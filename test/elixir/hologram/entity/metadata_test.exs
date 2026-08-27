@@ -8,6 +8,11 @@ defmodule Hologram.Entity.MetadataTest do
       assert inspect(%Metadata{}) == "#Hologram.Entity.Metadata<>"
     end
 
+    test "shows the attribute ops when set" do
+      assert inspect(%Metadata{attribute_ops: %{votes: {:increment, 1}}}) ==
+               "#Hologram.Entity.Metadata<attribute_ops: %{votes: {:increment, 1}}>"
+    end
+
     test "shows the revisions when set" do
       assert inspect(%Metadata{revisions: %{a: 3}}) ==
                "#Hologram.Entity.Metadata<revisions: %{a: 3}>"

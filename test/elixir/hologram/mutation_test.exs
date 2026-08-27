@@ -18,6 +18,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
@@ -177,15 +178,29 @@ defmodule Hologram.MutationTest do
   defp server(user_id \\ nil), do: %Server{user_id: user_id}
 
   defp update_write(entity_type, id, data, opts \\ []) do
-    %{
+    base = %{
       "op" => "update",
       "type" => inspect(entity_type),
       "id" => id,
-      "data" => data,
       "based_on" => Keyword.get(opts, :based_on),
       "claim" => Keyword.get(opts, :claim, ["authorize", "archive"]),
       "stamp" => Keyword.get(opts, :stamp, stamp())
     }
+
+    with_data = if data, do: Map.put(base, "data", data), else: base
+
+    case Keyword.get(opts, :deltas) do
+      nil -> with_data
+      deltas -> Map.put(with_data, "deltas", deltas)
+    end
+  end
+
+  # A counter row anyone may update - Module20's allow lines are bare, so its writes are granted
+  # with or without an actor, which is what a delta test needs and no other fixture offers.
+  defp create_counter(count) do
+    Module20
+    |> Entity.new(count: count)
+    |> DB.create!()
   end
 
   # A stamp from the wall clock, for a write against a row this test did NOT just create. For one
@@ -371,6 +386,95 @@ defmodule Hologram.MutationTest do
 
       assert reloaded.priority == 5
       assert reloaded.public == true
+    end
+
+    test "applies a delta whatever the writer saw" do
+      row = create_counter(1)
+
+      # Below every revision the row holds and based on nothing: a PUT with this stamp is dropped
+      # by the merge, which is what the second batch below proves.
+      stale = row.__meta__.revisions.count - 1
+
+      moved =
+        update_write(Module20, row.id, nil,
+          claim: ["authorize", "update"],
+          deltas: %{"count" => 2},
+          stamp: stale
+        )
+
+      assert run(envelope([moved]), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+      reloaded = EntityOperations.get(Module20, row.id)
+
+      assert reloaded.count == 3
+      assert reloaded.__meta__.revisions.count > row.__meta__.revisions.count
+
+      put =
+        update_write(Module20, row.id, %{"count" => 9},
+          claim: ["authorize", "update"],
+          stamp: stale
+        )
+
+      assert run(envelope([put], seq: 2), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{"0" => %{"count" => 9}}}}
+
+      assert EntityOperations.get(Module20, row.id).count == 3
+    end
+
+    test "adds up deltas from two batches authored against one value" do
+      row = create_counter(1)
+
+      write =
+        update_write(Module20, row.id, nil,
+          claim: ["authorize", "update"],
+          deltas: %{"count" => 1},
+          stamp: stamp_above(row)
+        )
+
+      assert run(envelope([write]), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+      assert run(envelope([write], replica_id: Entity.generate_id()), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+      assert EntityOperations.get(Module20, row.id).count == 3
+    end
+
+    test "applies a delta beside a set" do
+      row = create_counter(1)
+
+      write =
+        update_write(Module20, row.id, %{"label" => "moved"},
+          based_on: %{"label" => row.__meta__.revisions.label},
+          claim: ["authorize", "update"],
+          deltas: %{"count" => 1},
+          stamp: stamp_above(row)
+        )
+
+      assert run(envelope([write]), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+      reloaded = EntityOperations.get(Module20, row.id)
+
+      assert reloaded.label == "moved"
+      assert reloaded.count == 2
+    end
+
+    test "refuses a move past what the column can hold" do
+      row = create_counter(9_223_372_036_854_775_807)
+
+      write =
+        update_write(Module20, row.id, nil,
+          claim: ["authorize", "update"],
+          deltas: %{"count" => 1},
+          stamp: stamp_above(row)
+        )
+
+      assert run(envelope([write]), server()) ==
+               rejected(0, %{count: [{:type, :integer}]})
+
+      assert EntityOperations.get(Module20, row.id).count == 9_223_372_036_854_775_807
     end
 
     test "applies a delete the writer is based on" do

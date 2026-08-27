@@ -294,8 +294,8 @@ defmodule Hologram.DB do
 
   @doc """
   Writes the changes recorded on the given entity struct - the values put on it with
-  put_attribute and the edges recorded with add_relationship and delete_relationship - in one
-  transaction, and returns :ok.
+  put_attribute, the amounts recorded with increment and decrement, and the edges recorded with
+  add_relationship and delete_relationship - in one transaction, and returns :ok.
 
   Only recorded changes are written: a field set directly on the struct is not among them, and
   a struct carrying nothing recorded raises ArgumentError, as does an id that names no entity.
@@ -311,7 +311,9 @@ defmodule Hologram.DB do
   write. An entity claiming the server's own authority through trust/1 is written without
   evaluation, and without an acting user an unclaimed write is raw.
 
-  Returns {:error, violations} for a refused value exactly as update/3 does.
+  Returns {:error, violations} for a refused value exactly as update/3 does. A moved attribute is
+  judged on the value the write leaves, so a move that would cross a declared bound is reported
+  the same way.
   """
   @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) when is_struct(entity) do
@@ -338,7 +340,7 @@ defmodule Hologram.DB do
         raise WriteError,
           message:
             "cannot update #{inspect(entity_type)} #{inspect(entity.id)}:\n" <>
-              refusal_lines(entity_type, violations, entity.__meta__.attribute_changes),
+              refusal_lines(entity_type, violations, put_values(entity.__meta__.attribute_ops)),
           reason: violations
     end
   end
@@ -529,6 +531,12 @@ defmodule Hologram.DB do
   # only one that reads the same whether the map holds one entry or several. A taken value is
   # described here because the validator never reports uniqueness: it is state, not a value.
   # A missing reference target is described here for the same reason - existence is state too.
+  # The values the struct was asked to write - an increment has none, and its line names no
+  # received value.
+  defp put_values(attribute_ops) do
+    for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
   defp refusal_lines(entity_type, violations, values) do
     violations
     |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)

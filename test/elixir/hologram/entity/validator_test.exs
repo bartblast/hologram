@@ -1890,5 +1890,10 @@ defmodule Hologram.Entity.ValidatorTest do
       assert violation_description(Module3, %{}, {:c_id, :required}) ==
                "  * reference :c_id is required"
     end
+
+    test "describes a violation on a field the data does not hold without a received value" do
+      assert violation_description(Module10, %{}, {:count, {:min, 1}}) ==
+               "  * attribute :count must be at least 1"
+    end
   end
 end

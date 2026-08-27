@@ -213,6 +213,9 @@ defmodule Hologram.DB.EntityOperations do
 
   # The :stamp option gives the revision every column this statement sets takes, for a write
   # authored elsewhere. Without it the node's own clock answers, which is every server-side write.
+  # The :deltas option gives the counters to move by an amount rather than set - `%{name => amount}`
+  # over required integer attributes, applied in the statement as `column + amount` and judged
+  # against the declarations on the value the statement leaves.
   @doc false
   @spec update(module, String.t(), map | keyword, keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
@@ -230,7 +233,14 @@ defmodule Hologram.DB.EntityOperations do
     changes_map = Map.new(changes)
     sorted_changes = Enum.sort(changes_map)
 
-    validate_changes!(entity_type, sorted_changes, columns_by_field)
+    deltas_map =
+      opts
+      |> Keyword.get(:deltas, %{})
+      |> Map.new()
+
+    sorted_deltas = Enum.sort(deltas_map)
+
+    validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field)
 
     # Values are judged before the statement is built - nothing is written for changes the
     # declarations already refuse.
@@ -244,13 +254,24 @@ defmodule Hologram.DB.EntityOperations do
               {column, Codec.encode(value, column.type)}
             end)
 
-          set_entries = change_entries ++ companion_entries(columns, sorted_changes)
+          delta_entries =
+            Enum.map(sorted_deltas, fn {name, amount} ->
+              column = columns_by_field[name]
+
+              {column, Codec.encode(amount, column.type)}
+            end)
+
+          # A value entry sets its column, a delta entry moves it - in the statement, never
+          # read-then-set, so two updates that overlap add up whether or not a lock is held.
+          set_entries =
+            Enum.map(change_entries ++ companion_entries(columns, sorted_changes), &{&1, :value}) ++
+              Enum.map(delta_entries, &{&1, :delta})
 
           set_list =
             set_entries
             |> Enum.with_index(1)
-            |> Enum.map_join(", ", fn {{column, _value}, index} ->
-              "#{Mapper.quote_identifier(column.name)} = $#{index}"
+            |> Enum.map_join(", ", fn {{{column, _value}, form}, index} ->
+              assignment(form, column, index)
             end)
 
           stamp_placeholder = length(set_entries) + 1
@@ -260,15 +281,25 @@ defmodule Hologram.DB.EntityOperations do
           # One stamp for the whole statement, so every column it sets reads as set together.
           set_columns =
             set_entries
-            |> Enum.map(fn {column, _value} -> column end)
+            |> Enum.map(fn {{column, _value}, _form} -> column end)
             |> Enum.filter(&settable?/1)
 
           revisions_assignment = revisions_assignment(set_columns, stamp_placeholder)
 
-          statement =
-            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING "$revisions"|
+          # A moved column comes back: the value the statement left is the only one the
+          # declarations can be judged on, and what the effect records.
+          delta_columns = Enum.map(delta_entries, fn {column, _amount} -> column end)
 
-          changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
+          returning_list =
+            Enum.map_join([~s|"$revisions"| | delta_columns], ", ", fn
+              ~s|"$revisions"| = literal -> literal
+              column -> Mapper.quote_identifier(column.name)
+            end)
+
+          statement =
+            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING #{returning_list}|
+
+          changed_values = Enum.map(set_entries, fn {{_column, value}, _form} -> value end)
 
           stamp = Keyword.get_lazy(opts, :stamp, &Clock.stamp/0)
           updated_at = DateTime.utc_now(:microsecond)
@@ -285,7 +316,7 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
-            run_update!(statement, params, entity_type, id, data, set_columns)
+            run_update!(statement, params, entity_type, id, data, set_columns, delta_columns)
           end)
 
         {:error, violations} ->
@@ -299,7 +330,9 @@ defmodule Hologram.DB.EntityOperations do
         :ok
 
       {:error, refusal} ->
-        violations = write_violations!(entity_type, refusal)
+        violations =
+          overflow_violations(entity_type, id, deltas_map, refusal) ||
+            write_violations!(entity_type, refusal)
 
         {:error, advisory_violations(entity_type, changes_map, id, violations)}
     end
@@ -373,6 +406,48 @@ defmodule Hologram.DB.EntityOperations do
     end)
   end
 
+  defp assignment(:value, column, index) do
+    "#{Mapper.quote_identifier(column.name)} = $#{index}"
+  end
+
+  defp assignment(:delta, column, index) do
+    quoted = Mapper.quote_identifier(column.name)
+
+    "#{quoted} = #{quoted} + $#{index}"
+  end
+
+  # A counter moved past what its column can hold aborts the statement before the value it would
+  # have left can be judged, and the error names no column - it comes from int8 arithmetic rather
+  # than from a constraint - so the row is asked which one. The write has rolled back by now, so
+  # each counter holds what it held before it, and the move that does not fit is the one to name.
+  # Advisory in the same sense the uniqueness questions below are: it describes the moment it was
+  # asked. Through the struct verb the row is still locked, so there is nothing to move meanwhile.
+  # A row that is gone answers nothing, and the write is refused for every counter it moved -
+  # which is all that is known then.
+  defp overflow_violations(entity_type, id, deltas_map, %Postgrex.Error{
+         postgres: %{code: :numeric_value_out_of_range}
+       })
+       when deltas_map != %{} do
+    case overflowing_names(entity_type, id, deltas_map) do
+      [] -> Map.new(deltas_map, fn {name, _amount} -> {name, [{:type, :integer}]} end)
+      names -> Map.new(names, &{&1, [{:type, :integer}]})
+    end
+  end
+
+  defp overflow_violations(_entity_type, _id, _deltas_map, _refusal), do: nil
+
+  defp overflowing_names(entity_type, id, deltas_map) do
+    case get(entity_type, id) do
+      nil ->
+        []
+
+      row ->
+        for {name, amount} <- deltas_map,
+            not Validator.attribute_value_valid?(Map.fetch!(row, name) + amount, :integer),
+            do: name
+    end
+  end
+
   # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
   # identifier. Every name here comes from the mapping and never from a caller - the escape is
   # there because a name is still data, and a literal is the position where that would matter.
@@ -407,6 +482,10 @@ defmodule Hologram.DB.EntityOperations do
   defp compute_sort_key(nil), do: nil
 
   defp compute_sort_key(value), do: SortKey.compute(value)
+
+  defp counter_column?(%{source: {:attribute, _name}, type: :integer, null: false}), do: true
+
+  defp counter_column?(_column), do: false
 
   # Returns how many rows the delete removed - deleting an id nothing holds removes none, and
   # is not something that happened to tell anyone about. A foreign key that refuses it is named
@@ -611,20 +690,36 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
-  defp run_update!(statement, params, entity_type, id, data, set_columns) do
+  defp run_update!(statement, params, entity_type, id, data, set_columns, delta_columns) do
     case Connection.query(statement, params) do
       # The stored map comes back rather than the stamp that was sent: a column already past the
       # stamp keeps its own revision, so what the row now holds is the only true answer.
-      {:ok, %Postgrex.Result{num_rows: 1, rows: [[stored_revisions]]}} ->
-        Outbox.append([
-          %{
-            op: :patch_entity,
-            entity_type: entity_type,
-            entity_id: id,
-            data: data,
-            revisions: revisions_from_row(stored_revisions, set_columns)
-          }
-        ])
+      {:ok, %Postgrex.Result{num_rows: 1, rows: [[stored_revisions | returned_values]]}} ->
+        results =
+          delta_columns
+          |> Enum.zip(returned_values)
+          |> Map.new(fn {column, value} ->
+            {field_name(column), Codec.decode(value, column.type)}
+          end)
+
+        # A moved column is judged on the value the statement LEFT, which only the statement can
+        # answer - a refused result rolls the statement back with the same field-keyed map a
+        # refused put gets, and nothing is recorded.
+        case Entity.validate(entity_type, results) do
+          :ok ->
+            Outbox.append([
+              %{
+                op: :patch_entity,
+                entity_type: entity_type,
+                entity_id: id,
+                data: Map.merge(data, results),
+                revisions: revisions_from_row(stored_revisions, set_columns)
+              }
+            ])
+
+          {:error, violations} ->
+            Connection.rollback(violations)
+        end
 
       {:ok, %Postgrex.Result{num_rows: 0}} ->
         raise ArgumentError,
@@ -741,10 +836,38 @@ defmodule Hologram.DB.EntityOperations do
 
   defp unique_violations(_entity_type, _error), do: nil
 
-  defp validate_changes!(entity_type, sorted_changes, columns_by_field) do
-    if sorted_changes == [] do
+  defp validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field) do
+    if sorted_changes == [] and sorted_deltas == [] do
       raise ArgumentError,
             "invalid changes for #{inspect(entity_type)} - at least one declared attribute or to-one relationship must be changed"
+    end
+
+    # The mapper's own guard, for a caller that never met the stage's: a counter is a required
+    # integer attribute, so its column is NOT NULL and the statement never meets a null to add to.
+    unmovable_names =
+      sorted_deltas
+      |> Enum.map(fn {name, _amount} -> name end)
+      |> Enum.reject(&counter_column?(columns_by_field[&1]))
+
+    if unmovable_names != [] do
+      listed_names = Enum.map_join(unmovable_names, ", ", &inspect/1)
+
+      raise ArgumentError,
+            "invalid deltas for #{inspect(entity_type)} - only required integer attributes can be moved: #{listed_names}"
+    end
+
+    # A column set and moved in one statement would be assigned twice - the stage never records
+    # both for one attribute, and a hand-built call gets the same refusal.
+    both_names =
+      sorted_deltas
+      |> Keyword.keys()
+      |> Enum.filter(&Keyword.has_key?(sorted_changes, &1))
+
+    if both_names != [] do
+      listed_names = Enum.map_join(both_names, ", ", &inspect/1)
+
+      raise ArgumentError,
+            "invalid deltas for #{inspect(entity_type)} - a field is either changed or moved, not both: #{listed_names}"
     end
 
     unknown_names =

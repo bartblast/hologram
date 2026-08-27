@@ -16,6 +16,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -1251,6 +1252,169 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert revisions.a == ahead + 1
     end
 
+    test "moves an integer attribute by a delta" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      assert update(Module10, created_entity.id, %{}, deltas: %{count: 3}) == :ok
+
+      assert get(Module10, created_entity.id).count == 8
+    end
+
+    test "moves by a negative delta" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      :ok = update(Module10, created_entity.id, %{}, deltas: %{count: -2})
+
+      assert get(Module10, created_entity.id).count == 3
+    end
+
+    test "moves a column beside one it sets" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      :ok = update(Module10, created_entity.id, %{bio: "moved"}, deltas: %{count: 1})
+
+      updated_entity = get(Module10, created_entity.id)
+
+      assert updated_entity.bio == "moved"
+      assert updated_entity.count == 6
+    end
+
+    test "records the value a moved column ends at on the effect" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      :ok = update(Module10, created_entity.id, %{}, deltas: %{count: 3})
+
+      assert [_put_effect, patch_effect] = outbox_effects()
+
+      assert patch_effect.op == "patch_entity"
+      assert patch_effect.data["count"] == 8
+      assert Map.has_key?(patch_effect.data, "updated_at")
+      assert Map.keys(patch_effect.revisions) == ["count"]
+    end
+
+    test "stamps a moved column" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5, priority: 1)
+        |> create()
+
+      :ok = update(Module10, created_entity.id, %{}, deltas: %{count: 3})
+
+      revisions = get(Module10, created_entity.id).__meta__.revisions
+
+      assert revisions.count > created_entity.__meta__.revisions.count
+      assert revisions.priority == created_entity.__meta__.revisions.priority
+    end
+
+    test "refuses a result below the declared minimum" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 1)
+        |> create()
+
+      assert update(Module10, created_entity.id, %{}, deltas: %{count: -1}) ==
+               {:error, %{count: [{:min, 1}]}}
+
+      assert get(Module10, created_entity.id).count == 1
+    end
+
+    test "refuses a result above the declared maximum" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 10)
+        |> create()
+
+      assert update(Module10, created_entity.id, %{}, deltas: %{count: 1}) ==
+               {:error, %{count: [{:max, 10}]}}
+    end
+
+    test "changes nothing and records nothing for a refused result" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 1)
+        |> create()
+
+      {:error, _violations} =
+        update(Module10, created_entity.id, %{bio: "kept out"}, deltas: %{count: -1})
+
+      updated_entity = get(Module10, created_entity.id)
+
+      assert updated_entity.bio == nil
+      assert updated_entity.count == 1
+      assert [%{op: "put_entity"}] = outbox_effects()
+    end
+
+    test "refuses a move past what the column can hold" do
+      max_int = 9_223_372_036_854_775_807
+
+      {:ok, created_entity} =
+        Module20
+        |> Entity.new(count: max_int)
+        |> create()
+
+      assert update(Module20, created_entity.id, %{}, deltas: %{count: 1}) ==
+               {:error, %{count: [{:type, :integer}]}}
+
+      assert get(Module20, created_entity.id).count == max_int
+    end
+
+    test "names only the counter that moved past what its column can hold" do
+      max_int = 9_223_372_036_854_775_807
+
+      {:ok, created_entity} =
+        Module20
+        |> Entity.new(count: 1, views: max_int)
+        |> create()
+
+      assert update(Module20, created_entity.id, %{}, deltas: %{count: 1, views: 1}) ==
+               {:error, %{views: [{:type, :integer}]}}
+
+      reloaded = get(Module20, created_entity.id)
+
+      assert reloaded.count == 1
+      assert reloaded.views == max_int
+    end
+
+    test "raises when a delta names anything but a required integer attribute" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      expected_msg =
+        "invalid deltas for Hologram.Test.Fixtures.Entity.Module10 - only required integer attributes can be moved: :bio, :nope, :priority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module10, created_entity.id, %{}, deltas: %{bio: 1, nope: 1, priority: 1})
+      end
+    end
+
+    test "raises when a field is both changed and moved" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      expected_msg =
+        "invalid deltas for Hologram.Test.Fixtures.Entity.Module10 - a field is either changed or moved, not both: :count"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module10, created_entity.id, %{count: 7}, deltas: %{count: 1})
+      end
+    end
+
     test "returns the violation from the write itself when the new value is taken" do
       {:ok, first} =
         Module19
@@ -1504,6 +1668,10 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module2, created_entity.id, %{})
+      end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module2, created_entity.id, %{}, deltas: %{})
       end
     end
 

@@ -7,6 +7,7 @@ defmodule Hologram.QueryTest do
   alias Hologram.Entity.Metadata
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -27,13 +28,13 @@ defmodule Hologram.QueryTest do
 
   describe "add_relationship/3" do
     test "keeps the rest of the metadata" do
-      metadata = %Metadata{attribute_changes: %{c_id: "x"}, claim: :trust}
+      metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}
       entity = %{Entity.new(Module3) | __meta__: metadata}
       target_id = Entity.generate_id()
 
       result = add_relationship(entity, :a, target_id)
 
-      assert result.__meta__.attribute_changes == %{c_id: "x"}
+      assert result.__meta__.attribute_ops == %{c_id: {:put, "x"}}
       assert result.__meta__.claim == :trust
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
     end
@@ -143,7 +144,7 @@ defmodule Hologram.QueryTest do
         |> add_relationship(:a, target_id)
         |> authorize(:archive)
 
-      assert result.__meta__.attribute_changes == %{c_id: target_id}
+      assert result.__meta__.attribute_ops == %{c_id: {:put, target_id}}
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
       assert result.__meta__.claim == {:authorize, :archive}
     end
@@ -232,15 +233,72 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "decrement/3" do
+    test "records a positive amount as a negative delta" do
+      entity = Entity.new(Module10, count: 5)
+
+      result = decrement(entity, :count, 2)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, -2}}}
+    end
+
+    test "subtracts from a recorded increment" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> increment(:count, 5)
+        |> decrement(:count, 2)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, 3}}}
+    end
+
+    test "drops a delta that nets to zero" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> increment(:count, 2)
+        |> decrement(:count, 2)
+
+      assert result.__meta__ == %Metadata{}
+    end
+
+    test "raises on an amount that is not a positive integer" do
+      entity = Entity.new(Module10, count: 5)
+
+      assert_error ArgumentError, "decrement takes a positive integer amount, got: -1", fn ->
+        decrement(entity, :count, -1)
+      end
+
+      assert_error ArgumentError, "decrement takes a positive integer amount, got: 0", fn ->
+        decrement(entity, :count, 0)
+      end
+
+      assert_error ArgumentError, "decrement takes a positive integer amount, got: 1.5", fn ->
+        decrement(entity, :count, 1.5)
+      end
+    end
+
+    test "raises on a non-integer attribute" do
+      entity = Entity.new(Module10, count: 5)
+
+      expected_msg =
+        ":bio is a :string attribute of Hologram.Test.Fixtures.Entity.Module10 - decrement moves integer attributes only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        decrement(entity, :bio, 1)
+      end
+    end
+  end
+
   describe "delete_relationship/3" do
     test "keeps the rest of the metadata" do
-      metadata = %Metadata{attribute_changes: %{c_id: "x"}, claim: :trust}
+      metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}
       entity = %{Entity.new(Module3) | __meta__: metadata}
       target_id = Entity.generate_id()
 
       result = delete_relationship(entity, :a, target_id)
 
-      assert result.__meta__.attribute_changes == %{c_id: "x"}
+      assert result.__meta__.attribute_ops == %{c_id: {:put, "x"}}
       assert result.__meta__.claim == :trust
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :delete}
     end
@@ -987,6 +1045,178 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "increment/3" do
+    test "records a positive amount as a delta" do
+      entity = Entity.new(Module10, count: 5)
+
+      result = increment(entity, :count, 2)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, 2}}}
+    end
+
+    test "previews the result on the struct's field" do
+      entity = Entity.new(Module10, count: 5)
+
+      result = increment(entity, :count, 2)
+
+      assert result.count == 7
+    end
+
+    test "previews a second move on top of the first" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> increment(:count, 2)
+        |> decrement(:count, 1)
+
+      assert result.count == 6
+    end
+
+    test "moves down by a negative amount" do
+      entity = Entity.new(Module10, count: 5)
+
+      result = increment(entity, :count, -2)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, -2}}}
+    end
+
+    test "records nothing for a zero amount" do
+      entity = Entity.new(Module10, count: 5)
+
+      result = increment(entity, :count, 0)
+
+      assert result.__meta__ == %Metadata{}
+    end
+
+    test "adds a second increment to the first" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> increment(:count, 2)
+        |> increment(:count, 3)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, 5}}}
+    end
+
+    test "keeps the rest of the metadata" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> put_attribute(bio: "x")
+        |> increment(:count, 1)
+
+      assert result.__meta__.attribute_ops == %{bio: {:put, "x"}, count: {:increment, 1}}
+    end
+
+    test "folds into a put value recorded before it" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> put_attribute(count: 10)
+        |> increment(:count, 1)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:put, 11}}}
+      assert result.count == 11
+    end
+
+    test "raises on an amount that is not an integer" do
+      entity = Entity.new(Module10, count: 5)
+
+      assert_error ArgumentError, "increment takes an integer amount, got: 1.5", fn ->
+        increment(entity, :count, 1.5)
+      end
+
+      assert_error ArgumentError, ~s(increment takes an integer amount, got: "1"), fn ->
+        increment(entity, :count, "1")
+      end
+    end
+
+    test "raises on an optional integer attribute" do
+      entity = Entity.new(Module10, count: 5)
+
+      expected_msg =
+        ":priority in Hologram.Test.Fixtures.Entity.Module10 is optional and can hold nil - increment moves attributes that always hold a number - declare it without optional: true, with a default"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :priority, 1)
+      end
+    end
+
+    test "raises on a non-integer attribute" do
+      entity = Entity.new(Module10, count: 5)
+
+      expected_msg =
+        ":bio is a :string attribute of Hologram.Test.Fixtures.Entity.Module10 - increment moves integer attributes only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :bio, 1)
+      end
+    end
+
+    test "raises on a relationship" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - increment moves integer attributes only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :b, 1)
+      end
+    end
+
+    test "raises on a system attribute" do
+      entity = Entity.new(Module10, count: 5)
+
+      expected_msg =
+        ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module10 - it is managed automatically and can't be moved"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :id, 1)
+      end
+    end
+
+    test "raises on an unknown name" do
+      entity = Entity.new(Module10, count: 5)
+
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module10 - known counters: :count"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :nope, 1)
+      end
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(increment takes an entity struct, got: "x"), fn ->
+        increment(wrap_term("x"), :count, 1)
+      end
+    end
+
+    test "raises when the struct's field holds nil" do
+      entity = Entity.new(Module10)
+
+      expected_msg =
+        ":count in Hologram.Test.Fixtures.Entity.Module10 holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :count, 1)
+      end
+    end
+
+    test "raises when the put value it would fold into is not an integer" do
+      entity = Entity.new(Module10, count: 5)
+
+      expected_msg =
+        ":count in Hologram.Test.Fixtures.Entity.Module10 carries a put value that is not an integer (nil) - increment cannot move it"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> put_attribute(count: nil)
+        |> increment(:count, 1)
+      end
+    end
+  end
+
   describe "limit/2" do
     test "accepts a placeholder" do
       query = limit(Module2, %Placeholder{name: :size})
@@ -1498,7 +1728,7 @@ defmodule Hologram.QueryTest do
       result = put_attribute(entity, %{b: 7})
 
       assert result.b == 7
-      assert result.__meta__ == %Metadata{attribute_changes: %{b: 7}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{b: {:put, 7}}}
     end
 
     test "keeps the rest of the metadata" do
@@ -1519,7 +1749,7 @@ defmodule Hologram.QueryTest do
         |> put_attribute(c: "z")
 
       assert result.c == "z"
-      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "z"}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{a: {:put, true}, c: {:put, "z"}}}
     end
 
     test "sets a to-one reference field" do
@@ -1529,7 +1759,7 @@ defmodule Hologram.QueryTest do
       result = put_attribute(entity, b_id: target_id)
 
       assert result.b_id == target_id
-      assert result.__meta__ == %Metadata{attribute_changes: %{b_id: target_id}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{b_id: {:put, target_id}}}
     end
 
     test "sets the values on the struct and records them as changes" do
@@ -1539,7 +1769,17 @@ defmodule Hologram.QueryTest do
 
       assert result.a == true
       assert result.c == "y"
-      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "y"}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{a: {:put, true}, c: {:put, "y"}}}
+    end
+
+    test "replaces a delta recorded before it" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> increment(:count, 1)
+        |> put_attribute(count: 10)
+
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:put, 10}}}
     end
 
     test "raises on a system attribute name" do
@@ -1616,7 +1856,7 @@ defmodule Hologram.QueryTest do
       result = put_attribute(entity, :a, true)
 
       assert result.a == true
-      assert result.__meta__ == %Metadata{attribute_changes: %{a: true}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{a: {:put, true}}}
     end
 
     test "raises on an unknown name" do
@@ -1639,7 +1879,7 @@ defmodule Hologram.QueryTest do
         |> put_attribute(a: true)
         |> trust()
 
-      assert result.__meta__.attribute_changes == %{a: true}
+      assert result.__meta__.attribute_ops == %{a: {:put, true}}
       assert result.__meta__.claim == :trust
     end
 

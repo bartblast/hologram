@@ -106,6 +106,40 @@ defmodule Hologram.Mutation.Envelope do
     Enum.reduce_while(values, {:ok, %{}}, &decode_field_into(&1, &2, fields, entity_type))
   end
 
+  defp decode_delta(name, amount, fields, entity_type) do
+    case Map.fetch(fields, name) do
+      {:ok, {field, _type}} when is_integer(amount) and amount != 0 ->
+        # Bounded here because nothing downstream can: the column is judged on the value the
+        # statement leaves, and an amount the column cannot hold fails the statement's own
+        # parameters instead - the same range a put's value is judged against.
+        if Validator.attribute_value_valid?(amount, :integer) do
+          {:ok, {field, amount}}
+        else
+          {:error, ~s(deltas."#{name}" is out of range for an integer attribute)}
+        end
+
+      {:ok, _field} ->
+        {:error, ~s(deltas."#{name}" must be a non-zero integer)}
+
+      :error ->
+        {:error,
+         ~s("#{name}" is not a counter of #{inspect(entity_type)} a client can move - a counter is a required integer attribute)}
+    end
+  end
+
+  defp decode_delta_into({name, amount}, {:ok, decoded}, fields, entity_type) do
+    case decode_delta(name, amount, fields, entity_type) do
+      {:ok, {field, value}} -> {:cont, {:ok, Map.put(decoded, field, value)}}
+      {:error, message} -> {:halt, {:error, message}}
+    end
+  end
+
+  defp decode_deltas(amounts, entity_type) do
+    fields = movable_fields(entity_type)
+
+    Enum.reduce_while(amounts, {:ok, %{}}, &decode_delta_into(&1, &2, fields, entity_type))
+  end
+
   defp decode_field(name, value, fields, entity_type) do
     case Map.fetch(fields, name) do
       {:ok, {field, type}} ->
@@ -150,6 +184,16 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  # The amounts to move counters by, keyed the way data is. A write that only moves one carries no
+  # data at all, so both are optional and at least one has to name a field.
+  defp deltas(entry, entity_type) do
+    case Map.get(entry, "deltas") do
+      nil -> {:ok, %{}}
+      amounts when is_map(amounts) -> decode_deltas(amounts, entity_type)
+      _other -> {:error, "deltas must be an object"}
+    end
+  end
+
   defp entity_type(entry) do
     case Map.get(entry, "type") do
       label when is_binary(label) -> resolve_entity_type(label)
@@ -167,6 +211,22 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  # The counters a client may move: the settable fields narrowed to the attributes a delta can
+  # apply to - a required integer, which is the one shape that always holds a number to add to.
+  defp movable_fields(entity_type) do
+    optional_names =
+      entity_type.__attributes__()
+      |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :optional) == true end)
+      |> Enum.map(fn {name, _type, _opts} -> Atom.to_string(name) end)
+
+    entity_type
+    |> settable_fields()
+    |> Enum.filter(fn {name, {_field, type}} ->
+      type == :integer and name not in optional_names
+    end)
+    |> Map.new()
+  end
+
   # A delete takes the whole row, so there is nothing for it to carry values for - one that does
   # was built by something that does not know what a delete is.
   defp no_data(entry) do
@@ -174,6 +234,31 @@ defmodule Hologram.Mutation.Envelope do
       nil -> :ok
       values when values == %{} -> :ok
       _other -> {:error, "a delete carries no data"}
+    end
+  end
+
+  # Only an update moves a counter: a create sets every field outright, a delete takes the row,
+  # and an edge changes no column.
+  defp no_deltas(entry) do
+    case Map.get(entry, "deltas") do
+      nil -> :ok
+      amounts when amounts == %{} -> :ok
+      _other -> {:error, "only an update carries deltas"}
+    end
+  end
+
+  # A field set and moved by one write would be assigned twice in one statement, and the two say
+  # different things about the same column.
+  defp no_overlap(data, deltas) do
+    both =
+      data
+      |> Map.keys()
+      |> Enum.filter(&Map.has_key?(deltas, &1))
+      |> Enum.sort()
+
+    case both do
+      [] -> :ok
+      [name | _rest] -> {:error, ~s("#{name}" is both set and moved by one write)}
     end
   end
 
@@ -197,6 +282,7 @@ defmodule Hologram.Mutation.Envelope do
     with {:ok, entity_type} <- entity_type(entry),
          {:ok, id} <- id(entry),
          {:ok, data} <- data(entry, entity_type),
+         :ok <- no_deltas(entry),
          {:ok, claim} <- claim(entry),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
@@ -215,6 +301,7 @@ defmodule Hologram.Mutation.Envelope do
     with {:ok, entity_type} <- entity_type(entry),
          {:ok, id} <- id(entry),
          :ok <- no_data(entry),
+         :ok <- no_deltas(entry),
          {:ok, based_on} <- based_on(entry, entity_type),
          {:ok, claim} <- claim(entry),
          {:ok, stamp} <- stamp(entry) do
@@ -233,8 +320,10 @@ defmodule Hologram.Mutation.Envelope do
   defp parse_update(entry) do
     with {:ok, entity_type} <- entity_type(entry),
          {:ok, id} <- id(entry),
-         {:ok, data} <- data(entry, entity_type),
-         :ok <- some_data(data),
+         {:ok, data} <- update_data(entry, entity_type),
+         {:ok, deltas} <- deltas(entry, entity_type),
+         :ok <- some_change(data, deltas),
+         :ok <- no_overlap(data, deltas),
          {:ok, based_on} <- based_on(entry, entity_type),
          {:ok, claim} <- claim(entry),
          {:ok, stamp} <- stamp(entry) do
@@ -243,6 +332,7 @@ defmodule Hologram.Mutation.Envelope do
          based_on: based_on,
          claim: claim,
          data: data,
+         deltas: deltas,
          entity_type: entity_type,
          id: id,
          op: :update,
@@ -257,6 +347,7 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, relationship} <- relationship(entry, entity_type),
          {:ok, target_id} <- target_id(entry),
          :ok <- no_stamp(entry),
+         :ok <- no_deltas(entry),
          {:ok, claim} <- claim(entry) do
       {:ok,
        %Write{
@@ -324,9 +415,11 @@ defmodule Hologram.Mutation.Envelope do
     ArgumentError -> {:error, unknown_type_message(label)}
   end
 
-  defp some_data(data) when data == %{}, do: {:error, "an update must change at least one field"}
+  defp some_change(data, deltas) when data == %{} and deltas == %{} do
+    {:error, "an update must change at least one field"}
+  end
 
-  defp some_data(_data), do: :ok
+  defp some_change(_data, _deltas), do: :ok
 
   # A to-ONE is not an edge: it is set through its reference field like any other value, so naming
   # one here is refused the same way naming no relationship at all is.
@@ -401,6 +494,15 @@ defmodule Hologram.Mutation.Envelope do
 
   defp unknown_type_message(label) do
     ~s(type "#{label}" is not an entity type of this build)
+  end
+
+  # An update carrying only deltas has no data at all, which reads as no values rather than as a
+  # malformed entry - a create's still must be there.
+  defp update_data(entry, entity_type) do
+    case Map.get(entry, "data") do
+      nil -> {:ok, %{}}
+      _values -> data(entry, entity_type)
+    end
   end
 
   defp writes(raw) do

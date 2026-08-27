@@ -63,22 +63,20 @@ defmodule Hologram.DB.Writer do
   @doc false
   @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) do
-    %Metadata{
-      attribute_changes: attribute_changes,
-      relationship_ops: relationship_ops,
-      stamp: stamp
-    } = entity.__meta__
+    %Metadata{attribute_ops: attribute_ops, relationship_ops: relationship_ops, stamp: stamp} =
+      entity.__meta__
 
-    if attribute_changes == %{} and relationship_ops == %{} do
+    if attribute_ops == %{} and relationship_ops == %{} do
       raise ArgumentError,
         message:
-          "update takes recorded changes - put values with put_attribute and edges with " <>
-            "add_relationship or delete_relationship. A field set directly on the struct is " <>
-            "not recorded: writing the whole struct would overwrite concurrent changes to " <>
-            "fields you didn't touch."
+          "update takes recorded changes - put values with put_attribute, move counters with " <>
+            "increment or decrement, and edges with add_relationship or delete_relationship. " <>
+            "A field set directly on the struct is not recorded: writing the whole struct " <>
+            "would overwrite concurrent changes to fields you didn't touch."
     end
 
     entity_type = entity.__struct__
+    {attribute_changes, attribute_deltas} = split_attribute_ops(attribute_ops)
 
     {:ok, applied} =
       Connection.transaction(fn ->
@@ -86,7 +84,14 @@ defmodule Hologram.DB.Writer do
 
         evaluate!(entity, :update, row)
 
-        apply_update(entity_type, entity.id, attribute_changes, relationship_ops, stamp)
+        apply_update(
+          entity_type,
+          entity.id,
+          attribute_changes,
+          attribute_deltas,
+          relationship_ops,
+          stamp
+        )
       end)
 
     applied
@@ -134,8 +139,8 @@ defmodule Hologram.DB.Writer do
 
   # The attribute changes go first and the edges follow, all inside one transaction: a refused
   # value leaves the edges unapplied, and an edge that raises takes the values with it.
-  defp apply_update(entity_type, id, attribute_changes, relationship_ops, stamp) do
-    case update_attributes(entity_type, id, attribute_changes, stamp) do
+  defp apply_update(entity_type, id, attribute_changes, attribute_deltas, relationship_ops, stamp) do
+    case update_attributes(entity_type, id, attribute_changes, attribute_deltas, stamp) do
       :ok -> apply_relationship_ops(entity_type, id, relationship_ops)
       {:error, violations} -> {:error, violations}
     end
@@ -191,14 +196,26 @@ defmodule Hologram.DB.Writer do
     end
   end
 
-  defp update_attributes(_entity_type, _id, attribute_changes, _stamp)
-       when map_size(attribute_changes) == 0,
+  # The executor takes values and amounts apart: a put sets its column, an increment moves it.
+  defp split_attribute_ops(attribute_ops) do
+    Enum.reduce(attribute_ops, {%{}, %{}}, fn
+      {name, {:put, value}}, {changes, deltas} -> {Map.put(changes, name, value), deltas}
+      {name, {:increment, amount}}, {changes, deltas} -> {changes, Map.put(deltas, name, amount)}
+    end)
+  end
+
+  defp update_attributes(_entity_type, _id, attribute_changes, attribute_deltas, _stamp)
+       when map_size(attribute_changes) == 0 and map_size(attribute_deltas) == 0,
        do: :ok
 
-  defp update_attributes(entity_type, id, attribute_changes, stamp) do
+  defp update_attributes(entity_type, id, attribute_changes, attribute_deltas, stamp) do
     # An absent stamp is left absent rather than passed as nil: the option's presence is what
     # says a revision was authored elsewhere, and a nil under the key would reach the statement.
-    opts = if stamp, do: [stamp: stamp], else: []
+    # Deltas travel the same way: present only when the struct recorded some.
+    stamp_opts = if stamp, do: [stamp: stamp], else: []
+
+    opts =
+      if attribute_deltas == %{}, do: stamp_opts, else: [{:deltas, attribute_deltas} | stamp_opts]
 
     EntityOperations.update(entity_type, id, attribute_changes, opts)
   end
