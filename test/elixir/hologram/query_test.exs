@@ -5,6 +5,7 @@ defmodule Hologram.QueryTest do
 
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -15,16 +16,7 @@ defmodule Hologram.QueryTest do
   alias Hologram.Test.Fixtures.Entity.Module5
 
   defp base_term(entity_type) do
-    %{
-      cardinality: :set,
-      entity: entity_type,
-      filter: [],
-      include: %{},
-      limit: nil,
-      offset: nil,
-      order_by: [],
-      trust: false
-    }
+    %Query{entity: entity_type}
   end
 
   describe "add_relationship/3" do
@@ -212,16 +204,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "marks the query as counting" do
-      assert count(Module2) == %{
-               cardinality: :count,
-               entity: Module2,
-               filter: [],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: [],
-               trust: false
-             }
+      assert count(Module2) == %Query{cardinality: :count, entity: Module2}
     end
 
     test "raises when cardinality is already marked" do
@@ -471,16 +454,7 @@ defmodule Hologram.QueryTest do
         |> filter(a: true)
         |> filter(b: 123)
 
-      assert query == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [{:a, :==, true}, {:b, :==, 123}],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: [],
-               trust: false
-             }
+      assert query == %Query{entity: Module2, filter: [{:a, :==, true}, {:b, :==, 123}]}
     end
 
     test "builds a membership triple from a bare list" do
@@ -578,16 +552,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "starts a query term from an entity type module" do
-      assert filter(Module2, a: true) == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [{:a, :==, true}],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: [],
-               trust: false
-             }
+      assert filter(Module2, a: true) == %Query{entity: Module2, filter: [{:a, :==, true}]}
     end
 
     test "treats nil as a regular equality value" do
@@ -645,6 +610,17 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: {:>=, nil})
+      end
+    end
+
+    test "raises on a map shaped like a query term" do
+      term = Map.from_struct(%Query{entity: Module2})
+
+      expected_msg =
+        ~s(#{inspect(term)} is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(term, a: true)
       end
     end
 
@@ -847,16 +823,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "embeds a to-many relationship" do
-      assert include(Module3, :a) == %{
-               cardinality: :set,
-               entity: Module3,
-               filter: [],
-               include: %{a: base_term(Module2)},
-               limit: nil,
-               offset: nil,
-               order_by: [],
-               trust: false
-             }
+      assert include(Module3, :a) == %Query{entity: Module3, include: %{a: base_term(Module2)}}
     end
 
     test "embeds a to-one relationship" do
@@ -1255,16 +1222,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "sets the limit" do
-      assert limit(Module2, 50) == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [],
-               include: %{},
-               limit: 50,
-               offset: nil,
-               order_by: [],
-               trust: false
-             }
+      assert limit(Module2, 50) == %Query{entity: Module2, limit: 50}
     end
 
     test "raises on a negative limit" do
@@ -1304,16 +1262,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "defaults an empty ordering to the id order" do
-      assert normalize(Module2) == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: [{:id, :asc}],
-               trust: false
-             }
+      assert normalize(Module2) == %Query{entity: Module2, order_by: [{:id, :asc}]}
     end
 
     test "drops the ordering from counting queries" do
@@ -1413,16 +1362,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "sets the offset" do
-      assert offset(Module2, 20) == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [],
-               include: %{},
-               limit: nil,
-               offset: 20,
-               order_by: [],
-               trust: false
-             }
+      assert offset(Module2, 20) == %Query{entity: Module2, offset: 20}
     end
 
     test "raises on a negative offset" do
@@ -1446,16 +1386,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "marks the query as single-result" do
-      assert one(Module2) == %{
-               cardinality: :one,
-               entity: Module2,
-               filter: [],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: [],
-               trust: false
-             }
+      assert one(Module2) == %Query{cardinality: :one, entity: Module2}
     end
 
     test "raises on a cardinality marker in an include sub-term" do
@@ -1520,16 +1451,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "defaults a bare attribute name to ascending" do
-      assert order_by(Module2, :c) == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: [{:c, :asc}],
-               trust: false
-             }
+      assert order_by(Module2, :c) == %Query{entity: Module2, order_by: [{:c, :asc}]}
     end
 
     test "defaults list entries to ascending" do
@@ -1647,15 +1569,10 @@ defmodule Hologram.QueryTest do
     end
 
     test "sets the view bounds from page and size" do
-      assert paginate(Module2, page: 2, size: 20) == %{
-               cardinality: :set,
+      assert paginate(Module2, page: 2, size: 20) == %Query{
                entity: Module2,
-               filter: [],
-               include: %{},
                limit: 20,
-               offset: 20,
-               order_by: [],
-               trust: false
+               offset: 20
              }
     end
 
@@ -1913,9 +1830,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "marks an entity type's query as trusted" do
-      expected_term = %{base_term(Module2) | trust: true}
-
-      assert trust(Module2) == expected_term
+      assert trust(Module2) == %Query{entity: Module2, trust: true}
     end
 
     test "raises on a trust mark in an include sub-term" do
