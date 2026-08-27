@@ -19,6 +19,18 @@ defmodule Hologram.DB.ConfigTest do
     end
   end
 
+  describe "listener_child_spec/1" do
+    test "names the connection and has it connect after booting" do
+      assert %{id: :my_listener, start: {Postgrex.Notifications, :start_link, [opts]}} =
+               listener_child_spec(:my_listener)
+
+      assert opts[:name] == :my_listener
+      assert opts[:auto_reconnect] == false
+      assert opts[:sync_connect] == false
+      assert opts[:database] == connection_opts()[:database]
+    end
+  end
+
   describe "resolve!/2" do
     test "applies dev defaults when no config is given" do
       assert resolve!([], :dev) == [
