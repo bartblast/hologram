@@ -6,6 +6,7 @@ defmodule Hologram.Job.Runner do
   # must not hold a connection while it does, and because the claim has to be visible to every
   # other node before the work starts - which is what stops two nodes running one job.
 
+  alias Hologram.Auth.Context
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
 
@@ -37,5 +38,40 @@ defmodule Hologram.Job.Runner do
       end)
 
     result
+  end
+
+  @doc """
+  Calls the given job's run/1 with it, as the user who created it - so its reads are filtered and
+  its writes evaluated as that user's, and raw for a job created with no actor.
+
+  Returns `:done` when run/1 answered `:ok` or `{:ok, value}` - the value is not kept, since what a
+  job did is in the rows it wrote - or `{:failed, text}` for `{:error, reason}`, for a raise, throw
+  or exit, and for any other return, each with the text that goes on the row.
+  """
+  @spec invoke(struct) :: :done | {:failed, String.t()}
+  def invoke(job) do
+    Context.with_actor(job.actor_id, fn -> attempt(job) end)
+  end
+
+  # Whatever run/1 does, the worker goes on: a job that raises is a failed job rather than a failed
+  # worker, and the exception is what the row records.
+  defp attempt(job) do
+    job_type = job.__struct__
+
+    classify(job_type.run(job))
+  rescue
+    error -> {:failed, Exception.format(:error, error, __STACKTRACE__)}
+  catch
+    kind, reason -> {:failed, Exception.format(kind, reason, __STACKTRACE__)}
+  end
+
+  defp classify(:ok), do: :done
+
+  defp classify({:ok, _value}), do: :done
+
+  defp classify({:error, reason}), do: {:failed, "run/1 returned {:error, #{inspect(reason)}}"}
+
+  defp classify(other) do
+    {:failed, "run/1 must return :ok, {:ok, value} or {:error, reason}, got: #{inspect(other)}"}
   end
 end
