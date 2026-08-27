@@ -1,7 +1,7 @@
 defmodule Hologram.JobCreateTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 3]
+  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 2, create!: 3]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
@@ -10,6 +10,7 @@ defmodule Hologram.JobCreateTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Job.Module1
   alias Hologram.Test.Fixtures.Job.Module2
+  alias Hologram.Test.Fixtures.Job.Module3
 
   # Built at run time rather than written as a literal: the clauses of the option parser make a
   # literal the type checker refuses at the call site, which is the point of them - what these two
@@ -33,6 +34,13 @@ defmodule Hologram.JobCreateTest do
       assert job.status == :queued
       assert job.error == nil
       assert DB.read(Module1, job.id).status == :queued
+    end
+
+    test "applies the given values" do
+      assert {:ok, job} = create(Module3, outcome: :ok)
+
+      assert job.outcome == :ok
+      assert DB.read(Module3, job.id).outcome == :ok
     end
 
     test "stamps the acting user" do
@@ -103,6 +111,12 @@ defmodule Hologram.JobCreateTest do
       end
     end
 
+    test "returns the violations of a value the declarations refuse" do
+      assert create(Module3, %{}) == {:error, %{outcome: [:required]}}
+
+      assert DB.read(Module3) == []
+    end
+
     test "raises on a job type that declares no allow lines under an acting user" do
       user = create_user("blocked@example.com")
 
@@ -123,6 +137,16 @@ defmodule Hologram.JobCreateTest do
 
       assert job.status == :queued
       assert DB.read(Module1, job.id) != nil
+    end
+
+    test "raises on a value the declarations refuse" do
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Job.Module3:
+          * attribute :outcome is required\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn -> create!(Module3, %{}) end
     end
 
     test "raises on a denial" do

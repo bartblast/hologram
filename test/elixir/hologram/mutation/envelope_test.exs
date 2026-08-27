@@ -12,6 +12,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
+  alias Hologram.Test.Fixtures.Job.Module3, as: JobModule3
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
   @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -338,6 +339,24 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert parse(raw([entry])) ==
                {:error,
                 ~s[write 0: "token" is not a field of Hologram.Test.Fixtures.Entity.Module15 a client can write]}
+    end
+
+    test "parses a job's own attribute into a create" do
+      entry = create(JobModule3, %{"outcome" => "ok"})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write == %Write{
+               based_on: %{},
+               claim: nil,
+               data: %{outcome: :ok},
+               entity_type: JobModule3,
+               id: @id,
+               op: :create,
+               relationship: nil,
+               stamp: 5,
+               target_id: nil
+             }
     end
 
     test "refuses a job's status as a field" do
