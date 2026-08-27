@@ -10,6 +10,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Commands use `server` struct, not `socket`. Return `%Server{}`, not `{:noreply, socket}`.
 - Cookie keys are strings (`"my_cookie"`), session keys are atoms or strings (`:user_id`). Mixing these up causes errors.
 - `init/3` for pages receives URL params, not props. Don't confuse with component `init/3` which receives props.
+- Never give a state key the same name as a prop. Templates merge props and state with state winning, so the state key shadows the prop entirely. Copying a prop into a same-named state key in `init` is the usual cause - `init` runs once, so the copy never refreshes and fresh props never reach the template. Use distinct names (an `:initial_count` prop feeding a `:count` state key).
 - Stateless components cannot handle events. You need a `cid` to make a component stateful.
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
 - Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
@@ -23,7 +24,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - **Actions** run on the client (browser). Use them for state updates, navigation, and triggering commands.
 - **Commands** run on the server. Use them for database access, API calls, session/cookie management, and other server-side operations.
 - State lives in the browser, not on the server. This enables instant UI updates without network round-trips.
-- Client-server communication happens automatically over HTTP/2 persistent connections. You never configure HTTP endpoints or write boilerplate for action-command interactions.
+- Client-server communication happens automatically over two transports: HTTP/2 request/response for action-command round-trips, and a Server-Sent Events (SSE) stream for server-pushed updates such as broadcast actions. You never configure HTTP endpoints or write boilerplate for either.
 - Hologram automatically determines which code runs on the client vs server and compiles the client portions to JavaScript. You don't manually split code.
 
 ## Template Syntax
