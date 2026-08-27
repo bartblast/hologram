@@ -461,6 +461,27 @@ defmodule Hologram.DB do
     }
   end
 
+  @doc false
+  @spec refusal_lines(module, %{atom => list(atom | {atom, any})}, %{atom => any}) :: String.t()
+  def refusal_lines(entity_type, violations, values) do
+    violations
+    |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
+    |> Enum.sort()
+    |> Enum.map_join("\n", fn
+      {field, :unique} ->
+        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+
+      {field, :not_found} ->
+        "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
+
+      violation ->
+        Validator.violation_description(entity_type, values, violation)
+    end)
+  end
+
+  # A by-id read is indexed by the entity type, the way delete/2 and update/3 are - a query
+  # term reaches the same row through read/1, which is where the stages compose.
+
   @doc """
   Re-derives and re-caches the mapping from the current entity type modules, then
   reconciles the schema - the live-reload path after a dev code change. A no-op when
@@ -570,24 +591,6 @@ defmodule Hologram.DB do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
   end
 
-  defp refusal_lines(entity_type, violations, values) do
-    violations
-    |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
-    |> Enum.sort()
-    |> Enum.map_join("\n", fn
-      {field, :unique} ->
-        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
-
-      {field, :not_found} ->
-        "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
-
-      violation ->
-        Validator.violation_description(entity_type, values, violation)
-    end)
-  end
-
-  # A by-id read is indexed by the entity type, the way delete/2 and update/3 are - a query
-  # term reaches the same row through read/1, which is where the stages compose.
   defp validate_entity_type!(query) do
     if not Reflection.entity?(query) do
       raise ArgumentError,

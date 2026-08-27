@@ -40,7 +40,15 @@ defmodule Hologram.Job do
   move forward.
   """
 
+  alias Hologram.Auth.Context
+  alias Hologram.DB
+  alias Hologram.DB.Writer
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
+  alias Hologram.Policy
+  alias Hologram.Query
+  alias Hologram.Reflection
+  alias Hologram.WriteError
 
   @doc """
   Runs the job.
@@ -97,8 +105,121 @@ defmodule Hologram.Job do
   end
 
   @doc """
+  Enqueues a job of the given job type, built from the given values (a map or a keyword list).
+
+  The job is written as a row of its type, in whatever transaction the caller is already in, with
+  its status queued and its actor the acting user - nobody, on the trusted tier. It runs once,
+  after that transaction commits: a worker calls the job type's run/1 with the job, under the
+  acting user's authority, and records the outcome on it. A transaction that rolls back leaves no
+  job, so nothing runs.
+
+  Returns {:ok, job} with the written job, or {:error, violations} naming each attribute or
+  reference that broke its declaration - the same answers, and the same checks, as writing any
+  other row.
+
+  With an acting user set, the write is evaluated for :create, or for the operation named by the
+  :authorize option. The :trust option claims the server's own authority instead, which is what a
+  webhook, a seed or a job enqueuing another job does. The two are the only options, and asking
+  for both raises.
+
+  Raises ArgumentError for a module that is not a job type, for an unknown option, and for a value
+  of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting and
+  the job type declares no allow lines, since no rule can then grant the enqueue.
+  """
+  @spec enqueue(module, %{optional(atom) => any} | keyword, keyword) ::
+          {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
+  def enqueue(job_type, values \\ %{}, opts \\ []) do
+    job_type
+    |> build(values, opts)
+    |> Writer.create()
+  end
+
+  @doc """
+  Like enqueue/3, returning the written job directly and raising Hologram.WriteError instead of returning {:error, ...}.
+
+  The spelling for a call site where a refused job is a reason to stop rather than something to
+  answer.
+  """
+  @spec enqueue!(module, %{optional(atom) => any} | keyword, keyword) :: struct
+  def enqueue!(job_type, values \\ %{}, opts \\ []) do
+    job = build(job_type, values, opts)
+
+    case Writer.create(job) do
+      {:ok, written_job} ->
+        written_job
+
+      {:error, violations} ->
+        raise WriteError,
+          message:
+            "cannot enqueue #{inspect(job_type)}:\n" <>
+              DB.refusal_lines(job_type, violations, Map.from_struct(job)),
+          reason: violations
+    end
+  end
+
+  @doc """
   Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, the failure record, and the status.
   """
   @spec framework_attribute_names() :: list(atom)
   def framework_attribute_names, do: [:actor_id, :error, :status]
+
+  defp apply_claim(job, :none), do: job
+
+  defp apply_claim(job, {:authorize, operation}), do: Query.authorize(job, operation)
+
+  defp apply_claim(job, :trust), do: Query.trust(job)
+
+  # The job the enqueue writes: constructed the way any entity is, then carrying whatever authority
+  # the call claimed. Built here rather than in each verb so that the bang has the job in hand and
+  # can name the values a refusal objected to.
+  defp build(job_type, values, opts) do
+    validate_job_type!(job_type)
+
+    claim = parse_claim!(opts)
+
+    validate_enqueueable!(job_type, claim)
+
+    job_type
+    |> Entity.new(values)
+    |> apply_claim(claim)
+  end
+
+  # A literal option this refuses is a COMPILE warning as well as this raise: the clauses cover the
+  # valid shapes and anything else raises, which the type checker reads as a call site passing what
+  # the function does not take. The raise is what answers options built at run time.
+  defp parse_claim!([]), do: :none
+
+  defp parse_claim!(authorize: operation) when is_atom(operation), do: {:authorize, operation}
+
+  defp parse_claim!(trust: true), do: :trust
+
+  defp parse_claim!(opts) do
+    raise ArgumentError,
+      message: "enqueue takes authorize: operation or trust: true, got: #{inspect(opts)}"
+  end
+
+  # A job type declaring nothing is server-side work: no rule grants its create, so a user acting
+  # cannot enqueue it and would otherwise be told they lack a permission, when the state is that
+  # no permission exists. Claiming the server's authority is how one is enqueued under an actor,
+  # so a trust claim skips the check rather than meeting it.
+  defp validate_enqueueable!(job_type, claim) do
+    if claim != :trust and Context.actor_user_id() != nil and
+         Policy.dead_entity_types([job_type]) != [] do
+      raise Hologram.AccessDeniedError,
+        message:
+          "cannot enqueue #{inspect(job_type)} as a user - it declares no allow lines, so no user may enqueue it. Add \"allow :create, ...\" to enqueue it from an action, or enqueue it from server code, where there is no acting user."
+    end
+
+    :ok
+  end
+
+  defp validate_job_type!(job_type) do
+    if not Reflection.job?(job_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(job_type)} is not a job type - enqueue takes a module defined with use Hologram.Job"
+    end
+
+    :ok
+  end
 end
