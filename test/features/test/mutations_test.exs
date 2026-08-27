@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Runtime.ReplicaIdentity
+  alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.MutationsPage
@@ -20,7 +21,7 @@ defmodule HologramFeatureTests.MutationsTest do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Note, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Item, Note, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -43,6 +44,12 @@ defmodule HologramFeatureTests.MutationsTest do
           {:halt, response}
       end
     end)
+  end
+
+  defp create_item(stock) do
+    Item
+    |> Entity.new(name: "widget", stock: stock)
+    |> DB.create!()
   end
 
   defp create_note_write(author_id, body) do
@@ -81,6 +88,19 @@ defmodule HologramFeatureTests.MutationsTest do
   # The signed statement the page was given beside its replica id.
   defp page_replica_token(session) do
     script_result(session, "return globalThis.Hologram.replicaToken;")
+  end
+
+  # A move carries no data and no based_on: a delta is never merged, so there is no revision for it
+  # to be based on, and a wall-clock stamp is enough.
+  defp move_stock_write(id, amount) do
+    %{
+      "op" => "update",
+      "type" => inspect(Item),
+      "id" => id,
+      "deltas" => %{"stock" => amount},
+      "claim" => nil,
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
   end
 
   defp pin_note_write(id) do
@@ -338,5 +358,63 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert record_rows(victim_id) == []
     assert DB.read(Note) == []
+  end
+
+  feature "adds up two increments posted against the same starting value", %{session: session} do
+    item = create_item(0)
+
+    session = log_in(session)
+
+    mark_this_page_load(session)
+
+    assert_text(session, css("#items"), "widget: 0")
+
+    post_batch(session, 1, [move_stock_write(item.id, 1)])
+
+    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+
+    post_batch(session, 2, [move_stock_write(item.id, 1)])
+
+    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+
+    session
+    |> assert_text(css("#items"), "widget: 2")
+    |> assert_same_page_load()
+
+    assert [%Item{stock: 2}] = DB.read(Item)
+  end
+
+  feature "refuses a decrement that would cross the attribute's minimum", %{session: session} do
+    item = create_item(1)
+
+    session = log_in(session)
+
+    post_batch(session, 1, [move_stock_write(item.id, -2)])
+
+    response = await_response(session)
+
+    assert response["status"] == "rejected"
+    assert response["write"] == 0
+
+    assert response["reason"] ==
+             ~s|Type.map([[Type.atom("stock"), Type.list([Type.tuple([Type.atom("min"), Type.integer(0n)])])]])|
+
+    assert [%Item{stock: 1}] = DB.read(Item)
+  end
+
+  feature "moves a counter on the server through a command", %{session: session} do
+    create_item(0)
+
+    session = log_in(session)
+
+    mark_this_page_load(session)
+
+    session
+    |> click(button("Restock item"))
+    |> assert_text(css("#result"), "restocked_item")
+    |> assert_text(css("#items"), "widget: 1")
+    |> assert_same_page_load()
+
+    assert [%Item{stock: 1}] = DB.read(Item)
   end
 end
