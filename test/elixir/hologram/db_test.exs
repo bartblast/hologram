@@ -3,7 +3,7 @@ defmodule Hologram.DBTest do
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB
-  import Hologram.Query, only: [put_attribute: 3]
+  import Hologram.Query, only: [decrement: 3, put_attribute: 3]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
@@ -15,6 +15,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Entity
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -663,6 +664,25 @@ defmodule Hologram.DBTest do
       end
 
       assert read(Module19, entity.id).slug == "taken"
+    end
+
+    test "raises naming a moved attribute's refused result" do
+      {:ok, entity} =
+        Module10
+        |> Entity.new(count: 1)
+        |> create()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module10 #{inspect(entity.id)}:\n" <>
+          "  * attribute :count must be at least 1"
+
+      assert_error WriteError, expected_msg, fn ->
+        entity
+        |> decrement(:count, 1)
+        |> update!()
+      end
+
+      assert read(Module10, entity.id).count == 1
     end
 
     test "names the value the write used, not the one the struct holds" do
