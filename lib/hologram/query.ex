@@ -12,10 +12,12 @@ defmodule Hologram.Query do
           add_relationship: 3,
           authorize: 2,
           count: 1,
+          decrement: 3,
           delete_relationship: 3,
           filter: 2,
           include: 2,
           include: 3,
+          increment: 3,
           limit: 2,
           offset: 2,
           one: 1,
@@ -103,6 +105,19 @@ defmodule Hologram.Query do
     end
 
     %{term | cardinality: :count}
+  end
+
+  @doc """
+  Records on the given entity struct that the given integer attribute is to move DOWN by the
+  given amount, and returns the struct - the attribute is moved when DB.update/1 writes the
+  struct. increment/3 with the opposite sign and one stricter rule: the amount is a positive
+  integer, since a literal move down is what this spelling is for - a computed amount of either
+  sign goes through increment/3. Otherwise the same arguments, the same recording and the same
+  rules - see increment/3.
+  """
+  @spec decrement(struct, atom, pos_integer) :: struct
+  def decrement(entity, name, amount) do
+    put_delta(entity, name, amount, -1, "decrement")
   end
 
   @doc """
@@ -279,6 +294,36 @@ defmodule Hologram.Query do
   def include(_query, spec, _sub_builder) do
     raise ArgumentError,
       message: "include spec must be a relationship name or a shape list, got: #{inspect(spec)}"
+  end
+
+  @doc """
+  Records on the given entity struct that the given integer attribute is to move UP by the given
+  amount, and returns the struct - the attribute is moved when DB.update/1 writes the struct.
+
+  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The name is
+  a counter - a declared attribute of type :integer that is not optional, so it always holds a
+  number - and the amount any integer: a negative one moves the attribute down, which is how a
+  computed amount passes through with its sign, and decrement/3 is the readable spelling for a
+  literal move down. The amount is recorded in the struct's metadata as a delta under the
+  attribute's name, and several increments and decrements of one attribute add up, so a sum
+  that reaches zero leaves nothing recorded. The struct's own field is left as it was read: what
+  the attribute ends up holding is the row's to compute at the write, from whatever value it
+  holds then - which is what lets two writers moving one attribute add up instead of one
+  overwriting the other. The attribute's constraints are judged on that result at the write, so
+  a move that would cross a declared minimum, maximum or range is reported by DB.update/1.
+
+  Stages apply in order and the struct holds the net: moving an attribute the struct already
+  carries a put value for folds the amount into that value (put 10 then increment 1 records a
+  put of 11), and putting an attribute the struct carries a delta for replaces the delta.
+
+  Raises ArgumentError when the entity is not an entity struct, when the amount is not an
+  integer, when the name is an optional integer attribute, a non-integer attribute, a
+  relationship, a system attribute, or unknown, or when the put value the amount would fold
+  into is not an integer.
+  """
+  @spec increment(struct, atom, integer) :: struct
+  def increment(entity, name, amount) do
+    put_delta(entity, name, amount, 1, "increment")
   end
 
   @doc """
@@ -476,7 +521,9 @@ defmodule Hologram.Query do
   are a keyword list or a map keyed by declared attribute names and to-one reference fields
   (`<relationship name>_id`) - what DB.update/3 takes as changes. Each value is set on the
   struct's field and recorded under the same name in the struct's metadata, so a later put of
-  the same name replaces the earlier one. Values are judged at the write, not here - a value
+  the same name replaces the earlier one, and replaces a delta recorded for it by increment/3 or
+  decrement/3 - stages apply in order, and the struct holds the net. Values are judged at the
+  write, not here - a value
   the declarations refuse is reported by DB.update/1, and a struct holding one reads like any
   other until then.
 
@@ -501,13 +548,22 @@ defmodule Hologram.Query do
 
     Enum.each(values_map, fn {name, _value} -> validate_put_name!(name, entity_type) end)
 
-    %Metadata{attribute_changes: recorded_changes} = metadata = entity.__meta__
+    %Metadata{attribute_changes: recorded_changes, attribute_deltas: recorded_deltas} =
+      metadata = entity.__meta__
 
     changes = Map.merge(recorded_changes, values_map)
 
+    # Stages apply in order: a put after a delta replaces it, the way a later put replaces an
+    # earlier one.
+    deltas = Map.drop(recorded_deltas, Map.keys(values_map))
+
     entity
     |> Map.merge(values_map)
-    |> Map.put(:__meta__, %Metadata{metadata | attribute_changes: changes})
+    |> Map.put(:__meta__, %Metadata{
+      metadata
+      | attribute_changes: changes,
+        attribute_deltas: deltas
+    })
   end
 
   def put_attribute(_entity, values) do
@@ -583,6 +639,14 @@ defmodule Hologram.Query do
 
   defp constraint_tuple?(value) do
     is_tuple(value) and tuple_size(value) == 2 and is_atom(elem(value, 0))
+  end
+
+  # A counter is an integer attribute that always holds a number: an optional one can be nil, and
+  # there is nothing to add to nil.
+  defp counter_attribute_names(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.reject(fn {_name, _type, opts} -> Keyword.get(opts, :optional) == true end)
+    |> integer_names()
   end
 
   # Keyword.keyword?/1 with placeholder keys admitted - a placeholder names an attribute nobody knows yet.
@@ -674,6 +738,12 @@ defmodule Hologram.Query do
     raise ArgumentError,
       message:
         "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
+  end
+
+  defp integer_names(definitions) do
+    definitions
+    |> Enum.filter(fn {_name, type, _opts} -> type == :integer end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
   defp normalized_includes(term) do
@@ -908,6 +978,37 @@ defmodule Hologram.Query do
     Map.put(entity, :__meta__, %Metadata{metadata | claim: claim})
   end
 
+  # The two counter stages share everything but the sign they record. A sum that reaches zero is
+  # dropped rather than recorded: a delta of nothing is not a change, and the wire refuses one.
+  defp put_delta(entity, name, amount, sign, stage) do
+    entity_type = entity_type!(entity, stage)
+
+    validate_delta_name!(name, entity_type, stage)
+    validate_amount!(amount, stage)
+
+    %Metadata{attribute_changes: changes, attribute_deltas: deltas} = metadata = entity.__meta__
+
+    case Map.fetch(changes, name) do
+      # Stages apply in order: a delta after a put folds into the value, so the struct holds the
+      # net of both and never carries a put and a delta for one attribute.
+      {:ok, value} when is_integer(value) ->
+        put_attribute(entity, name, value + sign * amount)
+
+      {:ok, value} ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} in #{inspect(entity_type)} carries a put value that is not an integer (#{inspect(value)}) - #{stage} cannot move it"
+
+      :error ->
+        delta = Map.get(deltas, name, 0) + sign * amount
+
+        recorded_deltas =
+          if delta == 0, do: Map.delete(deltas, name), else: Map.put(deltas, name, delta)
+
+        Map.put(entity, :__meta__, %Metadata{metadata | attribute_deltas: recorded_deltas})
+    end
+  end
+
   # The two edge stages share everything but the operation they record.
   defp put_relationship_op(entity, relationship_name, target_id, op, stage) do
     entity_type = entity_type!(entity, stage)
@@ -1024,6 +1125,23 @@ defmodule Hologram.Query do
     end
   end
 
+  # increment is the general form and takes any integer - a computed amount passes through with
+  # its sign. decrement is the readable spelling for a literal move down, so an amount that is
+  # not positive is refused: decrement(:stock, -1) has no sensible reading, and increment covers
+  # it.
+  defp validate_amount!(amount, "increment") when is_integer(amount), do: :ok
+
+  defp validate_amount!(amount, "decrement") when is_integer(amount) and amount > 0, do: :ok
+
+  defp validate_amount!(amount, "increment") do
+    raise ArgumentError, message: "increment takes an integer amount, got: #{inspect(amount)}"
+  end
+
+  defp validate_amount!(amount, "decrement") do
+    raise ArgumentError,
+      message: "decrement takes a positive integer amount, got: #{inspect(amount)}"
+  end
+
   defp validate_attribute_name!(name, entity_type, usage) do
     attribute_names = attribute_names(entity_type)
 
@@ -1076,6 +1194,43 @@ defmodule Hologram.Query do
   # statement reaches it, and by then nothing can name the values there were to choose from.
   # A declared to-many relationship - refused where it is written, with the fix named for the
   # names an edge stage is most often given by mistake.
+  defp validate_delta_name!(name, entity_type, stage) do
+    counter_names = counter_attribute_names(entity_type)
+    system_names = system_attribute_names(entity_type)
+
+    cond do
+      name in counter_names ->
+        :ok
+
+      name in integer_names(entity_type.__attributes__()) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} in #{inspect(entity_type)} is optional and can hold nil - #{stage} moves attributes that always hold a number - declare it without optional: true, with a default"
+
+      name in system_names ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a system attribute of #{inspect(entity_type)} - it is managed automatically and can't be moved"
+
+      name in attribute_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a #{inspect(attribute_type(entity_type, name))} attribute of #{inspect(entity_type)} - #{stage} moves integer attributes only"
+
+      name in relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - #{stage} moves integer attributes only"
+
+      true ->
+        known = Enum.map_join(counter_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known counters: #{known}"
+    end
+  end
+
   defp validate_edge_relationship_name!(name, entity_type) do
     to_many_names = to_many_relationship_names(entity_type)
 
