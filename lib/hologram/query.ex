@@ -5,14 +5,6 @@ defmodule Hologram.Query do
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
-  # TODO: delete once every app pinning Hologram by git ref uses "use Hologram.DB" - kept only so
-  # that the test apps, whose pinned commit predates the rename, go on compiling.
-  defmacro __using__(opts) do
-    quote do
-      use Hologram.DB, unquote(opts)
-    end
-  end
-
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]

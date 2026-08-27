@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.MutationsPage do
   use Hologram.Page
-  use Hologram.Query
+  use Hologram.DB
 
   alias HologramFeatureTests.Components.Mutations.Items
   alias HologramFeatureTests.Components.Mutations.Notes

@@ -19,26 +19,6 @@ defmodule Hologram.QueryTest do
     %Query{entity: entity_type}
   end
 
-  describe "__using__/1" do
-    # The line every app writes is "use Hologram.DB" - this one is kept only while apps pinned to a
-    # commit before the rename still say "use Hologram.Query", and goes when they no longer do.
-    test "brings in the same data surface use Hologram.DB does" do
-      {{:module, module, _binary, _result}, _bindings} =
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.Query.DataSurface do
-          use Hologram.Query
-
-          def query, do: filter(Hologram.Test.Fixtures.Entity.Module2, c: "abc")
-
-          def executor, do: DB.pool_name()
-        end
-        """)
-
-      assert module.query() == %Query{entity: Module2, filter: [{:c, :==, "abc"}]}
-      assert module.executor() == Hologram.DB.pool_name()
-    end
-  end
-
   describe "add_relationship/3" do
     test "keeps the rest of the metadata" do
       metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}

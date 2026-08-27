@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.PoliciesPage do
   use Hologram.Page
-  use Hologram.Query
+  use Hologram.DB
 
   alias Hologram.Auth
   alias HologramFeatureTests.Components.Policies.Component1

@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.Components.Queries.Component3 do
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias HologramFeatureTests.Components.Queries.Component4
   alias HologramFeatureTests.Entities.Product

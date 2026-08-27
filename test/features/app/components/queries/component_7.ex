@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.Components.Queries.Component7 do
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias HologramFeatureTests.Entities.Ticket
 
