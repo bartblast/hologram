@@ -92,7 +92,9 @@ defmodule Hologram.Mutation do
     end
   end
 
-  defp apply_changes(_write, changes, _index) when changes == %{}, do: :ok
+  defp apply_changes(%Write{deltas: deltas}, changes, _index)
+       when changes == %{} and deltas == %{},
+       do: :ok
 
   defp apply_changes(write, changes, index) do
     result =
@@ -166,6 +168,9 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # Only the VALUES go through the merge. A delta is not a claim about what the column should
+  # hold, so there is nothing to compare it against and nothing for it to lose: it is applied
+  # whatever the row's revision is, which is what makes two writers' +1s land as +2.
   defp apply_write(%Write{op: :update} = write, index) do
     row = lock_row(write, index)
 
