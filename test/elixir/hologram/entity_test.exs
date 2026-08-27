@@ -16,6 +16,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
 
   describe "__attributes__/0" do
     test "returns empty list for entity type with no attribute declarations" do
@@ -276,6 +277,14 @@ defmodule Hologram.EntityTest do
       assert new(Module3, %{c_id: "id_2"}).c_id == "id_2"
     end
 
+    test "builds a job queued, with nothing recorded of a run" do
+      job = new(JobModule1)
+
+      assert job.status == :queued
+      assert job.actor_id == nil
+      assert job.error == nil
+    end
+
     test "raises on a role grant" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
@@ -290,6 +299,24 @@ defmodule Hologram.EntityTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         new(Module3, %{c: "id_2"})
+      end
+    end
+
+    test "raises on an assigned job status" do
+      expected_msg =
+        ":status of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        new(JobModule1, %{status: :done})
+      end
+    end
+
+    test "raises on an assigned job actor" do
+      expected_msg =
+        ":actor_id of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        new(JobModule1, %{actor_id: "018f4c11-1111-7111-8111-111111111111"})
       end
     end
   end

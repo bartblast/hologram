@@ -5,6 +5,7 @@ defmodule Hologram.Entity do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
+  alias Hologram.Job
   alias Hologram.Reflection
 
   @system_attributes [
@@ -495,6 +496,26 @@ defmodule Hologram.Entity do
       raise ArgumentError,
         message:
           "relationship #{inspect(assigned_relationship_name)} of #{inspect(entity_type)} cannot be assigned at construction - set a to-one reference via the :#{assigned_relationship_name}_id field, to-many edges via add_relationship"
+    end
+
+    validate_framework_values!(entity_type, values_map)
+
+    :ok
+  end
+
+  # A job is enqueued as queued, by whoever is acting, and what happens to it afterwards is the
+  # worker's to record - so the three attributes carrying that are refused here rather than
+  # silently overwritten at the write.
+  defp validate_framework_values!(entity_type, values_map) do
+    framework_name =
+      if Reflection.job?(entity_type) do
+        Enum.find(Job.framework_attribute_names(), &Map.has_key?(values_map, &1))
+      end
+
+    if framework_name do
+      raise ArgumentError,
+        message:
+          "#{inspect(framework_name)} of #{inspect(entity_type)} is set by the framework - a job is enqueued as queued, and the worker records the rest"
     end
 
     :ok

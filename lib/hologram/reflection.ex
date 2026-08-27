@@ -303,6 +303,22 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if the given term is a Hologram job type module, or false otherwise.
+
+  ## Examples
+
+      iex> job?(MyJob)
+      true
+
+      iex> job?(MyEntity)
+      false
+  """
+  @spec job?(term) :: boolean
+  def job?(term) do
+    elixir_module?(term) && has_function?(term, :__is_hologram_job__, 0)
+  end
+
+  @doc """
   Lists all OTP applications, both loaded and not loaded.
   """
   @spec list_all_otp_apps() :: list(atom)
