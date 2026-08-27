@@ -11,15 +11,18 @@ defmodule Hologram.DB.Writer do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity.Metadata
+  alias Hologram.Reflection
 
   @doc false
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
+    stamped = stamp_actor(entity)
+
     # The row being inserted is the struct in hand - nothing a transaction could change - so the
     # claim is evaluated against it before the write's own transaction opens.
-    evaluate!(entity, :create, entity)
+    evaluate!(stamped, :create, stamped)
 
-    entity
+    stamped
     |> clean()
     |> EntityOperations.create()
   end
@@ -202,6 +205,18 @@ defmodule Hologram.DB.Writer do
       {name, {:put, value}}, {changes, deltas} -> {Map.put(changes, name, value), deltas}
       {name, {:increment, amount}}, {changes, deltas} -> {changes, Map.put(deltas, name, amount)}
     end)
+  end
+
+  # A job records who enqueued it, and that is a fact of the write rather than of the struct: the
+  # ambient actor at the moment it is written, and nobody on the trusted tier. Stamped before the
+  # claim is evaluated, so a policy naming the field judges the value the row will hold - and
+  # stamped over whatever the struct carries, the way the executor stamps the timestamps.
+  defp stamp_actor(entity) do
+    if Reflection.job?(entity.__struct__) do
+      %{entity | actor_id: Context.actor_user_id()}
+    else
+      entity
+    end
   end
 
   defp update_attributes(_entity_type, _id, attribute_changes, attribute_deltas, _stamp)

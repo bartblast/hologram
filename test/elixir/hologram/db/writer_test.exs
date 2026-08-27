@@ -28,6 +28,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
 
@@ -135,6 +136,30 @@ defmodule Hologram.DB.WriterTest do
       end
 
       assert DB.read(Module2, denied_entity.id) == nil
+    end
+
+    test "stamps a job with the acting user" do
+      user = create_user("enqueuer@example.com")
+      job = Entity.new(JobModule1)
+
+      assert {:ok, %JobModule1{actor_id: actor_id}} = as_user(user, fn -> create(job) end)
+      assert actor_id == user.id
+      assert DB.read(JobModule1, job.id).actor_id == user.id
+    end
+
+    test "stamps a job with no actor without an acting user" do
+      job = Entity.new(JobModule1)
+
+      assert {:ok, %JobModule1{actor_id: nil}} = create(job)
+      assert DB.read(JobModule1, job.id).actor_id == nil
+    end
+
+    test "stamps a job over the actor its struct carries" do
+      user = create_user("stamped@example.com")
+      job = %{Entity.new(JobModule1) | actor_id: Entity.generate_id()}
+
+      assert {:ok, %JobModule1{actor_id: actor_id}} = as_user(user, fn -> create(job) end)
+      assert actor_id == user.id
     end
 
     test "inserts raw without an acting user" do
