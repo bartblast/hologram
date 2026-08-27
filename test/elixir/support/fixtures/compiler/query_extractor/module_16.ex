@@ -2,7 +2,7 @@
 # credo:disable-for-this-file Credo.Check.Refactor.CondStatements
 defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module16 do
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 

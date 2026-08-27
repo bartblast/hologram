@@ -1,6 +1,6 @@
 defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.Component
 

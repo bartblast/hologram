@@ -1,6 +1,6 @@
 defmodule Hologram.DB.QueryRunnerSortKeyTest do
   use Hologram.Test.DatabaseCase, async: false
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.DB.QueryRunner

@@ -13,6 +13,7 @@ defmodule Hologram.DBTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
   alias Hologram.Entity
+  alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -21,6 +22,31 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.WriteError
+
+  describe "__using__/1" do
+    test "imports the query and write stages, and aliases the modules the executors live on" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.DB.DataSurface do
+          use Hologram.DB
+
+          def query, do: filter(Hologram.Test.Fixtures.Entity.Module2, c: "abc")
+
+          def write, do: put_attribute(Entity.new(Hologram.Test.Fixtures.Entity.Module2), :c, "abc")
+
+          def executor, do: DB.pool_name()
+        end
+        """)
+
+      assert module.query() == %Query{
+               entity: Module2,
+               filter: [{:c, :==, "abc"}]
+             }
+
+      assert module.write().__meta__.attribute_ops == %{c: {:put, "abc"}}
+      assert module.executor() == pool_name()
+    end
+  end
 
   describe "init/1" do
     test "starts only the connection pool in test" do

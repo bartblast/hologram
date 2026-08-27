@@ -22,6 +22,39 @@ defmodule Hologram.DB do
 
   @pool_name Hologram.DB.Pool
 
+  # The data surface, brought in by one line: the stages that build a query term or record a write
+  # on an entity struct as bare functions, and the modules the executors live on as aliases. Named
+  # after the database rather than after the query, because a module says this line to read or
+  # write data - a page that queries, a command that writes, a seed that only creates, a job that
+  # only enqueues - and the write stages are the database's vocabulary as much as the query's.
+  defmacro __using__(_opts) do
+    quote do
+      import Hologram.Query,
+        only: [
+          add_relationship: 3,
+          authorize: 2,
+          count: 1,
+          decrement: 3,
+          delete_relationship: 3,
+          filter: 2,
+          include: 2,
+          include: 3,
+          increment: 3,
+          limit: 2,
+          offset: 2,
+          one: 1,
+          order_by: 2,
+          paginate: 2,
+          put_attribute: 2,
+          put_attribute: 3,
+          trust: 1
+        ]
+
+      alias Hologram.DB
+      alias Hologram.Entity
+    end
+  end
+
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp.

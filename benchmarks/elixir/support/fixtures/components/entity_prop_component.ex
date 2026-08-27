@@ -3,7 +3,7 @@ defmodule Hologram.Benchmarks.Fixtures.Components.EntityPropComponent do
   @moduledoc false
 
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias Hologram.Benchmarks.Fixtures.Entity1
 

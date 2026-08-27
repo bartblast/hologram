@@ -1,6 +1,6 @@
 defmodule Hologram.Query.InterpreterTest do
   use Hologram.Test.DatabaseCase, async: true
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.Query.Interpreter

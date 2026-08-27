@@ -1,6 +1,6 @@
 defmodule Hologram.CompilerTest do
   use Hologram.Test.BasicCase, async: false
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.Compiler
 
