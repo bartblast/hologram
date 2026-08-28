@@ -206,15 +206,7 @@ defmodule Hologram.Entity do
     Validator.validate_writable!(entity_type)
     validate_construction_values!(entity_type, values_map)
 
-    declared_defaults =
-      entity_type.__attributes__()
-      |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
-      |> Map.new(fn {name, _type, opts} -> {name, Keyword.fetch!(opts, :default)} end)
-
-    fields =
-      declared_defaults
-      |> Map.put(:id, generate_id())
-      |> Map.merge(values_map)
+    fields = Map.put_new(values_map, :id, generate_id())
 
     struct!(entity_type, fields)
   end
