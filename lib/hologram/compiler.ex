@@ -921,12 +921,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns what the client's data layer is compiled with, derived from the queries the given
-  pages reach.
+  Returns what the client's data layer is compiled with, derived from what the given pages reach.
 
-  `:entity_types` are the types a client can ever hold - every window's own type and everything
-  it includes. Nothing else can reach a client's database, so nothing else is worth telling it
-  about.
+  `:entity_types` are the types a client can ever hold or mention - every window's own type and
+  everything it includes, plus every entity type the given pages' client code mentions. A client
+  constructs and validates entities as well as reading them, and a type it constructs is one it
+  has to be told the declarations of. A type neither queried nor mentioned is left out, which is
+  what keeps an app's other tables out of a file every page load serves.
 
   `:prop_params` are the ordered argument names of every parameterized from_query capture those
   components declare, keyed by component and prop. A capture travels in the bundle and is called
@@ -955,14 +956,32 @@ defmodule Hologram.Compiler do
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
+    # One traversal per page, read twice: the modules a page reaches carry both its components
+    # and the entity types below.
+    reached_modules = Enum.map(page_modules, &page_reached_modules(&1, call_graph, analysis))
+
     component_modules =
-      page_modules
-      |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
+      reached_modules
+      |> Enum.concat()
       |> Enum.uniq()
+      |> Enum.filter(&Reflection.component?/1)
 
     # One sweep for both the extraction below and the policied set: the extractor forks over this
     # list once per variant if it reads it itself, and policied_entity_types/1 filters the same one.
     all_entity_types = Reflection.list_entities()
+
+    # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
+    # to `Task.__struct__/1`, and `Entity.new(Task, ...)` hands the module over as a value - which
+    # reaches those same two functions, because the call graph links every module it reaches to
+    # its own `__struct__/0` and `__struct__/1` whenever the module has a struct
+    # (`CallGraph.maybe_add_struct_call_graph_edges/2`). Every entity type has one, so both
+    # spellings land in the reached modules, and telling a mention apart from a call would answer
+    # nothing this does not.
+    mentioned_entity_types =
+      reached_modules
+      |> Enum.concat()
+      |> MapSet.new()
+      |> MapSet.intersection(MapSet.new(all_entity_types))
 
     terms =
       Enum.flat_map(
@@ -975,13 +994,15 @@ defmodule Hologram.Compiler do
         MapSet.union(types, Registry.entity_types(term))
       end)
 
+    reached_entity_types = MapSet.union(queried_entity_types, mentioned_entity_types)
+
     entity_types =
       if permission_checking? do
-        queried_entity_types
+        reached_entity_types
         |> MapSet.put(RoleGrant)
         |> MapSet.union(policied_entity_types(all_entity_types))
       else
-        queried_entity_types
+        reached_entity_types
       end
 
     # The flag is carried rather than recovered from the type set: a component query reading grant
@@ -1302,10 +1323,8 @@ defmodule Hologram.Compiler do
   end
 
   defp page_component_modules(page_module, call_graph, analysis) do
-    call_graph
-    |> CallGraph.list_page_mfas(page_module, analysis)
-    |> Enum.map(fn {module, _function, _arity} -> module end)
-    |> Enum.uniq()
+    page_module
+    |> page_reached_modules(call_graph, analysis)
     |> Enum.filter(&Reflection.component?/1)
   end
 
@@ -1313,6 +1332,13 @@ defmodule Hologram.Compiler do
     page_module
     |> page_component_modules(call_graph, analysis)
     |> Enum.flat_map(&QueryExtractor.extract_module_queries(&1, all_entity_types))
+  end
+
+  defp page_reached_modules(page_module, call_graph, analysis) do
+    call_graph
+    |> CallGraph.list_page_mfas(page_module, analysis)
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
   end
 
   # A component declaring no parameterized capture is left out rather than carried as an empty

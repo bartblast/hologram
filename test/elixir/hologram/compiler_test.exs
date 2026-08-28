@@ -755,9 +755,22 @@ defmodule Hologram.CompilerTest do
       assert MapSet.member?(sync_constants.entity_types, Entity1)
     end
 
-    # A type no query reads can never reach a client's database, so the build tells it nothing
-    # about one - not its attributes, and not that it exists.
-    test "leaves out a type no query reads", %{sync_constants: sync_constants} do
+    # A client constructs and validates entities as well as reading them, and the type it
+    # constructs is the one it needs the declarations of. PageModule13 holds a Module4 in an
+    # action and no query anywhere reads that type, so mentioning it is the only way it can be
+    # here - and Module4 declares no policy, so the policied set cannot be carrying it either.
+    test "collects a type the given pages mention without querying", %{
+      sync_constants: sync_constants
+    } do
+      assert MapSet.member?(sync_constants.entity_types, Entity4)
+    end
+
+    # A type nothing reads and nothing mentions can never reach a client's database or be built
+    # there, so the build tells it nothing about one - not its attributes, and not that it exists.
+    # That is what keeps an app's other tables out of a file every page load serves.
+    test "leaves out a type no query reads and no page mentions", %{
+      sync_constants: sync_constants
+    } do
       refute MapSet.member?(sync_constants.entity_types, Entity12)
     end
 

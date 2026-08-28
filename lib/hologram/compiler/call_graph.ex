@@ -906,8 +906,27 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec list_page_mfas(t, module, %{module => server_callback_analysis}) :: [mfa]
   def list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable) do
-    {graph, final_state, server_callback_analysis_by_templatable} =
-      page_reachable_state(call_graph, page_module, server_callback_analysis_by_templatable)
+    entry_mfas = list_page_entry_mfas(page_module)
+    graph = get_graph(call_graph)
+
+    initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
+    initial_templatables = [page_module | extract_uniq_components(initial_mfas)]
+
+    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        server_callback_analysis_by_templatable
+      )
+
+    server_types =
+      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
+      end)
+
+    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
 
     graph
     |> finalize_reachable_mfas(final_state)
@@ -916,24 +935,6 @@ defmodule Hologram.Compiler.CallGraph do
       page_module,
       server_callback_analysis_by_templatable
     )
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  @doc """
-  Returns the sorted list of modules that the given page's client-reachable code NAMES.
-
-  A module is named when it is written where a value is expected - an argument, a list, a module attribute - which is what puts a bare module atom in the graph.
-  A module reached only by CALLING one of its functions is not named and is not returned: `list_page_mfas/3` answers for those.
-  A struct literal is a call rather than a name, because `%SomeModule{}` compiles to `SomeModule.__struct__/1`.
-  """
-  @spec list_page_modules(t, module, %{module => server_callback_analysis}) :: [module]
-  def list_page_modules(call_graph, page_module, server_callback_analysis_by_templatable) do
-    {_graph, final_state, _analysis} =
-      page_reachable_state(call_graph, page_module, server_callback_analysis_by_templatable)
-
-    final_state.reached_vertices
-    |> Enum.reject(&is_tuple/1)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1682,36 +1683,6 @@ defmodule Hologram.Compiler.CallGraph do
     else
       types
     end
-  end
-
-  # The traversal both page listings share - everything reachable from the page's entry MFAs,
-  # with the server-referenced components and the types their server callbacks create folded in.
-  # The analysis travels back out because expanding over server-referenced components fills it in
-  # for templatables it had not been asked about yet.
-  defp page_reachable_state(call_graph, page_module, server_callback_analysis_by_templatable) do
-    entry_mfas = list_page_entry_mfas(page_module)
-    graph = get_graph(call_graph)
-
-    initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
-    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-    initial_templatables = [page_module | extract_uniq_components(initial_mfas)]
-
-    {expanded_state, templatables, server_callback_analysis_by_templatable} =
-      expand_reachable_state_with_server_referenced_components(
-        graph,
-        initial_state,
-        initial_templatables,
-        server_callback_analysis_by_templatable
-      )
-
-    server_types =
-      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
-      end)
-
-    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
-
-    {graph, final_state, server_callback_analysis_by_templatable}
   end
 
   # Moves pending implementation candidates whose target type has become reachable
