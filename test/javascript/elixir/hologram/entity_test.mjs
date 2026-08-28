@@ -611,6 +611,28 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    // Map.take omits a key the struct lacks, so the server reports such a field as required. A
+    // struct from new/2 or from a boxed row carries every field, so this is the shape an app
+    // reaches by dropping one - and reading it as undefined would crash where the server answers.
+    it("reports a declared field the struct does not carry as required", () => {
+      const entity = newEntityWithValues(
+        Type.alias(ACCOUNT),
+        Type.map([[Type.atom("handle"), Type.bitstring("bart")]]),
+      );
+
+      const withoutHandle = Type.map(
+        Object.values(entity.data).filter(([key]) => key.value !== "handle"),
+      );
+
+      assert.deepEqual(
+        validate(withoutHandle),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([[Type.atom("handle"), Type.list([Type.atom("required")])]]),
+        ]),
+      );
+    });
+
     it("raises for something that is not an entity struct", () => {
       assertBoxedError(
         () => validate(Type.atom("nope")),

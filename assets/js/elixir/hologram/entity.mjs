@@ -386,6 +386,10 @@ function lengthSatisfied(count, key, bound) {
   }
 }
 
+function hasField(struct, name) {
+  return Type.encodeMapKey(Type.atom(name)) in struct.data;
+}
+
 function structField(struct, name) {
   return struct.data[Type.encodeMapKey(Type.atom(name))][1];
 }
@@ -507,10 +511,7 @@ function validateChanges(entityType, changes) {
 }
 
 function validateEntity(entity) {
-  if (
-    !Type.isMap(entity) ||
-    !(Type.encodeMapKey(Type.atom("__struct__")) in entity.data)
-  ) {
+  if (!Type.isMap(entity) || !hasField(entity, "__struct__")) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(entity)} is not an entity struct`,
     );
@@ -522,14 +523,23 @@ function validateEntity(entity) {
   // What Map.take leaves on the server: the declared attributes and the to-one reference fields,
   // and nothing else - so a system attribute, a relationship and __meta__ are never judged, and
   // an undeclared name cannot be present to be reported.
+  // A field the struct does not carry stays OUT of the data rather than being read as undefined,
+  // which is what Map.take does with a key the struct lacks - and it is what lets the checks
+  // report such a field as required, the way the server reports it, instead of crashing on a
+  // read. A struct built by new/2 or boxed from a row carries every field, so this is the shape
+  // an app arrives at by dropping one.
   const data = new Map();
 
   for (const [name] of declaredAttributes(entry)) {
-    data.set(name, structField(entity, name));
+    if (hasField(entity, name)) {
+      data.set(name, structField(entity, name));
+    }
   }
 
   for (const [field] of referenceDefinitions(entry)) {
-    data.set(field, structField(entity, field));
+    if (hasField(entity, field)) {
+      data.set(field, structField(entity, field));
+    }
   }
 
   const attributeErrors = declaredAttributes(entry).flatMap(([name, type]) =>
