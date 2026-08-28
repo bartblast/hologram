@@ -7,7 +7,12 @@ defmodule Hologram.Component do
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
-  defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
+  defstruct emitted_context: %{},
+            next_action: nil,
+            next_command: nil,
+            next_page: nil,
+            props: %{},
+            state: %{}
 
   defmodule Action do
     defstruct delay: 0, name: nil, params: %{}, target: nil
@@ -31,6 +36,7 @@ defmodule Hologram.Component do
           next_action: Action.t() | nil,
           next_command: Command.t() | nil,
           next_page: module | {module, keyword},
+          props: %{atom => any},
           state: %{atom => any}
         }
 
