@@ -95,6 +95,16 @@ defmodule Hologram.Compiler.CallGraphTest do
     list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
   end
 
+  defp list_page_modules_with_analysis(call_graph, page_module) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = [page_module | Reflection.list_components()]
+
+    server_callback_analysis_by_templatable =
+      server_callback_analysis_by_templatable(graph, templatables)
+
+    list_page_modules(call_graph, page_module, server_callback_analysis_by_templatable)
+  end
+
   # An End marker paired with the Deps comment under it, yielding one
   # {source, target} per Erlang dependency. Dependencies on Elixir modules are
   # named without a leading colon and are carried by a different table.
@@ -1755,6 +1765,35 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     refute {:unicode, :characters_to_binary, 1} in result
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
+  end
+
+  describe "list_page_modules/3" do
+    setup do
+      call_graph =
+        start()
+        |> build(IR.for_module(Module14))
+        |> build(IR.for_module(Module15))
+        |> build(IR.for_module(Module16))
+
+      [call_graph: call_graph]
+    end
+
+    # Module15 is the page's layout, named by the __layout_module__/0 the layout macro generates -
+    # a bare module atom, which is what being named means.
+    test "returns the modules a page's client code names", %{call_graph: call_graph} do
+      assert list_page_modules_with_analysis(call_graph, Module14) == [Module15]
+    end
+
+    # Module16 is reached through my_fun_16a/2 and named nowhere. The distinction is load-bearing
+    # rather than academic: a struct literal is a call too, since %Module16{} compiles to
+    # Module16.__struct__/1, so a listing that took every MFA's module would answer both the same.
+    test "excludes a module reached only by calling one of its functions", %{
+      call_graph: call_graph
+    } do
+      assert {Module16, :my_fun_16a, 2} in list_page_mfas_with_analysis(call_graph, Module14)
+
+      refute Module16 in list_page_modules_with_analysis(call_graph, Module14)
+    end
   end
 
   describe "list_runtime_mfas/2" do
