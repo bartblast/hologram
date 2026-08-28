@@ -47,7 +47,7 @@ defmodule Hologram.Policy do
 
   defmacro __using__(_opts) do
     quote do
-      import Hologram.Policy, only: [allow: 1, allow: 2, role: 1, role: 2]
+      import Hologram.Policy, only: [allow: 1, allow: 2, policy: 1, role: 1, role: 2]
 
       @doc """
       Returns true to indicate that the callee module is a policy module (has "use Hologram.Policy" directive).
@@ -116,6 +116,14 @@ defmodule Hologram.Policy do
     :ok
   end
 
+  @doc false
+  @spec __take__(module, module) :: :ok
+  def __take__(module, policy_module) do
+    validate_policy_module!(module, policy_module)
+
+    Enum.each(policy_module.__declarations__(), &replay(module, &1))
+  end
+
   @doc """
   Accumulates the given policy declaration, for replay into the entity types taking this policy on.
 
@@ -132,6 +140,28 @@ defmodule Hologram.Policy do
       EntityValidator.validate_allow!(__MODULE__, operation, spec)
 
       @__policy_declarations__ {:allow, operation, spec}
+    end
+  end
+
+  @doc """
+  Takes on the roles and rules of the given policy module.
+
+  Can be written in an entity type or in another policy module, to any depth. The declarations are
+  copied in where the line is written, so they land in the taking module exactly as locally written
+  ones do, and a role name declared on both sides is one role.
+  """
+  @spec policy(module) :: Macro.t()
+  defmacro policy(module) do
+    quote do
+      # The require is load-bearing: it states a COMPILE-TIME dependency on the policy module,
+      # which is what makes Elixir recompile this module when that policy changes. The
+      # declarations are copied at compile time, so an out-of-date taker would silently carry
+      # stale roles and rules. A bare alias passed as a function argument is only a runtime
+      # reference, and an export dependency would not help either - a policy's declarations
+      # change without its exported functions changing.
+      require unquote(module)
+
+      Hologram.Policy.__take__(__MODULE__, unquote(module))
     end
   end
 
@@ -352,6 +382,22 @@ defmodule Hologram.Policy do
   # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
   # that resource type's read-grants roles, held on the very resource the grant row names - so
   # the check reads grant rows through grant rows, never through this policy again.
+  defp replay(module, declaration) do
+    if Module.has_attribute?(module, :__policies__) do
+      replay_into_entity(module, declaration)
+    else
+      Module.put_attribute(module, :__policy_declarations__, declaration)
+    end
+  end
+
+  defp replay_into_entity(module, {:allow, operation, spec}) do
+    Entity.__put_policy__(module, operation, spec)
+  end
+
+  defp replay_into_entity(module, {:role, name, opts}) do
+    Entity.__put_role__(module, name, opts)
+  end
+
   defp role_grant_read_rules do
     resource_rules =
       model_facts().entity_types
@@ -372,11 +418,11 @@ defmodule Hologram.Policy do
     }
   end
 
-  defp replay_into_entity(module, {:allow, operation, spec}) do
-    Entity.__put_policy__(module, operation, spec)
-  end
-
-  defp replay_into_entity(module, {:role, name, opts}) do
-    Entity.__put_role__(module, name, opts)
+  defp validate_policy_module!(module, policy_module) do
+    if not Reflection.policy?(policy_module) do
+      raise Hologram.CompileError,
+        message:
+          "invalid policy #{inspect(policy_module)} taken in #{inspect(module)} - #{inspect(policy_module)} is not a policy module (define it with use Hologram.Policy)"
+    end
   end
 end

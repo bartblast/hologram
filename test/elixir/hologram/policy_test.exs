@@ -152,6 +152,70 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "policy/1" do
+    test "takes the declarations of another policy, in order" do
+      defmodule TakenPolicyFixture do
+        use Hologram.Policy
+
+        role :viewer
+
+        allow :read, to: :viewer
+      end
+
+      defmodule TakingPolicyFixture do
+        use Hologram.Policy
+
+        policy TakenPolicyFixture
+
+        allow :update, to: :viewer
+      end
+
+      assert TakingPolicyFixture.__declarations__() == [
+               {:role, :viewer, []},
+               {:allow, :read, [to: :viewer]},
+               {:allow, :update, [to: :viewer]}
+             ]
+    end
+
+    test "takes the declarations of a policy nested two levels down, innermost first" do
+      defmodule MiddlePolicyFixture do
+        use Hologram.Policy
+
+        policy Policy.Shared.Module1
+
+        allow :update, to: :viewer
+      end
+
+      defmodule OuterPolicyFixture do
+        use Hologram.Policy
+
+        policy MiddlePolicyFixture
+
+        allow :delete, to: :viewer
+      end
+
+      assert OuterPolicyFixture.__declarations__() == [
+               {:role, :viewer, []},
+               {:allow, :read, [to: :viewer]},
+               {:allow, :update, [to: :viewer]},
+               {:allow, :delete, [to: :viewer]}
+             ]
+    end
+
+    test "raises for a target that is not a policy module" do
+      expected_msg =
+        "invalid policy Hologram.Test.Fixtures.Entity.Module1 taken in Hologram.PolicyTest.NonPolicyTargetPolicyFixture - Hologram.Test.Fixtures.Entity.Module1 is not a policy module (define it with use Hologram.Policy)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPolicyTargetPolicyFixture do
+          use Hologram.Policy
+
+          policy Module1
+        end
+      end
+    end
+  end
+
   describe "role/2" do
     test "replays a role declaration into the including entity type" do
       defmodule RolePolicyFixture do
