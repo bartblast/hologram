@@ -21,6 +21,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       :ok_tuple,
       :raise,
       :record_actor,
+      :record_order,
       :throw
     ]
 
@@ -55,6 +56,12 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
 
   def run(%{outcome: :record_actor}) do
     Process.put(:ran_as, Auth.user_id())
+
+    :ok
+  end
+
+  def run(%{outcome: :record_order} = job) do
+    Process.put(:ran_order, [job.id | Process.get(:ran_order, [])])
 
     :ok
   end

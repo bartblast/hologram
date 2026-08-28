@@ -280,6 +280,28 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Gives the row of the given type with the given id the given creation time, and returns :ok.
+
+  The spelling for a test whose subject is an ORDER: two rows created a moment apart carry the same
+  created_at wherever the system clock ticks coarsely - about every 16 ms on Windows - which leaves
+  the order they are read in undefined rather than merely unasserted.
+  """
+  @spec set_created_at(module, String.t(), DateTime.t()) :: :ok
+  def set_created_at(entity_type, id, created_at) do
+    statement =
+      ~s|UPDATE "hologram_data"."#{Mapper.table_name(entity_type)}" | <>
+        ~s|SET "created_at" = $1 WHERE "id" = $2|
+
+    {:ok, _result} =
+      Connection.query(statement, [
+        Codec.encode(created_at, :datetime),
+        Codec.encode(id, :uuid)
+      ])
+
+    :ok
+  end
+
+  @doc """
   Writes the given per-column revisions onto a row directly, for a test that needs a revision
   standing in a row before a write would stamp one.
 

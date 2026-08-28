@@ -321,6 +321,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "ok_tuple",
                  "raise",
                  "record_actor",
+                 "record_order",
                  "throw"
                ],
                "test_fixtures_job_module3_status_$enum" => [

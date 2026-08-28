@@ -29,6 +29,13 @@ defmodule Hologram.Job.RunnerTest do
     if user, do: as_user(user, create), else: create.()
   end
 
+  # The jobs record themselves as they run, newest first, so the order they ran in reads forwards.
+  defp ran_order do
+    :ran_order
+    |> Process.get([])
+    |> Enum.reverse()
+  end
+
   describe "claim/2" do
     test "claims a queued job" do
       job = Job.create!(Module1)
@@ -130,32 +137,29 @@ defmodule Hologram.Job.RunnerTest do
 
   describe "pass/1" do
     test "runs every queued job of a type, oldest first" do
-      first = job(:ok)
-      second = job(:ok)
+      first = job(:record_order)
+      second = job(:record_order)
+
+      # The order the pass reads in is created_at's, and two rows created a moment apart share it
+      # wherever the system clock ticks coarsely - so the times are set rather than raced for, and
+      # the SECOND job is made the older one, which no insertion order could produce by accident.
+      set_created_at(Module3, first.id, ~U[2026-01-01 00:00:01.000000Z])
+      set_created_at(Module3, second.id, ~U[2026-01-01 00:00:00.000000Z])
 
       assert pass([Module3]) == 2
 
-      first_row = EntityOperations.get(Module3, first.id)
-      second_row = EntityOperations.get(Module3, second.id)
-
-      assert first_row.status == :done
-      assert second_row.status == :done
-
-      # The outcome write stamps updated_at, so which row carries the earlier one says which job
-      # this pass reached first.
-      assert DateTime.compare(first_row.updated_at, second_row.updated_at) == :lt
+      assert ran_order() == [second.id, first.id]
+      assert EntityOperations.get(Module3, first.id).status == :done
+      assert EntityOperations.get(Module3, second.id).status == :done
     end
 
     test "runs the types in the order it was given" do
-      first = Job.create!(Module1)
-      second = job(:ok)
+      module_1_job = Job.create!(Module1)
+      module_3_job = job(:record_order)
 
       assert pass([Module3, Module1]) == 2
 
-      assert DateTime.compare(
-               EntityOperations.get(Module3, second.id).updated_at,
-               EntityOperations.get(Module1, first.id).updated_at
-             ) == :lt
+      assert ran_order() == [module_3_job.id, module_1_job.id]
     end
 
     test "runs nothing when nothing is queued" do
