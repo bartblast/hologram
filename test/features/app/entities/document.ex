@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.Entities.Document do
   use Hologram.Entity
-  use HologramFeatureTests.Policies.PubliclyReadable
+
+  policy HologramFeatureTests.Policies.PubliclyReadable
 
   alias HologramFeatureTests.Entities.Folder
 
@@ -11,7 +12,7 @@ defmodule HologramFeatureTests.Entities.Document do
   relationship :folder, Folder, optional: true
 
   role :editor
-  role :owner, extends: :editor, creator: true
+  role :owner, extends: :editor, granted_to: :creator
 
   allow :read, to: [:editor, :owner]
   allow :manage_roles, to: :owner

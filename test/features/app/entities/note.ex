@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.Entities.Note do
   relationship :author, User
 
   role :editor
-  role :owner, extends: :editor, creator: true
+  role :owner, extends: :editor, granted_to: :creator
 
   allow :read, to: :editor
   allow :create, author_id: user_id()
