@@ -63,7 +63,8 @@ defmodule Hologram.PolicyTest do
 
       defmodule AllowEntityFixture do
         use Hologram.Entity
-        use AllowPolicyFixture
+
+        policy AllowPolicyFixture
 
         role :editor
 
@@ -86,7 +87,8 @@ defmodule Hologram.PolicyTest do
 
       defmodule ActorEntityFixture do
         use Hologram.Entity
-        use ActorPolicyFixture
+
+        policy ActorPolicyFixture
       end
 
       assert build(ActorEntityFixture)[:archive] == [
@@ -105,7 +107,8 @@ defmodule Hologram.PolicyTest do
 
       defmodule GlobalReferenceEntityFixture do
         use Hologram.Entity
-        use GlobalReferencePolicyFixture
+
+        policy GlobalReferencePolicyFixture
       end
 
       assert build(GlobalReferenceEntityFixture)[:read] == [
@@ -128,8 +131,9 @@ defmodule Hologram.PolicyTest do
 
       defmodule DuplicateLineEntityFixture do
         use Hologram.Entity
-        use DuplicateLinePolicyFixture1
-        use DuplicateLinePolicyFixture2
+
+        policy DuplicateLinePolicyFixture1
+        policy DuplicateLinePolicyFixture2
       end
 
       assert DuplicateLineEntityFixture.__policies__() == [
@@ -177,7 +181,7 @@ defmodule Hologram.PolicyTest do
              ]
     end
 
-    test "takes the declarations of a policy nested two levels down, innermost first" do
+    test "carries the declarations of a policy nested two levels down into an entity type" do
       defmodule MiddlePolicyFixture do
         use Hologram.Policy
 
@@ -194,11 +198,18 @@ defmodule Hologram.PolicyTest do
         allow :delete, to: :viewer
       end
 
-      assert OuterPolicyFixture.__declarations__() == [
-               {:role, :viewer, []},
-               {:allow, :read, [to: :viewer]},
-               {:allow, :update, [to: :viewer]},
-               {:allow, :delete, [to: :viewer]}
+      defmodule NestedEntityFixture do
+        use Hologram.Entity
+
+        policy OuterPolicyFixture
+      end
+
+      assert NestedEntityFixture.__roles__() == [{:viewer, []}]
+
+      assert NestedEntityFixture.__policies__() == [
+               {:read, :viewer, nil, []},
+               {:update, :viewer, nil, []},
+               {:delete, :viewer, nil, []}
              ]
     end
 
@@ -226,7 +237,8 @@ defmodule Hologram.PolicyTest do
 
       defmodule RoleEntityFixture do
         use Hologram.Entity
-        use RolePolicyFixture
+
+        policy RolePolicyFixture
 
         role :owner
       end
@@ -249,8 +261,9 @@ defmodule Hologram.PolicyTest do
 
       defmodule DuplicateRoleEntityFixture do
         use Hologram.Entity
-        use DuplicateRolePolicyFixture1
-        use DuplicateRolePolicyFixture2
+
+        policy DuplicateRolePolicyFixture1
+        policy DuplicateRolePolicyFixture2
       end
 
       assert DuplicateRoleEntityFixture.__roles__() == [{:moderator, []}]
@@ -265,54 +278,6 @@ defmodule Hologram.PolicyTest do
           use Hologram.Policy
 
           role "moderator"
-        end
-      end
-    end
-  end
-
-  describe "use" do
-    test "replays the declarations of a nested policy before the outer ones" do
-      defmodule NestedInnerPolicyFixture do
-        use Hologram.Policy
-
-        role :viewer
-
-        allow :read, to: :viewer
-      end
-
-      defmodule NestedOuterPolicyFixture do
-        use Hologram.Policy
-        use NestedInnerPolicyFixture
-
-        allow :update, to: :viewer
-      end
-
-      defmodule NestedEntityFixture do
-        use Hologram.Entity
-        use NestedOuterPolicyFixture
-      end
-
-      assert NestedEntityFixture.__roles__() == [{:viewer, []}]
-
-      assert NestedEntityFixture.__policies__() == [
-               {:read, :viewer, nil, []},
-               {:update, :viewer, nil, []}
-             ]
-    end
-
-    test "raises in a module that is neither an entity type nor a policy" do
-      defmodule TargetPolicyFixture do
-        use Hologram.Policy
-
-        allow :read
-      end
-
-      expected_msg =
-        "policies can be used only in a module with use Hologram.Entity or use Hologram.Policy - Hologram.PolicyTest.PlainModuleFixture has neither"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule PlainModuleFixture do
-          use TargetPolicyFixture
         end
       end
     end
