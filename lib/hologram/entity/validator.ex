@@ -44,7 +44,7 @@ defmodule Hologram.Entity.Validator do
 
   @valid_relationship_opts [:optional]
 
-  @valid_role_opts [:creator, :extends]
+  @valid_role_opts [:extends, :granted_to]
 
   @valid_use_opts [:user]
 
@@ -784,18 +784,6 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
-  defp validate_creator_opt!(module, name, opts) do
-    case Keyword.fetch(opts, :creator) do
-      {:ok, value} when value != true ->
-        raise Hologram.CompileError,
-          message:
-            "invalid creator option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the creator option must be true"
-
-      _fetch_result ->
-        :ok
-    end
-  end
-
   defp validate_declaration_name!(module, kind, name) do
     validate_name_type!(module, kind, name)
 
@@ -951,6 +939,18 @@ defmodule Hologram.Entity.Validator do
           :ok
       end
     end)
+  end
+
+  defp validate_granted_to_opt!(module, name, opts) do
+    case Keyword.fetch(opts, :granted_to) do
+      {:ok, value} when value != :creator ->
+        raise Hologram.CompileError,
+          message:
+            "invalid granted_to option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the granted_to option must be :creator"
+
+      _fetch_result ->
+        :ok
+    end
   end
 
   defp validate_in_conflict!(module, name, opts) do
@@ -1184,7 +1184,7 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "role", name, opts)
     validate_scope_opt_removed!(module, name, opts)
     validate_known_opts!(module, "role", name, opts, @valid_role_opts)
-    validate_creator_opt!(module, name, opts)
+    validate_granted_to_opt!(module, name, opts)
   end
 
   defp validate_scope_opt_removed!(module, name, opts) do

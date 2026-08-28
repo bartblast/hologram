@@ -539,7 +539,7 @@ defmodule Hologram.DB.EntityOperations do
 
       actor_user_id ->
         entity_type.__roles__()
-        |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :creator) == true end)
+        |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :granted_to) == :creator end)
         |> Enum.map(&creator_grant(&1, entity, entity_type, actor_user_id))
     end
   end

@@ -1633,39 +1633,39 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture55.__roles__() == [{:owner, []}]
     end
 
-    test "accepts creator option" do
+    test "accepts granted_to option" do
       defmodule InlineEntityFixture68 do
         use Hologram.Entity
 
-        role :owner, creator: true
+        role :owner, granted_to: :creator
       end
 
-      assert InlineEntityFixture68.__roles__() == [{:owner, [creator: true]}]
+      assert InlineEntityFixture68.__roles__() == [{:owner, [granted_to: :creator]}]
     end
 
-    test "accepts creator option on several roles of one entity type" do
+    test "accepts granted_to option on several roles of one entity type" do
       defmodule InlineEntityFixture69 do
         use Hologram.Entity
 
-        role :author, creator: true
-        role :owner, creator: true
+        role :author, granted_to: :creator
+        role :owner, granted_to: :creator
       end
 
       assert InlineEntityFixture69.__roles__() == [
-               {:author, [creator: true]},
-               {:owner, [creator: true]}
+               {:author, [granted_to: :creator]},
+               {:owner, [granted_to: :creator]}
              ]
     end
 
-    test "rejects creator option other than true" do
+    test "rejects granted_to option other than :creator" do
       expected_msg =
-        "invalid creator option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the creator option must be true"
+        "invalid granted_to option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the granted_to option must be :creator"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture70 do
           use Hologram.Entity
 
-          role :owner, creator: false
+          role :owner, granted_to: false
         end
       end
     end
@@ -1724,7 +1724,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown role option" do
       expected_msg =
-        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :creator, :extends"
+        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :extends, :granted_to"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture58 do

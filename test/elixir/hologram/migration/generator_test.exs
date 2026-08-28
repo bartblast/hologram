@@ -411,7 +411,7 @@ defmodule Hologram.Migration.GeneratorTest do
           %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator},
           %{op: :delete_relationship, entity: MyApp.Task, name: :project},
           %{op: :add_role, entity: MyApp.Task, name: :owner, opts: [extends: :editor]},
-          %{op: :change_role, entity: MyApp.Task, name: :editor, changes: [creator: true]},
+          %{op: :change_role, entity: MyApp.Task, name: :editor, changes: [granted_to: :creator]},
           %{op: :rename_role, entity: MyApp.Task, from: :moderator, to: :maintainer},
           %{op: :delete_role, entity: MyApp.Task, name: :viewer},
           %{
@@ -450,7 +450,7 @@ defmodule Hologram.Migration.GeneratorTest do
         rename_relationship :author, :creator
         delete_relationship :project
         add_role :owner, extends: :editor
-        change_role :editor, creator: true
+        change_role :editor, granted_to: :creator
         rename_role :moderator, :maintainer
         delete_role :viewer
         add_enum_value :status, :doing, after: :todo

@@ -221,7 +221,7 @@ defmodule Hologram.PolicyTest do
       defmodule RolePolicyFixture do
         use Hologram.Policy
 
-        role :moderator, creator: true
+        role :moderator, granted_to: :creator
       end
 
       defmodule RoleEntityFixture do
@@ -231,7 +231,7 @@ defmodule Hologram.PolicyTest do
         role :owner
       end
 
-      assert RoleEntityFixture.__roles__() == [{:moderator, [creator: true]}, {:owner, []}]
+      assert RoleEntityFixture.__roles__() == [{:moderator, [granted_to: :creator]}, {:owner, []}]
     end
 
     test "unifies the same role declared by two policies" do

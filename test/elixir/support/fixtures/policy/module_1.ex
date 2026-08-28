@@ -12,8 +12,8 @@ defmodule Hologram.Test.Fixtures.Policy.Module1 do
   relationship :parent, Module2, optional: true
 
   role :editor
-  role :maintainer, creator: true
-  role :owner, extends: :editor, creator: true
+  role :maintainer, granted_to: :creator
+  role :owner, extends: :editor, granted_to: :creator
   role :viewer
 
   allow :read, public: true

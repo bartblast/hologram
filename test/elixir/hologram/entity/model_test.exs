@@ -246,11 +246,17 @@ defmodule Hologram.Entity.ModelTest do
       model = task_model(%{roles: [{:owner, [extends: :editor]}]})
 
       ops = [
-        %{op: :change_role, entity: MyApp.Task, name: :owner, changes: [creator: true], line: 3}
+        %{
+          op: :change_role,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [granted_to: :creator],
+          line: 3
+        }
       ]
 
       assert fold(model, ops) ==
-               task_model(%{roles: [{:owner, [creator: true, extends: :editor]}]})
+               task_model(%{roles: [{:owner, [extends: :editor, granted_to: :creator]}]})
     end
 
     test "deletes an enum value" do
@@ -334,7 +340,7 @@ defmodule Hologram.Entity.ModelTest do
           roles: [
             {:admin, [extends: [:editor, :owner]]},
             {:editor, []},
-            {:owner, [creator: true]}
+            {:owner, [granted_to: :creator]}
           ]
         })
 
@@ -344,7 +350,7 @@ defmodule Hologram.Entity.ModelTest do
                task_model(%{
                  roles: [
                    {:admin, [extends: [:reviewer, :owner]]},
-                   {:owner, [creator: true]},
+                   {:owner, [granted_to: :creator]},
                    {:reviewer, []}
                  ]
                })
@@ -1279,7 +1285,7 @@ defmodule Hologram.Entity.ModelTest do
                      {:title, :string, []}
                    ],
                    relationships: [{:parent, Module1, [optional: true]}],
-                   roles: [{:editor, []}, {:owner, [creator: true, extends: :editor]}]
+                   roles: [{:editor, []}, {:owner, [extends: :editor, granted_to: :creator]}]
                  }
                },
                roles: %{},
@@ -1531,7 +1537,7 @@ defmodule Hologram.Entity.ModelTest do
 
     test "changing a role declaration changes the hash" do
       creator_owner =
-        %{roles: [{:owner, [creator: true]}]}
+        %{roles: [{:owner, [granted_to: :creator]}]}
         |> task_model()
         |> hash()
 

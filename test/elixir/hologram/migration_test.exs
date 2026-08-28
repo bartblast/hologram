@@ -204,7 +204,7 @@ defmodule Hologram.MigrationTest do
         change_entity MyApp.Task do
           add_role(:editor)
           add_role(:owner, extends: :editor)
-          change_role(:owner, creator: true)
+          change_role(:owner, granted_to: :creator)
           delete_role(:viewer)
           rename_role(:moderator, :maintainer)
         end
@@ -231,7 +231,7 @@ defmodule Hologram.MigrationTest do
                op: :change_role,
                entity: MyApp.Task,
                name: :owner,
-               changes: [creator: true],
+               changes: [granted_to: :creator],
                line: change_op.line
              }
 
@@ -341,7 +341,7 @@ defmodule Hologram.MigrationTest do
       code = """
       import Hologram.Migration
 
-      change_role :owner, creator: true
+      change_role :owner, granted_to: :creator
       """
 
       expected_msg =

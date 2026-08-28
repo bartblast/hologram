@@ -10,7 +10,7 @@ defmodule Hologram.Entity.Model do
   # absence, so two spellings of one model always produce one term. Value options treat
   # nil as neutral uniformly (default: false stays - a boolean default of false is a
   # real default, not a flag).
-  @flag_opts [:creator, :optional, :server_only, :unique]
+  @flag_opts [:optional, :server_only, :unique]
 
   # One-time transition values ride the migration op, never the model: a backfill is
   # what existing rows receive as the column arrives, not something the entity declares.

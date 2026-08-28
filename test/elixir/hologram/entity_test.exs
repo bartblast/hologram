@@ -373,23 +373,23 @@ defmodule Hologram.EntityTest do
       defmodule InlineRoleFixture1 do
         use Hologram.Entity
 
-        role :owner, creator: true
-        role :owner, creator: true
+        role :owner, granted_to: :creator
+        role :owner, granted_to: :creator
       end
 
-      assert InlineRoleFixture1.__roles__() == [{:owner, [creator: true]}]
+      assert InlineRoleFixture1.__roles__() == [{:owner, [granted_to: :creator]}]
     end
 
     test "rejects a re-declaration with different options" do
       expected_msg =
-        "conflicting declarations for role :owner in Hologram.EntityTest.InlineRoleFixture2: [] and [creator: true] - repeated role declarations must be identical"
+        "conflicting declarations for role :owner in Hologram.EntityTest.InlineRoleFixture2: [] and [granted_to: :creator] - repeated role declarations must be identical"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineRoleFixture2 do
           use Hologram.Entity
 
           role :owner
-          role :owner, creator: true
+          role :owner, granted_to: :creator
         end
       end
     end

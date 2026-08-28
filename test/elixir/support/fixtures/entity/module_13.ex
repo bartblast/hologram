@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Entity.Module13 do
   relationship :parent, Module1, optional: true
 
   role :editor
-  role :owner, extends: :editor, creator: true
+  role :owner, extends: :editor, granted_to: :creator
 
   allow :read, public: true
   allow :read, to: [:editor, :owner]
