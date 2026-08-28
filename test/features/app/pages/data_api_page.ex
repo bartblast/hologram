@@ -51,33 +51,33 @@ defmodule HologramFeatureTests.DataApiPage do
   end
 
   def command(:create_duplicate_account, _params, server) do
-    Account
-    |> Entity.new(handle: "taken")
+    %{handle: "taken"}
+    |> Account.new()
     |> DB.create!()
 
     result =
-      Account
-      |> Entity.new(handle: "taken")
+      %{handle: "taken"}
+      |> Account.new()
       |> DB.create()
 
     put_action(server, :show_result, result: "duplicate_account_#{inspect(result)}")
   end
 
   def command(:create_duplicate_account_in_transaction, _params, server) do
-    Account
-    |> Entity.new(handle: "taken")
+    %{handle: "taken"}
+    |> Account.new()
     |> DB.create!()
 
     result =
       DB.transaction(fn ->
         refusal =
-          Account
-          |> Entity.new(handle: "taken")
+          %{handle: "taken"}
+          |> Account.new()
           |> DB.create()
 
         other =
-          Account
-          |> Entity.new(handle: "other")
+          %{handle: "other"}
+          |> Account.new()
           |> DB.create!()
 
         {refusal, other.handle}
@@ -89,13 +89,13 @@ defmodule HologramFeatureTests.DataApiPage do
   end
 
   def command(:create_invalid_duplicate_account, _params, server) do
-    Account
-    |> Entity.new(handle: "taken")
+    %{handle: "taken"}
+    |> Account.new()
     |> DB.create!()
 
     result =
-      Account
-      |> Entity.new(bio: "far too long for ten", handle: "taken")
+      %{bio: "far too long for ten", handle: "taken"}
+      |> Account.new()
       |> DB.create()
 
     put_action(server, :show_result, result: "invalid_duplicate_account_#{inspect(result)}")
@@ -103,15 +103,15 @@ defmodule HologramFeatureTests.DataApiPage do
 
   def command(:create_invalid_review_for_missing_product, _params, server) do
     product =
-      Product
-      |> Entity.new(name: "invalid_missing_product")
+      %{name: "invalid_missing_product"}
+      |> Product.new()
       |> DB.create!()
 
     DB.delete!(Product, product.id)
 
     result =
-      Review
-      |> Entity.new(product_id: product.id, rating: 0)
+      %{product_id: product.id, rating: 0}
+      |> Review.new()
       |> DB.create()
 
     put_action(server, :show_result,
@@ -121,13 +121,13 @@ defmodule HologramFeatureTests.DataApiPage do
 
   def command(:create_review, _params, server) do
     product =
-      Product
-      |> Entity.new(name: "create_review_product")
+      %{name: "create_review_product"}
+      |> Product.new()
       |> DB.create!()
 
     review =
-      Review
-      |> Entity.new(product_id: product.id, rating: 4)
+      %{product_id: product.id, rating: 4}
+      |> Review.new()
       |> DB.create!()
 
     persisted_review = DB.read(Review, review.id)
@@ -137,15 +137,15 @@ defmodule HologramFeatureTests.DataApiPage do
 
   def command(:create_review_for_missing_product, _params, server) do
     product =
-      Product
-      |> Entity.new(name: "missing_product")
+      %{name: "missing_product"}
+      |> Product.new()
       |> DB.create!()
 
     DB.delete!(Product, product.id)
 
     result =
-      Review
-      |> Entity.new(product_id: product.id, rating: 4)
+      %{product_id: product.id, rating: 4}
+      |> Review.new()
       |> DB.create()
 
     put_action(server, :show_result, result: "review_for_missing_product_#{inspect(result)}")
@@ -153,12 +153,12 @@ defmodule HologramFeatureTests.DataApiPage do
 
   def command(:delete_referenced_product, _params, server) do
     product =
-      Product
-      |> Entity.new(name: "referenced_product")
+      %{name: "referenced_product"}
+      |> Product.new()
       |> DB.create!()
 
-    Review
-    |> Entity.new(product_id: product.id, rating: 3)
+    %{product_id: product.id, rating: 3}
+    |> Review.new()
     |> DB.create!()
 
     result = DB.delete(Product, product.id)
@@ -168,14 +168,14 @@ defmodule HologramFeatureTests.DataApiPage do
 
   def command(:reject_invalid_review, _params, server) do
     product =
-      Product
-      |> Entity.new(name: "reject_invalid_review_product")
+      %{name: "reject_invalid_review_product"}
+      |> Product.new()
       |> DB.create!()
 
     result =
       try do
-        Review
-        |> Entity.new(product_id: product.id, rating: 0)
+        %{product_id: product.id, rating: 0}
+        |> Review.new()
         |> DB.create!()
 
         "rejected_nothing"
@@ -187,14 +187,14 @@ defmodule HologramFeatureTests.DataApiPage do
   end
 
   def command(:raise_on_duplicate_account, _params, server) do
-    Account
-    |> Entity.new(handle: "taken")
+    %{handle: "taken"}
+    |> Account.new()
     |> DB.create!()
 
     result =
       try do
-        Account
-        |> Entity.new(handle: "taken")
+        %{handle: "taken"}
+        |> Account.new()
         |> DB.create!()
 
         "raised_nothing"
@@ -206,15 +206,15 @@ defmodule HologramFeatureTests.DataApiPage do
   end
 
   def command(:raise_on_duplicate_account_in_transaction, _params, server) do
-    Account
-    |> Entity.new(handle: "taken")
+    %{handle: "taken"}
+    |> Account.new()
     |> DB.create!()
 
     result =
       try do
         DB.transaction(fn ->
-          Account
-          |> Entity.new(handle: "taken")
+          %{handle: "taken"}
+          |> Account.new()
           |> DB.create!()
         end)
 
@@ -230,8 +230,8 @@ defmodule HologramFeatureTests.DataApiPage do
 
   def command(:run_query, _params, server) do
     Enum.each(["run_query_banana", "run_query_apple", "run_query_excluded"], fn name ->
-      Product
-      |> Entity.new(name: name)
+      %{name: name}
+      |> Product.new()
       |> DB.create!()
     end)
 
@@ -246,13 +246,13 @@ defmodule HologramFeatureTests.DataApiPage do
   end
 
   def command(:update_into_duplicate_account, _params, server) do
-    Account
-    |> Entity.new(handle: "first")
+    %{handle: "first"}
+    |> Account.new()
     |> DB.create!()
 
     second =
-      Account
-      |> Entity.new(handle: "second")
+      %{handle: "second"}
+      |> Account.new()
       |> DB.create!()
 
     result = DB.update(Account, second.id, handle: "first")

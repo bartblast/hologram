@@ -51,8 +51,8 @@ defmodule HologramFeatureTests.MutationsPage do
 
   def command(:log_in, _params, server) do
     user =
-      User
-      |> Entity.new(email: "session@example.com")
+      %{email: "session@example.com"}
+      |> User.new()
       |> trust()
       |> DB.create!()
 
