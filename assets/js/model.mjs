@@ -51,10 +51,16 @@ export default class Model {
         ]);
       }
 
-      data.push([Type.atom(name), includes[name] ?? Model.#notIncluded(name)]);
+      data.push([Type.atom(name), includes[name] ?? Model.notIncluded(name)]);
     }
 
     return Type.map(data);
+  }
+
+  // The framework's own state on an entity struct, as one that arrived from nowhere carries it:
+  // nothing recorded toward a write, and no revisions, because it was read from no row.
+  static emptyMetadata() {
+    return Model.#metadataWithRevisions(Type.map([]));
   }
 
   static entry(type) {
@@ -74,7 +80,9 @@ export default class Model {
 
     entry = {
       attributes: baked.attributes,
+      defaults: baked.defaults,
       enumValues: baked.enumValues,
+      frameworkAttributes: baked.frameworkAttributes,
       policy: baked.policy,
       relationships: baked.relationships,
       resourceType: baked.resourceType,
@@ -84,6 +92,15 @@ export default class Model {
     Model.#entries[type] = entry;
 
     return entry;
+  }
+
+  // What a relationship nobody asked for holds, naming itself - a read of one reports which
+  // relationship was not included rather than answering nil, which is a different fact.
+  static notIncluded(name) {
+    return Type.map([
+      [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
+      [Type.atom("relationship"), Type.atom(name)],
+    ]);
   }
 
   static relationships(type) {
@@ -242,12 +259,21 @@ export default class Model {
       ([name, revision]) => [Type.atom(name), Type.integer(revision)],
     );
 
+    return Model.#metadataWithRevisions(Type.map(revisions));
+  }
+
+  // Every field Hologram.Entity.Metadata declares is written here, at its own default, whether or
+  // not this side has anything to put in it: a struct short of a field answers a read of that
+  // field with a KeyError where the server's answers nil, and stops comparing equal to a struct
+  // the server built. One list, so the two can only drift by someone editing this line.
+  static #metadataWithRevisions(revisions) {
     return Type.map([
       [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
       [Type.atom("attribute_ops"), Type.map([])],
       [Type.atom("claim"), Type.nil()],
       [Type.atom("relationship_ops"), Type.map([])],
-      [Type.atom("revisions"), Type.map(revisions)],
+      [Type.atom("revisions"), revisions],
+      [Type.atom("stamp"), Type.nil()],
     ]);
   }
 
@@ -288,12 +314,5 @@ export default class Model {
     return Type.isAlias(value)
       ? value.value.replace(/^Elixir\./, "")
       : value.value;
-  }
-
-  static #notIncluded(name) {
-    return Type.map([
-      [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
-      [Type.atom("relationship"), Type.atom(name)],
-    ]);
   }
 }

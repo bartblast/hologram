@@ -18,9 +18,9 @@ describe("Model", () => {
   // One attribute of every admitted type, a server-only one, and both relationship
   // cardinalities - the shape the build bakes for a type this client can hold.
   //
-  // Neither relationship target has an entry of its own, deliberately: a build carries a type
-  // when a query reaches it, so a relationship nothing queries through points at a name the model
-  // does not hold. Boxing reads the reference field and leaves the sentinel, asking the target
+  // Neither relationship target has an entry of its own, deliberately: a build carries a type a
+  // page queries or mentions, so a relationship nothing reaches through points at a name the
+  // model does not hold. Boxing reads the reference field and leaves the sentinel, asking the target
   // nothing - and a query that DID include one would have put it in the model by including it.
   beforeEach(() => {
     globalThis.Hologram.sync = {
@@ -37,10 +37,12 @@ describe("Model", () => {
             updated_at: "datetime",
             weight: "float",
           },
+          defaults: {done: Type.boolean(false), position: Type.integer(7)},
           enumValues: {status: ["open", "done"]},
+          frameworkAttributes: [],
           relationships: {
-            project: {toMany: false, type: "MyApp.Project"},
-            tags: {toMany: true, type: "MyApp.Tag"},
+            project: {optional: false, toMany: false, type: "MyApp.Project"},
+            tags: {optional: true, toMany: true, type: "MyApp.Tag"},
           },
           serverOnly: ["internal_notes"],
         },
@@ -113,6 +115,7 @@ describe("Model", () => {
               [Type.atom("title"), Type.integer(5)],
             ]),
           ],
+          [Type.atom("stamp"), Type.nil()],
         ]),
       );
     });
@@ -128,6 +131,7 @@ describe("Model", () => {
           [Type.atom("claim"), Type.nil()],
           [Type.atom("relationship_ops"), Type.map([])],
           [Type.atom("revisions"), Type.map([])],
+          [Type.atom("stamp"), Type.nil()],
         ]),
       );
     });
@@ -371,12 +375,44 @@ describe("Model", () => {
     });
   });
 
+  describe("emptyMetadata()", () => {
+    // Equal to what a row carrying no revisions is boxed with, which is the point: one list of
+    // fields answers for a struct that was read and for one built from nothing.
+    it("builds the metadata a struct that arrived from nowhere carries", () => {
+      assert.deepEqual(
+        Model.emptyMetadata(),
+        field(Model.box(TASK, row()), "__meta__"),
+      );
+    });
+
+    // Hologram.Entity.Metadata declares five fields, and a struct short of one answers a read of
+    // it with a KeyError where the server's struct answers nil.
+    it("carries every field the entity metadata struct declares", () => {
+      const metadata = Model.emptyMetadata();
+
+      assert.deepEqual(
+        Object.values(metadata.data)
+          .map(([key]) => key.value)
+          .sort(),
+        [
+          "__struct__",
+          "attribute_ops",
+          "claim",
+          "relationship_ops",
+          "revisions",
+          "stamp",
+        ],
+      );
+    });
+  });
+
   describe("entry()", () => {
     it("returns the type's attributes and relationships", () => {
       const entry = Model.entry(TASK);
 
       assert.equal(entry.attributes.title, "string");
       assert.deepEqual(entry.relationships.tags, {
+        optional: true,
         toMany: true,
         type: "MyApp.Tag",
       });
@@ -397,6 +433,28 @@ describe("Model", () => {
       assert.isFalse(entry.serverOnly.has("title"));
     });
 
+    // Boxed rather than spelled the way the wire spells values: a default is applied to a struct
+    // field, and a struct field holds what the declaration wrote.
+    it("returns the declared defaults as the boxed terms they were baked as", () => {
+      const entry = Model.entry(TASK);
+
+      assert.deepEqual(entry.defaults, {
+        done: Type.boolean(false),
+        position: Type.integer(7),
+      });
+    });
+
+    it("returns the framework-owned attribute names", () => {
+      assert.deepEqual(Model.entry(TASK).frameworkAttributes, []);
+    });
+
+    it("returns whether a relationship is optional", () => {
+      const entry = Model.entry(TASK);
+
+      assert.isFalse(entry.relationships.project.optional);
+      assert.isTrue(entry.relationships.tags.optional);
+    });
+
     // A row of a type this build never told the client about is a row it cannot read - which is
     // what a bundle older than the server looks like from here.
     it("raises for a type this build does not carry", () => {
@@ -408,11 +466,22 @@ describe("Model", () => {
     });
   });
 
+  describe("notIncluded()", () => {
+    // Equal to what boxing leaves in place of a relationship nobody asked for - the same sentinel
+    // from both directions, so a struct built here reads like one built from a row.
+    it("builds the sentinel naming the relationship nobody asked for", () => {
+      assert.deepEqual(
+        Model.notIncluded("tags"),
+        field(Model.box(TASK, row()), "tags"),
+      );
+    });
+  });
+
   describe("relationships()", () => {
     it("returns the type's relationships with their cardinality and target", () => {
       assert.deepEqual(Model.relationships(TASK), {
-        project: {toMany: false, type: "MyApp.Project"},
-        tags: {toMany: true, type: "MyApp.Tag"},
+        project: {optional: false, toMany: false, type: "MyApp.Project"},
+        tags: {optional: true, toMany: true, type: "MyApp.Tag"},
       });
     });
   });
