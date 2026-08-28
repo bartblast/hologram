@@ -2089,6 +2089,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert {Hologram.Entity, :new, 1} in result
     assert {Hologram.Entity, :new, 2} in result
+    assert {Hologram.Entity, :validate, 1} in result
+    assert {Hologram.Entity, :validate, 2} in result
   end
 
   describe "maybe_load/2" do
