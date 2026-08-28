@@ -14,6 +14,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -107,6 +108,21 @@ defmodule Hologram.EntityTest do
         |> Enum.sort()
 
       assert field_names == [:__meta__, :a, :b, :c, :created_at, :id, :updated_at]
+    end
+
+    test "carries the declared attribute defaults" do
+      assert %Module2{}.a == false
+      assert %Module4{}.c == :x
+      assert %Module20{}.count == 0
+    end
+
+    test "leaves an attribute declaring no default nil" do
+      assert %Module2{}.b == nil
+      assert %Module2{}.c == nil
+    end
+
+    test "carries a job's queued status" do
+      assert %JobModule1{}.status == :queued
     end
 
     test "defaults relationship embed and to-many fields to the NotIncluded sentinel" do

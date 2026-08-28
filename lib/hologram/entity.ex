@@ -382,6 +382,9 @@ defmodule Hologram.Entity do
 
   # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
   # by the caller rather than here, so that its struct is expanded in the entity's module.
+  # An attribute field holds what its declaration declares as the default, so a bare struct
+  # agrees with new/2 on everything but the id - which only the constructor can mint, a struct
+  # default being evaluated once, at compile time.
   @doc false
   # sobelow_skip ["DOS.BinToAtom"]
   @spec struct_fields(module) :: list({atom, any})
@@ -392,7 +395,7 @@ defmodule Hologram.Entity do
     attribute_fields =
       module
       |> Module.get_attribute(:__attributes__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, nil} end)
+      |> Enum.map(fn {name, _type, opts} -> {name, Keyword.get(opts, :default)} end)
 
     relationship_fields =
       module
