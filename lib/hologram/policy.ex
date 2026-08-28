@@ -84,6 +84,13 @@ defmodule Hologram.Policy do
       end)
 
     quote do
+      @doc """
+      Returns the role and allow declarations of the callee policy module, in declaration order.
+      A role declaration is a {:role, name, opts} tuple and an allow declaration is an {:allow, operation, spec} tuple.
+      """
+      @spec __declarations__() :: list(tuple)
+      def __declarations__, do: unquote(Macro.escape(declarations))
+
       defmacro __using__(_opts) do
         unquote(Macro.escape({:__block__, [], replay_calls}))
       end

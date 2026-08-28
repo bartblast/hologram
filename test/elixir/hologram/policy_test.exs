@@ -17,6 +17,31 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
+  describe "__declarations__/0" do
+    test "returns empty list for a policy module with no declarations" do
+      defmodule EmptyDeclarationsPolicyFixture do
+        use Hologram.Policy
+      end
+
+      assert EmptyDeclarationsPolicyFixture.__declarations__() == []
+    end
+
+    test "returns the role and allow declarations in declaration order" do
+      defmodule DeclarationsPolicyFixture do
+        use Hologram.Policy
+
+        role :viewer
+
+        allow :read, to: :viewer
+      end
+
+      assert DeclarationsPolicyFixture.__declarations__() == [
+               {:role, :viewer, []},
+               {:allow, :read, [to: :viewer]}
+             ]
+    end
+  end
+
   describe "__is_hologram_policy__/0" do
     test "returns true" do
       defmodule IsPolicyFixture do
