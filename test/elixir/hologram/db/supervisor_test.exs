@@ -5,10 +5,12 @@ defmodule Hologram.DB.SupervisorTest do
 
   alias Hologram.DB
   alias Hologram.DB.QueryCache
+  alias Hologram.Job
   alias Hologram.Sync
 
-  # Sync restarts with the database it reads through: rest_for_one takes it down when the
-  # database goes, so no evaluator keeps rows read over a connection that no longer exists.
+  # Sync and the jobs restart with the database they read through: rest_for_one takes them down
+  # when the database goes, so no evaluator keeps rows read over a connection that no longer exists
+  # and no worker goes on scanning through one.
   test "init/1" do
     assert init(nil) ==
              {:ok,
@@ -19,6 +21,11 @@ defmodule Hologram.DB.SupervisorTest do
                  %{
                    id: Sync.Supervisor,
                    start: {Sync.Supervisor, :start_link, [[]]},
+                   type: :supervisor
+                 },
+                 %{
+                   id: Job.Supervisor,
+                   start: {Job.Supervisor, :start_link, [[]]},
                    type: :supervisor
                  }
                ]}}

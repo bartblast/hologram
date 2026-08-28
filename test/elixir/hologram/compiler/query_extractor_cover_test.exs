@@ -2,7 +2,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
   # async: false - cover-compiling a module changes how every concurrent test
   # resolves its beam, so the covered window must not overlap other tests.
   use Hologram.Test.BasicCase, async: false
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.Compiler.QueryExtractor
 

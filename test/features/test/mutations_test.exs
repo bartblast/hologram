@@ -13,15 +13,16 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
 
-  # All three tables truncate in one statement: the role grant table's foreign keys to the user
-  # table make Postgres reject truncating the referenced table alone.
+  # Every table truncates in one statement: the role grant table's foreign keys to the user table
+  # and the job's to the item table make Postgres reject truncating a referenced table alone.
   setup do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Item, Note, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Item, Note, RestockItem, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -50,6 +51,18 @@ defmodule HologramFeatureTests.MutationsTest do
     Item
     |> Entity.new(name: "widget", stock: stock)
     |> DB.create!()
+  end
+
+  # A create of a job, spelled as an ordinary create - which is what a job is on the wire.
+  defp create_restock_write(item_id, amount) do
+    %{
+      "op" => "create",
+      "type" => inspect(RestockItem),
+      "id" => Entity.generate_id(),
+      "data" => %{"amount" => amount, "item_id" => item_id},
+      "claim" => nil,
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
   end
 
   defp create_note_write(author_id, body) do
@@ -416,5 +429,83 @@ defmodule HologramFeatureTests.MutationsTest do
     |> assert_same_page_load()
 
     assert [%Item{stock: 1}] = DB.read(Item)
+  end
+
+  feature "runs a job created by a batch once the batch commits", %{session: session} do
+    item = create_item(0)
+
+    session = log_in(session)
+
+    mark_this_page_load(session)
+
+    assert_text(session, css("#items"), "widget: 0")
+
+    post_batch(session, 1, [create_restock_write(item.id, 1)])
+
+    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+
+    session
+    |> assert_text(css("#items"), "widget: 1")
+    |> assert_text(css("#jobs"), "1:done")
+    |> assert_same_page_load()
+
+    assert [%RestockItem{status: :done, error: nil, actor_id: actor_id}] = DB.read(RestockItem)
+    assert actor_id == session_user().id
+  end
+
+  feature "creates no job when the batch it rode in is refused", %{session: session} do
+    item = create_item(0)
+
+    session = log_in(session)
+
+    other_author =
+      User
+      |> Entity.new(email: "other@example.com")
+      |> DB.create!()
+
+    writes = [create_restock_write(item.id, 1), create_note_write(other_author.id, "denied")]
+
+    post_batch(session, 1, writes)
+
+    assert await_response(session)["status"] == "rejected"
+
+    assert DB.read(RestockItem) == []
+    assert [%Item{stock: 0}] = DB.read(Item)
+  end
+
+  feature "records a job that fails, with the error on its own row", %{session: session} do
+    item = create_item(0)
+
+    session = log_in(session)
+
+    # Moving the stock below the item's declared minimum is refused by the write, and the refusal
+    # raises out of the job's run/1.
+    post_batch(session, 1, [create_restock_write(item.id, -5)])
+
+    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+
+    assert_text(session, css("#jobs"), "-5:failed")
+
+    assert [%RestockItem{status: :failed, error: error}] = DB.read(RestockItem)
+    assert error =~ "cannot update"
+    assert [%Item{stock: 0}] = DB.read(Item)
+  end
+
+  feature "runs a job created by a command, as the session's user", %{session: session} do
+    create_item(0)
+
+    session = log_in(session)
+
+    mark_this_page_load(session)
+
+    session
+    |> click(button("Create restock job"))
+    |> assert_text(css("#result"), "created_restock_job")
+    |> assert_text(css("#items"), "widget: 1")
+    |> assert_text(css("#jobs"), "1:done")
+    |> assert_same_page_load()
+
+    assert [%RestockItem{status: :done, actor_id: actor_id}] = DB.read(RestockItem)
+    assert actor_id == session_user().id
   end
 end

@@ -297,6 +297,28 @@ defmodule Hologram.Entity.Validator do
   def validate_writable!(_entity_type), do: :ok
 
   @doc """
+  Validates the options given to the use Hologram.Job directive at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys).
+  """
+  @spec validate_use_job_opts!(module, T.opts()) :: :ok
+  def validate_use_job_opts!(module, opts) do
+    if not Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          "invalid options #{inspect(opts)} for use Hologram.Job in #{inspect(module)} - options must be a keyword list"
+    end
+
+    Enum.each(opts, fn {key, _value} ->
+      raise Hologram.CompileError,
+        message:
+          "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes no options"
+    end)
+
+    :ok
+  end
+
+  @doc """
   Validates the options given to the use Hologram.Entity directive at compile time.
 
   Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys, user option).

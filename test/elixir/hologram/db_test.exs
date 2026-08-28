@@ -13,6 +13,7 @@ defmodule Hologram.DBTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
   alias Hologram.Entity
+  alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -20,7 +21,36 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.WriteError
+
+  describe "__using__/1" do
+    test "imports the query and write stages, and aliases the modules the verbs live on" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.DB.DataSurface do
+          use Hologram.DB
+
+          def query, do: filter(Hologram.Test.Fixtures.Entity.Module2, c: "abc")
+
+          def write, do: put_attribute(Entity.new(Hologram.Test.Fixtures.Entity.Module2), :c, "abc")
+
+          def executor, do: DB.pool_name()
+
+          def job_fields, do: Job.framework_attribute_names()
+        end
+        """)
+
+      assert module.query() == %Query{
+               entity: Module2,
+               filter: [{:c, :==, "abc"}]
+             }
+
+      assert module.write().__meta__.attribute_ops == %{c: {:put, "abc"}}
+      assert module.executor() == pool_name()
+      assert module.job_fields() == [:actor_id, :error, :status]
+    end
+  end
 
   describe "init/1" do
     test "starts only the connection pool in test" do
@@ -137,6 +167,13 @@ defmodule Hologram.DBTest do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error ArgumentError, expected_msg, fn -> create(%RoleGrant{}) end
+    end
+
+    test "rejects jobs" do
+      expected_msg =
+        "Hologram.Test.Fixtures.Job.Module1 is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits"
+
+      assert_error ArgumentError, expected_msg, fn -> create(Entity.new(JobModule1)) end
     end
   end
 

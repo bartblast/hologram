@@ -1,6 +1,6 @@
 defmodule HologramClusterTests.Components.SyncedItems do
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias HologramClusterTests.Entities.Item
 

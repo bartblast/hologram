@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.WriteClaimsPage do
   use Hologram.Page
-  use Hologram.Query
+  use Hologram.DB
 
   alias Hologram.AccessDeniedError
   alias HologramFeatureTests.Entities.Note

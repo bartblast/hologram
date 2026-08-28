@@ -38,6 +38,31 @@ defmodule Hologram.DB.Config do
   end
 
   @doc """
+  Returns the child spec of a connection that listens for announcements under the given name.
+
+  A connection of its own, outside the pool: LISTEN belongs to one connection for as long as it
+  listens, which a pooled one cannot promise.
+
+  It connects AFTER booting rather than while booting, which is the difference between a database
+  that is away for a moment and a node that is gone. Connecting while booting means a database that
+  cannot be reached fails this child, and a child that fails fast enough often enough takes its
+  supervisor with it - then the database unit, then the node. Every other connection waits and
+  retries instead, and listening survives the wait: the channel is registered with the process and
+  sent to the server once it connects.
+
+  It does not reconnect on its own, which is what a unit holding one relies on: losing the
+  connection ends this process, and whatever listens through it is restarted beside it and listens
+  again as it starts. Reconnecting in place would leave that untouched, listening through a
+  connection it never re-registered on.
+  """
+  @spec listener_child_spec(atom) :: Supervisor.child_spec()
+  def listener_child_spec(name) do
+    opts = connection_opts(name: name, auto_reconnect: false, sync_connect: false)
+
+    %{id: name, start: {Postgrex.Notifications, :start_link, [opts]}}
+  end
+
+  @doc """
   Resolves the database connection options for the given environment from the given
   config keyword list (the value of `config :hologram, :database`).
 

@@ -5,34 +5,6 @@ defmodule Hologram.Query do
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
-  defmacro __using__(_opts) do
-    quote do
-      import Hologram.Query,
-        only: [
-          add_relationship: 3,
-          authorize: 2,
-          count: 1,
-          decrement: 3,
-          delete_relationship: 3,
-          filter: 2,
-          include: 2,
-          include: 3,
-          increment: 3,
-          limit: 2,
-          offset: 2,
-          one: 1,
-          order_by: 2,
-          paginate: 2,
-          put_attribute: 2,
-          put_attribute: 3,
-          trust: 1
-        ]
-
-      alias Hologram.DB
-      alias Hologram.Entity
-    end
-  end
-
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]

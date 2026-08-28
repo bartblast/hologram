@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.DataApiPage do
   use Hologram.Page
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]

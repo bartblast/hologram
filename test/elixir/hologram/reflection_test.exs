@@ -3,6 +3,7 @@ defmodule Hologram.ReflectionTest do
   import Hologram.Reflection
 
   alias Hologram.Test.Fixtures.Entity
+  alias Hologram.Test.Fixtures.Job
   alias Hologram.Test.Fixtures.Reflection.Module1
   alias Hologram.Test.Fixtures.Reflection.Module2
   alias Hologram.Test.Fixtures.Reflection.Module3
@@ -361,6 +362,20 @@ defmodule Hologram.ReflectionTest do
 
     refute Hologram.Compiler.Context in result
     refute Module2 in result
+  end
+
+  describe "job?/1" do
+    test "is a job type module" do
+      assert job?(Job.Module1)
+    end
+
+    test "is not a module" do
+      refute job?(123)
+    end
+
+    test "is an entity type module that is not a job type module" do
+      refute job?(Entity.Module1)
+    end
   end
 
   describe "list_ebin_modules/1" do

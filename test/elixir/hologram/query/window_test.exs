@@ -1,6 +1,6 @@
 defmodule Hologram.Query.WindowTest do
   use Hologram.Test.DatabaseCase, async: true
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.Query.Window
 

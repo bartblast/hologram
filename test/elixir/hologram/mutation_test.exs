@@ -20,6 +20,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
@@ -583,6 +584,35 @@ defmodule Hologram.MutationTest do
 
       # The whole batch rolled back, including the write that had already landed.
       assert EntityOperations.get(PolicyModule2, landing_id) == nil
+    end
+
+    test "lands a job queued, with the session's user as its actor" do
+      user = create_user("job-enqueuer@example.com")
+      id = Entity.generate_id()
+
+      assert run(envelope([create_write(JobModule1, id, %{})]), server(user.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+      job = EntityOperations.get(JobModule1, id)
+
+      assert job.status == :queued
+      assert job.actor_id == user.id
+      assert job.error == nil
+    end
+
+    test "refuses a job with the batch it rode in" do
+      user = create_user("job-loser@example.com")
+      job_id = Entity.generate_id()
+
+      writes = [
+        create_write(JobModule1, job_id, %{}),
+        create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
+      ]
+
+      assert {:ok, %{"status" => "rejected", "write" => 1}} =
+               run(envelope(writes), server(user.id))
+
+      assert EntityOperations.get(JobModule1, job_id) == nil
     end
 
     test "refuses a value the declarations refuse" do

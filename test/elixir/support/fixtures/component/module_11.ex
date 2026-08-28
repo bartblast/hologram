@@ -1,7 +1,7 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Component.Module11 do
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 

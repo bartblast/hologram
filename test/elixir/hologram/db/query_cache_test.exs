@@ -1,6 +1,6 @@
 defmodule Hologram.DB.QueryCacheTest do
   use Hologram.Test.DatabaseCase, async: false
-  use Hologram.Query
+  use Hologram.DB
 
   import Hologram.DB.QueryCache
   import Hologram.Test.Stubs

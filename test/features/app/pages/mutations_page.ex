@@ -1,11 +1,13 @@
 defmodule HologramFeatureTests.MutationsPage do
   use Hologram.Page
-  use Hologram.Query
+  use Hologram.DB
 
   alias HologramFeatureTests.Components.Mutations.Items
+  alias HologramFeatureTests.Components.Mutations.Jobs
   alias HologramFeatureTests.Components.Mutations.Notes
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.RestockItem
 
   route "/mutations"
 
@@ -18,11 +20,13 @@ defmodule HologramFeatureTests.MutationsPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click={command: :create_restock_job}> Create restock job </button>
       <button $click={command: :log_in}> Log in </button>
       <button $click={command: :restock_item}> Restock item </button>
     </p>
     <Notes cid="notes" />
     <Items cid="items" />
+    <Jobs cid="jobs" />
     <p>
       Result: <strong id="result"><code>{@result}</code></strong>
     </p>
@@ -31,6 +35,18 @@ defmodule HologramFeatureTests.MutationsPage do
 
   def action(:show_result, params, component) do
     put_state(component, :result, params.result)
+  end
+
+  def command(:create_restock_job, _params, server) do
+    item =
+      Item
+      |> filter(name: "widget")
+      |> one()
+      |> DB.read()
+
+    Job.create!(RestockItem, amount: 1, item_id: item.id)
+
+    put_action(server, :show_result, result: "created_restock_job")
   end
 
   def command(:log_in, _params, server) do

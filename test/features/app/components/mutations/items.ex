@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.Components.Mutations.Items do
   use Hologram.Component
-  use Hologram.Query
+  use Hologram.DB
 
   alias HologramFeatureTests.Entities.Item
 

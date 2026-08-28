@@ -22,6 +22,40 @@ defmodule Hologram.DB do
 
   @pool_name Hologram.DB.Pool
 
+  # The data surface, brought in by one line: the stages that build a query term or record a write
+  # on an entity struct as bare functions, and the modules the executors live on as aliases. Named
+  # after the database rather than after the query, because a module says this line to read or
+  # write data - a page that queries, a command that writes, a seed that only creates, a job that
+  # only enqueues - and the write stages are the database's vocabulary as much as the query's.
+  defmacro __using__(_opts) do
+    quote do
+      import Hologram.Query,
+        only: [
+          add_relationship: 3,
+          authorize: 2,
+          count: 1,
+          decrement: 3,
+          delete_relationship: 3,
+          filter: 2,
+          include: 2,
+          include: 3,
+          increment: 3,
+          limit: 2,
+          offset: 2,
+          one: 1,
+          order_by: 2,
+          paginate: 2,
+          put_attribute: 2,
+          put_attribute: 3,
+          trust: 1
+        ]
+
+      alias Hologram.DB
+      alias Hologram.Entity
+      alias Hologram.Job
+    end
+  end
+
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp.
@@ -46,10 +80,12 @@ defmodule Hologram.DB do
   semantics. The returned entity carries no claim and no recorded changes.
 
   Misuse raises rather than returning - a role grant, which is written only through
-  grant_role/revoke_role - as does a constraint violation the mapping does not explain.
+  grant_role/revoke_role, and a job, which is created through Job.create/2 - as does a
+  constraint violation the mapping does not explain.
   """
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
+    validate_not_job!(entity.__struct__)
     Validator.validate_writable!(entity.__struct__)
 
     Writer.create(entity)
@@ -428,6 +464,27 @@ defmodule Hologram.DB do
     }
   end
 
+  @doc false
+  @spec refusal_lines(module, %{atom => list(atom | {atom, any})}, %{atom => any}) :: String.t()
+  def refusal_lines(entity_type, violations, values) do
+    violations
+    |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
+    |> Enum.sort()
+    |> Enum.map_join("\n", fn
+      {field, :unique} ->
+        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+
+      {field, :not_found} ->
+        "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
+
+      violation ->
+        Validator.violation_description(entity_type, values, violation)
+    end)
+  end
+
+  # A by-id read is indexed by the entity type, the way delete/2 and update/3 are - a query
+  # term reaches the same row through read/1, which is where the stages compose.
+
   @doc """
   Re-derives and re-caches the mapping from the current entity type modules, then
   reconciles the schema - the live-reload path after a dev code change. A no-op when
@@ -537,29 +594,24 @@ defmodule Hologram.DB do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
   end
 
-  defp refusal_lines(entity_type, violations, values) do
-    violations
-    |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
-    |> Enum.sort()
-    |> Enum.map_join("\n", fn
-      {field, :unique} ->
-        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
-
-      {field, :not_found} ->
-        "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
-
-      violation ->
-        Validator.violation_description(entity_type, values, violation)
-    end)
-  end
-
-  # A by-id read is indexed by the entity type, the way delete/2 and update/3 are - a query
-  # term reaches the same row through read/1, which is where the stages compose.
   defp validate_entity_type!(query) do
     if not Reflection.entity?(query) do
       raise ArgumentError,
         message:
           "#{inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1"
+    end
+
+    :ok
+  end
+
+  # A job's create means more than storing a row - it schedules work to run after the transaction
+  # commits - so it has one spelling, the way a role grant has one. The message gives the reason
+  # rather than the redirect, since the two verbs are now the same word in different modules.
+  defp validate_not_job!(entity_type) do
+    if Reflection.job?(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(entity_type)} is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits"
     end
 
     :ok
