@@ -1,7 +1,12 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
+import {
+  assert,
+  assertBoxedStrictEqual,
+  defineRuntimeGlobals,
+} from "./support/helpers.mjs";
 
+import Erlang_Re from "../../assets/js/erlang/re.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Model from "../../assets/js/model.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -36,6 +41,20 @@ describe("Model", () => {
             title: "string",
             updated_at: "datetime",
             weight: "float",
+          },
+          constraints: {
+            internal_notes: {unique: true},
+            position: {in: {first: 0, last: 100, step: 5}},
+            title: {
+              format: {opts: ["caseless"], source: "^[a-z ]+$"},
+              max_length: 32,
+              min_length: 3,
+            },
+            weight: {
+              max: Type.float(5.0),
+              min: Type.integer(0),
+              optional: true,
+            },
           },
           defaults: {done: Type.boolean(false), position: Type.integer(7)},
           enumValues: {status: ["open", "done"]},
@@ -453,6 +472,53 @@ describe("Model", () => {
 
       assert.isFalse(entry.relationships.project.optional);
       assert.isTrue(entry.relationships.tags.optional);
+    });
+
+    it("builds a declared range as the struct a membership test walks", () => {
+      assert.deepEqual(
+        Model.entry(TASK).constraints.position.in,
+        Type.range(0, 100, 5),
+      );
+    });
+
+    // Compiled here because a pattern exists only inside the runtime that compiled it. The
+    // options travel with the source, so a caseless pattern stays caseless.
+    it("compiles a declared format into the regex struct a violation carries", () => {
+      const format = Model.entry(TASK).constraints.title.format;
+
+      assert.deepEqual(field(format, "__struct__"), Type.alias("Regex"));
+      assertBoxedStrictEqual(
+        field(format, "source"),
+        Type.bitstring("^[a-z ]+$"),
+      );
+
+      assertBoxedStrictEqual(
+        field(format, "opts"),
+        Type.list([Type.atom("caseless")]),
+      );
+
+      const matched = Erlang_Re["run/3"](
+        Type.bitstring("ABC"),
+        field(format, "re_pattern"),
+        Type.list([Type.tuple([Type.atom("capture"), Type.atom("none")])]),
+      );
+
+      assert.deepEqual(matched, Type.atom("match"));
+    });
+
+    it("keeps bounds, lengths and flags as the build baked them", () => {
+      const constraints = Model.entry(TASK).constraints;
+
+      assert.deepEqual(constraints.weight.max, Type.float(5.0));
+      assert.deepEqual(constraints.weight.min, Type.integer(0));
+      assert.isTrue(constraints.weight.optional);
+      assert.equal(constraints.title.max_length, 32);
+      assert.equal(constraints.title.min_length, 3);
+      assert.isTrue(constraints.internal_notes.unique);
+    });
+
+    it("returns nothing for an attribute declaring no constraint", () => {
+      assert.isUndefined(Model.entry(TASK).constraints.done);
     });
 
     // A row of a type this build never told the client about is a row it cannot read - which is

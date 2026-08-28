@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 // What the client knows about the shape of its own rows, and the boundary where a row becomes
@@ -78,11 +79,17 @@ export default class Model {
       );
     }
 
+    // The three the write path INDEXES into stand in for themselves when a baked entry does not
+    // carry them, where the ones that are only carried can stay undefined: a reader asking what
+    // an attribute declares has to be told "nothing" rather than meet a crash. A build writes all
+    // of them for every type - what has fewer keys is a hand-built entry, which is how most of
+    // this suite states the little it reads.
     entry = {
       attributes: baked.attributes,
-      defaults: baked.defaults,
+      constraints: Model.#boxConstraints(baked.constraints ?? {}),
+      defaults: baked.defaults ?? {},
       enumValues: baked.enumValues,
-      frameworkAttributes: baked.frameworkAttributes,
+      frameworkAttributes: baked.frameworkAttributes ?? [],
       policy: baked.policy,
       relationships: baked.relationships,
       resourceType: baked.resourceType,
@@ -154,6 +161,41 @@ export default class Model {
     }
 
     return Model.#boxValue(row[name], attributeType);
+  }
+
+  static #boxAttributeConstraints(options) {
+    const entries = Object.entries(options).map(([option, value]) => [
+      option,
+      Model.#boxConstraintValue(option, value),
+    ]);
+
+    return Object.fromEntries(entries);
+  }
+
+  // The declared constraints, in the form the checks read them: a range as the struct a
+  // membership test walks, a pattern as the struct a match runs, and everything else as the
+  // build wrote it. Boxed once per type rather than at every check, because a type is read back
+  // far more often than it is met for the first time.
+  static #boxConstraints(constraints) {
+    const entries = Object.entries(constraints).map(([name, options]) => [
+      name,
+      Model.#boxAttributeConstraints(options),
+    ]);
+
+    return Object.fromEntries(entries);
+  }
+
+  static #boxConstraintValue(option, value) {
+    switch (option) {
+      case "format":
+        return Model.#compileFormat(value);
+
+      case "in":
+        return Type.range(value.first, value.last, value.step);
+
+      default:
+        return value;
+    }
   }
 
   static #boxDate(value) {
@@ -245,6 +287,26 @@ export default class Model {
       default:
         return Type.bitstring(value);
     }
+  }
+
+  // A compiled pattern exists only inside the runtime that compiled it, so the build bakes what
+  // compiles into one - the source and the options it was written with - and this is the runtime
+  // that compiles it. The struct is the one a violation carries, so it holds the same three
+  // fields Elixir's does.
+  static #compileFormat({opts, source}) {
+    const boxedSource = Type.bitstring(source);
+    const boxedOpts = Type.list(opts.map((opt) => Type.atom(opt)));
+
+    const compiled = Interpreter.moduleProxy("re")["compile/2"](
+      boxedSource,
+      boxedOpts,
+    );
+
+    return Type.struct("Regex", [
+      [Type.atom("opts"), boxedOpts],
+      [Type.atom("re_pattern"), compiled.data[1]],
+      [Type.atom("source"), boxedSource],
+    ]);
   }
 
   static #field(struct, name) {
