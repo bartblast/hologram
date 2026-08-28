@@ -43,6 +43,16 @@ defmodule Hologram.Entity do
         """
         @spec __is_hologram_entity__() :: boolean
         def __is_hologram_entity__, do: true
+
+        @doc """
+        Builds a new entity struct of this entity type from the given values (a map or a keyword list).
+        The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
+        To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
+        """
+        @spec new(%{optional(atom) => any} | keyword) :: struct
+        def new(values \\ []), do: Hologram.Entity.new(__MODULE__, values)
+
+        defoverridable new: 0, new: 1
       end,
       register_attributes_accumulator(),
       register_policies_accumulator(),
@@ -198,6 +208,7 @@ defmodule Hologram.Entity do
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
+  This is the form for an entity type held in a variable - a type written by name has its own generated new/1, which delegates here.
   """
   @spec new(module, %{optional(atom) => any} | keyword) :: struct
   def new(entity_type, values \\ %{}) do
