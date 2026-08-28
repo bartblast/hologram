@@ -929,6 +929,20 @@ Both `init/3` and `init/2` functions are optional. If you don't need to initiali
 
 Give props and state entries different names. Templates merge the two with state taking precedence, so a state entry sharing a prop's name shadows it entirely. Copying a prop into a same-named state entry during `init` is the usual way to hit this: initialization runs only once, so the copy never refreshes, and the template keeps reading the copy rather than the prop. New values from the parent arrive on every render, none of them reach the screen, and nothing warns you. When a prop supplies a starting value that the component goes on to own, separate names - an `:initial_count` prop feeding a `:count` state entry - keep the prop reachable and make the snapshot obvious.
 
+##### Reading Props in Actions
+
+A stateful component's props are carried on its `%Component{}` struct, so an action reads one with `component.props.name`. Defaults and Context-sourced props are in there too, and so is the `cid`.
+
+```elixir
+prop :label, :string
+
+def action(:announce, _params, component) do
+  put_state(component, :announced, component.props.label)
+end
+```
+
+Props follow whatever the parent passes, so an action always reads the current value and never needs a copy kept in state.
+
 #### Slots
 
 Slots allow components to accept and render child content. They are defined using the `<slot />` tag in the component's template:
@@ -1644,6 +1658,14 @@ Actions receive three arguments:
   - Custom parameters from template event attributes, other actions via `put_action/3`, or commands via `put_action/3`
   - Event data under the `:event` key (see Events for details about event data)
 - `component` - the current `%Component{}` struct
+
+The `component` argument carries the component's state as `component.state` and its props as `component.props`. Props follow whatever the parent passes, so an action always sees the current value and never needs a copy kept in state. A page's params are its props, so a page action reads a URL param the same way.
+
+```elixir
+def action(:refresh, _params, component) do
+  put_command(component, :load_order, id: component.props.id)
+end
+```
 
 #### Action Results
 
