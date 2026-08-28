@@ -28,12 +28,6 @@ const ROLE_GRANT = "Hologram.Auth.RoleGrant";
 
 const SERVER_ONLY_STRUCT = "Hologram.Entity.ServerOnly";
 
-// The attributes every entity type carries without declaring them - Hologram.Entity's
-// @system_attributes. Validation judges what a type DECLARES, so these are left out of it, which
-// is what __attributes__/0 does on the server by simply not holding them. The model bakes them
-// alongside the declared ones, because reading a row back needs their types.
-const SYSTEM_ATTRIBUTES = ["created_at", "id", "updated_at"];
-
 function attributeValue(entry, given, name) {
   if (given.has(name)) {
     return given.get(name);
@@ -207,10 +201,11 @@ function changeErrors(entry, name, value, attributeType) {
 }
 
 // The attributes a type DECLARES, which is what validation judges - the system ones the model
-// bakes beside them are the framework's to fill.
+// bakes beside them are the framework's to fill, which is what __attributes__/0 does on the server
+// by simply not holding them.
 function declaredAttributes(entry) {
   return Object.entries(entry.attributes).filter(
-    ([name]) => !SYSTEM_ATTRIBUTES.includes(name),
+    ([name]) => !Model.systemAttributes.includes(name),
   );
 }
 

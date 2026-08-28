@@ -4,7 +4,6 @@ import Clock from "./clock.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
-import SortKey from "./sort_key.mjs";
 
 // What a frame does to the database. Deltas arrive grouped by op and then by entity type, and
 // each of them is a statement about one moment - so they may be applied in any order. A row and
@@ -134,32 +133,13 @@ export default class Deltas {
       }
     }
 
-    Deltas.#computeSortKeys(type, attributes);
+    Model.computeSortKeys(type, attributes);
     LocalDatabase.putRow(type, attributes);
 
     // The whole target set of the relationship as it now stands, which is what a row states
     // about one: pairs it no longer names are pairs it no longer has.
     for (const [name, targetIds] of facts) {
       LocalDatabase.replaceFacts(type, name, row.id, targetIds);
-    }
-  }
-
-  // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
-  // compared by its key on both tiers - so it is read from the entry's attribute types rather than
-  // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
-  // string's value never arrives, and its key is null like any unset value's.
-  static #computeSortKeys(type, attributes) {
-    for (const [name, attributeType] of Object.entries(
-      Model.entry(type).attributes,
-    )) {
-      if (attributeType !== "string") {
-        continue;
-      }
-
-      const value = attributes[name];
-
-      attributes[`${name}_sort`] =
-        value === null || value === undefined ? null : SortKey.compute(value);
     }
   }
 

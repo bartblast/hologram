@@ -3,6 +3,7 @@
 import Bitstring from "./bitstring.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import SortKey from "./sort_key.mjs";
 import Type from "./type.mjs";
 
 // What the client knows about the shape of its own rows, and the boundary where a row becomes
@@ -21,6 +22,13 @@ import Type from "./type.mjs";
 // declaration spells them: that order is the type's order, so sorting rows by an enum attribute
 // is a comparison of positions in this list rather than of the labels themselves.
 export default class Model {
+  // The attributes every entity type carries without declaring them - Hologram.Entity's
+  // @system_attributes. The model bakes them alongside the declared ones, because reading a row
+  // back needs their types, so anything asking what a type DECLARES has to subtract them. Held
+  // here rather than beside each reader: it is one list mirroring an Elixir one, and a second copy
+  // is how the two drift.
+  static systemAttributes = ["created_at", "id", "updated_at"];
+
   static #entries = {};
 
   // Every relationship of a row is absent from the row itself: a to-many lives in the
@@ -70,6 +78,30 @@ export default class Model {
     const first = label[0];
 
     return first >= "A" && first <= "Z" ? Type.alias(label) : Type.atom(label);
+  }
+
+  // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
+  // compared by its key on both tiers - so it is read from the entry's attribute types rather than
+  // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
+  // string's value never arrives, and its key is null like any unset value's.
+  //
+  // Writes into the object it is given and hands it back, because both callers - a row arriving
+  // from the server and a row this client wrote - are filing that same object.
+  static computeSortKeys(type, attributes) {
+    for (const [name, attributeType] of Object.entries(
+      Model.entry(type).attributes,
+    )) {
+      if (attributeType !== "string") {
+        continue;
+      }
+
+      const value = attributes[name];
+
+      attributes[`${name}_sort`] =
+        value === null || value === undefined ? null : SortKey.compute(value);
+    }
+
+    return attributes;
   }
 
   static entry(type) {
@@ -122,6 +154,31 @@ export default class Model {
     return Model.entry(type).relationships;
   }
 
+  // The fields a client may write, which is what a create's data carries and what the server's
+  // Hologram.Mutation.Envelope.settable_fields/1 admits - the declared attributes plus a to-one's
+  // reference field. Three kinds are left out and each for its own reason: the system attributes
+  // are the framework's to fill, a server-only attribute is one this client was never shown, and a
+  // job's framework attributes are what the worker records. A to-many is not a field at all - its
+  // edges travel as their own writes.
+  //
+  // Sorted, so a batch built twice from one struct spells its data the same way both times.
+  static settableFields(type) {
+    const entry = Model.entry(type);
+
+    const attributes = Object.keys(entry.attributes).filter(
+      (name) =>
+        !Model.systemAttributes.includes(name) &&
+        !entry.serverOnly.has(name) &&
+        !entry.frameworkAttributes.includes(name),
+    );
+
+    const references = Object.entries(entry.relationships)
+      .filter(([_name, relationship]) => !relationship.toMany)
+      .map(([name]) => `${name}_id`);
+
+    return attributes.concat(references).sort();
+  }
+
   // The way back over the same boundary: a value written in a query becomes the way the wire
   // spells it, because that is what the rows it will be compared against hold. A date written as
   // a date compares with a date written as a string only if one of them stops being what it was,
@@ -151,6 +208,23 @@ export default class Model {
       default:
         return Bitstring.toText(value);
     }
+  }
+
+  // A boxed entity struct as the wire spells its settable fields - the object a create's data
+  // carries. A reference field has no attribute type of its own and is always a uuid, which is
+  // what the server's own field_types/1 says about it.
+  static unboxRow(type, struct) {
+    const entry = Model.entry(type);
+    const row = {};
+
+    for (const field of Model.settableFields(type)) {
+      row[field] = Model.unbox(
+        Model.#field(struct, field),
+        entry.attributes[field] ?? "uuid",
+      );
+    }
+
+    return row;
   }
 
   static reset() {

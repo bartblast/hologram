@@ -117,42 +117,14 @@ describe("Deltas", () => {
       );
     });
 
-    it("computes the sort key of a string attribute", () => {
+    // What the keys themselves are is Model.computeSortKeys's, and its own tests say so - what a
+    // filed row proves is that filing asks for them at all.
+    it("files a sort key beside the string attribute it derives from", () => {
       Deltas.apply({
         put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
       });
 
       assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "lodz");
-    });
-
-    it("computes a sort key for every string attribute", () => {
-      Deltas.apply({
-        put_entity: {
-          [TASK]: [{done: false, id: "t1", note: "Ödön", title: "Łódź"}],
-        },
-      });
-
-      const row = LocalDatabase.getRow(TASK, "t1");
-
-      assert.equal(row.note_sort, "odon");
-      assert.equal(row.title_sort, "lodz");
-    });
-
-    it("computes no sort key for an attribute of another type", () => {
-      Deltas.apply({
-        put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
-      });
-
-      assert.isUndefined(LocalDatabase.getRow(TASK, "t1").done_sort);
-      assert.isUndefined(LocalDatabase.getRow(TASK, "t1").id_sort);
-    });
-
-    it("computes a null sort key for an unset value", () => {
-      Deltas.apply({
-        put_entity: {[TASK]: [{done: false, id: "t1", title: null}]},
-      });
-
-      assert.isNull(LocalDatabase.getRow(TASK, "t1").title_sort);
     });
 
     it("files every row of every type a frame carries", () => {

@@ -18,6 +18,7 @@ defineRuntimeGlobals();
 // client that built them any other way would answer one way for a synced row and another for a
 // rendered one.
 describe("Model", () => {
+  const NOTIFY = "MyApp.Jobs.Notify";
   const TASK = "MyApp.Task";
 
   // One attribute of every admitted type, a server-only one, and both relationship
@@ -30,6 +31,24 @@ describe("Model", () => {
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
+        // A job type, whose three framework attributes are the worker's to fill and no client's
+        // to write.
+        [NOTIFY]: {
+          attributes: {
+            actor_id: "uuid",
+            created_at: "datetime",
+            error: "string",
+            id: "uuid",
+            reason: "enum",
+            status: "enum",
+          },
+          constraints: {},
+          defaults: {},
+          enumValues: {reason: ["created"], status: ["queued", "running"]},
+          frameworkAttributes: ["actor_id", "error", "status"],
+          relationships: {},
+          serverOnly: ["error"],
+        },
         [TASK]: {
           attributes: {
             done: "boolean",
@@ -310,6 +329,53 @@ describe("Model", () => {
     });
   });
 
+  describe("computeSortKeys()", () => {
+    it("computes a null sort key for a server-only string, whose value never arrives", () => {
+      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: "Łódź"});
+
+      assert.isNull(attributes.internal_notes_sort);
+    });
+
+    it("computes a null sort key for an unset value", () => {
+      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: null});
+
+      assert.isNull(attributes.title_sort);
+    });
+
+    it("computes a sort key for every string attribute", () => {
+      const attributes = Model.computeSortKeys(TASK, {
+        id: "t1",
+        internal_notes: "Ödön",
+        title: "Łódź",
+      });
+
+      assert.equal(attributes.internal_notes_sort, "odon");
+      assert.equal(attributes.title_sort, "lodz");
+    });
+
+    it("computes no sort key for an attribute of another type", () => {
+      const attributes = Model.computeSortKeys(TASK, {done: false, id: "t1"});
+
+      assert.isUndefined(attributes.done_sort);
+      assert.isUndefined(attributes.id_sort);
+    });
+
+    it("computes the sort key of a string attribute", () => {
+      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: "Łódź"});
+
+      assert.equal(attributes.title_sort, "lodz");
+    });
+
+    // Both callers file the object they passed in, so handing back a copy would file a row with
+    // no keys on it.
+    it("writes into the object it was given and returns it", () => {
+      const attributes = {id: "t1", title: "Łódź"};
+
+      assert.strictEqual(Model.computeSortKeys(TASK, attributes), attributes);
+      assert.equal(attributes.title_sort, "lodz");
+    });
+  });
+
   describe("unbox()", () => {
     it("unboxes a string and a uuid as the text they hold", () => {
       assert.equal(
@@ -397,6 +463,34 @@ describe("Model", () => {
           );
         }
       }
+    });
+  });
+
+  describe("unboxRow()", () => {
+    it("leaves a server-only attribute out rather than unboxing its sentinel", () => {
+      const unboxed = Model.unboxRow(TASK, Model.box(TASK, row()));
+
+      assert.notProperty(unboxed, "internal_notes");
+    });
+
+    it("spells a settable field holding nothing as null", () => {
+      const unboxed = Model.unboxRow(TASK, Model.box(TASK, row({title: null})));
+
+      assert.isNull(unboxed.title);
+    });
+
+    it("spells a struct's settable fields the way the wire does", () => {
+      const unboxed = Model.unboxRow(TASK, Model.box(TASK, row()));
+
+      assert.deepStrictEqual(unboxed, {
+        done: false,
+        due_on: "2026-08-16",
+        position: 7,
+        project_id: "p1",
+        status: "open",
+        title: "Draft copy",
+        weight: 1.5,
+      });
     });
   });
 
@@ -551,6 +645,24 @@ describe("Model", () => {
         Model.notIncluded("tags"),
         field(Model.box(TASK, row()), "tags"),
       );
+    });
+  });
+
+  describe("settableFields()", () => {
+    it("answers the declared attributes and a to-one's reference field, sorted", () => {
+      assert.deepStrictEqual(Model.settableFields(TASK), [
+        "done",
+        "due_on",
+        "position",
+        "project_id",
+        "status",
+        "title",
+        "weight",
+      ]);
+    });
+
+    it("leaves out the attributes a job's framework fills", () => {
+      assert.deepStrictEqual(Model.settableFields(NOTIFY), ["reason"]);
     });
   });
 
