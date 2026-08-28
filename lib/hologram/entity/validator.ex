@@ -943,10 +943,10 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_granted_to_opt!(module, name, opts) do
     case Keyword.fetch(opts, :granted_to) do
-      {:ok, value} when value != :creator ->
+      {:ok, value} when value != :creator and value != nil ->
         raise Hologram.CompileError,
           message:
-            "invalid granted_to option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the granted_to option must be :creator"
+            "invalid granted_to option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the granted_to option must be :creator or nil"
 
       _fetch_result ->
         :ok

@@ -1657,9 +1657,19 @@ defmodule Hologram.Entity.ValidatorTest do
              ]
     end
 
-    test "rejects granted_to option other than :creator" do
+    test "accepts granted_to option set to nil" do
+      defmodule InlineEntityFixture71 do
+        use Hologram.Entity
+
+        role :owner, granted_to: nil
+      end
+
+      assert InlineEntityFixture71.__roles__() == [{:owner, []}]
+    end
+
+    test "rejects granted_to option other than :creator or nil" do
       expected_msg =
-        "invalid granted_to option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the granted_to option must be :creator"
+        "invalid granted_to option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the granted_to option must be :creator or nil"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture70 do
