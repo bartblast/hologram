@@ -47,16 +47,29 @@ defmodule HologramFeatureTests.RenderingTest do
       |> visit(PropsOnStructPage, n: 1)
       |> click(button("Increment"))
       |> click(button("Increment"))
-      |> assert_text(css("#component_prop_count"), "2")
-      |> click(button("Read prop"))
-      |> assert_text(css("#component_result"), "2")
+      |> assert_text(css("#component_1_prop_count"), "2")
+      |> click(css("#component_1_read_prop"))
+      |> assert_text(css("#component_1_result"), "2")
     end
 
     feature "action reads the prop on the first render", %{session: session} do
       session
       |> visit(PropsOnStructPage, n: 1)
-      |> click(button("Read prop"))
-      |> assert_text(css("#component_result"), "0")
+      |> click(css("#component_1_read_prop"))
+      |> assert_text(css("#component_1_result"), "0")
+    end
+
+    # Component 2 is not in the tree when the page loads, so it goes down the client's init/2 path
+    # rather than being initialized on the server.
+    feature "action reads the prop of a component added after load", %{session: session} do
+      session
+      |> visit(PropsOnStructPage, n: 1)
+      |> click(button("Increment"))
+      |> click(button("Increment"))
+      |> click(button("Show component 2"))
+      |> assert_text(css("#component_2_prop_count"), "2")
+      |> click(css("#component_2_read_prop"))
+      |> assert_text(css("#component_2_result"), "2")
     end
 
     feature "page action reads a URL param", %{session: session} do

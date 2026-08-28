@@ -14,13 +14,13 @@ defmodule HologramFeatureTests.Components.Rendering.PropsOnStructComponent do
   def template do
     ~HOLO"""
     <p>
-      Component prop count: <strong id="component_prop_count">{@count}</strong>
+      Component prop count: <strong id="{@cid}_prop_count">{@count}</strong>
     </p>
     <p>
-      <button $click="read_prop">Read prop</button>
+      <button id="{@cid}_read_prop" $click="read_prop">Read prop</button>
     </p>
     <p>
-      Component result: <strong id="component_result">{inspect(@result)}</strong>
+      Component result: <strong id="{@cid}_result">{inspect(@result)}</strong>
     </p>
     """
   end
