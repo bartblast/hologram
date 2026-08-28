@@ -814,12 +814,19 @@ defmodule Hologram.Template.Renderer do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
+  # The props are both handed to init and written back onto whatever it returned, so the field holds
+  # the props the render actually used rather than anything a handler put there. That is what lets a
+  # later handler read a prop's current value instead of a copy taken when the component mounted.
+  # A page reaches this with its URL params in the props position, which is how its params land on
+  # its struct too.
   defp init_component(module, props, server_struct) do
+    initial_component_struct = %Component{props: props}
+
     init_result =
       if Reflection.has_function?(module, :init, 3) do
-        module.init(props, %Component{}, server_struct)
+        module.init(props, initial_component_struct, server_struct)
       else
-        {%Component{}, server_struct}
+        {initial_component_struct, server_struct}
       end
 
     {component_struct, returned_server_struct} =
@@ -831,10 +838,10 @@ defmodule Hologram.Template.Renderer do
           {component_struct, server_struct}
 
         %Server{} = mutated_server_struct ->
-          {%Component{}, mutated_server_struct}
+          {initial_component_struct, mutated_server_struct}
       end
 
-    {component_struct, %{returned_server_struct | cid: nil}}
+    {%{component_struct | props: props}, %{returned_server_struct | cid: nil}}
   end
 
   defp inject_default_prop_values(props, module) do
