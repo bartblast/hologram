@@ -8892,6 +8892,41 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("writes the page params onto the page component struct", () => {
+      const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
+        state: Type.map([
+          [Type.atom("key_2"), Type.bitstring("state_value_2")],
+          [Type.atom("key_3"), Type.bitstring("state_value_3")],
+        ]),
+      });
+
+      ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
+
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
+
+      const params = Type.map([
+        [Type.atom("key_1"), Type.bitstring("param_value_1")],
+        [Type.atom("key_2"), Type.bitstring("param_value_2")],
+      ]);
+
+      Renderer.renderPage(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
+        params,
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("props"),
+          ComponentRegistry.getComponentStruct(Type.bitstring("page")),
+        ),
+        params,
+      );
+    });
+
     it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
       initComponentRegistryEntry(
         Type.bitstring("page"),

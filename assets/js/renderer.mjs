@@ -297,6 +297,11 @@ export default class Renderer {
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
     const cid = Type.bitstring("page");
+
+    // A page's params are its props, and it is re-rendered on every action like everything else,
+    // so they are rewritten here for the same reason a component's are.
+    ComponentRegistry.putComponentProps(cid, pageParams);
+
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
     // The document's own children, the one children list with no element to own it.
