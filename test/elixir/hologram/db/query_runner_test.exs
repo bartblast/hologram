@@ -12,7 +12,6 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
-  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Policy
   alias Hologram.Query
@@ -41,32 +40,29 @@ defmodule Hologram.DB.QueryRunnerTest do
 
   defp create_module_2_entities do
     {:ok, first} =
-      Module2
-      |> Entity.new(a: true, c: "banana")
+      %{a: true, c: "banana"}
+      |> Module2.new()
       |> create()
 
     {:ok, second} =
-      Module2
-      |> Entity.new(a: false, c: "apple")
+      %{a: false, c: "apple"}
+      |> Module2.new()
       |> create()
 
     {:ok, third} =
-      Module2
-      |> Entity.new(a: true, b: 7, c: "cherry")
+      %{a: true, b: 7, c: "cherry"}
+      |> Module2.new()
       |> create()
 
     {first, second, third}
   end
 
   defp create_module_3_entity do
-    {:ok, target} =
-      Module1
-      |> Entity.new()
-      |> create()
+    {:ok, target} = create(Module1.new())
 
     {:ok, entity} =
-      Module3
-      |> Entity.new(c_id: target.id)
+      %{c_id: target.id}
+      |> Module3.new()
       |> create()
 
     entity
@@ -99,22 +95,19 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     defp create_policy_child(parent, public) do
-      PolicyModule1
-      |> Entity.new(parent_id: parent.id, public: public)
+      %{parent_id: parent.id, public: public}
+      |> PolicyModule1.new()
       |> DB.create!()
     end
 
     defp create_policy_entity(public) do
-      PolicyModule1
-      |> Entity.new(public: public)
+      %{public: public}
+      |> PolicyModule1.new()
       |> DB.create!()
     end
 
     defp create_policy_container(children) do
-      container =
-        PolicyModule3
-        |> Entity.new()
-        |> DB.create!()
+      container = DB.create!(PolicyModule3.new())
 
       Enum.each(children, &add_relationship(PolicyModule3, container.id, :children, &1.id))
 
@@ -122,14 +115,12 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     defp create_policy_parent do
-      PolicyModule2
-      |> Entity.new()
-      |> DB.create!()
+      DB.create!(PolicyModule2.new())
     end
 
     defp create_policy_user(email) do
-      Module14
-      |> Entity.new(email: email)
+      %{email: email}
+      |> Module14.new()
       |> DB.create!()
     end
 
@@ -199,10 +190,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       user = create_policy_user("runner_10@example.com")
       other_user = create_policy_user("runner_11@example.com")
 
-      entity =
-        PolicyModule2
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(PolicyModule2.new())
 
       insert_global_grant(user.id, Role.Module1)
 
@@ -247,21 +235,21 @@ defmodule Hologram.DB.QueryRunnerTest do
       user = create_policy_user("runner_16@example.com")
 
       public_match =
-        PolicyModule1
-        |> Entity.new(priority: 5, public: true)
+        %{priority: 5, public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
       granted_match =
-        PolicyModule1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> PolicyModule1.new()
         |> DB.create!()
 
-      PolicyModule1
-      |> Entity.new(priority: 5)
+      %{priority: 5}
+      |> PolicyModule1.new()
       |> DB.create!()
 
-      PolicyModule1
-      |> Entity.new(priority: 9, public: true)
+      %{priority: 9, public: true}
+      |> PolicyModule1.new()
       |> DB.create!()
 
       Auth.grant_role(user, granted_match, :viewer)
@@ -367,8 +355,8 @@ defmodule Hologram.DB.QueryRunnerTest do
     # invalid query.
     test "binds placeholder values violating declared constraint options" do
       {:ok, _entity} =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> create()
 
       mapping = Mapper.derive!([Module10])
@@ -486,19 +474,16 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "fills the metadata of an included row" do
-      {:ok, required_target} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, required_target} = create(Module1.new())
 
       {:ok, included_target} =
-        Module2
-        |> Entity.new(a: true, c: "abc")
+        %{a: true, c: "abc"}
+        |> Module2.new()
         |> create()
 
       {:ok, _source} =
-        Module3
-        |> Entity.new(b_id: included_target.id, c_id: required_target.id)
+        %{b_id: included_target.id, c_id: required_target.id}
+        |> Module3.new()
         |> create()
 
       set_revisions(Module2, included_target.id, %{"a" => 3, "c" => 2})
@@ -513,13 +498,10 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "embeds an included row the read policy hides from an acting user" do
-      parent =
-        PolicyModule2
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(PolicyModule2.new())
 
-      PolicyModule1
-      |> Entity.new(parent_id: parent.id, public: true)
+      %{parent_id: parent.id, public: true}
+      |> PolicyModule1.new()
       |> DB.create!()
 
       term =
@@ -554,19 +536,16 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "filters and orders a to-many include whose target names columns like the join table" do
-      {:ok, source} =
-        Module9
-        |> Entity.new()
-        |> create()
+      {:ok, source} = create(Module9.new())
 
       {:ok, first_target} =
-        Module8
-        |> Entity.new(source_id: 5)
+        %{source_id: 5}
+        |> Module8.new()
         |> create()
 
       {:ok, second_target} =
-        Module8
-        |> Entity.new(source_id: 1)
+        %{source_id: 1}
+        |> Module8.new()
         |> create()
 
       :ok = add_relationship(Module9, source.id, :a, first_target.id)

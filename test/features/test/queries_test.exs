@@ -4,7 +4,6 @@ defmodule HologramFeatureTests.QueriesTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Queries.Page1
@@ -60,13 +59,13 @@ defmodule HologramFeatureTests.QueriesTest do
   # registered for this query.
   feature "orders rows by a dynamic string key in practical order", %{session: session} do
     product =
-      Product
-      |> Entity.new(name: "Widget")
+      %{name: "Widget"}
+      |> Product.new()
       |> DB.create!()
 
     Enum.each(["Zebra", "apple", "Łódź"], fn body ->
-      Review
-      |> Entity.new(body: body, product_id: product.id, rating: 3)
+      %{body: body, product_id: product.id, rating: 3}
+      |> Review.new()
       |> DB.create!()
     end)
 
@@ -76,16 +75,16 @@ defmodule HologramFeatureTests.QueriesTest do
   end
 
   feature "renders from_query prop results in practical order", %{session: session} do
-    Product
-    |> Entity.new(name: "Zürich")
+    %{name: "Zürich"}
+    |> Product.new()
     |> DB.create!()
 
-    Product
-    |> Entity.new(name: "Łódź")
+    %{name: "Łódź"}
+    |> Product.new()
     |> DB.create!()
 
-    Product
-    |> Entity.new(name: "apple")
+    %{name: "apple"}
+    |> Product.new()
     |> DB.create!()
 
     session
@@ -97,25 +96,25 @@ defmodule HologramFeatureTests.QueriesTest do
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do
     alpha =
-      Product
-      |> Entity.new(name: "alpha")
+      %{name: "alpha"}
+      |> Product.new()
       |> DB.create!()
 
     beta =
-      Product
-      |> Entity.new(name: "beta")
+      %{name: "beta"}
+      |> Product.new()
       |> DB.create!()
 
-    Review
-    |> Entity.new(body: "aa", product_id: alpha.id, rating: 2)
+    %{body: "aa", product_id: alpha.id, rating: 2}
+    |> Review.new()
     |> DB.create!()
 
-    Review
-    |> Entity.new(body: "bb", product_id: alpha.id, rating: 5)
+    %{body: "bb", product_id: alpha.id, rating: 5}
+    |> Review.new()
     |> DB.create!()
 
-    Review
-    |> Entity.new(body: "cc", product_id: beta.id, rating: 3)
+    %{body: "cc", product_id: beta.id, rating: 3}
+    |> Review.new()
     |> DB.create!()
 
     :ok

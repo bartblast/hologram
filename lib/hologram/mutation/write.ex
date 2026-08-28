@@ -44,6 +44,10 @@ defmodule Hologram.Mutation.Write do
   defaults filled - and every other op names the row by id and records what it does on the struct's
   metadata, the way the pure stages record it.
 
+  The attribute fields of a non-create op's struct are the type's declared defaults and describe
+  nothing: a write against an existing row carries what it changes, not a picture of the row, and
+  the executor reads the recorded operations while the policy check reads the stored row.
+
   A write claiming nothing takes the operation of the verb it is: a client is never the trusted
   tier, so what a server-side verb leaves to the actor's presence - evaluate, or write raw - a
   batch always evaluates, with the anonymous semantics when nobody is signed in.

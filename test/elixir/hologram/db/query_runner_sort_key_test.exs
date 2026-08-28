@@ -8,7 +8,6 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
-  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -37,8 +36,8 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   defp create_module2_rows(values) do
     Enum.each(values, fn value ->
       {:ok, _entity} =
-        Module2
-        |> Entity.new(a: true, c: value)
+        %{a: true, c: value}
+        |> Module2.new()
         |> create()
     end)
   end
@@ -52,18 +51,18 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   describe "run/3" do
     test "orders string attributes practically through sort-key companions" do
       {:ok, _entity} =
-        Module2
-        |> Entity.new(a: true, c: "Zürich")
+        %{a: true, c: "Zürich"}
+        |> Module2.new()
         |> create()
 
       {:ok, _entity} =
-        Module2
-        |> Entity.new(a: true, c: "Łódź")
+        %{a: true, c: "Łódź"}
+        |> Module2.new()
         |> create()
 
       {:ok, _entity} =
-        Module2
-        |> Entity.new(a: true, c: "apple")
+        %{a: true, c: "apple"}
+        |> Module2.new()
         |> create()
 
       backfill_sort_keys()
@@ -78,18 +77,15 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
     test "skips sort-key companions when decoding embedded entities" do
       {:ok, related} =
-        Module2
-        |> Entity.new(a: true, c: "banana")
+        %{a: true, c: "banana"}
+        |> Module2.new()
         |> create()
 
-      {:ok, target} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, target} = create(Module1.new())
 
       {:ok, source} =
-        Module3
-        |> Entity.new(c_id: target.id)
+        %{c_id: target.id}
+        |> Module3.new()
         |> create()
 
       :ok = add_relationship(Module3, source.id, :a, related.id)
@@ -104,8 +100,8 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
     test "skips sort-key companions when decoding entities" do
       {:ok, _entity} =
-        Module2
-        |> Entity.new(a: true, c: "banana")
+        %{a: true, c: "banana"}
+        |> Module2.new()
         |> create()
 
       term =

@@ -19,7 +19,7 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "sends a row that appeared whole" do
-      row = Entity.new(Module2, a: true, c: "first")
+      row = Module2.new(a: true, c: "first")
 
       assert deltas(news(%{appeared: [row]})) == [
                %{
@@ -33,7 +33,7 @@ defmodule Hologram.Sync.FrameTest do
 
     test "sends a row that changed as the attributes that moved" do
       row = %{
-        Entity.new(Module2, a: true, c: "after")
+        Module2.new(a: true, c: "after")
         | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
       }
 
@@ -49,7 +49,7 @@ defmodule Hologram.Sync.FrameTest do
 
     test "carries the revisions of the columns a patch names" do
       row = %{
-        Entity.new(Module2, a: true, c: "after")
+        Module2.new(a: true, c: "after")
         | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
       }
 
@@ -62,7 +62,7 @@ defmodule Hologram.Sync.FrameTest do
     # told a column it may not have has moved.
     test "leaves a server-only attribute out of a patch's revisions" do
       row = %{
-        Entity.new(Module14, email: "user@test.com")
+        Module14.new(email: "user@test.com")
         | __meta__: %Metadata{revisions: %{email: 3, password_hash: 4}}
       }
 
@@ -76,7 +76,7 @@ defmodule Hologram.Sync.FrameTest do
     # Every update moves the stamp, so a patch carrying a value that must be written for the wire
     # is the common case - and a DateTime handed over raw is one JSON refuses outright.
     test "sends the changed values written the way the wire carries them" do
-      row = Entity.new(Module2, a: true, c: "after")
+      row = Module2.new(a: true, c: "after")
       moved = %{c: "after", updated_at: ~U[2026-08-16 16:20:00.000000Z]}
 
       assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}))
@@ -131,7 +131,7 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "takes the type of an arrived row from the row itself" do
-      row = Entity.new(Module14, email: "user@test.com")
+      row = Module14.new(email: "user@test.com")
 
       assert [%{type: "Hologram.Test.Fixtures.Entity.Module14"}] =
                deltas(news(%{appeared: [row]}))
@@ -150,7 +150,7 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "wraps the deltas in a sync_deltas SSE event envelope" do
-      row = Entity.new(Module2, a: true, c: "first")
+      row = Module2.new(a: true, c: "first")
 
       payload = %{
         cursor: @cursor,
@@ -169,9 +169,9 @@ defmodule Hologram.Sync.FrameTest do
     # a fill, where a parent arrives with its include-reached children, every row travels exactly
     # once, flat, under its own type, with the to-many fact as the id list on the parent.
     test "groups an appearing parent and child by op and their own types" do
-      child = Entity.new(Module2, a: true, c: "child")
+      child = Module2.new(a: true, c: "child")
 
-      parent = Entity.new(Module3, c_id: Entity.generate_id())
+      parent = Module3.new(c_id: Entity.generate_id())
       embedded_parent = %{parent | a: [child]}
 
       news = news(%{appeared: [embedded_parent, child]})
@@ -206,7 +206,7 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "groups every op of a mixed round, ids alone for the rows that left" do
-      row = Entity.new(Module2, a: true, c: "after")
+      row = Module2.new(a: true, c: "after")
       gone_id = Entity.generate_id()
       target_id = Entity.generate_id()
 
@@ -263,7 +263,7 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "never carries the value of a server-only attribute" do
-      row = Entity.new(Module14, email: "user@test.com", password_hash: "hashed_secret_v3")
+      row = Module14.new(email: "user@test.com", password_hash: "hashed_secret_v3")
 
       envelope = encode_deltas_envelope(42, @cursor, [put_entity(row)])
 
@@ -334,7 +334,7 @@ defmodule Hologram.Sync.FrameTest do
 
   describe "put_entity/1" do
     test "hands over the whole row, under the type the row itself names" do
-      row = Entity.new(Module2, a: true, c: "first")
+      row = Module2.new(a: true, c: "first")
 
       assert put_entity(row) == %{
                data: WireData.row(row),

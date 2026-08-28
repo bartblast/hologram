@@ -9,7 +9,6 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
-  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
   alias Hologram.Query.Placeholder
@@ -89,8 +88,8 @@ defmodule Hologram.Query.InterpreterTest do
 
   defp module_10(attributes) do
     {:ok, entity} =
-      Module10
-      |> Entity.new(attributes)
+      attributes
+      |> Module10.new()
       |> create()
 
     entity
@@ -98,8 +97,8 @@ defmodule Hologram.Query.InterpreterTest do
 
   defp module_17(attributes) do
     {:ok, entity} =
-      Module17
-      |> Entity.new(attributes)
+      attributes
+      |> Module17.new()
       |> create()
 
     entity
@@ -116,8 +115,8 @@ defmodule Hologram.Query.InterpreterTest do
 
   defp module_2(title) do
     {:ok, entity} =
-      Module2
-      |> Entity.new(a: true, c: title)
+      %{a: true, c: title}
+      |> Module2.new()
       |> create()
 
     entity
@@ -645,16 +644,13 @@ defmodule Hologram.Query.InterpreterTest do
 
   describe "run/3 - includes" do
     setup do
-      {:ok, required} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, required} = create(Module1.new())
 
       target = module_2("the to-one target")
 
       {:ok, source} =
-        Module3
-        |> Entity.new(b_id: target.id, c_id: required.id)
+        %{b_id: target.id, c_id: required.id}
+        |> Module3.new()
         |> create()
 
       %{required: required, source: source, target: target}
@@ -667,14 +663,11 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "fills a to-one relationship holding nothing with nothing" do
-      {:ok, required} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, required} = create(Module1.new())
 
       {:ok, _entity} =
-        Module3
-        |> Entity.new(c_id: required.id)
+        %{c_id: required.id}
+        |> Module3.new()
         |> create()
 
       rows = agreed(include(Module3, :b))
@@ -707,14 +700,11 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "reads only the pairs of its own source", %{source: source} do
-      {:ok, required} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, required} = create(Module1.new())
 
       {:ok, other_source} =
-        Module3
-        |> Entity.new(c_id: required.id)
+        %{c_id: required.id}
+        |> Module3.new()
         |> create()
 
       mine = module_2("mine")
@@ -762,8 +752,8 @@ defmodule Hologram.Query.InterpreterTest do
 
     test "fills what an include includes, two levels down", %{required: required, source: source} do
       {:ok, _entity} =
-        Module5
-        |> Entity.new(a_id: source.id)
+        %{a_id: source.id}
+        |> Module5.new()
         |> create()
 
       query = include(Module5, :a, &include(&1, :c))
@@ -778,8 +768,8 @@ defmodule Hologram.Query.InterpreterTest do
       module_10(count: 1, username: "ada")
 
       {:ok, _entity} =
-        Module2
-        |> Entity.new(a: true, c: "not a Module10 row")
+        %{a: true, c: "not a Module10 row"}
+        |> Module2.new()
         |> create()
 
       assert names(agreed(Module10)) == ["ada"]

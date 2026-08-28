@@ -15,10 +15,14 @@ defmodule Hologram.Auth.RoleGrant do
   # facts when called - by then the app is compiled - so every consumer reading entity
   # definitions through the standard reflection interface sees an ordinary, fully
   # resolved definition. Keep the hand-written contract in sync with what use
-  # Hologram.Entity generates.
+  # Hologram.Entity generates - new/0,1 included, which delegates to the same engine. The
+  # defoverridable accompanying the generated constructor has no counterpart here: it
+  # exists so that a module can redefine what the macro injected into it, and nothing is
+  # injected into this one.
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
+  alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Reflection
@@ -102,6 +106,13 @@ defmodule Hologram.Auth.RoleGrant do
   def __system_attributes__ do
     [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
   end
+
+  @doc """
+  Raises - a role grant is written through grant_role/revoke_role and constructed nowhere.
+  Present so that this type answers the constructor every entity type answers, with the refusal the engine already gives it.
+  """
+  @spec new(%{optional(atom) => any} | keyword) :: struct
+  def new(values \\ []), do: Entity.new(__MODULE__, values)
 
   @doc false
   @spec resource_type(module) :: atom

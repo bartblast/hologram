@@ -59,8 +59,8 @@ defmodule Hologram.Sync.SessionTest do
   end
 
   defp create(title) do
-    Module2
-    |> Entity.new(a: true, c: title)
+    %{a: true, c: title}
+    |> Module2.new()
     |> DB.create!()
   end
 
@@ -459,18 +459,16 @@ defmodule Hologram.Sync.SessionTest do
 
     test "sends only the rows this client may read" do
       user =
-        Module14
-        |> Entity.new(email: "reader@example.com")
+        %{email: "reader@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       readable =
-        PolicyModule1
-        |> Entity.new(public: true)
+        %{public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
-      PolicyModule1
-      |> Entity.new()
-      |> DB.create!()
+      DB.create!(PolicyModule1.new())
 
       windows(%{@page => [@other_window]})
       hold_windows([@other_window])
@@ -484,13 +482,11 @@ defmodule Hologram.Sync.SessionTest do
 
     test "sends an anonymous visitor the rows anyone may read, and no others" do
       readable =
-        PolicyModule1
-        |> Entity.new(public: true)
+        %{public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
-      PolicyModule1
-      |> Entity.new()
-      |> DB.create!()
+      DB.create!(PolicyModule1.new())
 
       windows(%{@page => [@other_window]})
       hold_windows([@other_window])
@@ -999,14 +995,11 @@ defmodule Hologram.Sync.SessionTest do
   # A row of the include window's reach without being any window's root - what the child of the
   # reach tests is held through.
   defp include_source(child) do
-    required =
-      Module1
-      |> Entity.new()
-      |> DB.create!()
+    required = DB.create!(Module1.new())
 
     source =
-      Module3
-      |> Entity.new(c_id: required.id)
+      %{c_id: required.id}
+      |> Module3.new()
       |> DB.create!()
 
     source

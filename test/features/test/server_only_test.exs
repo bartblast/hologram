@@ -5,7 +5,6 @@ defmodule HologramFeatureTests.ServerOnlyTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Note
@@ -30,8 +29,8 @@ defmodule HologramFeatureTests.ServerOnlyTest do
   feature "delivers the row while keeping its server-only value out of the page", %{
     session: session
   } do
-    Document
-    |> Entity.new(api_token: "api_token_5rL9", public: true, title: "public_document")
+    %{api_token: "api_token_5rL9", public: true, title: "public_document"}
+    |> Document.new()
     |> DB.create!()
 
     session

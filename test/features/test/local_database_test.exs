@@ -7,7 +7,6 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ticket
@@ -45,8 +44,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
   feature "shows a value changed after the page was rendered", %{session: session} do
     product =
-      Product
-      |> Entity.new(name: "abacus")
+      %{name: "abacus"}
+      |> Product.new()
       |> DB.create!()
 
     session
@@ -62,8 +61,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   end
 
   feature "shows a row created after the page was rendered", %{session: session} do
-    Product
-    |> Entity.new(name: "bicycle")
+    %{name: "bicycle"}
+    |> Product.new()
     |> DB.create!()
 
     session
@@ -71,8 +70,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     |> assert_text(css("#live_products"), ~r/^bicycle$/)
     |> mark_this_page_load()
 
-    Product
-    |> Entity.new(name: "birdcage")
+    %{name: "birdcage"}
+    |> Product.new()
     |> DB.create!()
 
     session
@@ -82,13 +81,13 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
   feature "drops a row deleted after the page was rendered", %{session: session} do
     kept =
-      Product
-      |> Entity.new(name: "cabinet")
+      %{name: "cabinet"}
+      |> Product.new()
       |> DB.create!()
 
     removed =
-      Product
-      |> Entity.new(name: "candle")
+      %{name: "candle"}
+      |> Product.new()
       |> DB.create!()
 
     session
@@ -110,12 +109,12 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   # The order is the query's, not the arrival order: a row landing on the stream is filed and
   # then read back through the same ordering the term declares.
   feature "places a row arriving later where the query orders it", %{session: session} do
-    Product
-    |> Entity.new(name: "dolphin")
+    %{name: "dolphin"}
+    |> Product.new()
     |> DB.create!()
 
-    Product
-    |> Entity.new(name: "dragon")
+    %{name: "dragon"}
+    |> Product.new()
     |> DB.create!()
 
     session
@@ -123,8 +122,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     |> assert_text(css("#live_products"), ~r/^dolphin,dragon$/)
     |> mark_this_page_load()
 
-    Product
-    |> Entity.new(name: "daffodil")
+    %{name: "daffodil"}
+    |> Product.new()
     |> DB.create!()
 
     session
@@ -135,16 +134,16 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   # The first paint is the server's, out of Postgres, and what is read here is after hydration,
   # out of the client's own database - so one assertion covers both executors agreeing.
   feature "orders rows by an enum in its declared order", %{session: session} do
-    Ticket
-    |> Entity.new(priority: :medium, title: "a")
+    %{priority: :medium, title: "a"}
+    |> Ticket.new()
     |> DB.create!()
 
-    Ticket
-    |> Entity.new(priority: :high, title: "b")
+    %{priority: :high, title: "b"}
+    |> Ticket.new()
     |> DB.create!()
 
-    Ticket
-    |> Entity.new(priority: :low, title: "c")
+    %{priority: :low, title: "c"}
+    |> Ticket.new()
     |> DB.create!()
 
     session
@@ -153,16 +152,16 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   end
 
   feature "filters rows at or above a declared enum value", %{session: session} do
-    Ticket
-    |> Entity.new(priority: :low, title: "a")
+    %{priority: :low, title: "a"}
+    |> Ticket.new()
     |> DB.create!()
 
-    Ticket
-    |> Entity.new(priority: :medium, title: "b")
+    %{priority: :medium, title: "b"}
+    |> Ticket.new()
     |> DB.create!()
 
-    Ticket
-    |> Entity.new(priority: :high, title: "c")
+    %{priority: :high, title: "c"}
+    |> Ticket.new()
     |> DB.create!()
 
     session
@@ -176,12 +175,12 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   # created in the same millisecond order unpredictably.
   feature "re-files a row whose enum value changed", %{session: session} do
     ticket_a =
-      Ticket
-      |> Entity.new(priority: :low, title: "a")
+      %{priority: :low, title: "a"}
+      |> Ticket.new()
       |> DB.create!()
 
-    Ticket
-    |> Entity.new(priority: :medium, title: "b")
+    %{priority: :medium, title: "b"}
+    |> Ticket.new()
     |> DB.create!()
 
     session
@@ -201,8 +200,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   # it, and the order they come back in is the order the bound was placed against.
   feature "filters rows by a string bound in the order they sort", %{session: session} do
     Enum.each(["apple", "Łódź", "Mango", "Ödön", "Zebra"], fn name ->
-      Product
-      |> Entity.new(name: name)
+      %{name: name}
+      |> Product.new()
       |> DB.create!()
     end)
 
@@ -213,16 +212,16 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
   feature "re-files a row whose value crosses a string bound", %{session: session} do
     apple =
-      Product
-      |> Entity.new(name: "apple")
+      %{name: "apple"}
+      |> Product.new()
       |> DB.create!()
 
-    Product
-    |> Entity.new(name: "Mango")
+    %{name: "Mango"}
+    |> Product.new()
     |> DB.create!()
 
-    Product
-    |> Entity.new(name: "Zebra")
+    %{name: "Zebra"}
+    |> Product.new()
     |> DB.create!()
 
     session
@@ -242,8 +241,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   # it again from the revisions a patch carries for the columns it names.
   feature "shows the revision a row's name was set at", %{session: session} do
     product =
-      Product
-      |> Entity.new(name: "abacus")
+      %{name: "abacus"}
+      |> Product.new()
       |> DB.create!()
 
     session
@@ -257,8 +256,8 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   feature "moves the revision of a name changed after the page was rendered",
           %{session: session} do
     product =
-      Product
-      |> Entity.new(name: "abacus")
+      %{name: "abacus"}
+      |> Product.new()
       |> DB.create!()
 
     session

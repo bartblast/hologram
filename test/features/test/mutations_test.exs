@@ -48,8 +48,8 @@ defmodule HologramFeatureTests.MutationsTest do
   end
 
   defp create_item(stock) do
-    Item
-    |> Entity.new(name: "widget", stock: stock)
+    %{name: "widget", stock: stock}
+    |> Item.new()
     |> DB.create!()
   end
 
@@ -208,8 +208,8 @@ defmodule HologramFeatureTests.MutationsTest do
     session = log_in(session)
 
     other_author =
-      User
-      |> Entity.new(email: "other@example.com")
+      %{email: "other@example.com"}
+      |> User.new()
       |> DB.create!()
 
     post_batch(session, 1, [create_note_write(other_author.id, "denied")])
@@ -268,8 +268,8 @@ defmodule HologramFeatureTests.MutationsTest do
     replica_id = page_replica_id(session)
 
     other_author =
-      User
-      |> Entity.new(email: "other@example.com")
+      %{email: "other@example.com"}
+      |> User.new()
       |> DB.create!()
 
     writes = [create_note_write(other_author.id, "kept")]
@@ -309,8 +309,8 @@ defmodule HologramFeatureTests.MutationsTest do
     # evaluation would answer something else - a denial, since a row created from the test process
     # has no acting user to grant its creator role. An answer that still says :not_found is one
     # the record replayed.
-    Note
-    |> Entity.new(id: id, body: "late", author_id: session_user().id)
+    %{id: id, body: "late", author_id: session_user().id}
+    |> Note.new()
     |> DB.create!()
 
     post_batch(session, 1, [pin_note_write(id)])
@@ -326,8 +326,8 @@ defmodule HologramFeatureTests.MutationsTest do
     replica_id = page_replica_id(session)
 
     author =
-      User
-      |> Entity.new(email: "nobody@example.com")
+      %{email: "nobody@example.com"}
+      |> User.new()
       |> DB.create!()
 
     post_batch(session, 1, [create_note_write(author.id, "anonymous")])
@@ -459,8 +459,8 @@ defmodule HologramFeatureTests.MutationsTest do
     session = log_in(session)
 
     other_author =
-      User
-      |> Entity.new(email: "other@example.com")
+      %{email: "other@example.com"}
+      |> User.new()
       |> DB.create!()
 
     writes = [create_restock_write(item.id, 1), create_note_write(other_author.id, "denied")]

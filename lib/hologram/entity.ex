@@ -43,6 +43,16 @@ defmodule Hologram.Entity do
         """
         @spec __is_hologram_entity__() :: boolean
         def __is_hologram_entity__, do: true
+
+        @doc """
+        Builds a new entity struct of this entity type from the given values (a map or a keyword list).
+        The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
+        To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
+        """
+        @spec new(%{optional(atom) => any} | keyword) :: struct
+        def new(values \\ []), do: Hologram.Entity.new(__MODULE__, values)
+
+        defoverridable new: 0, new: 1
       end,
       register_attributes_accumulator(),
       register_policies_accumulator(),
@@ -198,6 +208,7 @@ defmodule Hologram.Entity do
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
+  This is the form for an entity type held in a variable - a type written by name has its own generated new/1, which delegates here.
   """
   @spec new(module, %{optional(atom) => any} | keyword) :: struct
   def new(entity_type, values \\ %{}) do
@@ -206,15 +217,7 @@ defmodule Hologram.Entity do
     Validator.validate_writable!(entity_type)
     validate_construction_values!(entity_type, values_map)
 
-    declared_defaults =
-      entity_type.__attributes__()
-      |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
-      |> Map.new(fn {name, _type, opts} -> {name, Keyword.fetch!(opts, :default)} end)
-
-    fields =
-      declared_defaults
-      |> Map.put(:id, generate_id())
-      |> Map.merge(values_map)
+    fields = Map.put_new(values_map, :id, generate_id())
 
     struct!(entity_type, fields)
   end
@@ -382,6 +385,9 @@ defmodule Hologram.Entity do
 
   # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
   # by the caller rather than here, so that its struct is expanded in the entity's module.
+  # An attribute field holds what its declaration declares as the default, so a bare struct
+  # agrees with new/2 on everything but the id - which only the constructor can mint, a struct
+  # default being evaluated once, at compile time.
   @doc false
   # sobelow_skip ["DOS.BinToAtom"]
   @spec struct_fields(module) :: list({atom, any})
@@ -392,7 +398,7 @@ defmodule Hologram.Entity do
     attribute_fields =
       module
       |> Module.get_attribute(:__attributes__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, nil} end)
+      |> Enum.map(fn {name, _type, opts} -> {name, Keyword.get(opts, :default)} end)
 
     relationship_fields =
       module

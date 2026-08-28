@@ -4,7 +4,6 @@ defmodule Hologram.TestTest do
   import Hologram.Test, only: [as_user: 1, as_user: 2]
 
   alias Hologram.Auth.Context
-  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module14
 
   describe "as_user/1" do
@@ -15,7 +14,7 @@ defmodule Hologram.TestTest do
     end
 
     test "takes the user entity" do
-      user = Entity.new(Module14, email: "user_1@example.com")
+      user = Module14.new(email: "user_1@example.com")
 
       as_user(user)
 
@@ -23,7 +22,7 @@ defmodule Hologram.TestTest do
     end
 
     test "returns the given user" do
-      user = Entity.new(Module14, email: "user_2@example.com")
+      user = Module14.new(email: "user_2@example.com")
 
       assert as_user(user) == user
       assert as_user("user_id_2") == "user_id_2"
@@ -51,7 +50,7 @@ defmodule Hologram.TestTest do
     end
 
     test "takes the user entity" do
-      user = Entity.new(Module14, email: "user_3@example.com")
+      user = Module14.new(email: "user_3@example.com")
 
       assert as_user(user, fn -> Context.actor_user_id() end) == user.id
     end

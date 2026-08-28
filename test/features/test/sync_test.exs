@@ -8,7 +8,6 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
@@ -106,8 +105,8 @@ defmodule HologramFeatureTests.SyncTest do
   end
 
   feature "fills a connecting client with the rows it may read", %{session: _session} do
-    Document
-    |> Entity.new(public: true, title: "seeded_before_connect")
+    %{public: true, title: "seeded_before_connect"}
+    |> Document.new()
     |> DB.create!()
 
     {data, _client} = await_deltas_carrying(connect(), ~s["title":"seeded_before_connect"])
@@ -127,8 +126,8 @@ defmodule HologramFeatureTests.SyncTest do
 
   feature "delivers a change as a patch carrying the fresh value", %{session: _session} do
     document =
-      Document
-      |> Entity.new(public: true, title: "before_patch")
+      %{public: true, title: "before_patch"}
+      |> Document.new()
       |> DB.create!()
 
     client = drain_initial_sync(connect())
@@ -144,8 +143,8 @@ defmodule HologramFeatureTests.SyncTest do
   # is what the client writes over its own map rather than being sent a whole one.
   feature "carries the revisions of a patched column", %{session: _session} do
     document =
-      Document
-      |> Entity.new(public: true, title: "before_revision_patch")
+      %{public: true, title: "before_revision_patch"}
+      |> Document.new()
       |> DB.create!()
 
     client = drain_initial_sync(connect())
@@ -171,12 +170,12 @@ defmodule HologramFeatureTests.SyncTest do
   # its own patches. Rooted-everywhere fixtures kept the hole green for a whole step.
   feature "patches a row reached only through an include", %{session: _session} do
     folder =
-      Folder
-      |> Entity.new(name: "folder_before_patch", public: true)
+      %{name: "folder_before_patch", public: true}
+      |> Folder.new()
       |> DB.create!()
 
-    Document
-    |> Entity.new(folder_id: folder.id, public: true, title: "reaches_the_folder")
+    %{folder_id: folder.id, public: true, title: "reaches_the_folder"}
+    |> Document.new()
     |> DB.create!()
 
     client = drain_initial_sync(connect())
@@ -202,8 +201,8 @@ defmodule HologramFeatureTests.SyncTest do
   feature "delivers a row created while the client watches, whole", %{session: _session} do
     client = drain_initial_sync(connect())
 
-    Document
-    |> Entity.new(public: true, title: "created_while_watching")
+    %{public: true, title: "created_while_watching"}
+    |> Document.new()
     |> DB.create!()
 
     {data, _client} = await_deltas_carrying(client, ~s["title":"created_while_watching"])
@@ -213,8 +212,8 @@ defmodule HologramFeatureTests.SyncTest do
 
   feature "tells the client a deleted row is no longer its to hold", %{session: _session} do
     document =
-      Document
-      |> Entity.new(public: true, title: "to_be_deleted")
+      %{public: true, title: "to_be_deleted"}
+      |> Document.new()
       |> DB.create!()
 
     client = drain_initial_sync(connect())
@@ -235,8 +234,8 @@ defmodule HologramFeatureTests.SyncTest do
   end
 
   feature "keeps a server-only value out of the frame its row travels in", %{session: _session} do
-    Document
-    |> Entity.new(api_token: "api_token_9xK4", public: true, title: "row_with_secret")
+    %{api_token: "api_token_9xK4", public: true, title: "row_with_secret"}
+    |> Document.new()
     |> DB.create!()
 
     # Waiting for the row is the positive artifact beside the negative one: this is the frame the
@@ -252,14 +251,14 @@ defmodule HologramFeatureTests.SyncTest do
   # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
   # to produce a frame after the store is complete, which is the first frame carrying a place.
   feature "tells a returning client only what moved while it was away", %{session: _session} do
-    Document
-    |> Entity.new(public: true, title: "held_across_the_gap")
+    %{public: true, title: "held_across_the_gap"}
+    |> Document.new()
     |> DB.create!()
 
     filled_client = drain_initial_sync(connect())
 
-    Document
-    |> Entity.new(public: true, title: "dated_the_store")
+    %{public: true, title: "dated_the_store"}
+    |> Document.new()
     |> DB.create!()
 
     {dating_data, departing_client} =
@@ -270,8 +269,8 @@ defmodule HologramFeatureTests.SyncTest do
 
     :ok = SyncClient.close(departing_client)
 
-    Document
-    |> Entity.new(public: true, title: "landed_while_away")
+    %{public: true, title: "landed_while_away"}
+    |> Document.new()
     |> DB.create!()
 
     {gap_data, _returned} =
@@ -285,8 +284,8 @@ defmodule HologramFeatureTests.SyncTest do
   end
 
   feature "tells a client whose place cannot be read to start over", %{session: _session} do
-    Document
-    |> Entity.new(public: true, title: "sent_again_after_resync")
+    %{public: true, title: "sent_again_after_resync"}
+    |> Document.new()
     |> DB.create!()
 
     returning_client = connect(cursor: "not a cursor")
@@ -304,12 +303,12 @@ defmodule HologramFeatureTests.SyncTest do
   feature "sends an anonymous client the rows anyone may read, and no others", %{
     session: _session
   } do
-    Document
-    |> Entity.new(public: true, title: "public_row")
+    %{public: true, title: "public_row"}
+    |> Document.new()
     |> DB.create!()
 
-    Document
-    |> Entity.new(title: "private_row")
+    %{title: "private_row"}
+    |> Document.new()
     |> DB.create!()
 
     # The frame the readable row travelled in, so what it does not carry is what a visitor was not

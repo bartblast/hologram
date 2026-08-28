@@ -6,14 +6,14 @@ defmodule Hologram.Test.Fixtures.Controller.Module33 do
 
   alias Hologram.Auth
   alias Hologram.DB
-  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Role.Module1, as: Role1
 
   @impl Component
   def command(:my_command_creating_entity, _params, server) do
-    Module1
-    |> Entity.new()
+    entity = Module1.new()
+
+    entity
     |> trust()
     |> DB.create!()
 
@@ -21,9 +21,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module33 do
   end
 
   def command(:my_command_creating_entity_on_the_users_authority, _params, server) do
-    Module1
-    |> Entity.new()
-    |> DB.create!()
+    DB.create!(Module1.new())
 
     %{server | next_action: nil}
   end
