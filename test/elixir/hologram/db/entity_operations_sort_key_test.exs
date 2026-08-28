@@ -5,7 +5,6 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module7
 
@@ -19,18 +18,15 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
   describe "create/1" do
     test "derives a nil companion from a nil attribute value" do
-      {:ok, entity} =
-        Module7
-        |> Entity.new()
-        |> create()
+      {:ok, entity} = create(Module7.new())
 
       assert companion_value("test_fixtures_entity_module7", entity.id) == nil
     end
 
     test "derives the sort-key companion from the attribute value" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "Łódź")
+        %{c: "Łódź"}
+        |> Module2.new()
         |> create()
 
       assert companion_value("test_fixtures_entity_module2", entity.id) == "lodz"
@@ -40,8 +36,8 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
   describe "get/2" do
     test "returns the entity without its sort-key companion" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "Łódź")
+        %{c: "Łódź"}
+        |> Module2.new()
         |> create()
 
       assert get(Module2, entity.id) == entity
@@ -51,8 +47,8 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
   describe "update/3" do
     test "leaves the companion untouched when the attribute does not change" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "Łódź")
+        %{c: "Łódź"}
+        |> Module2.new()
         |> create()
 
       :ok = update(Module2, entity.id, %{a: true})
@@ -62,8 +58,8 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
     test "recomputes the companion when the attribute changes" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "Łódź")
+        %{c: "Łódź"}
+        |> Module2.new()
         |> create()
 
       :ok = update(Module2, entity.id, %{c: "Zürich"})

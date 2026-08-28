@@ -22,7 +22,7 @@ defmodule Hologram.QueryTest do
   describe "add_relationship/3" do
     test "keeps the rest of the metadata" do
       metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}
-      entity = %{Entity.new(Module3) | __meta__: metadata}
+      entity = %{Module3.new() | __meta__: metadata}
       target_id = Entity.generate_id()
 
       result = add_relationship(entity, :a, target_id)
@@ -33,7 +33,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "leaves the relationship's own field as it is" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       result = add_relationship(entity, :a, Entity.generate_id())
 
@@ -41,7 +41,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "records an add operation for the edge" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
       target_id = Entity.generate_id()
 
       result = add_relationship(entity, :a, target_id)
@@ -52,10 +52,10 @@ defmodule Hologram.QueryTest do
     test "records one operation per edge, several edges coexisting" do
       target_id_1 = Entity.generate_id()
       target_id_2 = Entity.generate_id()
+      entity = Module3.new()
 
       result =
-        Module3
-        |> Entity.new()
+        entity
         |> add_relationship(:a, target_id_1)
         |> add_relationship(:a, target_id_2)
 
@@ -67,10 +67,10 @@ defmodule Hologram.QueryTest do
 
     test "replaces a delete operation recorded for the same edge" do
       target_id = Entity.generate_id()
+      entity = Module3.new()
 
       result =
-        Module3
-        |> Entity.new()
+        entity
         |> delete_relationship(:a, target_id)
         |> add_relationship(:a, target_id)
 
@@ -78,7 +78,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a to-one relationship name" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         ":c is a to-one relationship in Hologram.Test.Fixtures.Entity.Module3 - only to-many relationships hold edges - set its reference via put_attribute(:c_id, id)"
@@ -89,7 +89,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an attribute name" do
-      entity = Entity.new(Module16)
+      entity = Module16.new()
 
       expected_msg =
         ":name is an attribute in Hologram.Test.Fixtures.Entity.Module16 - only to-many relationships hold edges - put it via put_attribute"
@@ -100,7 +100,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an unknown relationship name" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         "unknown relationship :nope in Hologram.Test.Fixtures.Entity.Module3 - known to-many relationships: :a"
@@ -117,7 +117,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the target id is not a string" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
       expected_msg = "add_relationship takes a target id string, got: 123"
 
       assert_error ArgumentError, expected_msg, fn ->
@@ -129,10 +129,10 @@ defmodule Hologram.QueryTest do
   describe "authorize/2" do
     test "keeps the rest of the metadata" do
       target_id = Entity.generate_id()
+      entity = Module3.new()
 
       result =
-        Module3
-        |> Entity.new()
+        entity
         |> put_attribute(c_id: target_id)
         |> add_relationship(:a, target_id)
         |> authorize(:archive)
@@ -143,7 +143,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "records the claim for the operation" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       result = authorize(entity, :archive)
 
@@ -157,7 +157,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the operation is not an atom" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
       expected_msg = ~s(authorize takes an operation atom, got: "archive")
 
       assert_error ArgumentError, expected_msg, fn ->
@@ -166,7 +166,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the struct already carries an authorize claim" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :archive}) - a write claims exactly one authority"
@@ -179,7 +179,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the struct already carries a trust claim" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
@@ -220,7 +220,7 @@ defmodule Hologram.QueryTest do
 
   describe "decrement/3" do
     test "records a positive amount as a negative delta" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       result = decrement(entity, :count, 2)
 
@@ -229,8 +229,8 @@ defmodule Hologram.QueryTest do
 
     test "subtracts from a recorded increment" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> increment(:count, 5)
         |> decrement(:count, 2)
 
@@ -239,8 +239,8 @@ defmodule Hologram.QueryTest do
 
     test "drops a delta that nets to zero" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> increment(:count, 2)
         |> decrement(:count, 2)
 
@@ -248,7 +248,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an amount that is not a positive integer" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       assert_error ArgumentError, "decrement takes a positive integer amount, got: -1", fn ->
         decrement(entity, :count, -1)
@@ -264,7 +264,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a non-integer attribute" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       expected_msg =
         ":bio is a :string attribute of Hologram.Test.Fixtures.Entity.Module10 - decrement moves integer attributes only"
@@ -278,7 +278,7 @@ defmodule Hologram.QueryTest do
   describe "delete_relationship/3" do
     test "keeps the rest of the metadata" do
       metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}
-      entity = %{Entity.new(Module3) | __meta__: metadata}
+      entity = %{Module3.new() | __meta__: metadata}
       target_id = Entity.generate_id()
 
       result = delete_relationship(entity, :a, target_id)
@@ -289,7 +289,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "records a delete operation for the edge" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
       target_id = Entity.generate_id()
 
       result = delete_relationship(entity, :a, target_id)
@@ -299,10 +299,10 @@ defmodule Hologram.QueryTest do
 
     test "replaces an add operation recorded for the same edge" do
       target_id = Entity.generate_id()
+      entity = Module3.new()
 
       result =
-        Module3
-        |> Entity.new()
+        entity
         |> add_relationship(:a, target_id)
         |> delete_relationship(:a, target_id)
 
@@ -310,7 +310,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a to-one relationship name" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         ":c is a to-one relationship in Hologram.Test.Fixtures.Entity.Module3 - only to-many relationships hold edges - set its reference via put_attribute(:c_id, id)"
@@ -327,7 +327,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the target id is not a string" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
       expected_msg = "delete_relationship takes a target id string, got: 123"
 
       assert_error ArgumentError, expected_msg, fn ->
@@ -1019,7 +1019,7 @@ defmodule Hologram.QueryTest do
 
   describe "increment/3" do
     test "records a positive amount as a delta" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       result = increment(entity, :count, 2)
 
@@ -1027,7 +1027,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "previews the result on the struct's field" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       result = increment(entity, :count, 2)
 
@@ -1036,8 +1036,8 @@ defmodule Hologram.QueryTest do
 
     test "previews a second move on top of the first" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> increment(:count, 2)
         |> decrement(:count, 1)
 
@@ -1045,7 +1045,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "moves down by a negative amount" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       result = increment(entity, :count, -2)
 
@@ -1053,7 +1053,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "records nothing for a zero amount" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       result = increment(entity, :count, 0)
 
@@ -1062,8 +1062,8 @@ defmodule Hologram.QueryTest do
 
     test "adds a second increment to the first" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> increment(:count, 2)
         |> increment(:count, 3)
 
@@ -1072,8 +1072,8 @@ defmodule Hologram.QueryTest do
 
     test "keeps the rest of the metadata" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> put_attribute(bio: "x")
         |> increment(:count, 1)
 
@@ -1082,8 +1082,8 @@ defmodule Hologram.QueryTest do
 
     test "folds into a put value recorded before it" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> put_attribute(count: 10)
         |> increment(:count, 1)
 
@@ -1092,7 +1092,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an amount that is not an integer" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       assert_error ArgumentError, "increment takes an integer amount, got: 1.5", fn ->
         increment(entity, :count, 1.5)
@@ -1104,7 +1104,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an optional integer attribute" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       expected_msg =
         ":priority in Hologram.Test.Fixtures.Entity.Module10 is optional and can hold nil - increment moves attributes that always hold a number - declare it without optional: true, with a default"
@@ -1115,7 +1115,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a non-integer attribute" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       expected_msg =
         ":bio is a :string attribute of Hologram.Test.Fixtures.Entity.Module10 - increment moves integer attributes only"
@@ -1126,7 +1126,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a relationship" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - increment moves integer attributes only"
@@ -1137,7 +1137,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a system attribute" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       expected_msg =
         ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module10 - it is managed automatically and can't be moved"
@@ -1148,7 +1148,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an unknown name" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module10 - known counters: :count"
@@ -1165,7 +1165,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the struct's field holds nil" do
-      entity = Entity.new(Module10)
+      entity = Module10.new()
 
       expected_msg =
         ":count in Hologram.Test.Fixtures.Entity.Module10 holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default"
@@ -1176,7 +1176,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the put value it would fold into is not an integer" do
-      entity = Entity.new(Module10, count: 5)
+      entity = Module10.new(count: 5)
 
       expected_msg =
         ":count in Hologram.Test.Fixtures.Entity.Module10 carries a put value that is not an integer (nil) - increment cannot move it"
@@ -1705,7 +1705,7 @@ defmodule Hologram.QueryTest do
 
   describe "put_attribute/2" do
     test "accepts a map of values" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       result = put_attribute(entity, %{b: 7})
 
@@ -1715,7 +1715,7 @@ defmodule Hologram.QueryTest do
 
     test "keeps the rest of the metadata" do
       metadata = %Metadata{claim: :trust, relationship_ops: %{{:a, "x"} => :add}}
-      entity = %{Entity.new(Module3) | __meta__: metadata}
+      entity = %{Module3.new() | __meta__: metadata}
 
       result = put_attribute(entity, b_id: Entity.generate_id())
 
@@ -1725,8 +1725,8 @@ defmodule Hologram.QueryTest do
 
     test "merges into the changes already recorded, the later value replacing the earlier" do
       result =
-        Module2
-        |> Entity.new(c: "x")
+        %{c: "x"}
+        |> Module2.new()
         |> put_attribute(a: true, c: "y")
         |> put_attribute(c: "z")
 
@@ -1736,7 +1736,7 @@ defmodule Hologram.QueryTest do
 
     test "sets a to-one reference field" do
       target_id = Entity.generate_id()
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       result = put_attribute(entity, b_id: target_id)
 
@@ -1745,7 +1745,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "sets the values on the struct and records them as changes" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       result = put_attribute(entity, a: true, c: "y")
 
@@ -1756,8 +1756,8 @@ defmodule Hologram.QueryTest do
 
     test "replaces a delta recorded before it" do
       result =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> increment(:count, 1)
         |> put_attribute(count: 10)
 
@@ -1765,7 +1765,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a system attribute name" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       expected_msg =
         ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module2 - it is managed automatically and can't be put"
@@ -1776,7 +1776,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a to-many relationship name" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - add its edges via add_relationship"
@@ -1787,18 +1787,18 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on a to-one relationship name" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - set its reference via :c_id"
 
       assert_error ArgumentError, expected_msg, fn ->
-        put_attribute(entity, c: Entity.new(Module1))
+        put_attribute(entity, c: Module1.new())
       end
     end
 
     test "raises on an unknown name" do
-      entity = Entity.new(Module3)
+      entity = Module3.new()
 
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id"
@@ -1819,7 +1819,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the values are neither a keyword list nor a map" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       assert_error ArgumentError,
                    "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
@@ -1833,7 +1833,7 @@ defmodule Hologram.QueryTest do
 
   describe "put_attribute/3" do
     test "sets the value on the struct and records it as a change" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       result = put_attribute(entity, :a, true)
 
@@ -1842,7 +1842,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises on an unknown name" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c"
@@ -1856,8 +1856,8 @@ defmodule Hologram.QueryTest do
   describe "trust/1" do
     test "keeps the rest of the metadata" do
       result =
-        Module2
-        |> Entity.new(c: "x")
+        %{c: "x"}
+        |> Module2.new()
         |> put_attribute(a: true)
         |> trust()
 
@@ -1866,7 +1866,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "records the claim" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       result = trust(entity)
 
@@ -1906,7 +1906,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the struct already carries an authorize claim" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :archive}) - a write claims exactly one authority"
@@ -1919,7 +1919,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "raises when the struct already carries a trust claim" do
-      entity = Entity.new(Module2, c: "x")
+      entity = Module2.new(c: "x")
 
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
