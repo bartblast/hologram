@@ -7,7 +7,6 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
@@ -41,8 +40,8 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   end
 
   defp create_document(title) do
-    Document
-    |> Entity.new(public: true, title: title)
+    %{public: true, title: title}
+    |> Document.new()
     |> DB.create!()
   end
 

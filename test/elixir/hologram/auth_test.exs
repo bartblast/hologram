@@ -15,21 +15,19 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Role
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
   defp create_parent(public \\ false) do
-    Module2
-    |> Entity.new(public: public)
+    %{public: public}
+    |> Module2.new()
     |> DB.create!()
   end
 
   defp create_resource do
-    Module1
-    |> Entity.new()
-    |> DB.create!()
+    DB.create!(Module1.new())
   end
 
   defp grant_id(user_id) do
@@ -220,7 +218,7 @@ defmodule Hologram.AuthTest do
     end
 
     test "takes the user entity" do
-      user = Entity.new(Module14, email: "user_1@example.com")
+      user = Module14.new(email: "user_1@example.com")
 
       assert can?(user, :archive, %Module1{author_id: user.id})
     end

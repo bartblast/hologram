@@ -4,7 +4,6 @@ defmodule Hologram.Sync.EvaluatorTest do
   import Hologram.Sync.Evaluator
 
   alias Hologram.DB
-  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.ResultStore
@@ -24,8 +23,8 @@ defmodule Hologram.Sync.EvaluatorTest do
   end
 
   defp create(title) do
-    Module2
-    |> Entity.new(a: true, c: title)
+    %{a: true, c: title}
+    |> Module2.new()
     |> DB.create!()
   end
 

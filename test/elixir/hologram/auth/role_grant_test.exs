@@ -148,4 +148,14 @@ defmodule Hologram.Auth.RoleGrantTest do
              {:updated_at, :datetime, []}
            ]
   end
+
+  describe "new/1" do
+    test "refuses construction the way the engine does" do
+      expected_msg = "role grants are written only through grant_role/revoke_role"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        RoleGrant.new()
+      end
+    end
+  end
 end

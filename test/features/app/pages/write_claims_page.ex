@@ -39,8 +39,8 @@ defmodule HologramFeatureTests.WriteClaimsPage do
   end
 
   def command(:add_note_as_author, _params, server) do
-    Note
-    |> Entity.new(body: "own", author_id: server.user_id)
+    %{body: "own", author_id: server.user_id}
+    |> Note.new()
     |> DB.create!()
 
     put_action(server, :show_result, result: "added_note_as_author")
@@ -51,8 +51,8 @@ defmodule HologramFeatureTests.WriteClaimsPage do
 
     result =
       try do
-        Note
-        |> Entity.new(body: "other", author_id: other_user.id)
+        %{body: "other", author_id: other_user.id}
+        |> Note.new()
         |> DB.create!()
 
         "added_note_as_other"
@@ -66,8 +66,8 @@ defmodule HologramFeatureTests.WriteClaimsPage do
   def command(:add_note_by_server, _params, server) do
     other_user = create_user("server_author@example.com")
 
-    Note
-    |> Entity.new(body: "by server", author_id: other_user.id)
+    %{body: "by server", author_id: other_user.id}
+    |> Note.new()
     |> trust()
     |> DB.create!()
 
@@ -135,15 +135,15 @@ defmodule HologramFeatureTests.WriteClaimsPage do
   # Trusted so the session user becomes the note's owner through the creator role without the
   # :create rule being the thing under test.
   defp create_note(author_id, pinned) do
-    Note
-    |> Entity.new(author_id: author_id, body: "seeded", pinned: pinned)
+    %{author_id: author_id, body: "seeded", pinned: pinned}
+    |> Note.new()
     |> trust()
     |> DB.create!()
   end
 
   defp create_user(email) do
-    User
-    |> Entity.new(email: email)
+    %{email: email}
+    |> User.new()
     |> trust()
     |> DB.create!()
   end

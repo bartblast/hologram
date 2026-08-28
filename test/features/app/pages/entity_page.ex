@@ -16,9 +16,10 @@ defmodule HologramFeatureTests.EntityPage do
     put_state(component, :result, nil)
   end
 
-  # Every one of these runs in the BROWSER, which is the whole point: an action reaches the ported
-  # Entity.new and Entity.validate, and those read the declarations the build baked rather than
-  # the entity module, which ships no reflection here.
+  # Every one of these runs in the BROWSER, which is the whole point: an action reaches the type's
+  # own new/1 and the ported Entity.validate, and those read the declarations the build baked
+  # rather than the entity module, which ships no reflection here. The bare struct is here for the
+  # same reason - its defaults are baked into the transpiled __struct__/0.
   #
   # A button is clicked by a label the browser driver matches as a SUBSTRING, so no label here may
   # contain another's - which is why each one names what it builds rather than sharing a verb.
@@ -26,6 +27,7 @@ defmodule HologramFeatureTests.EntityPage do
     ~HOLO"""
     <p>
       <button $click={action: :build_with_defaults}> Build with defaults </button>
+      <button $click={action: :read_bare_struct}> Read a bare struct </button>
       <button $click={action: :refuse_relationship_assignment}> Assign a relationship </button>
       <button $click={action: :validate_changes}> Check a range </button>
       <button $click={action: :validate_format}> Check a pattern </button>
@@ -39,15 +41,21 @@ defmodule HologramFeatureTests.EntityPage do
   end
 
   def action(:build_with_defaults, _params, component) do
-    item = Entity.new(Item, name: "shelf")
+    item = Item.new(name: "shelf")
 
     put_state(component, :result, "defaults_#{item.stock}_#{inspect(item.created_at)}")
+  end
+
+  def action(:read_bare_struct, _params, component) do
+    item = %Item{}
+
+    put_state(component, :result, "bare_#{item.stock}_#{inspect(item.id)}")
   end
 
   def action(:refuse_relationship_assignment, _params, component) do
     result =
       try do
-        Entity.new(Review, product: "id_1")
+        Review.new(product: "id_1")
       rescue
         error in ArgumentError -> error.message
       end
@@ -72,8 +80,8 @@ defmodule HologramFeatureTests.EntityPage do
 
   def action(:validate_struct, _params, component) do
     {:error, %{stock: [{:min, min}]}} =
-      Item
-      |> Entity.new(name: "shelf", stock: -1)
+      %{name: "shelf", stock: -1}
+      |> Item.new()
       |> Entity.validate()
 
     put_state(component, :result, "struct_#{min}")

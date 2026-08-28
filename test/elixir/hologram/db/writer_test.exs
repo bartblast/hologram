@@ -33,8 +33,8 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module2
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
@@ -69,7 +69,7 @@ defmodule Hologram.DB.WriterTest do
   describe "create/1" do
     test "evaluates :create for the acting user" do
       user = create_user("author@example.com")
-      entity = Entity.new(Module2, public: true)
+      entity = Module2.new(public: true)
 
       expected_msg =
         ~s(not allowed to create Hologram.Test.Fixtures.Policy.Module2 "#{entity.id}")
@@ -85,10 +85,7 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("admin@example.com")
       Auth.grant_role(user, Module2, :admin)
 
-      entity =
-        Module2
-        |> Entity.new()
-        |> authorize(:update)
+      entity = authorize(Module2.new(), :update)
 
       assert {:ok, %Module2{}} = as_user(user, fn -> create(entity) end)
       assert DB.read(Module2, entity.id) != nil
@@ -96,15 +93,15 @@ defmodule Hologram.DB.WriterTest do
 
     test "evaluates an explicit claim without an acting user with the anonymous semantics" do
       granted_entity =
-        Module2
-        |> Entity.new(public: true)
+        %{public: true}
+        |> Module2.new()
         |> authorize(:publish)
 
       assert {:ok, %Module2{}} = create(granted_entity)
 
       denied_entity =
-        Module2
-        |> Entity.new(public: true)
+        %{public: true}
+        |> Module2.new()
         |> authorize(:update)
 
       expected_msg =
@@ -117,15 +114,15 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("publisher@example.com")
 
       granted_entity =
-        Module2
-        |> Entity.new(public: true)
+        %{public: true}
+        |> Module2.new()
         |> authorize(:publish)
 
       assert {:ok, %Module2{}} = as_user(user, fn -> create(granted_entity) end)
 
       denied_entity =
-        Module2
-        |> Entity.new(public: false)
+        %{public: false}
+        |> Module2.new()
         |> authorize(:publish)
 
       expected_msg =
@@ -140,7 +137,7 @@ defmodule Hologram.DB.WriterTest do
 
     test "stamps a job with the acting user" do
       user = create_user("enqueuer@example.com")
-      job = Entity.new(JobModule1)
+      job = JobModule1.new()
 
       assert {:ok, %JobModule1{actor_id: actor_id}} = as_user(user, fn -> create(job) end)
       assert actor_id == user.id
@@ -148,7 +145,7 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "stamps a job with no actor without an acting user" do
-      job = Entity.new(JobModule1)
+      job = JobModule1.new()
 
       assert {:ok, %JobModule1{actor_id: nil}} = create(job)
       assert DB.read(JobModule1, job.id).actor_id == nil
@@ -156,21 +153,21 @@ defmodule Hologram.DB.WriterTest do
 
     test "stamps a job over the actor its struct carries" do
       user = create_user("stamped@example.com")
-      job = %{Entity.new(JobModule1) | actor_id: Entity.generate_id()}
+      job = %{JobModule1.new() | actor_id: Entity.generate_id()}
 
       assert {:ok, %JobModule1{actor_id: actor_id}} = as_user(user, fn -> create(job) end)
       assert actor_id == user.id
     end
 
     test "inserts raw without an acting user" do
-      entity = Entity.new(Module2, public: true)
+      entity = Module2.new(public: true)
 
       assert {:ok, %Module2{created_at: %DateTime{}} = stamped_entity} = create(entity)
       assert DB.read(Module2, entity.id) == stamped_entity
     end
 
     test "joins the enclosing transaction" do
-      entity = Entity.new(Module2)
+      entity = Module2.new()
 
       assert DB.transaction(fn ->
                create(entity)
@@ -182,10 +179,7 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "returns an entity carrying no claim" do
-      entity =
-        Module2
-        |> Entity.new()
-        |> trust()
+      entity = trust(Module2.new())
 
       assert {:ok, %Module2{__meta__: %Metadata{claim: nil}}} = create(entity)
     end
@@ -196,8 +190,8 @@ defmodule Hologram.DB.WriterTest do
       stamp = 4_000_000_000_000_000
 
       entity =
-        Module2
-        |> Entity.new(public: true)
+        %{public: true}
+        |> Module2.new()
         |> trust()
         |> Map.update!(:__meta__, &%{&1 | stamp: stamp})
 
@@ -211,10 +205,7 @@ defmodule Hologram.DB.WriterTest do
     test "skips evaluation for a trust claim and still grants creator roles" do
       user = create_user("creator@example.com")
 
-      entity =
-        Module1
-        |> Entity.new()
-        |> trust()
+      entity = trust(Module1.new())
 
       assert {:ok, %Module1{}} = as_user(user, fn -> create(entity) end)
       assert granted_roles(user.id, entity.id) == ["maintainer", "owner"]
@@ -223,10 +214,7 @@ defmodule Hologram.DB.WriterTest do
 
   describe "delete/1" do
     test "deletes raw without an acting user" do
-      entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(Module1.new())
 
       assert delete(entity) == :ok
       assert DB.read(Module1, entity.id) == nil
@@ -235,14 +223,11 @@ defmodule Hologram.DB.WriterTest do
     test "evaluates :delete for the acting user" do
       user = create_user("deleter@example.com")
 
-      parent =
-        Module2
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(Module2.new())
 
       entity =
-        Module1
-        |> Entity.new(parent_id: parent.id)
+        %{parent_id: parent.id}
+        |> Module1.new()
         |> DB.create!()
 
       expected_msg =
@@ -264,19 +249,13 @@ defmodule Hologram.DB.WriterTest do
     test "evaluates the claim against the row as it stands, not the struct in hand" do
       user = create_user("mover@example.com")
 
-      granting_parent =
-        Module2
-        |> Entity.new()
-        |> DB.create!()
+      granting_parent = DB.create!(Module2.new())
 
-      other_parent =
-        Module2
-        |> Entity.new()
-        |> DB.create!()
+      other_parent = DB.create!(Module2.new())
 
       entity =
-        Module1
-        |> Entity.new(parent_id: granting_parent.id)
+        %{parent_id: granting_parent.id}
+        |> Module1.new()
         |> DB.create!()
 
       # allow :delete, to: {:parent, :admin} - the role is granted on the parent the STRUCT
@@ -298,8 +277,8 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("archiver@example.com")
 
       entity =
-        Module1
-        |> Entity.new(author_id: user.id)
+        %{author_id: user.id}
+        |> Module1.new()
         |> DB.create!()
 
       claimed_entity = authorize(entity, :archive)
@@ -311,10 +290,7 @@ defmodule Hologram.DB.WriterTest do
     test "skips evaluation for a trust claim" do
       user = create_user("purger@example.com")
 
-      entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(Module1.new())
 
       assert as_user(user, fn -> delete(trust(entity)) end) == :ok
       assert DB.read(Module1, entity.id) == nil
@@ -323,19 +299,16 @@ defmodule Hologram.DB.WriterTest do
     test "is a no-op for an id naming no row, evaluating nothing" do
       user = create_user("ghost@example.com")
 
-      assert delete(Entity.new(Module1)) == :ok
-      assert as_user(user, fn -> delete(Entity.new(Module1)) end) == :ok
+      assert delete(Module1.new()) == :ok
+      assert as_user(user, fn -> delete(Module1.new()) end) == :ok
     end
 
     test "names the referencer when an incoming reference blocks the delete" do
-      source =
-        Module16
-        |> Entity.new()
-        |> DB.create!()
+      source = DB.create!(Module16.new())
 
       target =
-        Module15
-        |> Entity.new(token: "t")
+        %{token: "t"}
+        |> Module15.new()
         |> DB.create!()
 
       source
@@ -349,10 +322,7 @@ defmodule Hologram.DB.WriterTest do
 
   describe "delete/2" do
     test "deletes raw without an acting user" do
-      entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(Module1.new())
 
       assert delete(Module1, entity.id) == :ok
       assert DB.read(Module1, entity.id) == nil
@@ -361,14 +331,11 @@ defmodule Hologram.DB.WriterTest do
     test "evaluates :delete for the acting user" do
       user = create_user("id_deleter@example.com")
 
-      parent =
-        Module2
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(Module2.new())
 
       entity =
-        Module1
-        |> Entity.new(parent_id: parent.id)
+        %{parent_id: parent.id}
+        |> Module1.new()
         |> DB.create!()
 
       expected_msg =
@@ -396,11 +363,11 @@ defmodule Hologram.DB.WriterTest do
   describe "update/1" do
     test "a denied claim rolls back the writes made before it" do
       user = create_user("roller@example.com")
-      earlier_entity = Entity.new(Module1)
+      earlier_entity = Module1.new()
 
       target =
-        Module1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> Module1.new()
         |> DB.create!()
 
       expected_msg =
@@ -425,14 +392,11 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "applies changes and relationship ops under one transaction - a refused value applies no op" do
-      source =
-        Module16
-        |> Entity.new()
-        |> DB.create!()
+      source = DB.create!(Module16.new())
 
       target =
-        Module15
-        |> Entity.new(token: "t")
+        %{token: "t"}
+        |> Module15.new()
         |> DB.create!()
 
       entity =
@@ -445,14 +409,11 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "applies recorded relationship ops in the same transaction" do
-      source =
-        Module16
-        |> Entity.new()
-        |> DB.create!()
+      source = DB.create!(Module16.new())
 
       target =
-        Module15
-        |> Entity.new(token: "t")
+        %{token: "t"}
+        |> Module15.new()
         |> DB.create!()
 
       assert source
@@ -463,14 +424,11 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "applies a recorded delete op" do
-      source =
-        Module16
-        |> Entity.new()
-        |> DB.create!()
+      source = DB.create!(Module16.new())
 
       target =
-        Module15
-        |> Entity.new(token: "t")
+        %{token: "t"}
+        |> Module15.new()
         |> DB.create!()
 
       source
@@ -488,8 +446,8 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("editor@example.com")
 
       entity =
-        Module1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> Module1.new()
         |> DB.create!()
 
       Auth.grant_role(user, entity, :editor)
@@ -522,8 +480,8 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("archivist@example.com")
 
       own_entity =
-        Module1
-        |> Entity.new(author_id: user.id)
+        %{author_id: user.id}
+        |> Module1.new()
         |> DB.create!()
 
       assert as_user(user, fn ->
@@ -533,10 +491,7 @@ defmodule Hologram.DB.WriterTest do
                |> update()
              end) == :ok
 
-      other_entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      other_entity = DB.create!(Module1.new())
 
       expected_msg =
         ~s(not allowed to archive Hologram.Test.Fixtures.Policy.Module1 "#{other_entity.id}")
@@ -555,8 +510,8 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("recorder@example.com")
 
       entity =
-        Module1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> Module1.new()
         |> DB.create!()
 
       assert as_user(user, fn ->
@@ -571,8 +526,8 @@ defmodule Hologram.DB.WriterTest do
 
     test "writes the recorded changes raw without an acting user" do
       entity =
-        Module1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> Module1.new()
         |> DB.create!()
 
       assert entity
@@ -586,15 +541,9 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "writes a to-one reference field" do
-      entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(Module1.new())
 
-      parent =
-        Module2
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(Module2.new())
 
       assert entity
              |> put_attribute(:parent_id, parent.id)
@@ -605,8 +554,8 @@ defmodule Hologram.DB.WriterTest do
 
     test "stores the stamp the struct carries on the columns it sets" do
       entity =
-        Module1
-        |> Entity.new(priority: 1)
+        %{priority: 1}
+        |> Module1.new()
         |> DB.create!()
 
       stamp = entity.__meta__.revisions.priority + 1_000_000
@@ -624,8 +573,8 @@ defmodule Hologram.DB.WriterTest do
 
     test "moves the recorded deltas" do
       entity =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> DB.create!()
 
       assert entity
@@ -641,8 +590,8 @@ defmodule Hologram.DB.WriterTest do
 
     test "moves a recorded delta alone" do
       entity =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> DB.create!()
 
       assert entity
@@ -654,8 +603,8 @@ defmodule Hologram.DB.WriterTest do
 
     test "stores the stamp the struct carries on a moved column" do
       entity =
-        Module10
-        |> Entity.new(count: 5)
+        %{count: 5}
+        |> Module10.new()
         |> DB.create!()
 
       stamp = entity.__meta__.revisions.count + 1_000_000
@@ -670,8 +619,8 @@ defmodule Hologram.DB.WriterTest do
 
     test "returns the violation a moved value's declaration refuses" do
       entity =
-        Module10
-        |> Entity.new(count: 1)
+        %{count: 1}
+        |> Module10.new()
         |> DB.create!()
 
       assert entity
@@ -682,10 +631,7 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "raises when nothing is recorded" do
-      entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(Module1.new())
 
       expected_msg =
         "update takes recorded changes - put values with put_attribute, move counters with " <>
@@ -697,7 +643,7 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "raises when the row does not exist" do
-      entity = Entity.new(Module1)
+      entity = Module1.new()
 
       expected_msg =
         ~s(cannot update Hologram.Test.Fixtures.Policy.Module1 - no entity with id "#{entity.id}")
@@ -710,10 +656,7 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "returns the violation the update validator refuses" do
-      entity =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      entity = DB.create!(Module1.new())
 
       assert {:error, %{priority: [{:type, :integer}]}} =
                entity
@@ -725,8 +668,8 @@ defmodule Hologram.DB.WriterTest do
   describe "update/3" do
     test "writes raw without an acting user" do
       entity =
-        Module1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> Module1.new()
         |> DB.create!()
 
       assert update(Module1, entity.id, priority: 7) == :ok
@@ -737,8 +680,8 @@ defmodule Hologram.DB.WriterTest do
       user = create_user("id_editor@example.com")
 
       entity =
-        Module1
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> Module1.new()
         |> DB.create!()
 
       expected_msg =

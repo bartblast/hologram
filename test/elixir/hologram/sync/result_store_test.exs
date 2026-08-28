@@ -3,7 +3,6 @@ defmodule Hologram.Sync.ResultStoreTest do
 
   import Hologram.Sync.ResultStore
 
-  alias Hologram.Entity
   alias Hologram.Sync.ResultStore
   alias Hologram.Test.Fixtures.Entity.Module2
 
@@ -18,7 +17,7 @@ defmodule Hologram.Sync.ResultStoreTest do
   end
 
   defp row(title) do
-    Entity.new(Module2, a: true, c: title)
+    Module2.new(a: true, c: title)
   end
 
   describe "fetch/2" do

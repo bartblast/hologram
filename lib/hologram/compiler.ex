@@ -971,12 +971,12 @@ defmodule Hologram.Compiler do
     all_entity_types = Reflection.list_entities()
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
-    # to `Task.__struct__/1`, and `Entity.new(Task, ...)` hands the module over as a value - which
-    # reaches those same two functions, because the call graph links every module it reaches to
-    # its own `__struct__/0` and `__struct__/1` whenever the module has a struct
-    # (`CallGraph.maybe_add_struct_call_graph_edges/2`). Every entity type has one, so both
-    # spellings land in the reached modules, and telling a mention apart from a call would answer
-    # nothing this does not.
+    # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
+    # hands the module over as a value. All three reach the module itself, because the call graph
+    # links every module it reaches to its own `__struct__/0` and `__struct__/1` whenever the
+    # module has a struct (`CallGraph.maybe_add_struct_call_graph_edges/2`). Every entity type has
+    # one, so every spelling lands in the reached modules, and telling a mention apart from a call
+    # would answer nothing this does not.
     mentioned_entity_types =
       reached_modules
       |> Enum.concat()

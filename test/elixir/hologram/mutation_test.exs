@@ -27,8 +27,9 @@ defmodule Hologram.MutationTest do
   # A row whose author is the given user, which `allow :archive, author_id: user_id()` grants that
   # user - the fixtures' one write rule that needs no role grant and holds on a multi-column type.
   defp create_archivable(user, values) do
-    PolicyModule1
-    |> Entity.new(Keyword.put(values, :author_id, user.id))
+    values
+    |> Keyword.put(:author_id, user.id)
+    |> PolicyModule1.new()
     |> DB.create!()
   end
 
@@ -53,20 +54,18 @@ defmodule Hologram.MutationTest do
   end
 
   defp create_source do
-    Module16
-    |> Entity.new()
-    |> DB.create!()
+    DB.create!(Module16.new())
   end
 
   defp create_target do
-    Module15
-    |> Entity.new(token: "t")
+    %{token: "t"}
+    |> Module15.new()
     |> DB.create!()
   end
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
@@ -199,8 +198,8 @@ defmodule Hologram.MutationTest do
   # A counter row anyone may update - Module20's allow lines are bare, so its writes are granted
   # with or without an actor, which is what a delta test needs and no other fixture offers.
   defp create_counter(count) do
-    Module20
-    |> Entity.new(count: count)
+    %{count: count}
+    |> Module20.new()
     |> DB.create!()
   end
 
@@ -622,8 +621,8 @@ defmodule Hologram.MutationTest do
     end
 
     test "refuses a duplicate of a unique value" do
-      Module19
-      |> Entity.new(slug: "taken")
+      %{slug: "taken"}
+      |> Module19.new()
       |> DB.create!()
 
       write = readable_write(Module19, Entity.generate_id(), %{"slug" => "taken"})
@@ -639,18 +638,15 @@ defmodule Hologram.MutationTest do
     end
 
     test "refuses a delete the row's references block" do
-      required_target =
-        Module1
-        |> Entity.new()
-        |> DB.create!()
+      required_target = DB.create!(Module1.new())
 
       referenced =
-        Module2
-        |> Entity.new(a: true, c: "x")
+        %{a: true, c: "x"}
+        |> Module2.new()
         |> DB.create!()
 
-      Module3
-      |> Entity.new(b_id: referenced.id, c_id: required_target.id)
+      %{b_id: referenced.id, c_id: required_target.id}
+      |> Module3.new()
       |> DB.create!()
 
       # The delete has to WIN the merge to reach the executor at all - a client holding the row
@@ -704,8 +700,8 @@ defmodule Hologram.MutationTest do
 
       # Nothing kept means no key taken: the same batch sent again is evaluated on its own, and
       # lands once the row its reference names exists.
-      Module1
-      |> Entity.new(id: target_id)
+      %{id: target_id}
+      |> Module1.new()
       |> DB.create!()
 
       assert {:ok, %{"status" => "confirmed"}} = run(raw, server())

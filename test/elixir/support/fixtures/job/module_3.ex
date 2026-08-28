@@ -35,8 +35,8 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
   end
 
   def run(%{outcome: :create_row}) do
-    Entity2
-    |> Hologram.Entity.new(c: "by job")
+    %{c: "by job"}
+    |> Entity2.new()
     |> Hologram.DB.create!()
 
     :ok

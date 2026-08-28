@@ -39,8 +39,8 @@ defmodule HologramFeatureTests.PoliciesPage do
   end
 
   def command(:create_own_document, _params, server) do
-    Document
-    |> Entity.new(title: "own_document")
+    %{title: "own_document"}
+    |> Document.new()
     |> trust()
     |> DB.create!()
 
@@ -108,8 +108,8 @@ defmodule HologramFeatureTests.PoliciesPage do
   end
 
   def command(:seed_documents, _params, server) do
-    Document
-    |> Entity.new(public: true, title: "public_document")
+    %{public: true, title: "public_document"}
+    |> Document.new()
     |> trust()
     |> DB.create!()
 
@@ -119,15 +119,15 @@ defmodule HologramFeatureTests.PoliciesPage do
   end
 
   defp create_document(title) do
-    Document
-    |> Entity.new(title: title)
+    %{title: title}
+    |> Document.new()
     |> trust()
     |> DB.create!()
   end
 
   defp create_user(email) do
-    User
-    |> Entity.new(email: email)
+    %{email: email}
+    |> User.new()
     |> trust()
     |> DB.create!()
   end

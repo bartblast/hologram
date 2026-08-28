@@ -67,18 +67,18 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
   defp create_entities do
     {:ok, _entity} =
-      Entity2
-      |> Entity.new(a: true, c: "banana")
+      %{a: true, c: "banana"}
+      |> Entity2.new()
       |> create()
 
     {:ok, _entity} =
-      Entity2
-      |> Entity.new(a: false, b: 3, c: "apple")
+      %{a: false, b: 3, c: "apple"}
+      |> Entity2.new()
       |> create()
 
     {:ok, _entity} =
-      Entity2
-      |> Entity.new(a: true, b: 7, c: "cherry")
+      %{a: true, b: 7, c: "cherry"}
+      |> Entity2.new()
       |> create()
   end
 
@@ -121,8 +121,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
   test "injects a from_query prop row with its server-only attributes already replaced by the sentinel" do
     {:ok, _entity} =
-      Module15
-      |> Entity.new(label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ")
+      %{label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ"}
+      |> Module15.new()
       |> create()
 
     node = {:component, Module95, [], []}
@@ -152,13 +152,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module107, :dummy_module_107_digest)
 
       public_entity =
-        PolicyEntity
-        |> Entity.new(priority: 1, public: true)
+        %{priority: 1, public: true}
+        |> PolicyEntity.new()
         |> DB.create!()
 
       private_entity =
-        PolicyEntity
-        |> Entity.new(priority: 2, public: false)
+        %{priority: 2, public: false}
+        |> PolicyEntity.new()
         |> DB.create!()
 
       {:ok, private_entity: private_entity, public_entity: public_entity}
@@ -168,8 +168,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
       private_entity: private_entity
     } do
       user =
-        Module14
-        |> Entity.new(email: "renderer_1@example.com")
+        %{email: "renderer_1@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       Auth.grant_role(user, private_entity, :viewer)
@@ -228,19 +228,16 @@ defmodule Hologram.Template.RendererFromQueryTest do
     # The rows travel flat, each once, with the to-many naming the ids it holds - the shape a
     # frame carries, read on the client by the same ingest.
     test "carries the rows its props read, embedded rows among them" do
-      {:ok, required} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, required} = create(Module1.new())
 
       {:ok, target} =
-        Entity2
-        |> Entity.new(a: true, c: "the embedded row")
+        %{a: true, c: "the embedded row"}
+        |> Entity2.new()
         |> create()
 
       {:ok, source} =
-        Module3
-        |> Entity.new(c_id: required.id)
+        %{c_id: required.id}
+        |> Module3.new()
         |> create()
 
       :ok = add_relationship(Module3, source.id, :a, target.id)
@@ -257,19 +254,16 @@ defmodule Hologram.Template.RendererFromQueryTest do
     # so a value that spells a closing tag would end that element and put whatever follows it into
     # the document as markup. The escape leaves the value identical to whoever parses the JSON.
     test "carries a value that spells a closing tag without ending the script" do
-      {:ok, required} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, required} = create(Module1.new())
 
       {:ok, target} =
-        Entity2
-        |> Entity.new(a: true, c: "</script><script>alert(1)</script>")
+        %{a: true, c: "</script><script>alert(1)</script>"}
+        |> Entity2.new()
         |> create()
 
       {:ok, source} =
-        Module3
-        |> Entity.new(c_id: required.id)
+        %{c_id: required.id}
+        |> Module3.new()
         |> create()
 
       :ok = add_relationship(Module3, source.id, :a, target.id)
@@ -295,8 +289,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
     # missing.
     test "never carries a value the client may not have" do
       {:ok, _entity} =
-        Module15
-        |> Entity.new(label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ")
+        %{label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ"}
+        |> Module15.new()
         |> create()
 
       carried = carried_rows_json(render_page_html(Module100))
@@ -310,8 +304,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     test "names who the render read the rows as" do
       user =
-        Module14
-        |> Entity.new(email: "seeded@example.com")
+        %{email: "seeded@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       html = render_page_html(Module99, %Server{user_id: user.id})
@@ -414,13 +408,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     test "carries the row answering a check the render ran" do
       {:ok, user} =
-        Module14
-        |> Entity.new(email: "renderer_grants_1@example.com")
+        %{email: "renderer_grants_1@example.com"}
+        |> Module14.new()
         |> create()
 
       {:ok, entity} =
-        PolicyEntity
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> PolicyEntity.new()
         |> create()
 
       Auth.grant_role(user, entity, :viewer)
@@ -434,13 +428,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     test "carries no grant row for a check nothing answers" do
       {:ok, user} =
-        Module14
-        |> Entity.new(email: "renderer_grants_2@example.com")
+        %{email: "renderer_grants_2@example.com"}
+        |> Module14.new()
         |> create()
 
       {:ok, entity} =
-        PolicyEntity
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> PolicyEntity.new()
         |> create()
 
       html = render_grants_page_html(entity.id, %Server{user_id: user.id})
@@ -451,8 +445,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     test "carries no grant row for an anonymous session" do
       {:ok, entity} =
-        PolicyEntity
-        |> Entity.new(priority: 5)
+        %{priority: 5}
+        |> PolicyEntity.new()
         |> create()
 
       html = render_grants_page_html(entity.id, %Server{})
@@ -477,8 +471,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     test "exposes the session user's row to a from_context prop" do
       user =
-        Module14
-        |> Entity.new(email: "renderer_2@example.com")
+        %{email: "renderer_2@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       html = render_page_html(Module93, %Server{user_id: user.id})
@@ -488,8 +482,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     test "hands over the row with its server-only attributes already replaced by the sentinel" do
       user =
-        Module14
-        |> Entity.new(email: "renderer_5@example.com", password_hash: "hash_9dTf")
+        %{email: "renderer_5@example.com", password_hash: "hash_9dTf"}
+        |> Module14.new()
         |> DB.create!()
 
       %{component_registry: component_registry} =

@@ -14,6 +14,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -158,6 +159,21 @@ defmodule Hologram.EntityTest do
       assert field_names == [:__meta__, :a, :b, :c, :created_at, :id, :updated_at]
     end
 
+    test "carries the declared attribute defaults" do
+      assert %Module2{}.a == false
+      assert %Module4{}.c == :x
+      assert %Module20{}.count == 0
+    end
+
+    test "leaves an attribute declaring no default nil" do
+      assert %Module2{}.b == nil
+      assert %Module2{}.c == nil
+    end
+
+    test "carries a job's queued status" do
+      assert %JobModule1{}.status == :queued
+    end
+
     test "defaults relationship embed and to-many fields to the NotIncluded sentinel" do
       entity = %Module3{}
 
@@ -282,6 +298,64 @@ defmodule Hologram.EntityTest do
 
       assert embedded_unix_ms >= unix_ms_before
       assert embedded_unix_ms <= unix_ms_after
+    end
+  end
+
+  describe "new/1" do
+    test "builds the struct the engine builds for the type" do
+      entity = Module2.new(c: "text_4")
+
+      assert is_struct(entity, Module2)
+
+      assert entity.id =~
+               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+      assert entity.a == false
+      assert entity.c == "text_4"
+      assert entity.created_at == nil
+    end
+
+    test "accepts values as a map" do
+      assert Module2.new(%{c: "text_5"}).c == "text_5"
+    end
+
+    test "takes no values" do
+      entity = Module1.new()
+
+      assert is_struct(entity, Module1)
+
+      assert entity.id =~
+               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    end
+
+    test "builds a job through its own type" do
+      assert JobModule1.new().status == :queued
+    end
+
+    # An override reaches the generated constructor through super, which is resolved by Elixir
+    # before the compiler sees the module - so it transpiles to an ordinary private call and the
+    # override applies in the browser as well as on the server.
+    test "lets an entity type override the generated constructor" do
+      defmodule InlineConstructorFixture1 do
+        use Hologram.Entity
+
+        attribute :a, :string
+
+        @spec new(keyword) :: struct
+        def new(values), do: super(Keyword.put(values, :a, "overridden"))
+      end
+
+      assert InlineConstructorFixture1.new(a: "given").a == "overridden"
+      assert InlineConstructorFixture1.new().a == "overridden"
+    end
+
+    test "refuses what the engine refuses, in its words" do
+      expected_msg =
+        "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module3.new(c: "id_2")
+      end
     end
   end
 

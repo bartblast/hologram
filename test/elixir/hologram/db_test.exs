@@ -33,7 +33,7 @@ defmodule Hologram.DBTest do
 
           def query, do: filter(Hologram.Test.Fixtures.Entity.Module2, c: "abc")
 
-          def write, do: put_attribute(Entity.new(Hologram.Test.Fixtures.Entity.Module2), :c, "abc")
+          def write, do: put_attribute(Hologram.Test.Fixtures.Entity.Module2.new(), :c, "abc")
 
           def executor, do: DB.pool_name()
 
@@ -117,7 +117,7 @@ defmodule Hologram.DBTest do
 
   describe "create/1" do
     test "evaluates the claim under an acting user" do
-      entity = Entity.new(Module1)
+      entity = Module1.new()
 
       expected_msg =
         ~s(not allowed to create Hologram.Test.Fixtures.Entity.Module1 "#{entity.id}")
@@ -131,13 +131,13 @@ defmodule Hologram.DBTest do
     # second pins the violation travelling out through the gateway unchanged.
     test "returns the unique violation from the write itself" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(slug: "x")
+        %{slug: "x"}
+        |> Module19.new()
         |> create()
 
       result =
-        Module19
-        |> Entity.new(slug: "x")
+        %{slug: "x"}
+        |> Module19.new()
         |> create()
 
       assert result == {:error, %{slug: [:unique]}}
@@ -145,21 +145,21 @@ defmodule Hologram.DBTest do
 
     test "returns a value violation and a taken unique value in one map" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(code: "gateway_taken", slug: "gateway_a")
+        %{code: "gateway_taken", slug: "gateway_a"}
+        |> Module19.new()
         |> create()
 
-      assert create(Entity.new(Module19, code: "gateway_taken", slug: 123)) ==
+      assert create(Module19.new(code: "gateway_taken", slug: 123)) ==
                {:error, %{code: [:unique], slug: [type: :string]}}
     end
 
     test "returns a missing reference target" do
-      assert create(Entity.new(Module3, c_id: Entity.generate_id())) ==
+      assert create(Module3.new(c_id: Entity.generate_id())) ==
                {:error, %{c_id: [:not_found]}}
     end
 
     test "returns every missing reference target" do
-      assert create(Entity.new(Module3, b_id: Entity.generate_id(), c_id: Entity.generate_id())) ==
+      assert create(Module3.new(b_id: Entity.generate_id(), c_id: Entity.generate_id())) ==
                {:error, %{b_id: [:not_found], c_id: [:not_found]}}
     end
 
@@ -173,16 +173,13 @@ defmodule Hologram.DBTest do
       expected_msg =
         "Hologram.Test.Fixtures.Job.Module1 is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits"
 
-      assert_error ArgumentError, expected_msg, fn -> create(Entity.new(JobModule1)) end
+      assert_error ArgumentError, expected_msg, fn -> create(JobModule1.new()) end
     end
   end
 
   describe "create!/1" do
     test "returns the created entity" do
-      entity =
-        Module1
-        |> Entity.new()
-        |> create!()
+      entity = create!(Module1.new())
 
       assert entity.created_at
       assert read(Module1, entity.id).id == entity.id
@@ -197,15 +194,15 @@ defmodule Hologram.DBTest do
         """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
-        Module2
-        |> Entity.new(b: "nope")
+        %{b: "nope"}
+        |> Module2.new()
         |> create!()
       end
 
       error =
         try do
-          Module2
-          |> Entity.new(b: "nope")
+          %{b: "nope"}
+          |> Module2.new()
           |> create!()
         rescue
           error in Hologram.WriteError -> error
@@ -218,8 +215,8 @@ defmodule Hologram.DBTest do
     # variant would have returned - is caught and asserted separately.
     test "raises naming the taken value beside the value violation" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(code: "bang_taken", slug: "bang_a")
+        %{code: "bang_taken", slug: "bang_a"}
+        |> Module19.new()
         |> create()
 
       expected_msg =
@@ -230,14 +227,14 @@ defmodule Hologram.DBTest do
         """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
-        create!(Entity.new(Module19, code: "bang_taken", slug: 123))
+        create!(Module19.new(code: "bang_taken", slug: 123))
       end
     end
 
     test "raises a write error when a unique attribute's value is taken" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(slug: "x")
+        %{slug: "x"}
+        |> Module19.new()
         |> create()
 
       expected_msg =
@@ -247,15 +244,15 @@ defmodule Hologram.DBTest do
         """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
-        Module19
-        |> Entity.new(slug: "x")
+        %{slug: "x"}
+        |> Module19.new()
         |> create!()
       end
 
       error =
         try do
-          Module19
-          |> Entity.new(slug: "x")
+          %{slug: "x"}
+          |> Module19.new()
           |> create!()
         rescue
           error in Hologram.WriteError -> error
@@ -274,12 +271,12 @@ defmodule Hologram.DBTest do
         """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
-        create!(Entity.new(Module13, parent_id: gone_id, title: "t"))
+        create!(Module13.new(parent_id: gone_id, title: "t"))
       end
 
       error =
         try do
-          create!(Entity.new(Module13, parent_id: gone_id, title: "t"))
+          create!(Module13.new(parent_id: gone_id, title: "t"))
         rescue
           error in Hologram.WriteError -> error
         end
@@ -298,7 +295,7 @@ defmodule Hologram.DBTest do
         """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
-        create!(Entity.new(Module13, parent_id: gone_id, title: nil))
+        create!(Module13.new(parent_id: gone_id, title: nil))
       end
     end
   end
@@ -315,7 +312,7 @@ defmodule Hologram.DBTest do
 
   describe "delete/1" do
     test "deletes the given entity struct" do
-      {:ok, entity} = create(Entity.new(Module1))
+      {:ok, entity} = create(Module1.new())
 
       assert delete(entity) == :ok
       assert read(Module1, entity.id) == nil
@@ -324,14 +321,14 @@ defmodule Hologram.DBTest do
 
   describe "delete!/1" do
     test "deletes the given entity struct" do
-      {:ok, entity} = create(Entity.new(Module1))
+      {:ok, entity} = create(Module1.new())
 
       assert delete!(entity) == :ok
       assert read(Module1, entity.id) == nil
     end
 
     test "lets a denied claim propagate" do
-      {:ok, entity} = create(Entity.new(Module1))
+      {:ok, entity} = create(Module1.new())
 
       expected_msg =
         ~s(not allowed to delete Hologram.Test.Fixtures.Entity.Module1 "#{entity.id}")
@@ -344,11 +341,11 @@ defmodule Hologram.DBTest do
     end
 
     test "raises on a restricted delete" do
-      {:ok, target} = create(Entity.new(Module1))
+      {:ok, target} = create(Module1.new())
 
       {:ok, source} =
-        Module3
-        |> Entity.new(c_id: target.id)
+        %{c_id: target.id}
+        |> Module3.new()
         |> create()
 
       expected_msg =
@@ -361,11 +358,11 @@ defmodule Hologram.DBTest do
     end
 
     test "raises on a restricted delete inside a transaction" do
-      {:ok, target} = create(Entity.new(Module1))
+      {:ok, target} = create(Module1.new())
 
       {:ok, _source} =
-        Module3
-        |> Entity.new(c_id: target.id)
+        %{c_id: target.id}
+        |> Module3.new()
         |> create()
 
       expected_msg =
@@ -380,24 +377,18 @@ defmodule Hologram.DBTest do
 
   describe "delete!/2" do
     test "returns :ok" do
-      {:ok, entity} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, entity} = create(Module1.new())
 
       assert delete!(Module1, entity.id) == :ok
       assert read(Module1, entity.id) == nil
     end
 
     test "raises a write error when another entity references the row" do
-      {:ok, target} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, target} = create(Module1.new())
 
       {:ok, _referencing} =
-        Module3
-        |> Entity.new(c_id: target.id)
+        %{c_id: target.id}
+        |> Module3.new()
         |> create()
 
       expected_msg =
@@ -434,14 +425,14 @@ defmodule Hologram.DBTest do
   describe "transaction/2" do
     test "completes a refused write's map inside a transaction" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(code: "nested_taken", slug: "nested_taken")
+        %{code: "nested_taken", slug: "nested_taken"}
+        |> Module19.new()
         |> create()
 
       result =
         transaction(fn ->
-          Module19
-          |> Entity.new(code: "nested_taken", slug: "nested_taken")
+          %{code: "nested_taken", slug: "nested_taken"}
+          |> Module19.new()
           |> create()
         end)
 
@@ -450,13 +441,13 @@ defmodule Hologram.DBTest do
 
     test "returns a refused update's violations inside a transaction" do
       {:ok, first} =
-        Module19
-        |> Entity.new(slug: "nested_update_held")
+        %{slug: "nested_update_held"}
+        |> Module19.new()
         |> create()
 
       {:ok, second} =
-        Module19
-        |> Entity.new(slug: "nested_update_other")
+        %{slug: "nested_update_other"}
+        |> Module19.new()
         |> create()
 
       result =
@@ -471,20 +462,20 @@ defmodule Hologram.DBTest do
 
     test "returns a refused write's violations inside a transaction and keeps it usable" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(slug: "nested_held")
+        %{slug: "nested_held"}
+        |> Module19.new()
         |> create()
 
       result =
         transaction(fn ->
           refusal =
-            Module19
-            |> Entity.new(slug: "nested_held")
+            %{slug: "nested_held"}
+            |> Module19.new()
             |> create()
 
           {:ok, other} =
-            Module19
-            |> Entity.new(slug: "nested_other")
+            %{slug: "nested_other"}
+            |> Module19.new()
             |> create()
 
           {refusal, other.id}
@@ -495,14 +486,11 @@ defmodule Hologram.DBTest do
     end
 
     test "returns a restricted delete's referencer inside a transaction" do
-      {:ok, target} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, target} = create(Module1.new())
 
       {:ok, _referencing} =
-        Module3
-        |> Entity.new(c_id: target.id)
+        %{c_id: target.id}
+        |> Module3.new()
         |> create()
 
       result =
@@ -518,8 +506,8 @@ defmodule Hologram.DBTest do
     test "returns a value violation inside a transaction" do
       result =
         transaction(fn ->
-          Module2
-          |> Entity.new(b: "nope")
+          %{b: "nope"}
+          |> Module2.new()
           |> create()
         end)
 
@@ -536,8 +524,8 @@ defmodule Hologram.DBTest do
 
       assert_error Hologram.WriteError, expected_msg, fn ->
         transaction(fn ->
-          Module2
-          |> Entity.new(b: "nope")
+          %{b: "nope"}
+          |> Module2.new()
           |> create!()
         end)
       end
@@ -545,8 +533,8 @@ defmodule Hologram.DBTest do
 
     test "raises through the bang inside a transaction and rolls it back" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(slug: "nested_bang_held")
+        %{slug: "nested_bang_held"}
+        |> Module19.new()
         |> create()
 
       expected_msg =
@@ -558,14 +546,14 @@ defmodule Hologram.DBTest do
       assert_error Hologram.WriteError, expected_msg, fn ->
         transaction(fn ->
           {:ok, earlier} =
-            Module19
-            |> Entity.new(slug: "nested_bang_earlier")
+            %{slug: "nested_bang_earlier"}
+            |> Module19.new()
             |> create()
 
           Process.put(:earlier_id, earlier.id)
 
-          Module19
-          |> Entity.new(slug: "nested_bang_held")
+          %{slug: "nested_bang_held"}
+          |> Module19.new()
           |> create!()
         end)
       end
@@ -577,13 +565,13 @@ defmodule Hologram.DBTest do
   describe "update/3" do
     test "returns the unique violation from the write itself" do
       {:ok, first} =
-        Module19
-        |> Entity.new(slug: "held")
+        %{slug: "held"}
+        |> Module19.new()
         |> create()
 
       {:ok, second} =
-        Module19
-        |> Entity.new(slug: "other")
+        %{slug: "other"}
+        |> Module19.new()
         |> create()
 
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
@@ -591,13 +579,13 @@ defmodule Hologram.DBTest do
 
     test "returns a value violation and a taken unique value in one map" do
       {:ok, first} =
-        Module19
-        |> Entity.new(code: "gateway_update_taken", slug: "gateway_update_a")
+        %{code: "gateway_update_taken", slug: "gateway_update_a"}
+        |> Module19.new()
         |> create()
 
       {:ok, second} =
-        Module19
-        |> Entity.new(code: "gateway_update_free", slug: "gateway_update_b")
+        %{code: "gateway_update_free", slug: "gateway_update_b"}
+        |> Module19.new()
         |> create()
 
       assert update(Module19, second.id, %{code: first.code, slug: 123}) ==
@@ -605,14 +593,11 @@ defmodule Hologram.DBTest do
     end
 
     test "returns a missing reference target" do
-      {:ok, target_entity} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, target_entity} = create(Module1.new())
 
       {:ok, entity} =
-        Module3
-        |> Entity.new(c_id: target_entity.id)
+        %{c_id: target_entity.id}
+        |> Module3.new()
         |> create()
 
       assert update(Module3, entity.id, %{c_id: Entity.generate_id()}) ==
@@ -620,14 +605,11 @@ defmodule Hologram.DBTest do
     end
 
     test "returns every missing reference target" do
-      {:ok, target_entity} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, target_entity} = create(Module1.new())
 
       {:ok, entity} =
-        Module3
-        |> Entity.new(c_id: target_entity.id)
+        %{c_id: target_entity.id}
+        |> Module3.new()
         |> create()
 
       changes = %{b_id: Entity.generate_id(), c_id: Entity.generate_id()}
@@ -648,8 +630,8 @@ defmodule Hologram.DBTest do
   describe "update!/1" do
     test "writes the changes recorded on the struct" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "before")
+        %{c: "before"}
+        |> Module2.new()
         |> create()
 
       assert entity
@@ -661,8 +643,8 @@ defmodule Hologram.DBTest do
 
     test "lets a denied claim propagate" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "before")
+        %{c: "before"}
+        |> Module2.new()
         |> create()
 
       expected_msg =
@@ -681,13 +663,13 @@ defmodule Hologram.DBTest do
 
     test "raises on a refused value" do
       {:ok, entity} =
-        Module19
-        |> Entity.new(slug: "taken")
+        %{slug: "taken"}
+        |> Module19.new()
         |> create()
 
       {:ok, other_entity} =
-        Module19
-        |> Entity.new(slug: "free")
+        %{slug: "free"}
+        |> Module19.new()
         |> create()
 
       expected_msg =
@@ -705,8 +687,8 @@ defmodule Hologram.DBTest do
 
     test "raises naming a moved attribute's refused result" do
       {:ok, entity} =
-        Module10
-        |> Entity.new(count: 1)
+        %{count: 1}
+        |> Module10.new()
         |> create()
 
       expected_msg =
@@ -724,13 +706,13 @@ defmodule Hologram.DBTest do
 
     test "names the value the write used, not the one the struct holds" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(slug: "written")
+        %{slug: "written"}
+        |> Module19.new()
         |> create()
 
       {:ok, other_entity} =
-        Module19
-        |> Entity.new(slug: "spare")
+        %{slug: "spare"}
+        |> Module19.new()
         |> create()
 
       # The recorded change is what the write uses - a field set directly on the struct
@@ -746,13 +728,13 @@ defmodule Hologram.DBTest do
 
     test "raises on a refused value inside a transaction" do
       {:ok, _entity} =
-        Module19
-        |> Entity.new(slug: "held")
+        %{slug: "held"}
+        |> Module19.new()
         |> create()
 
       {:ok, other_entity} =
-        Module19
-        |> Entity.new(slug: "spare")
+        %{slug: "spare"}
+        |> Module19.new()
         |> create()
 
       expected_msg =
@@ -772,8 +754,8 @@ defmodule Hologram.DBTest do
   describe "update!/3" do
     test "returns :ok" do
       {:ok, entity} =
-        Module19
-        |> Entity.new(slug: "before")
+        %{slug: "before"}
+        |> Module19.new()
         |> create()
 
       assert update!(Module19, entity.id, slug: "after") == :ok
@@ -781,8 +763,8 @@ defmodule Hologram.DBTest do
 
     test "raises a write error naming every change violation" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(a: true, c: "some text")
+        %{a: true, c: "some text"}
+        |> Module2.new()
         |> create()
 
       expected_msg =
@@ -807,13 +789,13 @@ defmodule Hologram.DBTest do
 
     test "raises a write error when the new value is taken" do
       {:ok, first} =
-        Module19
-        |> Entity.new(slug: "held")
+        %{slug: "held"}
+        |> Module19.new()
         |> create()
 
       {:ok, second} =
-        Module19
-        |> Entity.new(slug: "other")
+        %{slug: "other"}
+        |> Module19.new()
         |> create()
 
       expected_msg =
@@ -839,14 +821,11 @@ defmodule Hologram.DBTest do
     test "raises naming the missing target" do
       gone_id = Entity.generate_id()
 
-      {:ok, target_entity} =
-        Module1
-        |> Entity.new()
-        |> create()
+      {:ok, target_entity} = create(Module1.new())
 
       {:ok, entity} =
-        Module3
-        |> Entity.new(c_id: target_entity.id)
+        %{c_id: target_entity.id}
+        |> Module3.new()
         |> create()
 
       expected_msg =
@@ -873,8 +852,8 @@ defmodule Hologram.DBTest do
   describe "update/1" do
     test "writes the changes recorded on the struct" do
       {:ok, entity} =
-        Module2
-        |> Entity.new(c: "before")
+        %{c: "before"}
+        |> Module2.new()
         |> create()
 
       assert entity
@@ -885,7 +864,7 @@ defmodule Hologram.DBTest do
     end
 
     test "raises a teaching error for a struct carrying nothing recorded" do
-      {:ok, entity} = create(Entity.new(Module1))
+      {:ok, entity} = create(Module1.new())
 
       expected_msg =
         "update takes recorded changes - put values with put_attribute, move counters with " <>

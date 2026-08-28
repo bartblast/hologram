@@ -9,7 +9,6 @@ defmodule HologramClusterTests.SyncHelpers do
 
   alias Hologram.DB
   alias Hologram.DB.Connection
-  alias Hologram.Entity
   alias HologramClusterTests.Entities.Item
 
   @doc """
@@ -17,8 +16,8 @@ defmodule HologramClusterTests.SyncHelpers do
   """
   @spec create_item(String.t(), String.t()) :: struct
   def create_item(slug, title) do
-    Item
-    |> Entity.new(slug: slug, title: title)
+    %{slug: slug, title: title}
+    |> Item.new()
     |> DB.create!()
   end
 

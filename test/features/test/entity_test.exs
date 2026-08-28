@@ -15,6 +15,13 @@ defmodule HologramFeatureTests.EntityTest do
     |> assert_text(css("#result"), "defaults_0_nil")
   end
 
+  feature "a bare struct carries the declared defaults", %{session: session} do
+    session
+    |> visit(EntityPage)
+    |> click(button("Read a bare struct"))
+    |> assert_text(css("#result"), "bare_0_nil")
+  end
+
   feature "judges a whole struct against a declared bound", %{session: session} do
     session
     |> visit(EntityPage)

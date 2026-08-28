@@ -25,14 +25,16 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   defp module_2(overrides \\ []) do
-    Entity.new(Module2, Keyword.merge([a: true, c: "a task"], overrides))
+    [a: true, c: "a task"]
+    |> Keyword.merge(overrides)
+    |> Module2.new()
   end
 
   # A query result carries its includes in the relationship fields, which construction refuses
   # to set - the runner fills them when it decodes what the query embedded.
   defp module_3(embeds) do
-    Module3
-    |> Entity.new(c_id: Entity.generate_id())
+    %{c_id: Entity.generate_id()}
+    |> Module3.new()
     |> Map.merge(embeds)
   end
 
@@ -142,7 +144,7 @@ defmodule Hologram.Sync.CarryTest do
 
     test "never spells a value the client may not have" do
       user =
-        Entity.new(Module14,
+        Module14.new(
           email: "user@test.com",
           password_hash: %ServerOnly{attribute: :password_hash}
         )
@@ -158,7 +160,7 @@ defmodule Hologram.Sync.CarryTest do
 
     test "gathers rows of every type a page's props read" do
       collect([module_2(c: "a task")])
-      collect([Entity.new(Module1)])
+      collect([Module1.new()])
 
       carried = take()
 

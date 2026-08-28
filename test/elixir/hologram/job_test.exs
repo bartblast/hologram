@@ -3,7 +3,6 @@ defmodule Hologram.JobTest do
 
   import Hologram.Job
 
-  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Job.Module1
 
   describe "__using__/1" do
@@ -26,7 +25,7 @@ defmodule Hologram.JobTest do
     end
 
     test "builds a job queued, with nothing recorded of a run" do
-      job = Entity.new(Module1)
+      job = Module1.new()
 
       assert job.status == :queued
       assert job.actor_id == nil

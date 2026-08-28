@@ -11,7 +11,6 @@ defmodule Hologram.AuthConcurrencyTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
 
@@ -26,8 +25,8 @@ defmodule Hologram.AuthConcurrencyTest do
   end
 
   defp create_owner(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
@@ -80,10 +79,7 @@ defmodule Hologram.AuthConcurrencyTest do
   test "concurrent revocations never strip a resource of its last managing role" do
     owners = Enum.map(1..2, &create_owner("concurrency_#{&1}@example.com"))
 
-    resource =
-      Module1
-      |> Entity.new()
-      |> DB.create!()
+    resource = DB.create!(Module1.new())
 
     Enum.each(owners, &grant_role(&1, resource, :owner))
 

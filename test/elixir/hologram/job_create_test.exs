@@ -6,7 +6,6 @@ defmodule Hologram.JobCreateTest do
 
   alias Hologram.AccessDeniedError
   alias Hologram.DB
-  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Job.Module1
   alias Hologram.Test.Fixtures.Job.Module2
@@ -22,8 +21,8 @@ defmodule Hologram.JobCreateTest do
   end
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 

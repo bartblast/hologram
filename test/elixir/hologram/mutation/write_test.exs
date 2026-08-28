@@ -51,7 +51,7 @@ defmodule Hologram.Mutation.WriteTest do
                  revisions: %{c: 3},
                  stamp: 5
                },
-               a: nil,
+               a: false,
                b: nil,
                c: "x",
                created_at: nil,
@@ -89,7 +89,7 @@ defmodule Hologram.Mutation.WriteTest do
                  revisions: %{a: 1, c: 3},
                  stamp: 5
                },
-               a: nil,
+               a: false,
                b: nil,
                c: nil,
                created_at: nil,
