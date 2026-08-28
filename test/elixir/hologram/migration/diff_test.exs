@@ -307,7 +307,7 @@ defmodule Hologram.Migration.DiffTest do
           MyApp.Task => %{
             attributes: [{:estimate, :integer, [default: 0, min: 0, optional: true]}],
             relationships: [{:tags, [MyApp.Tag], []}],
-            roles: [{:owner, [creator: true]}]
+            roles: [{:owner, [granted_to: :creator]}]
           }
         })
 
@@ -338,7 +338,7 @@ defmodule Hologram.Migration.DiffTest do
                    op: :change_role,
                    entity: MyApp.Task,
                    name: :owner,
-                   changes: [creator: false, extends: :editor]
+                   changes: [extends: :editor, granted_to: nil]
                  }
                ],
                questions: []

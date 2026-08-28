@@ -54,7 +54,10 @@ exported_locals_without_parens = [
   layout: 2,
   param: 2,
   param: 3,
-  route: 1
+  route: 1,
+
+  # Hologram.Policy
+  policy: 1
 ]
 
 test_locals_without_parens = [

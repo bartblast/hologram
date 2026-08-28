@@ -65,6 +65,32 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__policy_sources__/0" do
+    test "returns empty list for entity type with no policy declarations" do
+      assert Module1.__policy_sources__() == []
+    end
+
+    test "lines up with __policies__/0 across taken and local lines" do
+      defmodule PolicySourcesEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        allow :delete, to: :viewer
+      end
+
+      assert PolicySourcesEntityFixture.__policies__() == [
+               {:read, :viewer, nil, []},
+               {:delete, :viewer, nil, []}
+             ]
+
+      assert PolicySourcesEntityFixture.__policy_sources__() == [
+               Hologram.Test.Fixtures.Policy.Shared.Module1,
+               PolicySourcesEntityFixture
+             ]
+    end
+  end
+
   describe "__relationships__/0" do
     test "returns empty list for entity type with no relationship declarations" do
       assert Module1.__relationships__() == []
@@ -75,6 +101,29 @@ defmodule Hologram.EntityTest do
                {:a, [Module2], []},
                {:b, Module2, [optional: true]},
                {:c, Module1, []}
+             ]
+    end
+  end
+
+  describe "__role_declarations__/0" do
+    test "returns empty list for entity type with no role declarations" do
+      assert Module1.__role_declarations__() == []
+    end
+
+    test "keeps every declaration of a unioned role beside the module it was written in" do
+      defmodule RoleDeclarationsEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :viewer, granted_to: :creator
+      end
+
+      assert RoleDeclarationsEntityFixture.__roles__() == [{:viewer, [granted_to: :creator]}]
+
+      assert RoleDeclarationsEntityFixture.__role_declarations__() == [
+               {:viewer, [], Hologram.Test.Fixtures.Policy.Shared.Module1},
+               {:viewer, [granted_to: :creator], RoleDeclarationsEntityFixture}
              ]
     end
   end
@@ -395,28 +444,166 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  # The taken policy is the shared fixture rather than an inline module: this file imports
+  # Hologram.Entity, and a nested defmodule with use Hologram.Policy inherits that import,
+  # which collides on role/1 and allow/1.
+  describe "policy/1" do
+    test "takes the roles and rules of the given policy module" do
+      defmodule TakingEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+      end
+
+      assert TakingEntityFixture.__roles__() == [{:viewer, []}]
+      assert TakingEntityFixture.__policies__() == [{:read, :viewer, nil, []}]
+    end
+
+    test "keeps the entity's own declarations beside the taken ones, taken first" do
+      defmodule CoexistEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :owner
+
+        allow :delete, to: :owner
+      end
+
+      assert CoexistEntityFixture.__roles__() == [{:owner, []}, {:viewer, []}]
+
+      assert CoexistEntityFixture.__policies__() == [
+               {:read, :viewer, nil, []},
+               {:delete, :owner, nil, []}
+             ]
+    end
+
+    test "contributes roles that a locally declared extends option can name" do
+      defmodule ExtendsEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :owner, extends: :viewer
+      end
+
+      assert ExtendsEntityFixture.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
+    end
+  end
+
   describe "role/2" do
     test "unifies an identical re-declaration" do
       defmodule InlineRoleFixture1 do
         use Hologram.Entity
 
-        role :owner, creator: true
-        role :owner, creator: true
+        role :owner, granted_to: :creator
+        role :owner, granted_to: :creator
       end
 
-      assert InlineRoleFixture1.__roles__() == [{:owner, [creator: true]}]
+      assert InlineRoleFixture1.__roles__() == [{:owner, [granted_to: :creator]}]
     end
 
-    test "rejects a re-declaration with different options" do
+    test "unifies a re-declaration written with the options in a different order" do
+      defmodule InlineRoleFixture2 do
+        use Hologram.Entity
+
+        role :editor
+        role :owner, extends: :editor, granted_to: :creator
+        role :owner, granted_to: :creator, extends: :editor
+      end
+
+      assert InlineRoleFixture2.__roles__() == [
+               {:editor, []},
+               {:owner, [extends: [:editor], granted_to: :creator]}
+             ]
+    end
+
+    test "unions the extends targets of several declarations" do
+      defmodule InlineRoleFixture3 do
+        use Hologram.Entity
+
+        role :editor
+        role :viewer
+        role :owner, extends: :viewer
+        role :owner, extends: :editor
+      end
+
+      assert InlineRoleFixture3.__roles__() == [
+               {:editor, []},
+               {:owner, [extends: [:editor, :viewer]]},
+               {:viewer, []}
+             ]
+    end
+
+    test "keeps granted_to declared by one declaration and unmentioned by the other" do
+      defmodule InlineRoleFixture4 do
+        use Hologram.Entity
+
+        role :owner, granted_to: :creator
+        role :owner, extends: :editor
+        role :editor
+      end
+
+      assert InlineRoleFixture4.__roles__() == [
+               {:editor, []},
+               {:owner, [extends: [:editor], granted_to: :creator]}
+             ]
+    end
+
+    test "lets the last declaration mentioning granted_to switch the grant off" do
+      defmodule InlineRoleFixture5 do
+        use Hologram.Entity
+
+        role :owner, granted_to: :creator
+        role :owner, granted_to: nil
+      end
+
+      assert InlineRoleFixture5.__roles__() == [{:owner, []}]
+    end
+
+    test "lets the last declaration mentioning granted_to switch the grant on" do
+      defmodule InlineRoleFixture6 do
+        use Hologram.Entity
+
+        role :owner, granted_to: nil
+        role :owner, granted_to: :creator
+      end
+
+      assert InlineRoleFixture6.__roles__() == [{:owner, [granted_to: :creator]}]
+    end
+
+    test "accepts a lone granted_to: nil declaration" do
+      defmodule InlineRoleFixture7 do
+        use Hologram.Entity
+
+        role :owner, granted_to: nil
+      end
+
+      assert InlineRoleFixture7.__roles__() == [{:owner, []}]
+    end
+
+    test "merges a role reached through a policy with a local declaration of the same name" do
+      defmodule PolicyRoleEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :viewer, granted_to: :creator
+      end
+
+      assert PolicyRoleEntityFixture.__roles__() == [{:viewer, [granted_to: :creator]}]
+    end
+
+    test "validates a re-declaration of a role already declared" do
       expected_msg =
-        "conflicting declarations for role :owner in Hologram.EntityTest.InlineRoleFixture2: [] and [creator: true] - repeated role declarations must be identical"
+        "invalid granted_to option false for role :owner in Hologram.EntityTest.InlineRoleFixture8 - the granted_to option must be :creator or nil"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineRoleFixture2 do
+        defmodule InlineRoleFixture8 do
           use Hologram.Entity
 
-          role :owner
-          role :owner, creator: true
+          role :owner, granted_to: :creator
+          role :owner, granted_to: false
         end
       end
     end

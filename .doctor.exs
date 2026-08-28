@@ -8,7 +8,11 @@
     Hologram.Layout,
     Hologram.Middleware,
     Hologram.Middleware.Builder,
-    Hologram.Page
+    Hologram.Page,
+    # Doctor harvests a generated function's @doc and @spec from a __using__ block only, while
+    # counting every def it finds in the file - and __declarations__/0 is generated in
+    # __before_compile__. Same reason Hologram.Entity is on this list.
+    Hologram.Policy
   ],
   ignore_paths: [~r(^benchmarks/*), ~r(^test/*)],
   min_module_doc_coverage: 100,

@@ -21,14 +21,7 @@ defmodule Hologram.Policy.Validator do
     validate_role_modules!(Reflection.list_roles())
     validate_user_entity!(entity_types)
 
-    Enum.each(entity_types, fn entity_type ->
-      Enum.each(entity_type.__policies__(), fn {operation, to, via, predicates} ->
-        validate_to!(entity_type, operation, to)
-        validate_via!(entity_type, operation, via)
-        validate_predicates!(entity_type, operation, predicates)
-        validate_gate_operation!(entity_type, operation, to, via, predicates)
-      end)
-    end)
+    Enum.each(entity_types, &validate_entity_policies!/1)
 
     validate_via_cycles!(entity_types)
   end
@@ -66,7 +59,7 @@ defmodule Hologram.Policy.Validator do
     start_index =
       cycle
       |> Enum.with_index()
-      |> Enum.min_by(fn {{entity_type, relationship_name}, _index} ->
+      |> Enum.min_by(fn {{entity_type, relationship_name, _source}, _index} ->
         {inspect(entity_type), relationship_name}
       end)
       |> elem(1)
@@ -98,13 +91,20 @@ defmodule Hologram.Policy.Validator do
     "  * #{hops} -> #{inspect(first_role_module)}"
   end
 
-  defp describe_via_cycle([{first_entity_type, _first_relationship_name} | _later_hops] = cycle) do
-    hops =
-      Enum.map_join(cycle, " -> ", fn {entity_type, relationship_name} ->
-        "#{inspect(entity_type)} (via #{inspect(relationship_name)})"
-      end)
+  defp describe_via_cycle([{first_entity_type, _name, _source} | _later_hops] = cycle) do
+    hops = Enum.map_join(cycle, " -> ", &describe_via_cycle_hop/1)
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
+  end
+
+  # A hop whose via line the entity type wrote itself reads as it always did; one taken from a
+  # policy names it, so a cycle formed out of a shared delegation says where the line lives.
+  defp describe_via_cycle_hop({entity_type, relationship_name, entity_type}) do
+    "#{inspect(entity_type)} (via #{inspect(relationship_name)})"
+  end
+
+  defp describe_via_cycle_hop({entity_type, relationship_name, source}) do
+    "#{inspect(entity_type)} (via #{inspect(relationship_name)}, from #{inspect(source)})"
   end
 
   # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
@@ -134,8 +134,8 @@ defmodule Hologram.Policy.Validator do
       {cycles, visited} =
         edges
         |> Map.get(entity_type, [])
-        |> Enum.reduce({cycles, visited}, fn {relationship_name, target_type}, acc ->
-          follow_via_edge({entity_type, relationship_name}, target_type, path, edges, acc)
+        |> Enum.reduce({cycles, visited}, fn {relationship_name, target_type, source}, acc ->
+          follow_via_edge({entity_type, relationship_name, source}, target_type, path, edges, acc)
         end)
 
       {cycles, MapSet.put(visited, entity_type)}
@@ -162,9 +162,11 @@ defmodule Hologram.Policy.Validator do
   defp follow_via_edge(hop, target_type, path, edges, {cycles, visited}) do
     new_path = [hop | path]
 
-    if Enum.any?(new_path, fn {entity_type, _relationship_name} -> entity_type == target_type end) do
+    if Enum.any?(new_path, fn {entity_type, _relationship_name, _source} ->
+         entity_type == target_type
+       end) do
       {hops_beyond_target, [target_hop | _earlier_hops]} =
-        Enum.split_while(new_path, fn {entity_type, _relationship_name} ->
+        Enum.split_while(new_path, fn {entity_type, _relationship_name, _source} ->
           entity_type != target_type
         end)
 
@@ -176,30 +178,58 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  defp validate_predicates!(entity_type, operation, predicates) do
+  # A line the entity type wrote itself reads exactly as it always did. One that arrived through
+  # a policy names the module whose BODY wrote it - the file the dev has to open - because after
+  # composition the entity type's own source may hold no such line at all.
+  defp location(entity_type, entity_type), do: inspect(entity_type)
+
+  defp location(entity_type, source), do: "#{inspect(entity_type)}, taken from #{inspect(source)}"
+
+  defp validate_entity_policies!(entity_type) do
+    entity_type.__policies__()
+    |> Enum.zip(entity_type.__policy_sources__())
+    |> Enum.each(&validate_policy_line!(entity_type, &1))
+  end
+
+  defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source}) do
+    location = location(entity_type, source)
+
+    validate_to!(entity_type, operation, to, location)
+    validate_via!(entity_type, operation, via, location)
+    validate_predicates!(entity_type, operation, predicates, location)
+    validate_gate_operation!(operation, to, via, predicates, location)
+  end
+
+  defp validate_predicates!(entity_type, operation, predicates, location) do
     triples = Query.predicate_triples!(entity_type, predicates)
-    validate_server_only_predicates!(entity_type, operation, triples)
+    validate_server_only_predicates!(entity_type, operation, triples, location)
 
     :ok
   rescue
     error in ArgumentError ->
       message =
-        "invalid predicate for allow #{inspect(operation)} in #{inspect(entity_type)} - #{Exception.message(error)}"
+        "invalid predicate for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
 
       reraise Hologram.CompileError, [message: message], __STACKTRACE__
   end
 
-  defp validate_relationship_reference!(entity_type, operation, relationship_name, role_name) do
+  defp validate_relationship_reference!(
+         entity_type,
+         operation,
+         relationship_name,
+         role_name,
+         location
+       ) do
     definitions = entity_type.__relationships__()
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
       {_name, [_target], _opts} ->
         raise Hologram.CompileError,
           message:
-            "invalid to option #{inspect({relationship_name, role_name})} for allow #{inspect(operation)} in #{inspect(entity_type)} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
+            "invalid to option #{inspect({relationship_name, role_name})} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
 
       {_name, target, _opts} ->
-        validate_target_role!(entity_type, operation, target, role_name)
+        validate_target_role!(operation, target, role_name, location)
 
       nil ->
         declared_relationships =
@@ -207,7 +237,7 @@ defmodule Hologram.Policy.Validator do
 
         raise Hologram.CompileError,
           message:
-            "unknown relationship #{inspect(relationship_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared relationships are: #{declared_relationships}"
+            "unknown relationship #{inspect(relationship_name)} in the to option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
     end
   end
 
@@ -268,21 +298,21 @@ defmodule Hologram.Policy.Validator do
   # the row's presence already proves the predicate held - the client never evaluates it.
   # Every other operation is decided locally (can?), which needs the value, so there the
   # reference is rejected.
-  defp validate_server_only_predicates!(_entity_type, :read, _triples), do: :ok
+  defp validate_server_only_predicates!(_entity_type, :read, _triples, _location), do: :ok
 
-  defp validate_server_only_predicates!(entity_type, operation, triples) do
+  defp validate_server_only_predicates!(entity_type, operation, triples, location) do
     server_only_names = Entity.server_only_attribute_names(entity_type)
 
     Enum.each(triples, fn {name, _operator, _value} ->
       if name in server_only_names do
         raise Hologram.CompileError,
           message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(name)} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{inspect(name)} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
       end
     end)
   end
 
-  defp validate_target_role!(entity_type, operation, target_type, role_name) do
+  defp validate_target_role!(operation, target_type, role_name, location) do
     declared_names = declared_role_names(target_type)
 
     if role_name not in declared_names do
@@ -290,36 +320,36 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared roles of #{inspect(target_type)} are: #{declared_roles}"
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles of #{inspect(target_type)} are: #{declared_roles}"
     end
   end
 
-  defp validate_to!(_entity_type, _operation, nil), do: :ok
+  defp validate_to!(_entity_type, _operation, nil, _location), do: :ok
 
-  defp validate_to!(entity_type, operation, to) do
+  defp validate_to!(entity_type, operation, to, location) do
     to
     |> List.wrap()
-    |> Enum.each(&validate_to_reference!(entity_type, operation, &1))
+    |> Enum.each(&validate_to_reference!(entity_type, operation, &1, location))
   end
 
-  defp validate_to_reference!(entity_type, operation, {reference, role_name}) do
+  defp validate_to_reference!(entity_type, operation, {reference, role_name}, location) do
     if Reflection.alias?(reference) do
-      validate_type_reference!(entity_type, operation, reference, role_name)
+      validate_type_reference!(operation, reference, role_name, location)
     else
-      validate_relationship_reference!(entity_type, operation, reference, role_name)
+      validate_relationship_reference!(entity_type, operation, reference, role_name, location)
     end
   end
 
-  defp validate_to_reference!(entity_type, operation, role_module)
+  defp validate_to_reference!(entity_type, operation, role_module, location)
        when is_atom(role_module) do
     if Reflection.alias?(role_module) do
-      validate_global_reference!(entity_type, operation, role_module)
+      validate_global_reference!(operation, role_module, location)
     else
-      validate_own_reference!(entity_type, operation, role_module)
+      validate_own_reference!(entity_type, operation, role_module, location)
     end
   end
 
-  defp validate_gate_operation!(entity_type, operation, to, via, predicates)
+  defp validate_gate_operation!(operation, to, via, predicates, location)
        when operation in @gate_operations do
     references = List.wrap(to)
 
@@ -327,14 +357,14 @@ defmodule Hologram.Policy.Validator do
       if not is_atom(reference) or Reflection.alias?(reference) do
         raise Hologram.CompileError,
           message:
-            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
       end
     end)
 
     if via do
       raise Hologram.CompileError,
         message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
     end
 
     case predicates do
@@ -344,7 +374,7 @@ defmodule Hologram.Policy.Validator do
       [{name, _value} | _later_predicates] ->
         raise Hologram.CompileError,
           message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
     end
 
     # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
@@ -353,23 +383,23 @@ defmodule Hologram.Policy.Validator do
     if references == [] do
       raise Hologram.CompileError,
         message:
-          "missing to option for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+          "missing to option for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
     end
 
     :ok
   end
 
-  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates), do: :ok
+  defp validate_gate_operation!(_operation, _to, _via, _predicates, _location), do: :ok
 
-  defp validate_global_reference!(entity_type, operation, role_module) do
+  defp validate_global_reference!(operation, role_module, location) do
     if not Reflection.role?(role_module) do
       raise Hologram.CompileError,
         message:
-          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
+          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{location} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
     end
   end
 
-  defp validate_own_reference!(entity_type, operation, role_name) do
+  defp validate_own_reference!(entity_type, operation, role_name, location) do
     declared_names = declared_role_names(entity_type)
 
     if role_name not in declared_names do
@@ -377,18 +407,18 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared roles are: #{declared_roles}"
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
     end
   end
 
-  defp validate_type_reference!(entity_type, operation, target_type, role_name) do
+  defp validate_type_reference!(operation, target_type, role_name, location) do
     if not Reflection.entity?(target_type) do
       raise Hologram.CompileError,
         message:
-          "invalid to option #{inspect({target_type, role_name})} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(target_type)} is not an entity type module"
+          "invalid to option #{inspect({target_type, role_name})} for allow #{inspect(operation)} in #{location} - #{inspect(target_type)} is not an entity type module"
     end
 
-    validate_target_role!(entity_type, operation, target_type, role_name)
+    validate_target_role!(operation, target_type, role_name, location)
   end
 
   defp validate_user_entity!(entity_types) do
@@ -426,13 +456,13 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  defp validate_via!(_entity_type, _operation, nil), do: :ok
+  defp validate_via!(_entity_type, _operation, nil, _location), do: :ok
 
-  defp validate_via!(entity_type, operation, via) do
+  defp validate_via!(entity_type, operation, via, location) do
     if not is_atom(via) do
       raise Hologram.CompileError,
         message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{inspect(entity_type)} - the via option must be a relationship name"
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name"
     end
 
     definitions = entity_type.__relationships__()
@@ -441,7 +471,7 @@ defmodule Hologram.Policy.Validator do
       {_name, [_target], _opts} ->
         raise Hologram.CompileError,
           message:
-            "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{inspect(entity_type)} - relationship #{inspect(via)} is to-many, but delegation requires a to-one relationship"
+            "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - relationship #{inspect(via)} is to-many, but delegation requires a to-one relationship"
 
       {_name, _target, _opts} ->
         :ok
@@ -452,7 +482,7 @@ defmodule Hologram.Policy.Validator do
 
         raise Hologram.CompileError,
           message:
-            "unknown relationship #{inspect(via)} in the via option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared relationships are: #{declared_relationships}"
+            "unknown relationship #{inspect(via)} in the via option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
     end
   end
 
@@ -486,15 +516,19 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # The source rides the EDGE rather than being looked up when the cycle is described: by then
+  # the hop is only an entity type and a relationship name, and an entity type can carry several
+  # via lines from different policies.
   defp via_declarations(entity_type) do
     entity_type.__policies__()
-    |> Enum.reject(fn {_operation, _to, via, _predicates} -> is_nil(via) end)
-    |> Enum.map(fn {operation, _to, via, _predicates} ->
-      {operation, entity_type, {via, Entity.relationship_target(entity_type, via)}}
+    |> Enum.zip(entity_type.__policy_sources__())
+    |> Enum.reject(fn {{_operation, _to, via, _predicates}, _source} -> is_nil(via) end)
+    |> Enum.map(fn {{operation, _to, via, _predicates}, source} ->
+      {operation, entity_type, {via, Entity.relationship_target(entity_type, via), source}}
     end)
   end
 
-  # Delegation edges grouped as %{operation => %{entity type => [{relationship name, target type}]}} -
+  # Delegation edges grouped as %{operation => %{entity type => [{relationship name, target type, source}]}} -
   # a via chain delegates the SAME operation, so each operation forms its own independent graph.
   defp via_edges(entity_types) do
     entity_types

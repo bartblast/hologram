@@ -1633,39 +1633,49 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture55.__roles__() == [{:owner, []}]
     end
 
-    test "accepts creator option" do
+    test "accepts granted_to option" do
       defmodule InlineEntityFixture68 do
         use Hologram.Entity
 
-        role :owner, creator: true
+        role :owner, granted_to: :creator
       end
 
-      assert InlineEntityFixture68.__roles__() == [{:owner, [creator: true]}]
+      assert InlineEntityFixture68.__roles__() == [{:owner, [granted_to: :creator]}]
     end
 
-    test "accepts creator option on several roles of one entity type" do
+    test "accepts granted_to option on several roles of one entity type" do
       defmodule InlineEntityFixture69 do
         use Hologram.Entity
 
-        role :author, creator: true
-        role :owner, creator: true
+        role :author, granted_to: :creator
+        role :owner, granted_to: :creator
       end
 
       assert InlineEntityFixture69.__roles__() == [
-               {:author, [creator: true]},
-               {:owner, [creator: true]}
+               {:author, [granted_to: :creator]},
+               {:owner, [granted_to: :creator]}
              ]
     end
 
-    test "rejects creator option other than true" do
+    test "accepts granted_to option set to nil" do
+      defmodule InlineEntityFixture93 do
+        use Hologram.Entity
+
+        role :owner, granted_to: nil
+      end
+
+      assert InlineEntityFixture93.__roles__() == [{:owner, []}]
+    end
+
+    test "rejects granted_to option other than :creator or nil" do
       expected_msg =
-        "invalid creator option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the creator option must be true"
+        "invalid granted_to option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the granted_to option must be :creator or nil"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture70 do
           use Hologram.Entity
 
-          role :owner, creator: false
+          role :owner, granted_to: false
         end
       end
     end
@@ -1724,7 +1734,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown role option" do
       expected_msg =
-        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :creator, :extends"
+        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :extends, :granted_to"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture58 do
@@ -1832,6 +1842,80 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role :owner, extends: :owner
+        end
+      end
+    end
+
+    test "names the policy a role extending an undeclared role was declared in" do
+      defmodule TakenExtendsPolicy do
+        use Hologram.Policy
+
+        role :owner, extends: :editor
+      end
+
+      expected_msg =
+        "unknown role :editor in the extends option of role :owner in Hologram.Entity.ValidatorTest.TakenExtendsEntity, taken from Hologram.Entity.ValidatorTest.TakenExtendsPolicy - declared roles are: :owner, :viewer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule TakenExtendsEntity do
+          use Hologram.Entity
+
+          policy TakenExtendsPolicy
+
+          role :viewer
+        end
+      end
+    end
+
+    test "annotates every hop of a cycle no single policy declares" do
+      defmodule CycleEditorPolicy do
+        use Hologram.Policy
+
+        role :editor, extends: :owner
+      end
+
+      defmodule CycleOwnerPolicy do
+        use Hologram.Policy
+
+        role :owner, extends: :editor
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension in Hologram.Entity.ValidatorTest.TwoPolicyCycleEntity - a role can't extend itself, directly or transitively:
+          * :editor (from Hologram.Entity.ValidatorTest.CycleEditorPolicy) -> :owner (from Hologram.Entity.ValidatorTest.CycleOwnerPolicy) -> :editor\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule TwoPolicyCycleEntity do
+          use Hologram.Entity
+
+          policy CycleEditorPolicy
+          policy CycleOwnerPolicy
+        end
+      end
+    end
+
+    test "leaves a hop the entity type declared itself unannotated" do
+      defmodule MixedCyclePolicy do
+        use Hologram.Policy
+
+        role :editor, extends: :owner
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension in Hologram.Entity.ValidatorTest.MixedCycleEntity - a role can't extend itself, directly or transitively:
+          * :editor (from Hologram.Entity.ValidatorTest.MixedCyclePolicy) -> :owner -> :editor\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule MixedCycleEntity do
+          use Hologram.Entity
+
+          policy MixedCyclePolicy
+
+          role :owner, extends: :editor
         end
       end
     end

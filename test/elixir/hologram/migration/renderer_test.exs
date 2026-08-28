@@ -698,7 +698,13 @@ defmodule Hologram.Migration.RendererTest do
           changes: [default: 0],
           line: 3
         },
-        %{op: :change_role, entity: MyApp.Task, name: :owner, changes: [creator: true], line: 4}
+        %{
+          op: :change_role,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [granted_to: :creator],
+          line: 4
+        }
       ]
 
       result = render(ops, pre)
@@ -710,7 +716,7 @@ defmodule Hologram.Migration.RendererTest do
                model(%{
                  MyApp.Task => %{
                    attributes: [{:priority, :integer, [default: 0, optional: true]}],
-                   roles: [{:owner, [creator: true]}]
+                   roles: [{:owner, [granted_to: :creator]}]
                  }
                })
     end
@@ -963,7 +969,7 @@ defmodule Hologram.Migration.RendererTest do
           op: :change_role,
           entity: MyApp.Task,
           name: :editor,
-          changes: [creator: true],
+          changes: [granted_to: :creator],
           line: 3
         }
       ]
@@ -972,7 +978,9 @@ defmodule Hologram.Migration.RendererTest do
 
       assert result.transactional == []
       assert result.tail == []
-      assert result.post_model == model(%{MyApp.Task => %{roles: [{:editor, [creator: true]}]}})
+
+      assert result.post_model ==
+               model(%{MyApp.Task => %{roles: [{:editor, [granted_to: :creator]}]}})
     end
   end
 end

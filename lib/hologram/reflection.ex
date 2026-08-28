@@ -649,6 +649,23 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if the given term is a policy module (a module that has a "use Hologram.Policy" directive).
+  Otherwise false is returned.
+
+  ## Examples
+
+      iex> policy?(MyApp.Policies.Editable)
+      true
+
+      iex> policy?(Hologram.Reflection)
+      false
+  """
+  @spec policy?(term) :: boolean
+  def policy?(term) do
+    elixir_module?(term) && has_function?(term, :__is_hologram_policy__, 0)
+  end
+
+  @doc """
   Returns true if the given term is a protocol module, or false otherwise.
   """
   @spec protocol?(any) :: boolean

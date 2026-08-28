@@ -31,6 +31,8 @@ defmodule Hologram.Entity do
             role: 2
           ]
 
+        import Hologram.Policy, only: [policy: 1]
+
         @before_compile Entity
 
         @doc """
@@ -56,8 +58,10 @@ defmodule Hologram.Entity do
       end,
       register_attributes_accumulator(),
       register_policies_accumulator(),
+      register_policy_sources_accumulator(),
+      register_role_declarations_accumulator(),
       register_relationships_accumulator(),
-      register_roles_accumulator()
+      register_roles_attribute()
     ] ++ user_entity_marker(opts)
   end
 
@@ -97,11 +101,19 @@ defmodule Hologram.Entity do
       @spec __policies__() :: list({atom, term, atom | nil, keyword})
       def __policies__, do: Enum.reverse(@__policies__)
 
+      @doc false
+      @spec __policy_sources__() :: list(module)
+      def __policy_sources__, do: Enum.reverse(@__policy_sources__)
+
       @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
+
+      @doc false
+      @spec __role_declarations__() :: list({atom, keyword, module})
+      def __role_declarations__, do: Enum.reverse(@__role_declarations__)
 
       @doc """
       Returns the list of role definitions for the compiled entity type, sorted by role name.
@@ -127,7 +139,7 @@ defmodule Hologram.Entity do
     spec = replace_actor_leaves!(spec, __CALLER__.module)
 
     quote do
-      Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec))
+      Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec), __MODULE__)
     end
   end
 
@@ -165,11 +177,12 @@ defmodule Hologram.Entity do
   @doc """
   Accumulates the given role definition in __roles__ module attribute.
   A role is a named grantable capability set of the entity type - role names live in their own namespace, separate from attribute and relationship names.
+  A role name is one role however many places declare it, here and in the policies the entity type takes on: extends targets union, and granted_to follows the last declaration mentioning it.
   """
   @spec role(atom, T.opts()) :: Macro.t()
   defmacro role(name, opts \\ []) do
     quote do
-      Entity.__put_role__(__MODULE__, unquote(name), unquote(opts))
+      Entity.__put_role__(__MODULE__, unquote(name), unquote(opts), __MODULE__)
     end
   end
 
@@ -223,8 +236,8 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec __put_policy__(module, atom, T.opts()) :: :ok
-  def __put_policy__(module, operation, spec) do
+  @spec __put_policy__(module, atom, T.opts(), module) :: :ok
+  def __put_policy__(module, operation, spec, source) do
     Validator.validate_allow!(module, operation, spec)
 
     policy =
@@ -232,30 +245,31 @@ defmodule Hologram.Entity do
        Keyword.drop(spec, [:to, :via])}
 
     Module.put_attribute(module, :__policies__, policy)
+    Module.put_attribute(module, :__policy_sources__, source)
 
     :ok
   end
 
+  # A role name is one role, however many places declare it - a policy taken on, another policy
+  # nested inside it, and the entity type itself. The RAW declarations are kept beside the merged
+  # list, because a merged entry cannot say which source declared which extends target, which is
+  # what an error message about one of them has to name.
+  # Every declaration is validated, then merged:
+  # extends unions, and granted_to follows the LAST declaration that mentions it, a declaration
+  # that omits it having no opinion. Merged options are sorted, so the entry does not depend on
+  # which side declared what.
   @doc false
-  @spec __put_role__(module, atom, T.opts()) :: :ok
-  def __put_role__(module, name, opts) do
+  @spec __put_role__(module, atom, T.opts(), module) :: :ok
+  def __put_role__(module, name, opts, source) do
+    Validator.validate_role!(module, name, opts)
+
+    Module.put_attribute(module, :__role_declarations__, {name, opts, source})
+
     declarations = Module.get_attribute(module, :__roles__)
 
-    case Enum.find(declarations, fn {declared_name, _opts} -> declared_name == name end) do
-      nil ->
-        Validator.validate_role!(module, name, opts)
-        Module.put_attribute(module, :__roles__, {name, opts})
+    Module.put_attribute(module, :__roles__, put_role_declaration(declarations, name, opts))
 
-        :ok
-
-      {^name, ^opts} ->
-        :ok
-
-      {^name, declared_opts} ->
-        raise Hologram.CompileError,
-          message:
-            "conflicting declarations for role #{inspect(name)} in #{inspect(module)}: #{inspect(declared_opts)} and #{inspect(opts)} - repeated role declarations must be identical"
-    end
+    :ok
   end
 
   @doc false
@@ -275,6 +289,14 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  @spec register_policy_sources_accumulator() :: AST.t()
+  def register_policy_sources_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__policy_sources__, accumulate: true)
+    end
+  end
+
+  @doc false
   @spec register_relationships_accumulator() :: AST.t()
   def register_relationships_accumulator do
     quote do
@@ -283,10 +305,18 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec register_roles_accumulator() :: AST.t()
-  def register_roles_accumulator do
+  @spec register_role_declarations_accumulator() :: AST.t()
+  def register_role_declarations_accumulator do
     quote do
-      Module.register_attribute(__MODULE__, :__roles__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__role_declarations__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_roles_attribute() :: AST.t()
+  def register_roles_attribute do
+    quote do
+      @__roles__ []
     end
   end
 
@@ -299,6 +329,46 @@ defmodule Hologram.Entity do
       end)
 
     target_type
+  end
+
+  defp merge_role_opts(declared_opts, opts) do
+    extends =
+      [declared_opts, opts]
+      |> Enum.flat_map(&List.wrap(&1[:extends]))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    granted_to =
+      if Keyword.has_key?(opts, :granted_to) do
+        opts[:granted_to]
+      else
+        declared_opts[:granted_to]
+      end
+
+    Enum.reject([extends: extends, granted_to: granted_to], fn {_key, value} ->
+      value in [[], nil]
+    end)
+  end
+
+  # granted_to: nil is the neutral spelling of "no grant" - the same fact as never mentioning
+  # the option - so it is dropped rather than stored, and one role has one spelling of it.
+  # Nothing else is normalized here: a first declaration keeps extends exactly as written, and
+  # only a merge turns it into a list.
+  # A new name is PREPENDED, which is what the accumulating attribute did before: both readers
+  # of :__roles__ (the generated __roles__/0 and Validator.validate_roles!/1) sort, so the
+  # stored order carries nothing.
+  defp put_role_declaration(declarations, name, opts) do
+    if Keyword.has_key?(declarations, name) do
+      Enum.map(declarations, fn
+        {^name, declared_opts} -> {name, merge_role_opts(declared_opts, opts)}
+        declaration -> declaration
+      end)
+    else
+      kept_opts =
+        Keyword.reject(opts, fn {key, value} -> key == :granted_to and is_nil(value) end)
+
+      [{name, kept_opts} | declarations]
+    end
   end
 
   # The replacement happens on the AST, before the spec is evaluated in the module body -
