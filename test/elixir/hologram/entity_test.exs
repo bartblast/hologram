@@ -64,6 +64,32 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__policy_sources__/0" do
+    test "returns empty list for entity type with no policy declarations" do
+      assert Module1.__policy_sources__() == []
+    end
+
+    test "lines up with __policies__/0 across taken and local lines" do
+      defmodule PolicySourcesEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        allow :delete, to: :viewer
+      end
+
+      assert PolicySourcesEntityFixture.__policies__() == [
+               {:read, :viewer, nil, []},
+               {:delete, :viewer, nil, []}
+             ]
+
+      assert PolicySourcesEntityFixture.__policy_sources__() == [
+               Hologram.Test.Fixtures.Policy.Shared.Module1,
+               PolicySourcesEntityFixture
+             ]
+    end
+  end
+
   describe "__relationships__/0" do
     test "returns empty list for entity type with no relationship declarations" do
       assert Module1.__relationships__() == []
@@ -74,6 +100,29 @@ defmodule Hologram.EntityTest do
                {:a, [Module2], []},
                {:b, Module2, [optional: true]},
                {:c, Module1, []}
+             ]
+    end
+  end
+
+  describe "__role_declarations__/0" do
+    test "returns empty list for entity type with no role declarations" do
+      assert Module1.__role_declarations__() == []
+    end
+
+    test "keeps every declaration of a unioned role beside the module it was written in" do
+      defmodule RoleDeclarationsEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :viewer, granted_to: :creator
+      end
+
+      assert RoleDeclarationsEntityFixture.__roles__() == [{:viewer, [granted_to: :creator]}]
+
+      assert RoleDeclarationsEntityFixture.__role_declarations__() == [
+               {:viewer, [], Hologram.Test.Fixtures.Policy.Shared.Module1},
+               {:viewer, [granted_to: :creator], RoleDeclarationsEntityFixture}
              ]
     end
   end

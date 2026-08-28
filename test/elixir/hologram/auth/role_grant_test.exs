@@ -69,6 +69,10 @@ defmodule Hologram.Auth.RoleGrantTest do
     assert RoleGrant.__policies__() == []
   end
 
+  test "__policy_sources__/0" do
+    assert RoleGrant.__policy_sources__() == []
+  end
+
   describe "__relationships__/0" do
     test "targets the designated user entity type" do
       assert RoleGrant.__relationships__() == [
@@ -76,6 +80,10 @@ defmodule Hologram.Auth.RoleGrantTest do
                {:user, Module14, []}
              ]
     end
+  end
+
+  test "__role_declarations__/0" do
+    assert RoleGrant.__role_declarations__() == []
   end
 
   test "__roles__/0" do
@@ -103,6 +111,18 @@ defmodule Hologram.Auth.RoleGrantTest do
 
     # The hardcoded map above states the fields but cannot notice one the macro GAINS - it kept
     # passing when every generated entity grew a __meta__ and this hand-written struct did not.
+    # Module1 declares nothing, so its exported functions are exactly the set use Hologram.Entity
+    # owns. The struct-field twin below cannot see a FUNCTION the macro gains, which is how
+    # __meta__ slipped in once already - this one binds every future addition.
+    test "exports every function the entity macro puts on an entity that declares nothing" do
+      macro_functions = Module1.__info__(:functions)
+      own_functions = RoleGrant.__info__(:functions)
+
+      missing = macro_functions -- own_functions
+
+      assert missing == []
+    end
+
     # Module1 declares nothing, so its fields are exactly the set use Hologram.Entity owns.
     test "carries every field the entity macro puts on an entity that declares nothing" do
       macro_fields =

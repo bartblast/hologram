@@ -17,6 +17,55 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
+  describe "__declaration_sources__/0" do
+    test "returns empty list for a policy module with no declarations" do
+      defmodule EmptySourcesPolicyFixture do
+        use Hologram.Policy
+      end
+
+      assert EmptySourcesPolicyFixture.__declaration_sources__() == []
+    end
+
+    test "names the policy module itself for its own declarations" do
+      defmodule OwnSourcesPolicyFixture do
+        use Hologram.Policy
+
+        role :viewer
+
+        allow :read, to: :viewer
+      end
+
+      assert OwnSourcesPolicyFixture.__declaration_sources__() == [
+               OwnSourcesPolicyFixture,
+               OwnSourcesPolicyFixture
+             ]
+    end
+
+    test "keeps the module a taken declaration was written in" do
+      defmodule TakenSourcesPolicyFixture do
+        use Hologram.Policy
+
+        role :viewer
+
+        allow :read, to: :viewer
+      end
+
+      defmodule TakingSourcesPolicyFixture do
+        use Hologram.Policy
+
+        policy TakenSourcesPolicyFixture
+
+        allow :update, to: :viewer
+      end
+
+      assert TakingSourcesPolicyFixture.__declaration_sources__() == [
+               TakenSourcesPolicyFixture,
+               TakenSourcesPolicyFixture,
+               TakingSourcesPolicyFixture
+             ]
+    end
+  end
+
   describe "__declarations__/0" do
     test "returns empty list for a policy module with no declarations" do
       defmodule EmptyDeclarationsPolicyFixture do
@@ -210,6 +259,13 @@ defmodule Hologram.PolicyTest do
                {:read, :viewer, nil, []},
                {:update, :viewer, nil, []},
                {:delete, :viewer, nil, []}
+             ]
+
+      # A line taken through two hops names the module whose body wrote it, not the last hop.
+      assert NestedEntityFixture.__policy_sources__() == [
+               Policy.Shared.Module1,
+               MiddlePolicyFixture,
+               OuterPolicyFixture
              ]
     end
 

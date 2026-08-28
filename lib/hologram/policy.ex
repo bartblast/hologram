@@ -78,6 +78,7 @@ defmodule Hologram.Policy do
       def __is_hologram_policy__, do: true
 
       Module.register_attribute(__MODULE__, :__policy_declarations__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__policy_declaration_sources__, accumulate: true)
 
       @before_compile Hologram.Policy
     end
@@ -90,6 +91,11 @@ defmodule Hologram.Policy do
       |> Module.get_attribute(:__policy_declarations__)
       |> Enum.reverse()
 
+    declaration_sources =
+      env.module
+      |> Module.get_attribute(:__policy_declaration_sources__)
+      |> Enum.reverse()
+
     quote do
       @doc """
       Returns the role and allow declarations of the callee policy module, in declaration order.
@@ -97,6 +103,10 @@ defmodule Hologram.Policy do
       """
       @spec __declarations__() :: list(tuple)
       def __declarations__, do: unquote(Macro.escape(declarations))
+
+      @doc false
+      @spec __declaration_sources__() :: list(module)
+      def __declaration_sources__, do: unquote(Macro.escape(declaration_sources))
     end
   end
 
@@ -105,7 +115,9 @@ defmodule Hologram.Policy do
   def __take__(module, policy_module) do
     validate_policy_module!(module, policy_module)
 
-    Enum.each(policy_module.__declarations__(), &replay(module, &1))
+    policy_module.__declarations__()
+    |> Enum.zip(policy_module.__declaration_sources__())
+    |> Enum.each(fn {declaration, source} -> replay(module, declaration, source) end)
   end
 
   @doc """
@@ -124,6 +136,7 @@ defmodule Hologram.Policy do
       EntityValidator.validate_allow!(__MODULE__, operation, spec)
 
       @__policy_declarations__ {:allow, operation, spec}
+      @__policy_declaration_sources__ __MODULE__
     end
   end
 
@@ -163,6 +176,7 @@ defmodule Hologram.Policy do
       EntityValidator.validate_role!(__MODULE__, name, opts)
 
       @__policy_declarations__ {:role, name, opts}
+      @__policy_declaration_sources__ __MODULE__
     end
   end
 
@@ -366,20 +380,23 @@ defmodule Hologram.Policy do
   # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
   # that resource type's read-grants roles, held on the very resource the grant row names - so
   # the check reads grant rows through grant rows, never through this policy again.
-  defp replay(module, declaration) do
+  # The source travels with the declaration rather than being recomputed here: a line taken
+  # through several policies names the module whose BODY wrote it, not the last hop it came by.
+  defp replay(module, declaration, source) do
     if Module.has_attribute?(module, :__policies__) do
-      replay_into_entity(module, declaration)
+      replay_into_entity(module, declaration, source)
     else
       Module.put_attribute(module, :__policy_declarations__, declaration)
+      Module.put_attribute(module, :__policy_declaration_sources__, source)
     end
   end
 
-  defp replay_into_entity(module, {:allow, operation, spec}) do
-    Entity.__put_policy__(module, operation, spec)
+  defp replay_into_entity(module, {:allow, operation, spec}, source) do
+    Entity.__put_policy__(module, operation, spec, source)
   end
 
-  defp replay_into_entity(module, {:role, name, opts}) do
-    Entity.__put_role__(module, name, opts)
+  defp replay_into_entity(module, {:role, name, opts}, source) do
+    Entity.__put_role__(module, name, opts, source)
   end
 
   defp role_grant_read_rules do

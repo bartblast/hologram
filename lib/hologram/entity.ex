@@ -48,6 +48,8 @@ defmodule Hologram.Entity do
       end,
       register_attributes_accumulator(),
       register_policies_accumulator(),
+      register_policy_sources_accumulator(),
+      register_role_declarations_accumulator(),
       register_relationships_accumulator(),
       register_roles_attribute()
     ] ++ user_entity_marker(opts)
@@ -89,11 +91,19 @@ defmodule Hologram.Entity do
       @spec __policies__() :: list({atom, term, atom | nil, keyword})
       def __policies__, do: Enum.reverse(@__policies__)
 
+      @doc false
+      @spec __policy_sources__() :: list(module)
+      def __policy_sources__, do: Enum.reverse(@__policy_sources__)
+
       @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
+
+      @doc false
+      @spec __role_declarations__() :: list({atom, keyword, module})
+      def __role_declarations__, do: Enum.reverse(@__role_declarations__)
 
       @doc """
       Returns the list of role definitions for the compiled entity type, sorted by role name.
@@ -119,7 +129,7 @@ defmodule Hologram.Entity do
     spec = replace_actor_leaves!(spec, __CALLER__.module)
 
     quote do
-      Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec))
+      Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec), __MODULE__)
     end
   end
 
@@ -162,7 +172,7 @@ defmodule Hologram.Entity do
   @spec role(atom, T.opts()) :: Macro.t()
   defmacro role(name, opts \\ []) do
     quote do
-      Entity.__put_role__(__MODULE__, unquote(name), unquote(opts))
+      Entity.__put_role__(__MODULE__, unquote(name), unquote(opts), __MODULE__)
     end
   end
 
@@ -223,8 +233,8 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec __put_policy__(module, atom, T.opts()) :: :ok
-  def __put_policy__(module, operation, spec) do
+  @spec __put_policy__(module, atom, T.opts(), module) :: :ok
+  def __put_policy__(module, operation, spec, source) do
     Validator.validate_allow!(module, operation, spec)
 
     policy =
@@ -232,19 +242,25 @@ defmodule Hologram.Entity do
        Keyword.drop(spec, [:to, :via])}
 
     Module.put_attribute(module, :__policies__, policy)
+    Module.put_attribute(module, :__policy_sources__, source)
 
     :ok
   end
 
   # A role name is one role, however many places declare it - a policy taken on, another policy
-  # nested inside it, and the entity type itself. Every declaration is validated, then merged:
+  # nested inside it, and the entity type itself. The RAW declarations are kept beside the merged
+  # list, because a merged entry cannot say which source declared which extends target, which is
+  # what an error message about one of them has to name.
+  # Every declaration is validated, then merged:
   # extends unions, and granted_to follows the LAST declaration that mentions it, a declaration
   # that omits it having no opinion. Merged options are sorted, so the entry does not depend on
   # which side declared what.
   @doc false
-  @spec __put_role__(module, atom, T.opts()) :: :ok
-  def __put_role__(module, name, opts) do
+  @spec __put_role__(module, atom, T.opts(), module) :: :ok
+  def __put_role__(module, name, opts, source) do
     Validator.validate_role!(module, name, opts)
+
+    Module.put_attribute(module, :__role_declarations__, {name, opts, source})
 
     declarations = Module.get_attribute(module, :__roles__)
 
@@ -270,10 +286,26 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  @spec register_policy_sources_accumulator() :: AST.t()
+  def register_policy_sources_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__policy_sources__, accumulate: true)
+    end
+  end
+
+  @doc false
   @spec register_relationships_accumulator() :: AST.t()
   def register_relationships_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_role_declarations_accumulator() :: AST.t()
+  def register_role_declarations_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__role_declarations__, accumulate: true)
     end
   end
 

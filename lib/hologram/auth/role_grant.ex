@@ -78,6 +78,13 @@ defmodule Hologram.Auth.RoleGrant do
   def __policies__, do: []
 
   @doc """
+  Returns the module each policy definition of the role grant entity type was declared in, in the order of __policies__/0.
+  Empty - the visibility policy of role grants is framework-supplied, not declared.
+  """
+  @spec __policy_sources__() :: list(module)
+  def __policy_sources__, do: []
+
+  @doc """
   Returns the list of relationship definitions for the role grant entity type, sorted by relationship name.
   Both targets are the app's designated user entity type, computed from the compiled data model.
   """
@@ -87,6 +94,13 @@ defmodule Hologram.Auth.RoleGrant do
 
     [{:granted_by, user_entity, [optional: true]}, {:user, user_entity, []}]
   end
+
+  @doc """
+  Returns the role declarations of the role grant entity type as written, with the module each was declared in.
+  Empty - roles are granted on resources, and role grant rows are not resources.
+  """
+  @spec __role_declarations__() :: list({atom, keyword, module})
+  def __role_declarations__, do: []
 
   @doc """
   Returns the list of role definitions for the role grant entity type.
