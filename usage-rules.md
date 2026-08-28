@@ -11,6 +11,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Cookie keys are strings (`"my_cookie"`), session keys are atoms or strings (`:user_id`). Mixing these up causes errors.
 - `init/3` for pages receives URL params, not props. Don't confuse with component `init/3` which receives props.
 - Never give a state key the same name as a prop. Templates merge props and state with state winning, so the state key shadows the prop entirely. Copying a prop into a same-named state key in `init` is the usual cause - `init` runs once, so the copy never refreshes and fresh props never reach the template. Use distinct names (an `:initial_count` prop feeding a `:count` state key).
+- Never copy a prop into state so an action can read it. Read it from the struct: `component.props.name`. Props follow whatever the parent passes, so an action always reads the current value.
 - Stateless components cannot handle events. You need a `cid` to make a component stateful.
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
 - Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
@@ -64,6 +65,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Restrict a prop to a set of values with `prop :size, :atom, values: [:small, :large]`. A `default:` outside its own `values:` list is a compile error.
 - A missing required prop is caught at compile time wherever a template writes the component out, and so is any value the compiler can evaluate without running anything: plain text with no interpolation, or a literal - including composites like `{[:small, :large]}` and `{%{size: :small}}`.
 - Everything else is checked while rendering and raises `Hologram.PropError`: a `...{@props}` spread, a `<{@module} />` dynamic tag, a `from_context:` prop, an interpolated value (`size="a{@b}"`), and any expression, including one nested inside an otherwise literal value (`{[:small, @other]}`).
+- Read a prop in an action with `component.props.name`. Defaults and context-sourced props are in there too, and so is `cid`.
 - Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
 - Each stateful instance is initialized exactly once: `init/3` (props, component, server) runs when its lifecycle starts during server-side page rendering, `init/2` (props, component) when it is dynamically added to an already-loaded page.
 - `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.
@@ -81,6 +83,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - `init/3` receives URL params, not props. Use `param :name, :type` to declare typed route parameters.
 - Supported param types: `:atom`, `:float`, `:integer`, `:string`.
 - `param` takes no options yet - passing one is a compile error.
+- A page's params are its props, so an action reads a URL param with `component.props.name`, the same way a component reads a prop.
 - The page's component ID (cid) is always `"page"`. Use `target: "page"` to target actions at it.
 - Hologram uses a search tree router, not ordered routing. Static segments always match before parameterized ones. You cannot have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`) - use distinct prefixes instead.
 

@@ -336,13 +336,15 @@ defmodule Hologram.Template.Renderer do
     # Realtime-agnostic means the controller supplies it after `Realtime.get_self_echoes/1`, into
     # the HTML through `interpolate_self_echoes_js/2` and into the navigation payload as a field.
 
+    component_registry_for_client = hollow_props(component_registry_with_page_struct)
+
     # The values a mount reads, grouped because they travel together. The HTML projection inlines
     # all four, since a loaded document has no other channel for them. A navigation carries three of
     # them as payload fields instead - not the asset manifest, which is a global the initial
     # document sets once and a navigation therefore already has.
     mount_data_js = %{
       asset_manifest: AssetManifestCache.get_manifest_js(),
-      component_registry: Encoder.encode_term!(component_registry_with_page_struct),
+      component_registry: Encoder.encode_term!(component_registry_for_client),
       page_module: Encoder.encode_term!(page_module),
       page_params: Encoder.encode_term!(params)
     }
@@ -814,12 +816,31 @@ defmodule Hologram.Template.Renderer do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
+  # The props are both handed to init and written back onto whatever it returned, so the field holds
+  # the props the render actually used rather than anything a handler put there. That is what lets a
+  # later handler read a prop's current value instead of a copy taken when the component mounted.
+  # A page reaches this with its URL params in the props position, which is how its params land on
+  # its struct too.
+  # The client works every struct's props out again during its first render, so sending them would
+  # put each prop value in the payload a second time - once inside the parent's state, once as the
+  # child's props - for the client to immediately overwrite. The key stays and holds an empty map:
+  # the client reads the field with :maps.get/2, which raises on a key that isn't there. What this
+  # relies on is that nothing runs a handler before that first render, which is why #mountPage
+  # (hologram.mjs) says so where it orders its drains.
+  defp hollow_props(component_registry) do
+    Map.new(component_registry, fn {cid, %{module: module, struct: struct}} ->
+      {cid, %{module: module, struct: %{struct | props: %{}}}}
+    end)
+  end
+
   defp init_component(module, props, server_struct) do
+    initial_component_struct = %Component{props: props}
+
     init_result =
       if Reflection.has_function?(module, :init, 3) do
-        module.init(props, %Component{}, server_struct)
+        module.init(props, initial_component_struct, server_struct)
       else
-        {%Component{}, server_struct}
+        {initial_component_struct, server_struct}
       end
 
     {component_struct, returned_server_struct} =
@@ -831,10 +852,10 @@ defmodule Hologram.Template.Renderer do
           {component_struct, server_struct}
 
         %Server{} = mutated_server_struct ->
-          {%Component{}, mutated_server_struct}
+          {initial_component_struct, mutated_server_struct}
       end
 
-    {component_struct, %{returned_server_struct | cid: nil}}
+    {%{component_struct | props: props}, %{returned_server_struct | cid: nil}}
   end
 
   defp inject_default_prop_values(props, module) do
