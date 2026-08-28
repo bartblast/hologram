@@ -9,8 +9,9 @@
     Hologram.Middleware,
     Hologram.Middleware.Builder,
     Hologram.Page,
-    # Doctor reads a module's docs from the LAST __using__ it finds in the file, which here is the
-    # one __before_compile__ generates - so the real __using__'s @doc and @spec go unseen.
+    # Doctor harvests a generated function's @doc and @spec from a __using__ block only, while
+    # counting every def it finds in the file - and __declarations__/0 is generated in
+    # __before_compile__. Same reason Hologram.Entity is on this list.
     Hologram.Policy
   ],
   ignore_paths: [~r(^benchmarks/*), ~r(^test/*)],

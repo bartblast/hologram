@@ -157,6 +157,7 @@ defmodule Hologram.Entity do
   @doc """
   Accumulates the given role definition in __roles__ module attribute.
   A role is a named grantable capability set of the entity type - role names live in their own namespace, separate from attribute and relationship names.
+  A role name is one role however many places declare it, here and in the policies the entity type takes on: extends targets union, and granted_to follows the last declaration mentioning it.
   """
   @spec role(atom, T.opts()) :: Macro.t()
   defmacro role(name, opts \\ []) do

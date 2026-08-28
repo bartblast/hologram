@@ -2,8 +2,8 @@ defmodule Hologram.Policy do
   @moduledoc """
   The construct for policies shared by several entity types.
 
-  A policy module holds `role` and `allow` declarations written exactly as they are written
-  inside an entity type:
+  `use Hologram.Policy` defines a policy module, which holds `role` and `allow` declarations
+  written exactly as they are written inside an entity type:
 
       defmodule MyApp.Policies.AdminManaged do
         use Hologram.Policy
@@ -15,24 +15,41 @@ defmodule Hologram.Policy do
         allow :delete, to: Admin
       end
 
-  An entity type takes them on with `use`, and keeps declaring its own alongside:
+  `policy Mod` takes one on, and the taking module keeps declaring its own alongside:
 
       defmodule MyApp.Invoice do
         use Hologram.Entity
-        use MyApp.Policies.AdminManaged
 
         attribute :number, :string
+
+        policy MyApp.Policies.AdminManaged
 
         role :admin
         allow :manage_roles, to: :admin
       end
 
-  Policy modules compose: one may `use` another, and an entity type taking on the outer one
-  receives the declarations of both. A role declared by several of them collapses into one
-  declaration, as long as every declaration of it is identical.
+  The canonical order inside an entity type is attributes, relationships, `policy` lines, roles,
+  allows. Policy modules compose with the same line - one may take another, to any depth - and an
+  entity type taking on the outer one receives the declarations of both.
+
+  A role name is one role, however many places declare it. Every declaration adds to it: `extends`
+  targets union, and `granted_to` follows the last declaration that mentions it, a declaration
+  omitting the option having no opinion. So a policy can carry a role's extension while the entity
+  type adds the creator grant, without either repeating the other:
+
+      # in the policy
+      role :owner, extends: :editor
+
+      # in the entity type
+      role :owner, granted_to: :creator
+
+      # the entity type's __roles__/0
+      [owner: [extends: [:editor], granted_to: :creator]]
+
+  Rules accumulate the same way and are OR'd, so the order of `allow` lines carries no meaning.
 
   Declarations are evaluated where they are written, so aliases, module attributes and helper
-  functions in a policy module mean what they mean there - the entity type receives values,
+  functions in a policy module mean what they mean there - the taking module receives values,
   not code to re-resolve.
   """
 
@@ -73,16 +90,6 @@ defmodule Hologram.Policy do
       |> Module.get_attribute(:__policy_declarations__)
       |> Enum.reverse()
 
-    # The replay is a plain call executed in the including module's body, not a macro expanded
-    # into it: a module body is fully expanded before any of it runs, so at expansion time the
-    # accumulators use Hologram.Entity registers do not exist yet.
-    replay_calls =
-      Enum.map(declarations, fn declaration ->
-        quote do
-          Hologram.Policy.__replay__(__MODULE__, unquote(Macro.escape(declaration)))
-        end
-      end)
-
     quote do
       @doc """
       Returns the role and allow declarations of the callee policy module, in declaration order.
@@ -90,30 +97,7 @@ defmodule Hologram.Policy do
       """
       @spec __declarations__() :: list(tuple)
       def __declarations__, do: unquote(Macro.escape(declarations))
-
-      defmacro __using__(_opts) do
-        unquote(Macro.escape({:__block__, [], replay_calls}))
-      end
     end
-  end
-
-  @doc false
-  @spec __replay__(module, tuple) :: :ok
-  def __replay__(module, declaration) do
-    cond do
-      Module.has_attribute?(module, :__policies__) ->
-        replay_into_entity(module, declaration)
-
-      Module.has_attribute?(module, :__policy_declarations__) ->
-        Module.put_attribute(module, :__policy_declarations__, declaration)
-
-      true ->
-        raise Hologram.CompileError,
-          message:
-            "policies can be used only in a module with use Hologram.Entity or use Hologram.Policy - #{inspect(module)} has neither"
-    end
-
-    :ok
   end
 
   @doc false
