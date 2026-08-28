@@ -363,6 +363,12 @@ defmodule Hologram.Compiler.CallGraph do
     {FunctionClauseError, :message, 1},
     {Hologram.Auth, :can?, 3},
     {Hologram.Entity, :generate_id, 0},
+    # Construction reads what an entity type DECLARES - its defaults, its relationships, the
+    # attributes a caller may set - and an entity module ships no reflection to the client. The
+    # port reads the model the build bakes instead, for the reason the query stages do, and
+    # keeping the transpiled originals out of the bundle is what makes that the only answer.
+    {Hologram.Entity, :new, 1},
+    {Hologram.Entity, :new, 2},
     {Hologram.JS, :call, 4},
     {Hologram.JS, :delete, 3},
     {Hologram.JS, :dispatch_event, 5},

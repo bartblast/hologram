@@ -2086,6 +2086,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert is_list(result)
     assert {Kernel, :inspect, 1} in result
     assert {String, :upcase, 1} in result
+
+    assert {Hologram.Entity, :new, 1} in result
+    assert {Hologram.Entity, :new, 2} in result
   end
 
   describe "maybe_load/2" do
