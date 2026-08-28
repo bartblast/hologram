@@ -2092,15 +2092,21 @@ defmodule Hologram.Compiler.CallGraphTest do
   # function is simply gone: the browser answers a call to it with UndefinedFunctionError, which
   # no Elixir test and no JavaScript test of the port itself can see, because both call the port
   # directly rather than through the interpreter's registry.
+  #
+  # Matched over ANY whitespace between the two arguments rather than over the newline and indent
+  # the formatter happens to write: a Windows checkout reads that file with CRLF, and a run there
+  # found every one of them missing.
   test "every manually ported Elixir MFA is defined in the client runtime" do
     runtime_js = File.read!(@runtime_js_path)
 
     unregistered =
       Enum.reject(manually_ported_elixir_mfas(), fn {module, function, arity} ->
-        registration =
-          ~s/"#{Reflection.module_name(module)}",\n      "#{function}\/#{arity}",/
+        module_name = Regex.escape(Reflection.module_name(module))
+        function_name = Regex.escape("#{function}/#{arity}")
 
-        String.contains?(runtime_js, registration)
+        registration = ~r/"#{module_name}",\s*"#{function_name}",/
+
+        Regex.match?(registration, runtime_js)
       end)
 
     assert unregistered == []
