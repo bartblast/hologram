@@ -5,7 +5,6 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Note
@@ -28,12 +27,12 @@ defmodule HologramFeatureTests.PoliciesTest do
   feature "renders only unconditionally readable rows for an anonymous session", %{
     session: session
   } do
-    Document
-    |> Entity.new(public: true, title: "public_document")
+    %{public: true, title: "public_document"}
+    |> Document.new()
     |> DB.create!()
 
-    Document
-    |> Entity.new(title: "private_document")
+    %{title: "private_document"}
+    |> Document.new()
     |> DB.create!()
 
     session
@@ -45,21 +44,21 @@ defmodule HologramFeatureTests.PoliciesTest do
 
   feature "renders an included row only when the session may read it", %{session: session} do
     public_folder =
-      Folder
-      |> Entity.new(name: "shared_folder", public: true)
+      %{name: "shared_folder", public: true}
+      |> Folder.new()
       |> DB.create!()
 
     private_folder =
-      Folder
-      |> Entity.new(name: "locked_folder")
+      %{name: "locked_folder"}
+      |> Folder.new()
       |> DB.create!()
 
-    Document
-    |> Entity.new(folder_id: public_folder.id, public: true, title: "filed_document")
+    %{folder_id: public_folder.id, public: true, title: "filed_document"}
+    |> Document.new()
     |> DB.create!()
 
-    Document
-    |> Entity.new(folder_id: private_folder.id, public: true, title: "secret_document")
+    %{folder_id: private_folder.id, public: true, title: "secret_document"}
+    |> Document.new()
     |> DB.create!()
 
     session
@@ -95,12 +94,12 @@ defmodule HologramFeatureTests.PoliciesTest do
   end
 
   feature "reads every row on the server's authority", %{session: session} do
-    Document
-    |> Entity.new(title: "hidden_document")
+    %{title: "hidden_document"}
+    |> Document.new()
     |> DB.create!()
 
-    Document
-    |> Entity.new(public: true, title: "public_document")
+    %{public: true, title: "public_document"}
+    |> Document.new()
     |> DB.create!()
 
     session
@@ -112,12 +111,12 @@ defmodule HologramFeatureTests.PoliciesTest do
   end
 
   feature "reads only the rows the session user may read", %{session: session} do
-    Document
-    |> Entity.new(title: "hidden_document")
+    %{title: "hidden_document"}
+    |> Document.new()
     |> DB.create!()
 
-    Document
-    |> Entity.new(public: true, title: "public_document")
+    %{public: true, title: "public_document"}
+    |> Document.new()
     |> DB.create!()
 
     session
