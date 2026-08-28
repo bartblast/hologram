@@ -2114,9 +2114,24 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module48, @params, @server, @opts)
 
       expected =
-        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([[Type.atom("cid"), Type.bitstring("layout")]])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
+        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
 
       assert String.contains?(html, expected)
+    end
+
+    test "keep the props out of the interpolated component structs JS" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      params = %{key_1: "param_value_1", key_2: "param_value_2"}
+
+      %{component_registry: component_registry, mount_data: mount_data} =
+        render_page(Module21, params, @server, @opts)
+
+      # The renderer keeps them; only what the client is sent is hollowed, and the key stays.
+      assert component_registry["page"].struct.props == params
+
+      refute mount_data.component_registry =~ "param_value_1"
+      assert mount_data.component_registry =~ ~s/[Type.atom("props"), Type.map([])]/
     end
 
     test "interpolate page module JS" do

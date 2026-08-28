@@ -1306,6 +1306,10 @@ export default class Hologram {
     }
 
     window.requestAnimationFrame(() => {
+      // The registry arrives with every struct's props empty - this render is what writes them, so
+      // that the payload doesn't carry each prop value a second time - which is one more reason
+      // nothing above may run a handler before this call, and why every drain below it stays below
+      // it.
       $.render();
 
       if ($.#scrollPosition) {
