@@ -6481,6 +6481,7 @@ describe("Renderer", () => {
             module: Type.alias(
               "Hologram.Test.Fixtures.Template.Renderer.Module1",
             ),
+            props: Type.map([[Type.atom("cid"), cid]]),
           }),
         ],
       ]);
@@ -6550,6 +6551,12 @@ describe("Renderer", () => {
             module: Type.alias(
               "Hologram.Test.Fixtures.Template.Renderer.Module2",
             ),
+            props: Type.map([
+              [Type.atom("a"), Type.bitstring("ddd")],
+              [Type.atom("b"), Type.integer(222)],
+              [Type.atom("c"), Type.bitstring("fff333hhh")],
+              [Type.atom("cid"), cid],
+            ]),
           }),
         ],
       ]);
@@ -6648,6 +6655,86 @@ describe("Renderer", () => {
             }),
           ],
         ]),
+      );
+    });
+
+    it("refreshes the props of an already-initialized component on every render", () => {
+      // Module2 declares props but no init/2, so it can only be rendered already registered -
+      // which is exactly the path that used to leave the props at whatever init put there.
+      function module2Node(propAValue) {
+        return Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid]]),
+            ]),
+            Type.tuple([
+              Type.bitstring("a"),
+              Type.keywordList([
+                [Type.atom("text"), Type.bitstring(propAValue)],
+              ]),
+            ]),
+            Type.tuple([
+              Type.bitstring("b"),
+              Type.keywordList([
+                [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+              ]),
+            ]),
+            Type.tuple([
+              Type.bitstring("c"),
+              Type.keywordList([[Type.atom("text"), Type.bitstring("ccc")]]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+      }
+
+      function expectedProps(propAValue) {
+        return Type.map([
+          [Type.atom("a"), Type.bitstring(propAValue)],
+          [Type.atom("b"), Type.integer(222)],
+          [Type.atom("c"), Type.bitstring("ccc")],
+          [Type.atom("cid"), cid],
+        ]);
+      }
+
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+      );
+
+      Renderer.renderDom(
+        module2Node("first"),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("props"),
+          ComponentRegistry.getComponentStruct(cid),
+        ),
+        expectedProps("first"),
+      );
+
+      Renderer.renderDom(
+        module2Node("second"),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("props"),
+          ComponentRegistry.getComponentStruct(cid),
+        ),
+        expectedProps("second"),
       );
     });
 
@@ -7465,6 +7552,7 @@ describe("Renderer", () => {
               module: Type.alias(
                 "Hologram.Test.Fixtures.Template.Renderer.Module1",
               ),
+              props: Type.map([[Type.atom("cid"), cid]]),
             }),
           ],
         ]),
@@ -7608,6 +7696,7 @@ describe("Renderer", () => {
               module: Type.alias(
                 "Hologram.Test.Fixtures.Template.Renderer.Module1",
               ),
+              props: Type.map([[Type.atom("cid"), cid]]),
             }),
           ],
         ]),

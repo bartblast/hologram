@@ -2148,6 +2148,11 @@ export default class Renderer {
     const [componentState, componentEmittedContext] =
       Renderer.#maybeInitComponent(cid, moduleProxy, props);
 
+    // Rewritten on every render rather than only at init, so a handler reading a prop gets the
+    // value the latest render used rather than one taken when the component mounted. Runs after
+    // #maybeInitComponent, which is what creates the registry entry on a first render.
+    ComponentRegistry.putComponentProps(cid, props);
+
     const vars = Erlang_Maps["merge/2"](props, componentState);
     const mergedContext = Erlang_Maps["merge/2"](
       context,
