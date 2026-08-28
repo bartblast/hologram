@@ -1488,9 +1488,32 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
-  # What a client needs to read its own rows: a value's type is not recoverable from the value
-  # itself - a date, an enum and a uuid all arrive as strings - so reading one back means knowing
-  # the attribute it belongs to, which is what this says.
+  # A default travels as the ENCODED TERM the declared literal becomes in transpiled code, rather
+  # than as the way the wire spells the same value: the client applies it to a struct field, and a
+  # struct field holds the literal the developer wrote. The two are not interchangeable - a float
+  # attribute takes both `default: 5` and `default: 5.0`, which the wire spells alike and the term
+  # encoder keeps apart, and a struct built on the client has to hold the one that was declared.
+  #
+  # Only the attributes declaring one are named - an attribute with no default has nothing to
+  # apply, and the reader fills its field the way an absent value is filled anyway.
+  defp render_defaults(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
+    |> Enum.map(fn {name, _type, opts} ->
+      default =
+        opts
+        |> Keyword.fetch!(:default)
+        |> Encoder.encode_term!()
+
+      {Atom.to_string(name), default}
+    end)
+    |> render_json_object()
+  end
+
+  # What a client needs to read its own rows, and to build one: a value's type is not recoverable
+  # from the value itself - a date, an enum and a uuid all arrive as strings - so reading one back
+  # means knowing the attribute it belongs to, which is what this says. Building one means knowing
+  # what the declaration fills in for an attribute nobody set, which is what the defaults say.
   #
   # It rides with the bundle rather than with the entity modules, for two reasons. A module says
   # this through functions nothing calls statically, so nothing keeps them: the caller names them
@@ -1528,6 +1551,7 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"attributes", attributes},
+      {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},

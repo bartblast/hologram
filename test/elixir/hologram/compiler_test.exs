@@ -1081,10 +1081,26 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"enumValues":{"c":["x","y"]},"policy":{},/ <>
+                 ~s/"updated_at":"datetime"},"defaults":{"c":Type.atom("x")},/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"policy":{},/ <>
                  ~s/"relationships":{},/ <>
                  ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[]}}/
              )
+    end
+
+    # A default is the literal the declaration wrote, so it travels as the term that literal
+    # becomes in transpiled code rather than as the way the wire spells the same value - a struct
+    # built on the client holds what was declared, and `default: 5` and `default: 5.0` are two
+    # different things to hold.
+    test "injects the declared defaults as encoded terms", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
     end
 
     test "injects the relationships with their target types and cardinality", %{
@@ -1231,6 +1247,19 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"user":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
              )
+    end
+
+    # A type declaring no default carries an empty map rather than nothing at all - the reader
+    # fetches the field without asking whether it is there.
+    test "injects an empty default map for a type declaring no default", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"defaults":{},"enumValues"/)
     end
 
     # A type holding no enum attribute carries an empty map rather than nothing at all - the
