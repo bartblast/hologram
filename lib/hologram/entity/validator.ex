@@ -273,13 +273,21 @@ defmodule Hologram.Entity.Validator do
       |> Module.get_attribute(:__roles__)
       |> Enum.sort()
 
+    # The MERGED roles are the graph - a cycle is a property of the composed picture. The RAW
+    # declarations are what the messages read, because only they know which module wrote which
+    # extends target; a merged entry has lost that.
+    declarations =
+      module
+      |> Module.get_attribute(:__role_declarations__)
+      |> Enum.reverse()
+
     declared_names = Enum.map(roles, fn {name, _opts} -> name end)
 
-    Enum.each(roles, fn {name, opts} ->
-      validate_extends_opt!(module, name, opts, declared_names)
+    Enum.each(declarations, fn {name, opts, source} ->
+      validate_extends_opt!(module, name, opts, declared_names, source)
     end)
 
-    validate_role_extension_cycles!(module, roles)
+    validate_role_extension_cycles!(module, roles, declarations)
 
     :ok
   end
@@ -465,10 +473,35 @@ defmodule Hologram.Entity.Validator do
     attribute_fields ++ relationship_fields
   end
 
-  defp describe_role_cycle([first_name | _later_hops] = cycle) do
-    hops = Enum.map_join(cycle, " -> ", &inspect/1)
+  defp describe_role_cycle([first_name | _later_hops] = cycle, declarations, module) do
+    # Each hop is paired with the hop it extends: the cycle rotated by one, so the last hop's
+    # target wraps back to the first.
+    targets = Enum.slide(cycle, 0, length(cycle) - 1)
+
+    hops =
+      cycle
+      |> Enum.zip(targets)
+      |> Enum.map_join(" -> ", &describe_role_cycle_hop(&1, declarations, module))
 
     "  * #{hops} -> #{inspect(first_name)}"
+  end
+
+  # A hop is annotated with the policies whose declaration of it carries the extends target the
+  # cycle follows next - so a cycle no single module commits still names the files that formed it.
+  # A hop the entity type declared itself reads unannotated, as it always did.
+  defp describe_role_cycle_hop({name, target}, declarations, module) do
+    sources =
+      declarations
+      |> Enum.filter(fn {declared_name, opts, _source} ->
+        declared_name == name and target in List.wrap(opts[:extends])
+      end)
+      |> Enum.map(fn {_name, _opts, source} -> source end)
+      |> Enum.uniq()
+
+    case sources -- [module] do
+      [] -> inspect(name)
+      policies -> "#{inspect(name)} (from #{Enum.map_join(policies, ", ", &inspect/1)})"
+    end
   end
 
   defp extends_value_valid?(value) when is_atom(value) and not is_nil(value), do: true
@@ -897,31 +930,38 @@ defmodule Hologram.Entity.Validator do
     end)
   end
 
-  defp validate_extends_opt!(module, name, opts, declared_names) do
+  # Twin of Hologram.Policy.Validator's location/2 - keep the two message shapes in step.
+  defp location(module, module), do: inspect(module)
+
+  defp location(module, source), do: "#{inspect(module)}, taken from #{inspect(source)}"
+
+  defp validate_extends_opt!(module, name, opts, declared_names, source) do
     case Keyword.fetch(opts, :extends) do
       {:ok, value} ->
+        location = location(module, source)
+
         if not extends_value_valid?(value) do
           raise Hologram.CompileError,
             message:
-              "invalid extends option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the extends option must be a role name or a non-empty list of role names"
+              "invalid extends option #{inspect(value)} for role #{inspect(name)} in #{location} - the extends option must be a role name or a non-empty list of role names"
         end
 
         value
         |> List.wrap()
-        |> Enum.each(&validate_extends_target!(module, name, &1, declared_names))
+        |> Enum.each(&validate_extends_target!(name, &1, declared_names, location))
 
       :error ->
         :ok
     end
   end
 
-  defp validate_extends_target!(module, name, target, declared_names) do
+  defp validate_extends_target!(name, target, declared_names, location) do
     if target not in declared_names do
       declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
 
       raise Hologram.CompileError,
         message:
-          "unknown role #{inspect(target)} in the extends option of role #{inspect(name)} in #{inspect(module)} - declared roles are: #{declared_roles}"
+          "unknown role #{inspect(target)} in the extends option of role #{inspect(name)} in #{location} - declared roles are: #{declared_roles}"
     end
   end
 
@@ -1150,7 +1190,7 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_role_extension_cycles!(module, roles) do
+  defp validate_role_extension_cycles!(module, roles, declarations) do
     edges = role_extension_edges(roles)
 
     {cycles, _visited} =
@@ -1166,7 +1206,7 @@ defmodule Hologram.Entity.Validator do
         |> Enum.map(&canonicalize_role_cycle/1)
         |> Enum.uniq()
         |> Enum.sort()
-        |> Enum.map_join("\n", &describe_role_cycle/1)
+        |> Enum.map_join("\n", &describe_role_cycle(&1, declarations, module))
 
       raise Hologram.CompileError,
         message:
