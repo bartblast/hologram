@@ -59,8 +59,8 @@ defmodule Hologram.ControllerMutationTest do
   end
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
@@ -207,8 +207,8 @@ defmodule Hologram.ControllerMutationTest do
 
       # The world changes between the two posts - a second evaluation would find the row and land
       # the update - so an answer that still refuses is one the record replayed.
-      PolicyModule1
-      |> Entity.new(id: id, author_id: user.id, priority: 5)
+      %{id: id, author_id: user.id, priority: 5}
+      |> PolicyModule1.new()
       |> DB.create!()
 
       second = post_batch(raw, session_of(user.id))

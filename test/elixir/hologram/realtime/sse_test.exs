@@ -5,7 +5,6 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
-  alias Hologram.Entity
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -302,7 +301,7 @@ defmodule Hologram.Realtime.SSETest do
   describe "process_message/4 on {:sync_deltas, ...}" do
     test "pushes a sync_deltas SSE event carrying the deltas" do
       conn = prepared_test_conn()
-      row = Entity.new(EntityModule2, a: true, c: "first")
+      row = EntityModule2.new(a: true, c: "first")
 
       # Built through the frame rather than by hand: a delta holds a row already written the way
       # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.

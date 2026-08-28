@@ -13,7 +13,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
-  alias Hologram.Entity
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -844,8 +843,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   describe "reconcile/1 for the role grant store" do
     test "raises when removing a role that grants still hold" do
       user =
-        Module14
-        |> Entity.new(email: "reconciler_1@example.com")
+        %{email: "reconciler_1@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       Auth.grant_role(user, Role.Module1)

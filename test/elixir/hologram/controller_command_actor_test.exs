@@ -7,7 +7,6 @@ defmodule Hologram.ControllerCommandActorTest do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.Entity
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.CSRFProtection
@@ -45,8 +44,8 @@ defmodule Hologram.ControllerCommandActorTest do
   end
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
@@ -162,10 +161,7 @@ defmodule Hologram.ControllerCommandActorTest do
   test "raises when a command handler revokes the last role managing a resource" do
     owner = create_user("user_4@example.com")
 
-    resource =
-      Module1
-      |> Entity.new()
-      |> DB.create!()
+    resource = DB.create!(Module1.new())
 
     Auth.grant_role(owner, resource, :owner)
 

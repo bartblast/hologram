@@ -15,8 +15,8 @@ defmodule Hologram.Job.RunnerTest do
   alias Hologram.Test.Fixtures.Job.Module3
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
