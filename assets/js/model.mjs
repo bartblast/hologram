@@ -231,6 +231,13 @@ export default class Model {
     Model.#entries = {};
   }
 
+  // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the
+  // same rule #unboxDateTime follows, so an instant this client derives compares as a plain string
+  // with one the server sent. toISOString writes exactly three, which is all a millisecond has.
+  static wireDateTime(milliseconds) {
+    return `${new Date(milliseconds).toISOString().slice(0, -1)}000Z`;
+  }
+
   // A value the client may not have is not a value it is missing: the model says the attribute
   // exists and is not for this client, which is what the sentinel says in its place - and it
   // names the attribute, so a read of one reports which.

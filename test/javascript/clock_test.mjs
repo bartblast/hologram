@@ -59,6 +59,18 @@ describe("Clock", () => {
     });
   });
 
+  describe("wallClockMs()", () => {
+    it("answers the millisecond a stamp was taken at", () => {
+      assert.equal(Clock.wallClockMs(Clock.stamp()), nowMs);
+    });
+
+    it("answers the same millisecond for every stamp taken within it", () => {
+      Clock.stamp();
+
+      assert.equal(Clock.wallClockMs(Clock.stamp()), nowMs);
+    });
+  });
+
   describe("stamp()", () => {
     it("increases strictly within one millisecond", () => {
       assert.equal(Clock.stamp(), nowMs * 1024);

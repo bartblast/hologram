@@ -19,6 +19,13 @@ export default class Clock {
 
   static #logicalSpan = 1024;
 
+  // The wall clock, in milliseconds, that the given stamp was taken at - the twin of
+  // Hologram.DB.Clock.wall_clock_ms/1. A write's own stamp is therefore the moment its writer made
+  // it, which is what a row created offline is timestamped from.
+  static wallClockMs(stamp) {
+    return Math.floor(stamp / Clock.#logicalSpan);
+  }
+
   // Advances the clock past the given stamp, so every stamp authored afterwards is above it.
   static observe(stamp) {
     Clock.#last = Math.max(Clock.#last, stamp);

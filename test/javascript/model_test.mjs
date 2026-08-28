@@ -648,6 +648,26 @@ describe("Model", () => {
     });
   });
 
+  describe("wireDateTime()", () => {
+    it("spells an instant the way a datetime arrives on the wire", () => {
+      const milliseconds = Date.UTC(2026, 7, 29, 14, 32, 7, 481);
+
+      assert.equal(
+        Model.wireDateTime(milliseconds),
+        "2026-08-29T14:32:07.481000Z",
+      );
+    });
+
+    it("spells a whole second with its fraction, so every value has the same shape", () => {
+      const milliseconds = Date.UTC(2026, 7, 29, 14, 32, 7);
+
+      assert.equal(
+        Model.wireDateTime(milliseconds),
+        "2026-08-29T14:32:07.000000Z",
+      );
+    });
+  });
+
   describe("settableFields()", () => {
     it("answers the declared attributes and a to-one's reference field, sorted", () => {
       assert.deepStrictEqual(Model.settableFields(TASK), [
