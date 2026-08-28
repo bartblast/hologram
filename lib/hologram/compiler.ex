@@ -1673,27 +1673,39 @@ defmodule Hologram.Compiler do
 
   # A to-many is spelled apart from a to-one because they are read apart: a to-many is assembled
   # from the relationship facts, a to-one is followed through the reference field the row carries.
+  #
+  # Optionality rides with both, though only a to-one is judged by it: a row missing the reference
+  # field of a required to-one is a row the write refuses, which is an answer the client owes as
+  # much as the server does.
   defp render_relationships(entity_type) do
     entity_type.__relationships__()
-    |> Enum.map(fn {name, target, _opts} ->
-      {Atom.to_string(name), render_relationship(target)}
+    |> Enum.map(fn {name, target, opts} ->
+      optional? = Keyword.get(opts, :optional) == true
+
+      {Atom.to_string(name), render_relationship(target, optional?)}
     end)
     |> render_json_object()
   end
 
-  defp render_relationship(target) when is_list(target) do
-    render_relationship_entry(hd(target), true)
+  defp render_relationship(target, optional?) when is_list(target) do
+    render_relationship_entry(hd(target), true, optional?)
   end
 
-  defp render_relationship(target), do: render_relationship_entry(target, false)
+  defp render_relationship(target, optional?) do
+    render_relationship_entry(target, false, optional?)
+  end
 
-  defp render_relationship_entry(target, to_many?) do
+  defp render_relationship_entry(target, to_many?, optional?) do
     type =
       target
       |> Codec.encode_enum_value()
       |> Jason.encode!()
 
-    render_json_object([{"toMany", Jason.encode!(to_many?)}, {"type", type}])
+    render_json_object([
+      {"optional", Jason.encode!(optional?)},
+      {"toMany", Jason.encode!(to_many?)},
+      {"type", type}
+    ])
   end
 
   # The rules a client evaluates permissions by, spelled the way the rows it evaluates them

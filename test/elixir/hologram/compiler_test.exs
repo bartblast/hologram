@@ -1215,7 +1215,7 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
     end
 
-    test "injects the relationships with their target types and cardinality", %{
+    test "injects the relationships with their target types, cardinality and optionality", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
@@ -1225,9 +1225,9 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"relationships":{"a":{"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
-                 ~s/"b":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
-                 ~s/"c":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+               ~s/"relationships":{"a":{"optional":false,"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
              )
     end
 
@@ -1357,7 +1357,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"user":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
+               ~s/"user":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
              )
     end
 
