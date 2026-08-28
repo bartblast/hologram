@@ -15,20 +15,18 @@ defmodule Hologram.DBReadTest do
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
 
   defp create_module_2_entity(values) do
-    Module2
-    |> Entity.new(values)
+    values
+    |> Module2.new()
     |> DB.create!()
   end
 
   defp create_policy_module_2_entity do
-    PolicyModule2
-    |> Entity.new()
-    |> DB.create!()
+    DB.create!(PolicyModule2.new())
   end
 
   defp create_user(email) do
-    Module14
-    |> Entity.new(email: email)
+    %{email: email}
+    |> Module14.new()
     |> DB.create!()
   end
 
@@ -54,19 +52,16 @@ defmodule Hologram.DBReadTest do
       user = create_user("db_read_include@example.com")
 
       public_child =
-        PolicyModule1
-        |> Entity.new(public: true)
+        %{public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
       private_child =
-        PolicyModule1
-        |> Entity.new(public: false)
+        %{public: false}
+        |> PolicyModule1.new()
         |> DB.create!()
 
-      source =
-        PolicyModule3
-        |> Entity.new()
-        |> DB.create!()
+      source = DB.create!(PolicyModule3.new())
 
       source
       |> add_relationship(:children, public_child.id)
