@@ -32,20 +32,17 @@ defmodule Hologram.Sync.DiffTest do
   end
 
   defp row(title) do
-    Module2
-    |> Entity.new(a: true, c: title)
+    %{a: true, c: title}
+    |> Module2.new()
     |> DB.create!()
   end
 
   defp source_with_targets(targets) do
-    required =
-      Module1
-      |> Entity.new()
-      |> DB.create!()
+    required = DB.create!(Module1.new())
 
     source =
-      Module3
-      |> Entity.new(c_id: required.id)
+      %{c_id: required.id}
+      |> Module3.new()
       |> DB.create!()
 
     Enum.each(targets, fn target ->
@@ -166,19 +163,16 @@ defmodule Hologram.Sync.DiffTest do
 
     test "returns a patch for a row embedded beneath another embedded row" do
       author =
-        Module14
-        |> Entity.new(email: "author@example.com")
+        %{email: "author@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       child =
-        PolicyModule1
-        |> Entity.new(author_id: author.id, public: true)
+        %{author_id: author.id, public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
-      parent =
-        PolicyModule3
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(PolicyModule3.new())
 
       round_parent = %{parent | children: [%{child | author: author}]}
       held = MapSet.new([parent.id, child.id, author.id])
@@ -268,14 +262,11 @@ defmodule Hologram.Sync.DiffTest do
 
     test "reports nothing for a row this client cannot see" do
       user =
-        Module14
-        |> Entity.new(email: "edge_reader@example.com")
+        %{email: "edge_reader@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
-      hidden =
-        PolicyModule1
-        |> Entity.new()
-        |> DB.create!()
+      hidden = DB.create!(PolicyModule1.new())
 
       events = edge_events(hidden.id, :add_relationship, "a", Entity.generate_id())
 
@@ -290,15 +281,9 @@ defmodule Hologram.Sync.DiffTest do
     # terms - here the parent goes out with its list emptied, and the edge would have named the
     # very row that emptying withheld.
     test "reports nothing for a target this client cannot see" do
-      hidden =
-        PolicyModule1
-        |> Entity.new()
-        |> DB.create!()
+      hidden = DB.create!(PolicyModule1.new())
 
-      parent =
-        PolicyModule3
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(PolicyModule3.new())
 
       round_parent = %{parent | children: [hidden]}
 
@@ -411,18 +396,15 @@ defmodule Hologram.Sync.DiffTest do
   describe "deltas/4 - visibility" do
     setup do
       user =
-        Module14
-        |> Entity.new(email: "reader@example.com")
+        %{email: "reader@example.com"}
+        |> Module14.new()
         |> DB.create!()
 
       %{user: user}
     end
 
     test "leaves out a row this client may not read", %{user: user} do
-      hidden =
-        PolicyModule1
-        |> Entity.new()
-        |> DB.create!()
+      hidden = DB.create!(PolicyModule1.new())
 
       refute Auth.can?(user.id, :read, hidden)
 
@@ -432,15 +414,9 @@ defmodule Hologram.Sync.DiffTest do
     end
 
     test "leaves out an embedded row this client may not read", %{user: user} do
-      hidden =
-        PolicyModule1
-        |> Entity.new()
-        |> DB.create!()
+      hidden = DB.create!(PolicyModule1.new())
 
-      parent =
-        PolicyModule3
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(PolicyModule3.new())
 
       round_parent = %{parent | children: [hidden]}
 
@@ -455,21 +431,15 @@ defmodule Hologram.Sync.DiffTest do
 
     test "scrubs each client's embedded lists to what it may see", %{user: user} do
       public_child =
-        PolicyModule1
-        |> Entity.new(public: true)
+        %{public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
-      gated_child =
-        PolicyModule1
-        |> Entity.new()
-        |> DB.create!()
+      gated_child = DB.create!(PolicyModule1.new())
 
       Auth.grant_role(user, gated_child, :viewer)
 
-      parent =
-        PolicyModule3
-        |> Entity.new()
-        |> DB.create!()
+      parent = DB.create!(PolicyModule3.new())
 
       round = result([%{parent | children: [public_child, gated_child]}])
 
@@ -485,8 +455,8 @@ defmodule Hologram.Sync.DiffTest do
 
     test "returns a row this client may read", %{user: user} do
       readable =
-        PolicyModule1
-        |> Entity.new(public: true)
+        %{public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
       deltas = deltas(result([readable]), MapSet.new(), user.id, [])
@@ -495,10 +465,7 @@ defmodule Hologram.Sync.DiffTest do
     end
 
     test "reports a row the client holds but may no longer read as vanished", %{user: user} do
-      hidden =
-        PolicyModule1
-        |> Entity.new()
-        |> DB.create!()
+      hidden = DB.create!(PolicyModule1.new())
 
       deltas = deltas(result([hidden]), MapSet.new([hidden.id]), user.id, [])
 
@@ -508,13 +475,13 @@ defmodule Hologram.Sync.DiffTest do
 
     test "tells two clients different things about one round", %{user: user} do
       public_row =
-        PolicyModule1
-        |> Entity.new(priority: 1, public: true)
+        %{priority: 1, public: true}
+        |> PolicyModule1.new()
         |> DB.create!()
 
       granted_row =
-        PolicyModule1
-        |> Entity.new(priority: 2)
+        %{priority: 2}
+        |> PolicyModule1.new()
         |> DB.create!()
 
       # What makes the two clients differ: `allow :read, to: [:viewer, ...]` opens the non-public
