@@ -4,6 +4,7 @@ defmodule Hologram.ReflectionTest do
 
   alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Job
+  alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Reflection.Module1
   alias Hologram.Test.Fixtures.Reflection.Module2
   alias Hologram.Test.Fixtures.Reflection.Module3
@@ -758,6 +759,20 @@ defmodule Hologram.ReflectionTest do
       put_env_with_cleanup(:hologram, Module1, [])
 
       assert phoenix_endpoint() == nil
+    end
+  end
+
+  describe "policy?" do
+    test "is a policy module" do
+      assert policy?(Policy.Shared.Module1)
+    end
+
+    test "is not a module" do
+      refute policy?(123)
+    end
+
+    test "is not a policy module" do
+      refute policy?(Entity.Module1)
     end
   end
 
