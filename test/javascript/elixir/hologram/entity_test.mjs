@@ -156,9 +156,9 @@ describe("Elixir_Hologram_Entity", () => {
             bio: {max_length: 10, optional: true},
             count: {max: Type.integer(10), min: Type.integer(1)},
             country_code: {length: 2, optional: true},
-            email: {format: {opts: [], source: "@"}, optional: true},
+            email: {format: {opts: Type.list([]), source: "@"}, optional: true},
             handle: {
-              format: {opts: [], source: "^[a-z_]+$"},
+              format: {opts: Type.list([]), source: "^[a-z_]+$"},
               min_length: 3,
               optional: true,
             },

@@ -1170,12 +1170,25 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"email":{"format":{"opts":[],"source":"@"},"optional":true},/
+               ~s/"handle":{"format":{"opts":Type.list([]),"source":"^[a-z_]+$"},"min_length":3,"optional":true},/
              )
+    end
+
+    # Not every compile option is a NAME: ~r/@/s reads back as [:dotall, {:newline, :anycrlf}],
+    # and a tuple has none to write - which is why the options travel as the term they are.
+    test "injects a declared format's options as the term the declaration held", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(
                js,
-               ~s/"handle":{"format":{"opts":[],"source":"^[a-z_]+$"},"min_length":3,"optional":true},/
+               ~s/"email":{"format":{"opts":Type.list([Type.atom("dotall"), / <>
+                 ~s/Type.tuple([Type.atom("newline"), Type.atom("anycrlf")])]),"source":"@"},/ <>
+                 ~s/"optional":true},/
              )
     end
 

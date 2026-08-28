@@ -1571,12 +1571,15 @@ defmodule Hologram.Compiler do
   # pattern exists only inside the runtime that compiled it, and the encoded form of a Regex is a
   # struct wrapping a :re.import/1 CALL, which this line sits above in the runtime script. The
   # client compiles it once instead, which is what the import would have done anyway.
+  #
+  # The options travel as an ENCODED TERM rather than as their names, because not all of them are
+  # names: ~r/x/s reads back as [:dotall, {:newline, :anycrlf}], and a tuple has no name to write.
+  # Model.normalize_value/1 keeps the same list whole for the same reason.
   defp render_constraint_value(:format, value) do
     opts =
       value
       |> Regex.opts()
-      |> Enum.map(&Atom.to_string/1)
-      |> Jason.encode!()
+      |> Encoder.encode_term!()
 
     source =
       value

@@ -46,7 +46,13 @@ describe("Model", () => {
             internal_notes: {unique: true},
             position: {in: {first: 0, last: 100, step: 5}},
             title: {
-              format: {opts: ["caseless"], source: "^[a-z ]+$"},
+              format: {
+                opts: Type.list([
+                  Type.atom("caseless"),
+                  Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+                ]),
+                source: "^[a-z ]+$",
+              },
               max_length: 32,
               min_length: 3,
             },
@@ -482,7 +488,9 @@ describe("Model", () => {
     });
 
     // Compiled here because a pattern exists only inside the runtime that compiled it. The
-    // options travel with the source, so a caseless pattern stays caseless.
+    // options travel with the source, so a caseless pattern stays caseless - and they travel as
+    // the TERM they are, because not every one of them is a name: ~r/x/s reads back as
+    // [:dotall, {:newline, :anycrlf}], which is the shape the second option here stands for.
     it("compiles a declared format into the regex struct a violation carries", () => {
       const format = Model.entry(TASK).constraints.title.format;
 
@@ -494,7 +502,10 @@ describe("Model", () => {
 
       assertBoxedStrictEqual(
         field(format, "opts"),
-        Type.list([Type.atom("caseless")]),
+        Type.list([
+          Type.atom("caseless"),
+          Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+        ]),
       );
 
       const matched = Erlang_Re["run/3"](

@@ -295,15 +295,16 @@ export default class Model {
   // fields Elixir's does.
   static #compileFormat({opts, source}) {
     const boxedSource = Type.bitstring(source);
-    const boxedOpts = Type.list(opts.map((opt) => Type.atom(opt)));
 
+    // The options arrive boxed, as the term the declaration held: not every one of them is a
+    // name, since ~r/x/s reads back as [:dotall, {:newline, :anycrlf}].
     const compiled = Interpreter.moduleProxy("re")["compile/2"](
       boxedSource,
-      boxedOpts,
+      opts,
     );
 
     return Type.struct("Regex", [
-      [Type.atom("opts"), boxedOpts],
+      [Type.atom("opts"), opts],
       [Type.atom("re_pattern"), compiled.data[1]],
       [Type.atom("source"), boxedSource],
     ]);
