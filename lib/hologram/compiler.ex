@@ -25,6 +25,22 @@ defmodule Hologram.Compiler do
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
+  # The declaration options a write is judged against, which is why they are the ones baked into
+  # the client's model. What is missing from the list is missing on purpose: :values already
+  # travels as the entry's enum values, :default as its defaults, and :server_only as the names a
+  # client is told it may not have.
+  @baked_constraint_opts [
+    :format,
+    :in,
+    :length,
+    :max,
+    :max_length,
+    :min,
+    :min_length,
+    :optional,
+    :unique
+  ]
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers.
@@ -1488,6 +1504,73 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
+  # What the client judges a written value by, so that a browser answers what the server answers.
+  # Only the attributes declaring at least one of these options are named, and each carries only
+  # the options its declaration wrote.
+  #
+  # The inner keys are the option names as Elixir spells them (min_length, not minLength) rather
+  # than in the camelCase of their neighbours, because they are also the words a violation is
+  # reported in - one spelling, written by the build and read back in the answer.
+  defp render_constraints(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, _type, opts} ->
+      Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
+    end)
+    |> Enum.map(fn {name, _type, opts} ->
+      {Atom.to_string(name), render_attribute_constraints(opts)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_attribute_constraints(opts) do
+    @baked_constraint_opts
+    |> Enum.flat_map(fn key ->
+      case Keyword.fetch(opts, key) do
+        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value)}]
+        :error -> []
+      end
+    end)
+    |> render_json_object()
+  end
+
+  # A bound travels as the ENCODED TERM its literal becomes, for the reason a default does: a
+  # violation names the bound the declaration wrote, and a float attribute takes both `max: 5` and
+  # `max: 5.0`, which the wire spells alike.
+  defp render_constraint_value(key, value) when key in [:max, :min] do
+    Encoder.encode_term!(value)
+  end
+
+  # A pattern travels as its source and its options rather than as a compiled one: a compiled
+  # pattern exists only inside the runtime that compiled it, and the encoded form of a Regex is a
+  # struct wrapping a :re.import/1 CALL, which this line sits above in the runtime script. The
+  # client compiles it once instead, which is what the import would have done anyway.
+  defp render_constraint_value(:format, value) do
+    opts =
+      value
+      |> Regex.opts()
+      |> Enum.map(&Atom.to_string/1)
+      |> Jason.encode!()
+
+    source =
+      value
+      |> Regex.source()
+      |> Jason.encode!()
+
+    render_json_object([{"opts", opts}, {"source", source}])
+  end
+
+  # A range travels as its three parts, the step included - `in: 0..100//5` admits 5 and refuses
+  # 7, so a client told only the ends would answer differently from the server.
+  defp render_constraint_value(:in, value) do
+    render_json_object([
+      {"first", Jason.encode!(value.first)},
+      {"last", Jason.encode!(value.last)},
+      {"step", Jason.encode!(value.step)}
+    ])
+  end
+
+  defp render_constraint_value(_key, value), do: Jason.encode!(value)
+
   # A default travels as the ENCODED TERM the declared literal becomes in transpiled code, rather
   # than as the way the wire spells the same value: the client applies it to a struct field, and a
   # struct field holds the literal the developer wrote. The two are not interchangeable - a float
@@ -1551,6 +1634,7 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"attributes", attributes},
+      {"constraints", render_constraints(entity_type)},
       {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},

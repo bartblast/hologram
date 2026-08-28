@@ -32,8 +32,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module28, as: ComponentModule28
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
+  alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
@@ -1081,10 +1083,120 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"defaults":{"c":Type.atom("x")},/ <>
+                 ~s/"updated_at":"datetime"},"constraints":{},"defaults":{"c":Type.atom("x")},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"policy":{},/ <>
                  ~s/"relationships":{},/ <>
                  ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[]}}/
+             )
+    end
+
+    # The client judges a written value by these, so the name a violation is reported under is the
+    # name the build writes - min_length, not the camelCase of its neighbours.
+    test "injects the declared constraints under the option names a violation names", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"bio":{"max_length":10,"optional":true},/)
+      assert String.contains?(js, ~s/"country_code":{"length":2,"optional":true},/)
+      assert String.contains?(js, ~s/"username":{"max_length":8,"min_length":3,"optional":true}/)
+    end
+
+    # A bound is the literal the declaration wrote, and rating declares both spellings of the same
+    # number on one attribute - a float attribute takes `min: 0` beside `max: 5.0`, which the wire
+    # would spell alike and the term encoder keeps apart.
+    test "injects a numeric bound as the encoded term its literal builds", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"count":{"max":Type.integer(10n),"min":Type.integer(1n)},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"rating":{"max":Type.float(5.0),"min":Type.integer(0n),"optional":true},/
+             )
+    end
+
+    test "injects a temporal bound as the encoded struct its literal builds", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"released_on":{"max":Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Date")], / <>
+                 ~s/[Type.atom("calendar"), Type.atom("Elixir.Calendar.ISO")], / <>
+                 ~s/[Type.atom("day"), Type.integer(31n)], [Type.atom("month"), Type.integer(12n)], / <>
+                 ~s/[Type.atom("year"), Type.integer(2030n)]]),"optional":true}/
+             )
+    end
+
+    # A compiled pattern exists only inside the runtime that compiled it, so what travels is what
+    # compiles into one - the source and the options it was written with.
+    test "injects a declared format as its source and its options", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"email":{"format":{"opts":[],"source":"@"},"optional":true},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"handle":{"format":{"opts":[],"source":"^[a-z_]+$"},"min_length":3,"optional":true},/
+             )
+    end
+
+    # The step travels with the ends: 0..100//5 admits 5 and refuses 7, so a client told only
+    # where the range starts and stops would answer differently from the server.
+    test "injects a declared range as its ends and its step", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"percent":{"in":{"first":0,"last":100,"step":5},"optional":true},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"priority":{"in":{"first":1,"last":5,"step":1},"optional":true},/
+             )
+    end
+
+    test "injects the uniqueness a declaration asks for", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity19])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"constraints":{"code":{"optional":true,"unique":true},"slug":{"unique":true}}/
              )
     end
 
@@ -1247,6 +1359,20 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"user":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
              )
+    end
+
+    # An attribute declaring no constraint is left out of the map entirely, and a type whose
+    # attributes all declare none carries an empty one - the reader fetches the field without
+    # asking whether it is there.
+    test "injects an empty constraint map for a type declaring no constraint", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"constraints":{},"defaults"/)
     end
 
     # A type declaring no default carries an empty map rather than nothing at all - the reader
