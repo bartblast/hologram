@@ -21,14 +21,7 @@ defmodule Hologram.Policy.Validator do
     validate_role_modules!(Reflection.list_roles())
     validate_user_entity!(entity_types)
 
-    Enum.each(entity_types, fn entity_type ->
-      Enum.each(entity_type.__policies__(), fn {operation, to, via, predicates} ->
-        validate_to!(entity_type, operation, to)
-        validate_via!(entity_type, operation, via)
-        validate_predicates!(entity_type, operation, predicates)
-        validate_gate_operation!(entity_type, operation, to, via, predicates)
-      end)
-    end)
+    Enum.each(entity_types, &validate_entity_policies!/1)
 
     validate_via_cycles!(entity_types)
   end
@@ -176,6 +169,26 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # A line the entity type wrote itself reads exactly as it always did. One that arrived through
+  # a policy names the module whose BODY wrote it - the file the dev has to open - because after
+  # composition the entity type's own source may hold no such line at all.
+  defp location(entity_type, entity_type), do: inspect(entity_type)
+
+  defp location(entity_type, source), do: "#{inspect(entity_type)}, taken from #{inspect(source)}"
+
+  defp validate_entity_policies!(entity_type) do
+    entity_type.__policies__()
+    |> Enum.zip(entity_type.__policy_sources__())
+    |> Enum.each(&validate_policy_line!(entity_type, &1))
+  end
+
+  defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source}) do
+    validate_to!(entity_type, operation, to, location(entity_type, source))
+    validate_via!(entity_type, operation, via)
+    validate_predicates!(entity_type, operation, predicates)
+    validate_gate_operation!(entity_type, operation, to, via, predicates)
+  end
+
   defp validate_predicates!(entity_type, operation, predicates) do
     triples = Query.predicate_triples!(entity_type, predicates)
     validate_server_only_predicates!(entity_type, operation, triples)
@@ -189,17 +202,23 @@ defmodule Hologram.Policy.Validator do
       reraise Hologram.CompileError, [message: message], __STACKTRACE__
   end
 
-  defp validate_relationship_reference!(entity_type, operation, relationship_name, role_name) do
+  defp validate_relationship_reference!(
+         entity_type,
+         operation,
+         relationship_name,
+         role_name,
+         location
+       ) do
     definitions = entity_type.__relationships__()
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
       {_name, [_target], _opts} ->
         raise Hologram.CompileError,
           message:
-            "invalid to option #{inspect({relationship_name, role_name})} for allow #{inspect(operation)} in #{inspect(entity_type)} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
+            "invalid to option #{inspect({relationship_name, role_name})} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
 
       {_name, target, _opts} ->
-        validate_target_role!(entity_type, operation, target, role_name)
+        validate_target_role!(operation, target, role_name, location)
 
       nil ->
         declared_relationships =
@@ -207,7 +226,7 @@ defmodule Hologram.Policy.Validator do
 
         raise Hologram.CompileError,
           message:
-            "unknown relationship #{inspect(relationship_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared relationships are: #{declared_relationships}"
+            "unknown relationship #{inspect(relationship_name)} in the to option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
     end
   end
 
@@ -282,7 +301,7 @@ defmodule Hologram.Policy.Validator do
     end)
   end
 
-  defp validate_target_role!(entity_type, operation, target_type, role_name) do
+  defp validate_target_role!(operation, target_type, role_name, location) do
     declared_names = declared_role_names(target_type)
 
     if role_name not in declared_names do
@@ -290,32 +309,32 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared roles of #{inspect(target_type)} are: #{declared_roles}"
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles of #{inspect(target_type)} are: #{declared_roles}"
     end
   end
 
-  defp validate_to!(_entity_type, _operation, nil), do: :ok
+  defp validate_to!(_entity_type, _operation, nil, _location), do: :ok
 
-  defp validate_to!(entity_type, operation, to) do
+  defp validate_to!(entity_type, operation, to, location) do
     to
     |> List.wrap()
-    |> Enum.each(&validate_to_reference!(entity_type, operation, &1))
+    |> Enum.each(&validate_to_reference!(entity_type, operation, &1, location))
   end
 
-  defp validate_to_reference!(entity_type, operation, {reference, role_name}) do
+  defp validate_to_reference!(entity_type, operation, {reference, role_name}, location) do
     if Reflection.alias?(reference) do
-      validate_type_reference!(entity_type, operation, reference, role_name)
+      validate_type_reference!(operation, reference, role_name, location)
     else
-      validate_relationship_reference!(entity_type, operation, reference, role_name)
+      validate_relationship_reference!(entity_type, operation, reference, role_name, location)
     end
   end
 
-  defp validate_to_reference!(entity_type, operation, role_module)
+  defp validate_to_reference!(entity_type, operation, role_module, location)
        when is_atom(role_module) do
     if Reflection.alias?(role_module) do
-      validate_global_reference!(entity_type, operation, role_module)
+      validate_global_reference!(operation, role_module, location)
     else
-      validate_own_reference!(entity_type, operation, role_module)
+      validate_own_reference!(entity_type, operation, role_module, location)
     end
   end
 
@@ -361,15 +380,15 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates), do: :ok
 
-  defp validate_global_reference!(entity_type, operation, role_module) do
+  defp validate_global_reference!(operation, role_module, location) do
     if not Reflection.role?(role_module) do
       raise Hologram.CompileError,
         message:
-          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
+          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{location} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
     end
   end
 
-  defp validate_own_reference!(entity_type, operation, role_name) do
+  defp validate_own_reference!(entity_type, operation, role_name, location) do
     declared_names = declared_role_names(entity_type)
 
     if role_name not in declared_names do
@@ -377,18 +396,18 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared roles are: #{declared_roles}"
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
     end
   end
 
-  defp validate_type_reference!(entity_type, operation, target_type, role_name) do
+  defp validate_type_reference!(operation, target_type, role_name, location) do
     if not Reflection.entity?(target_type) do
       raise Hologram.CompileError,
         message:
-          "invalid to option #{inspect({target_type, role_name})} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(target_type)} is not an entity type module"
+          "invalid to option #{inspect({target_type, role_name})} for allow #{inspect(operation)} in #{location} - #{inspect(target_type)} is not an entity type module"
     end
 
-    validate_target_role!(entity_type, operation, target_type, role_name)
+    validate_target_role!(operation, target_type, role_name, location)
   end
 
   defp validate_user_entity!(entity_types) do

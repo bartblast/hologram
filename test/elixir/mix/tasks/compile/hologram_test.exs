@@ -437,8 +437,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
         @spec __policies__() :: list(tuple)
         def __policies__, do: []
 
+        @spec __policy_sources__() :: list(module)
+        def __policy_sources__, do: []
+
         @spec __relationships__() :: list(tuple)
         def __relationships__, do: [{:owner, Hologram.Test.Fixtures.Entity.Module1, []}]
+
+        @spec __role_declarations__() :: list(tuple)
+        def __role_declarations__, do: []
 
         @spec __roles__() :: list(tuple)
         def __roles__, do: []

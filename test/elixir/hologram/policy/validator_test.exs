@@ -494,6 +494,171 @@ defmodule Hologram.Policy.ValidatorTest do
     end
   end
 
+  # Every message below has a local-line twin in the describe above, asserting the same text
+  # WITHOUT the tail - so the pair pins that the tail appears exactly when the line was taken.
+  describe "validate_model!/1 for a line taken from a policy" do
+    test "rejects a to option naming a role the taking entity type does not declare" do
+      defmodule TakenOwnReferencePolicy do
+        use Hologram.Policy
+
+        allow :update, to: :publisher
+      end
+
+      defmodule TakenOwnReferenceEntity do
+        use Hologram.Entity
+
+        role :editor
+
+        policy TakenOwnReferencePolicy
+      end
+
+      expected_msg =
+        "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenOwnReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenOwnReferencePolicy - declared roles are: :editor"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenOwnReferenceEntity])
+      end
+    end
+
+    test "rejects a to option referencing a non-entity module" do
+      defmodule TakenTypeReferencePolicy do
+        use Hologram.Policy
+
+        allow :update, to: {Hologram.Reflection, :editor}
+      end
+
+      defmodule TakenTypeReferenceEntity do
+        use Hologram.Entity
+
+        policy TakenTypeReferencePolicy
+      end
+
+      expected_msg =
+        "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenTypeReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenTypeReferencePolicy - Hologram.Reflection is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenTypeReferenceEntity])
+      end
+    end
+
+    test "rejects a to option referencing an undeclared role of another entity type" do
+      defmodule TakenTargetRolePolicy do
+        use Hologram.Policy
+
+        allow :update, to: {Hologram.Test.Fixtures.Entity.Module13, :publisher}
+      end
+
+      defmodule TakenTargetRoleEntity do
+        use Hologram.Entity
+
+        policy TakenTargetRolePolicy
+      end
+
+      expected_msg =
+        "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenTargetRoleEntity, taken from Hologram.Policy.ValidatorTest.TakenTargetRolePolicy - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenTargetRoleEntity])
+      end
+    end
+
+    test "rejects a to option naming a relationship the taking entity type does not declare" do
+      defmodule TakenUnknownRelationshipPolicy do
+        use Hologram.Policy
+
+        allow :update, to: {:project, :editor}
+      end
+
+      defmodule TakenUnknownRelationshipEntity do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        policy TakenUnknownRelationshipPolicy
+      end
+
+      expected_msg =
+        "unknown relationship :project in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenUnknownRelationshipEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownRelationshipPolicy - declared relationships are: :parent"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenUnknownRelationshipEntity])
+      end
+    end
+
+    test "rejects a to option referencing a role on a to-many relationship" do
+      defmodule TakenToManyPolicy do
+        use Hologram.Policy
+
+        allow :update, to: {:children, :editor}
+      end
+
+      defmodule TakenToManyEntity do
+        use Hologram.Entity
+
+        relationship :children, [Module13]
+
+        policy TakenToManyPolicy
+      end
+
+      expected_msg =
+        "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenToManyEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyPolicy - relationship :children is to-many, but a role reference requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenToManyEntity])
+      end
+    end
+
+    test "rejects a to option naming a module that is not a role module" do
+      defmodule TakenGlobalReferencePolicy do
+        use Hologram.Policy
+
+        allow :update, to: Hologram.Reflection
+      end
+
+      defmodule TakenGlobalReferenceEntity do
+        use Hologram.Entity
+
+        policy TakenGlobalReferencePolicy
+      end
+
+      expected_msg =
+        "invalid to option Hologram.Reflection for allow :update in Hologram.Policy.ValidatorTest.TakenGlobalReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenGlobalReferencePolicy - Hologram.Reflection is not a role module (define it with use Hologram.Role)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenGlobalReferenceEntity])
+      end
+    end
+
+    test "names the innermost policy for a line taken through two hops" do
+      defmodule TakenInnerPolicy do
+        use Hologram.Policy
+
+        allow :update, to: :publisher
+      end
+
+      defmodule TakenOuterPolicy do
+        use Hologram.Policy
+
+        policy TakenInnerPolicy
+      end
+
+      defmodule TakenTwoHopsEntity do
+        use Hologram.Entity
+
+        role :editor
+
+        policy TakenOuterPolicy
+      end
+
+      expected_msg =
+        "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenTwoHopsEntity, taken from Hologram.Policy.ValidatorTest.TakenInnerPolicy - declared roles are: :editor"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenTwoHopsEntity])
+      end
+    end
+  end
+
   describe "validate_model!/1 for the grant lifecycle operations" do
     test "returns :ok for own role references" do
       defmodule OwnGateFixture do
