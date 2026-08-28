@@ -695,6 +695,34 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "new/1",
+      "public",
+      ManuallyPortedElixirHologramEntity["new/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "new/2",
+      "public",
+      ManuallyPortedElixirHologramEntity["new/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "validate/1",
+      "public",
+      ManuallyPortedElixirHologramEntity["validate/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "validate/2",
+      "public",
+      ManuallyPortedElixirHologramEntity["validate/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Hologram.Query",
       "count/1",
       "public",

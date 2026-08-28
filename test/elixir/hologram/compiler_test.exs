@@ -32,11 +32,14 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module28, as: ComponentModule28
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
+  alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
   alias Hologram.Test.Fixtures.Page.Module12, as: PageModule12
@@ -752,9 +755,22 @@ defmodule Hologram.CompilerTest do
       assert MapSet.member?(sync_constants.entity_types, Entity1)
     end
 
-    # A type no query reads can never reach a client's database, so the build tells it nothing
-    # about one - not its attributes, and not that it exists.
-    test "leaves out a type no query reads", %{sync_constants: sync_constants} do
+    # A client constructs and validates entities as well as reading them, and the type it
+    # constructs is the one it needs the declarations of. PageModule13 holds a Module4 in an
+    # action and no query anywhere reads that type, so mentioning it is the only way it can be
+    # here - and Module4 declares no policy, so the policied set cannot be carrying it either.
+    test "collects a type the given pages mention without querying", %{
+      sync_constants: sync_constants
+    } do
+      assert MapSet.member?(sync_constants.entity_types, Entity4)
+    end
+
+    # A type nothing reads and nothing mentions can never reach a client's database or be built
+    # there, so the build tells it nothing about one - not its attributes, and not that it exists.
+    # That is what keeps an app's other tables out of a file every page load serves.
+    test "leaves out a type no query reads and no page mentions", %{
+      sync_constants: sync_constants
+    } do
       refute MapSet.member?(sync_constants.entity_types, Entity12)
     end
 
@@ -1081,13 +1097,163 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"enumValues":{"c":["x","y"]},"policy":{},/ <>
+                 ~s/"updated_at":"datetime"},"constraints":{},"defaults":{"c":Type.atom("x")},/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
                  ~s/"relationships":{},/ <>
                  ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[]}}/
              )
     end
 
-    test "injects the relationships with their target types and cardinality", %{
+    # The client judges a written value by these, so the name a violation is reported under is the
+    # name the build writes - min_length, not the camelCase of its neighbours.
+    test "injects the declared constraints under the option names a violation names", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"bio":{"max_length":10,"optional":true},/)
+      assert String.contains?(js, ~s/"country_code":{"length":2,"optional":true},/)
+      assert String.contains?(js, ~s/"username":{"max_length":8,"min_length":3,"optional":true}/)
+    end
+
+    # A bound is the literal the declaration wrote, and rating declares both spellings of the same
+    # number on one attribute - a float attribute takes `min: 0` beside `max: 5.0`, which the wire
+    # would spell alike and the term encoder keeps apart.
+    test "injects a numeric bound as the encoded term its literal builds", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"count":{"max":Type.integer(10n),"min":Type.integer(1n)},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"rating":{"max":Type.float(5.0),"min":Type.integer(0n),"optional":true},/
+             )
+    end
+
+    test "injects a temporal bound as the encoded struct its literal builds", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"released_on":{"max":Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Date")], / <>
+                 ~s/[Type.atom("calendar"), Type.atom("Elixir.Calendar.ISO")], / <>
+                 ~s/[Type.atom("day"), Type.integer(31n)], [Type.atom("month"), Type.integer(12n)], / <>
+                 ~s/[Type.atom("year"), Type.integer(2030n)]]),"optional":true}/
+             )
+    end
+
+    # A compiled pattern exists only inside the runtime that compiled it, so what travels is what
+    # compiles into one - the source and the options it was written with.
+    test "injects a declared format as its source and its options", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"handle":{"format":{"opts":Type.list([]),"source":"^[a-z_]+$"},"min_length":3,"optional":true},/
+             )
+    end
+
+    # Not every compile option is a NAME: ~r/@/s reads back as [:dotall, {:newline, :anycrlf}],
+    # and a tuple has none to write - which is why the options travel as the term they are.
+    test "injects a declared format's options as the term the declaration held", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"email":{"format":{"opts":Type.list([Type.atom("dotall"), / <>
+                 ~s/Type.tuple([Type.atom("newline"), Type.atom("anycrlf")])]),"source":"@"},/ <>
+                 ~s/"optional":true},/
+             )
+    end
+
+    # The step travels with the ends: 0..100//5 admits 5 and refuses 7, so a client told only
+    # where the range starts and stops would answer differently from the server.
+    test "injects a declared range as its ends and its step", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"percent":{"in":{"first":0,"last":100,"step":5},"optional":true},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"priority":{"in":{"first":1,"last":5,"step":1},"optional":true},/
+             )
+    end
+
+    test "injects the uniqueness a declaration asks for", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity19])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"constraints":{"code":{"optional":true,"unique":true},"slug":{"unique":true}}/
+             )
+    end
+
+    # A default is the literal the declaration wrote, so it travels as the term that literal
+    # becomes in transpiled code rather than as the way the wire spells the same value - a struct
+    # built on the client holds what was declared, and `default: 5` and `default: 5.0` are two
+    # different things to hold.
+    test "injects the declared defaults as encoded terms", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
+    end
+
+    # A construction naming two of them reports the FIRST, so the order is the refusal's rather
+    # than sorted - a client reporting the other would answer a question the server never got.
+    test "injects the framework-owned attribute names of a job type, in the order they are refused",
+         %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([JobModule1])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"frameworkAttributes":["actor_id","error","status"]/)
+    end
+
+    test "injects the relationships with their target types, cardinality and optionality", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
@@ -1097,9 +1263,9 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"relationships":{"a":{"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
-                 ~s/"b":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
-                 ~s/"c":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+               ~s/"relationships":{"a":{"optional":false,"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
              )
     end
 
@@ -1229,8 +1395,35 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"user":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
+               ~s/"user":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
              )
+    end
+
+    # An attribute declaring no constraint is left out of the map entirely, and a type whose
+    # attributes all declare none carries an empty one - the reader fetches the field without
+    # asking whether it is there.
+    test "injects an empty constraint map for a type declaring no constraint", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"constraints":{},/)
+    end
+
+    # A type declaring no default carries an empty map rather than nothing at all - the reader
+    # fetches the field without asking whether it is there.
+    test "injects an empty default map for a type declaring no default", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"defaults":{},/)
     end
 
     # A type holding no enum attribute carries an empty map rather than nothing at all - the
@@ -1243,7 +1436,20 @@ defmodule Hologram.CompilerTest do
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
-      assert String.contains?(js, ~s/"enumValues":{},"policy"/)
+      assert String.contains?(js, ~s/"enumValues":{},/)
+    end
+
+    # Every type carries the list, empty for anything that is not a job - which is what makes it a
+    # fact about the type rather than a rule the reader has to know jobs by.
+    test "injects an empty framework-attribute list for a type that is not a job", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"frameworkAttributes":[],/)
     end
 
     # A capture travels in the bundle and is called there, but an encoded function carries no

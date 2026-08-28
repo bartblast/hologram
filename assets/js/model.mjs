@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 // What the client knows about the shape of its own rows, and the boundary where a row becomes
@@ -51,10 +52,24 @@ export default class Model {
         ]);
       }
 
-      data.push([Type.atom(name), includes[name] ?? Model.#notIncluded(name)]);
+      data.push([Type.atom(name), includes[name] ?? Model.notIncluded(name)]);
     }
 
     return Type.map(data);
+  }
+
+  // The framework's own state on an entity struct, as one that arrived from nowhere carries it:
+  // nothing recorded toward a write, and no revisions, because it was read from no row.
+  static emptyMetadata() {
+    return Model.#metadataWithRevisions(Type.map([]));
+  }
+
+  // A label beginning with an uppercase letter names a module, which is stored without the
+  // prefix every module atom carries - the same rule the database codec reads labels by.
+  static boxEnumValue(label) {
+    const first = label[0];
+
+    return first >= "A" && first <= "Z" ? Type.alias(label) : Type.atom(label);
   }
 
   static entry(type) {
@@ -72,9 +87,17 @@ export default class Model {
       );
     }
 
+    // The three the write path INDEXES into stand in for themselves when a baked entry does not
+    // carry them, where the ones that are only carried can stay undefined: a reader asking what
+    // an attribute declares has to be told "nothing" rather than meet a crash. A build writes all
+    // of them for every type - what has fewer keys is a hand-built entry, which is how most of
+    // this suite states the little it reads.
     entry = {
       attributes: baked.attributes,
+      constraints: Model.#boxConstraints(baked.constraints ?? {}),
+      defaults: baked.defaults ?? {},
       enumValues: baked.enumValues,
+      frameworkAttributes: baked.frameworkAttributes ?? [],
       policy: baked.policy,
       relationships: baked.relationships,
       resourceType: baked.resourceType,
@@ -84,6 +107,15 @@ export default class Model {
     Model.#entries[type] = entry;
 
     return entry;
+  }
+
+  // What a relationship nobody asked for holds, naming itself - a read of one reports which
+  // relationship was not included rather than answering nil, which is a different fact.
+  static notIncluded(name) {
+    return Type.map([
+      [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
+      [Type.atom("relationship"), Type.atom(name)],
+    ]);
   }
 
   static relationships(type) {
@@ -137,6 +169,41 @@ export default class Model {
     }
 
     return Model.#boxValue(row[name], attributeType);
+  }
+
+  static #boxAttributeConstraints(options) {
+    const entries = Object.entries(options).map(([option, value]) => [
+      option,
+      Model.#boxConstraintValue(option, value),
+    ]);
+
+    return Object.fromEntries(entries);
+  }
+
+  // The declared constraints, in the form the checks read them: a range as the struct a
+  // membership test walks, a pattern as the struct a match runs, and everything else as the
+  // build wrote it. Boxed once per type rather than at every check, because a type is read back
+  // far more often than it is met for the first time.
+  static #boxConstraints(constraints) {
+    const entries = Object.entries(constraints).map(([name, options]) => [
+      name,
+      Model.#boxAttributeConstraints(options),
+    ]);
+
+    return Object.fromEntries(entries);
+  }
+
+  static #boxConstraintValue(option, value) {
+    switch (option) {
+      case "format":
+        return Model.#compileFormat(value);
+
+      case "in":
+        return Type.range(value.first, value.last, value.step);
+
+      default:
+        return value;
+    }
   }
 
   static #boxDate(value) {
@@ -193,14 +260,6 @@ export default class Model {
     ]);
   }
 
-  // A label beginning with an uppercase letter names a module, which is stored without the
-  // prefix every module atom carries - the same rule the database codec reads labels by.
-  static #boxEnum(value) {
-    const first = value[0];
-
-    return first >= "A" && first <= "Z" ? Type.alias(value) : Type.atom(value);
-  }
-
   static #boxValue(value, attributeType) {
     if (value === null || value === undefined) {
       return Type.nil();
@@ -217,7 +276,7 @@ export default class Model {
         return Model.#boxDateTime(value);
 
       case "enum":
-        return Model.#boxEnum(value);
+        return Model.boxEnumValue(value);
 
       case "float":
         return Type.float(value);
@@ -228,6 +287,27 @@ export default class Model {
       default:
         return Type.bitstring(value);
     }
+  }
+
+  // A compiled pattern exists only inside the runtime that compiled it, so the build bakes what
+  // compiles into one - the source and the options it was written with - and this is the runtime
+  // that compiles it. The struct is the one a violation carries, so it holds the same three
+  // fields Elixir's does.
+  static #compileFormat({opts, source}) {
+    const boxedSource = Type.bitstring(source);
+
+    // The options arrive boxed, as the term the declaration held: not every one of them is a
+    // name, since ~r/x/s reads back as [:dotall, {:newline, :anycrlf}].
+    const compiled = Interpreter.moduleProxy("re")["compile/2"](
+      boxedSource,
+      opts,
+    );
+
+    return Type.struct("Regex", [
+      [Type.atom("opts"), opts],
+      [Type.atom("re_pattern"), compiled.data[1]],
+      [Type.atom("source"), boxedSource],
+    ]);
   }
 
   static #field(struct, name) {
@@ -242,12 +322,21 @@ export default class Model {
       ([name, revision]) => [Type.atom(name), Type.integer(revision)],
     );
 
+    return Model.#metadataWithRevisions(Type.map(revisions));
+  }
+
+  // Every field Hologram.Entity.Metadata declares is written here, at its own default, whether or
+  // not this side has anything to put in it: a struct short of a field answers a read of that
+  // field with a KeyError where the server's answers nil, and stops comparing equal to a struct
+  // the server built. One list, so the two can only drift by someone editing this line.
+  static #metadataWithRevisions(revisions) {
     return Type.map([
       [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
       [Type.atom("attribute_ops"), Type.map([])],
       [Type.atom("claim"), Type.nil()],
       [Type.atom("relationship_ops"), Type.map([])],
-      [Type.atom("revisions"), Type.map(revisions)],
+      [Type.atom("revisions"), revisions],
+      [Type.atom("stamp"), Type.nil()],
     ]);
   }
 
@@ -288,12 +377,5 @@ export default class Model {
     return Type.isAlias(value)
       ? value.value.replace(/^Elixir\./, "")
       : value.value;
-  }
-
-  static #notIncluded(name) {
-    return Type.map([
-      [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
-      [Type.atom("relationship"), Type.atom(name)],
-    ]);
   }
 }

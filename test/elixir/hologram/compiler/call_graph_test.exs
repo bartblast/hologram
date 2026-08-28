@@ -58,6 +58,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
+  @runtime_js_path Path.join([Reflection.root_dir(), "assets", "js", "hologram.mjs"])
+
   @tmp_dir Reflection.tmp_dir()
 
   defp app_protocol_dispatch_types_with_analysis(graph) do
@@ -1753,6 +1755,11 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert {:re, :import, 1} in result
 
+    # The regex engine the model and the entity port reach through a module proxy, which no
+    # client-reachable code names for the compiler to follow.
+    assert {:re, :compile, 2} in result
+    assert {:re, :run, 3} in result
+
     refute {:unicode, :characters_to_binary, 1} in result
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
@@ -2080,12 +2087,42 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph_2) == get_graph(call_graph)
   end
 
+  # Registering an MFA here takes the transpiled original OUT of every bundle, and the client
+  # runtime is where the replacement is put in - by hand, in hologram.mjs. Miss that half and the
+  # function is simply gone: the browser answers a call to it with UndefinedFunctionError, which
+  # no Elixir test and no JavaScript test of the port itself can see, because both call the port
+  # directly rather than through the interpreter's registry.
+  #
+  # Matched over ANY whitespace between the two arguments rather than over the newline and indent
+  # the formatter happens to write: a Windows checkout reads that file with CRLF, and a run there
+  # found every one of them missing.
+  test "every manually ported Elixir MFA is defined in the client runtime" do
+    runtime_js = File.read!(@runtime_js_path)
+
+    unregistered =
+      Enum.reject(manually_ported_elixir_mfas(), fn {module, function, arity} ->
+        module_name = Regex.escape(Reflection.module_name(module))
+        function_name = Regex.escape("#{function}/#{arity}")
+
+        registration = ~r/"#{module_name}",\s*"#{function_name}",/
+
+        Regex.match?(registration, runtime_js)
+      end)
+
+    assert unregistered == []
+  end
+
   test "manually_ported_elixir_mfas/0" do
     result = manually_ported_elixir_mfas()
 
     assert is_list(result)
     assert {Kernel, :inspect, 1} in result
     assert {String, :upcase, 1} in result
+
+    assert {Hologram.Entity, :new, 1} in result
+    assert {Hologram.Entity, :new, 2} in result
+    assert {Hologram.Entity, :validate, 1} in result
+    assert {Hologram.Entity, :validate, 2} in result
   end
 
   describe "maybe_load/2" do

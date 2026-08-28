@@ -18,12 +18,29 @@ defmodule Hologram.Compiler do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
+
+  # The declaration options a write is judged against, which is why they are the ones baked into
+  # the client's model. What is missing from the list is missing on purpose: :values already
+  # travels as the entry's enum values, :default as its defaults, and :server_only as the names a
+  # client is told it may not have.
+  @baked_constraint_opts [
+    :format,
+    :in,
+    :length,
+    :max,
+    :max_length,
+    :min,
+    :min_length,
+    :optional,
+    :unique
+  ]
 
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
@@ -904,12 +921,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns what the client's data layer is compiled with, derived from the queries the given
-  pages reach.
+  Returns what the client's data layer is compiled with, derived from what the given pages reach.
 
-  `:entity_types` are the types a client can ever hold - every window's own type and everything
-  it includes. Nothing else can reach a client's database, so nothing else is worth telling it
-  about.
+  `:entity_types` are the types a client can ever hold or mention - every window's own type and
+  everything it includes, plus every entity type the given pages' client code mentions. A client
+  constructs and validates entities as well as reading them, and a type it constructs is one it
+  has to be told the declarations of. A type neither queried nor mentioned is left out, which is
+  what keeps an app's other tables out of a file every page load serves.
 
   `:prop_params` are the ordered argument names of every parameterized from_query capture those
   components declare, keyed by component and prop. A capture travels in the bundle and is called
@@ -938,14 +956,32 @@ defmodule Hologram.Compiler do
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
+    # One traversal per page, read twice: the modules a page reaches carry both its components
+    # and the entity types below.
+    reached_modules = Enum.map(page_modules, &page_reached_modules(&1, call_graph, analysis))
+
     component_modules =
-      page_modules
-      |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
+      reached_modules
+      |> Enum.concat()
       |> Enum.uniq()
+      |> Enum.filter(&Reflection.component?/1)
 
     # One sweep for both the extraction below and the policied set: the extractor forks over this
     # list once per variant if it reads it itself, and policied_entity_types/1 filters the same one.
     all_entity_types = Reflection.list_entities()
+
+    # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
+    # to `Task.__struct__/1`, and `Entity.new(Task, ...)` hands the module over as a value - which
+    # reaches those same two functions, because the call graph links every module it reaches to
+    # its own `__struct__/0` and `__struct__/1` whenever the module has a struct
+    # (`CallGraph.maybe_add_struct_call_graph_edges/2`). Every entity type has one, so both
+    # spellings land in the reached modules, and telling a mention apart from a call would answer
+    # nothing this does not.
+    mentioned_entity_types =
+      reached_modules
+      |> Enum.concat()
+      |> MapSet.new()
+      |> MapSet.intersection(MapSet.new(all_entity_types))
 
     terms =
       Enum.flat_map(
@@ -958,13 +994,15 @@ defmodule Hologram.Compiler do
         MapSet.union(types, Registry.entity_types(term))
       end)
 
+    reached_entity_types = MapSet.union(queried_entity_types, mentioned_entity_types)
+
     entity_types =
       if permission_checking? do
-        queried_entity_types
+        reached_entity_types
         |> MapSet.put(RoleGrant)
         |> MapSet.union(policied_entity_types(all_entity_types))
       else
-        queried_entity_types
+        reached_entity_types
       end
 
     # The flag is carried rather than recovered from the type set: a component query reading grant
@@ -1285,10 +1323,8 @@ defmodule Hologram.Compiler do
   end
 
   defp page_component_modules(page_module, call_graph, analysis) do
-    call_graph
-    |> CallGraph.list_page_mfas(page_module, analysis)
-    |> Enum.map(fn {module, _function, _arity} -> module end)
-    |> Enum.uniq()
+    page_module
+    |> page_reached_modules(call_graph, analysis)
     |> Enum.filter(&Reflection.component?/1)
   end
 
@@ -1296,6 +1332,13 @@ defmodule Hologram.Compiler do
     page_module
     |> page_component_modules(call_graph, analysis)
     |> Enum.flat_map(&QueryExtractor.extract_module_queries(&1, all_entity_types))
+  end
+
+  defp page_reached_modules(page_module, call_graph, analysis) do
+    call_graph
+    |> CallGraph.list_page_mfas(page_module, analysis)
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
   end
 
   # A component declaring no parameterized capture is left out rather than carried as an empty
@@ -1488,9 +1531,102 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
-  # What a client needs to read its own rows: a value's type is not recoverable from the value
-  # itself - a date, an enum and a uuid all arrive as strings - so reading one back means knowing
-  # the attribute it belongs to, which is what this says.
+  # What the client judges a written value by, so that a browser answers what the server answers.
+  # Only the attributes declaring at least one of these options are named, and each carries only
+  # the options its declaration wrote.
+  #
+  # The inner keys are the option names as Elixir spells them (min_length, not minLength) rather
+  # than in the camelCase of their neighbours, because they are also the words a violation is
+  # reported in - one spelling, written by the build and read back in the answer.
+  defp render_constraints(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, _type, opts} ->
+      Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
+    end)
+    |> Enum.map(fn {name, _type, opts} ->
+      {Atom.to_string(name), render_attribute_constraints(opts)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_attribute_constraints(opts) do
+    @baked_constraint_opts
+    |> Enum.flat_map(fn key ->
+      case Keyword.fetch(opts, key) do
+        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value)}]
+        :error -> []
+      end
+    end)
+    |> render_json_object()
+  end
+
+  # A bound travels as the ENCODED TERM its literal becomes, for the reason a default does: a
+  # violation names the bound the declaration wrote, and a float attribute takes both `max: 5` and
+  # `max: 5.0`, which the wire spells alike.
+  defp render_constraint_value(key, value) when key in [:max, :min] do
+    Encoder.encode_term!(value)
+  end
+
+  # A pattern travels as its source and its options rather than as a compiled one: a compiled
+  # pattern exists only inside the runtime that compiled it, and the encoded form of a Regex is a
+  # struct wrapping a :re.import/1 CALL, which this line sits above in the runtime script. The
+  # client compiles it once instead, which is what the import would have done anyway.
+  #
+  # The options travel as an ENCODED TERM rather than as their names, because not all of them are
+  # names: ~r/x/s reads back as [:dotall, {:newline, :anycrlf}], and a tuple has no name to write.
+  # Model.normalize_value/1 keeps the same list whole for the same reason.
+  defp render_constraint_value(:format, value) do
+    opts =
+      value
+      |> Regex.opts()
+      |> Encoder.encode_term!()
+
+    source =
+      value
+      |> Regex.source()
+      |> Jason.encode!()
+
+    render_json_object([{"opts", opts}, {"source", source}])
+  end
+
+  # A range travels as its three parts, the step included - `in: 0..100//5` admits 5 and refuses
+  # 7, so a client told only the ends would answer differently from the server.
+  defp render_constraint_value(:in, value) do
+    render_json_object([
+      {"first", Jason.encode!(value.first)},
+      {"last", Jason.encode!(value.last)},
+      {"step", Jason.encode!(value.step)}
+    ])
+  end
+
+  defp render_constraint_value(_key, value), do: Jason.encode!(value)
+
+  # A default travels as the ENCODED TERM the declared literal becomes in transpiled code, rather
+  # than as the way the wire spells the same value: the client applies it to a struct field, and a
+  # struct field holds the literal the developer wrote. The two are not interchangeable - a float
+  # attribute takes both `default: 5` and `default: 5.0`, which the wire spells alike and the term
+  # encoder keeps apart, and a struct built on the client has to hold the one that was declared.
+  #
+  # Only the attributes declaring one are named - an attribute with no default has nothing to
+  # apply, and the reader fills its field the way an absent value is filled anyway.
+  defp render_defaults(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
+    |> Enum.map(fn {name, _type, opts} ->
+      default =
+        opts
+        |> Keyword.fetch!(:default)
+        |> Encoder.encode_term!()
+
+      {Atom.to_string(name), default}
+    end)
+    |> render_json_object()
+  end
+
+  # What a client needs to read its own rows, and to build one: a value's type is not recoverable
+  # from the value itself - a date, an enum and a uuid all arrive as strings - so reading one back
+  # means knowing the attribute it belongs to, which is what this says. Building one means knowing
+  # what the declaration fills in for an attribute nobody set, which is what the defaults say.
   #
   # It rides with the bundle rather than with the entity modules, for two reasons. A module says
   # this through functions nothing calls statically, so nothing keeps them: the caller names them
@@ -1528,7 +1664,10 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"attributes", attributes},
+      {"constraints", render_constraints(entity_type)},
+      {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
+      {"frameworkAttributes", render_framework_attributes(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"resourceType", render_resource_type(entity_type)},
@@ -1553,6 +1692,21 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
+  # The attributes of a job that the framework owns and nobody else writes - the ones construction
+  # refuses by name, so that a client refuses them for the same reason and in the same words.
+  #
+  # They travel in the order the refusal walks rather than sorted, because a construction naming
+  # two of them reports the FIRST, and a client reporting the other would answer a question the
+  # server was never asked. Every other entity type carries an empty list, which is what makes
+  # this a fact about the type rather than a rule the reader has to know jobs by.
+  defp render_framework_attributes(entity_type) do
+    names = if Reflection.job?(entity_type), do: Job.framework_attribute_names(), else: []
+
+    names
+    |> Enum.map(&Atom.to_string/1)
+    |> Jason.encode!()
+  end
+
   # Keys are written in sorted order rather than the order a map hands them over in - that one
   # follows the atom table, which follows what the build happened to load first, and the bundle
   # this text ends up in is addressed by its content.
@@ -1565,27 +1719,39 @@ defmodule Hologram.Compiler do
 
   # A to-many is spelled apart from a to-one because they are read apart: a to-many is assembled
   # from the relationship facts, a to-one is followed through the reference field the row carries.
+  #
+  # Optionality rides with both, though only a to-one is judged by it: a row missing the reference
+  # field of a required to-one is a row the write refuses, which is an answer the client owes as
+  # much as the server does.
   defp render_relationships(entity_type) do
     entity_type.__relationships__()
-    |> Enum.map(fn {name, target, _opts} ->
-      {Atom.to_string(name), render_relationship(target)}
+    |> Enum.map(fn {name, target, opts} ->
+      optional? = Keyword.get(opts, :optional) == true
+
+      {Atom.to_string(name), render_relationship(target, optional?)}
     end)
     |> render_json_object()
   end
 
-  defp render_relationship(target) when is_list(target) do
-    render_relationship_entry(hd(target), true)
+  defp render_relationship(target, optional?) when is_list(target) do
+    render_relationship_entry(hd(target), true, optional?)
   end
 
-  defp render_relationship(target), do: render_relationship_entry(target, false)
+  defp render_relationship(target, optional?) do
+    render_relationship_entry(target, false, optional?)
+  end
 
-  defp render_relationship_entry(target, to_many?) do
+  defp render_relationship_entry(target, to_many?, optional?) do
     type =
       target
       |> Codec.encode_enum_value()
       |> Jason.encode!()
 
-    render_json_object([{"toMany", Jason.encode!(to_many?)}, {"type", type}])
+    render_json_object([
+      {"optional", Jason.encode!(optional?)},
+      {"toMany", Jason.encode!(to_many?)},
+      {"type", type}
+    ])
   end
 
   # The rules a client evaluates permissions by, spelled the way the rows it evaluates them
