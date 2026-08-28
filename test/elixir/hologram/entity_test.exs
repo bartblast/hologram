@@ -266,6 +266,10 @@ defmodule Hologram.EntityTest do
       assert entity.created_at == nil
     end
 
+    test "accepts values as a map" do
+      assert Module2.new(%{c: "text_5"}).c == "text_5"
+    end
+
     test "takes no values" do
       entity = Module1.new()
 
