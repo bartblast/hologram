@@ -39,6 +39,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
   alias Hologram.Test.Fixtures.Page.Module12, as: PageModule12
@@ -1084,7 +1085,7 @@ defmodule Hologram.CompilerTest do
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"defaults":{"c":Type.atom("x")},/ <>
-                 ~s/"enumValues":{"c":["x","y"]},"policy":{},/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
                  ~s/"relationships":{},/ <>
                  ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[]}}/
              )
@@ -1213,6 +1214,17 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
+    end
+
+    # A construction naming two of them reports the FIRST, so the order is the refusal's rather
+    # than sorted - a client reporting the other would answer a question the server never got.
+    test "injects the framework-owned attribute names of a job type, in the order they are refused",
+         %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([JobModule1])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"frameworkAttributes":["actor_id","error","status"]/)
     end
 
     test "injects the relationships with their target types, cardinality and optionality", %{
@@ -1372,7 +1384,7 @@ defmodule Hologram.CompilerTest do
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
-      assert String.contains?(js, ~s/"constraints":{},"defaults"/)
+      assert String.contains?(js, ~s/"constraints":{},/)
     end
 
     # A type declaring no default carries an empty map rather than nothing at all - the reader
@@ -1385,7 +1397,7 @@ defmodule Hologram.CompilerTest do
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
-      assert String.contains?(js, ~s/"defaults":{},"enumValues"/)
+      assert String.contains?(js, ~s/"defaults":{},/)
     end
 
     # A type holding no enum attribute carries an empty map rather than nothing at all - the
@@ -1398,7 +1410,20 @@ defmodule Hologram.CompilerTest do
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
-      assert String.contains?(js, ~s/"enumValues":{},"policy"/)
+      assert String.contains?(js, ~s/"enumValues":{},/)
+    end
+
+    # Every type carries the list, empty for anything that is not a job - which is what makes it a
+    # fact about the type rather than a rule the reader has to know jobs by.
+    test "injects an empty framework-attribute list for a type that is not a job", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"frameworkAttributes":[],/)
     end
 
     # A capture travels in the bundle and is called there, but an encoded function carries no

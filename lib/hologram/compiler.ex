@@ -18,6 +18,7 @@ defmodule Hologram.Compiler do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Registry
@@ -1637,6 +1638,7 @@ defmodule Hologram.Compiler do
       {"constraints", render_constraints(entity_type)},
       {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
+      {"frameworkAttributes", render_framework_attributes(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"resourceType", render_resource_type(entity_type)},
@@ -1659,6 +1661,21 @@ defmodule Hologram.Compiler do
       {Atom.to_string(name), values}
     end)
     |> render_json_object()
+  end
+
+  # The attributes of a job that the framework owns and nobody else writes - the ones construction
+  # refuses by name, so that a client refuses them for the same reason and in the same words.
+  #
+  # They travel in the order the refusal walks rather than sorted, because a construction naming
+  # two of them reports the FIRST, and a client reporting the other would answer a question the
+  # server was never asked. Every other entity type carries an empty list, which is what makes
+  # this a fact about the type rather than a rule the reader has to know jobs by.
+  defp render_framework_attributes(entity_type) do
+    names = if Reflection.job?(entity_type), do: Job.framework_attribute_names(), else: []
+
+    names
+    |> Enum.map(&Atom.to_string/1)
+    |> Jason.encode!()
   end
 
   # Keys are written in sorted order rather than the order a map hands them over in - that one
