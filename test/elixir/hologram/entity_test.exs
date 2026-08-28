@@ -321,6 +321,53 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  # The taken policy is the shared fixture rather than an inline module: this file imports
+  # Hologram.Entity, and a nested defmodule with use Hologram.Policy inherits that import,
+  # which collides on role/1 and allow/1.
+  describe "policy/1" do
+    test "takes the roles and rules of the given policy module" do
+      defmodule TakingEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+      end
+
+      assert TakingEntityFixture.__roles__() == [{:viewer, []}]
+      assert TakingEntityFixture.__policies__() == [{:read, :viewer, nil, []}]
+    end
+
+    test "keeps the entity's own declarations beside the taken ones, taken first" do
+      defmodule CoexistEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :owner
+
+        allow :delete, to: :owner
+      end
+
+      assert CoexistEntityFixture.__roles__() == [{:owner, []}, {:viewer, []}]
+
+      assert CoexistEntityFixture.__policies__() == [
+               {:read, :viewer, nil, []},
+               {:delete, :owner, nil, []}
+             ]
+    end
+
+    test "contributes roles that a locally declared extends option can name" do
+      defmodule ExtendsEntityFixture do
+        use Hologram.Entity
+
+        policy Hologram.Test.Fixtures.Policy.Shared.Module1
+
+        role :owner, extends: :viewer
+      end
+
+      assert ExtendsEntityFixture.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
+    end
+  end
+
   describe "role/2" do
     test "unifies an identical re-declaration" do
       defmodule InlineRoleFixture1 do

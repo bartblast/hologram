@@ -31,6 +31,8 @@ defmodule Hologram.Entity do
             role: 2
           ]
 
+        import Hologram.Policy, only: [policy: 1]
+
         @before_compile Entity
 
         @doc """
