@@ -1753,6 +1753,11 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert {:re, :import, 1} in result
 
+    # The regex engine the model and the entity port reach through a module proxy, which no
+    # client-reachable code names for the compiler to follow.
+    assert {:re, :compile, 2} in result
+    assert {:re, :run, 3} in result
+
     refute {:unicode, :characters_to_binary, 1} in result
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end

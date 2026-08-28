@@ -464,11 +464,25 @@ defmodule Hologram.Compiler.CallGraph do
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
     ],
+    # The entity port matches a declared format against a value by running the pattern the model
+    # compiled. It reaches the engine through a module proxy, so no :re atom appears in
+    # client-reachable code for the compiler to follow - the runtime holds re.run/3 today only
+    # because something else in the build happens to reach it.
+    manually_ported_entity_module: [
+      {:re, :run, 3}
+    ],
     manually_ported_function_clause_error_module: [
       {Exception, :format_mfa, 3}
     ],
     manually_ported_io_module: [
       {:erlang, :iolist_to_binary, 1}
+    ],
+    # A declared format is baked as its source and its options, and the model compiles it into a
+    # pattern the first time it reads the type - reached through a module proxy like the port's
+    # own call. It rides in through the encoded-regex edge as well, which is a coupling rather
+    # than a guarantee: the model is a reader in its own right.
+    model_class: [
+      {:re, :compile, 2}
     ],
     operation_class: [
       {:maps, :from_list, 1},
