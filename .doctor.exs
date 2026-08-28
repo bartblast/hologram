@@ -8,7 +8,10 @@
     Hologram.Layout,
     Hologram.Middleware,
     Hologram.Middleware.Builder,
-    Hologram.Page
+    Hologram.Page,
+    # Doctor reads a module's docs from the LAST __using__ it finds in the file, which here is the
+    # one __before_compile__ generates - so the real __using__'s @doc and @spec go unseen.
+    Hologram.Policy
   ],
   ignore_paths: [~r(^benchmarks/*), ~r(^test/*)],
   min_module_doc_coverage: 100,

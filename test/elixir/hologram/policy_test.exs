@@ -17,6 +17,16 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
+  describe "__is_hologram_policy__/0" do
+    test "returns true" do
+      defmodule IsPolicyFixture do
+        use Hologram.Policy
+      end
+
+      assert IsPolicyFixture.__is_hologram_policy__()
+    end
+  end
+
   describe "allow/2" do
     test "replays declarations into the including entity type in declaration order" do
       defmodule AllowPolicyFixture do

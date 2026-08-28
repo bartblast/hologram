@@ -49,6 +49,17 @@ defmodule Hologram.Policy do
     quote do
       import Hologram.Policy, only: [allow: 1, allow: 2, role: 1, role: 2]
 
+      @doc """
+      Returns true to indicate that the callee module is a policy module (has "use Hologram.Policy" directive).
+
+      ## Examples
+
+          iex> __is_hologram_policy__()
+          true
+      """
+      @spec __is_hologram_policy__() :: boolean
+      def __is_hologram_policy__, do: true
+
       Module.register_attribute(__MODULE__, :__policy_declarations__, accumulate: true)
 
       @before_compile Hologram.Policy
