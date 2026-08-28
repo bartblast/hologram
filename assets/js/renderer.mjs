@@ -1377,11 +1377,11 @@ export default class Renderer {
 
     if (componentState === null) {
       if ("init/2" in moduleProxy) {
-        const emptyComponentStruct = Type.componentStruct();
+        const initialComponentStruct = Type.componentStruct({props});
 
         const componentStruct = moduleProxy["init/2"](
           props,
-          emptyComponentStruct,
+          initialComponentStruct,
         );
 
         ComponentRegistry.putEntry(

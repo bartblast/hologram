@@ -78,6 +78,7 @@ import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 import {defineModule91Fixture} from "./support/fixtures/renderer/module_91.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
+import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client_only/module_3.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
@@ -156,6 +157,7 @@ defineModule91Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
+defineClientOnlyModule3Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -6249,6 +6251,7 @@ describe("Renderer", () => {
             cid,
             componentRegistryEntryFixture({
               module: module3,
+              props: Type.map([[Type.atom("cid"), cid]]),
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
@@ -6637,11 +6640,49 @@ describe("Renderer", () => {
             cid,
             componentRegistryEntryFixture({
               module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
               ]),
             }),
+          ],
+        ]),
+      );
+    });
+
+    it("init/2 is given a struct that already carries the props", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module3",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("label"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("Save")]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      // The fixture's init/2 copies component.props into state, so what it stored is what the
+      // struct it was handed held.
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentState(cid),
+        Type.map([
+          [
+            Type.atom("props_seen_by_init"),
+            Type.map([
+              [Type.atom("cid"), cid],
+              [Type.atom("label"), Type.bitstring("Save")],
+            ]),
           ],
         ]),
       );
@@ -6863,6 +6904,7 @@ describe("Renderer", () => {
             cid,
             componentRegistryEntryFixture({
               module: module3,
+              props: Type.map([[Type.atom("cid"), cid]]),
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
