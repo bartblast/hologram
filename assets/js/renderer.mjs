@@ -302,6 +302,11 @@ export default class Renderer {
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
     const cid = Type.bitstring("page");
+
+    // A page's params are its props, and it is re-rendered on every action like everything else,
+    // so they are rewritten here for the same reason a component's are.
+    ComponentRegistry.putComponentProps(cid, pageParams);
+
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
     // The document's own children, the one children list with no element to own it.
@@ -1572,11 +1577,11 @@ export default class Renderer {
 
     if (componentState === null) {
       if ("init/2" in moduleProxy) {
-        const emptyComponentStruct = Type.componentStruct();
+        const initialComponentStruct = Type.componentStruct({props});
 
         const componentStruct = moduleProxy["init/2"](
           props,
-          emptyComponentStruct,
+          initialComponentStruct,
         );
 
         ComponentRegistry.putEntry(
@@ -2343,6 +2348,11 @@ export default class Renderer {
 
     const [componentState, componentEmittedContext] =
       Renderer.#maybeInitComponent(cid, moduleProxy, props);
+
+    // Rewritten on every render rather than only at init, so a handler reading a prop gets the
+    // value the latest render used rather than one taken when the component mounted. Runs after
+    // #maybeInitComponent, which is what creates the registry entry on a first render.
+    ComponentRegistry.putComponentProps(cid, props);
 
     const vars = Erlang_Maps["merge/2"](props, componentState);
     const mergedContext = Erlang_Maps["merge/2"](

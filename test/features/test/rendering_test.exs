@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.RenderingTest do
   alias HologramFeatureTests.Rendering.Page2
   alias HologramFeatureTests.Rendering.Page3
   alias HologramFeatureTests.Rendering.Page4
+  alias HologramFeatureTests.Rendering.PropsOnStructPage
   alias HologramFeatureTests.Rendering.PropValidationPage
 
   feature "root element without attributes", %{session: session} do
@@ -36,6 +37,47 @@ defmodule HologramFeatureTests.RenderingTest do
     |> visit(Page4)
     |> assert_text(css("#text"), "a & b < c")
     |> assert_text(css("#length"), "9")
+  end
+
+  describe "props on the component struct" do
+    # The prop is changed after mount and then read in an action. A component that copied the prop
+    # into state during init would answer 0 here forever, which is the trap this closes.
+    feature "action reads the prop the latest render passed", %{session: session} do
+      session
+      |> visit(PropsOnStructPage, n: 1)
+      |> click(button("Increment"))
+      |> click(button("Increment"))
+      |> assert_text(css("#component_1_prop_count"), "2")
+      |> click(css("#component_1_read_prop"))
+      |> assert_text(css("#component_1_result"), "2")
+    end
+
+    feature "action reads the prop on the first render", %{session: session} do
+      session
+      |> visit(PropsOnStructPage, n: 1)
+      |> click(css("#component_1_read_prop"))
+      |> assert_text(css("#component_1_result"), "0")
+    end
+
+    # Component 2 is not in the tree when the page loads, so it goes down the client's init/2 path
+    # rather than being initialized on the server.
+    feature "action reads the prop of a component added after load", %{session: session} do
+      session
+      |> visit(PropsOnStructPage, n: 1)
+      |> click(button("Increment"))
+      |> click(button("Increment"))
+      |> click(button("Show component 2"))
+      |> assert_text(css("#component_2_prop_count"), "2")
+      |> click(css("#component_2_read_prop"))
+      |> assert_text(css("#component_2_result"), "2")
+    end
+
+    feature "page action reads a URL param", %{session: session} do
+      session
+      |> visit(PropsOnStructPage, n: 7)
+      |> click(button("Read param"))
+      |> assert_text(css("#page_result"), "7")
+    end
   end
 
   describe "prop validation" do

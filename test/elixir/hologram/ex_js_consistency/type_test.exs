@@ -27,6 +27,7 @@ defmodule Hologram.ExJsConsistency.TypeTest do
              next_action: nil,
              next_command: nil,
              next_page: nil,
+             props: %{},
              state: %{}
            }
   end

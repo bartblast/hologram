@@ -38,6 +38,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module35
   alias Hologram.Test.Fixtures.Template.Renderer.Module36
   alias Hologram.Test.Fixtures.Template.Renderer.Module37
+  alias Hologram.Test.Fixtures.Template.Renderer.Module38
   alias Hologram.Test.Fixtures.Template.Renderer.Module39
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module40
@@ -155,12 +156,14 @@ defmodule Hologram.Template.RendererTest do
                   "component_3" => %{
                     module: Module3,
                     struct: %Component{
+                      props: %{cid: "component_3"},
                       state: %{a: 1, b: 2}
                     }
                   },
                   "component_7" => %{
                     module: Module7,
                     struct: %Component{
+                      props: %{cid: "component_7"},
                       state: %{c: 3, d: 4}
                     }
                   }
@@ -320,12 +323,14 @@ defmodule Hologram.Template.RendererTest do
                   "component_3" => %{
                     module: Module3,
                     struct: %Component{
+                      props: %{cid: "component_3"},
                       state: %{a: 1, b: 2}
                     }
                   },
                   "component_7" => %{
                     module: Module7,
                     struct: %Component{
+                      props: %{cid: "component_7"},
                       state: %{c: 3, d: 4}
                     }
                   }
@@ -682,8 +687,14 @@ defmodule Hologram.Template.RendererTest do
                {
                  "abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
                  %{
-                   "component_3" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}},
-                   "component_7" => %{module: Module7, struct: %Component{state: %{c: 3, d: 4}}}
+                   "component_3" => %{
+                     module: Module3,
+                     struct: %Component{props: %{cid: "component_3"}, state: %{a: 1, b: 2}}
+                   },
+                   "component_7" => %{
+                     module: Module7,
+                     struct: %Component{props: %{cid: "component_7"}, state: %{c: 3, d: 4}}
+                   }
                  },
                  %Server{
                    cookies: %{
@@ -714,8 +725,14 @@ defmodule Hologram.Template.RendererTest do
                {
                  "abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
                  %{
-                   "component_51" => %{module: Module51, struct: %Component{state: %{a: 1, b: 2}}},
-                   "component_52" => %{module: Module52, struct: %Component{state: %{c: 3, d: 4}}}
+                   "component_51" => %{
+                     module: Module51,
+                     struct: %Component{props: %{cid: "component_51"}, state: %{a: 1, b: 2}}
+                   },
+                   "component_52" => %{
+                     module: Module52,
+                     struct: %Component{props: %{cid: "component_52"}, state: %{c: 3, d: 4}}
+                   }
                  },
                  %Server{
                    cookies: %{
@@ -1101,7 +1118,12 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, @env, @server) ==
                {"<div>abc</div>",
-                %{"my_component" => %{module: Module1, struct: %Component{state: %{}}}}, @server}
+                %{
+                  "my_component" => %{
+                    module: Module1,
+                    struct: %Component{props: %{cid: "my_component"}, state: %{}}
+                  }
+                }, @server}
     end
 
     test "with props" do
@@ -1116,7 +1138,49 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, @env, @server) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>",
-                %{"my_component" => %{module: Module2, struct: %Component{state: %{}}}}, @server}
+                %{
+                  "my_component" => %{
+                    module: Module2,
+                    struct: %Component{
+                      props: %{a: "ddd", b: 222, c: "fff333hhh", cid: "my_component"},
+                      state: %{}
+                    }
+                  }
+                }, @server}
+    end
+
+    test "with a prop that has a default value" do
+      node =
+        {:component, Module65,
+         [{"cid", [text: "my_component"]}, {"prop_2", [expression: {:xyz}]}], []}
+
+      assert {_html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.props == %{
+               cid: "my_component",
+               prop_1: "abc",
+               prop_2: :xyz,
+               prop_3: 123
+             }
+    end
+
+    test "with a prop injected from context" do
+      node = {:component, Module38, [{"cid", [text: "my_component"]}], []}
+      env = %Renderer.Env{context: %{{:my_scope, :my_key} => 123}}
+
+      assert {_html, component_registry, _server_struct} = render_dom(node, env, @server)
+
+      assert component_registry["my_component"].struct.props == %{aaa: 123, cid: "my_component"}
+    end
+
+    test "with an attribute that isn't declared as a prop" do
+      node =
+        {:component, Module1,
+         [{"cid", [text: "my_component"]}, {"my_undeclared_prop", [text: "my_value"]}], []}
+
+      assert {_html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.props == %{cid: "my_component"}
     end
 
     test "with state / only component struct returned from init/3" do
@@ -1125,7 +1189,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) ==
                {"<div>state_a = 1, state_b = 2</div>",
                 %{
-                  "my_component" => %{module: Module69, struct: %Component{state: %{a: 1, b: 2}}}
+                  "my_component" => %{
+                    module: Module69,
+                    struct: %Component{props: %{cid: "my_component"}, state: %{a: 1, b: 2}}
+                  }
                 }, @server}
     end
 
@@ -1143,7 +1210,10 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "my_component" => %{
                     module: Module4,
-                    struct: %Component{state: %{a: "state_a", b: "state_b"}}
+                    struct: %Component{
+                      props: %{b: "prop_b", c: "prop_c", cid: "my_component"},
+                      state: %{a: "state_a", b: "state_b"}
+                    }
                   }
                 }, @server}
     end
@@ -1160,7 +1230,15 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) ==
                {
                  "<div>prop_a = aaa, prop_b = bbb</div>",
-                 %{"my_component" => %{module: Module5, struct: %Component{state: %{}}}},
+                 %{
+                   "my_component" => %{
+                     module: Module5,
+                     struct: %Component{
+                       props: %{a: "aaa", b: "bbb", cid: "my_component"},
+                       state: %{}
+                     }
+                   }
+                 },
                  %Server{
                    cookies: %{
                      "initial_cookie_key" => :initial_cookie_value,
@@ -1183,7 +1261,10 @@ defmodule Hologram.Template.RendererTest do
                {
                  "<div>state_a = 1, state_b = 2</div>",
                  %{
-                   "my_component" => %{module: Module6, struct: %Component{state: %{a: 1, b: 2}}}
+                   "my_component" => %{
+                     module: Module6,
+                     struct: %Component{props: %{cid: "my_component"}, state: %{a: 1, b: 2}}
+                   }
                  },
                  %Server{
                    cookies: %{
@@ -1259,9 +1340,18 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) ==
                {"10,11,10,12,10",
                 %{
-                  "component_10" => %{module: Module10, struct: %Component{state: %{a: 10}}},
-                  "component_11" => %{module: Module11, struct: %Component{state: %{a: 11}}},
-                  "component_12" => %{module: Module12, struct: %Component{state: %{a: 12}}}
+                  "component_10" => %{
+                    module: Module10,
+                    struct: %Component{props: %{cid: "component_10"}, state: %{a: 10}}
+                  },
+                  "component_11" => %{
+                    module: Module11,
+                    struct: %Component{props: %{cid: "component_11"}, state: %{a: 11}}
+                  },
+                  "component_12" => %{
+                    module: Module12,
+                    struct: %Component{props: %{cid: "component_12"}, state: %{a: 12}}
+                  }
                 },
                 %Server{
                   cookies: %{
@@ -1299,6 +1389,7 @@ defmodule Hologram.Template.RendererTest do
                   "component_34" => %{
                     module: Module34,
                     struct: %Component{
+                      props: %{a: "34a_prop", cid: "component_34"},
                       state: %{
                         cid: "component_34",
                         a: "34a_prop",
@@ -1313,12 +1404,14 @@ defmodule Hologram.Template.RendererTest do
                   "component_35" => %{
                     module: Module35,
                     struct: %Component{
+                      props: %{a: "35a_prop", cid: "component_35"},
                       state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
                     }
                   },
                   "component_36" => %{
                     module: Module36,
                     struct: %Component{
+                      props: %{a: "36a_prop", cid: "component_36"},
                       state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
                     }
                   }
@@ -1428,7 +1521,10 @@ defmodule Hologram.Template.RendererTest do
       assert html == "<div><div>state_a = 1, state_b = 2</div></div>"
 
       assert component_registry == %{
-               "component_3" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}
+               "component_3" => %{
+                 module: Module3,
+                 struct: %Component{props: %{cid: "component_3"}, state: %{a: 1, b: 2}}
+               }
              }
     end
 
@@ -1488,7 +1584,12 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, @env, @server) ==
                {"<div>state_a = 1, state_b = 2</div>",
-                %{"my_component" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}},
+                %{
+                  "my_component" => %{
+                    module: Module3,
+                    struct: %Component{props: %{cid: "my_component"}, state: %{a: 1, b: 2}}
+                  }
+                },
                 %Server{
                   cookies: %{
                     "initial_cookie_key" => :initial_cookie_value,
@@ -1645,7 +1746,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %{
                     module: LayoutFixture,
                     struct: %Component{
-                      emitted_context: %{}
+                      emitted_context: %{},
+                      props: %{cid: "layout"}
                     }
                   },
                   "page" => %{
@@ -1676,7 +1778,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %{
                     module: Module47,
                     struct: %Component{
-                      emitted_context: %{}
+                      emitted_context: %{},
+                      props: %{cid: "layout"}
                     }
                   },
                   "page" => %{
@@ -1707,7 +1810,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %{
                     module: Module41,
                     struct: %Component{
-                      emitted_context: %{}
+                      emitted_context: %{},
+                      props: %{aaa: 123, cid: "layout"}
                     }
                   },
                   "page" => %{
@@ -1738,7 +1842,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %{
                     module: Module42,
                     struct: %Component{
-                      emitted_context: %{{:my_scope, :my_key} => 123}
+                      emitted_context: %{{:my_scope, :my_key} => 123},
+                      props: %{cid: "layout"}
                     }
                   },
                   "page" => %{
@@ -1768,7 +1873,8 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %{
                     module: Module44,
                     struct: %Component{
-                      emitted_context: %{{:my_scope, :my_key} => 123}
+                      emitted_context: %{{:my_scope, :my_key} => 123},
+                      props: %{cid: "layout"}
                     }
                   },
                   "page" => %{
@@ -1800,7 +1906,8 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {:my_scope, :my_key} => 123
-                      }
+                      },
+                      props: %{cid: "component_37"}
                     }
                   }
                 }, @server}
@@ -1869,13 +1976,27 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module24, @params, @server, @opts)
     end
 
+    test "merge the page params into the page component struct" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      params = %{key_1: "param_value_1", key_2: "param_value_2"}
+
+      assert {_html, component_registry, _server_struct} =
+               render_page_without_tree(Module21, params, @server, @opts)
+
+      assert component_registry["page"].struct.props == params
+    end
+
     test "merge the page component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
       assert render_page_without_tree(Module28, @params, @server, @opts) ==
                {"",
                 %{
-                  "layout" => %{module: LayoutFixture, struct: %Component{}},
+                  "layout" => %{
+                    module: LayoutFixture,
+                    struct: %Component{props: %{cid: "layout"}}
+                  },
                   "page" => %{
                     module: Module28,
                     struct: %Component{
@@ -1904,6 +2025,7 @@ defmodule Hologram.Template.RendererTest do
                   "layout" => %{
                     module: Module30,
                     struct: %Component{
+                      props: %{cid: "layout"},
                       state: %{state_1: "value_1", state_2: "value_2"}
                     }
                   },
@@ -2029,9 +2151,24 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module48, @params, @server, @opts)
 
       expected =
-        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_id")]), Type.bitstring("#{@replica_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_token")]), Type.bitstring("#{@replica_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("user")]), Type.atom("nil")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
+        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_id")]), Type.bitstring("#{@replica_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_token")]), Type.bitstring("#{@replica_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("user")]), Type.atom("nil")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
 
       assert String.contains?(html, expected)
+    end
+
+    test "keep the props out of the interpolated component structs JS" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      params = %{key_1: "param_value_1", key_2: "param_value_2"}
+
+      %{component_registry: component_registry, mount_data: mount_data} =
+        render_page(Module21, params, @server, @opts)
+
+      # The renderer keeps them; only what the client is sent is hollowed, and the key stays.
+      assert component_registry["page"].struct.props == params
+
+      refute mount_data.component_registry =~ "param_value_1"
+      assert mount_data.component_registry =~ ~s/[Type.atom("props"), Type.map([])]/
     end
 
     test "interpolate component structs JS with server-only state values replaced by the sentinel" do
@@ -3541,6 +3678,7 @@ defmodule Hologram.Template.RendererTest do
                   "component_3" => %{
                     module: Module3,
                     struct: %Component{
+                      props: %{cid: "component_3"},
                       state: %{a: 1, b: 2}
                     }
                   }

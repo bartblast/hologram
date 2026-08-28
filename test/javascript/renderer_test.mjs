@@ -78,6 +78,7 @@ import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 import {defineModule91Fixture} from "./support/fixtures/renderer/module_91.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
+import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client_only/module_3.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
@@ -156,6 +157,7 @@ defineModule91Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
+defineClientOnlyModule3Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -6247,6 +6249,7 @@ describe("Renderer", () => {
             cid,
             componentRegistryEntryFixture({
               module: module3,
+              props: Type.map([[Type.atom("cid"), cid]]),
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
@@ -6476,6 +6479,7 @@ describe("Renderer", () => {
             module: Type.alias(
               "Hologram.Test.Fixtures.Template.Renderer.Module1",
             ),
+            props: Type.map([[Type.atom("cid"), cid]]),
           }),
         ],
       ]);
@@ -6545,6 +6549,12 @@ describe("Renderer", () => {
             module: Type.alias(
               "Hologram.Test.Fixtures.Template.Renderer.Module2",
             ),
+            props: Type.map([
+              [Type.atom("a"), Type.bitstring("ddd")],
+              [Type.atom("b"), Type.integer(222)],
+              [Type.atom("c"), Type.bitstring("fff333hhh")],
+              [Type.atom("cid"), cid],
+            ]),
           }),
         ],
       ]);
@@ -6635,11 +6645,129 @@ describe("Renderer", () => {
             cid,
             componentRegistryEntryFixture({
               module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
               ]),
             }),
+          ],
+        ]),
+      );
+    });
+
+    it("refreshes the props of an already-initialized component on every render", () => {
+      // Module2 declares props but no init/2, so it can only be rendered already registered -
+      // which is exactly the path that used to leave the props at whatever init put there.
+      function module2Node(propAValue) {
+        return Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid]]),
+            ]),
+            Type.tuple([
+              Type.bitstring("a"),
+              Type.keywordList([
+                [Type.atom("text"), Type.bitstring(propAValue)],
+              ]),
+            ]),
+            Type.tuple([
+              Type.bitstring("b"),
+              Type.keywordList([
+                [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+              ]),
+            ]),
+            Type.tuple([
+              Type.bitstring("c"),
+              Type.keywordList([[Type.atom("text"), Type.bitstring("ccc")]]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+      }
+
+      function expectedProps(propAValue) {
+        return Type.map([
+          [Type.atom("a"), Type.bitstring(propAValue)],
+          [Type.atom("b"), Type.integer(222)],
+          [Type.atom("c"), Type.bitstring("ccc")],
+          [Type.atom("cid"), cid],
+        ]);
+      }
+
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+      );
+
+      Renderer.renderDom(
+        module2Node("first"),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("props"),
+          ComponentRegistry.getComponentStruct(cid),
+        ),
+        expectedProps("first"),
+      );
+
+      Renderer.renderDom(
+        module2Node("second"),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("props"),
+          ComponentRegistry.getComponentStruct(cid),
+        ),
+        expectedProps("second"),
+      );
+    });
+
+    it("init/2 is given a struct that already carries the props", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module3",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("label"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("Save")]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      // The fixture's init/2 copies component.props into state, so what it stored is what the
+      // struct it was handed held.
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentState(cid),
+        Type.map([
+          [
+            Type.atom("props_seen_by_init"),
+            Type.map([
+              [Type.atom("cid"), cid],
+              [Type.atom("label"), Type.bitstring("Save")],
+            ]),
           ],
         ]),
       );
@@ -6861,6 +6989,7 @@ describe("Renderer", () => {
             cid,
             componentRegistryEntryFixture({
               module: module3,
+              props: Type.map([[Type.atom("cid"), cid]]),
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
@@ -7421,6 +7550,7 @@ describe("Renderer", () => {
               module: Type.alias(
                 "Hologram.Test.Fixtures.Template.Renderer.Module1",
               ),
+              props: Type.map([[Type.atom("cid"), cid]]),
             }),
           ],
         ]),
@@ -7564,6 +7694,7 @@ describe("Renderer", () => {
               module: Type.alias(
                 "Hologram.Test.Fixtures.Template.Renderer.Module1",
               ),
+              props: Type.map([[Type.atom("cid"), cid]]),
             }),
           ],
         ]),
@@ -8757,6 +8888,41 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("writes the page params onto the page component struct", () => {
+      const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
+        state: Type.map([
+          [Type.atom("key_2"), Type.bitstring("state_value_2")],
+          [Type.atom("key_3"), Type.bitstring("state_value_3")],
+        ]),
+      });
+
+      ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
+
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
+
+      const params = Type.map([
+        [Type.atom("key_1"), Type.bitstring("param_value_1")],
+        [Type.atom("key_2"), Type.bitstring("param_value_2")],
+      ]);
+
+      Renderer.renderPage(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
+        params,
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("props"),
+          ComponentRegistry.getComponentStruct(Type.bitstring("page")),
+        ),
+        params,
+      );
     });
 
     it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
