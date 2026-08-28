@@ -657,6 +657,213 @@ defmodule Hologram.Policy.ValidatorTest do
         validate_model!([Module14, TakenTwoHopsEntity])
       end
     end
+
+    test "rejects a via option naming a relationship the taking entity type does not declare" do
+      defmodule TakenUnknownViaPolicy do
+        use Hologram.Policy
+
+        allow :read, via: :project
+      end
+
+      defmodule TakenUnknownViaEntity do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        policy TakenUnknownViaPolicy
+      end
+
+      expected_msg =
+        "unknown relationship :project in the via option of allow :read in Hologram.Policy.ValidatorTest.TakenUnknownViaEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownViaPolicy - declared relationships are: :parent"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenUnknownViaEntity])
+      end
+    end
+
+    test "rejects a via option naming a to-many relationship" do
+      defmodule TakenToManyViaPolicy do
+        use Hologram.Policy
+
+        allow :read, via: :children
+      end
+
+      defmodule TakenToManyViaEntity do
+        use Hologram.Entity
+
+        relationship :children, [Module13]
+
+        policy TakenToManyViaPolicy
+      end
+
+      expected_msg =
+        "invalid via option :children for allow :read in Hologram.Policy.ValidatorTest.TakenToManyViaEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyViaPolicy - relationship :children is to-many, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenToManyViaEntity])
+      end
+    end
+
+    test "rejects a via option that is not a relationship name" do
+      defmodule TakenNonAtomViaPolicy do
+        use Hologram.Policy
+
+        allow :read, via: "parent"
+      end
+
+      defmodule TakenNonAtomViaEntity do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        policy TakenNonAtomViaPolicy
+      end
+
+      expected_msg =
+        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.TakenNonAtomViaEntity, taken from Hologram.Policy.ValidatorTest.TakenNonAtomViaPolicy - the via option must be a relationship name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenNonAtomViaEntity])
+      end
+    end
+
+    test "rejects a predicate naming an attribute the taking entity type does not declare" do
+      defmodule TakenUnknownPredicatePolicy do
+        use Hologram.Policy
+
+        allow :read, published: true
+      end
+
+      defmodule TakenUnknownPredicateEntity do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        policy TakenUnknownPredicatePolicy
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :title, :updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenUnknownPredicateEntity])
+      end
+    end
+
+    test "rejects a non-read predicate over a server-only attribute" do
+      defmodule TakenServerOnlyPolicy do
+        use Hologram.Policy
+
+        allow :publish, token: "tok_hidden"
+      end
+
+      defmodule TakenServerOnlyEntity do
+        use Hologram.Entity
+
+        attribute :token, :string, server_only: true
+
+        policy TakenServerOnlyPolicy
+      end
+
+      expected_msg =
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.TakenServerOnlyEntity, taken from Hologram.Policy.ValidatorTest.TakenServerOnlyPolicy - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenServerOnlyEntity])
+      end
+    end
+
+    test "rejects a gate reference the gate cannot honor" do
+      defmodule TakenGlobalGatePolicy do
+        use Hologram.Policy
+
+        allow :manage_roles, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      defmodule TakenGlobalGateEntity do
+        use Hologram.Entity
+
+        policy TakenGlobalGatePolicy
+      end
+
+      expected_msg =
+        "invalid to option Hologram.Test.Fixtures.Role.Module1 for allow :manage_roles in Hologram.Policy.ValidatorTest.TakenGlobalGateEntity, taken from Hologram.Policy.ValidatorTest.TakenGlobalGatePolicy - :manage_roles is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenGlobalGateEntity])
+      end
+    end
+
+    test "rejects a gate predicate the gate cannot honor" do
+      defmodule TakenPredicateGatePolicy do
+        use Hologram.Policy
+
+        allow :manage_roles, to: :owner, archived: false
+      end
+
+      defmodule TakenPredicateGateEntity do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        role :owner
+
+        policy TakenPredicateGatePolicy
+      end
+
+      expected_msg =
+        "invalid predicate :archived for allow :manage_roles in Hologram.Policy.ValidatorTest.TakenPredicateGateEntity, taken from Hologram.Policy.ValidatorTest.TakenPredicateGatePolicy - :manage_roles is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenPredicateGateEntity])
+      end
+    end
+
+    test "rejects a gate delegation the gate cannot honor" do
+      defmodule TakenDelegatedGatePolicy do
+        use Hologram.Policy
+
+        allow :read_grants, via: :parent
+      end
+
+      defmodule TakenDelegatedGateEntity do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
+
+        policy TakenDelegatedGatePolicy
+      end
+
+      expected_msg =
+        "invalid via option :parent for allow :read_grants in Hologram.Policy.ValidatorTest.TakenDelegatedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenDelegatedGatePolicy - :read_grants is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenDelegatedGateEntity])
+      end
+    end
+
+    test "rejects a gate line naming no own role" do
+      defmodule TakenUnqualifiedGatePolicy do
+        use Hologram.Policy
+
+        allow :manage_roles
+      end
+
+      defmodule TakenUnqualifiedGateEntity do
+        use Hologram.Entity
+
+        role :owner
+
+        policy TakenUnqualifiedGatePolicy
+      end
+
+      expected_msg =
+        "missing to option for allow :manage_roles in Hologram.Policy.ValidatorTest.TakenUnqualifiedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnqualifiedGatePolicy - :manage_roles is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, TakenUnqualifiedGateEntity])
+      end
+    end
   end
 
   describe "validate_model!/1 for the grant lifecycle operations" do
