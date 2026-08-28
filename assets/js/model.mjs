@@ -64,6 +64,14 @@ export default class Model {
     return Model.#metadataWithRevisions(Type.map([]));
   }
 
+  // A label beginning with an uppercase letter names a module, which is stored without the
+  // prefix every module atom carries - the same rule the database codec reads labels by.
+  static boxEnumValue(label) {
+    const first = label[0];
+
+    return first >= "A" && first <= "Z" ? Type.alias(label) : Type.atom(label);
+  }
+
   static entry(type) {
     let entry = Model.#entries[type];
 
@@ -252,14 +260,6 @@ export default class Model {
     ]);
   }
 
-  // A label beginning with an uppercase letter names a module, which is stored without the
-  // prefix every module atom carries - the same rule the database codec reads labels by.
-  static #boxEnum(value) {
-    const first = value[0];
-
-    return first >= "A" && first <= "Z" ? Type.alias(value) : Type.atom(value);
-  }
-
   static #boxValue(value, attributeType) {
     if (value === null || value === undefined) {
       return Type.nil();
@@ -276,7 +276,7 @@ export default class Model {
         return Model.#boxDateTime(value);
 
       case "enum":
-        return Model.#boxEnum(value);
+        return Model.boxEnumValue(value);
 
       case "float":
         return Type.float(value);

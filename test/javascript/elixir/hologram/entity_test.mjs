@@ -25,13 +25,18 @@ defineRuntimeGlobals();
 // baked model entries standing for the Elixir fixtures rather than the fixtures themselves.
 
 describe("Elixir_Hologram_Entity", () => {
+  const SERVER_ONLY = "Hologram.Entity.ServerOnly";
+
   const ACCOUNT = "MyApp.Account";
+  const DOC = "MyApp.Doc";
   const EMPTY = "MyApp.Empty";
   const NOTIFY = "MyApp.Jobs.Notify";
   const POST = "MyApp.Post";
 
   const newEntity = Elixir_Hologram_Entity["new/1"];
   const newEntityWithValues = Elixir_Hologram_Entity["new/2"];
+  const validate = Elixir_Hologram_Entity["validate/1"];
+  const validateChanges = Elixir_Hologram_Entity["validate/2"];
 
   const systemAttributes = {
     created_at: "datetime",
@@ -58,6 +63,27 @@ describe("Elixir_Hologram_Entity", () => {
           frameworkAttributes: [],
           relationships: {},
           serverOnly: [],
+        },
+        [DOC]: {
+          attributes: {
+            ...systemAttributes,
+            api_token: "string",
+            due_on: "date",
+            published_at: "datetime",
+            state: "enum",
+            title: "string",
+            weight: "float",
+          },
+          constraints: {
+            due_on: {optional: true},
+            published_at: {optional: true},
+            weight: {optional: true},
+          },
+          defaults: {},
+          enumValues: {state: ["draft", "live"]},
+          frameworkAttributes: [],
+          relationships: {},
+          serverOnly: ["api_token"],
         },
         [EMPTY]: {
           attributes: {...systemAttributes},
@@ -292,6 +318,346 @@ describe("Elixir_Hologram_Entity", () => {
         () => newEntityWithValues(Type.alias(ACCOUNT), Type.atom("nope")),
         "ArgumentError",
         ":nope is not a map or a keyword list of entity field values",
+      );
+    });
+  });
+
+  // Mirrors the corresponding describes of test/elixir/hologram/entity_test.exs, plus the cases
+  // that file leaves to validator_test.exs - one per admitted attribute type, since the type
+  // check is the port's own rather than a delegation.
+  //
+  // The constraint checks are NOT here. The cases needing them - a value outside a bound, a
+  // string of the wrong length, several reasons accumulating on one field - land with the next
+  // commit, which is what turns valueErrors from a type check into the full fold.
+  describe("validate/1", () => {
+    const doc = (overrides = {}) =>
+      newEntityWithValues(
+        Type.alias(DOC),
+        Type.map(
+          Object.entries({
+            api_token: Type.bitstring("t"),
+            state: Type.atom("draft"),
+            title: Type.bitstring("Draft copy"),
+            ...overrides,
+          }).map(([name, value]) => [Type.atom(name), value]),
+        ),
+      );
+
+    it("returns :ok for a valid entity struct", () => {
+      assert.deepEqual(validate(doc()), Type.atom("ok"));
+    });
+
+    it("reports violations grouped by field name", () => {
+      const entity = doc({state: Type.integer(1), title: Type.nil()});
+
+      assert.deepEqual(
+        validate(entity),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("state"),
+              Type.list([
+                Type.tuple([
+                  Type.atom("values"),
+                  Type.list([Type.atom("draft"), Type.atom("live")]),
+                ]),
+              ]),
+            ],
+            [Type.atom("title"), Type.list([Type.atom("required")])],
+          ]),
+        ]),
+      );
+    });
+
+    it("reports a missing required reference", () => {
+      const post = newEntity(Type.alias(POST));
+
+      assert.deepEqual(
+        validate(post),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [Type.atom("author_id"), Type.list([Type.atom("required")])],
+          ]),
+        ]),
+      );
+    });
+
+    it("accepts a to-one reference holding a canonical entity id", () => {
+      const values = Type.map([
+        [
+          Type.atom("author_id"),
+          Type.bitstring("018f4c11-1111-7111-8111-111111111111"),
+        ],
+      ]);
+
+      assert.deepEqual(
+        validate(newEntityWithValues(Type.alias(POST), values)),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports a to-one reference that is not a canonical entity id", () => {
+      const values = Type.map([
+        [Type.atom("author_id"), Type.bitstring("nope")],
+      ]);
+
+      assert.deepEqual(
+        validate(newEntityWithValues(Type.alias(POST), values)),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("author_id"),
+              Type.list([Type.tuple([Type.atom("type"), Type.atom("uuid")])]),
+            ],
+          ]),
+        ]),
+      );
+    });
+
+    // Ruled 2026-08-28: a sentinel is not a value that failed a check, it is the absence of this
+    // client's permission to see one, so it is passed over. What the client can still judge is a
+    // server-only attribute that is required and simply empty, which the case below pins.
+    it("passes over a server-only value the client may not have", () => {
+      const entity = doc();
+      const sentinel = Type.struct(SERVER_ONLY, [
+        [Type.atom("attribute"), Type.atom("api_token")],
+      ]);
+
+      const withSentinel = Type.map([
+        ...Object.values(entity.data).map(([key, value]) =>
+          key.value === "api_token" ? [key, sentinel] : [key, value],
+        ),
+      ]);
+
+      assert.deepEqual(validate(withSentinel), Type.atom("ok"));
+    });
+
+    it("reports a required server-only attribute the struct leaves empty", () => {
+      assert.deepEqual(
+        validate(doc({api_token: Type.nil()})),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [Type.atom("api_token"), Type.list([Type.atom("required")])],
+          ]),
+        ]),
+      );
+    });
+
+    // The system attributes carry no declaration to judge and a relationship is followed rather
+    // than validated, so neither reaches the checks - which a created_at holding an integer
+    // proves, where a struct that merely looked right would prove nothing.
+    it("judges neither the system attributes nor the relationships", () => {
+      const values = Type.map([
+        [Type.atom("created_at"), Type.integer(1)],
+        [
+          Type.atom("author_id"),
+          Type.bitstring("018f4c11-1111-7111-8111-111111111111"),
+        ],
+      ]);
+
+      assert.deepEqual(
+        validate(newEntityWithValues(Type.alias(POST), values)),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports a boolean, a date, a datetime, a float, an integer and a string of the wrong type", () => {
+      const cases = [
+        ["public", Type.integer(1), "boolean"],
+        ["rank", Type.bitstring("5"), "integer"],
+        ["handle", Type.integer(5), "string"],
+      ];
+
+      for (const [name, value, attributeType] of cases) {
+        const values = Type.map([
+          [Type.atom("handle"), Type.bitstring("bart")],
+          [Type.atom(name), value],
+        ]);
+
+        assert.deepEqual(
+          validate(newEntityWithValues(Type.alias(ACCOUNT), values)),
+          Type.tuple([
+            Type.atom("error"),
+            Type.map([
+              [
+                Type.atom(name),
+                Type.list([
+                  Type.tuple([Type.atom("type"), Type.atom(attributeType)]),
+                ]),
+              ],
+            ]),
+          ]),
+          `expected a type violation for ${name}`,
+        );
+      }
+    });
+
+    it("reports an integer outside what its column can hold", () => {
+      const values = Type.map([
+        [Type.atom("handle"), Type.bitstring("bart")],
+        [Type.atom("rank"), Type.integer(9223372036854775808n)],
+      ]);
+
+      assert.deepEqual(
+        validate(newEntityWithValues(Type.alias(ACCOUNT), values)),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("rank"),
+              Type.list([
+                Type.tuple([Type.atom("type"), Type.atom("integer")]),
+              ]),
+            ],
+          ]),
+        ]),
+      );
+    });
+
+    it("reports a string that is not valid text", () => {
+      const values = Type.map([
+        [Type.atom("handle"), Bitstring.fromBytes([255])],
+      ]);
+
+      assert.deepEqual(
+        validate(newEntityWithValues(Type.alias(ACCOUNT), values)),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("handle"),
+              Type.list([Type.tuple([Type.atom("type"), Type.atom("string")])]),
+            ],
+          ]),
+        ]),
+      );
+    });
+
+    it("raises for something that is not an entity struct", () => {
+      assertBoxedError(
+        () => validate(Type.atom("nope")),
+        "ArgumentError",
+        ":nope is not an entity struct",
+      );
+    });
+  });
+
+  describe("validate/2", () => {
+    it("returns :ok for valid changes given as a keyword list", () => {
+      const changes = Type.keywordList([
+        [Type.atom("handle"), Type.bitstring("bart")],
+      ]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.atom("ok"),
+      );
+    });
+
+    it("does not require absent fields", () => {
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), Type.map([])),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports violations grouped by field name", () => {
+      const changes = Type.map([
+        [Type.atom("handle"), Type.integer(5)],
+        [Type.atom("public"), Type.integer(1)],
+      ]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("handle"),
+              Type.list([Type.tuple([Type.atom("type"), Type.atom("string")])]),
+            ],
+            [
+              Type.atom("public"),
+              Type.list([
+                Type.tuple([Type.atom("type"), Type.atom("boolean")]),
+              ]),
+            ],
+          ]),
+        ]),
+      );
+    });
+
+    it("reports nil for a non-optional attribute as required", () => {
+      const changes = Type.map([[Type.atom("handle"), Type.nil()]]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([[Type.atom("handle"), Type.list([Type.atom("required")])]]),
+        ]),
+      );
+    });
+
+    it("accepts nil for an optional attribute", () => {
+      const changes = Type.map([[Type.atom("rank"), Type.nil()]]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.atom("ok"),
+      );
+    });
+
+    // A form never produces a sentinel, so a present pair is judged like any other - the write is
+    // what refuses a client naming a server-only field, by name rather than by value.
+    it("judges a server-only pair like any other", () => {
+      const changes = Type.map([[Type.atom("api_token"), Type.bitstring("t")]]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(DOC), changes),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports a to-many relationship name as unknown", () => {
+      const changes = Type.map([[Type.atom("tags"), Type.list([])]]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(POST), changes),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([[Type.atom("tags"), Type.list([Type.atom("unknown")])]]),
+        ]),
+      );
+    });
+
+    it("reports an undeclared name as unknown", () => {
+      const changes = Type.map([[Type.atom("zzz"), Type.integer(1)]]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([[Type.atom("zzz"), Type.list([Type.atom("unknown")])]]),
+        ]),
+      );
+    });
+
+    it("reports a system attribute as unknown", () => {
+      const changes = Type.map([[Type.atom("created_at"), Type.nil()]]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [Type.atom("created_at"), Type.list([Type.atom("unknown")])],
+          ]),
+        ]),
       );
     });
   });
