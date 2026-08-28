@@ -214,8 +214,202 @@ function declaredAttributes(entry) {
   );
 }
 
+// The most bytes a unique string may hold, which is what its btree index entry can carry - the
+// Elixir side measures and explains it as @unique_string_max_bytes.
+const UNIQUE_STRING_MAX_BYTES = 2692;
+
+function constraintErrors(entry, name, value, attributeType) {
+  const constraints = entry.constraints[name] ?? {};
+
+  return [
+    ...boundErrors(name, value, attributeType, constraints, "min"),
+    ...boundErrors(name, value, attributeType, constraints, "max"),
+    ...inErrors(name, value, constraints),
+    ...lengthErrors(name, value, constraints),
+    ...formatErrors(name, value, constraints),
+    ...uniqueBytesErrors(name, value, attributeType, constraints),
+  ];
+}
+
+// A minimum is satisfied when the bound comes no later than the value, a maximum when the value
+// comes no later than the bound - one comparison read from both ends, as the server reads it.
+function boundErrors(name, value, attributeType, constraints, key) {
+  if (!(key in constraints)) {
+    return [];
+  }
+
+  const bound = constraints[key];
+
+  const satisfied =
+    key === "min"
+      ? compareValues(bound, value, attributeType) <= 0
+      : compareValues(value, bound, attributeType) <= 0;
+
+  return satisfied
+    ? []
+    : [errorTuple(name, Type.tuple([Type.atom(key), bound]))];
+}
+
+function compareValues(left, right, attributeType) {
+  if (attributeType === "date" || attributeType === "datetime") {
+    const key = attributeType === "date" ? dateKey : datetimeKey;
+
+    return compareKeys(key(left), key(right));
+  }
+
+  // Compared with the ordering operators alone, never with ===, so that a BigInt and a Number
+  // compare by their value: a float attribute takes an integer bound beside a float one, so the
+  // two spellings reach here as different kinds of JavaScript number, and 0n === 0 is false.
+  const leftValue = left.value;
+  const rightValue = right.value;
+
+  if (leftValue < rightValue) {
+    return -1;
+  }
+
+  return leftValue > rightValue ? 1 : 0;
+}
+
+function compareKeys(left, right) {
+  for (const [index, part] of left.entries()) {
+    if (part !== right[index]) {
+      return part < right[index] ? -1 : 1;
+    }
+  }
+
+  return 0;
+}
+
+function dateKey(value) {
+  return ["year", "month", "day"].map((name) =>
+    Number(structField(value, name).value),
+  );
+}
+
+// The instant the struct names, as DateTime.compare reads it: the wall clock moved back by the
+// offsets the struct carries, and the microsecond amount beside it. Built through setUTCFullYear
+// rather than Date.UTC, which maps years 0 to 99 into the 1900s.
+function datetimeKey(value) {
+  const part = (name) => Number(structField(value, name).value);
+
+  const date = new Date(0);
+  date.setUTCFullYear(part("year"), part("month") - 1, part("day"));
+  date.setUTCHours(part("hour"), part("minute"), part("second"), 0);
+
+  const offset = part("utc_offset") + part("std_offset");
+  const microsecond = Number(structField(value, "microsecond").data[0].value);
+
+  return [date.getTime() / 1000 - offset, microsecond];
+}
+
 function errorTuple(name, reason) {
   return Type.tuple([Type.atom(name), reason]);
+}
+
+function formatErrors(name, value, constraints) {
+  if (!("format" in constraints)) {
+    return [];
+  }
+
+  const regex = constraints.format;
+
+  const result = Interpreter.moduleProxy("re")["run/3"](
+    value,
+    structField(regex, "re_pattern"),
+    Type.list([Type.tuple([Type.atom("capture"), Type.atom("none")])]),
+  );
+
+  return Type.isAtom(result) && result.value === "match"
+    ? []
+    : [errorTuple(name, Type.tuple([Type.atom("format"), regex]))];
+}
+
+// Inclusive at both ends and stepped, which is what Range.member? answers: 0..100//5 admits 5 and
+// refuses 7, and a range counting down runs from its first toward its last.
+function inErrors(name, value, constraints) {
+  if (!("in" in constraints)) {
+    return [];
+  }
+
+  const range = constraints.in;
+  const first = structField(range, "first").value;
+  const last = structField(range, "last").value;
+  const step = structField(range, "step").value;
+
+  const withinEnds =
+    step > 0n
+      ? value.value >= first && value.value <= last
+      : value.value <= first && value.value >= last;
+
+  const onStep = (value.value - first) % step === 0n;
+
+  return withinEnds && onStep
+    ? []
+    : [errorTuple(name, Type.tuple([Type.atom("in"), range]))];
+}
+
+// Counted in CODE POINTS, which is what String.codepoints |> length counts and what Postgres
+// counts for varchar(n) - not in the UTF-16 units a JavaScript string reports as its length.
+function lengthErrors(name, value, constraints) {
+  const keys = ["length", "min_length", "max_length"].filter(
+    (key) => key in constraints,
+  );
+
+  if (keys.length === 0) {
+    return [];
+  }
+
+  const count = [...Bitstring.toText(value)].length;
+
+  return keys.flatMap((key) =>
+    lengthSatisfied(count, key, constraints[key])
+      ? []
+      : [
+          errorTuple(
+            name,
+            Type.tuple([Type.atom(key), Type.integer(constraints[key])]),
+          ),
+        ],
+  );
+}
+
+function lengthSatisfied(count, key, bound) {
+  switch (key) {
+    case "length":
+      return count === bound;
+
+    case "min_length":
+      return count >= bound;
+
+    default:
+      return count <= bound;
+  }
+}
+
+function structField(struct, name) {
+  return struct.data[Type.encodeMapKey(Type.atom(name))][1];
+}
+
+// The bound belongs to the INDEX rather than to the type, so only a unique string carries it, and
+// it is counted in bytes rather than in characters because that is what the index stores.
+function uniqueBytesErrors(name, value, attributeType, constraints) {
+  if (attributeType !== "string" || constraints.unique !== true) {
+    return [];
+  }
+
+  Bitstring.maybeSetBytesFromText(value);
+
+  return value.bytes.length > UNIQUE_STRING_MAX_BYTES
+    ? [
+        errorTuple(
+          name,
+          Type.tuple([
+            Type.atom("max_bytes"),
+            Type.integer(UNIQUE_STRING_MAX_BYTES),
+          ]),
+        ),
+      ]
+    : [];
 }
 
 // The pairs a violation map is built from, sorted the way Elixir sorts the {name, reason} tuples
@@ -322,7 +516,7 @@ function validateEntity(entity) {
     );
   }
 
-  const entityType = entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1];
+  const entityType = structField(entity, "__struct__");
   const entry = Model.entry(Interpreter.moduleExName(entityType));
 
   // What Map.take leaves on the server: the declared attributes and the to-one reference fields,
@@ -331,11 +525,11 @@ function validateEntity(entity) {
   const data = new Map();
 
   for (const [name] of declaredAttributes(entry)) {
-    data.set(name, entity.data[Type.encodeMapKey(Type.atom(name))][1]);
+    data.set(name, structField(entity, name));
   }
 
   for (const [field] of referenceDefinitions(entry)) {
-    data.set(field, entity.data[Type.encodeMapKey(Type.atom(field))][1]);
+    data.set(field, structField(entity, field));
   }
 
   const attributeErrors = declaredAttributes(entry).flatMap(([name, type]) =>
@@ -363,8 +557,7 @@ function valueErrors(entry, name, value, attributeType) {
     ];
   }
 
-  // TODO: the declared constraints are judged here, on a value that matched its type.
-  return [];
+  return constraintErrors(entry, name, value, attributeType);
 }
 
 function enumErrors(entry, name, value) {

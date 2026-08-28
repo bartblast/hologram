@@ -29,12 +29,40 @@ describe("Elixir_Hologram_Entity", () => {
 
   const ACCOUNT = "MyApp.Account";
   const DOC = "MyApp.Doc";
+  const ITEM = "MyApp.Item";
   const EMPTY = "MyApp.Empty";
   const NOTIFY = "MyApp.Jobs.Notify";
   const POST = "MyApp.Post";
 
   const newEntity = Elixir_Hologram_Entity["new/1"];
   const newEntityWithValues = Elixir_Hologram_Entity["new/2"];
+  const boxedDate = (year, month, day) =>
+    Type.struct("Date", [
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("day"), Type.integer(day)],
+      [Type.atom("month"), Type.integer(month)],
+      [Type.atom("year"), Type.integer(year)],
+    ]);
+
+  const boxedDateTime = (year, month, day, hour = 0, offset = 0) =>
+    Type.struct("DateTime", [
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("day"), Type.integer(day)],
+      [Type.atom("hour"), Type.integer(hour)],
+      [
+        Type.atom("microsecond"),
+        Type.tuple([Type.integer(0), Type.integer(0)]),
+      ],
+      [Type.atom("minute"), Type.integer(0)],
+      [Type.atom("month"), Type.integer(month)],
+      [Type.atom("second"), Type.integer(0)],
+      [Type.atom("std_offset"), Type.integer(0)],
+      [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+      [Type.atom("utc_offset"), Type.integer(offset)],
+      [Type.atom("year"), Type.integer(year)],
+      [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+    ]);
+
   const validate = Elixir_Hologram_Entity["validate/1"];
   const validateChanges = Elixir_Hologram_Entity["validate/2"];
 
@@ -108,6 +136,50 @@ describe("Elixir_Hologram_Entity", () => {
           relationships: {},
           serverOnly: ["error"],
         },
+        [ITEM]: {
+          attributes: {
+            ...systemAttributes,
+            bio: "string",
+            count: "integer",
+            country_code: "string",
+            email: "string",
+            handle: "string",
+            held_at: "datetime",
+            percent: "integer",
+            priority: "integer",
+            rating: "float",
+            released_on: "date",
+            slug: "string",
+            username: "string",
+          },
+          constraints: {
+            bio: {max_length: 10, optional: true},
+            count: {max: Type.integer(10), min: Type.integer(1)},
+            country_code: {length: 2, optional: true},
+            email: {format: {opts: [], source: "@"}, optional: true},
+            handle: {
+              format: {opts: [], source: "^[a-z_]+$"},
+              min_length: 3,
+              optional: true,
+            },
+            held_at: {min: boxedDateTime(2026, 1, 1), optional: true},
+            percent: {in: {first: 0, last: 100, step: 5}, optional: true},
+            priority: {in: {first: 1, last: 5, step: 1}, optional: true},
+            rating: {
+              max: Type.float(5.0),
+              min: Type.integer(0),
+              optional: true,
+            },
+            released_on: {max: boxedDate(2030, 12, 31), optional: true},
+            slug: {optional: true, unique: true},
+            username: {max_length: 8, min_length: 3, optional: true},
+          },
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          relationships: {},
+          serverOnly: [],
+        },
         [POST]: {
           attributes: {...systemAttributes},
           constraints: {},
@@ -129,6 +201,8 @@ describe("Elixir_Hologram_Entity", () => {
 
   const field = (struct, name) =>
     struct.data[Type.encodeMapKey(Type.atom(name))][1];
+
+  const structField = field;
 
   describe("generate_id/0", () => {
     it("returns a boxed version 7 UUID string", () => {
@@ -658,6 +732,278 @@ describe("Elixir_Hologram_Entity", () => {
             [Type.atom("created_at"), Type.list([Type.atom("unknown")])],
           ]),
         ]),
+      );
+    });
+  });
+
+  // Mirrors the constraint cases of test/elixir/hologram/entity/validator_test.exs (describe
+  // "validate/2") over the same declarations, and the accumulate case of entity_test.exs.
+  describe("validate/2 - the declared constraints", () => {
+    const item = (overrides) =>
+      validateChanges(
+        Type.alias(ITEM),
+        Type.map(
+          Object.entries(overrides).map(([name, value]) => [
+            Type.atom(name),
+            value,
+          ]),
+        ),
+      );
+
+    const violation = (name, reason) =>
+      Type.tuple([
+        Type.atom("error"),
+        Type.map([[Type.atom(name), Type.list([reason])]]),
+      ]);
+
+    it("accepts values sitting on the declared bounds", () => {
+      assert.deepEqual(item({count: Type.integer(1)}), Type.atom("ok"));
+      assert.deepEqual(item({count: Type.integer(10)}), Type.atom("ok"));
+      assert.deepEqual(item({rating: Type.float(0.0)}), Type.atom("ok"));
+      assert.deepEqual(item({rating: Type.float(5.0)}), Type.atom("ok"));
+      assert.deepEqual(item({percent: Type.integer(0)}), Type.atom("ok"));
+      assert.deepEqual(item({percent: Type.integer(100)}), Type.atom("ok"));
+
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 1, 1)}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({released_on: boxedDate(2030, 12, 31)}),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports a value below the declared minimum", () => {
+      assert.deepEqual(
+        item({count: Type.integer(0)}),
+        violation("count", Type.tuple([Type.atom("min"), Type.integer(1)])),
+      );
+    });
+
+    it("reports a value above the declared maximum", () => {
+      assert.deepEqual(
+        item({count: Type.integer(11)}),
+        violation("count", Type.tuple([Type.atom("max"), Type.integer(10)])),
+      );
+    });
+
+    // The one case the encoding decision rests on: rating declares an integer minimum beside a
+    // float maximum, so the two bounds reach the checks as different kinds of number and the
+    // reason carries back the literal that was written.
+    it("compares a float against bounds written as an integer and as a float", () => {
+      assert.deepEqual(
+        item({rating: Type.float(-0.5)}),
+        violation("rating", Type.tuple([Type.atom("min"), Type.integer(0)])),
+      );
+
+      assert.deepEqual(
+        item({rating: Type.float(5.5)}),
+        violation("rating", Type.tuple([Type.atom("max"), Type.float(5.0)])),
+      );
+    });
+
+    it("reports a datetime before the declared minimum", () => {
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2025, 12, 31)}),
+        violation(
+          "held_at",
+          Type.tuple([Type.atom("min"), boxedDateTime(2026, 1, 1)]),
+        ),
+      );
+    });
+
+    // The instant is what is compared, not the wall clock: 2026-01-01T00:00 at an offset of one
+    // hour east is 2025-12-31T23:00 UTC, which is before the bound.
+    it("compares a datetime by its instant rather than by its wall clock", () => {
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 1, 1, 0, 3600)}),
+        violation(
+          "held_at",
+          Type.tuple([Type.atom("min"), boxedDateTime(2026, 1, 1)]),
+        ),
+      );
+    });
+
+    it("reports a date after the declared maximum", () => {
+      assert.deepEqual(
+        item({released_on: boxedDate(2031, 1, 1)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("max"), boxedDate(2030, 12, 31)]),
+        ),
+      );
+    });
+
+    it("reports a value outside the declared range", () => {
+      assert.deepEqual(
+        item({priority: Type.integer(6)}),
+        violation(
+          "priority",
+          Type.tuple([Type.atom("in"), Type.range(1, 5, 1)]),
+        ),
+      );
+    });
+
+    it("honors the step of a stepped range", () => {
+      assert.deepEqual(item({percent: Type.integer(5)}), Type.atom("ok"));
+
+      assert.deepEqual(
+        item({percent: Type.integer(7)}),
+        violation(
+          "percent",
+          Type.tuple([Type.atom("in"), Type.range(0, 100, 5)]),
+        ),
+      );
+    });
+
+    it("reports a string that is not the declared exact length", () => {
+      assert.deepEqual(
+        item({country_code: Type.bitstring("pl")}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({country_code: Type.bitstring("pol")}),
+        violation(
+          "country_code",
+          Type.tuple([Type.atom("length"), Type.integer(2)]),
+        ),
+      );
+    });
+
+    it("reports a string shorter than the declared minimum length", () => {
+      assert.deepEqual(
+        item({username: Type.bitstring("ab")}),
+        violation(
+          "username",
+          Type.tuple([Type.atom("min_length"), Type.integer(3)]),
+        ),
+      );
+    });
+
+    it("reports a string longer than the declared maximum length", () => {
+      assert.deepEqual(
+        item({username: Type.bitstring("abcdefghi")}),
+        violation(
+          "username",
+          Type.tuple([Type.atom("max_length"), Type.integer(8)]),
+        ),
+      );
+    });
+
+    // Counted in code points rather than in the UTF-16 units JavaScript reports: an emoji outside
+    // the Basic Multilingual Plane is two units and one character, and the server counts one.
+    it("counts string lengths in code points", () => {
+      assert.deepEqual(
+        item({country_code: Type.bitstring("ab")}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({country_code: Type.bitstring("\u{1F600}\u{1F600}")}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({country_code: Type.bitstring("\u{1F600}")}),
+        violation(
+          "country_code",
+          Type.tuple([Type.atom("length"), Type.integer(2)]),
+        ),
+      );
+    });
+
+    it("reports a string not matching the declared pattern", () => {
+      assert.deepEqual(item({email: Type.bitstring("a@b")}), Type.atom("ok"));
+
+      const answer = item({email: Type.bitstring("nope")});
+      const [name, reasons] = Object.values(answer.data[1].data)[0];
+
+      assert.deepEqual(name, Type.atom("email"));
+      assert.deepEqual(reasons.data[0].data[0], Type.atom("format"));
+
+      assertBoxedStrictEqual(
+        structField(reasons.data[0].data[1], "source"),
+        Type.bitstring("@"),
+      );
+    });
+
+    it("accepts a unique string holding exactly the most bytes its index carries", () => {
+      assert.deepEqual(
+        item({slug: Type.bitstring("a".repeat(2692))}),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports a unique string one byte over what its index carries", () => {
+      assert.deepEqual(
+        item({slug: Type.bitstring("a".repeat(2693))}),
+        violation(
+          "slug",
+          Type.tuple([Type.atom("max_bytes"), Type.integer(2692)]),
+        ),
+      );
+    });
+
+    // The index stores bytes, so a two-byte character counts twice - 1346 of them is the bound
+    // exactly, and one more is over it while the character count is barely half.
+    it("counts a unique string's bytes rather than its characters", () => {
+      assert.deepEqual(
+        item({slug: Type.bitstring("\u00e0".repeat(1346))}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({slug: Type.bitstring("\u00e0".repeat(1347))}),
+        violation(
+          "slug",
+          Type.tuple([Type.atom("max_bytes"), Type.integer(2692)]),
+        ),
+      );
+    });
+
+    it("leaves a string that is not unique unbounded", () => {
+      assert.deepEqual(
+        item({bio: Type.bitstring("a".repeat(2693))}),
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("bio"),
+              Type.list([
+                Type.tuple([Type.atom("max_length"), Type.integer(10)]),
+              ]),
+            ],
+          ]),
+        ]),
+      );
+    });
+
+    // Sorted the way Elixir sorts the {name, reason} pairs, which is what puts the format reason
+    // before the min_length one - the port sorts the boxed tuples rather than spelling the rule.
+    it("accumulates multiple reasons per field, in Elixir's own order", () => {
+      const answer = item({handle: Type.bitstring("A?")});
+      const [name, reasons] = Object.values(answer.data[1].data)[0];
+
+      assert.deepEqual(name, Type.atom("handle"));
+      assert.equal(reasons.data.length, 2);
+      assert.deepEqual(reasons.data[0].data[0], Type.atom("format"));
+
+      assert.deepEqual(
+        reasons.data[1],
+        Type.tuple([Type.atom("min_length"), Type.integer(3)]),
+      );
+    });
+
+    it("suppresses the constraint checks when the value does not match its type", () => {
+      assert.deepEqual(
+        item({count: Type.bitstring("0")}),
+        violation(
+          "count",
+          Type.tuple([Type.atom("type"), Type.atom("integer")]),
+        ),
       );
     });
   });
