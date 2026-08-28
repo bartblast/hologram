@@ -59,7 +59,7 @@ defmodule Hologram.Policy.Validator do
     start_index =
       cycle
       |> Enum.with_index()
-      |> Enum.min_by(fn {{entity_type, relationship_name}, _index} ->
+      |> Enum.min_by(fn {{entity_type, relationship_name, _source}, _index} ->
         {inspect(entity_type), relationship_name}
       end)
       |> elem(1)
@@ -91,13 +91,20 @@ defmodule Hologram.Policy.Validator do
     "  * #{hops} -> #{inspect(first_role_module)}"
   end
 
-  defp describe_via_cycle([{first_entity_type, _first_relationship_name} | _later_hops] = cycle) do
-    hops =
-      Enum.map_join(cycle, " -> ", fn {entity_type, relationship_name} ->
-        "#{inspect(entity_type)} (via #{inspect(relationship_name)})"
-      end)
+  defp describe_via_cycle([{first_entity_type, _name, _source} | _later_hops] = cycle) do
+    hops = Enum.map_join(cycle, " -> ", &describe_via_cycle_hop/1)
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
+  end
+
+  # A hop whose via line the entity type wrote itself reads as it always did; one taken from a
+  # policy names it, so a cycle formed out of a shared delegation says where the line lives.
+  defp describe_via_cycle_hop({entity_type, relationship_name, entity_type}) do
+    "#{inspect(entity_type)} (via #{inspect(relationship_name)})"
+  end
+
+  defp describe_via_cycle_hop({entity_type, relationship_name, source}) do
+    "#{inspect(entity_type)} (via #{inspect(relationship_name)}, from #{inspect(source)})"
   end
 
   # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
@@ -127,8 +134,8 @@ defmodule Hologram.Policy.Validator do
       {cycles, visited} =
         edges
         |> Map.get(entity_type, [])
-        |> Enum.reduce({cycles, visited}, fn {relationship_name, target_type}, acc ->
-          follow_via_edge({entity_type, relationship_name}, target_type, path, edges, acc)
+        |> Enum.reduce({cycles, visited}, fn {relationship_name, target_type, source}, acc ->
+          follow_via_edge({entity_type, relationship_name, source}, target_type, path, edges, acc)
         end)
 
       {cycles, MapSet.put(visited, entity_type)}
@@ -155,9 +162,11 @@ defmodule Hologram.Policy.Validator do
   defp follow_via_edge(hop, target_type, path, edges, {cycles, visited}) do
     new_path = [hop | path]
 
-    if Enum.any?(new_path, fn {entity_type, _relationship_name} -> entity_type == target_type end) do
+    if Enum.any?(new_path, fn {entity_type, _relationship_name, _source} ->
+         entity_type == target_type
+       end) do
       {hops_beyond_target, [target_hop | _earlier_hops]} =
-        Enum.split_while(new_path, fn {entity_type, _relationship_name} ->
+        Enum.split_while(new_path, fn {entity_type, _relationship_name, _source} ->
           entity_type != target_type
         end)
 
@@ -507,15 +516,19 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # The source rides the EDGE rather than being looked up when the cycle is described: by then
+  # the hop is only an entity type and a relationship name, and an entity type can carry several
+  # via lines from different policies.
   defp via_declarations(entity_type) do
     entity_type.__policies__()
-    |> Enum.reject(fn {_operation, _to, via, _predicates} -> is_nil(via) end)
-    |> Enum.map(fn {operation, _to, via, _predicates} ->
-      {operation, entity_type, {via, Entity.relationship_target(entity_type, via)}}
+    |> Enum.zip(entity_type.__policy_sources__())
+    |> Enum.reject(fn {{_operation, _to, via, _predicates}, _source} -> is_nil(via) end)
+    |> Enum.map(fn {{operation, _to, via, _predicates}, source} ->
+      {operation, entity_type, {via, Entity.relationship_target(entity_type, via), source}}
     end)
   end
 
-  # Delegation edges grouped as %{operation => %{entity type => [{relationship name, target type}]}} -
+  # Delegation edges grouped as %{operation => %{entity type => [{relationship name, target type, source}]}} -
   # a via chain delegates the SAME operation, so each operation forms its own independent graph.
   defp via_edges(entity_types) do
     entity_types

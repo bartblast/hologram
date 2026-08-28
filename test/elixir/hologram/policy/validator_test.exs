@@ -842,6 +842,74 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "annotates every hop of a delegation cycle no single entity type declares" do
+      defmodule TakenViaCyclePolicy do
+        use Hologram.Policy
+
+        allow :read, via: :peer
+      end
+
+      defmodule TakenViaCycleEntityA do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.TakenViaCycleEntityB, optional: true
+
+        policy TakenViaCyclePolicy
+      end
+
+      defmodule TakenViaCycleEntityB do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.TakenViaCycleEntityA, optional: true
+
+        policy TakenViaCyclePolicy
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic policy delegation for allow :read - a via chain can't return to the entity type it starts from:
+          * Hologram.Policy.ValidatorTest.TakenViaCycleEntityA (via :peer, from Hologram.Policy.ValidatorTest.TakenViaCyclePolicy) -> Hologram.Policy.ValidatorTest.TakenViaCycleEntityB (via :peer, from Hologram.Policy.ValidatorTest.TakenViaCyclePolicy) -> Hologram.Policy.ValidatorTest.TakenViaCycleEntityA\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenViaCycleEntityA, TakenViaCycleEntityB])
+      end
+    end
+
+    test "leaves a delegation hop the entity type declared itself unannotated" do
+      defmodule MixedViaCyclePolicy do
+        use Hologram.Policy
+
+        allow :publish, via: :peer
+      end
+
+      defmodule MixedViaCycleEntityA do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.MixedViaCycleEntityB, optional: true
+
+        policy MixedViaCyclePolicy
+      end
+
+      defmodule MixedViaCycleEntityB do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.MixedViaCycleEntityA, optional: true
+
+        allow :publish, via: :peer
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic policy delegation for allow :publish - a via chain can't return to the entity type it starts from:
+          * Hologram.Policy.ValidatorTest.MixedViaCycleEntityA (via :peer, from Hologram.Policy.ValidatorTest.MixedViaCyclePolicy) -> Hologram.Policy.ValidatorTest.MixedViaCycleEntityB (via :peer) -> Hologram.Policy.ValidatorTest.MixedViaCycleEntityA\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([MixedViaCycleEntityA, MixedViaCycleEntityB])
+      end
+    end
+
     test "rejects a gate line naming no own role" do
       defmodule TakenUnqualifiedGatePolicy do
         use Hologram.Policy
