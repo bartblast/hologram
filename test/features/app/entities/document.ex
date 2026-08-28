@@ -1,9 +1,9 @@
 defmodule HologramFeatureTests.Entities.Document do
   use Hologram.Entity
 
-  policy HologramFeatureTests.Policies.PubliclyReadable
-
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Policies.Editable
+  alias HologramFeatureTests.Policies.PubliclyReadable
 
   attribute :api_token, :string, optional: true, server_only: true
   attribute :public, :boolean, default: false
@@ -11,9 +11,8 @@ defmodule HologramFeatureTests.Entities.Document do
 
   relationship :folder, Folder, optional: true
 
-  role :editor
-  role :owner, extends: :editor, granted_to: :creator
+  policy Editable
+  policy PubliclyReadable
 
-  allow :read, to: [:editor, :owner]
-  allow :manage_roles, to: :owner
+  role :owner, granted_to: :creator
 end
