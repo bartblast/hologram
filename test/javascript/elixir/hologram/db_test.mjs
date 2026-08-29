@@ -535,6 +535,77 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, []);
     });
 
+    // What the entries carry is asserted above; these read the same write back through the
+    // database, which is what an action does on its next line.
+    it("shows the value it put, at the revision it set", () => {
+      update(
+        putAttribute(held(), pairs([["title", Type.bitstring("Ship it")]])),
+      );
+
+      const row = LocalDatabase.getRow(TASK, ID_1);
+
+      assert.equal(row.title, "Ship it");
+      assert.equal(row.title_sort, "ship it");
+      assert.deepStrictEqual(row.$revisions, {done: 10, title: STAMP});
+    });
+
+    it("leaves the row the server sent untouched underneath", () => {
+      update(
+        putAttribute(held(), pairs([["title", Type.bitstring("Ship it")]])),
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, ID_1).title, "Draft copy");
+      assert.equal(LocalDatabase.baseRow(TASK, ID_1).$revisions.title, 11);
+    });
+
+    it("shows a moved counter moved, its revision left alone", () => {
+      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      update(increment(item, Type.atom("stock"), Type.integer(2)));
+
+      const row = LocalDatabase.getRow(ITEM, ID_2);
+
+      assert.equal(row.stock, 5);
+      assert.equal(row.$revisions.stock, 12);
+    });
+
+    // The chain D1 rests on: a second write to a column says it was based on what the FIRST one
+    // stored, because the first one wrote its stamp into the row this one read. Nothing is
+    // predicted - based_on is simply what the local row holds.
+    it("bases a second write to a column on the stamp the first one set", () => {
+      update(putAttribute(held(), pairs([["title", Type.bitstring("First")]])));
+      update(
+        putAttribute(held(), pairs([["title", Type.bitstring("Second")]])),
+      );
+
+      const [first, second] = Batches.current().writes;
+
+      assert.deepStrictEqual(first.based_on, {title: 11});
+      assert.deepStrictEqual(second.based_on, {title: first.stamp});
+      assert.equal(LocalDatabase.getRow(TASK, ID_1).title, "Second");
+    });
+
+    it("shows the edges it recorded", () => {
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+
+      assert.deepStrictEqual(
+        LocalDatabase.getTargetIds(TASK, "tags", ID_1),
+        new Set(["g1"]),
+      );
+    });
+
+    it("takes the change away when the action's writes are discarded", () => {
+      update(
+        putAttribute(held(), pairs([["title", Type.bitstring("Ship it")]])),
+      );
+
+      Batches.discard();
+
+      assert.equal(LocalDatabase.getRow(TASK, ID_1).title, "Draft copy");
+    });
+
     it("raises when the struct records no change", () => {
       assert.throw(
         () => update(held()),
