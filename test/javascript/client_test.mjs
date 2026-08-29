@@ -475,6 +475,173 @@ describe("Client", () => {
     });
   });
 
+  describe("sendMutation()", () => {
+    let fetchStub, originalHologram, originalInstanceId;
+
+    const batch = {
+      seq: 7,
+      writes: [
+        {
+          claim: null,
+          data: {title: "alpha"},
+          id: "018f0000-0000-7000-8000-000000000001",
+          op: "create",
+          stamp: 1_798_246_400_125_952,
+          type: "MyApp.Task",
+        },
+      ],
+    };
+
+    const responding = (body, status = 200) =>
+      (fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        json: async () => body,
+        ok: status >= 200 && status < 300,
+        status,
+        text: async () => (typeof body === "string" ? body : ""),
+      }));
+
+    beforeEach(() => {
+      originalHologram = globalThis.Hologram;
+
+      globalThis.Hologram = {
+        csrfToken: "test-csrf-token-123",
+        replicaId: "test-replica-id",
+        replicaToken: "test-replica-token",
+        sync: {modelHash: "test-model-hash"},
+      };
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
+    });
+
+    afterEach(() => {
+      sinon.restore();
+      globalThis.Hologram = originalHologram;
+      App.instanceId = originalInstanceId;
+    });
+
+    it("posts the batch to the mutation endpoint", async () => {
+      responding({dropped: {}, status: "confirmed"});
+
+      await Client.sendMutation(batch);
+
+      assert.equal(fetchStub.firstCall.args[0], "/hologram/mutation");
+      assert.equal(fetchStub.firstCall.args[1].method, "POST");
+
+      assert.deepStrictEqual(fetchStub.firstCall.args[1].headers, {
+        "Content-Type": "application/json",
+        "X-Csrf-Token": "test-csrf-token-123",
+      });
+    });
+
+    // The identity is the page's and this client invents neither half of it.
+    it("sends the envelope the endpoint parses", async () => {
+      responding({dropped: {}, status: "confirmed"});
+
+      await Client.sendMutation(batch);
+
+      assert.deepStrictEqual(JSON.parse(fetchStub.firstCall.args[1].body), {
+        instance_id: "test-instance-id",
+        model_hash: "test-model-hash",
+        replica_id: "test-replica-id",
+        replica_token: "test-replica-token",
+        seq: 7,
+        writes: batch.writes,
+      });
+    });
+
+    it("answers a confirmation with the values that lost", async () => {
+      responding({dropped: {0: {title: "Standup"}}, status: "confirmed"});
+
+      assert.deepStrictEqual(await Client.sendMutation(batch), {
+        dropped: {0: {title: "Standup"}},
+        status: "confirmed",
+      });
+    });
+
+    // The reason travels as an encoded client term, because it carries regexes, ranges and
+    // exception structs - read here the way a command's next action is.
+    it("answers a rejection with the reason decoded", async () => {
+      responding({
+        reason: 'Type.atom("stale_build")',
+        status: "rejected",
+        write: null,
+      });
+
+      assert.deepStrictEqual(await Client.sendMutation(batch), {
+        reason: Type.atom("stale_build"),
+        status: "rejected",
+        write: null,
+      });
+    });
+
+    it("names the write a rejection refused", async () => {
+      responding({
+        reason: 'Type.atom("not_found")',
+        status: "rejected",
+        write: 2,
+      });
+
+      assert.equal((await Client.sendMutation(batch)).write, 2);
+    });
+
+    // A 403 says the identity was refused before the writes were read, so it is not a verdict
+    // about them - the batch is still pending, and what to do about it is the sender's call.
+    it("answers a failure for a status carrying no verdict", async () => {
+      responding({}, 403);
+
+      assert.deepStrictEqual(await Client.sendMutation(batch), {
+        httpStatus: 403,
+        status: "failed",
+      });
+    });
+
+    it("answers a failure for a server error", async () => {
+      responding({}, 500);
+
+      assert.deepStrictEqual(await Client.sendMutation(batch), {
+        httpStatus: 500,
+        status: "failed",
+      });
+    });
+
+    // A malformed envelope is this client's own bug, not an answer about the writes.
+    it("raises for an envelope the endpoint could not parse", async () => {
+      responding("seq must be a non-negative integer", 400);
+
+      let errorThrown = false;
+
+      try {
+        await Client.sendMutation(batch);
+      } catch (error) {
+        errorThrown = true;
+        assert.instanceOf(error, HologramRuntimeError);
+
+        assert.equal(
+          error.message,
+          "mutation failed: seq must be a non-negative integer",
+        );
+      }
+
+      assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
+    });
+
+    it("lets a network failure through to the caller", async () => {
+      sinon.stub(globalThis, "fetch").rejects(new Error("offline"));
+
+      let errorThrown = false;
+
+      try {
+        await Client.sendMutation(batch);
+      } catch (error) {
+        errorThrown = true;
+        assert.equal(error.message, "offline");
+      }
+
+      assert.isTrue(errorThrown, "Expected the failure to reach the caller");
+    });
+  });
+
   describe("sendCommand()", () => {
     let fetchStub,
       hologramScheduleActionStub,

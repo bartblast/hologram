@@ -165,6 +165,24 @@ export default class Client {
     return Connection.isConnected();
   }
 
+  // The envelope a batch ships as. Plain JSON, the spelling a sync frame uses in reverse - the
+  // client holds rows as the wire spells them, so what goes back is what came in.
+  //
+  // The identity is the page's, and this client invents neither half: replicaId and replicaToken
+  // are minted at the initial page render and emitted by the runtime script. The token is the
+  // server's signed statement of whom the id belongs to, which is what stops a stranger who
+  // learns an id from spending its sequence numbers.
+  static buildMutationPayload(batch) {
+    return {
+      instance_id: App.instanceId,
+      model_hash: globalThis.Hologram.sync.modelHash,
+      replica_id: globalThis.Hologram.replicaId,
+      replica_token: globalThis.Hologram.replicaToken,
+      seq: batch.seq,
+      writes: batch.writes,
+    };
+  }
+
   static async sendCommand(command) {
     const opts = {
       method: "POST",
@@ -223,6 +241,51 @@ export default class Client {
 
       $.#failCommand(error);
     }
+  }
+
+  // Answers what the server said about a batch, in one of three shapes:
+  //
+  //   {status: "confirmed", dropped}          - applied; dropped names the values that LOST
+  //   {status: "rejected", write, reason}     - refused; reason is a decoded client term
+  //   {status: "failed", httpStatus}          - no verdict at all, so the batch is still pending
+  //
+  // The third is not a rejection and must never be treated as one: a 403 says the identity was
+  // refused before the writes were read, and a network failure says nothing was read at all. What
+  // the sender does about it is its own decision.
+  //
+  // A 400 is different again - it means this client built a malformed envelope, which is a bug in
+  // the framework rather than an answer about the writes, so it is raised loudly.
+  static async sendMutation(batch) {
+    const opts = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Csrf-Token": globalThis.Hologram.csrfToken,
+      },
+      body: JSON.stringify($.buildMutationPayload(batch)),
+    };
+
+    const response = await fetch("/hologram/mutation", opts);
+
+    if (response.status === 400) {
+      throw new HologramRuntimeError(
+        `mutation failed: ${await response.text()}`,
+      );
+    }
+
+    if (!response.ok) {
+      return {httpStatus: response.status, status: "failed"};
+    }
+
+    const answer = await response.json();
+
+    return answer.status === "rejected"
+      ? {
+          reason: Interpreter.evaluateJavaScriptExpression(answer.reason),
+          status: "rejected",
+          write: answer.write,
+        }
+      : answer;
   }
 
   static #failCommand(message) {
