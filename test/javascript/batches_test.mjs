@@ -9,6 +9,7 @@ import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
@@ -382,6 +383,63 @@ describe("Batches", () => {
       await Batches.flush();
 
       sinon.assert.notCalled(sendStub);
+    });
+  });
+
+  describe("the queue reads", () => {
+    const write = (id) => ({id, op: "delete", stamp: 1, type: TODO});
+
+    const queued = (id) => {
+      Batches.open("todos");
+      Batches.current().append(write(id));
+
+      return Batches.close();
+    };
+
+    it("counts nothing when nothing is pending", () => {
+      assert.equal(Batches.pendingCount(), 0);
+      assert.isNull(Batches.oldestPendingSeq());
+      assert.deepStrictEqual(Batches.rejectedSummaries(), []);
+    });
+
+    it("counts the batches waiting to ship", () => {
+      queued("t1");
+      queued("t2");
+
+      assert.equal(Batches.pendingCount(), 2);
+    });
+
+    it("names the oldest waiting batch by its number", () => {
+      queued("t1");
+      queued("t2");
+
+      assert.equal(Batches.oldestPendingSeq(), 1);
+
+      Batches.pending.shift();
+
+      assert.equal(Batches.oldestPendingSeq(), 2);
+    });
+
+    // Inspected rather than boxed, so a devtools panel and a browser-driven test can both take it
+    // through JSON.
+    it("reads a refusal back as something a person can read", () => {
+      const batch = queued("t1");
+
+      batch.reason = Type.map([
+        [Type.atom("slug"), Type.list([Type.atom("unique")])],
+      ]);
+
+      batch.write = 0;
+      Batches.rejected.push(batch);
+
+      assert.deepStrictEqual(Batches.rejectedSummaries(), [
+        {
+          reason: "%{slug: [:unique]}",
+          rows: [`${TODO} t1`],
+          seq: 1,
+          write: 0,
+        },
+      ]);
     });
   });
 

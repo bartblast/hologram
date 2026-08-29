@@ -3,6 +3,7 @@
 import Batch from "./batch.mjs";
 import Client from "./client.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import Interpreter from "./interpreter.mjs";
 import Overlay from "./overlay.mjs";
 import Sse from "./sse.mjs";
 
@@ -131,6 +132,28 @@ export default class Batches {
 
   // The batch is in the overlay from the moment it opens, so a write is readable on the next line
   // of the action that made it.
+  // How long the oldest unsent batch has been waiting, named by its sequence number - null when
+  // nothing is pending.
+  static oldestPendingSeq() {
+    return Batches.pending[0]?.seq ?? null;
+  }
+
+  static pendingCount() {
+    return Batches.pending.length;
+  }
+
+  // The refused batches as something a person can read: the reason INSPECTED rather than boxed,
+  // so a devtools panel and a browser-driven test can both take it through JSON. Step 10's queue
+  // surface hands Elixir the term itself - this is the window that exists before it does.
+  static rejectedSummaries() {
+    return Batches.rejected.map((batch) => ({
+      reason: Interpreter.inspect(batch.reason),
+      rows: Array.from(batch.rowKeys()),
+      seq: batch.seq,
+      write: batch.write,
+    }));
+  }
+
   static open(target) {
     const batch = new Batch(target);
 

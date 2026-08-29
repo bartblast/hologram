@@ -8,10 +8,11 @@
 // so the array folded over the base rows here is the array posted to the endpoint - there is one
 // spelling of a write in the system, and no step that could translate it wrongly.
 export default class Batch {
-  // What the server refused and which write it named, both as its answer spells them. A batch
-  // that was never refused carries neither.
-  //
-  // TODO: filled when the sender loop records the server's answer.
+  // What the server refused, as its answer spells it - a decoded client term. A batch that was
+  // never refused carries none. Nothing app-facing reads it yet: a rejection after the client has
+  // navigated away arrives when the component's page bundle is not even loaded, so the channel
+  // that can always reach app code is a handler in the runtime bundle, and that is step 10's to
+  // build beside the durable queue that makes it meaningful.
   reason = null;
 
   // Taken at seal rather than at open: a number is spent in the order batches SHIP, and an action
@@ -27,7 +28,8 @@ export default class Batch {
   // can be delivered where they were made.
   target = null;
 
-  // TODO: filled when the sender loop records the server's answer.
+  // Which write a refusal named, by its index in `writes` - null for a refusal of the whole
+  // batch, which is what a stale build or a clock too far ahead gets.
   write = null;
 
   writes = [];

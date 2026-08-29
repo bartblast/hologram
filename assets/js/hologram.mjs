@@ -1529,6 +1529,17 @@ export default class Hologram {
 
     $.#pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
     globalThis.Hologram.dispatchAction = $.dispatchAction;
+
+    // A read-only window onto the write queue, beside the interop hatch above. Nothing in the
+    // framework reads it - it is for a devtools panel, a browser-driven test, and whatever step
+    // 10's queue surface is built on. Reads only: opening and closing batches is the action
+    // lifecycle's, and nothing outside it should reach in.
+    globalThis.Hologram.writes = {
+      oldestPendingSeq: Batches.oldestPendingSeq,
+      pendingCount: Batches.pendingCount,
+      rejected: Batches.rejectedSummaries,
+    };
+
     delete globalThis.Hologram._pendingJsInteropActions;
 
     Hologram.#isInitiated = true;
