@@ -222,6 +222,11 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
       assert_receive {:dispatched, [{200, _events}], _place}
 
+      # The delivery is not the barrier. The handler is what sends it, and the place moves once
+      # that handler RETURNS - so a read taken on the delivery alone races the round recording it.
+      # A synchronous call is answered only after the round is over.
+      :sys.get_state(dispatcher)
+
       recorded = ReadEdge.get(read_edge)
 
       # Asserted as a number before being compared: nothing recorded leaves nil, which every
@@ -244,11 +249,9 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
       refute_receive {:dispatched, _transactions, _place}, 100
 
-      # The round is awaited rather than timed. Its non-empty sibling gets that for free - it
-      # waits for the delivery - where an empty round delivers nothing to wait for, and a
-      # refute_receive proves only that nothing ARRIVED. A synchronous call to the dispatcher is
-      # the barrier: it is answered after the wake sent before it was handled, and the edge is
-      # recorded inside that handler.
+      # The round is awaited rather than timed, and a refute_receive is not that: it proves only
+      # that nothing ARRIVED. A synchronous call to the dispatcher is the barrier - it is answered
+      # after the wake sent before it was handled, and the edge is recorded inside that handler.
       :sys.get_state(dispatcher)
 
       recorded = ReadEdge.get(read_edge)
