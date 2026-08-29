@@ -9,6 +9,7 @@ import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
+import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
@@ -79,15 +80,16 @@ export default class Sse {
       greeting.cursor = $.syncCursor;
     }
 
-    // The identity the page was given, presented unchanged - this client invents neither half, the
-    // same as when it sends a batch. What it buys on this stream is being told how far its own
-    // writes are in what a frame carries, which is what stops it applying them a second time.
+    // The identity this browser presents - the pair it remembered from an earlier page load, or
+    // the current page's when it remembers none. This client invents neither half, the same as
+    // when it sends a batch. What it buys on this stream is being told how far its own writes are
+    // in what a frame carries, which is what stops it applying them a second time.
     //
     // Both or neither: an id is only worth what the statement beside it vouches for, and the
     // server reads an id with no statement as no identity at all.
-    if (globalThis.Hologram.replicaId && globalThis.Hologram.replicaToken) {
-      greeting.replica_id = globalThis.Hologram.replicaId;
-      greeting.replica_token = globalThis.Hologram.replicaToken;
+    if (Replica.id && Replica.token) {
+      greeting.replica_id = Replica.id;
+      greeting.replica_token = Replica.token;
     }
 
     return greeting;

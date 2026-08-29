@@ -16,6 +16,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
+import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -162,9 +163,14 @@ describe("Sse", () => {
   describe("buildSyncGreeting()", () => {
     const pageModule = Type.atom("Elixir.MyApp.BoardPage");
 
+    // Both sides, so a test asserting that NO identity is presented states its own premise
+    // rather than inheriting whatever the previous test or the previous suite adopted.
+    beforeEach(() => {
+      Replica.reset();
+    });
+
     afterEach(() => {
-      delete globalThis.Hologram.replicaId;
-      delete globalThis.Hologram.replicaToken;
+      Replica.reset();
       delete globalThis.Hologram.sync;
     });
 
@@ -208,12 +214,11 @@ describe("Sse", () => {
       assert.notProperty(Sse.buildSyncGreeting(pageModule), "cursor");
     });
 
-    // The pair the page was given, presented unchanged - what earns this client frames that say
-    // how far its own writes are in.
-    it("presents the replica identity the page was given", () => {
+    // The pair the browser is presenting, unchanged - what earns this client frames that say how
+    // far its own writes are in.
+    it("presents the replica identity the browser holds", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
-      globalThis.Hologram.replicaId = "r1";
-      globalThis.Hologram.replicaToken = "SFMyNTY.stated";
+      Replica.adopt({id: "r1", token: "SFMyNTY.stated"});
 
       const greeting = Sse.buildSyncGreeting(pageModule);
 
@@ -223,7 +228,7 @@ describe("Sse", () => {
 
     // An id is only worth the statement beside it, so half a pair is presented as none - the
     // server reads an id with no statement as no identity at all.
-    it("presents neither half when the page minted no identity", () => {
+    it("presents neither half when the browser holds no identity", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
       const greeting = Sse.buildSyncGreeting(pageModule);
@@ -232,9 +237,9 @@ describe("Sse", () => {
       assert.notProperty(greeting, "replica_token");
     });
 
-    it("presents neither half when the page gave an id with no statement", () => {
+    it("presents neither half for an id with no statement beside it", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
-      globalThis.Hologram.replicaId = "r1";
+      Replica.adopt({id: "r1", token: null});
 
       const greeting = Sse.buildSyncGreeting(pageModule);
 
