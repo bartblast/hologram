@@ -245,9 +245,14 @@ export default class Client {
 
   // Answers what the server said about a batch, in one of three shapes:
   //
-  //   {status: "confirmed", dropped}          - applied; dropped names the values that LOST
-  //   {status: "rejected", write, reason}     - refused; reason is a decoded client term
-  //   {status: "failed", httpStatus}          - no verdict at all, so the batch is still pending
+  //   {status: "confirmed", dropped, kept} - applied; dropped names the values that LOST and
+  //                                          kept the ones standing in their place
+  //   {status: "rejected", write, reason}  - refused; reason is a decoded client term
+  //   {status: "failed", httpStatus}       - no verdict at all, so the batch is still pending
+  //
+  // A confirmation is handed back exactly as it arrived. Both of its maps are keyed by the
+  // write's position as a string, and their values are wire spellings - the same shape a frame
+  // carries - so nothing here has to know what a column holds in order to pass it on.
   //
   // The third is not a rejection and must never be treated as one: a 403 says the identity was
   // refused before the writes were read, and a network failure says nothing was read at all. What
