@@ -572,6 +572,12 @@ function systemAttributeNames(entityType) {
   );
 }
 
+function toManyRelationshipNames(entityType) {
+  return Object.entries(Model.entry(entityType).relationships)
+    .filter(([_name, relationship]) => relationship.toMany)
+    .map(([name]) => name);
+}
+
 function toOneRelationshipNames(entityType) {
   return Object.entries(Model.entry(entityType).relationships)
     .filter(([_name, relationship]) => !relationship.toMany)
@@ -657,6 +663,33 @@ function putDelta(entity, name, amount, sign, stage) {
     moved_entity,
     Type.atom("__meta__"),
     putField(metadata, Type.atom("attribute_ops"), updatedOps),
+  );
+}
+
+// The two edge stages share everything but the operation they record. The relationship's own
+// field is left alone: an edge is recorded, not applied, and what the field holds is whatever the
+// read put there.
+function putRelationshipOp(entity, relationshipName, targetId, op, stage) {
+  const entityType = entityTypeOf(entity, stage);
+
+  validateEdgeRelationshipName(relationshipName, entityType);
+
+  if (!Type.isBitstring(targetId)) {
+    Interpreter.raiseArgumentError(
+      `${stage} takes a target id string, got: ${Interpreter.inspect(targetId)}`,
+    );
+  }
+
+  const metadata = field(entity, "__meta__");
+  const ops = Type.cloneMap(field(metadata, "relationship_ops"));
+  const key = Type.tuple([relationshipName, targetId]);
+
+  ops.data[Type.encodeMapKey(key)] = [key, Type.atom(op)];
+
+  return putField(
+    entity,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("relationship_ops"), ops),
   );
 }
 
@@ -966,6 +999,35 @@ function validateDeltaName(name, entityType, stage) {
   );
 }
 
+function validateEdgeRelationshipName(name, entityType) {
+  const toManyNames = toManyRelationshipNames(entityType);
+  const named = Type.isAtom(name) ? name.value : null;
+
+  if (named !== null && toManyNames.includes(named)) {
+    return;
+  }
+
+  const spelled = Interpreter.inspect(name);
+
+  if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a to-one relationship in ${entityType} - only to-many relationships hold edges - set its reference via put_attribute(:${named}_id, id)`,
+    );
+  }
+
+  if (named !== null && attributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is an attribute in ${entityType} - only to-many relationships hold edges - put it via put_attribute`,
+    );
+  }
+
+  const known = toManyNames.map((toMany) => `:${toMany}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown relationship ${spelled} in ${entityType} - known to-many relationships: ${known}`,
+  );
+}
+
 function validatePutName(name, entityType) {
   const settable = settableNames(entityType);
   const named = Type.isAtom(name) ? name.value : null;
@@ -1002,10 +1064,28 @@ function validatePutName(name, entityType) {
 }
 
 const Elixir_Hologram_Query = {
+  "add_relationship/3": (entity, relationshipName, targetId) =>
+    putRelationshipOp(
+      entity,
+      relationshipName,
+      targetId,
+      "add",
+      "add_relationship",
+    ),
+
   "count/1": (query) => setCardinality(query, "count"),
 
   "decrement/3": (entity, name, amount) =>
     putDelta(entity, name, amount, -1, "decrement"),
+
+  "delete_relationship/3": (entity, relationshipName, targetId) =>
+    putRelationshipOp(
+      entity,
+      relationshipName,
+      targetId,
+      "delete",
+      "delete_relationship",
+    ),
 
   "filter/2": (query, predicates) => {
     const term = toTerm(query);

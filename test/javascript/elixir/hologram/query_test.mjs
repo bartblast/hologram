@@ -26,7 +26,9 @@ describe("Elixir_Hologram_Query", () => {
   const task = Type.alias(TASK);
   const user = Type.alias(USER);
 
+  const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
   const count = Elixir_Hologram_Query["count/1"];
+  const deleteRelationship = Elixir_Hologram_Query["delete_relationship/3"];
   const decrement = Elixir_Hologram_Query["decrement/3"];
   const increment = Elixir_Hologram_Query["increment/3"];
   const filter = Elixir_Hologram_Query["filter/2"];
@@ -54,6 +56,9 @@ describe("Elixir_Hologram_Query", () => {
   // An entity struct as a stage meets one: what a query read, boxed the way every result is.
   const entity = (entityType, row = {}) =>
     Model.box(entityType, {id: "t1", ...row});
+
+  const edgeOps = (struct) =>
+    field(field(struct, "__meta__"), "relationship_ops");
 
   const ops = (struct) => field(field(struct, "__meta__"), "attribute_ops");
 
@@ -137,6 +142,241 @@ describe("Elixir_Hologram_Query", () => {
     // stages see if the entries another suite left behind go first - and the suites share these
     // type names while spelling them differently.
     Model.reset();
+  });
+
+  describe("add_relationship/3", () => {
+    const edge = (name, targetId, op) =>
+      Type.map([
+        [
+          Type.tuple([Type.atom(name), Type.bitstring(targetId)]),
+          Type.atom(op),
+        ],
+      ]);
+
+    it("keeps the rest of the metadata", () => {
+      const built = putAttribute(
+        entity(PROJECT),
+        predicates([["name", Type.bitstring("x")]]),
+      );
+
+      const result = addRelationship(
+        built,
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("name"),
+            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
+    });
+
+    it("leaves the relationship's own field as it is", () => {
+      const built = entity(PROJECT);
+
+      const result = addRelationship(
+        built,
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(field(result, "tasks"), field(built, "tasks"));
+    });
+
+    it("records an add operation for the edge", () => {
+      const result = addRelationship(
+        entity(PROJECT),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
+    });
+
+    it("records one operation per edge, several edges coexisting", () => {
+      const result = addRelationship(
+        addRelationship(
+          entity(PROJECT),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("tasks"),
+        Type.bitstring("t2"),
+      );
+
+      assert.deepStrictEqual(
+        edgeOps(result),
+        Type.map([
+          [
+            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
+            Type.atom("add"),
+          ],
+          [
+            Type.tuple([Type.atom("tasks"), Type.bitstring("t2")]),
+            Type.atom("add"),
+          ],
+        ]),
+      );
+    });
+
+    it("replaces a delete operation recorded for the same edge", () => {
+      const result = addRelationship(
+        deleteRelationship(
+          entity(PROJECT),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
+    });
+
+    it("raises on a to-one relationship name", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("owner"),
+            Type.bitstring("u1"),
+          ),
+        HologramBoxedError,
+        ":owner is a to-one relationship in MyApp.Project - only to-many relationships hold edges - set its reference via put_attribute(:owner_id, id)",
+      );
+    });
+
+    it("raises on an attribute name", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("name"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        ":name is an attribute in MyApp.Project - only to-many relationships hold edges - put it via put_attribute",
+      );
+    });
+
+    it("raises on an unknown relationship name", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("nope"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        "unknown relationship :nope in MyApp.Project - known to-many relationships: :tasks",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            Type.bitstring("x"),
+            Type.atom("tasks"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        'add_relationship takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the target id is not a string", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("tasks"),
+            Type.integer(123),
+          ),
+        HologramBoxedError,
+        "add_relationship takes a target id string, got: 123",
+      );
+    });
+  });
+
+  describe("delete_relationship/3", () => {
+    const edge = (name, targetId, op) =>
+      Type.map([
+        [
+          Type.tuple([Type.atom(name), Type.bitstring(targetId)]),
+          Type.atom(op),
+        ],
+      ]);
+
+    it("records a delete operation for the edge", () => {
+      const result = deleteRelationship(
+        entity(PROJECT),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "delete"));
+    });
+
+    it("replaces an add operation recorded for the same edge", () => {
+      const result = deleteRelationship(
+        addRelationship(
+          entity(PROJECT),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "delete"));
+    });
+
+    it("raises on a to-one relationship name", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(PROJECT),
+            Type.atom("owner"),
+            Type.bitstring("u1"),
+          ),
+        HologramBoxedError,
+        ":owner is a to-one relationship in MyApp.Project - only to-many relationships hold edges - set its reference via put_attribute(:owner_id, id)",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            Type.bitstring("x"),
+            Type.atom("tasks"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        'delete_relationship takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the target id is not a string", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(PROJECT),
+            Type.atom("tasks"),
+            Type.integer(123),
+          ),
+        HologramBoxedError,
+        "delete_relationship takes a target id string, got: 123",
+      );
+    });
   });
 
   describe("increment/3", () => {
