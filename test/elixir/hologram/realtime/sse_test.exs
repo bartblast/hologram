@@ -317,6 +317,18 @@ defmodule Hologram.Realtime.SSETest do
       # The place the client hands back on reconnect.
       assert updated_conn.resp_body =~ ~s["cursor":"g8uxAAAAZQ"]
     end
+
+    # The field is on the wire before anything fills it, so a client can be taught to read it
+    # while every frame still says nothing.
+    test "pushes a frame naming no applied batch of the receiving replica" do
+      conn = prepared_test_conn()
+
+      send(self(), {:sync_deltas, "g8uxAAAAZQ", []})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s["applied_seq":null]
+    end
   end
 
   describe "process_message/4 on {:sync_reload, ...}" do

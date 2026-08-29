@@ -142,7 +142,7 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "encode_deltas_envelope/3" do
+  describe "encode_deltas_envelope/4" do
     defp decoded_deltas(envelope) do
       "event: sync_deltas\nid: 42\ndata: " <> json = String.trim_trailing(envelope, "\n")
 
@@ -153,6 +153,7 @@ defmodule Hologram.Sync.FrameTest do
       row = Module2.new(a: true, c: "first")
 
       payload = %{
+        applied_seq: nil,
         cursor: @cursor,
         deltas: %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module2" => [WireData.row(row)]}},
         model_hash: Model.hash(),
@@ -161,7 +162,7 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_deltas_envelope(42, @cursor, [put_entity(row)]) ==
+      assert encode_deltas_envelope(42, @cursor, [put_entity(row)], nil) ==
                "event: sync_deltas\nid: 42\ndata: #{encoded}\n\n"
     end
 
@@ -175,7 +176,7 @@ defmodule Hologram.Sync.FrameTest do
       embedded_parent = %{parent | a: [child]}
 
       news = news(%{appeared: [embedded_parent, child]})
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news))
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news), nil)
 
       assert decoded_deltas(envelope) == %{
                "put_entity" => %{
@@ -221,7 +222,7 @@ defmodule Hologram.Sync.FrameTest do
       news =
         news(%{edges: [edge], patched: [{row, %{c: "after"}}], unsynced: [{gone_id, Module2}]})
 
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news))
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news), nil)
 
       assert decoded_deltas(envelope) == %{
                "patch_entity" => %{
@@ -239,33 +240,48 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "stamps the model the values were read under" do
-      envelope = encode_deltas_envelope(42, @cursor, [])
+      envelope = encode_deltas_envelope(42, @cursor, [], nil)
 
       assert String.contains?(envelope, Model.hash())
     end
 
     test "stamps the protocol version the frame is spelled in" do
-      envelope = encode_deltas_envelope(42, @cursor, [])
+      envelope = encode_deltas_envelope(42, @cursor, [], nil)
 
       assert String.contains?(envelope, ~s["protocol_version":#{protocol_version()}])
     end
 
     test "carries the cursor the client hands back" do
-      envelope = encode_deltas_envelope(42, @cursor, [])
+      envelope = encode_deltas_envelope(42, @cursor, [], nil)
 
       assert String.contains?(envelope, ~s["cursor":"#{@cursor}"])
     end
 
     test "carries no cursor when there is nowhere to resume from" do
-      envelope = encode_deltas_envelope(42, nil, [])
+      envelope = encode_deltas_envelope(42, nil, [], nil)
 
       assert String.contains?(envelope, ~s["cursor":null])
+    end
+
+    test "carries how far the receiving replica's own batches are applied" do
+      envelope = encode_deltas_envelope(42, @cursor, [], 7)
+
+      assert String.contains?(envelope, ~s["applied_seq":7])
+    end
+
+    # Nil says nothing rather than nothing-applied, which is what a stream serving no replica has
+    # to say - a client reading it as "none of mine have landed" would put its own writes back on
+    # top of rows that already hold them.
+    test "carries no number for a stream serving no replica" do
+      envelope = encode_deltas_envelope(42, @cursor, [], nil)
+
+      assert String.contains?(envelope, ~s["applied_seq":null])
     end
 
     test "never carries the value of a server-only attribute" do
       row = Module14.new(email: "user@test.com", password_hash: "hashed_secret_v3")
 
-      envelope = encode_deltas_envelope(42, @cursor, [put_entity(row)])
+      envelope = encode_deltas_envelope(42, @cursor, [put_entity(row)], nil)
 
       assert String.contains?(envelope, ~s["email":"user@test.com"])
 
