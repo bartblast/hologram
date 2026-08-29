@@ -285,4 +285,40 @@ defmodule HologramFeatureTests.ActionWritesTest do
 
     assert [%Todo{title: "beta", votes: 1}] = await_server_todos(1)
   end
+
+  # A newer edit from elsewhere reaches the SAME column this browser holds an unsent write to. The
+  # server will rule for the newer edit, and the browser can tell that from the row it already
+  # has: the arriving value carries a revision above the pending write's stamp, which is the very
+  # comparison the server's merge makes. So the winner shows as soon as its frame lands, rather
+  # than after the round trip, and the pending value is never put back on top of it.
+  #
+  # A column that loses is not a refusal - the batch is confirmed and the lost value is named on
+  # the answer - so nothing reaches the rejected queue.
+  feature "shows a newer edit from elsewhere through a pending one", %{session: session} do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Rename the todo"))
+    |> assert_text(css("#result"), "renamed_beta")
+    |> assert_text(css("#todos"), "beta 0")
+
+    :ok = update(Todo, todo_id, %{title: "gamma"})
+
+    session
+    |> assert_text(css("#todos"), "gamma 0")
+    |> release_mutations()
+    |> await_pending_writes(0)
+    |> assert_text(css("#todos"), "gamma 0")
+
+    assert script_result(session, "return globalThis.Hologram.writes.rejected();") == []
+
+    assert [%Todo{title: "gamma"}] = await_server_todos(1)
+  end
 end
