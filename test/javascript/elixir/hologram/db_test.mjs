@@ -276,6 +276,58 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // What C7a proves is the ENTRY the batch carries; these prove the same write is readable
+    // through the database's own getters the moment it is made, which is the seam the whole
+    // issue turns on. No production code stands between them - the batch is in the overlay from
+    // the moment the action opened it.
+    it("puts the row in the database, spelled the way the wire spells one", () => {
+      create(struct(TASK, {done: false, title: "Łódź"}));
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, ID_1), {
+        created_at: TIMESTAMP,
+        done: false,
+        id: ID_1,
+        title: "Łódź",
+        title_sort: "lodz",
+        updated_at: TIMESTAMP,
+        $revisions: {done: STAMP, title: STAMP},
+      });
+    });
+
+    it("leaves the row the server sent untouched underneath", () => {
+      create(struct(TASK, {done: false, title: "alpha"}));
+
+      assert.isNull(LocalDatabase.baseRow(TASK, ID_1));
+    });
+
+    it("lists the row through a read on the next line", () => {
+      create(struct(TASK, {done: false, title: "alpha"}));
+
+      const result = read(task);
+
+      assert.equal(result.data.length, 1);
+
+      assert.deepStrictEqual(
+        field(result.data[0], "title"),
+        Type.bitstring("alpha"),
+      );
+    });
+
+    it("keeps the row once the action's batch is sealed", () => {
+      create(struct(TASK, {done: false, title: "alpha"}));
+      Batches.close();
+
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    it("takes the row away when the action's writes are discarded", () => {
+      create(struct(TASK, {done: false, title: "alpha"}));
+      Batches.discard();
+
+      assert.isNull(LocalDatabase.getRow(TASK, ID_1));
+      assert.deepStrictEqual(read(task), Type.list([]));
+    });
+
     it("raises when no action is open", () => {
       Batches.reset();
 
