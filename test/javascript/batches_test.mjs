@@ -69,7 +69,11 @@ describe("Batches", () => {
       LocalDatabase.reset();
     });
 
-    const confirmed = (dropped = {}) => ({dropped, status: "confirmed"});
+    const confirmed = (dropped = {}, kept = {}) => ({
+      dropped,
+      kept,
+      status: "confirmed",
+    });
 
     const creating = (id, title) => ({
       claim: null,
@@ -175,18 +179,19 @@ describe("Batches", () => {
       );
     });
 
-    // The value lost the merge, so the base keeps what it has and the winner arrives with the
-    // frame - promoting the client's value would put back the value the server refused.
-    it("leaves a dropped column as the base holds it", async () => {
+    // The value lost the merge, and the answer says what stands in its place - so the column goes
+    // straight from what this client wrote to the winning value, without the row's older value
+    // showing in between while the frame is still on its way.
+    it("files what a lost column kept", async () => {
       LocalDatabase.putRow(TODO, {
         done: false,
         id: "t1",
-        title: "theirs",
+        title: "before either of us",
         $revisions: {title: 99},
       });
 
       sealed({
-        based_on: {title: 98},
+        based_on: {title: 99},
         claim: null,
         data: {title: "mine"},
         id: "t1",
@@ -195,12 +200,58 @@ describe("Batches", () => {
         type: TODO,
       });
 
-      sendStub.resolves(confirmed({0: {title: "mine"}}));
+      sendStub.resolves(
+        confirmed(
+          {0: {title: "mine"}},
+          {0: {title: "theirs", $revisions: {title: STAMP + 1}}},
+        ),
+      );
+
+      await Batches.flush();
+
+      const base = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(base.title, "theirs");
+      assert.equal(base.$revisions.title, STAMP + 1);
+    });
+
+    // The client's own copy is already gone - the fold took it away when the delete was made - so
+    // the row the answer describes is what puts it back. A patch for a row this client no longer
+    // holds is passed over, which is what makes the loss permanent otherwise.
+    it("keeps a row whose delete lost", async () => {
+      LocalDatabase.putRow(TODO, {
+        done: false,
+        id: "t1",
+        title: "held",
+        $revisions: {done: 99, title: 99},
+      });
+
+      sealed({
+        based_on: {done: 99, title: 99},
+        claim: null,
+        id: "t1",
+        op: "delete",
+        stamp: STAMP,
+        type: TODO,
+      });
+
+      sendStub.resolves(
+        confirmed(
+          {0: {done: null, title: null}},
+          {
+            0: {
+              done: false,
+              id: "t1",
+              title: "theirs",
+              $revisions: {done: 99, title: STAMP + 1},
+            },
+          },
+        ),
+      );
 
       await Batches.flush();
 
       assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "theirs");
-      assert.equal(LocalDatabase.baseRow(TODO, "t1").$revisions.title, 99);
     });
 
     // A later batch is still pending over the same row, and its values are not the server's to

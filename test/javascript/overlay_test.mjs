@@ -633,6 +633,96 @@ describe("Overlay", () => {
       assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 7);
     });
 
+    it("files the value a lost column kept, with its revision", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      const row = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(row.title, "Theirs");
+      assert.equal(row.$revisions.title, stamp + 1);
+      assert.equal(row.title_sort, "theirs");
+    });
+
+    // A resend of a batch already applied is answered from the record, so an answer can be older
+    // than what frames have delivered since - taking it whole would walk the row backwards.
+    it("leaves a base that has moved past what the answer kept", () => {
+      LocalDatabase.putRow(
+        TODO,
+        base({
+          title: "Newer still",
+          $revisions: {done: 10, project_id: 10, title: stamp + 5, votes: 10},
+        }),
+      );
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "Newer still");
+    });
+
+    // The client has been told to let the row go, and filing it again would put back a row the
+    // server says is not this client's to have.
+    it("passes over what was kept for a row the base no longer holds", () => {
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    // The row the answer describes is what puts back the copy the fold took away - and absorbing
+    // it first is what makes the delete's own fold answer correctly, since the row now carries a
+    // revision above the delete's stamp.
+    it("keeps a row whose delete lost, as the answer describes it", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      Overlay.promote(batch, {
+        0: {
+          done: false,
+          id: "t1",
+          title: "Theirs",
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        },
+      });
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "Theirs");
+    });
+
+    it("lifts the clock past the revisions the answer names", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      assert.isAbove(Clock.stamp(), stamp + 1);
+    });
+
+    it("files what a write set when the answer names nothing kept", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "Mine");
+    });
+
     it("drops the batch's layer either way", () => {
       LocalDatabase.putRow(TODO, base());
 

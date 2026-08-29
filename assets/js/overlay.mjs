@@ -104,9 +104,11 @@ export default class Overlay {
   // Applied against the BASE row rather than the folded one: a later batch may still be pending
   // over the same row, and its values are not the server's to store.
   //
-  // A column the answer names as dropped is the one exception. Its value lost the merge, so the
-  // base keeps what it has and the winner arrives with the frame.
-  static promote(batch, dropped) {
+  // Where a write LOST, the answer says what stands in its place, and that is absorbed into the
+  // base first - so the column goes straight from what this client wrote to the winning value,
+  // with nothing shown in between. Without it the only thing left to show is the value the row
+  // held before either writer touched it, which is a value nobody wrote.
+  static promote(batch, kept) {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
@@ -115,7 +117,11 @@ export default class Overlay {
         return;
       }
 
-      Overlay.#promoteWrite(write, dropped[String(index)] ?? {});
+      // Optional because a batch can be answered by a node that predates the key - a rolling
+      // deploy serves this bundle from one node and answers from another - and an answer that
+      // names nothing kept is one this client simply cannot show early.
+      Overlay.#absorb(write, kept?.[String(index)]);
+      Overlay.#promoteWrite(write);
     });
 
     Overlay.remove(batch);
@@ -133,6 +139,56 @@ export default class Overlay {
   // what this client has written and not yet sent is not the server's to take away.
   static reset() {
     Overlay.#batches = [];
+  }
+
+  // What the server kept where this write lost, written into the base as the answer lands.
+  //
+  // Per column, and only where the answer's revision is above the one the base holds. An answer
+  // can be REPLAYED - a resend of a batch already applied is answered from the record - and such
+  // an answer is older than whatever frames have delivered since, so taking it whole would walk
+  // the row backwards.
+  //
+  // A row the base no longer holds is passed over: the client has been told to let it go, and
+  // filing it again would put back a row the server says is not this client's to have.
+  static #absorb(write, kept) {
+    if (!kept) {
+      return;
+    }
+
+    const revisions = kept["$revisions"] ?? {};
+
+    // The clock's receive rule, the same one a frame's revisions go through: everything that
+    // arrives lifts the clock past it, so a stamp this client authors next is above it.
+    for (const revision of Object.values(revisions)) {
+      Clock.observe(revision);
+    }
+
+    const base = LocalDatabase.baseRow(write.type, write.id);
+
+    if (base === null) {
+      return;
+    }
+
+    const absorbed = Object.assign({}, base);
+    absorbed["$revisions"] = Object.assign({}, base["$revisions"] ?? {});
+
+    const columns = Object.entries(kept).filter(
+      ([field]) => field !== "$revisions",
+    );
+
+    for (const [field, value] of columns) {
+      const revision = revisions[field] ?? 0;
+
+      if (revision > (absorbed["$revisions"][field] ?? 0)) {
+        absorbed[field] = value;
+        absorbed["$revisions"][field] = revision;
+      }
+    }
+
+    LocalDatabase.putRow(
+      write.type,
+      Model.computeSortKeys(write.type, absorbed),
+    );
   }
 
   static #applyEdge(targetIds, relationship, write) {
@@ -244,7 +300,7 @@ export default class Overlay {
     );
   }
 
-  static #promoteWrite(write, droppedColumns) {
+  static #promoteWrite(write) {
     if (write.op === "add_relationship") {
       LocalDatabase.addFact(
         write.type,
@@ -276,28 +332,10 @@ export default class Overlay {
       return;
     }
 
-    for (const name of Object.keys(droppedColumns)) {
-      Overlay.#restoreColumn(promoted, base, name);
-    }
-
     LocalDatabase.putRow(
       write.type,
       Model.computeSortKeys(write.type, promoted),
     );
-  }
-
-  // A column whose value lost keeps what the base holds - its value AND its revision, since the
-  // revision this write would have set is not the one the row now carries.
-  static #restoreColumn(promoted, base, name) {
-    const revisions = base?.["$revisions"] ?? {};
-
-    promoted[name] = base === null ? null : base[name];
-
-    if (name in revisions) {
-      promoted["$revisions"][name] = revisions[name];
-    } else {
-      delete promoted["$revisions"][name];
-    }
   }
 
   // A moved counter takes no revision. There is nothing for a delta to be based on and nothing for

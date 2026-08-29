@@ -144,7 +144,7 @@ export default class Batches {
         Batches.pending.shift();
 
         if (answer.status === "confirmed") {
-          Overlay.promote(batch, answer.dropped);
+          Overlay.promote(batch, answer.kept);
         } else {
           Batches.#reject(batch, answer);
         }
