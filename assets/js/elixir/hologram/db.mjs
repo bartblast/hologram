@@ -190,6 +190,25 @@ function splitAttributeOps(attributeOps) {
   return {changes, deltas};
 }
 
+// The row a delete names, or a refusal, because a client answers only for the rows it holds.
+//
+// The server answers :ok for a row that is not there, and that answer does not carry: ITS absent
+// means the row is gone, where THIS one means "I do not have it" - which on a partial replica is
+// also what a row never synced looks like, and what a row this user may not see looks like.
+// Answering :ok would silently drop a delete of a row that is alive on the server, so the verbs
+// share one rule instead: a client writes the rows it holds, and says so where they are not.
+function heldRow(entityType, id, verb) {
+  const held = LocalDatabase.getRow(entityType, id);
+
+  if (held === null) {
+    Interpreter.raiseArgumentError(
+      `cannot ${verb} ${entityType} - no entity with id "${id}"`,
+    );
+  }
+
+  return held;
+}
+
 // The names a type-indexed update was given, or nothing when the changes are neither a map nor a
 // keyword list - a shape the stage explains better than this can.
 function changeNames(changes) {
@@ -296,6 +315,31 @@ function updateEntry(entity, entityType, id, held, data, deltas) {
   }
 
   return entry;
+}
+
+// A delete says it was based on the row's WHOLE revision map, because it touches every column -
+// the server keeps it only if none of them moved since this client last saw the row.
+function deleteRow(entityType, id, claim) {
+  if (entityType === ROLE_GRANT) {
+    Interpreter.raiseArgumentError(
+      "role grants are written only through grant_role/revoke_role",
+    );
+  }
+
+  const rowId = Bitstring.toText(id);
+  const held = heldRow(entityType, rowId, "delete");
+  const batch = currentBatch("delete");
+
+  batch.append({
+    based_on: {...(held["$revisions"] ?? {})},
+    claim,
+    id: rowId,
+    op: "delete",
+    stamp: Clock.stamp(),
+    type: entityType,
+  });
+
+  return Type.atom("ok");
 }
 
 // The row a create will store, as the wire spells it, beside the struct the verb answers with.
@@ -512,6 +556,15 @@ const Elixir_Hologram_DB = {
 
     return Elixir_Hologram_DB["update/1"](entity);
   },
+
+  "delete/1": (entity) => {
+    const entityType = entityTypeOf(entity, "delete");
+
+    return deleteRow(entityType, structField(entity, "id"), writeClaim(entity));
+  },
+
+  // Naming the row by type and id carries no claim - delete/1 is the spelling for one.
+  "delete/2": (entityType, id) => deleteRow(aliasName(entityType), id, null),
 
   "read/1": (query) => {
     const term = Elixir_Hologram_Query["normalize/1"](query);

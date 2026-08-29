@@ -29,6 +29,8 @@ describe("Elixir_Hologram_DB", () => {
   const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
   const decrement = Elixir_Hologram_Query["decrement/3"];
+  const deleteEntity = Elixir_Hologram_DB["delete/1"];
+  const deleteById = Elixir_Hologram_DB["delete/2"];
   const increment = Elixir_Hologram_Query["increment/3"];
   const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
   const update = Elixir_Hologram_DB["update/1"];
@@ -789,6 +791,152 @@ describe("Elixir_Hologram_DB", () => {
           ),
         HologramBoxedError,
         "role grants are written only through grant_role/revoke_role",
+      );
+    });
+  });
+
+  describe("delete/1 and delete/2", () => {
+    const NOW_MS = 1_756_100_000_123;
+    const STAMP = NOW_MS * 1024;
+
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(NOW_MS);
+      Batches.open("todos");
+
+      LocalDatabase.putRow(TASK, {
+        done: false,
+        id: ID_1,
+        title: "Draft copy",
+        $revisions: {done: 10, title: 11},
+      });
+
+      LocalDatabase.addFact(TASK, "tags", ID_1, "g1");
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    const held = () => Model.box(TASK, LocalDatabase.getRow(TASK, ID_1));
+
+    // A delete touches every column, so it says it was based on the whole map - the server keeps
+    // it only if none of them moved since this client last saw the row.
+    it("appends an entry based on the row's whole revision map", () => {
+      assert.deepStrictEqual(deleteEntity(held()), Type.atom("ok"));
+
+      assert.deepStrictEqual(Batches.current().writes, [
+        {
+          based_on: {done: 10, title: 11},
+          claim: null,
+          id: ID_1,
+          op: "delete",
+          stamp: STAMP,
+          type: TASK,
+        },
+      ]);
+    });
+
+    it("answers alike whether given a struct or a type and an id", () => {
+      deleteEntity(held());
+
+      const fromStruct = Batches.current().writes[0];
+
+      Batches.discard();
+      Batches.open("todos");
+      deleteById(task, Type.bitstring(ID_1));
+
+      assert.deepStrictEqual(Batches.current().writes[0], {
+        ...fromStruct,
+        stamp: Batches.current().writes[0].stamp,
+      });
+    });
+
+    it("carries the claim a stage recorded on the struct", () => {
+      deleteEntity(authorize(held(), Type.atom("archive")));
+
+      assert.deepStrictEqual(Batches.current().writes[0].claim, [
+        "authorize",
+        "archive",
+      ]);
+    });
+
+    it("carries no claim when the row is named by type and id", () => {
+      deleteById(task, Type.bitstring(ID_1));
+
+      assert.isNull(Batches.current().writes[0].claim);
+    });
+
+    it("takes the row and its outgoing edges out of the database", () => {
+      deleteById(task, Type.bitstring(ID_1));
+
+      assert.isNull(LocalDatabase.getRow(TASK, ID_1));
+      assert.deepStrictEqual(read(task), Type.list([]));
+
+      assert.deepStrictEqual(
+        LocalDatabase.getTargetIds(TASK, "tags", ID_1),
+        new Set(),
+      );
+    });
+
+    it("leaves the row the server sent untouched underneath", () => {
+      deleteById(task, Type.bitstring(ID_1));
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, ID_1));
+    });
+
+    it("puts the row back when the action's writes are discarded", () => {
+      deleteById(task, Type.bitstring(ID_1));
+      Batches.discard();
+
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    // D3, ruled 2026-08-29: the server answers :ok for a row that is not there, and that answer
+    // does not carry - here "absent" also covers a row never synced and a row this user may not
+    // see, so answering :ok would silently drop a delete of a row alive on the server.
+    it("raises for a row this client does not hold", () => {
+      assert.throw(
+        () => deleteById(task, Type.bitstring(ID_2)),
+        HologramBoxedError,
+        `cannot delete MyApp.Task - no entity with id "${ID_2}"`,
+      );
+    });
+
+    it("raises for a struct whose row this client does not hold", () => {
+      const absent = Model.box(TASK, {done: false, id: ID_2, title: "x"});
+
+      assert.throw(
+        () => deleteEntity(absent),
+        HologramBoxedError,
+        `cannot delete MyApp.Task - no entity with id "${ID_2}"`,
+      );
+    });
+
+    it("raises for a role grant", () => {
+      assert.throw(
+        () => deleteById(Type.alias(ROLE_GRANT), Type.bitstring(ID_1)),
+        HologramBoxedError,
+        "role grants are written only through grant_role/revoke_role",
+      );
+    });
+
+    it("raises when the value is not an entity struct", () => {
+      assert.throw(
+        () => deleteEntity(Type.bitstring("x")),
+        HologramBoxedError,
+        'delete takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when no action is open", () => {
+      Batches.reset();
+
+      assert.throw(
+        () => deleteById(task, Type.bitstring(ID_1)),
+        HologramBoxedError,
+        "delete was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
       );
     });
   });
