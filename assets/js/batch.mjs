@@ -25,6 +25,15 @@ export default class Batch {
   // build beside the durable queue that makes it meaningful.
   reason = null;
 
+  // The write that put this batch's number down, which the sender waits on before shipping it. A
+  // number is spent only once it is STORED: handed out and not written, the next page load hands
+  // out the same one, and the server - which answers a number it has already seen from its record
+  // rather than applying it again - answers that batch with the verdict this one got.
+  //
+  // Already settled where there is nowhere to store, so the wait costs a browser without durable
+  // storage nothing at all.
+  recorded = Promise.resolve();
+
   // Taken at seal rather than at open: a number is spent in the order batches SHIP, and an action
   // that writes nothing never spends one.
   seq = null;

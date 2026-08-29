@@ -2,6 +2,7 @@
 
 import Batch from "./batch.mjs";
 import Client from "./client.mjs";
+import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Overlay from "./overlay.mjs";
@@ -82,6 +83,11 @@ export default class Batches {
     }
 
     batch.seal(++Batches.#seq);
+
+    // Started here and awaited by the sender, so the number is on its way down while the action's
+    // own render happens - the store is never on the path of what the user sees.
+    batch.recorded = Durability.persistCounter(Batches.#seq);
+
     Batches.pending.push(batch);
 
     return batch;
@@ -118,6 +124,10 @@ export default class Batches {
     try {
       while (Batches.pending.length > 0) {
         const batch = Batches.pending[0];
+
+        // Before anything leaves: a batch may not be answered under a number this browser could
+        // hand out again after a reload.
+        await batch.recorded;
 
         batch.mark("sending");
 
@@ -236,6 +246,13 @@ export default class Batches {
     Batches.#seq = 0;
 
     Overlay.reset();
+  }
+
+  // Where the previous page load's numbering got to, so this one counts on from there. Never
+  // backwards: a number is identified with its replica, and the server answers a repeat from its
+  // record of the first batch to carry it.
+  static resumeFrom(seq) {
+    Batches.#seq = seq;
   }
 
   // A network failure and a status carrying no verdict are the same thing to this loop: nobody

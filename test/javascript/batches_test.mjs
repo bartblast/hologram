@@ -1,9 +1,15 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
+import {
+  assert,
+  defineRuntimeGlobals,
+  sinon,
+  waitForEventLoop,
+} from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
 import Client from "../../assets/js/client.mjs";
+import Durability from "../../assets/js/durability.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
@@ -25,6 +31,7 @@ describe("Batches", () => {
 
   afterEach(() => {
     Batches.reset();
+    sinon.restore();
   });
 
   const wrote = (id) => {
@@ -115,6 +122,35 @@ describe("Batches", () => {
         sendStub.getCalls().map((call) => call.args[0].seq),
         [1, 2],
       );
+    });
+
+    // A number handed out but never stored is one the next page load hands out again, and the
+    // server answers the batch carrying it with the verdict the FIRST one got. The wait sits
+    // between the seal and the send, where nobody is looking at it - the rows are already on
+    // screen and the action's render has already happened.
+    it("waits for the number to be recorded before sending", async () => {
+      let record;
+
+      const recording = new Promise((resolve) => {
+        record = resolve;
+      });
+
+      sinon.stub(Durability, "persistCounter").returns(recording);
+      sendStub.resolves(confirmed());
+
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+
+      await waitForEventLoop();
+
+      assert.isFalse(sendStub.called);
+
+      record();
+
+      await flushing;
+
+      assert.isTrue(sendStub.calledOnce);
     });
 
     it("does not enter the loop twice", async () => {
@@ -700,6 +736,21 @@ describe("Batches", () => {
       assert.isNull(Batches.current());
     });
 
+    it("records the batch's number, and hands the write to the sender", () => {
+      const recording = Promise.resolve();
+      const counter = sinon
+        .stub(Durability, "persistCounter")
+        .returns(recording);
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const batch = Batches.close();
+
+      assert.isTrue(counter.calledOnceWithExactly(1));
+      assert.strictEqual(batch.recorded, recording);
+    });
+
     it("answers nothing when no batch is open", () => {
       assert.isNull(Batches.close());
     });
@@ -791,6 +842,17 @@ describe("Batches", () => {
       wrote("t2");
 
       assert.equal(Batches.close().seq, 1);
+    });
+  });
+
+  describe("resumeFrom()", () => {
+    it("numbers the next sealed batch from above the given one", () => {
+      Batches.resumeFrom(41);
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 42);
     });
   });
 });
