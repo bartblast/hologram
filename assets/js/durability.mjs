@@ -1,5 +1,6 @@
 "use strict";
 
+import Clock from "./clock.mjs";
 import Logger from "./logger.mjs";
 
 // What this browser keeps between page loads, and where it keeps it.
@@ -38,6 +39,16 @@ export default class Durability {
 
   static #db = null;
 
+  // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
+  // dated at goes with them, and the identity, the counter and the clock stay. Called when a
+  // resync replaces the whole pot, and when what is stored cannot be read by this page.
+  static clear() {
+    return Durability.#write([ENTITIES, META], (transaction) => {
+      transaction.objectStore(ENTITIES).clear();
+      transaction.objectStore(META).delete("cursor");
+    });
+  }
+
   // Answers nothing, and never throws: a browser that cannot store is a browser that carries on
   // from memory. Every way that can happen is named, because the reason is what a developer needs
   // when a page is unexpectedly re-downloading everything.
@@ -68,6 +79,38 @@ export default class Durability {
     Durability.mode = "indexeddb";
   }
 
+  // One frame, one transaction: the rows it wrote, the place those rows are dated at, and where
+  // the clock now stands. Together, because a place is a claim about rows - stored apart, a crash
+  // between them would leave a client naming a place it does not hold the rows for, and the server
+  // would tell it only what changed since.
+  //
+  // Not awaited by anything on the write path. The rows are already in memory and already on
+  // screen, and what this buys is only whether they are still there after a reload.
+  static persistFrame(records, cursor) {
+    return Durability.#write([ENTITIES, META], (transaction) => {
+      const entities = transaction.objectStore(ENTITIES);
+      const meta = transaction.objectStore(META);
+
+      for (const record of records) {
+        if (record.row === null) {
+          entities.delete([record.type, record.id]);
+        } else {
+          entities.put(record);
+        }
+      }
+
+      // A frame sent mid-fill names no place, because a client holding part of a pot could not
+      // honour the claim one makes. The place already stored still describes the rows that were
+      // there before this fill started, so it is left standing rather than cleared - which is what
+      // lets a client cut off mid-fill come back asking for what it can still honour.
+      if (cursor !== null) {
+        meta.put(cursor, "cursor");
+      }
+
+      meta.put(Clock.last(), "clock");
+    });
+  }
+
   // Drops the database entirely and puts this module back as it starts. For tests - nothing in the
   // framework throws away what a browser has kept.
   static async reset() {
@@ -90,6 +133,14 @@ export default class Durability {
     }
 
     Durability.mode = "memory";
+  }
+
+  static #complete(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.onabort = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   }
 
   // Something the database was asked to do could not be done. What follows is always the same:
@@ -132,5 +183,36 @@ export default class Durability {
   static #upgrade(db) {
     db.createObjectStore(ENTITIES, {keyPath: ["type", "id"]});
     db.createObjectStore(META);
+  }
+
+  // Every write goes through here, so there is one place that counts what is in flight and one
+  // place that decides what a failure means.
+  //
+  // `relaxed` durability lets the browser answer before the operating system has flushed, which is
+  // the right trade for a cache of what the server already holds: throughput here is bound by
+  // commits, and the worst a lost tail costs is rows downloaded again.
+  //
+  // In memory mode this answers an already-settled promise, so a caller that awaits one - the
+  // batch counter does - waits for nothing rather than branching.
+  static async #write(storeNames, fn) {
+    if (Durability.mode === "memory") {
+      return;
+    }
+
+    Durability.inFlight += 1;
+
+    try {
+      const transaction = Durability.#db.transaction(storeNames, "readwrite", {
+        durability: "relaxed",
+      });
+
+      fn(transaction);
+
+      await Durability.#complete(transaction);
+    } catch (error) {
+      Durability.#fail(`write failed (${error})`);
+    } finally {
+      Durability.inFlight -= 1;
+    }
   }
 }

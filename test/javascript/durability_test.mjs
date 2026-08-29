@@ -17,7 +17,9 @@ import {
   registerWebApis,
 } from "./support/helpers.mjs";
 
+import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
+import Logger from "../../assets/js/logger.mjs";
 
 globalThis.indexedDB = fakeIndexedDB;
 
@@ -35,6 +37,9 @@ describe("Durability", () => {
   beforeEach(async () => {
     globalThis.Hologram.sync = {modelHash: "model-a"};
 
+    Clock.reset();
+    sessionStorage.clear();
+
     await Durability.reset();
   });
 
@@ -46,6 +51,8 @@ describe("Durability", () => {
     raw = [];
 
     await Durability.reset();
+
+    Clock.reset();
 
     delete globalThis.Hologram.sync;
   });
@@ -65,6 +72,82 @@ describe("Durability", () => {
         resolve({db: request.result, upgraded});
       };
     });
+
+  const readAll = async (storeName) => {
+    const {db} = await rawOpen();
+
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(storeName).objectStore(storeName).getAll();
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+  };
+
+  const readMeta = async (key) => {
+    const {db} = await rawOpen();
+
+    return new Promise((resolve, reject) => {
+      const request = db.transaction("meta").objectStore("meta").get(key);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+  };
+
+  const writeMeta = async (entries) => {
+    const {db} = await rawOpen();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("meta", "readwrite");
+      const meta = transaction.objectStore("meta");
+
+      for (const [key, value] of Object.entries(entries)) {
+        meta.put(value, key);
+      }
+
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve();
+    });
+  };
+
+  const taskRecord = (id, title) => ({
+    facts: {tags: []},
+    id,
+    row: {id, title},
+    type: "MyApp.Task",
+  });
+
+  describe("clear()", () => {
+    it("drops the rows and the place, and keeps what this browser did", async () => {
+      await Durability.open();
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy")],
+        "place-1",
+      );
+
+      await writeMeta({
+        actorUserId: "u1",
+        modelHash: "model-a",
+        replica: {id: "r1", token: "statement"},
+        seq: 41,
+      });
+
+      await Durability.clear();
+
+      assert.deepStrictEqual(await readAll("entities"), []);
+      assert.isUndefined(await readMeta("cursor"));
+
+      assert.equal(await readMeta("actorUserId"), "u1");
+      assert.equal(await readMeta("modelHash"), "model-a");
+      assert.equal(await readMeta("seq"), 41);
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r1",
+        token: "statement",
+      });
+    });
+  });
 
   describe("open()", () => {
     it("opens in indexeddb mode and creates the two object stores", async () => {
@@ -139,6 +222,88 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
 
       db.close();
+    });
+  });
+
+  describe("persistFrame()", () => {
+    it("puts a held row's record and deletes a gone row's", async () => {
+      await Durability.open();
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy"), taskRecord("t2", "Ship it")],
+        "place-1",
+      );
+
+      await Durability.persistFrame(
+        [{id: "t1", row: null, type: "MyApp.Task"}],
+        "place-2",
+      );
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        taskRecord("t2", "Ship it"),
+      ]);
+    });
+
+    // The rows and the place go together, which is what stops a client naming a place it does not
+    // hold the rows for - it would be told only what changed since, and the rows it never wrote
+    // would be missing for good.
+    it("writes a frame's rows and the place they are dated at", async () => {
+      await Durability.open();
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy")],
+        "place-1",
+      );
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        taskRecord("t1", "Draft copy"),
+      ]);
+
+      assert.equal(await readMeta("cursor"), "place-1");
+    });
+
+    // Mid-fill the server names no place, and the one already stored still describes the rows that
+    // were there before the fill started.
+    it("leaves the stored place alone for a frame naming none", async () => {
+      await Durability.open();
+      await Durability.persistFrame([], "place-1");
+      await Durability.persistFrame([], null);
+
+      assert.equal(await readMeta("cursor"), "place-1");
+    });
+
+    it("writes where the clock stands", async () => {
+      await Durability.open();
+
+      Clock.observe(1_756_100_000_123_004);
+
+      await Durability.persistFrame([], "place-1");
+
+      assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
+    });
+
+    it("counts a transaction in flight until it completes", async () => {
+      await Durability.open();
+
+      const writing = Durability.persistFrame([taskRecord("t1", "Draft")], "p");
+
+      assert.equal(Durability.inFlight, 1);
+
+      await writing;
+
+      assert.equal(Durability.inFlight, 0);
+    });
+
+    // Silently, which is the part worth asserting: without the check the write is attempted
+    // against a database that is not there, and a page with no storage would report a failure for
+    // every frame it received.
+    it("does nothing in memory mode", async () => {
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy")],
+        "place-1",
+      );
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
     });
   });
 
