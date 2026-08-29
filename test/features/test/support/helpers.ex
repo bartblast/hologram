@@ -166,6 +166,40 @@ defmodule HologramFeatureTests.Helpers do
     parent
   end
 
+  @doc """
+  Blocks until this browser has written everything it holds to durable storage, then returns the
+  `session`.
+
+  What a test can act on afterwards: the rows a frame delivered, the place they are dated at and
+  the clock are all committed, so a page load made after this reads them back rather than racing a
+  transaction that has not finished. Without it a test that reloads immediately can find an empty
+  database and conclude, wrongly, that nothing was kept.
+
+  Answers `nil` rather than zero for a page whose runtime has not attached its window yet, which is
+  what keeps the wait waiting instead of passing before the browser could have written anything.
+  Raises if writes are still in flight after `@max_wait_time`.
+  """
+  @spec await_durable_writes(Wallaby.Session.t(), integer | nil) :: Wallaby.Session.t()
+  def await_durable_writes(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    script = "return globalThis.Hologram.durability?.pendingWrites() ?? null;"
+
+    case script_result(session, script) do
+      0 ->
+        session
+
+      pending ->
+        if timed_out?(start_time) do
+          raise Wallaby.ExpectationNotMetError,
+                "Timed out waiting for the browser's durable writes, #{inspect(pending)} in flight"
+        end
+
+        :timer.sleep(50)
+        await_durable_writes(session, start_time)
+    end
+  end
+
   def cookies(session) do
     session
     |> Browser.cookies()
