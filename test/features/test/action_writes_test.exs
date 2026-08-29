@@ -36,6 +36,24 @@ defmodule HologramFeatureTests.ActionWritesTest do
     end)
   end
 
+  # Polls the SERVER until the one row holds the given number of votes.
+  #
+  # What it is for: while a batch's answer is held, nothing on the client says whether the server
+  # has applied it. Knowing that it HAS is the starting point for making a later write whose
+  # arrival proves the earlier one's frame has already been applied.
+  defp await_server_votes(expected_votes) do
+    Enum.reduce_while(1..100, nil, fn _attempt, _acc ->
+      case DB.read(Todo) do
+        [%Todo{votes: ^expected_votes} = todo] ->
+          {:halt, todo}
+
+        _not_yet ->
+          Process.sleep(50)
+          {:cont, nil}
+      end
+    end)
+  end
+
   # Polls the queue's own window for the refusal, which is the deterministic point at which the
   # rollback has happened - asserting "the row appeared and then vanished" would race the round
   # trip in whichever direction the machine happened to be faster.
@@ -228,5 +246,43 @@ defmodule HologramFeatureTests.ActionWritesTest do
     |> assert_text(css("#todos"), "beta 5")
 
     assert [%Todo{title: "beta", votes: 5}] = await_server_todos(1)
+  end
+
+  # One write reaches this browser twice: as the answer to the request that made it, and as a
+  # frame on the stream. Nothing orders the two, and when the frame wins the base already holds
+  # the move - so folding the pending move on top again shows one more than the server has, and
+  # promoting it afterwards writes that number down for good, with no later frame to correct it.
+  #
+  # Holding the ANSWER is what puts the frame first on purpose. The foreign rename that follows is
+  # the clock: it is written only once the server holds the vote, and frames arrive in order, so
+  # the renamed title showing means the vote's own frame has already been applied underneath.
+  feature "counts a moved counter once when its frame lands before its answer", %{
+    session: session
+  } do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    session
+    |> hold_mutation_answers()
+    |> click(button("Vote"))
+    |> assert_text(css("#result"), "voted_1")
+    |> assert_text(css("#todos"), "alpha 1")
+
+    await_server_votes(1)
+
+    :ok = update(Todo, todo_id, %{title: "beta"})
+
+    session
+    |> assert_text(css("#todos"), "beta 1")
+    |> release_mutations()
+    |> await_pending_writes(0)
+    |> assert_text(css("#todos"), "beta 1")
+
+    assert [%Todo{title: "beta", votes: 1}] = await_server_todos(1)
   end
 end
