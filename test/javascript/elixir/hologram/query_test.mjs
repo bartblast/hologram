@@ -17,6 +17,7 @@ defineRuntimeGlobals();
 // with the same raise messages. What differs is the term: these stages build the plain term the
 // client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query", () => {
+  const ITEM = "MyApp.Item";
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
@@ -26,6 +27,8 @@ describe("Elixir_Hologram_Query", () => {
   const user = Type.alias(USER);
 
   const count = Elixir_Hologram_Query["count/1"];
+  const decrement = Elixir_Hologram_Query["decrement/3"];
+  const increment = Elixir_Hologram_Query["increment/3"];
   const filter = Elixir_Hologram_Query["filter/2"];
   const include = Elixir_Hologram_Query["include/3"];
   const limit = Elixir_Hologram_Query["limit/2"];
@@ -80,6 +83,23 @@ describe("Elixir_Hologram_Query", () => {
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
+        // A counter type of its own rather than another attribute on TASK, whose known-name lists
+        // four assertions already pin: count is a counter, priority is an optional integer and so
+        // is not, and bio is there to be refused for its type.
+        [ITEM]: {
+          attributes: {
+            bio: "string",
+            count: "integer",
+            created_at: "datetime",
+            id: "uuid",
+            priority: "integer",
+            updated_at: "datetime",
+          },
+          constraints: {priority: {optional: true}},
+          enumValues: {},
+          relationships: {},
+          serverOnly: [],
+        },
         [PROJECT]: {
           attributes: {id: "uuid", name: "string"},
           relationships: {
@@ -117,6 +137,272 @@ describe("Elixir_Hologram_Query", () => {
     // stages see if the entries another suite left behind go first - and the suites share these
     // type names while spelling them differently.
     Model.reset();
+  });
+
+  describe("increment/3", () => {
+    const item = (count = 5) => entity(ITEM, {bio: "x", count, priority: null});
+
+    it("records a positive amount as a delta", () => {
+      assert.deepStrictEqual(
+        ops(increment(item(), Type.atom("count"), Type.integer(2))),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(2)]),
+          ],
+        ]),
+      );
+    });
+
+    it("previews the result on the struct's field", () => {
+      const result = increment(item(), Type.atom("count"), Type.integer(2));
+
+      assert.deepStrictEqual(field(result, "count"), Type.integer(7));
+    });
+
+    it("previews a second move on top of the first", () => {
+      const result = decrement(
+        increment(item(), Type.atom("count"), Type.integer(2)),
+        Type.atom("count"),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(field(result, "count"), Type.integer(6));
+    });
+
+    it("moves down by a negative amount", () => {
+      assert.deepStrictEqual(
+        ops(increment(item(), Type.atom("count"), Type.integer(-2))),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(-2)]),
+          ],
+        ]),
+      );
+    });
+
+    it("records nothing for a zero amount", () => {
+      assert.deepStrictEqual(
+        ops(increment(item(), Type.atom("count"), Type.integer(0))),
+        Type.map([]),
+      );
+    });
+
+    it("adds a second increment to the first", () => {
+      const result = increment(
+        increment(item(), Type.atom("count"), Type.integer(2)),
+        Type.atom("count"),
+        Type.integer(3),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(5)]),
+          ],
+        ]),
+      );
+    });
+
+    it("keeps the rest of the metadata", () => {
+      const result = increment(
+        putAttribute(item(), predicates([["bio", Type.bitstring("y")]])),
+        Type.atom("count"),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("bio"),
+            Type.tuple([Type.atom("put"), Type.bitstring("y")]),
+          ],
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(1)]),
+          ],
+        ]),
+      );
+    });
+
+    it("folds into a put value recorded before it", () => {
+      const result = increment(
+        putAttribute(item(), predicates([["count", Type.integer(10)]])),
+        Type.atom("count"),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("put"), Type.integer(11)]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(field(result, "count"), Type.integer(11));
+    });
+
+    it("raises on an amount that is not an integer", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("count"), Type.float(1.5)),
+        HologramBoxedError,
+        "increment takes an integer amount, got: 1.5",
+      );
+
+      assert.throw(
+        () => increment(item(), Type.atom("count"), Type.bitstring("1")),
+        HologramBoxedError,
+        'increment takes an integer amount, got: "1"',
+      );
+    });
+
+    it("raises on an optional integer attribute", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("priority"), Type.integer(1)),
+        HologramBoxedError,
+        ":priority in MyApp.Item is optional and can hold nil - increment moves attributes that always hold a number - declare it without optional: true, with a default",
+      );
+    });
+
+    it("raises on a non-integer attribute", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("bio"), Type.integer(1)),
+        HologramBoxedError,
+        ":bio is a :string attribute of MyApp.Item - increment moves integer attributes only",
+      );
+    });
+
+    it("raises on a relationship", () => {
+      assert.throw(
+        () => increment(entity(PROJECT), Type.atom("owner"), Type.integer(1)),
+        HologramBoxedError,
+        ":owner is a relationship in MyApp.Project - increment moves integer attributes only",
+      );
+    });
+
+    it("raises on a system attribute", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("id"), Type.integer(1)),
+        HologramBoxedError,
+        ":id is a system attribute of MyApp.Item - it is managed automatically and can't be moved",
+      );
+    });
+
+    it("raises on an unknown name", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("nope"), Type.integer(1)),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Item - known counters: :count",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () =>
+          increment(Type.bitstring("x"), Type.atom("count"), Type.integer(1)),
+        HologramBoxedError,
+        'increment takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the struct's field holds nil", () => {
+      assert.throw(
+        () =>
+          increment(
+            entity(ITEM, {bio: "x", count: null, priority: null}),
+            Type.atom("count"),
+            Type.integer(1),
+          ),
+        HologramBoxedError,
+        ":count in MyApp.Item holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default",
+      );
+    });
+
+    it("raises when the put value it would fold into is not an integer", () => {
+      assert.throw(
+        () =>
+          increment(
+            putAttribute(item(), predicates([["count", Type.nil()]])),
+            Type.atom("count"),
+            Type.integer(1),
+          ),
+        HologramBoxedError,
+        ":count in MyApp.Item carries a put value that is not an integer (nil) - increment cannot move it",
+      );
+    });
+  });
+
+  describe("decrement/3", () => {
+    const item = (count = 5) => entity(ITEM, {bio: "x", count, priority: null});
+
+    it("records a positive amount as a negative delta", () => {
+      assert.deepStrictEqual(
+        ops(decrement(item(), Type.atom("count"), Type.integer(2))),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(-2)]),
+          ],
+        ]),
+      );
+    });
+
+    it("subtracts from a recorded increment", () => {
+      const result = decrement(
+        increment(item(), Type.atom("count"), Type.integer(5)),
+        Type.atom("count"),
+        Type.integer(2),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(3)]),
+          ],
+        ]),
+      );
+    });
+
+    it("drops a delta that nets to zero", () => {
+      const result = decrement(
+        increment(item(), Type.atom("count"), Type.integer(2)),
+        Type.atom("count"),
+        Type.integer(2),
+      );
+
+      assert.deepStrictEqual(ops(result), Type.map([]));
+    });
+
+    it("raises on an amount that is not a positive integer", () => {
+      for (const [amount, spelled] of [
+        [Type.integer(-1), "-1"],
+        [Type.integer(0), "0"],
+        [Type.float(1.5), "1.5"],
+      ]) {
+        assert.throw(
+          () => decrement(item(), Type.atom("count"), amount),
+          HologramBoxedError,
+          `decrement takes a positive integer amount, got: ${spelled}`,
+        );
+      }
+    });
+
+    it("raises on a non-integer attribute", () => {
+      assert.throw(
+        () => decrement(item(), Type.atom("bio"), Type.integer(1)),
+        HologramBoxedError,
+        ":bio is a :string attribute of MyApp.Item - decrement moves integer attributes only",
+      );
+    });
   });
 
   describe("put_attribute/2", () => {

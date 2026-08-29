@@ -42,6 +42,16 @@ function attributeType(entityType, name) {
   return Model.entry(entityType).attributes[name] ?? "uuid";
 }
 
+// A counter is an integer attribute that always holds a number: an optional one can be nil, and
+// there is nothing to add to nil.
+function counterAttributeNames(entityType) {
+  const constraints = Model.entry(entityType).constraints;
+
+  return integerNames(entityType).filter(
+    (name) => constraints[name]?.optional !== true,
+  );
+}
+
 // The entity type of a struct a stage was handed, or a raise in the server's words. What the
 // client can check is that the build carries the type, which is its whole notion of "is an entity".
 function entityTypeOf(entity, stage) {
@@ -53,6 +63,28 @@ function entityTypeOf(entity, stage) {
 
   Interpreter.raiseArgumentError(
     `${stage} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
+  );
+}
+
+function integerNames(entityType) {
+  return attributeNames(entityType).filter(
+    (name) => attributeType(entityType, name) === "integer",
+  );
+}
+
+// The field previews the result the way a put value does - only the recorded amount is written, so
+// the row still computes its value from whatever it holds at the write.
+//
+// A declared integer attribute holds an integer or nil and nothing else, so the refusal names nil.
+function movedValue(entity, name, entityType, delta, stage) {
+  const value = field(entity, name.value);
+
+  if (Type.isInteger(value)) {
+    return Type.integer(value.value + delta);
+  }
+
+  Interpreter.raiseArgumentError(
+    `${Interpreter.inspect(name)} in ${entityType} holds nil - a counter always holds a number, so there is nothing for ${stage} to move - read the row first, or give the attribute a default`,
   );
 }
 
@@ -572,6 +604,62 @@ function toTerm(query) {
 
 // The actor leaf carries the acting user's entity id, so it compares only against names holding
 // one - any other type would build a comparison that never matches.
+// The two counter stages share everything but the sign they record. A sum that reaches zero is
+// dropped rather than recorded: a delta of nothing is not a change, and the wire refuses one.
+function putDelta(entity, name, amount, sign, stage) {
+  const entityType = entityTypeOf(entity, stage);
+
+  validateDeltaName(name, entityType, stage);
+  validateAmount(amount, stage);
+
+  const metadata = field(entity, "__meta__");
+  const ops = field(metadata, "attribute_ops");
+  const recorded = ops.data[Type.encodeMapKey(name)]?.[1] ?? null;
+  const moved = BigInt(sign) * amount.value;
+
+  // Stages apply in order: a move after a put folds into the value, so the attribute keeps one op.
+  if (recorded !== null && recorded.data[0].value === "put") {
+    const value = recorded.data[1];
+
+    if (!Type.isInteger(value)) {
+      Interpreter.raiseArgumentError(
+        `${Interpreter.inspect(name)} in ${entityType} carries a put value that is not an integer (${Interpreter.inspect(value)}) - ${stage} cannot move it`,
+      );
+    }
+
+    return Elixir_Hologram_Query["put_attribute/3"](
+      entity,
+      name,
+      Type.integer(value.value + moved),
+    );
+  }
+
+  const delta = (recorded === null ? 0n : recorded.data[1].value) + moved;
+  const updatedOps = Type.cloneMap(ops);
+  const key = Type.encodeMapKey(name);
+
+  if (delta === 0n) {
+    delete updatedOps.data[key];
+  } else {
+    updatedOps.data[key] = [
+      name,
+      Type.tuple([Type.atom("increment"), Type.integer(delta)]),
+    ];
+  }
+
+  const moved_entity = putField(
+    entity,
+    name,
+    movedValue(entity, name, entityType, moved, stage),
+  );
+
+  return putField(
+    moved_entity,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("attribute_ops"), updatedOps),
+  );
+}
+
 // Records one op per attribute, the later put replacing whatever the attribute carried - an
 // earlier put or an increment alike, since stages apply in order.
 function putAttributes(entity, pairs) {
@@ -825,6 +913,59 @@ function validateSubTerm(subTerm, name, target, kind) {
   }
 }
 
+function validateAmount(amount, stage) {
+  if (Type.isInteger(amount) && (stage === "increment" || amount.value > 0n)) {
+    return;
+  }
+
+  Interpreter.raiseArgumentError(
+    stage === "increment"
+      ? `increment takes an integer amount, got: ${Interpreter.inspect(amount)}`
+      : `decrement takes a positive integer amount, got: ${Interpreter.inspect(amount)}`,
+  );
+}
+
+function validateDeltaName(name, entityType, stage) {
+  const counters = counterAttributeNames(entityType);
+  const named = Type.isAtom(name) ? name.value : null;
+
+  if (named !== null && counters.includes(named)) {
+    return;
+  }
+
+  const spelled = Interpreter.inspect(name);
+
+  if (named !== null && integerNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} in ${entityType} is optional and can hold nil - ${stage} moves attributes that always hold a number - declare it without optional: true, with a default`,
+    );
+  }
+
+  if (named !== null && systemAttributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a system attribute of ${entityType} - it is managed automatically and can't be moved`,
+    );
+  }
+
+  if (named !== null && attributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a :${attributeType(entityType, named)} attribute of ${entityType} - ${stage} moves integer attributes only`,
+    );
+  }
+
+  if (named !== null && relationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a relationship in ${entityType} - ${stage} moves integer attributes only`,
+    );
+  }
+
+  const known = counters.map((counter) => `:${counter}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown attribute ${spelled} in ${entityType} - known counters: ${known}`,
+  );
+}
+
 function validatePutName(name, entityType) {
   const settable = settableNames(entityType);
   const named = Type.isAtom(name) ? name.value : null;
@@ -862,6 +1003,9 @@ function validatePutName(name, entityType) {
 
 const Elixir_Hologram_Query = {
   "count/1": (query) => setCardinality(query, "count"),
+
+  "decrement/3": (entity, name, amount) =>
+    putDelta(entity, name, amount, -1, "decrement"),
 
   "filter/2": (query, predicates) => {
     const term = toTerm(query);
@@ -918,6 +1062,9 @@ const Elixir_Hologram_Query = {
       `include spec must be a relationship name or a shape list, got: ${Interpreter.inspect(spec)}`,
     );
   },
+
+  "increment/3": (entity, name, amount) =>
+    putDelta(entity, name, amount, 1, "increment"),
 
   "limit/2": (query, value) => setViewBound(query, "limit", value),
 
