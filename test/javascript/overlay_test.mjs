@@ -47,6 +47,12 @@ describe("Overlay", () => {
     Overlay.reset();
   });
 
+  // Mocha runs every suite in one process and the overlay is module state, so a batch left pushed
+  // here would fold itself into another file's reads.
+  afterEach(() => {
+    Overlay.reset();
+  });
+
   const base = (overrides = {}) =>
     Object.assign(
       {
@@ -240,12 +246,180 @@ describe("Overlay", () => {
       assert.equal(Overlay.foldRow(TODO, "t1", base()).title, "Third");
     });
 
+    // The guard test below never reaches the write walk - it returns at names() - so this is the
+    // one that pins that the walk itself filters by id.
+    it("applies only the writes naming the row, when its batch names others too", () => {
+      pushed(
+        updateWrite({data: {title: "Mine"}}),
+        createWrite({id: "t2", data: {title: "Not mine", votes: 0}}),
+      );
+
+      const row = Overlay.foldRow(TODO, "t1", base());
+
+      assert.equal(row.id, "t1");
+      assert.equal(row.title, "Mine");
+    });
+
     it("passes over a pending write naming another row of the same type", () => {
       pushed(updateWrite({data: {title: "Ship it"}, id: "t2"}));
 
       const row = base();
 
       assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+  });
+
+  describe("foldTable()", () => {
+    const table = (...rows) =>
+      Object.fromEntries(rows.map((row) => [row.id, row]));
+
+    it("answers the base itself when no pending write names the type", () => {
+      const held = table(base());
+
+      assert.strictEqual(Overlay.foldTable(TODO, held), held);
+    });
+
+    it("answers the base itself when the pending writes name another type", () => {
+      pushed(createWrite({type: "MyApp.Other"}));
+
+      const held = table(base());
+
+      assert.strictEqual(Overlay.foldTable(TODO, held), held);
+    });
+
+    it("puts a created row in the table", () => {
+      pushed(createWrite({id: "t2"}));
+
+      const folded = Overlay.foldTable(TODO, table(base()));
+
+      assert.deepStrictEqual(Object.keys(folded).sort(), ["t1", "t2"]);
+      assert.equal(folded.t2.title, "Łódź");
+    });
+
+    it("takes a deleted row out of the table", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      assert.deepStrictEqual(Overlay.foldTable(TODO, table(base())), {});
+    });
+
+    it("passes over a delete of a row the table does not hold", () => {
+      pushed({id: "t9", op: "delete", stamp, type: TODO});
+
+      assert.deepStrictEqual(
+        Object.keys(Overlay.foldTable(TODO, table(base()))),
+        ["t1"],
+      );
+    });
+
+    it("shows an updated row as its writer left it", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      assert.equal(Overlay.foldTable(TODO, table(base())).t1.title, "Ship it");
+    });
+
+    it("leaves the base table and its rows untouched", () => {
+      const row = base();
+      const held = table(row);
+
+      pushed(updateWrite({data: {title: "Ship it"}}));
+      pushed(createWrite({id: "t2"}));
+      Overlay.foldTable(TODO, held);
+
+      assert.deepStrictEqual(Object.keys(held), ["t1"]);
+      assert.equal(row.title, "Draft copy");
+    });
+
+    it("reads a write appended after an earlier fold, so an action reads its own writes", () => {
+      const held = table(base());
+      const batch = pushed(updateWrite({data: {title: "First"}}));
+
+      assert.equal(Overlay.foldTable(TODO, held).t1.title, "First");
+
+      batch.append(updateWrite({data: {title: "Second"}, stamp: stamp + 1}));
+
+      assert.equal(Overlay.foldTable(TODO, held).t1.title, "Second");
+    });
+  });
+
+  describe("foldTargetIds()", () => {
+    const addEdge = (overrides = {}) =>
+      Object.assign(
+        {
+          id: "t1",
+          op: "add_relationship",
+          relationship: "tags",
+          target_id: "g2",
+          type: TODO,
+        },
+        overrides,
+      );
+
+    it("answers the base itself when no pending write names the row", () => {
+      const held = new Set(["g1"]);
+
+      assert.strictEqual(Overlay.foldTargetIds(TODO, "tags", "t1", held), held);
+    });
+
+    it("adds the target an edge names", () => {
+      pushed(addEdge());
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1"])),
+        new Set(["g1", "g2"]),
+      );
+    });
+
+    it("removes the target a deleted edge names", () => {
+      pushed(addEdge({op: "delete_relationship", target_id: "g1"}));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1", "g2"])),
+        new Set(["g2"]),
+      );
+    });
+
+    it("passes over an edge of another relationship", () => {
+      pushed(addEdge({relationship: "labels"}));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1"])),
+        new Set(["g1"]),
+      );
+    });
+
+    it("empties the set when the source row is deleted", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1"])),
+        new Set(),
+      );
+    });
+
+    it("applies only the edges naming the row, when its batch names others too", () => {
+      pushed(addEdge(), addEdge({id: "t2", target_id: "g9"}));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1"])),
+        new Set(["g1", "g2"]),
+      );
+    });
+
+    it("passes over an edge whose source is another row", () => {
+      pushed(addEdge({id: "t2"}));
+
+      const held = new Set(["g1"]);
+
+      assert.strictEqual(Overlay.foldTargetIds(TODO, "tags", "t1", held), held);
+    });
+
+    it("leaves the base set untouched", () => {
+      const held = new Set(["g1"]);
+
+      pushed(addEdge());
+      Overlay.foldTargetIds(TODO, "tags", "t1", held);
+
+      assert.deepStrictEqual(held, new Set(["g1"]));
     });
   });
 

@@ -36,15 +36,53 @@ export default class Overlay {
 
     let row = base;
 
+    for (const write of Overlay.#writesFor(type, id)) {
+      row = Overlay.#applyWrite(type, row, write);
+    }
+
+    return row;
+  }
+
+  // A type's whole table as the pending writes leave it - what a query reads. Nothing is cached:
+  // the fold is rebuilt per call, deliberately.
+  //
+  // A cache here would have to be dropped whenever the base moves, whenever a batch is pushed or
+  // dropped, AND whenever a write is appended to the batch that is still open - and it is that
+  // last one that decides it. An action writes and then reads its own write on the next line, so a
+  // cache that misses an append breaks read-your-writes, which is the promise this whole seam
+  // exists to keep. Rebuilding costs a shallow copy of one table, and only while a write is
+  // pending: with nothing pending the base is handed straight back, untouched and uncopied.
+  static foldTable(type, base) {
+    if (!Overlay.#namesType(type)) {
+      return base;
+    }
+
+    const table = Object.assign({}, base);
+
     for (const batch of Overlay.#batches) {
       for (const write of batch.writes) {
-        if (write.type === type && write.id === id) {
-          row = Overlay.#applyWrite(type, row, write);
+        if (write.type === type) {
+          Overlay.#fold(table, type, write);
         }
       }
     }
 
-    return row;
+    return table;
+  }
+
+  // The target ids of one relationship of one row, as the pending edge writes leave them.
+  static foldTargetIds(type, relationship, sourceId, base) {
+    if (!Overlay.names(type, sourceId)) {
+      return base;
+    }
+
+    let targetIds = new Set(base);
+
+    for (const write of Overlay.#writesFor(type, sourceId)) {
+      targetIds = Overlay.#applyEdge(targetIds, relationship, write);
+    }
+
+    return targetIds;
   }
 
   static names(type, id) {
@@ -65,6 +103,26 @@ export default class Overlay {
   // what this client has written and not yet sent is not the server's to take away.
   static reset() {
     Overlay.#batches = [];
+  }
+
+  static #applyEdge(targetIds, relationship, write) {
+    // A row that is gone takes its outgoing edges with it, which is what the database itself does
+    // when it drops one - the pairs it was the source of say nothing once there is no row.
+    if (write.op === "delete") {
+      return new Set();
+    }
+
+    if (write.relationship !== relationship) {
+      return targetIds;
+    }
+
+    if (write.op === "add_relationship") {
+      targetIds.add(write.target_id);
+    } else if (write.op === "delete_relationship") {
+      targetIds.delete(write.target_id);
+    }
+
+    return targetIds;
   }
 
   static #applyWrite(type, row, write) {
@@ -109,6 +167,22 @@ export default class Overlay {
     return Model.computeSortKeys(type, row);
   }
 
+  static #fold(table, type, write) {
+    const folded = Overlay.#applyWrite(type, table[write.id] ?? null, write);
+
+    if (folded === null) {
+      delete table[write.id];
+    } else {
+      table[write.id] = folded;
+    }
+  }
+
+  static #namesType(type) {
+    return Overlay.#batches.some((batch) =>
+      batch.writes.some((write) => write.type === type),
+    );
+  }
+
   // A moved counter takes no revision. There is nothing for a delta to be based on and nothing for
   // it to lose, which is what makes two clients' moves add up - its revision arrives with the
   // patch frame instead.
@@ -132,5 +206,12 @@ export default class Overlay {
     }
 
     return Model.computeSortKeys(type, updated);
+  }
+
+  // Every pending write naming one row, in the order they were made.
+  static #writesFor(type, id) {
+    return Overlay.#batches.flatMap((batch) =>
+      batch.writes.filter((write) => write.type === type && write.id === id),
+    );
   }
 }
