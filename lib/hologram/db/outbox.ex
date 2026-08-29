@@ -149,7 +149,8 @@ defmodule Hologram.DB.Outbox do
   @spec read_after(non_neg_integer, non_neg_integer, pos_integer) :: list(map)
   def read_after(tx, seq, limit) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id", "revisions"
+    SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id", "revisions",
+           "mutation_ref"
     FROM "hologram_system"."outbox"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
@@ -236,12 +237,14 @@ defmodule Hologram.DB.Outbox do
 
   # The history read's shape: everything the windowed read gives except the payload, which nothing
   # replaying it looks at. Fixed size by construction, which is what lets its caller bound a gap by
-  # counting.
-  defp place_event([seq, op, type, entity_id, tx, model_hash, actor_id, revisions]) do
+  # counting - the batch a write belongs to is bookkeeping of a bounded size, where the payload is
+  # the part that runs from a delete's nothing to a wide entity's kilobytes.
+  defp place_event([seq, op, type, entity_id, tx, model_hash, actor_id, revisions, mutation_ref]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       entity_id: Codec.decode(entity_id, :uuid),
       model_hash: model_hash,
+      mutation_ref: mutation_ref,
       op: operation(op),
       revisions: revisions,
       seq: seq,
