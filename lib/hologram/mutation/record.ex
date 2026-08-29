@@ -96,6 +96,25 @@ defmodule Hologram.Mutation.Record do
   end
 
   @doc """
+  Returns the highest sequence number at which the given replica has had a batch CONFIRMED, or nil
+  when it has had none.
+
+  Confirmed only, because that is what "this replica's writes are in the database" means: a refused
+  batch changed nothing, and a claim with no answer yet belongs to a transaction still running.
+  """
+  @spec highest_confirmed_seq(String.t()) :: non_neg_integer | nil
+  def highest_confirmed_seq(replica_id) do
+    statement = """
+    SELECT max("seq") FROM "hologram_system"."mutation"
+    WHERE "replica_id" = $1 AND "result"->>'status' = 'confirmed'
+    """
+
+    {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query(statement, [replica_id])
+
+    seq
+  end
+
+  @doc """
   Records the given batch as refused - the batch as it arrived and the answer it got, bound to the
   user who sent it - and returns :ok.
 
