@@ -248,6 +248,74 @@ describe("Sse", () => {
     });
   });
 
+  describe("reconnect()", () => {
+    // Both sides. The identity is module state, and the connect() tests below assert their whole
+    // greeting URL - one left adopted here puts a replica on theirs and fails them, a long way
+    // from anything that mentions an identity.
+    beforeEach(() => {
+      Replica.reset();
+    });
+
+    // The greeting is removed here rather than at the end of the test that sets it, as this file's
+    // connect() describe already learned: a failed assertion skips the line and leaves it standing
+    // for every test after it.
+    afterEach(() => {
+      Replica.reset();
+
+      delete globalThis.Hologram.sync;
+    });
+
+    // The greeting is built at connect time and nowhere else, so a client whose identity changed
+    // has to open a stream again for the server to hear about it.
+    it("closes the stream and opens a new one carrying the current identity", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      sinon.stub(Logger, "debug");
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      Replica.adopt({id: "r-refused", token: "statement-refused"});
+
+      await Sse.connect();
+
+      Replica.adopt({id: "r-fresh", token: "statement-fresh"});
+
+      await Sse.reconnect();
+
+      assert.isTrue(mockEventSource.close.calledOnce);
+      assert.equal(globalThis.EventSource.callCount, 2);
+
+      assert.include(
+        globalThis.EventSource.secondCall.args[0],
+        "replica_id=r-fresh&replica_token=statement-fresh",
+      );
+    });
+
+    // A stream that is replaced on purpose has earned no delay, and counting it as a failure would
+    // make the next real one back off further than it should.
+    it("leaves the failure count alone", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.connect();
+      await Sse.reconnect();
+
+      assert.equal(Sse.reconnectAttempts, 0);
+    });
+
+    it("opens a stream when there is none to close", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.reconnect();
+
+      assert.equal(globalThis.EventSource.callCount, 1);
+    });
+  });
+
   describe("computeReconnectDelay()", () => {
     beforeEach(() => {
       sinon.stub(Math, "random").returns(0.5);

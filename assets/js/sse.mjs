@@ -320,6 +320,23 @@ export default class Sse {
     }
   }
 
+  // Drops the stream and opens a new one, for a client whose greeting has changed since it
+  // connected - a replica whose identity was refused and replaced is the case that needs it. The
+  // server decides what a stream serves from what it was greeted with, so a client that becomes
+  // somebody else mid-page has to say so, and the only place it says anything is the connect.
+  //
+  // Deliberate rather than a failure, which is why the attempt counter is left alone and no backoff
+  // applies: nothing went wrong, and the delay a failing stream has earned is not this one's to
+  // serve.
+  // Answers the connect's own promise, so a caller that wants to know the new stream is up can
+  // wait for it. Nothing in the framework does - a replaced stream is opened and forgotten.
+  static reconnect() {
+    $.eventSource?.close();
+    $.eventSource = null;
+
+    return $.connect();
+  }
+
   // One render per animation frame, however many frames arrive in between: a fill lands as a
   // burst, and a repaint per frame would be work nobody sees.
   //
