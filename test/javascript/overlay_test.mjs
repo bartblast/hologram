@@ -178,6 +178,67 @@ describe("Overlay", () => {
       });
     });
 
+    it("leaves a column the base has moved past the write's stamp", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        }),
+      );
+
+      assert.equal(row.title, "Draft copy");
+      assert.equal(row.$revisions.title, stamp + 1);
+    });
+
+    it("applies the columns that still win and leaves the ones that lost, within one write", () => {
+      pushed(updateWrite({data: {done: true, title: "Ship it"}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        }),
+      );
+
+      assert.isTrue(row.done);
+      assert.equal(row.$revisions.done, stamp);
+      assert.equal(row.title, "Draft copy");
+      assert.equal(row.$revisions.title, stamp + 1);
+    });
+
+    // The server stores a client's stamp verbatim for a value it accepts, so a revision equal to
+    // the write's own stamp says the write is already in the base - and applying it again is
+    // work with no effect, which is why the base comes back as it stands.
+    it("reads its own landed value as the base", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = base({
+        title: "Ship it",
+        title_sort: "ship it",
+        $revisions: {done: 10, project_id: 10, title: stamp, votes: 10},
+      });
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+
+    it("leaves updated_at alone when every column of the write has lost", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        }),
+      );
+
+      assert.equal(row.updated_at, "2026-01-01T00:00:00.000000Z");
+    });
+
     it("moves a counter by the delta and leaves its revision alone", () => {
       pushed(updateWrite({deltas: {votes: 2}}));
 
@@ -185,6 +246,25 @@ describe("Overlay", () => {
 
       assert.equal(row.votes, 5);
       assert.equal(row.$revisions.votes, 10);
+    });
+
+    // A move is not a claim about the value, so there is nothing for it to lose and no revision to
+    // judge it by. What keeps a move that has already landed from counting twice is the batch's
+    // landed set - the server advances a contended counter's revision by one rather than to the
+    // mover's stamp, so the revision cannot answer that question at all.
+    it("moves a counter whatever revision the base holds for it", () => {
+      pushed(updateWrite({deltas: {votes: 2}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          votes: 5,
+          $revisions: {done: 10, project_id: 10, title: 10, votes: stamp + 1},
+        }),
+      );
+
+      assert.equal(row.votes, 7);
     });
 
     it("stamps an update's updated_at from the write", () => {
@@ -209,10 +289,28 @@ describe("Overlay", () => {
       assert.isNull(Overlay.foldRow(TODO, "t1", null));
     });
 
-    it("answers nothing for a delete", () => {
+    it("answers nothing for a delete of a row nothing moved past the stamp", () => {
       pushed({id: "t1", op: "delete", stamp, type: TODO});
 
       assert.isNull(Overlay.foldRow(TODO, "t1", base()));
+    });
+
+    // One column is enough: a delete is a claim about every column at once, so a newer edit to any
+    // of them is a newer edit than the delete, and the server will keep the row.
+    it("keeps a row a newer edit moved past the delete's stamp", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      const row = base({
+        $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+      });
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+
+    it("answers nothing for a delete of a row holding no revisions", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      assert.isNull(Overlay.foldRow(TODO, "t1", base({$revisions: {}})));
     });
 
     it("leaves the row as it was for an edge, which changes no column", () => {
@@ -300,6 +398,18 @@ describe("Overlay", () => {
       pushed({id: "t1", op: "delete", stamp, type: TODO});
 
       assert.deepStrictEqual(Overlay.foldTable(TODO, table(base())), {});
+    });
+
+    it("keeps a deleted row a newer edit moved past", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      const row = base({
+        $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+      });
+
+      assert.deepStrictEqual(Object.keys(Overlay.foldTable(TODO, table(row))), [
+        "t1",
+      ]);
     });
 
     it("passes over a delete of a row the table does not hold", () => {

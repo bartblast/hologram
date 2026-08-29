@@ -127,6 +127,12 @@ export default class Overlay {
   static #applyEdge(targetIds, relationship, write) {
     // A row that is gone takes its outgoing edges with it, which is what the database itself does
     // when it drops one - the pairs it was the source of say nothing once there is no row.
+    //
+    // Judged unconditionally, where the ROW fold asks whether the delete still stands. The two
+    // are not inconsistent: an edge fold is handed a set of target ids and never the row, so
+    // there are no revisions here to weigh a delete against. A delete that turns out to have lost
+    // costs an empty set until the answer arrives, where the row itself keeps standing - narrow,
+    // and closing it means handing this the row, which no reader of a fact set has.
     if (write.op === "delete") {
       return new Set();
     }
@@ -149,8 +155,12 @@ export default class Overlay {
       case "create":
         return Overlay.#created(type, write);
 
+      // A delete takes the row only when nothing has moved past the stamp it was made at, which
+      // is the server's own rule for one. A newer edit from elsewhere means the server is going
+      // to keep the row - so it keeps standing here too, rather than being gone until an answer
+      // says it never went.
       case "delete":
-        return null;
+        return Overlay.#deleteWins(row, write) ? null : row;
 
       // A row the client no longer holds cannot be updated onto anything - the write still ships,
       // and the server answers for it against the row it has.
@@ -184,6 +194,22 @@ export default class Overlay {
     });
 
     return Model.computeSortKeys(type, row);
+  }
+
+  // Whether a delete still stands against the base - the mirror of the server's rule for one,
+  // which takes the row only when the write wins against EVERY revision it holds. One column
+  // moved past the stamp is enough to keep the whole row, because a delete is a claim about all
+  // of them at once.
+  //
+  // A row holding no revisions has nothing that could have moved, and a row that is already gone
+  // has nothing to keep - both answer that the delete stands.
+  static #deleteWins(row, write) {
+    return (
+      row === null ||
+      Object.keys(row["$revisions"] ?? {}).every((field) =>
+        Overlay.#wins(row, write, field),
+      )
+    );
   }
 
   static #fold(table, type, write) {
@@ -260,27 +286,61 @@ export default class Overlay {
 
   // A moved counter takes no revision. There is nothing for a delta to be based on and nothing for
   // it to lose, which is what makes two clients' moves add up - its revision arrives with the
-  // patch frame instead.
+  // patch frame instead. A move is therefore applied whatever the base holds, exactly as the
+  // server applies it: what keeps a move that has ALREADY landed from being added a second time
+  // is the batch's landed set, never a revision, since the server does not store a mover's stamp
+  // when it advances a contended counter.
+  //
+  // A VALUE column is the opposite, and is applied only where it still wins against what the base
+  // now holds. That is the server's own merge rule read locally, so what shows is the answer the
+  // server is going to give rather than a guess at it: a newer value from elsewhere appears the
+  // moment its frame lands, instead of sitting under a pending write until the round trip ends.
+  //
+  // Nothing applies, nothing is built - the base row is handed back UNCOPIED, which keeps a write
+  // whose columns have all been overtaken from costing a copy of the row on every read.
   static #updated(type, row, write) {
     const data = write.data ?? {};
+    const deltas = Object.entries(write.deltas ?? {});
 
-    const updated = Object.assign({}, row, data, {
+    const applied = Object.keys(data).filter((field) =>
+      Overlay.#wins(row, write, field),
+    );
+
+    if (applied.length === 0 && deltas.length === 0) {
+      return row;
+    }
+
+    const updated = Object.assign({}, row, {
       updated_at: Model.wireDateTime(Clock.wallClockMs(write.stamp)),
     });
 
-    updated["$revisions"] = Object.assign(
-      {},
-      row["$revisions"] ?? {},
-      Object.fromEntries(
-        Object.keys(data).map((field) => [field, write.stamp]),
-      ),
-    );
+    // Copied rather than shared: writing a revision into it otherwise reaches into the base's own
+    // map, which every other reader of that row is holding.
+    updated["$revisions"] = Object.assign({}, row["$revisions"] ?? {});
 
-    for (const [counter, amount] of Object.entries(write.deltas ?? {})) {
+    for (const field of applied) {
+      updated[field] = data[field];
+      updated["$revisions"][field] = write.stamp;
+    }
+
+    for (const [counter, amount] of deltas) {
       updated[counter] = row[counter] + amount;
     }
 
     return Model.computeSortKeys(type, updated);
+  }
+
+  // Whether a write's value for one column still stands against the base, which is what the
+  // server's merge asks of it: the stamp has to be above the revision the column now holds.
+  //
+  // The server's other half - "the writer saw the revision that is stored" - is implied here
+  // rather than checked. A client stamps above every revision it has observed, and based_on is
+  // what it observed, so a column that has not moved passes the stamp comparison by construction.
+  //
+  // A column the base holds no revision for reads as revision zero: never set by anyone, so
+  // nothing can have moved past it. The same reading the server makes.
+  static #wins(row, write, field) {
+    return write.stamp > (row["$revisions"]?.[field] ?? 0);
   }
 
   // Every pending write naming one row, in the order they were made.
