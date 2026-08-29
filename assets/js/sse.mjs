@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
@@ -262,6 +263,11 @@ export default class Sse {
 
       $.eventSource.onopen = () => {
         GlobalRegistry.set("sseConnected?", true);
+
+        // The one signal that actually means the network is worth trying again. A batch whose
+        // send got no answer is still pending, and this is what wakes the queue that stopped
+        // behind it.
+        Batches.flush();
 
         // Opening reports liveness. Clearing the failure count is a separate judgement
         // the stream has to earn by lasting, so one that opens and dies still counts as

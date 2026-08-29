@@ -2,6 +2,7 @@
 
 import Batch from "./batch.mjs";
 import Client from "./client.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Overlay from "./overlay.mjs";
 import Sse from "./sse.mjs";
 
@@ -93,14 +94,22 @@ export default class Batches {
 
         batch.mark("sending");
 
-        const answer = await Client.sendMutation(batch);
+        const answer = await Batches.#answerFor(batch);
 
-        // No verdict about the writes, so the batch stays where it is and the queue stops behind
-        // it.
+        // No verdict about the writes, so the batch stays exactly where it is and the queue stops
+        // behind it - a later batch may name a row this one created.
         //
-        // TODO: decide what wakes the loop again after a failed send.
+        // Kept rather than discarded, because a failed send does NOT mean the batch did not land:
+        // a response can be lost after the server committed, and a resend of the same
+        // (replica_id, seq) is answered from the record rather than applied twice. The wake-ups
+        // are the next action's close and the connection coming back - no timer, since neither a
+        // base delay nor a cap has a bound anyone can state yet.
         if (answer.status === "failed") {
           batch.mark("pending");
+
+          console.warn(
+            `Hologram: batch ${batch.seq} was not answered (${answer.httpStatus}) - it stays pending and goes again on the next write or reconnect`,
+          );
 
           return;
         }
@@ -140,6 +149,23 @@ export default class Batches {
     Batches.#stack = [];
 
     Overlay.reset();
+  }
+
+  // A network failure and a status carrying no verdict are the same thing to this loop: nobody
+  // said anything about the writes. A malformed envelope is NOT - that is this client's own bug,
+  // and it is raised rather than retried forever.
+  static async #answerFor(batch) {
+    try {
+      return await Client.sendMutation(batch);
+    } catch (error) {
+      if (error instanceof HologramRuntimeError) {
+        batch.mark("pending");
+
+        throw error;
+      }
+
+      return {httpStatus: error.message, status: "failed"};
+    }
   }
 
   // A refused batch takes its rows with it - a created row vanishes, an updated one reverts -

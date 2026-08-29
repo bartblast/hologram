@@ -4,6 +4,7 @@ import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
 import Client from "../../assets/js/client.mjs";
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
@@ -272,6 +273,99 @@ describe("Batches", () => {
       assert.equal(Batches.rejected[0].reason, "the reason");
       assert.equal(Batches.rejected[0].write, 0);
       assert.equal(Batches.rejected[0].state, "rejected");
+    });
+
+    it("leaves a batch nobody answered pending, and stops the queue behind it", async () => {
+      sealed(creating("t1", "first"));
+      sealed(creating("t2", "second"));
+
+      sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+      sendStub.onSecondCall().resolves(confirmed());
+
+      await Batches.flush();
+
+      sinon.assert.calledOnce(sendStub);
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.seq),
+        [1, 2],
+      );
+
+      assert.equal(Batches.pending[0].state, "pending");
+      assert.deepStrictEqual(Batches.rejected, []);
+    });
+
+    it("keeps a failed batch's rows on screen", async () => {
+      sealed(creating("t1", "first"));
+      sendStub.resolves({httpStatus: 503, status: "failed"});
+
+      await Batches.flush();
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "first");
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("sends it again on the next flush", async () => {
+      sealed(creating("t1", "first"));
+
+      sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+      sendStub.onSecondCall().resolves(confirmed());
+
+      await Batches.flush();
+      await Batches.flush();
+
+      sinon.assert.calledTwice(sendStub);
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "first");
+    });
+
+    // Nobody said anything about the writes either way, so a dropped connection is the same
+    // answer as a status carrying no verdict.
+    it("reads a network failure as no answer at all", async () => {
+      sealed(creating("t1", "first"));
+      sendStub.rejects(new Error("offline"));
+
+      await Batches.flush();
+
+      assert.equal(Batches.pending.length, 1);
+      assert.equal(Batches.pending[0].state, "pending");
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "first");
+    });
+
+    // A malformed envelope is this client's own bug - retrying it forever would hide that.
+    it("lets a malformed envelope raise rather than retrying it", async () => {
+      sealed(creating("t1", "first"));
+      sendStub.rejects(new HologramRuntimeError("mutation failed: nope"));
+
+      let errorThrown = false;
+
+      try {
+        await Batches.flush();
+      } catch (error) {
+        errorThrown = true;
+        assert.equal(error.message, "mutation failed: nope");
+      }
+
+      assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
+      assert.equal(Batches.pending[0].state, "pending");
+    });
+
+    it("can be entered again after a send that raised", async () => {
+      sealed(creating("t1", "first"));
+      sendStub
+        .onFirstCall()
+        .rejects(new HologramRuntimeError("mutation failed: nope"));
+      sendStub.onSecondCall().resolves(confirmed());
+
+      try {
+        await Batches.flush();
+      } catch {
+        // Asserted on above - what matters here is that the loop released its guard.
+      }
+
+      await Batches.flush();
+
+      assert.deepStrictEqual(Batches.pending, []);
     });
 
     it("schedules a render per answer", async () => {
