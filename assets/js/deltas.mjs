@@ -79,7 +79,7 @@ export default class Deltas {
   static #patchRow(type, changes) {
     Deltas.#observeRevisions(changes);
 
-    const held = LocalDatabase.getRow(type, changes.id);
+    const held = LocalDatabase.baseRow(type, changes.id);
 
     if (held === null) {
       return;
@@ -103,7 +103,7 @@ export default class Deltas {
     Deltas.#observeRevisions(row);
 
     if (opts.insertOnly) {
-      if (LocalDatabase.getRow(type, row.id) !== null) {
+      if (LocalDatabase.baseRow(type, row.id) !== null) {
         return;
       }
 

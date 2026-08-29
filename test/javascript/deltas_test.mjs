@@ -2,11 +2,13 @@
 
 import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 
 defineRuntimeGlobals();
 
@@ -41,6 +43,11 @@ describe("Deltas", () => {
     Clock.reset();
     LocalDatabase.reset();
     Model.reset();
+    Overlay.reset();
+  });
+
+  afterEach(() => {
+    Overlay.reset();
   });
 
   describe("apply() - put_entity", () => {
@@ -441,6 +448,46 @@ describe("Deltas", () => {
       });
 
       assert.equal(Clock.stamp(), nowMs * 1024);
+    });
+  });
+
+  // A frame is a statement about the SERVER's row, so what ingest asks is what the server last
+  // said - never what this client has written and not yet sent. Reading the folded row instead
+  // would let a frame file a row into the base on the strength of a create the server has never
+  // seen.
+  describe("apply() - against a row that is only a pending write", () => {
+    beforeEach(() => {
+      const batch = new Batch("cid");
+
+      batch.append({
+        data: {done: false, title: "Mine, unsent"},
+        id: "t9",
+        op: "create",
+        stamp: 1024,
+        type: TASK,
+      });
+
+      Overlay.push(batch);
+    });
+
+    it("passes a patch over, as it does for any row the server has not sent", () => {
+      Deltas.apply({patch_entity: {[TASK]: [{id: "t9", title: "Ship it"}]}});
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t9"));
+      assert.equal(LocalDatabase.getRow(TASK, "t9").title, "Mine, unsent");
+    });
+
+    it("files a carried row, which the client does not yet hold from the server", () => {
+      Deltas.apply(
+        {
+          put_entity: {
+            [TASK]: [{done: true, id: "t9", title: "From the page"}],
+          },
+        },
+        {insertOnly: true},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t9").title, "From the page");
     });
   });
 

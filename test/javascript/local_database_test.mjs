@@ -2,11 +2,77 @@
 
 import {assert} from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 
 describe("LocalDatabase", () => {
   beforeEach(() => {
     LocalDatabase.reset();
+    Overlay.reset();
+  });
+
+  // A delete is the one write that folds without asking the model anything, which is what makes it
+  // the cheapest way to prove a getter goes through the overlay at all. What the fold ANSWERS is
+  // Overlay's own suite's business - these three say only that the reads route and the base reads
+  // do not.
+  const pendingDelete = (type, id) => {
+    const batch = new Batch("cid");
+
+    batch.append({id, op: "delete", stamp: 1, type});
+    Overlay.push(batch);
+  };
+
+  describe("getRow() and baseRow()", () => {
+    it("reads a pending write, where the base read does not", () => {
+      const row = {id: "t1", title: "Draft copy"};
+
+      LocalDatabase.putRow("MyApp.Task", row);
+      pendingDelete("MyApp.Task", "t1");
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.strictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), row);
+    });
+  });
+
+  describe("getTable() and baseTable()", () => {
+    it("reads a pending write, where the base read does not", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      pendingDelete("MyApp.Task", "t1");
+
+      assert.deepEqual(LocalDatabase.getTable("MyApp.Task"), {});
+      assert.deepEqual(Object.keys(LocalDatabase.baseTable("MyApp.Task")), [
+        "t1",
+      ]);
+    });
+  });
+
+  describe("getTargetIds() and baseTargetIds()", () => {
+    it("reads a pending write, where the base read does not", () => {
+      LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
+      pendingDelete("MyApp.Project", "p1");
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds("MyApp.Project", "tasks", "p1"),
+        new Set(),
+      );
+
+      assert.deepEqual(
+        LocalDatabase.baseTargetIds("MyApp.Project", "tasks", "p1"),
+        new Set(["t1"]),
+      );
+    });
+  });
+
+  describe("reset()", () => {
+    it("leaves the pending writes alone, which are not the server's to take away", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      pendingDelete("MyApp.Task", "t1");
+
+      LocalDatabase.reset();
+
+      assert.isTrue(Overlay.names("MyApp.Task", "t1"));
+    });
   });
 
   describe("addFact()", () => {
