@@ -4,6 +4,7 @@ import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
+import Durability from "./durability.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -231,6 +232,15 @@ export default class Sse {
           $.syncCursor = frame.cursor;
         }
 
+        // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
+        // place they are dated at, in one transaction. Rows a page carried are not written - every
+        // visit carries them again - and neither are the rows a confirmed batch promoted, since
+        // the server sends its own frame for that change.
+        //
+        // Not awaited. What is on screen is already correct, and what this buys is only whether it
+        // is still there after a reload.
+        Durability.persistFrame(LocalDatabase.records(written), frame.cursor);
+
         $.scheduleRender();
       });
 
@@ -270,6 +280,11 @@ export default class Sse {
         Logger.debug(`Hologram: sync starting over (${frame.reason})`);
         LocalDatabase.reset();
         $.syncCursor = null;
+
+        // The stored rows go with the place that dated them, for the same reason the memory ones
+        // do. What this browser DID - its identity, its counter, its clock - stays: a resync
+        // replaces what the SERVER said, and none of those three are the server's to take away.
+        Durability.clear();
       });
 
       $.eventSource.addEventListener("synced", (event) => {

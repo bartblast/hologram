@@ -9,6 +9,7 @@ import {
 
 import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
+import Durability from "../../assets/js/durability.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -848,6 +849,39 @@ describe("Sse", () => {
       assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Draft copy");
     });
 
+    // What goes down is what LocalDatabase would hand back for the rows this frame wrote - built
+    // there rather than here, so there is one spelling of a record in the system.
+    it("writes the rows the frame wrote, with the place they are dated at", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isTrue(persisting.calledOnce);
+
+      assert.deepStrictEqual(
+        persisting.firstCall.args[0],
+        LocalDatabase.records([`${TASK} t1`]),
+      );
+
+      assert.equal(persisting.firstCall.args[1], "Nzc4LjA");
+    });
+
+    // Mid-fill frames name no place, and the adapter leaves the stored one standing rather than
+    // clearing it - so the null is passed on rather than filtered out here.
+    it("passes a frame naming no place straight through", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame({cursor: null})});
+
+      assert.isNull(persisting.firstCall.args[1]);
+    });
+
     it("keeps the place the frame leaves the client at", async () => {
       stubHandshakeResponse();
 
@@ -987,6 +1021,17 @@ describe("Sse", () => {
       Sse.eventSource.listeners.sync_resync({data: envelope()});
 
       assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    it("drops the stored rows and the place that dated them", async () => {
+      const clearing = sinon.stub(Durability, "clear");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.isTrue(clearing.calledOnce);
     });
 
     it("drops the completeness it had, since the refill has not finished", async () => {
