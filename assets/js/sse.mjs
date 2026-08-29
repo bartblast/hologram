@@ -79,6 +79,17 @@ export default class Sse {
       greeting.cursor = $.syncCursor;
     }
 
+    // The identity the page was given, presented unchanged - this client invents neither half, the
+    // same as when it sends a batch. What it buys on this stream is being told how far its own
+    // writes are in what a frame carries, which is what stops it applying them a second time.
+    //
+    // Both or neither: an id is only worth what the statement beside it vouches for, and the
+    // server reads an id with no statement as no identity at all.
+    if (globalThis.Hologram.replicaId && globalThis.Hologram.replicaToken) {
+      greeting.replica_id = globalThis.Hologram.replicaId;
+      greeting.replica_token = globalThis.Hologram.replicaToken;
+    }
+
     return greeting;
   }
 
@@ -199,7 +210,16 @@ export default class Sse {
       $.eventSource.addEventListener("sync_deltas", (event) => {
         const frame = JSON.parse(event.data);
 
-        Deltas.apply(frame.deltas);
+        const written = Deltas.apply(frame.deltas);
+
+        // What this client's own pending writes are worth against what just arrived: every batch
+        // up to the number the frame names has been applied, so its writes on these rows are in
+        // the base now and the fold has to stop putting them on top.
+        //
+        // In the same handler as the ingest, which is what matters - the repaint below is
+        // SCHEDULED rather than run, so the fold that draws the screen happens a frame later and
+        // sees the base and the marks together whichever order these two lines are in.
+        Batches.land(frame.applied_seq, written);
 
         // Mid-fill the server hands over no place, because a client holding part of a pot could
         // not honour the claim one makes. Keeping the last place it DID name is what lets a

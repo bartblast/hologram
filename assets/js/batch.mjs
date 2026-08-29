@@ -8,6 +8,16 @@
 // so the array folded over the base rows here is the array posted to the endpoint - there is one
 // spelling of a write in the system, and no step that could translate it wrongly.
 export default class Batch {
+  // The writes whose effect the base already holds, by their position in `writes`. A frame naming
+  // this batch's number is what puts one here: the server applied it, resolved it against
+  // whatever else had moved, and sent back the row it left - so folding the write on top again
+  // would be applying the same change twice, which for a moved counter means counting it twice.
+  //
+  // The wire object itself is untouched, so a batch that has to be sent again ships exactly what
+  // it always would. And the batch goes on NAMING the row until the answer arrives: it is still
+  // pending, still the user's unanswered work, and only the fold passes over it.
+  landed = new Set();
+
   // What the server refused, as its answer spells it - a decoded client term. A batch that was
   // never refused carries none. Nothing app-facing reads it yet: a rejection after the client has
   // navigated away arrives when the component's page bundle is not even loaded, so the channel
@@ -40,6 +50,22 @@ export default class Batch {
 
   append(write) {
     this.writes.push(write);
+  }
+
+  isLanded(index) {
+    return this.landed.has(index);
+  }
+
+  // Marks every write naming one of the given rows as already in the base. Called with what a
+  // frame just wrote, per row rather than per batch: one batch's writes can reach two windows and
+  // arrive as two frames, and marking the second row's write on the first frame would take it off
+  // the screen until its own frame caught up.
+  land(rowKeys) {
+    this.writes.forEach((write, index) => {
+      if (rowKeys.has(`${write.type} ${write.id}`)) {
+        this.landed.add(index);
+      }
+    });
   }
 
   mark(state) {

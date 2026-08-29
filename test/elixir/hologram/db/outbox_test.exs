@@ -109,6 +109,25 @@ defmodule Hologram.DB.OutboxTest do
       assert event.revisions == %{"a" => 5}
     end
 
+    # The batch an effect belongs to travels with it, where the payload does not: it is a bounded
+    # pair rather than a value of the app's own size, and it is what tells a reader which of the
+    # effects it is being told about are its own doing.
+    test "returns the batch the effect was written by" do
+      ref = %{"replica_id" => @replica_id, "seq" => 7}
+
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, nil, ref)
+
+      assert [event] = read_after(0, 0, 10)
+      assert event.mutation_ref == ref
+    end
+
+    test "returns nothing for the batch of an effect no batch wrote" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [event] = read_after(0, 0, 10)
+      assert event.mutation_ref == nil
+    end
+
     test "leaves out the effect at the given place, which the reader already has" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 

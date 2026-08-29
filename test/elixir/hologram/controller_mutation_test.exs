@@ -137,7 +137,12 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.halted == true
       assert conn.state == :sent
       assert conn.status == 200
-      assert Jason.decode!(conn.resp_body) == %{"status" => "confirmed", "dropped" => %{}}
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "status" => "confirmed",
+               "dropped" => %{},
+               "kept" => %{}
+             }
 
       assert EntityOperations.get(PolicyModule2, id) != nil
     end
@@ -171,7 +176,12 @@ defmodule Hologram.ControllerMutationTest do
       conn = post_batch(raw, session_of(user.id))
 
       assert conn.status == 200
-      assert Jason.decode!(conn.resp_body) == %{"status" => "confirmed", "dropped" => %{}}
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "status" => "confirmed",
+               "dropped" => %{},
+               "kept" => %{}
+             }
 
       assert EntityOperations.get(PolicyModule2, id) != nil
     end

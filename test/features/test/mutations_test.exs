@@ -195,7 +195,8 @@ defmodule HologramFeatureTests.MutationsTest do
 
     post_batch(session, 1, [create_note_write(session_user().id, "posted")])
 
-    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     session
     |> assert_text(css("#notes"), "posted")
@@ -234,7 +235,7 @@ defmodule HologramFeatureTests.MutationsTest do
     post_batch(session, 1, writes)
     second_response = await_response(session)
 
-    assert first_response == %{"status" => "confirmed", "dropped" => %{}}
+    assert first_response == %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
     assert second_response == first_response
 
     assert [%Note{body: "once"}] = DB.read(Note)
@@ -384,11 +385,13 @@ defmodule HologramFeatureTests.MutationsTest do
 
     post_batch(session, 1, [move_stock_write(item.id, 1)])
 
-    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     post_batch(session, 2, [move_stock_write(item.id, 1)])
 
-    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     session
     |> assert_text(css("#items"), "widget: 2")
@@ -442,7 +445,8 @@ defmodule HologramFeatureTests.MutationsTest do
 
     post_batch(session, 1, [create_restock_write(item.id, 1)])
 
-    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     session
     |> assert_text(css("#items"), "widget: 1")
@@ -482,7 +486,8 @@ defmodule HologramFeatureTests.MutationsTest do
     # raises out of the job's run/1.
     post_batch(session, 1, [create_restock_write(item.id, -5)])
 
-    assert await_response(session) == %{"status" => "confirmed", "dropped" => %{}}
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     assert_text(session, css("#jobs"), "-5:failed")
 

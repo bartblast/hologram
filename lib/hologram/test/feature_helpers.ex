@@ -17,6 +17,27 @@ defmodule Hologram.Test.FeatureHelpers do
   alias Wallaby.Feature.Utils
 
   @doc """
+  Asserts that the session has navigated to the given page: blocks until the
+  current path matches the page's route, the Hologram client runtime has
+  mounted the page, and its server connections are established.
+
+  ## Options
+
+    * `:debug` - when true, prints the mounted vs expected page and the client
+      logs on each mounting poll. Defaults to false.
+  """
+  @spec assert_page(struct, module, keyword, keyword) :: struct
+  def assert_page(session, page_module, params \\ [], opts \\ []) do
+    path = Router.Helpers.page_path(page_module, params)
+
+    session
+    |> wait_for_path(path)
+    |> wait_for_page_mounting(page_module, opts)
+    |> wait_for_ws_connection()
+    |> wait_for_sse_connection()
+  end
+
+  @doc """
   Blocks until no sync evaluator from an earlier test is still alive.
 
   A test that empties the tables with TRUNCATE bypasses the write funnel, so no effect reaches
@@ -41,24 +62,69 @@ defmodule Hologram.Test.FeatureHelpers do
   end
 
   @doc """
-  Asserts that the session has navigated to the given page: blocks until the
-  current path matches the page's route, the Hologram client runtime has
-  mounted the page, and its server connections are established.
+  Blocks until the client holds the given number of write batches waiting to ship.
 
-  ## Options
-
-    * `:debug` - when true, prints the mounted vs expected page and the client
-      logs on each mounting poll. Defaults to false.
+  The point a test can act on after releasing held mutation traffic: zero pending batches means
+  every batch has been answered, so what is on screen is what the answers left there.
   """
-  @spec assert_page(struct, module, keyword, keyword) :: struct
-  def assert_page(session, page_module, params \\ [], opts \\ []) do
-    path = Router.Helpers.page_path(page_module, params)
+  @spec await_pending_writes(struct, non_neg_integer, non_neg_integer) :: struct
+  def await_pending_writes(session, count, attempts_left \\ 100)
 
-    session
-    |> wait_for_path(path)
-    |> wait_for_page_mounting(page_module, opts)
-    |> wait_for_ws_connection()
-    |> wait_for_sse_connection()
+  def await_pending_writes(session, count, 0) do
+    callback = fn pending ->
+      raise Wallaby.ExpectationNotMetError,
+            "Timed out waiting for #{count} pending write batches, the client holds #{inspect(pending)}"
+    end
+
+    Browser.execute_script(session, pending_writes_script(), [], callback)
+  end
+
+  def await_pending_writes(session, count, attempts_left) do
+    callback = fn pending ->
+      if pending == count do
+        :ok
+      else
+        Process.sleep(50)
+        await_pending_writes(session, count, attempts_left - 1)
+      end
+    end
+
+    Browser.execute_script(session, pending_writes_script(), [], callback)
+  end
+
+  @doc """
+  Holds every mutation request the page makes AFTER it is sent, parking its answer until
+  `release_mutations/1`.
+
+  What it buys a test: the server applies the batch and its effects reach the stream, so the
+  frame carrying this client's own write lands while the batch is still pending. That ordering
+  happens on its own in the wild and never reliably in a test.
+  """
+  @spec hold_mutation_answers(struct) :: struct
+  def hold_mutation_answers(session) do
+    hold_mutations(session, "answers")
+  end
+
+  @doc """
+  Holds every mutation request the page makes BEFORE it is sent, until `release_mutations/1`.
+
+  What it buys a test: a write made elsewhere reaches the server first, so the browser meets a
+  newer value under a write of its own that nobody has ruled on yet.
+  """
+  @spec hold_mutation_requests(struct) :: struct
+  def hold_mutation_requests(session) do
+    hold_mutations(session, "requests")
+  end
+
+  @doc """
+  Releases whatever `hold_mutation_answers/1` or `hold_mutation_requests/1` is holding.
+
+  Does nothing when nothing is held, and nothing again when called twice - a resolved gate stays
+  resolved, so a test may release without tracking whether it has.
+  """
+  @spec release_mutations(struct) :: struct
+  def release_mutations(session) do
+    Browser.execute_script(session, "globalThis.__hologramMutationGate?.release();")
   end
 
   @doc """
@@ -115,6 +181,68 @@ defmodule Hologram.Test.FeatureHelpers do
     :erlang.monotonic_time(:milli_seconds)
   end
 
+  # One wrapper around fetch, installed once and re-armed on every call, so a test may hold, release
+  # and hold again. Only the mutation endpoint is parked - the page's own requests, the SSE
+  # handshake and every command go straight through, or holding a write would freeze the page.
+  #
+  # The abort race is not decoration: the sender gives a mutation request 30 seconds
+  # (`Config.mutationTimeoutMs`) and aborts it through the signal it passes here. A parked request
+  # that ignored the signal would wait on the gate forever, and the queue behind it with it - the
+  # test would then be holding something the browser had already given up on.
+  #
+  # fetch is bound to the global, because calling it as a method of anything else is an illegal
+  # invocation in a browser.
+  defp hold_mutations(session, mode) do
+    script = """
+    (() => {
+      const held = globalThis.__hologramMutationGate;
+
+      if (held) {
+        held.mode = "#{mode}";
+
+        held.gate = new Promise((resolve) => {
+          held.release = resolve;
+        });
+
+        return;
+      }
+
+      const gate = {mode: "#{mode}", real: globalThis.fetch.bind(globalThis)};
+
+      gate.gate = new Promise((resolve) => {
+        gate.release = resolve;
+      });
+
+      globalThis.__hologramMutationGate = gate;
+
+      globalThis.fetch = (url, opts = {}) => {
+        if (typeof url !== "string" || !url.endsWith("/hologram/mutation")) {
+          return gate.real(url, opts);
+        }
+
+        const aborted = new Promise((_resolve, reject) => {
+          const abort = () => reject(new DOMException("aborted", "AbortError"));
+
+          if (opts.signal?.aborted) {
+            abort();
+          }
+
+          opts.signal?.addEventListener("abort", abort);
+        });
+
+        const sent =
+          gate.mode === "requests"
+            ? gate.gate.then(() => gate.real(url, opts))
+            : gate.real(url, opts).then((response) => gate.gate.then(() => response));
+
+        return Promise.race([sent, aborted]);
+      };
+    })();\
+    """
+
+    Browser.execute_script(session, script)
+  end
+
   # Read at runtime (not compile time) so that the client app's Wallaby config
   # is honored - this module is compiled as part of the Hologram dependency,
   # before the client app's config exists.
@@ -130,6 +258,12 @@ defmodule Hologram.Test.FeatureHelpers do
 
       print_client_logs(session)
     end
+  end
+
+  # Answers null rather than zero for a page whose runtime has not attached the window yet, so a
+  # wait for zero pending batches keeps waiting instead of passing before the client can write.
+  defp pending_writes_script do
+    "return globalThis.Hologram?.['writes']?.pendingCount() ?? null;"
   end
 
   defp print_client_logs(session) do

@@ -144,7 +144,7 @@ export default class Batches {
         Batches.pending.shift();
 
         if (answer.status === "confirmed") {
-          Overlay.promote(batch, answer.dropped);
+          Overlay.promote(batch, answer.kept);
         } else {
           Batches.#reject(batch, answer);
         }
@@ -153,6 +153,44 @@ export default class Batches {
       }
     } finally {
       Batches.#sending = false;
+    }
+  }
+
+  // Marks, on every batch the server has already applied, the writes naming the rows a frame just
+  // wrote. Those writes are in the base now, as the server resolved them, so the fold has to stop
+  // putting them on top - and for a moved counter that is the difference between showing the
+  // number the server holds and showing one more than it.
+  //
+  // Up to the number and no further. A batch above it has not been applied, so its writes are
+  // still this client's own to show. A batch still IN FLIGHT counts: it sits in the queue until
+  // its answer arrives, and its effects can reach the stream before that answer does, which is
+  // the whole case this exists for. The open batch is not in the queue at all and cannot be
+  // landed - nothing of it has been sent.
+  //
+  // A frame naming no number says NOTHING about this client's writes, which is not the same as
+  // saying none of them have landed - so nothing is marked.
+  //
+  // WHAT MAKES THIS SAFE IS THE SENDER, NOT THE NUMBER. The number is a MAXIMUM over the batches
+  // the server confirmed, and the set can be sparse: a batch can be refused with a later one
+  // confirmed above it. Taking every batch at or below a maximum would then be wrong, were it not
+  // for how the queue drains - flush() keeps ONE batch in flight and takes the head off `pending`
+  // BEFORE it reads the answer, so a refused batch leaves with the answer that refused it. While
+  // batch N is pending, nothing above N has been sent, so nothing above N can be confirmed, so a
+  // number at or above N can only mean N ITSELF was confirmed - which is exactly when its effects
+  // are in the base and landing it is right, answer lost or not.
+  //
+  // Anything that changes how the queue drains has to keep that property or replace this test. A
+  // durable queue, or one leader draining several tabs, is where it would go: batches of one
+  // replica answered out of order would make a maximum admit a batch nobody applied.
+  static land(appliedSeq, rowKeys) {
+    if (!Number.isInteger(appliedSeq)) {
+      return;
+    }
+
+    for (const batch of Batches.pending) {
+      if (batch.seq <= appliedSeq) {
+        batch.land(rowKeys);
+      }
     }
   }
 

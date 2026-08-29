@@ -4,6 +4,7 @@ import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
+import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 
@@ -147,14 +148,15 @@ describe("Overlay", () => {
       assert.equal(row.created_at, row.updated_at);
     });
 
-    it("overwrites a base row the confirming frame delivered first", () => {
+    // Nothing but this client writes an id this client minted, so a base row under one can only be
+    // the frame confirming this create. The server's copy is the better one - it carries whatever
+    // the server settled beyond what the write named - so it is what stands.
+    it("answers the base row the confirming frame delivered first", () => {
       pushed(createWrite());
 
-      const row = Overlay.foldRow(TODO, "t1", base({title: "From the frame"}));
+      const row = base({title: "From the frame"});
 
-      assert.equal(row.title, "Łódź");
-      assert.equal(row.created_at, timestamp);
-      assert.equal(row.$revisions.title, stamp);
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
     });
 
     it("writes the values an update names over the base", () => {
@@ -178,6 +180,67 @@ describe("Overlay", () => {
       });
     });
 
+    it("leaves a column the base has moved past the write's stamp", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        }),
+      );
+
+      assert.equal(row.title, "Draft copy");
+      assert.equal(row.$revisions.title, stamp + 1);
+    });
+
+    it("applies the columns that still win and leaves the ones that lost, within one write", () => {
+      pushed(updateWrite({data: {done: true, title: "Ship it"}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        }),
+      );
+
+      assert.isTrue(row.done);
+      assert.equal(row.$revisions.done, stamp);
+      assert.equal(row.title, "Draft copy");
+      assert.equal(row.$revisions.title, stamp + 1);
+    });
+
+    // The server stores a client's stamp verbatim for a value it accepts, so a revision equal to
+    // the write's own stamp says the write is already in the base - and applying it again is
+    // work with no effect, which is why the base comes back as it stands.
+    it("reads its own landed value as the base", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = base({
+        title: "Ship it",
+        title_sort: "ship it",
+        $revisions: {done: 10, project_id: 10, title: stamp, votes: 10},
+      });
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+
+    it("leaves updated_at alone when every column of the write has lost", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        }),
+      );
+
+      assert.equal(row.updated_at, "2026-01-01T00:00:00.000000Z");
+    });
+
     it("moves a counter by the delta and leaves its revision alone", () => {
       pushed(updateWrite({deltas: {votes: 2}}));
 
@@ -185,6 +248,53 @@ describe("Overlay", () => {
 
       assert.equal(row.votes, 5);
       assert.equal(row.$revisions.votes, 10);
+    });
+
+    // A move is not a claim about the value, so there is nothing for it to lose and no revision to
+    // judge it by. What keeps a move that has already landed from counting twice is the batch's
+    // landed set - the server advances a contended counter's revision by one rather than to the
+    // mover's stamp, so the revision cannot answer that question at all.
+    it("moves a counter whatever revision the base holds for it", () => {
+      pushed(updateWrite({deltas: {votes: 2}}));
+
+      const row = Overlay.foldRow(
+        TODO,
+        "t1",
+        base({
+          votes: 5,
+          $revisions: {done: 10, project_id: 10, title: 10, votes: stamp + 1},
+        }),
+      );
+
+      assert.equal(row.votes, 7);
+    });
+
+    // The frame carrying this write has already been applied, so the base holds its effect as the
+    // server resolved it - folding it on top again would add the same move a second time.
+    it("passes over a write whose frame has already arrived", () => {
+      const batch = pushed(updateWrite({deltas: {votes: 2}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      const row = base({votes: 5});
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+
+    // A batch's writes can reach two windows and come back as two frames, so one of its rows can
+    // be in the base while the other is still only this client's.
+    it("applies a write on a row no frame has carried, beside one that has", () => {
+      const batch = pushed(
+        updateWrite({data: {title: "Landed"}}),
+        updateWrite({data: {title: "Still mine"}, id: "t2"}),
+      );
+
+      batch.land(new Set([`${TODO} t1`]));
+
+      const landedRow = base();
+      const pendingRow = base({id: "t2"});
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", landedRow), landedRow);
+      assert.equal(Overlay.foldRow(TODO, "t2", pendingRow).title, "Still mine");
     });
 
     it("stamps an update's updated_at from the write", () => {
@@ -209,10 +319,28 @@ describe("Overlay", () => {
       assert.isNull(Overlay.foldRow(TODO, "t1", null));
     });
 
-    it("answers nothing for a delete", () => {
+    it("answers nothing for a delete of a row nothing moved past the stamp", () => {
       pushed({id: "t1", op: "delete", stamp, type: TODO});
 
       assert.isNull(Overlay.foldRow(TODO, "t1", base()));
+    });
+
+    // One column is enough: a delete is a claim about every column at once, so a newer edit to any
+    // of them is a newer edit than the delete, and the server will keep the row.
+    it("keeps a row a newer edit moved past the delete's stamp", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      const row = base({
+        $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+      });
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+
+    it("answers nothing for a delete of a row holding no revisions", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      assert.isNull(Overlay.foldRow(TODO, "t1", base({$revisions: {}})));
     });
 
     it("leaves the row as it was for an edge, which changes no column", () => {
@@ -302,6 +430,18 @@ describe("Overlay", () => {
       assert.deepStrictEqual(Overlay.foldTable(TODO, table(base())), {});
     });
 
+    it("keeps a deleted row a newer edit moved past", () => {
+      pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      const row = base({
+        $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+      });
+
+      assert.deepStrictEqual(Object.keys(Overlay.foldTable(TODO, table(row))), [
+        "t1",
+      ]);
+    });
+
     it("passes over a delete of a row the table does not hold", () => {
       pushed({id: "t9", op: "delete", stamp, type: TODO});
 
@@ -315,6 +455,15 @@ describe("Overlay", () => {
       pushed(updateWrite({data: {title: "Ship it"}}));
 
       assert.equal(Overlay.foldTable(TODO, table(base())).t1.title, "Ship it");
+    });
+
+    it("passes over a write whose frame has already arrived", () => {
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      const held = base();
+
+      assert.strictEqual(Overlay.foldTable(TODO, table(held))[held.id], held);
     });
 
     it("leaves the base table and its rows untouched", () => {
@@ -413,6 +562,23 @@ describe("Overlay", () => {
       assert.strictEqual(Overlay.foldTargetIds(TODO, "tags", "t1", held), held);
     });
 
+    it("passes over an edge whose frame has already arrived", () => {
+      const batch = pushed({
+        id: "t1",
+        op: "add_relationship",
+        relationship: "tags",
+        target_id: "g2",
+        type: TODO,
+      });
+
+      batch.land(new Set([`${TODO} t1`]));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1"])),
+        new Set(["g1"]),
+      );
+    });
+
     it("leaves the base set untouched", () => {
       const held = new Set(["g1"]);
 
@@ -430,6 +596,142 @@ describe("Overlay", () => {
       assert.isTrue(Overlay.names(TODO, "t1"));
       assert.isFalse(Overlay.names(TODO, "t2"));
       assert.isFalse(Overlay.names("MyApp.Other", "t1"));
+    });
+  });
+
+  describe("promote()", () => {
+    beforeEach(() => {
+      LocalDatabase.reset();
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    // The frame carrying this write has already been applied, so the base holds the row as the
+    // server left it. Folding the write in again would add the move a second time and write that
+    // number down for good - no later frame corrects it, because the server has nothing new to
+    // say about a row nothing has touched since.
+    it("does not promote a write whose frame has already arrived", () => {
+      LocalDatabase.putRow(TODO, base({votes: 5}));
+
+      const batch = pushed(updateWrite({deltas: {votes: 2}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 5);
+    });
+
+    it("promotes a write no frame has carried", () => {
+      LocalDatabase.putRow(TODO, base({votes: 5}));
+
+      const batch = pushed(updateWrite({deltas: {votes: 2}}));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 7);
+    });
+
+    it("files the value a lost column kept, with its revision", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      const row = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(row.title, "Theirs");
+      assert.equal(row.$revisions.title, stamp + 1);
+      assert.equal(row.title_sort, "theirs");
+    });
+
+    // A resend of a batch already applied is answered from the record, so an answer can be older
+    // than what frames have delivered since - taking it whole would walk the row backwards.
+    it("leaves a base that has moved past what the answer kept", () => {
+      LocalDatabase.putRow(
+        TODO,
+        base({
+          title: "Newer still",
+          $revisions: {done: 10, project_id: 10, title: stamp + 5, votes: 10},
+        }),
+      );
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "Newer still");
+    });
+
+    // The client has been told to let the row go, and filing it again would put back a row the
+    // server says is not this client's to have.
+    it("passes over what was kept for a row the base no longer holds", () => {
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    // The row the answer describes is what puts back the copy the fold took away - and absorbing
+    // it first is what makes the delete's own fold answer correctly, since the row now carries a
+    // revision above the delete's stamp.
+    it("keeps a row whose delete lost, as the answer describes it", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+      Overlay.promote(batch, {
+        0: {
+          done: false,
+          id: "t1",
+          title: "Theirs",
+          $revisions: {done: 10, project_id: 10, title: stamp + 1, votes: 10},
+        },
+      });
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "Theirs");
+    });
+
+    it("lifts the clock past the revisions the answer names", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      assert.isAbove(Clock.stamp(), stamp + 1);
+    });
+
+    it("files what a write set when the answer names nothing kept", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "Mine");
+    });
+
+    it("drops the batch's layer either way", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      Overlay.promote(batch, {});
+
+      assert.isFalse(Overlay.names(TODO, "t1"));
     });
   });
 

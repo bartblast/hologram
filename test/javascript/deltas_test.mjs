@@ -656,6 +656,109 @@ describe("Deltas", () => {
     });
   });
 
+  // The rows a frame WROTE, which is what a pending write of this client's is matched against to
+  // learn its effect is in the base now. Written rather than merely mentioned: a delta the ingest
+  // passes over changes nothing, so nothing about it is in there to be found.
+  describe("apply() - the rows it wrote", () => {
+    it("names a row it filed", () => {
+      const written = Deltas.apply({
+        put_entity: {[TASK]: [{id: "t1", title: "Draft copy"}]},
+      });
+
+      assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
+    });
+
+    it("names a row it patched", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const written = Deltas.apply({
+        patch_entity: {[TASK]: [{id: "t1", title: "Ship it"}]},
+      });
+
+      assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
+    });
+
+    it("names a row it deleted", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const written = Deltas.apply({del_entity: {[TASK]: ["t1"]}});
+
+      assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
+    });
+
+    it("names a row it unsynced", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const written = Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+      assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
+    });
+
+    // An edge names the row whose relationships changed, which is the row a batch's own edge
+    // write names - so the two match up.
+    it("names an edge's source row rather than its target", () => {
+      const written = Deltas.apply({
+        add_relationship: {
+          [PROJECT]: [{id: "p1", relationship: "tasks", target_id: "t1"}],
+        },
+      });
+
+      assert.deepStrictEqual(written, new Set([`${PROJECT} p1`]));
+    });
+
+    it("names an edge's source row when the pair is removed", () => {
+      const written = Deltas.apply({
+        del_relationship: {
+          [PROJECT]: [{id: "p1", relationship: "tasks", target_id: "t1"}],
+        },
+      });
+
+      assert.deepStrictEqual(written, new Set([`${PROJECT} p1`]));
+    });
+
+    it("names every row of a frame carrying several", () => {
+      const written = Deltas.apply({
+        put_entity: {
+          [PROJECT]: [{id: "p1", name: "Board"}],
+          [TASK]: [{id: "t1", title: "Draft copy"}],
+        },
+      });
+
+      assert.deepStrictEqual(written, new Set([`${PROJECT} p1`, `${TASK} t1`]));
+    });
+
+    // The base is left exactly as it was, so a pending write on that row is NOT in it - and a
+    // pending create told otherwise would go off the screen with nothing to put it back until the
+    // answer arrived.
+    it("names nothing for a patch it passed over", () => {
+      const written = Deltas.apply({
+        patch_entity: {[TASK]: [{id: "t9", title: "Ship it"}]},
+      });
+
+      assert.deepStrictEqual(written, new Set());
+    });
+
+    it("names nothing for a carried row it already held", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const written = Deltas.apply(
+        {put_entity: {[TASK]: [{id: "t1", title: "From the page"}]}},
+        {insertOnly: true},
+      );
+
+      assert.deepStrictEqual(written, new Set());
+    });
+
+    it("names a carried row it filed", () => {
+      const written = Deltas.apply(
+        {put_entity: {[TASK]: [{id: "t1", title: "From the page"}]}},
+        {insertOnly: true},
+      );
+
+      assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
+    });
+  });
+
   describe("apply() - an op this build does not know", () => {
     it("raises rather than passing it over", () => {
       assert.throw(

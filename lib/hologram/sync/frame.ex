@@ -59,10 +59,25 @@ defmodule Hologram.Sync.Frame do
   added in the same round is the ordinary case - but they cannot disagree: the row states the
   whole target set of what the window embeds, the edge states one pair of it, and both were read
   from the one round. Whichever is applied first, the same facts are left behind.
+
+  The applied sequence number says how far the receiving replica's own writes are reflected in
+  what this frame carries: every batch it sent up to that number has been applied to the rows the
+  frame was built from. That is what lets it tell a change of its own, arriving back, from one it
+  has still to make - which the values cannot say, since a write that landed looks exactly like
+  the write that made it.
+
+  It is ONE integer, and it is about the receiving replica alone - never a list of who wrote what.
+  A frame therefore says nothing about any other replica's writes, which is the whole of what
+  keeps this from telling one client which rows another client is responsible for.
+
+  Nil says nothing rather than nothing-applied: a stream serving no replica has no number to give,
+  and a reader must not read that as "none of my writes have landed".
   """
-  @spec encode_deltas_envelope(integer, String.t() | nil, list(map)) :: String.t()
-  def encode_deltas_envelope(id, cursor, deltas) do
+  @spec encode_deltas_envelope(integer, String.t() | nil, list(map), non_neg_integer | nil) ::
+          String.t()
+  def encode_deltas_envelope(id, cursor, deltas, applied_seq) do
     payload = %{
+      applied_seq: applied_seq,
       cursor: cursor,
       deltas: group(deltas),
       model_hash: Model.hash(),

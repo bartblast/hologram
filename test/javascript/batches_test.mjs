@@ -69,7 +69,11 @@ describe("Batches", () => {
       LocalDatabase.reset();
     });
 
-    const confirmed = (dropped = {}) => ({dropped, status: "confirmed"});
+    const confirmed = (dropped = {}, kept = {}) => ({
+      dropped,
+      kept,
+      status: "confirmed",
+    });
 
     const creating = (id, title) => ({
       claim: null,
@@ -175,18 +179,19 @@ describe("Batches", () => {
       );
     });
 
-    // The value lost the merge, so the base keeps what it has and the winner arrives with the
-    // frame - promoting the client's value would put back the value the server refused.
-    it("leaves a dropped column as the base holds it", async () => {
+    // The value lost the merge, and the answer says what stands in its place - so the column goes
+    // straight from what this client wrote to the winning value, without the row's older value
+    // showing in between while the frame is still on its way.
+    it("files what a lost column kept", async () => {
       LocalDatabase.putRow(TODO, {
         done: false,
         id: "t1",
-        title: "theirs",
+        title: "before either of us",
         $revisions: {title: 99},
       });
 
       sealed({
-        based_on: {title: 98},
+        based_on: {title: 99},
         claim: null,
         data: {title: "mine"},
         id: "t1",
@@ -195,12 +200,58 @@ describe("Batches", () => {
         type: TODO,
       });
 
-      sendStub.resolves(confirmed({0: {title: "mine"}}));
+      sendStub.resolves(
+        confirmed(
+          {0: {title: "mine"}},
+          {0: {title: "theirs", $revisions: {title: STAMP + 1}}},
+        ),
+      );
+
+      await Batches.flush();
+
+      const base = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(base.title, "theirs");
+      assert.equal(base.$revisions.title, STAMP + 1);
+    });
+
+    // The client's own copy is already gone - the fold took it away when the delete was made - so
+    // the row the answer describes is what puts it back. A patch for a row this client no longer
+    // holds is passed over, which is what makes the loss permanent otherwise.
+    it("keeps a row whose delete lost", async () => {
+      LocalDatabase.putRow(TODO, {
+        done: false,
+        id: "t1",
+        title: "held",
+        $revisions: {done: 99, title: 99},
+      });
+
+      sealed({
+        based_on: {done: 99, title: 99},
+        claim: null,
+        id: "t1",
+        op: "delete",
+        stamp: STAMP,
+        type: TODO,
+      });
+
+      sendStub.resolves(
+        confirmed(
+          {0: {done: null, title: null}},
+          {
+            0: {
+              done: false,
+              id: "t1",
+              title: "theirs",
+              $revisions: {done: 99, title: STAMP + 1},
+            },
+          },
+        ),
+      );
 
       await Batches.flush();
 
       assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "theirs");
-      assert.equal(LocalDatabase.baseRow(TODO, "t1").$revisions.title, 99);
     });
 
     // A later batch is still pending over the same row, and its values are not the server's to
@@ -383,6 +434,68 @@ describe("Batches", () => {
       await Batches.flush();
 
       sinon.assert.notCalled(sendStub);
+    });
+  });
+
+  describe("land()", () => {
+    const sealed = (...writes) => {
+      Batches.open("todos");
+
+      for (const write of writes) {
+        Batches.current().append(write);
+      }
+
+      return Batches.close();
+    };
+
+    // Up to the number and no further, in one call: a batch the server has applied stops being
+    // folded, and the one after it goes on showing, because nothing has been said about it yet.
+    it("marks the writes of the batches the server has applied, and no others", () => {
+      const first = sealed(write("t1"));
+      const second = sealed(write("t2"));
+
+      Batches.land(1, new Set([`${TODO} t1`, `${TODO} t2`]));
+
+      assert.isTrue(first.isLanded(0));
+      assert.isFalse(second.isLanded(0));
+    });
+
+    // A batch whose answer has not come back yet is still in the queue, and its effects can reach
+    // the stream before the answer does - which is the ordering this whole mechanism exists for.
+    it("marks a batch that is still in flight", () => {
+      const batch = sealed(write("t1"));
+      batch.mark("sending");
+
+      Batches.land(1, new Set([`${TODO} t1`]));
+
+      assert.isTrue(batch.isLanded(0));
+    });
+
+    // Nothing of the open batch has been sent, so nothing of it can have been applied.
+    it("leaves the batch the action is still writing alone", () => {
+      Batches.open("todos");
+      Batches.current().append(write("t1"));
+
+      Batches.land(9, new Set([`${TODO} t1`]));
+
+      assert.isFalse(Batches.current().isLanded(0));
+    });
+
+    it("marks nothing when the frame names no number", () => {
+      const batch = sealed(write("t1"));
+
+      Batches.land(null, new Set([`${TODO} t1`]));
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // What a bundle talking to a server that predates the field reads off a frame.
+    it("marks nothing when the frame names no number at all", () => {
+      const batch = sealed(write("t1"));
+
+      Batches.land(undefined, new Set([`${TODO} t1`]));
+
+      assert.isFalse(batch.isLanded(0));
     });
   });
 

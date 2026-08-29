@@ -551,11 +551,30 @@ describe("Client", () => {
       });
     });
 
-    it("answers a confirmation with the values that lost", async () => {
-      responding({dropped: {0: {title: "Standup"}}, status: "confirmed"});
+    // Both halves of a confirmation reach the caller: what this client's write lost, and the value
+    // standing in its place with the revision it carries. The second is what lets a losing write
+    // give way to the winner as the answer lands, rather than to whatever the row held before
+    // either of them - which is a value nobody wrote.
+    it("answers a confirmation with what lost and what stands", async () => {
+      responding({
+        dropped: {0: {title: "Standup"}},
+        kept: {0: {title: "Retro", $revisions: {title: 1_756_100_000_123_004}}},
+        status: "confirmed",
+      });
 
       assert.deepStrictEqual(await Client.sendMutation(batch), {
         dropped: {0: {title: "Standup"}},
+        kept: {0: {title: "Retro", $revisions: {title: 1_756_100_000_123_004}}},
+        status: "confirmed",
+      });
+    });
+
+    it("answers a confirmation that lost nothing with both halves empty", async () => {
+      responding({dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(await Client.sendMutation(batch), {
+        dropped: {},
+        kept: {},
         status: "confirmed",
       });
     });

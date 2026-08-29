@@ -4,10 +4,12 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.DB.Outbox
+  alias Hologram.Mutation.Record
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Session
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Frame
@@ -103,7 +105,9 @@ defmodule Hologram.Realtime.SSE do
           cursor: params["cursor"],
           model_hash: model_hash,
           page: page_module(page),
-          protocol_version: parse_protocol_version(protocol_version)
+          protocol_version: parse_protocol_version(protocol_version),
+          replica_id: params["replica_id"],
+          replica_token: params["replica_token"]
         }
 
       # A client built before any of this existed says nothing about sync, and keeps its stream.
@@ -149,9 +153,9 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:sync_deltas, cursor, deltas} ->
+      {:sync_deltas, cursor, deltas, applied_seq} ->
         id = System.unique_integer([:positive, :monotonic])
-        chunk_data = Frame.encode_deltas_envelope(id, cursor, deltas)
+        chunk_data = Frame.encode_deltas_envelope(id, cursor, deltas, applied_seq)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}
@@ -321,6 +325,19 @@ defmodule Hologram.Realtime.SSE do
 
       _msg ->
         {:cont, conn}
+    end
+  end
+
+  # Public so tests can check what a greeting's identity is worth without standing up a stream.
+  @doc false
+  @spec verified_replica_id(map, Plug.Conn.t(), term | nil) :: String.t() | nil
+  def verified_replica_id(greeting, conn, user_id) do
+    replica_id = greeting[:replica_id]
+    token = greeting[:replica_token]
+
+    if is_binary(replica_id) and is_binary(token) and
+         ReplicaIdentity.verify(token, replica_id, Session.get_session_id(conn), user_id) == :ok do
+      replica_id
     end
   end
 
@@ -738,25 +755,31 @@ defmodule Hologram.Realtime.SSE do
   # `resume?` is false for a client being filled again from nothing, which is what a change of
   # identity leaves it needing - the place it named belongs to a store it has been told to drop.
   defp start_syncing(conn, user_id, resume? \\ true) do
-    outcome =
-      conn
-      |> greeting()
-      |> SyncHandshake.check()
+    greeting = greeting(conn)
 
-    case outcome do
+    case SyncHandshake.check(greeting) do
       {:sync, page, cursor} ->
         # Named rather than written inline as `resume? && gap(cursor)`: that answers FALSE when it
         # does not resume, and a session reads "no gap" from nil alone - anything else and it sets
         # about replaying something it cannot walk.
         gap = if resume?, do: gap(cursor)
 
+        replica_id = verified_replica_id(greeting, conn, user_id)
+
+        # Read HERE rather than in the session, so the database work of starting a stream stays in
+        # the process that already does it - and so the session is a state machine over what it is
+        # handed rather than a reader of its own.
+        applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
+
         {:ok, session} =
           SyncSession.start_link(
             actor_user_id: user_id,
+            applied_seq: applied_seq,
             client: self(),
             fill_place: {Outbox.current_xmin(), 0},
             gap: gap,
-            page: page
+            page: page,
+            replica_id: replica_id
           )
 
         {conn, session}

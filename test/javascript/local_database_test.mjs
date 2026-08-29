@@ -1,10 +1,15 @@
 "use strict";
 
-import {assert} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
+import Clock from "../../assets/js/clock.mjs";
+import Deltas from "../../assets/js/deltas.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
+import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+
+defineRuntimeGlobals();
 
 describe("LocalDatabase", () => {
   beforeEach(() => {
@@ -24,6 +29,10 @@ describe("LocalDatabase", () => {
   // the cheapest way to prove a getter goes through the overlay at all. What the fold ANSWERS is
   // Overlay's own suite's business - these three say only that the reads route and the base reads
   // do not.
+  //
+  // The rows they file carry NO revisions, which is what leaves this stamp of 1 free to be any
+  // number: a delete stands against a row holding nothing that could have moved. Give one of them
+  // a `$revisions` and the delete starts being weighed against it.
   const pendingDelete = (type, id) => {
     const batch = new Batch("cid");
 
@@ -69,6 +78,92 @@ describe("LocalDatabase", () => {
         LocalDatabase.baseTargetIds("MyApp.Project", "tasks", "p1"),
         new Set(["t1"]),
       );
+    });
+  });
+
+  // What a frame does to a row a pending write is sitting on. Each of the three modules has its
+  // own suite for its own half, and what is true only of them together is that they agree about
+  // the revisions: Deltas files the arriving ones into the base, Overlay weighs the pending write
+  // against them, and the getter is where the two meet. A frame and a write that disagree are
+  // spelled here end to end rather than as two halves nobody puts side by side.
+  describe("a frame landing under a pending write", () => {
+    const TASK = "MyApp.Task";
+    const stamp = 1_756_100_000_123 * 1024;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            constraints: {},
+            defaults: {},
+            enumValues: {},
+            frameworkAttributes: [],
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Clock.reset();
+      Model.reset();
+    });
+
+    // Ingest lifts the clock past every revision it sees, and these carry huge ones - left behind,
+    // they would stamp whatever suite reads the clock next.
+    afterEach(() => {
+      Clock.reset();
+    });
+
+    const filed = (revision) =>
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [
+            {id: "t1", title: "Draft copy", $revisions: {title: revision}},
+          ],
+        },
+      });
+
+    const patched = (title, revision) =>
+      Deltas.apply({
+        patch_entity: {
+          [TASK]: [{id: "t1", title, $revisions: {title: revision}}],
+        },
+      });
+
+    const pending = (write) => {
+      const batch = new Batch("cid");
+
+      batch.append(write);
+      Overlay.push(batch);
+    };
+
+    it("reads a newer server value through a pending write to the same column", () => {
+      filed(10);
+      pending({
+        data: {title: "Mine"},
+        id: "t1",
+        op: "update",
+        stamp,
+        type: TASK,
+      });
+
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Mine");
+
+      patched("Theirs", stamp + 1);
+
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Theirs");
+    });
+
+    it("keeps a pending delete's row once a newer edit lands", () => {
+      filed(10);
+      pending({id: "t1", op: "delete", stamp, type: TASK});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+
+      patched("Theirs", stamp + 1);
+
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Theirs");
     });
   });
 

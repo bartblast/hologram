@@ -24,6 +24,80 @@ describe("Batch", () => {
     });
   });
 
+  describe("isLanded() and land()", () => {
+    it("marks the writes naming the given rows", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+      batch.append(create("n2"));
+
+      batch.land(new Set([`${NOTE} n1`]));
+
+      assert.isTrue(batch.isLanded(0));
+      assert.isFalse(batch.isLanded(1));
+    });
+
+    // Two writes to one row land together, because what came back is the row as the server left
+    // it - both of them are in it.
+    it("marks every write naming one row", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+      batch.append({id: "n1", op: "update", type: NOTE});
+
+      batch.land(new Set([`${NOTE} n1`]));
+
+      assert.isTrue(batch.isLanded(0));
+      assert.isTrue(batch.isLanded(1));
+    });
+
+    it("marks nothing for rows it does not name", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+
+      batch.land(new Set([`${NOTE} n9`]));
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // One id under two types is two rows, and a frame about one says nothing about the other.
+    it("tells apart one id held by two types", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("x1"));
+      batch.append({id: "x1", op: "update", type: TAG});
+
+      batch.land(new Set([`${TAG} x1`]));
+
+      assert.isFalse(batch.isLanded(0));
+      assert.isTrue(batch.isLanded(1));
+    });
+
+    // A batch reaching two windows comes back as two frames, so what the first marked has to
+    // survive the second.
+    it("keeps what an earlier frame marked", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+      batch.append(create("n2"));
+
+      batch.land(new Set([`${NOTE} n1`]));
+      batch.land(new Set([`${NOTE} n2`]));
+
+      assert.isTrue(batch.isLanded(0));
+      assert.isTrue(batch.isLanded(1));
+    });
+
+    it("marks nothing before a frame names anything", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+
+      assert.isFalse(batch.isLanded(0));
+    });
+  });
+
   describe("mark()", () => {
     it("moves the batch to the given state", () => {
       const batch = new Batch("notes");

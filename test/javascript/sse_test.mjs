@@ -163,6 +163,8 @@ describe("Sse", () => {
     const pageModule = Type.atom("Elixir.MyApp.BoardPage");
 
     afterEach(() => {
+      delete globalThis.Hologram.replicaId;
+      delete globalThis.Hologram.replicaToken;
       delete globalThis.Hologram.sync;
     });
 
@@ -204,6 +206,40 @@ describe("Sse", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
       assert.notProperty(Sse.buildSyncGreeting(pageModule), "cursor");
+    });
+
+    // The pair the page was given, presented unchanged - what earns this client frames that say
+    // how far its own writes are in.
+    it("presents the replica identity the page was given", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.replicaId = "r1";
+      globalThis.Hologram.replicaToken = "SFMyNTY.stated";
+
+      const greeting = Sse.buildSyncGreeting(pageModule);
+
+      assert.equal(greeting.replica_id, "r1");
+      assert.equal(greeting.replica_token, "SFMyNTY.stated");
+    });
+
+    // An id is only worth the statement beside it, so half a pair is presented as none - the
+    // server reads an id with no statement as no identity at all.
+    it("presents neither half when the page minted no identity", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      const greeting = Sse.buildSyncGreeting(pageModule);
+
+      assert.notProperty(greeting, "replica_id");
+      assert.notProperty(greeting, "replica_token");
+    });
+
+    it("presents neither half when the page gave an id with no statement", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.replicaId = "r1";
+
+      const greeting = Sse.buildSyncGreeting(pageModule);
+
+      assert.notProperty(greeting, "replica_id");
+      assert.notProperty(greeting, "replica_token");
     });
   });
 
@@ -686,6 +722,7 @@ describe("Sse", () => {
       JSON.stringify(
         Object.assign(
           {
+            applied_seq: null,
             cursor: "Nzc4LjA",
             deltas: {put_entity: {[TASK]: [{id: "t1", title: "Draft copy"}]}},
             model_hash: "a3f9c2",
@@ -694,6 +731,21 @@ describe("Sse", () => {
           overrides,
         ),
       );
+
+    // A batch of this client's own, sealed and waiting, naming the row the frames below carry.
+    const pendingWrite = (id) => {
+      Batches.open("tasks");
+
+      Batches.current().append({
+        data: {title: "mine"},
+        id,
+        op: "update",
+        stamp: 1,
+        type: TASK,
+      });
+
+      return Batches.close();
+    };
 
     beforeEach(() => {
       globalThis.Hologram.sync = {
@@ -710,6 +762,7 @@ describe("Sse", () => {
     });
 
     afterEach(() => {
+      Batches.reset();
       delete globalThis.Hologram.sync;
     });
 
@@ -742,6 +795,43 @@ describe("Sse", () => {
       Sse.eventSource.listeners.sync_deltas({data: frame({cursor: null})});
 
       assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    // The frame says how far this client's own batches are applied in what it carries, and the
+    // writes of those batches stop being folded on top - which for a moved counter is the whole
+    // difference between the number the server holds and one more than it.
+    it("lands the writes of the batches the frame names", async () => {
+      const batch = pendingWrite("t1");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame({applied_seq: 1})});
+
+      assert.isTrue(batch.isLanded(0));
+    });
+
+    it("lands nothing for a frame naming no number", async () => {
+      const batch = pendingWrite("t1");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // The frame carries a row this batch never wrote, so nothing of it is in what arrived.
+    it("lands nothing on a batch whose rows the frame does not carry", async () => {
+      const batch = pendingWrite("t9");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame({applied_seq: 1})});
+
+      assert.isFalse(batch.isLanded(0));
     });
 
     it("schedules a repaint rather than repainting in the handler", async () => {

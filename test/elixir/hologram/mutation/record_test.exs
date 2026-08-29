@@ -16,6 +16,13 @@ defmodule Hologram.Mutation.RecordTest do
     Connection.transaction(fn -> claim!(replica_id, seq, actor_id, model_hash) end)
   end
 
+  defp confirmed(replica_id, seq) do
+    Connection.transaction(fn ->
+      claim!(replica_id, seq, nil, "h")
+      complete!(replica_id, seq, %{"dropped" => %{}, "status" => "confirmed"})
+    end)
+  end
+
   defp rows do
     statement = """
     SELECT "replica_id", "seq", "actor_id", "model_hash", "result", "envelope", "answered_at"
@@ -135,6 +142,45 @@ defmodule Hologram.Mutation.RecordTest do
 
       assert find(@replica_id, 2) == nil
       assert find(@other_replica_id, 1) == nil
+    end
+  end
+
+  describe "highest_confirmed_seq/1" do
+    test "returns the highest sequence number the replica has had confirmed" do
+      confirmed(@replica_id, 1)
+      confirmed(@replica_id, 3)
+      confirmed(@replica_id, 2)
+
+      assert highest_confirmed_seq(@replica_id) == 3
+    end
+
+    test "returns nothing for a replica with no confirmed batch" do
+      assert highest_confirmed_seq(@replica_id) == nil
+    end
+
+    # A refused batch changed nothing, so no frame can be carrying its effects - counting it would
+    # claim a write is in the database that was never made.
+    test "passes over a refused batch above a confirmed one" do
+      confirmed(@replica_id, 1)
+      refuse!(@replica_id, 2, Entity.generate_id(), "h", @envelope, @answer)
+
+      assert highest_confirmed_seq(@replica_id) == 1
+    end
+
+    # A claim with no answer is a batch still being applied, in a transaction nothing outside can
+    # see - and this one runs outside it.
+    test "passes over a batch claimed but not yet answered" do
+      confirmed(@replica_id, 1)
+      claim(@replica_id, 2)
+
+      assert highest_confirmed_seq(@replica_id) == 1
+    end
+
+    test "counts only the batches of the replica it names" do
+      confirmed(@replica_id, 1)
+      confirmed(@other_replica_id, 7)
+
+      assert highest_confirmed_seq(@replica_id) == 1
     end
   end
 
