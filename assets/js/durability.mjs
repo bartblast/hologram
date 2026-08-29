@@ -159,6 +159,11 @@ export default class Durability {
   // about. Synchronous, because everything the mount leads to runs in one continuation, which is
   // what puts this ahead of the first local write without anything having to race.
   //
+  // Answers NOTHING when there is nothing to take up - a browser with no durable storage, and
+  // every call after the first. The second matters: the runtime's page-script listener runs again
+  // on each client-side navigation, so this is reached once per page visit, and a later call that
+  // answered a place of null would take away the one the stream had been keeping all along.
+  //
   // The rows are dropped rather than used in three cases, and each is a case where showing them
   // would be showing something untrue. What this browser DID - its identity, its counter, its
   // clock - survives all three: those are not the server's to take away, and reusing a number or
@@ -169,7 +174,7 @@ export default class Durability {
     Durability.#loaded = null;
 
     if (loaded === null) {
-      return {cursor: null, seq: 0};
+      return null;
     }
 
     // Before anything else and whatever happens below: a stamp this browser issues has to be above

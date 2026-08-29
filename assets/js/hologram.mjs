@@ -10,6 +10,7 @@ import Config from "./config.mjs";
 import Debouncer from "./debouncer.mjs";
 import Deltas from "./deltas.mjs";
 import Deserializer from "./deserializer.mjs";
+import Durability from "./durability.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
@@ -25,6 +26,7 @@ import MemoryStorage from "./memory_storage.mjs";
 import Dispatch from "./dispatch.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
+import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
 import Throttler from "./throttler.mjs";
@@ -623,6 +625,12 @@ export default class Hologram {
 
         throw error;
       }
+
+      // After the mount, so that the rows the page itself carried are already in - they are the
+      // freshest thing this client has, and a stored row fills only what the page said nothing
+      // about. Before the connect, so the stream is greeted with the place this browser had
+      // already been brought up to rather than with nothing.
+      Hologram.#restoreDurable();
 
       // SSE must open AFTER `#mountPage()` because the handshake payload
       // includes the receipts merged from `pageMountData.subReceiptAdds` -
@@ -1515,6 +1523,18 @@ export default class Hologram {
 
     await $.#restoreEts();
 
+    // The pair this page was minted, handed over before the store is read: what is found there
+    // wins, and this is what the client falls back to when the server refuses it.
+    Replica.offer({
+      id: globalThis.Hologram.replicaId,
+      token: globalThis.Hologram.replicaToken,
+    });
+
+    // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
+    // synchronous - everything from the mount onwards runs in one continuation, so the first local
+    // write cannot land ahead of what a previous page load left.
+    await Durability.open();
+
     App.maybeLoadInstanceId();
     Client.connect(false);
 
@@ -1538,6 +1558,17 @@ export default class Hologram {
       oldestPendingSeq: Batches.oldestPendingSeq,
       pendingCount: Batches.pendingCount,
       rejected: Batches.rejectedSummaries,
+    };
+
+    // The same kind of window onto what this browser keeps between page loads: whether it is
+    // keeping anything at all, the place it would greet a stream with, the identity it is
+    // presenting, and how many writes are still on their way down. Reads only, and nothing in the
+    // framework reads them.
+    globalThis.Hologram.durability = {
+      cursor: () => Sse.syncCursor,
+      mode: () => Durability.mode,
+      pendingWrites: () => Durability.inFlight,
+      replicaId: () => Replica.id,
     };
 
     delete globalThis.Hologram._pendingJsInteropActions;
@@ -1986,6 +2017,20 @@ export default class Hologram {
         Hologram.#settleAction(action, epoch);
       }, 0);
     }
+  }
+
+  // Takes up what a previous page load left, and answers nothing on every visit after the first -
+  // this runs once per page visit, since the runtime's page-script listener fires again on each
+  // client-side navigation.
+  static #restoreDurable() {
+    const resumed = Durability.restore();
+
+    if (resumed === null) {
+      return;
+    }
+
+    Sse.syncCursor = resumed.cursor;
+    Batches.resumeFrom(resumed.seq);
   }
 
   static async #restoreEts() {

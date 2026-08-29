@@ -609,10 +609,19 @@ describe("Durability", () => {
       assert.equal(await readMeta("actorUserId"), "u1");
     });
 
-    it("answers nothing to resume from in memory mode", async () => {
-      const resumed = Durability.restore();
+    it("answers nothing to resume from in memory mode", () => {
+      assert.isNull(Durability.restore());
+    });
 
-      assert.deepStrictEqual(resumed, {cursor: null, seq: 0});
+    // Called once per page visit, and only the first visit has anything to take up. A later one
+    // answering a place of null would take away the place the stream had been keeping.
+    it("answers nothing the second time it is asked", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      Durability.restore();
+
+      assert.isNull(Durability.restore());
     });
   });
 
