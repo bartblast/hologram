@@ -121,6 +121,14 @@ export default class Model {
     return attributes;
   }
 
+  // Whether this build carries the given entity type - the client's answer to the server's
+  // Reflection.entity?/1. A type a page neither queries nor mentions is not baked, so what this
+  // can say is "not an entity type THIS BUILD knows", which is the same divergence Entity.new
+  // already carries.
+  static isEntityType(type) {
+    return Boolean(globalThis.Hologram.sync?.model?.[type]);
+  }
+
   static entry(type) {
     let entry = Model.#entries[type];
 

@@ -33,6 +33,8 @@ describe("Elixir_Hologram_Query", () => {
   const offset = Elixir_Hologram_Query["offset/2"];
   const one = Elixir_Hologram_Query["one/1"];
   const orderBy = Elixir_Hologram_Query["order_by/2"];
+  const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
+  const putAttributeValue = Elixir_Hologram_Query["put_attribute/3"];
 
   const baseTerm = (entityType) => ({
     cardinality: "set",
@@ -45,6 +47,15 @@ describe("Elixir_Hologram_Query", () => {
   });
 
   const freshTerm = baseTerm(TASK);
+
+  // An entity struct as a stage meets one: what a query read, boxed the way every result is.
+  const entity = (entityType, row = {}) =>
+    Model.box(entityType, {id: "t1", ...row});
+
+  const ops = (struct) => field(field(struct, "__meta__"), "attribute_ops");
+
+  const field = (struct, name) =>
+    struct.data[Type.encodeMapKey(Type.atom(name))][1];
 
   const predicates = (pairs) =>
     Type.list(
@@ -106,6 +117,227 @@ describe("Elixir_Hologram_Query", () => {
     // stages see if the entries another suite left behind go first - and the suites share these
     // type names while spelling them differently.
     Model.reset();
+  });
+
+  describe("put_attribute/2", () => {
+    it("accepts a map of values", () => {
+      const result = putAttribute(
+        entity(TASK),
+        Type.map([[Type.atom("position"), Type.integer(7)]]),
+      );
+
+      assert.deepStrictEqual(field(result, "position"), Type.integer(7));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("position"),
+            Type.tuple([Type.atom("put"), Type.integer(7)]),
+          ],
+        ]),
+      );
+    });
+
+    it("keeps the rest of the metadata", () => {
+      const built = entity(TASK);
+      const metadata = field(built, "__meta__");
+
+      metadata.data[Type.encodeMapKey(Type.atom("claim"))] = [
+        Type.atom("claim"),
+        Type.atom("trust"),
+      ];
+
+      const result = putAttribute(
+        built,
+        predicates([["title", Type.bitstring("x")]]),
+      );
+
+      assert.deepStrictEqual(
+        field(field(result, "__meta__"), "claim"),
+        Type.atom("trust"),
+      );
+    });
+
+    it("merges into the changes already recorded, the later value replacing the earlier", () => {
+      const result = putAttribute(
+        putAttribute(
+          entity(TASK),
+          predicates([
+            ["done", Type.boolean(true)],
+            ["title", Type.bitstring("y")],
+          ]),
+        ),
+        predicates([["title", Type.bitstring("z")]]),
+      );
+
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("z"));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("done"),
+            Type.tuple([Type.atom("put"), Type.boolean(true)]),
+          ],
+          [
+            Type.atom("title"),
+            Type.tuple([Type.atom("put"), Type.bitstring("z")]),
+          ],
+        ]),
+      );
+    });
+
+    it("sets a to-one reference field", () => {
+      const result = putAttribute(
+        entity(PROJECT),
+        predicates([["owner_id", Type.bitstring("u1")]]),
+      );
+
+      assert.deepStrictEqual(field(result, "owner_id"), Type.bitstring("u1"));
+    });
+
+    it("sets the values on the struct and records them as changes", () => {
+      const result = putAttribute(
+        entity(TASK),
+        predicates([
+          ["done", Type.boolean(true)],
+          ["title", Type.bitstring("y")],
+        ]),
+      );
+
+      assert.deepStrictEqual(field(result, "done"), Type.boolean(true));
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("y"));
+    });
+
+    it("takes the later value when one list names an attribute twice", () => {
+      const result = putAttribute(
+        entity(TASK),
+        predicates([
+          ["title", Type.bitstring("first")],
+          ["title", Type.bitstring("second")],
+        ]),
+      );
+
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("second"));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("title"),
+            Type.tuple([Type.atom("put"), Type.bitstring("second")]),
+          ],
+        ]),
+      );
+    });
+
+    it("leaves the struct it was given alone", () => {
+      const built = entity(TASK, {title: "Draft copy"});
+
+      putAttribute(built, predicates([["title", Type.bitstring("Ship it")]]));
+
+      assert.deepStrictEqual(
+        field(built, "title"),
+        Type.bitstring("Draft copy"),
+      );
+    });
+
+    it("raises on a system attribute name", () => {
+      assert.throw(
+        () =>
+          putAttribute(entity(TASK), predicates([["id", Type.bitstring("x")]])),
+        HologramBoxedError,
+        ":id is a system attribute of MyApp.Task - it is managed automatically and can't be put",
+      );
+    });
+
+    it("raises on a to-many relationship name", () => {
+      assert.throw(
+        () =>
+          putAttribute(entity(PROJECT), predicates([["tasks", Type.list()]])),
+        HologramBoxedError,
+        ":tasks is a relationship in MyApp.Project - only attributes can be put - add its edges via add_relationship",
+      );
+    });
+
+    it("raises on a to-one relationship name", () => {
+      assert.throw(
+        () =>
+          putAttribute(entity(PROJECT), predicates([["owner", Type.nil()]])),
+        HologramBoxedError,
+        ":owner is a relationship in MyApp.Project - only attributes can be put - set its reference via :owner_id",
+      );
+    });
+
+    it("raises on an unknown name", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(PROJECT),
+            predicates([["nope", Type.integer(1)]]),
+          ),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Project - known attributes: :name, :owner_id",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () => putAttribute(Type.bitstring("x"), predicates([])),
+        HologramBoxedError,
+        'put_attribute takes an entity struct, got: "x"',
+      );
+
+      assert.throw(
+        () => putAttribute(task, predicates([])),
+        HologramBoxedError,
+        "put_attribute takes an entity struct, got: MyApp.Task",
+      );
+    });
+
+    it("raises when the values are neither a keyword list nor a map", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(TASK),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
+        HologramBoxedError,
+        "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
+      );
+    });
+  });
+
+  describe("put_attribute/3", () => {
+    it("sets the value on the struct and records it as a change", () => {
+      const result = putAttributeValue(
+        entity(TASK),
+        Type.atom("done"),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(field(result, "done"), Type.boolean(true));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("done"),
+            Type.tuple([Type.atom("put"), Type.boolean(true)]),
+          ],
+        ]),
+      );
+    });
+
+    it("raises on an unknown name", () => {
+      assert.throw(
+        () =>
+          putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :status, :title",
+      );
+    });
   });
 
   describe("count/1", () => {

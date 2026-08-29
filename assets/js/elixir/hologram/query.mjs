@@ -42,6 +42,20 @@ function attributeType(entityType, name) {
   return Model.entry(entityType).attributes[name] ?? "uuid";
 }
 
+// The entity type of a struct a stage was handed, or a raise in the server's words. What the
+// client can check is that the build carries the type, which is its whole notion of "is an entity".
+function entityTypeOf(entity, stage) {
+  const type = structTypeName(entity);
+
+  if (type !== null && Model.isEntityType(type)) {
+    return type;
+  }
+
+  Interpreter.raiseArgumentError(
+    `${stage} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
+  );
+}
+
 function orderEntries(spec, entityType) {
   if (Type.isAtom(spec)) {
     return [orderEntry(spec, entityType)];
@@ -95,13 +109,10 @@ function field(struct, name) {
 // The names a predicate may read: the attributes plus the reference field of every to-one
 // relationship, which carries an entity id and so filters like any uuid attribute.
 function filterableNames(entityType) {
-  const relationships = Model.entry(entityType).relationships;
-
-  const references = Object.entries(relationships)
-    .filter(([_name, relationship]) => !relationship.toMany)
-    .map(([name]) => `${name}_id`);
-
-  return [...attributeNames(entityType), ...references].sort();
+  return [
+    ...attributeNames(entityType),
+    ...referenceFieldNames(entityType),
+  ].sort();
 }
 
 function includeDepth(term) {
@@ -423,8 +434,34 @@ function rangeTriples(name, range, entityType) {
   ];
 }
 
+// The names a put may set: the DECLARED attributes and every to-one relationship's reference
+// field, sorted - the server's settable_names/1. A server-only attribute IS in this list, because
+// server code may put one: it is the WRITE that refuses a client's, by name, rather than the stage
+// pretending the attribute is not there.
+function settableNames(entityType) {
+  const declared = attributeNames(entityType).filter(
+    (name) => !Model.systemAttributes.includes(name),
+  );
+
+  return [...declared, ...referenceFieldNames(entityType)].sort();
+}
+
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
+}
+
+// The type a boxed struct names, or nothing at all when it is not a struct - which is how a stage
+// tells "wrong kind of value" from "wrong kind of struct" without raising on the way.
+function structTypeName(value) {
+  if (!Type.isMap(value)) {
+    return null;
+  }
+
+  const entry = value.data[Type.encodeMapKey(Type.atom("__struct__"))];
+
+  return entry === undefined || !Type.isAlias(entry[1])
+    ? null
+    : entry[1].value.replace(/^Elixir\./, "");
 }
 
 function subTermHasClauses(subTerm) {
@@ -434,6 +471,10 @@ function subTermHasClauses(subTerm) {
     subTerm.limit !== null ||
     subTerm.offset !== null
   );
+}
+
+function referenceFieldNames(entityType) {
+  return toOneRelationshipNames(entityType).map((name) => `${name}_id`);
 }
 
 function relationshipNames(entityType) {
@@ -493,6 +534,18 @@ function sortedFilter(filter) {
 // Membership in the model is what stands for the entity check: the model carries every type
 // this client can hold, so a name missing from it is either not an entity type or one whose
 // rows never reach a client - neither is a query this side can answer.
+function systemAttributeNames(entityType) {
+  return attributeNames(entityType).filter((name) =>
+    Model.systemAttributes.includes(name),
+  );
+}
+
+function toOneRelationshipNames(entityType) {
+  return Object.entries(Model.entry(entityType).relationships)
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => name);
+}
+
 function toTerm(query) {
   if (isQueryTerm(query)) {
     return query;
@@ -519,6 +572,54 @@ function toTerm(query) {
 
 // The actor leaf carries the acting user's entity id, so it compares only against names holding
 // one - any other type would build a comparison that never matches.
+// Records one op per attribute, the later put replacing whatever the attribute carried - an
+// earlier put or an increment alike, since stages apply in order.
+function putAttributes(entity, pairs) {
+  const metadata = field(entity, "__meta__");
+  const ops = Type.cloneMap(field(metadata, "attribute_ops"));
+  let updated = entity;
+
+  for (const [name, value] of pairs) {
+    ops.data[Type.encodeMapKey(name)] = [
+      name,
+      Type.tuple([Type.atom("put"), value]),
+    ];
+
+    updated = putField(updated, name, value);
+  }
+
+  return putField(
+    updated,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("attribute_ops"), ops),
+  );
+}
+
+function putField(struct, key, value) {
+  const updated = Type.cloneMap(struct);
+
+  updated.data[Type.encodeMapKey(key)] = [key, value];
+
+  return updated;
+}
+
+// The pairs a put was given, a keyword list and a map alike. A name repeated in one list is left
+// as the two pairs it arrived as rather than folded: applying them in order sets the later value
+// and records the later op, which is exactly what Map.new/1 leaves the server with.
+function putPairs(values, stage) {
+  const entries = Type.isList(values)
+    ? Type.isKeywordList(values) && values.data.map((pair) => pair.data)
+    : Type.isMap(values) && Object.values(values.data);
+
+  if (!entries) {
+    Interpreter.raiseArgumentError(
+      `${stage} takes a keyword list or a map of attribute values, got: ${Interpreter.inspect(values)}`,
+    );
+  }
+
+  return entries;
+}
+
 function validateActorAttribute(name, entityType) {
   const type = attributeType(entityType, name.value);
 
@@ -724,6 +825,41 @@ function validateSubTerm(subTerm, name, target, kind) {
   }
 }
 
+function validatePutName(name, entityType) {
+  const settable = settableNames(entityType);
+  const named = Type.isAtom(name) ? name.value : null;
+
+  if (named !== null && settable.includes(named)) {
+    return;
+  }
+
+  const spelled = Interpreter.inspect(name);
+
+  if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a relationship in ${entityType} - only attributes can be put - set its reference via :${named}_id`,
+    );
+  }
+
+  if (named !== null && relationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a relationship in ${entityType} - only attributes can be put - add its edges via add_relationship`,
+    );
+  }
+
+  if (named !== null && systemAttributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a system attribute of ${entityType} - it is managed automatically and can't be put`,
+    );
+  }
+
+  const known = settable.map((settableName) => `:${settableName}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown attribute ${spelled} in ${entityType} - known attributes: ${known}`,
+  );
+}
+
 const Elixir_Hologram_Query = {
   "count/1": (query) => setCardinality(query, "count"),
 
@@ -796,6 +932,23 @@ const Elixir_Hologram_Query = {
 
     return {...term, orderBy: orderEntries(spec, term.entity)};
   },
+
+  "put_attribute/2": (entity, values) => {
+    const entityType = entityTypeOf(entity, "put_attribute");
+    const pairs = putPairs(values, "put_attribute");
+
+    for (const [name] of pairs) {
+      validatePutName(name, entityType);
+    }
+
+    return putAttributes(entity, pairs);
+  },
+
+  "put_attribute/3": (entity, name, value) =>
+    Elixir_Hologram_Query["put_attribute/2"](
+      entity,
+      Type.list([Type.tuple([name, value])]),
+    ),
 };
 
 export default Elixir_Hologram_Query;
