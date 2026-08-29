@@ -21,6 +21,7 @@ describe("Elixir_Hologram_Query", () => {
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
+  const VAULT = "MyApp.Vault";
 
   const project = Type.alias(PROJECT);
   const task = Type.alias(TASK);
@@ -128,6 +129,14 @@ describe("Elixir_Hologram_Query", () => {
           enumValues: {status: ["open", "blocked", "done"]},
           relationships: {},
           serverOnly: [],
+        },
+        // A counter the client is never shown, which reads back as the sentinel rather than as a
+        // number it happens not to have.
+        [VAULT]: {
+          attributes: {balance: "integer", id: "uuid"},
+          enumValues: {},
+          relationships: {},
+          serverOnly: ["balance"],
         },
         [USER]: {
           attributes: {email: "string", id: "uuid"},
@@ -564,6 +573,16 @@ describe("Elixir_Hologram_Query", () => {
           ),
         HologramBoxedError,
         ":count in MyApp.Item holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default",
+      );
+    });
+
+    // Not the same refusal: reading the row is what the message above tells a caller to do, and no
+    // read produces this value on this tier.
+    it("raises when the counter is one the client is never shown", () => {
+      assert.throw(
+        () => increment(entity(VAULT), Type.atom("balance"), Type.integer(1)),
+        HologramBoxedError,
+        ":balance of MyApp.Vault is server-only - a browser cannot write it, set it in a command or a job",
       );
     });
 

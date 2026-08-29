@@ -779,7 +779,12 @@ const Elixir_Hologram_DB = {
 
     const {changes, deltas} = splitAttributeOps(attributeOps);
 
-    refuseServerOnlyNames(entityType, Object.keys(changes));
+    // Both halves: a move is as much a write of the column as a put, and a struct built with the
+    // value on it rather than read back carries a real number past the stage's own refusal.
+    refuseServerOnlyNames(entityType, [
+      ...Object.keys(changes),
+      ...Object.keys(deltas),
+    ]);
 
     const batch = currentBatch("update");
     const boxedChanges = Object.entries(changes).map(([name, value]) => [

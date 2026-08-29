@@ -28,6 +28,7 @@ describe("Elixir_Hologram_DB", () => {
   const NOTIFY = "MyApp.Jobs.Notify";
   const ROLE_GRANT = "Hologram.Auth.RoleGrant";
   const TASK = "MyApp.Task";
+  const VAULT = "MyApp.Vault";
 
   const task = Type.alias(TASK);
 
@@ -143,6 +144,17 @@ describe("Elixir_Hologram_DB", () => {
             tags: {optional: true, toMany: true, type: "MyApp.Tag"},
           },
           serverOnly: [],
+        },
+        // A counter the client is never shown, so a move naming it is refused by name the way a
+        // put is - which the row alone cannot say, since it carries no column for it at all.
+        [VAULT]: {
+          attributes: {balance: "integer", id: "uuid"},
+          constraints: {},
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          relationships: {},
+          serverOnly: ["balance"],
         },
       },
     };
@@ -638,6 +650,23 @@ describe("Elixir_Hologram_DB", () => {
           update(putAttribute(absent, pairs([["title", Type.bitstring("y")]]))),
         HologramBoxedError,
         `cannot update MyApp.Task - no entity with id "${ID_2}"`,
+      );
+    });
+
+    // The stage refuses the sentinel, so only a struct carrying a real number reaches the verb -
+    // which is what Entity.new and a form both hand it.
+    it("raises for a move naming a counter the client was never shown", () => {
+      LocalDatabase.putRow(VAULT, {id: ID_2});
+
+      const vault = Model.box(VAULT, LocalDatabase.getRow(VAULT, ID_2));
+      const key = Type.encodeMapKey(Type.atom("balance"));
+
+      vault.data[key] = [Type.atom("balance"), Type.integer(7)];
+
+      assert.throw(
+        () => update(increment(vault, Type.atom("balance"), Type.integer(1))),
+        HologramBoxedError,
+        ":balance of MyApp.Vault is server-only - a browser cannot write it, set it in a command or a job",
       );
     });
 

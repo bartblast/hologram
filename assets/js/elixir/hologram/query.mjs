@@ -75,12 +75,20 @@ function integerNames(entityType) {
 // The field previews the result the way a put value does - only the recorded amount is written, so
 // the row still computes its value from whatever it holds at the write.
 //
-// A declared integer attribute holds an integer or nil and nothing else, so the refusal names nil.
+// A declared integer attribute holds an integer, the server-only sentinel, or nil, and each is a
+// different answer: the sentinel is not a number this client is missing but one it is not for, so
+// no read produces it and the refusal must not send anyone looking.
 function movedValue(entity, name, entityType, delta, stage) {
   const value = field(entity, name.value);
 
   if (Type.isInteger(value)) {
     return Type.integer(value.value + delta);
+  }
+
+  if (Model.structTypeName(value) === "Hologram.Entity.ServerOnly") {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
+    );
   }
 
   Interpreter.raiseArgumentError(
