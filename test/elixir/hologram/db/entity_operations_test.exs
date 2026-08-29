@@ -5,6 +5,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
@@ -354,16 +355,23 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module2, created_entity.id).created_at == written_at
     end
 
+    # Bracketed against the CLOCK THE WRITE ITSELF READS, not against DateTime.utc_now/0. Two
+    # reasons, and each one alone is enough: Windows ticks its wall clock about every 16 ms, so a
+    # row created between two reads of it carries the same instant as both - and a stamp taken
+    # after 1024 stamps in one millisecond runs a millisecond AHEAD of os_time, so an upper bound
+    # read from outside the clock is not safe either. Between two stamps it is exact on every
+    # platform, because the counter only moves forward.
     test "stamps the row from this node's clock when its writer authored none" do
-      taken_before = DateTime.utc_now(:millisecond)
+      before_ms = Clock.wall_clock_ms(Clock.stamp())
 
       {:ok, created_entity} =
         %{a: true, c: "abc"}
         |> Module2.new()
         |> create()
 
-      assert DateTime.compare(created_entity.created_at, taken_before) in [:gt, :eq]
-      assert DateTime.compare(created_entity.created_at, DateTime.utc_now()) == :lt
+      after_ms = Clock.wall_clock_ms(Clock.stamp())
+
+      assert DateTime.to_unix(created_entity.created_at, :millisecond) in before_ms..after_ms
     end
 
     test "answers a struct carrying nothing of the write it made" do
