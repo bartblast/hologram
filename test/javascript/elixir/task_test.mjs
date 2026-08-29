@@ -7,6 +7,7 @@ import {
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
+import Batches from "../../../assets/js/batches.mjs";
 import Elixir_Task from "../../../assets/js/elixir/task.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -24,9 +25,14 @@ describe("Elixir_Task", () => {
 
     beforeEach(() => {
       ERTS.promiseRegistry.clear();
+      Batches.reset();
 
       const promise = Promise.resolve(42);
       taskStruct = ERTS.registerPromise(promise);
+    });
+
+    afterEach(() => {
+      Batches.reset();
     });
 
     it("returns a Promise (is async)", () => {
@@ -39,6 +45,20 @@ describe("Elixir_Task", () => {
       const result = await taskAwait(taskStruct);
 
       assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    // Awaiting is the one place an action stops running, so the batch it writes to is taken out of
+    // the slot here and put back before the caller goes on - client-only, so this one has no
+    // consistency twin.
+    it("puts the running action's batch back before the caller resumes", async () => {
+      const batch = Batches.open("todos");
+      const awaited = taskAwait(taskStruct);
+
+      Batches.open("another action");
+
+      await awaited;
+
+      assert.strictEqual(Batches.current(), batch);
     });
 
     // The attempted function clauses come from the clause heads the runtime script

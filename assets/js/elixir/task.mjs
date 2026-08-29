@@ -2,6 +2,7 @@
 
 import {box} from "../js_interop.mjs";
 
+import Batches from "../batches.mjs";
 import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -17,7 +18,12 @@ const Elixir_Task = {
       ]);
     }
 
-    return ERTS.takePromise(taskStruct).then(box);
+    // Awaiting is where an action stops running and another may run in full before this one comes
+    // back, so the batch it is writing to has to make the round trip with it - otherwise it would
+    // resume into whichever action started meanwhile, and write, close or discard that one's batch.
+    const promise = Batches.carryAcrossSuspension(ERTS.takePromise(taskStruct));
+
+    return promise.then(box);
   },
 };
 

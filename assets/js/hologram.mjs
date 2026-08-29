@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import AssetPathRegistry from "./asset_path_registry.mjs";
+import Batches from "./batches.mjs";
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
@@ -55,8 +56,10 @@ import ManuallyPortedElixirCode from "./elixir/code.mjs";
 import ManuallyPortedElixirException from "./elixir/exception.mjs";
 import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_error.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
+import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
 import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
+import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
@@ -190,16 +193,43 @@ export default class Hologram {
       vars: {},
     });
 
-    const resultComponentStruct = Interpreter.callNamedFunction(
-      componentModule,
-      Type.atom("action"),
-      Type.list(args),
-      context,
-    );
+    // An action's writes are one batch: opened here, sealed when it returns, discarded when it
+    // raises. That is what makes "the writes of one action" need no bookkeeping from the app - a
+    // DB verb writes to whichever batch is open, and there is one open only while an action runs.
+    Batches.open(target);
+
+    let resultComponentStruct;
+
+    try {
+      resultComponentStruct = Interpreter.callNamedFunction(
+        componentModule,
+        Type.atom("action"),
+        Type.list(args),
+        context,
+      );
+    } catch (error) {
+      // Nothing half-done: an action that raises leaves no rows behind, and dropping the batch is
+      // the whole of putting them back. The error goes on to handleUncaughtError as it always did.
+      Batches.discard();
+
+      throw error;
+    }
 
     if (resultComponentStruct instanceof Promise) {
-      resultComponentStruct.then((resolved) =>
-        Hologram.#processActionResult(resolved, name, target, startTime, epoch),
+      resultComponentStruct.then(
+        (resolved) =>
+          Hologram.#processActionResult(
+            resolved,
+            name,
+            target,
+            startTime,
+            epoch,
+          ),
+        (error) => {
+          Batches.discard();
+
+          throw error;
+        },
       );
     } else {
       Hologram.#processActionResult(
@@ -688,6 +718,111 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "create!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["create!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "create/1",
+      "public",
+      ManuallyPortedElixirHologramDB["create/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["delete!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete!/2",
+      "public",
+      ManuallyPortedElixirHologramDB["delete!/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete/1",
+      "public",
+      ManuallyPortedElixirHologramDB["delete/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete/2",
+      "public",
+      ManuallyPortedElixirHologramDB["delete/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "read/1",
+      "public",
+      ManuallyPortedElixirHologramDB["read/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "read/2",
+      "public",
+      ManuallyPortedElixirHologramDB["read/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "rollback/1",
+      "public",
+      ManuallyPortedElixirHologramDB["rollback/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "transaction/1",
+      "public",
+      ManuallyPortedElixirHologramDB["transaction/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "transaction/2",
+      "public",
+      ManuallyPortedElixirHologramDB["transaction/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["update!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update!/3",
+      "public",
+      ManuallyPortedElixirHologramDB["update!/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update/1",
+      "public",
+      ManuallyPortedElixirHologramDB["update/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update/3",
+      "public",
+      ManuallyPortedElixirHologramDB["update/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Hologram.Entity",
       "generate_id/0",
       "public",
@@ -724,9 +859,37 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query",
+      "add_relationship/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["add_relationship/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "authorize/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["authorize/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
       "count/1",
       "public",
       ManuallyPortedElixirHologramQuery["count/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "decrement/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["decrement/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "delete_relationship/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["delete_relationship/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -748,6 +911,13 @@ export default class Hologram {
       "include/3",
       "public",
       ManuallyPortedElixirHologramQuery["include/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "increment/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["increment/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -783,6 +953,27 @@ export default class Hologram {
       "order_by/2",
       "public",
       ManuallyPortedElixirHologramQuery["order_by/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "put_attribute/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["put_attribute/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "put_attribute/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["put_attribute/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "trust/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["trust/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -853,6 +1044,55 @@ export default class Hologram {
       "typeof/2",
       "public",
       ManuallyPortedElixirHologramJS["typeof/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/1",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/2",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/3",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/1",
+      "public",
+      ManuallyPortedElixirHologramJob["create/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/2",
+      "public",
+      ManuallyPortedElixirHologramJob["create/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/3",
+      "public",
+      ManuallyPortedElixirHologramJob["create/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "framework_attribute_names/0",
+      "public",
+      ManuallyPortedElixirHologramJob["framework_attribute_names/0"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -1289,6 +1529,17 @@ export default class Hologram {
 
     $.#pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
     globalThis.Hologram.dispatchAction = $.dispatchAction;
+
+    // A read-only window onto the write queue, beside the interop hatch above. Nothing in the
+    // framework reads it - it is for a devtools panel, a browser-driven test, and whatever step
+    // 10's queue surface is built on. Reads only: opening and closing batches is the action
+    // lifecycle's, and nothing outside it should reach in.
+    globalThis.Hologram.writes = {
+      oldestPendingSeq: Batches.oldestPendingSeq,
+      pendingCount: Batches.pendingCount,
+      rejected: Batches.rejectedSummaries,
+    };
+
     delete globalThis.Hologram._pendingJsInteropActions;
 
     Hologram.#isInitiated = true;
@@ -1627,6 +1878,11 @@ export default class Hologram {
     startTime,
     epoch,
   ) {
+    // Sealed BEFORE the render below, so the one frame that follows shows the action's state
+    // change and its data change together - which is the whole point of the batch boundary being
+    // the action.
+    Batches.close();
+
     let nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
       resultComponentStruct,
@@ -1678,6 +1934,9 @@ export default class Hologram {
     );
 
     Hologram.render();
+
+    // After the render rather than before it: what the user sees does not wait on the network.
+    Batches.flush();
 
     Hologram.#scheduleQueuedInitActions();
 

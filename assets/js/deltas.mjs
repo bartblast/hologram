@@ -1,9 +1,9 @@
 "use strict";
 
+import Clock from "./clock.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
-import SortKey from "./sort_key.mjs";
 
 // What a frame does to the database. Deltas arrive grouped by op and then by entity type, and
 // each of them is a statement about one moment - so they may be applied in any order. A row and
@@ -77,7 +77,9 @@ export default class Deltas {
   // happen. Filing the changes alone would leave a row with holes where its other attributes
   // should be, and nothing would ever fill them.
   static #patchRow(type, changes) {
-    const held = LocalDatabase.getRow(type, changes.id);
+    Deltas.#observeRevisions(changes);
+
+    const held = LocalDatabase.baseRow(type, changes.id);
 
     if (held === null) {
       return;
@@ -98,8 +100,10 @@ export default class Deltas {
   }
 
   static #putRow(type, row, opts) {
+    Deltas.#observeRevisions(row);
+
     if (opts.insertOnly) {
-      if (LocalDatabase.getRow(type, row.id) !== null) {
+      if (LocalDatabase.baseRow(type, row.id) !== null) {
         return;
       }
 
@@ -129,7 +133,7 @@ export default class Deltas {
       }
     }
 
-    Deltas.#computeSortKeys(type, attributes);
+    Model.computeSortKeys(type, attributes);
     LocalDatabase.putRow(type, attributes);
 
     // The whole target set of the relationship as it now stands, which is what a row states
@@ -139,22 +143,17 @@ export default class Deltas {
     }
   }
 
-  // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
-  // compared by its key on both tiers - so it is read from the entry's attribute types rather than
-  // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
-  // string's value never arrives, and its key is null like any unset value's.
-  static #computeSortKeys(type, attributes) {
-    for (const [name, attributeType] of Object.entries(
-      Model.entry(type).attributes,
-    )) {
-      if (attributeType !== "string") {
-        continue;
-      }
-
-      const value = attributes[name];
-
-      attributes[`${name}_sort`] =
-        value === null || value === undefined ? null : SortKey.compute(value);
+  // The clock's receive rule: every revision that ARRIVES lifts the clock past it, so a stamp this
+  // client authors is above everything the server has told it about - which is what lets a write's
+  // based_on be read as "the revision I saw" rather than as a guess.
+  //
+  // Deliberately about arrival rather than about what is kept, so it runs before a patch for an
+  // unheld row is passed over and before a carried row already held is left alone. Neither of
+  // those can reach a based_on today (both concern rows this client either lacks or holds a
+  // filed copy of), so the conservative reading costs nothing and needs no case analysis.
+  static #observeRevisions(row) {
+    for (const revision of Object.values(row["$revisions"] ?? {})) {
+      Clock.observe(revision);
     }
   }
 }

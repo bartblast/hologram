@@ -8,6 +8,7 @@ import {
 } from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
+import Batches from "../../assets/js/batches.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -535,6 +536,19 @@ describe("Sse", () => {
 
     beforeEach(() => {
       clock = sinon.useFakeTimers();
+    });
+
+    // A batch whose send got no answer is still pending, and this is the one signal that means
+    // the network is worth trying again.
+    it("sends the pending batches again when the stream comes back", async () => {
+      stubHandshakeResponse();
+
+      const flushStub = sinon.stub(Batches, "flush");
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      sinon.assert.calledOnce(flushStub);
     });
 
     it("keeps counting failures when a stream dies inside the window", async () => {

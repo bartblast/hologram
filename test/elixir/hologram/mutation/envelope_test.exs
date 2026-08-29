@@ -9,6 +9,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module21
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -433,6 +434,17 @@ defmodule Hologram.Mutation.EnvelopeTest do
         ~s[write 0: "priority" is not a counter of Hologram.Test.Fixtures.Entity.Module10 a client can move - a counter is a required integer attribute]
 
       assert parse(raw([update(Module10, nil, deltas: %{"priority" => 1})])) ==
+               {:error, expected_msg}
+    end
+
+    # The counters a client may move are the settable fields narrowed to required integers, and the
+    # settable fields already withhold the server-only names - so this holds by composition, and
+    # this test is what keeps it holding when either half is rewritten.
+    test "refuses a delta naming a server-only counter" do
+      expected_msg =
+        ~s[write 0: "balance" is not a counter of Hologram.Test.Fixtures.Entity.Module21 a client can move - a counter is a required integer attribute]
+
+      assert parse(raw([update(Module21, nil, deltas: %{"balance" => 1})])) ==
                {:error, expected_msg}
     end
 

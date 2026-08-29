@@ -362,6 +362,24 @@ defmodule Hologram.Compiler.CallGraph do
     {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
     {Hologram.Auth, :can?, 3},
+    # The data verbs, hand-written for the client the way the query stages are: one spelling on
+    # both tiers, so a domain helper reading and writing through them moves between an action, a
+    # command and a job untouched. What differs underneath is only where the rows are.
+    {Hologram.DB, :create, 1},
+    {Hologram.DB, :create!, 1},
+    {Hologram.DB, :delete, 1},
+    {Hologram.DB, :delete, 2},
+    {Hologram.DB, :delete!, 1},
+    {Hologram.DB, :delete!, 2},
+    {Hologram.DB, :read, 1},
+    {Hologram.DB, :read, 2},
+    {Hologram.DB, :rollback, 1},
+    {Hologram.DB, :transaction, 1},
+    {Hologram.DB, :transaction, 2},
+    {Hologram.DB, :update, 1},
+    {Hologram.DB, :update, 3},
+    {Hologram.DB, :update!, 1},
+    {Hologram.DB, :update!, 3},
     {Hologram.Entity, :generate_id, 0},
     # Constructing an entity and validating one both read what the type DECLARES - its defaults,
     # its constraints, the attributes a caller may set - and an entity module ships no reflection
@@ -382,18 +400,37 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :new, 3},
     {Hologram.JS, :set, 4},
     {Hologram.JS, :typeof, 2},
-    # The query stages build the PLAIN term the client's kernel evaluates, and validate against
-    # the model baked into the bundle rather than against entity reflection, which no client
-    # carries. Keeping the transpiled originals out of the bundle is what makes that possible.
+    # The query stages build the PLAIN term the client's kernel evaluates, and the write stages
+    # record on the entity struct an action is holding. Both validate against the model baked into
+    # the bundle rather than against entity reflection, which no client carries - and keeping the
+    # transpiled originals out of the bundle is what makes that possible. trust/1 is here to be
+    # REFUSED: the server's authority is not a client's to claim, on a write or on a read.
+    # A job is an entity type, so enqueuing one is an ordinary create of its row - what this port
+    # carries past that is the option parsing and the refusals.
+    {Hologram.Job, :create, 1},
+    {Hologram.Job, :create, 2},
+    {Hologram.Job, :create, 3},
+    {Hologram.Job, :create!, 1},
+    {Hologram.Job, :create!, 2},
+    {Hologram.Job, :create!, 3},
+    {Hologram.Job, :framework_attribute_names, 0},
+    {Hologram.Query, :add_relationship, 3},
+    {Hologram.Query, :authorize, 2},
     {Hologram.Query, :count, 1},
+    {Hologram.Query, :decrement, 3},
+    {Hologram.Query, :delete_relationship, 3},
     {Hologram.Query, :filter, 2},
     {Hologram.Query, :include, 2},
     {Hologram.Query, :include, 3},
+    {Hologram.Query, :increment, 3},
     {Hologram.Query, :limit, 2},
     {Hologram.Query, :normalize, 1},
     {Hologram.Query, :offset, 2},
     {Hologram.Query, :one, 1},
     {Hologram.Query, :order_by, 2},
+    {Hologram.Query, :put_attribute, 2},
+    {Hologram.Query, :put_attribute, 3},
+    {Hologram.Query, :trust, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},

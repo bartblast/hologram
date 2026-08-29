@@ -3,6 +3,7 @@
 import Bitstring from "./bitstring.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import SortKey from "./sort_key.mjs";
 import Type from "./type.mjs";
 
 // What the client knows about the shape of its own rows, and the boundary where a row becomes
@@ -21,6 +22,13 @@ import Type from "./type.mjs";
 // declaration spells them: that order is the type's order, so sorting rows by an enum attribute
 // is a comparison of positions in this list rather than of the labels themselves.
 export default class Model {
+  // The attributes every entity type carries without declaring them - Hologram.Entity's
+  // @system_attributes. The model bakes them alongside the declared ones, because reading a row
+  // back needs their types, so anything asking what a type DECLARES has to subtract them. Held
+  // here rather than beside each reader: it is one list mirroring an Elixir one, and a second copy
+  // is how the two drift.
+  static systemAttributes = ["created_at", "id", "updated_at"];
+
   static #entries = {};
 
   // Every relationship of a row is absent from the row itself: a to-many lives in the
@@ -48,7 +56,7 @@ export default class Model {
 
         data.push([
           Type.atom(referenceField),
-          Model.#boxValue(row[referenceField], "uuid"),
+          Model.boxValue(row[referenceField], "uuid"),
         ]);
       }
 
@@ -70,6 +78,70 @@ export default class Model {
     const first = label[0];
 
     return first >= "A" && first <= "Z" ? Type.alias(label) : Type.atom(label);
+  }
+
+  // Why this lives here rather than in the renderer, where it was written: a query result is boxed
+  // for a template AND for a read inside an action, and the two must agree. A row read one way and
+  // rendered the other would otherwise be two different structs of the same row.
+  // What the kernel evaluated to, in the form a template reads: a count is a number, a
+  // single-result query is one struct or nil, and everything else is a list.
+  static boxResult(term, result) {
+    if (term.cardinality === "count") {
+      return Type.integer(result);
+    }
+
+    if (term.cardinality === "one") {
+      return result === null ? Type.nil() : Model.#boxNode(term, result);
+    }
+
+    return Type.list(result.map((node) => Model.#boxNode(term, node)));
+  }
+
+  // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
+  // compared by its key on both tiers - so it is read from the entry's attribute types rather than
+  // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
+  // string's value never arrives, and its key is null like any unset value's.
+  //
+  // Writes into the object it is given and hands it back, because both callers - a row arriving
+  // from the server and a row this client wrote - are filing that same object.
+  static computeSortKeys(type, attributes) {
+    for (const [name, attributeType] of Object.entries(
+      Model.entry(type).attributes,
+    )) {
+      if (attributeType !== "string") {
+        continue;
+      }
+
+      const value = attributes[name];
+
+      attributes[`${name}_sort`] =
+        value === null || value === undefined ? null : SortKey.compute(value);
+    }
+
+    return attributes;
+  }
+
+  // The entity type a boxed struct names, or nothing at all when the value is not a struct -
+  // which is how a verb tells "wrong kind of value" from "wrong kind of struct" without raising
+  // on the way to finding out.
+  static structTypeName(value) {
+    if (!Type.isMap(value)) {
+      return null;
+    }
+
+    const entry = value.data[Type.encodeMapKey(Type.atom("__struct__"))];
+
+    return entry === undefined || !Type.isAlias(entry[1])
+      ? null
+      : entry[1].value.replace(/^Elixir\./, "");
+  }
+
+  // Whether this build carries the given entity type - the client's answer to the server's
+  // Reflection.entity?/1. A type a page neither queries nor mentions is not baked, so what this
+  // can say is "not an entity type THIS BUILD knows", which is the same divergence Entity.new
+  // already carries.
+  static isEntityType(type) {
+    return Boolean(globalThis.Hologram.sync?.model?.[type]);
   }
 
   static entry(type) {
@@ -122,6 +194,31 @@ export default class Model {
     return Model.entry(type).relationships;
   }
 
+  // The fields a client may write, which is what a create's data carries and what the server's
+  // Hologram.Mutation.Envelope.settable_fields/1 admits - the declared attributes plus a to-one's
+  // reference field. Three kinds are left out and each for its own reason: the system attributes
+  // are the framework's to fill, a server-only attribute is one this client was never shown, and a
+  // job's framework attributes are what the worker records. A to-many is not a field at all - its
+  // edges travel as their own writes.
+  //
+  // Sorted, so a batch built twice from one struct spells its data the same way both times.
+  static settableFields(type) {
+    const entry = Model.entry(type);
+
+    const attributes = Object.keys(entry.attributes).filter(
+      (name) =>
+        !Model.systemAttributes.includes(name) &&
+        !entry.serverOnly.has(name) &&
+        !entry.frameworkAttributes.includes(name),
+    );
+
+    const references = Object.entries(entry.relationships)
+      .filter(([_name, relationship]) => !relationship.toMany)
+      .map(([name]) => `${name}_id`);
+
+    return attributes.concat(references).sort();
+  }
+
   // The way back over the same boundary: a value written in a query becomes the way the wire
   // spells it, because that is what the rows it will be compared against hold. A date written as
   // a date compares with a date written as a string only if one of them stops being what it was,
@@ -153,8 +250,42 @@ export default class Model {
     }
   }
 
+  // A boxed entity struct as the wire spells its settable fields - the object a create's data
+  // carries. A reference field has no attribute type of its own and is always a uuid, which is
+  // what the server's own field_types/1 says about it.
+  static unboxRow(type, struct) {
+    const boxed = Object.fromEntries(
+      Model.settableFields(type).map((field) => [
+        field,
+        Model.#field(struct, field),
+      ]),
+    );
+
+    return Model.unboxChanges(type, boxed);
+  }
+
+  // The same boundary for SOME of a row's fields - what an update sets rather than what a create
+  // carries. A reference field has no attribute type of its own and is always a uuid.
+  static unboxChanges(type, changes) {
+    const entry = Model.entry(type);
+
+    return Object.fromEntries(
+      Object.entries(changes).map(([name, value]) => [
+        name,
+        Model.unbox(value, entry.attributes[name] ?? "uuid"),
+      ]),
+    );
+  }
+
   static reset() {
     Model.#entries = {};
+  }
+
+  // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the
+  // same rule #unboxDateTime follows, so an instant this client derives compares as a plain string
+  // with one the server sent. toISOString writes exactly three, which is all a millisecond has.
+  static wireDateTime(milliseconds) {
+    return `${new Date(milliseconds).toISOString().slice(0, -1)}000Z`;
   }
 
   // A value the client may not have is not a value it is missing: the model says the attribute
@@ -168,7 +299,7 @@ export default class Model {
       ]);
     }
 
-    return Model.#boxValue(row[name], attributeType);
+    return Model.boxValue(row[name], attributeType);
   }
 
   static #boxAttributeConstraints(options) {
@@ -260,7 +391,35 @@ export default class Model {
     ]);
   }
 
-  static #boxValue(value, attributeType) {
+  // A to-many include is a list of nodes, a to-one is one node or nothing at all - an absent
+  // to-one is nil, which is what the relationship not being there means.
+  static #boxIncluded(subTerm, included) {
+    if (Array.isArray(included)) {
+      return Type.list(
+        included.map((subNode) => Model.#boxNode(subTerm, subNode)),
+      );
+    }
+
+    return included === null ? Type.nil() : Model.#boxNode(subTerm, included);
+  }
+
+  // Deps: [:maps.from_list/1]
+  // A result node becomes the entity struct a template can read, its includes boxed with it.
+  // The node carries the row and what was included of it, and the TERM says what each of those
+  // is - a node has no type of its own.
+  static #boxNode(term, node) {
+    const includes = {};
+
+    for (const [name, subTerm] of Object.entries(term.include)) {
+      includes[name] = Model.#boxIncluded(subTerm, node.includes[name]);
+    }
+
+    return Model.box(term.entity, node.row, includes);
+  }
+
+  // A wire value as the term a template reads - the counterpart of the public unbox/2, and the
+  // same boundary: values are stored the way the wire spells them and boxed only on the way out.
+  static boxValue(value, attributeType) {
     if (value === null || value === undefined) {
       return Type.nil();
     }

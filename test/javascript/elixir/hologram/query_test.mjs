@@ -17,15 +17,22 @@ defineRuntimeGlobals();
 // with the same raise messages. What differs is the term: these stages build the plain term the
 // client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query", () => {
+  const ITEM = "MyApp.Item";
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
+  const VAULT = "MyApp.Vault";
 
   const project = Type.alias(PROJECT);
   const task = Type.alias(TASK);
   const user = Type.alias(USER);
 
+  const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
+  const authorize = Elixir_Hologram_Query["authorize/2"];
   const count = Elixir_Hologram_Query["count/1"];
+  const deleteRelationship = Elixir_Hologram_Query["delete_relationship/3"];
+  const decrement = Elixir_Hologram_Query["decrement/3"];
+  const increment = Elixir_Hologram_Query["increment/3"];
   const filter = Elixir_Hologram_Query["filter/2"];
   const include = Elixir_Hologram_Query["include/3"];
   const limit = Elixir_Hologram_Query["limit/2"];
@@ -33,6 +40,9 @@ describe("Elixir_Hologram_Query", () => {
   const offset = Elixir_Hologram_Query["offset/2"];
   const one = Elixir_Hologram_Query["one/1"];
   const orderBy = Elixir_Hologram_Query["order_by/2"];
+  const trust = Elixir_Hologram_Query["trust/1"];
+  const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
+  const putAttributeValue = Elixir_Hologram_Query["put_attribute/3"];
 
   const baseTerm = (entityType) => ({
     cardinality: "set",
@@ -45,6 +55,18 @@ describe("Elixir_Hologram_Query", () => {
   });
 
   const freshTerm = baseTerm(TASK);
+
+  // An entity struct as a stage meets one: what a query read, boxed the way every result is.
+  const entity = (entityType, row = {}) =>
+    Model.box(entityType, {id: "t1", ...row});
+
+  const edgeOps = (struct) =>
+    field(field(struct, "__meta__"), "relationship_ops");
+
+  const ops = (struct) => field(field(struct, "__meta__"), "attribute_ops");
+
+  const field = (struct, name) =>
+    struct.data[Type.encodeMapKey(Type.atom(name))][1];
 
   const predicates = (pairs) =>
     Type.list(
@@ -69,6 +91,23 @@ describe("Elixir_Hologram_Query", () => {
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
+        // A counter type of its own rather than another attribute on TASK, whose known-name lists
+        // four assertions already pin: count is a counter, priority is an optional integer and so
+        // is not, and bio is there to be refused for its type.
+        [ITEM]: {
+          attributes: {
+            bio: "string",
+            count: "integer",
+            created_at: "datetime",
+            id: "uuid",
+            priority: "integer",
+            updated_at: "datetime",
+          },
+          constraints: {priority: {optional: true}},
+          enumValues: {},
+          relationships: {},
+          serverOnly: [],
+        },
         [PROJECT]: {
           attributes: {id: "uuid", name: "string"},
           relationships: {
@@ -91,6 +130,14 @@ describe("Elixir_Hologram_Query", () => {
           relationships: {},
           serverOnly: [],
         },
+        // A counter the client is never shown, which reads back as the sentinel rather than as a
+        // number it happens not to have.
+        [VAULT]: {
+          attributes: {balance: "integer", id: "uuid"},
+          enumValues: {},
+          relationships: {},
+          serverOnly: ["balance"],
+        },
         [USER]: {
           attributes: {email: "string", id: "uuid"},
           relationships: {
@@ -106,6 +153,848 @@ describe("Elixir_Hologram_Query", () => {
     // stages see if the entries another suite left behind go first - and the suites share these
     // type names while spelling them differently.
     Model.reset();
+  });
+
+  describe("add_relationship/3", () => {
+    const edge = (name, targetId, op) =>
+      Type.map([
+        [
+          Type.tuple([Type.atom(name), Type.bitstring(targetId)]),
+          Type.atom(op),
+        ],
+      ]);
+
+    it("keeps the rest of the metadata", () => {
+      const built = putAttribute(
+        entity(PROJECT),
+        predicates([["name", Type.bitstring("x")]]),
+      );
+
+      const result = addRelationship(
+        built,
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("name"),
+            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
+    });
+
+    it("leaves the relationship's own field as it is", () => {
+      const built = entity(PROJECT);
+
+      const result = addRelationship(
+        built,
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(field(result, "tasks"), field(built, "tasks"));
+    });
+
+    it("records an add operation for the edge", () => {
+      const result = addRelationship(
+        entity(PROJECT),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
+    });
+
+    it("records one operation per edge, several edges coexisting", () => {
+      const result = addRelationship(
+        addRelationship(
+          entity(PROJECT),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("tasks"),
+        Type.bitstring("t2"),
+      );
+
+      assert.deepStrictEqual(
+        edgeOps(result),
+        Type.map([
+          [
+            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
+            Type.atom("add"),
+          ],
+          [
+            Type.tuple([Type.atom("tasks"), Type.bitstring("t2")]),
+            Type.atom("add"),
+          ],
+        ]),
+      );
+    });
+
+    it("replaces a delete operation recorded for the same edge", () => {
+      const result = addRelationship(
+        deleteRelationship(
+          entity(PROJECT),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
+    });
+
+    it("raises on a to-one relationship name", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("owner"),
+            Type.bitstring("u1"),
+          ),
+        HologramBoxedError,
+        ":owner is a to-one relationship in MyApp.Project - only to-many relationships hold edges - set its reference via put_attribute(:owner_id, id)",
+      );
+    });
+
+    it("raises on an attribute name", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("name"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        ":name is an attribute in MyApp.Project - only to-many relationships hold edges - put it via put_attribute",
+      );
+    });
+
+    it("raises on an unknown relationship name", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("nope"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        "unknown relationship :nope in MyApp.Project - known to-many relationships: :tasks",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            Type.bitstring("x"),
+            Type.atom("tasks"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        'add_relationship takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the target id is not a string", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(PROJECT),
+            Type.atom("tasks"),
+            Type.integer(123),
+          ),
+        HologramBoxedError,
+        "add_relationship takes a target id string, got: 123",
+      );
+    });
+  });
+
+  describe("delete_relationship/3", () => {
+    const edge = (name, targetId, op) =>
+      Type.map([
+        [
+          Type.tuple([Type.atom(name), Type.bitstring(targetId)]),
+          Type.atom(op),
+        ],
+      ]);
+
+    it("records a delete operation for the edge", () => {
+      const result = deleteRelationship(
+        entity(PROJECT),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "delete"));
+    });
+
+    it("replaces an add operation recorded for the same edge", () => {
+      const result = deleteRelationship(
+        addRelationship(
+          entity(PROJECT),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("tasks"),
+        Type.bitstring("t1"),
+      );
+
+      assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "delete"));
+    });
+
+    it("raises on a to-one relationship name", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(PROJECT),
+            Type.atom("owner"),
+            Type.bitstring("u1"),
+          ),
+        HologramBoxedError,
+        ":owner is a to-one relationship in MyApp.Project - only to-many relationships hold edges - set its reference via put_attribute(:owner_id, id)",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            Type.bitstring("x"),
+            Type.atom("tasks"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        'delete_relationship takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the target id is not a string", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(PROJECT),
+            Type.atom("tasks"),
+            Type.integer(123),
+          ),
+        HologramBoxedError,
+        "delete_relationship takes a target id string, got: 123",
+      );
+    });
+  });
+
+  describe("increment/3", () => {
+    const item = (count = 5) => entity(ITEM, {bio: "x", count, priority: null});
+
+    it("records a positive amount as a delta", () => {
+      assert.deepStrictEqual(
+        ops(increment(item(), Type.atom("count"), Type.integer(2))),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(2)]),
+          ],
+        ]),
+      );
+    });
+
+    it("previews the result on the struct's field", () => {
+      const result = increment(item(), Type.atom("count"), Type.integer(2));
+
+      assert.deepStrictEqual(field(result, "count"), Type.integer(7));
+    });
+
+    it("previews a second move on top of the first", () => {
+      const result = decrement(
+        increment(item(), Type.atom("count"), Type.integer(2)),
+        Type.atom("count"),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(field(result, "count"), Type.integer(6));
+    });
+
+    it("moves down by a negative amount", () => {
+      assert.deepStrictEqual(
+        ops(increment(item(), Type.atom("count"), Type.integer(-2))),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(-2)]),
+          ],
+        ]),
+      );
+    });
+
+    it("records nothing for a zero amount", () => {
+      assert.deepStrictEqual(
+        ops(increment(item(), Type.atom("count"), Type.integer(0))),
+        Type.map([]),
+      );
+    });
+
+    it("adds a second increment to the first", () => {
+      const result = increment(
+        increment(item(), Type.atom("count"), Type.integer(2)),
+        Type.atom("count"),
+        Type.integer(3),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(5)]),
+          ],
+        ]),
+      );
+    });
+
+    it("keeps the rest of the metadata", () => {
+      const result = increment(
+        putAttribute(item(), predicates([["bio", Type.bitstring("y")]])),
+        Type.atom("count"),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("bio"),
+            Type.tuple([Type.atom("put"), Type.bitstring("y")]),
+          ],
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(1)]),
+          ],
+        ]),
+      );
+    });
+
+    it("folds into a put value recorded before it", () => {
+      const result = increment(
+        putAttribute(item(), predicates([["count", Type.integer(10)]])),
+        Type.atom("count"),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("put"), Type.integer(11)]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(field(result, "count"), Type.integer(11));
+    });
+
+    it("raises on an amount that is not an integer", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("count"), Type.float(1.5)),
+        HologramBoxedError,
+        "increment takes an integer amount, got: 1.5",
+      );
+
+      assert.throw(
+        () => increment(item(), Type.atom("count"), Type.bitstring("1")),
+        HologramBoxedError,
+        'increment takes an integer amount, got: "1"',
+      );
+    });
+
+    it("raises on an optional integer attribute", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("priority"), Type.integer(1)),
+        HologramBoxedError,
+        ":priority in MyApp.Item is optional and can hold nil - increment moves attributes that always hold a number - declare it without optional: true, with a default",
+      );
+    });
+
+    it("raises on a non-integer attribute", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("bio"), Type.integer(1)),
+        HologramBoxedError,
+        ":bio is a :string attribute of MyApp.Item - increment moves integer attributes only",
+      );
+    });
+
+    it("raises on a relationship", () => {
+      assert.throw(
+        () => increment(entity(PROJECT), Type.atom("owner"), Type.integer(1)),
+        HologramBoxedError,
+        ":owner is a relationship in MyApp.Project - increment moves integer attributes only",
+      );
+    });
+
+    it("raises on a system attribute", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("id"), Type.integer(1)),
+        HologramBoxedError,
+        ":id is a system attribute of MyApp.Item - it is managed automatically and can't be moved",
+      );
+    });
+
+    it("raises on an unknown name", () => {
+      assert.throw(
+        () => increment(item(), Type.atom("nope"), Type.integer(1)),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Item - known counters: :count",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () =>
+          increment(Type.bitstring("x"), Type.atom("count"), Type.integer(1)),
+        HologramBoxedError,
+        'increment takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the struct's field holds nil", () => {
+      assert.throw(
+        () =>
+          increment(
+            entity(ITEM, {bio: "x", count: null, priority: null}),
+            Type.atom("count"),
+            Type.integer(1),
+          ),
+        HologramBoxedError,
+        ":count in MyApp.Item holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default",
+      );
+    });
+
+    // Not the same refusal: reading the row is what the message above tells a caller to do, and no
+    // read produces this value on this tier.
+    it("raises when the counter is one the client is never shown", () => {
+      assert.throw(
+        () => increment(entity(VAULT), Type.atom("balance"), Type.integer(1)),
+        HologramBoxedError,
+        ":balance of MyApp.Vault is server-only - a browser cannot write it, set it in a command or a job",
+      );
+    });
+
+    it("raises when the put value it would fold into is not an integer", () => {
+      assert.throw(
+        () =>
+          increment(
+            putAttribute(item(), predicates([["count", Type.nil()]])),
+            Type.atom("count"),
+            Type.integer(1),
+          ),
+        HologramBoxedError,
+        ":count in MyApp.Item carries a put value that is not an integer (nil) - increment cannot move it",
+      );
+    });
+  });
+
+  describe("decrement/3", () => {
+    const item = (count = 5) => entity(ITEM, {bio: "x", count, priority: null});
+
+    it("records a positive amount as a negative delta", () => {
+      assert.deepStrictEqual(
+        ops(decrement(item(), Type.atom("count"), Type.integer(2))),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(-2)]),
+          ],
+        ]),
+      );
+    });
+
+    it("subtracts from a recorded increment", () => {
+      const result = decrement(
+        increment(item(), Type.atom("count"), Type.integer(5)),
+        Type.atom("count"),
+        Type.integer(2),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("count"),
+            Type.tuple([Type.atom("increment"), Type.integer(3)]),
+          ],
+        ]),
+      );
+    });
+
+    it("drops a delta that nets to zero", () => {
+      const result = decrement(
+        increment(item(), Type.atom("count"), Type.integer(2)),
+        Type.atom("count"),
+        Type.integer(2),
+      );
+
+      assert.deepStrictEqual(ops(result), Type.map([]));
+    });
+
+    it("raises on an amount that is not a positive integer", () => {
+      for (const [amount, spelled] of [
+        [Type.integer(-1), "-1"],
+        [Type.integer(0), "0"],
+        [Type.float(1.5), "1.5"],
+      ]) {
+        assert.throw(
+          () => decrement(item(), Type.atom("count"), amount),
+          HologramBoxedError,
+          `decrement takes a positive integer amount, got: ${spelled}`,
+        );
+      }
+    });
+
+    it("raises on a non-integer attribute", () => {
+      assert.throw(
+        () => decrement(item(), Type.atom("bio"), Type.integer(1)),
+        HologramBoxedError,
+        ":bio is a :string attribute of MyApp.Item - decrement moves integer attributes only",
+      );
+    });
+  });
+
+  describe("put_attribute/2", () => {
+    it("accepts a map of values", () => {
+      const result = putAttribute(
+        entity(TASK),
+        Type.map([[Type.atom("position"), Type.integer(7)]]),
+      );
+
+      assert.deepStrictEqual(field(result, "position"), Type.integer(7));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("position"),
+            Type.tuple([Type.atom("put"), Type.integer(7)]),
+          ],
+        ]),
+      );
+    });
+
+    it("keeps the rest of the metadata", () => {
+      const built = entity(TASK);
+      const metadata = field(built, "__meta__");
+
+      metadata.data[Type.encodeMapKey(Type.atom("claim"))] = [
+        Type.atom("claim"),
+        Type.atom("trust"),
+      ];
+
+      const result = putAttribute(
+        built,
+        predicates([["title", Type.bitstring("x")]]),
+      );
+
+      assert.deepStrictEqual(
+        field(field(result, "__meta__"), "claim"),
+        Type.atom("trust"),
+      );
+    });
+
+    it("merges into the changes already recorded, the later value replacing the earlier", () => {
+      const result = putAttribute(
+        putAttribute(
+          entity(TASK),
+          predicates([
+            ["done", Type.boolean(true)],
+            ["title", Type.bitstring("y")],
+          ]),
+        ),
+        predicates([["title", Type.bitstring("z")]]),
+      );
+
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("z"));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("done"),
+            Type.tuple([Type.atom("put"), Type.boolean(true)]),
+          ],
+          [
+            Type.atom("title"),
+            Type.tuple([Type.atom("put"), Type.bitstring("z")]),
+          ],
+        ]),
+      );
+    });
+
+    it("sets a to-one reference field", () => {
+      const result = putAttribute(
+        entity(PROJECT),
+        predicates([["owner_id", Type.bitstring("u1")]]),
+      );
+
+      assert.deepStrictEqual(field(result, "owner_id"), Type.bitstring("u1"));
+    });
+
+    it("sets the values on the struct and records them as changes", () => {
+      const result = putAttribute(
+        entity(TASK),
+        predicates([
+          ["done", Type.boolean(true)],
+          ["title", Type.bitstring("y")],
+        ]),
+      );
+
+      assert.deepStrictEqual(field(result, "done"), Type.boolean(true));
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("y"));
+    });
+
+    it("takes the later value when one list names an attribute twice", () => {
+      const result = putAttribute(
+        entity(TASK),
+        predicates([
+          ["title", Type.bitstring("first")],
+          ["title", Type.bitstring("second")],
+        ]),
+      );
+
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("second"));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("title"),
+            Type.tuple([Type.atom("put"), Type.bitstring("second")]),
+          ],
+        ]),
+      );
+    });
+
+    it("leaves the struct it was given alone", () => {
+      const built = entity(TASK, {title: "Draft copy"});
+
+      putAttribute(built, predicates([["title", Type.bitstring("Ship it")]]));
+
+      assert.deepStrictEqual(
+        field(built, "title"),
+        Type.bitstring("Draft copy"),
+      );
+    });
+
+    it("raises on a system attribute name", () => {
+      assert.throw(
+        () =>
+          putAttribute(entity(TASK), predicates([["id", Type.bitstring("x")]])),
+        HologramBoxedError,
+        ":id is a system attribute of MyApp.Task - it is managed automatically and can't be put",
+      );
+    });
+
+    it("raises on a to-many relationship name", () => {
+      assert.throw(
+        () =>
+          putAttribute(entity(PROJECT), predicates([["tasks", Type.list()]])),
+        HologramBoxedError,
+        ":tasks is a relationship in MyApp.Project - only attributes can be put - add its edges via add_relationship",
+      );
+    });
+
+    it("raises on a to-one relationship name", () => {
+      assert.throw(
+        () =>
+          putAttribute(entity(PROJECT), predicates([["owner", Type.nil()]])),
+        HologramBoxedError,
+        ":owner is a relationship in MyApp.Project - only attributes can be put - set its reference via :owner_id",
+      );
+    });
+
+    it("raises on an unknown name", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(PROJECT),
+            predicates([["nope", Type.integer(1)]]),
+          ),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Project - known attributes: :name, :owner_id",
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () => putAttribute(Type.bitstring("x"), predicates([])),
+        HologramBoxedError,
+        'put_attribute takes an entity struct, got: "x"',
+      );
+
+      assert.throw(
+        () => putAttribute(task, predicates([])),
+        HologramBoxedError,
+        "put_attribute takes an entity struct, got: MyApp.Task",
+      );
+    });
+
+    it("raises when the values are neither a keyword list nor a map", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(TASK),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
+        HologramBoxedError,
+        "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
+      );
+    });
+  });
+
+  describe("put_attribute/3", () => {
+    it("sets the value on the struct and records it as a change", () => {
+      const result = putAttributeValue(
+        entity(TASK),
+        Type.atom("done"),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(field(result, "done"), Type.boolean(true));
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("done"),
+            Type.tuple([Type.atom("put"), Type.boolean(true)]),
+          ],
+        ]),
+      );
+    });
+
+    it("raises on an unknown name", () => {
+      assert.throw(
+        () =>
+          putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :status, :title",
+      );
+    });
+  });
+
+  describe("authorize/2", () => {
+    const claim = (struct) => field(field(struct, "__meta__"), "claim");
+
+    it("keeps the rest of the metadata", () => {
+      const result = authorize(
+        addRelationship(
+          putAttribute(
+            entity(PROJECT),
+            predicates([["name", Type.bitstring("x")]]),
+          ),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("archive"),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("name"),
+            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        edgeOps(result),
+        Type.map([
+          [
+            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
+            Type.atom("add"),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        claim(result),
+        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
+      );
+    });
+
+    it("records the claim for the operation", () => {
+      const result = authorize(entity(TASK), Type.atom("archive"));
+
+      assert.deepStrictEqual(
+        claim(result),
+        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () => authorize(Type.bitstring("x"), Type.atom("archive")),
+        HologramBoxedError,
+        'authorize takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the operation is not an atom", () => {
+      assert.throw(
+        () => authorize(entity(TASK), Type.bitstring("archive")),
+        HologramBoxedError,
+        'authorize takes an operation atom, got: "archive"',
+      );
+    });
+
+    it("raises when the struct already carries a claim", () => {
+      assert.throw(
+        () =>
+          authorize(
+            authorize(entity(TASK), Type.atom("archive")),
+            Type.atom("publish"),
+          ),
+        HologramBoxedError,
+        "MyApp.Task already carries a claim ({:authorize, :archive}) - a write claims exactly one authority",
+      );
+    });
+  });
+
+  // The server records a claim here and the client refuses one, so these have no twin in
+  // query_test.exs. Trust is the SERVER's authority on either half - a write claiming it is
+  // refused by the wire, and a read claiming it would ask this client's copy of the data to
+  // answer past the policies that decided what it holds.
+  describe("trust/1", () => {
+    it("refuses an entity struct", () => {
+      assert.throw(
+        () => trust(entity(TASK)),
+        HologramBoxedError,
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
+
+    it("refuses a query", () => {
+      assert.throw(
+        () => trust(task),
+        HologramBoxedError,
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
+
+    it("refuses a query term", () => {
+      assert.throw(
+        () => trust(filter(task, predicates([["done", Type.boolean(true)]]))),
+        HologramBoxedError,
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
   });
 
   describe("count/1", () => {

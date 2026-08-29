@@ -42,6 +42,60 @@ function attributeType(entityType, name) {
   return Model.entry(entityType).attributes[name] ?? "uuid";
 }
 
+// A counter is an integer attribute that always holds a number: an optional one can be nil, and
+// there is nothing to add to nil.
+function counterAttributeNames(entityType) {
+  const constraints = Model.entry(entityType).constraints;
+
+  return integerNames(entityType).filter(
+    (name) => constraints[name]?.optional !== true,
+  );
+}
+
+// The entity type of a struct a stage was handed, or a raise in the server's words. What the
+// client can check is that the build carries the type, which is its whole notion of "is an entity".
+function entityTypeOf(entity, stage) {
+  const type = Model.structTypeName(entity);
+
+  if (type !== null && Model.isEntityType(type)) {
+    return type;
+  }
+
+  Interpreter.raiseArgumentError(
+    `${stage} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
+  );
+}
+
+function integerNames(entityType) {
+  return attributeNames(entityType).filter(
+    (name) => attributeType(entityType, name) === "integer",
+  );
+}
+
+// The field previews the result the way a put value does - only the recorded amount is written, so
+// the row still computes its value from whatever it holds at the write.
+//
+// A declared integer attribute holds an integer, the server-only sentinel, or nil, and each is a
+// different answer: the sentinel is not a number this client is missing but one it is not for, so
+// no read produces it and the refusal must not send anyone looking.
+function movedValue(entity, name, entityType, delta, stage) {
+  const value = field(entity, name.value);
+
+  if (Type.isInteger(value)) {
+    return Type.integer(value.value + delta);
+  }
+
+  if (Model.structTypeName(value) === "Hologram.Entity.ServerOnly") {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
+    );
+  }
+
+  Interpreter.raiseArgumentError(
+    `${Interpreter.inspect(name)} in ${entityType} holds nil - a counter always holds a number, so there is nothing for ${stage} to move - read the row first, or give the attribute a default`,
+  );
+}
+
 function orderEntries(spec, entityType) {
   if (Type.isAtom(spec)) {
     return [orderEntry(spec, entityType)];
@@ -95,13 +149,10 @@ function field(struct, name) {
 // The names a predicate may read: the attributes plus the reference field of every to-one
 // relationship, which carries an entity id and so filters like any uuid attribute.
 function filterableNames(entityType) {
-  const relationships = Model.entry(entityType).relationships;
-
-  const references = Object.entries(relationships)
-    .filter(([_name, relationship]) => !relationship.toMany)
-    .map(([name]) => `${name}_id`);
-
-  return [...attributeNames(entityType), ...references].sort();
+  return [
+    ...attributeNames(entityType),
+    ...referenceFieldNames(entityType),
+  ].sort();
 }
 
 function includeDepth(term) {
@@ -423,6 +474,18 @@ function rangeTriples(name, range, entityType) {
   ];
 }
 
+// The names a put may set: the DECLARED attributes and every to-one relationship's reference
+// field, sorted - the server's settable_names/1. A server-only attribute IS in this list, because
+// server code may put one: it is the WRITE that refuses a client's, by name, rather than the stage
+// pretending the attribute is not there.
+function settableNames(entityType) {
+  const declared = attributeNames(entityType).filter(
+    (name) => !Model.systemAttributes.includes(name),
+  );
+
+  return [...declared, ...referenceFieldNames(entityType)].sort();
+}
+
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
 }
@@ -434,6 +497,10 @@ function subTermHasClauses(subTerm) {
     subTerm.limit !== null ||
     subTerm.offset !== null
   );
+}
+
+function referenceFieldNames(entityType) {
+  return toOneRelationshipNames(entityType).map((name) => `${name}_id`);
 }
 
 function relationshipNames(entityType) {
@@ -493,6 +560,24 @@ function sortedFilter(filter) {
 // Membership in the model is what stands for the entity check: the model carries every type
 // this client can hold, so a name missing from it is either not an entity type or one whose
 // rows never reach a client - neither is a query this side can answer.
+function systemAttributeNames(entityType) {
+  return attributeNames(entityType).filter((name) =>
+    Model.systemAttributes.includes(name),
+  );
+}
+
+function toManyRelationshipNames(entityType) {
+  return Object.entries(Model.entry(entityType).relationships)
+    .filter(([_name, relationship]) => relationship.toMany)
+    .map(([name]) => name);
+}
+
+function toOneRelationshipNames(entityType) {
+  return Object.entries(Model.entry(entityType).relationships)
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => name);
+}
+
 function toTerm(query) {
   if (isQueryTerm(query)) {
     return query;
@@ -519,6 +604,157 @@ function toTerm(query) {
 
 // The actor leaf carries the acting user's entity id, so it compares only against names holding
 // one - any other type would build a comparison that never matches.
+// A second claim is refused where it is written: a struct carrying two authorities would have to
+// pick one at the write, silently.
+function putClaim(entity, claim, stage) {
+  const entityType = entityTypeOf(entity, stage);
+  const metadata = field(entity, "__meta__");
+  const recorded = field(metadata, "claim");
+
+  if (!Type.isNil(recorded)) {
+    Interpreter.raiseArgumentError(
+      `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
+    );
+  }
+
+  return putField(
+    entity,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("claim"), claim),
+  );
+}
+
+// The two counter stages share everything but the sign they record. A sum that reaches zero is
+// dropped rather than recorded: a delta of nothing is not a change, and the wire refuses one.
+function putDelta(entity, name, amount, sign, stage) {
+  const entityType = entityTypeOf(entity, stage);
+
+  validateDeltaName(name, entityType, stage);
+  validateAmount(amount, stage);
+
+  const metadata = field(entity, "__meta__");
+  const ops = field(metadata, "attribute_ops");
+  const recorded = ops.data[Type.encodeMapKey(name)]?.[1] ?? null;
+  const moved = BigInt(sign) * amount.value;
+
+  // Stages apply in order: a move after a put folds into the value, so the attribute keeps one op.
+  if (recorded !== null && recorded.data[0].value === "put") {
+    const value = recorded.data[1];
+
+    if (!Type.isInteger(value)) {
+      Interpreter.raiseArgumentError(
+        `${Interpreter.inspect(name)} in ${entityType} carries a put value that is not an integer (${Interpreter.inspect(value)}) - ${stage} cannot move it`,
+      );
+    }
+
+    return Elixir_Hologram_Query["put_attribute/3"](
+      entity,
+      name,
+      Type.integer(value.value + moved),
+    );
+  }
+
+  const delta = (recorded === null ? 0n : recorded.data[1].value) + moved;
+  const updatedOps = Type.cloneMap(ops);
+  const key = Type.encodeMapKey(name);
+
+  if (delta === 0n) {
+    delete updatedOps.data[key];
+  } else {
+    updatedOps.data[key] = [
+      name,
+      Type.tuple([Type.atom("increment"), Type.integer(delta)]),
+    ];
+  }
+
+  const moved_entity = putField(
+    entity,
+    name,
+    movedValue(entity, name, entityType, moved, stage),
+  );
+
+  return putField(
+    moved_entity,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("attribute_ops"), updatedOps),
+  );
+}
+
+// The two edge stages share everything but the operation they record. The relationship's own
+// field is left alone: an edge is recorded, not applied, and what the field holds is whatever the
+// read put there.
+function putRelationshipOp(entity, relationshipName, targetId, op, stage) {
+  const entityType = entityTypeOf(entity, stage);
+
+  validateEdgeRelationshipName(relationshipName, entityType);
+
+  if (!Type.isBitstring(targetId)) {
+    Interpreter.raiseArgumentError(
+      `${stage} takes a target id string, got: ${Interpreter.inspect(targetId)}`,
+    );
+  }
+
+  const metadata = field(entity, "__meta__");
+  const ops = Type.cloneMap(field(metadata, "relationship_ops"));
+  const key = Type.tuple([relationshipName, targetId]);
+
+  ops.data[Type.encodeMapKey(key)] = [key, Type.atom(op)];
+
+  return putField(
+    entity,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("relationship_ops"), ops),
+  );
+}
+
+// Records one op per attribute, the later put replacing whatever the attribute carried - an
+// earlier put or an increment alike, since stages apply in order.
+function putAttributes(entity, pairs) {
+  const metadata = field(entity, "__meta__");
+  const ops = Type.cloneMap(field(metadata, "attribute_ops"));
+  let updated = entity;
+
+  for (const [name, value] of pairs) {
+    ops.data[Type.encodeMapKey(name)] = [
+      name,
+      Type.tuple([Type.atom("put"), value]),
+    ];
+
+    updated = putField(updated, name, value);
+  }
+
+  return putField(
+    updated,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("attribute_ops"), ops),
+  );
+}
+
+function putField(struct, key, value) {
+  const updated = Type.cloneMap(struct);
+
+  updated.data[Type.encodeMapKey(key)] = [key, value];
+
+  return updated;
+}
+
+// The pairs a put was given, a keyword list and a map alike. A name repeated in one list is left
+// as the two pairs it arrived as rather than folded: applying them in order sets the later value
+// and records the later op, which is exactly what Map.new/1 leaves the server with.
+function putPairs(values, stage) {
+  const entries = Type.isList(values)
+    ? Type.isKeywordList(values) && values.data.map((pair) => pair.data)
+    : Type.isMap(values) && Object.values(values.data);
+
+  if (!entries) {
+    Interpreter.raiseArgumentError(
+      `${stage} takes a keyword list or a map of attribute values, got: ${Interpreter.inspect(values)}`,
+    );
+  }
+
+  return entries;
+}
+
 function validateActorAttribute(name, entityType) {
   const type = attributeType(entityType, name.value);
 
@@ -724,8 +960,160 @@ function validateSubTerm(subTerm, name, target, kind) {
   }
 }
 
+function validateAmount(amount, stage) {
+  if (Type.isInteger(amount) && (stage === "increment" || amount.value > 0n)) {
+    return;
+  }
+
+  Interpreter.raiseArgumentError(
+    stage === "increment"
+      ? `increment takes an integer amount, got: ${Interpreter.inspect(amount)}`
+      : `decrement takes a positive integer amount, got: ${Interpreter.inspect(amount)}`,
+  );
+}
+
+function validateDeltaName(name, entityType, stage) {
+  const counters = counterAttributeNames(entityType);
+  const named = Type.isAtom(name) ? name.value : null;
+
+  if (named !== null && counters.includes(named)) {
+    return;
+  }
+
+  const spelled = Interpreter.inspect(name);
+
+  if (named !== null && integerNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} in ${entityType} is optional and can hold nil - ${stage} moves attributes that always hold a number - declare it without optional: true, with a default`,
+    );
+  }
+
+  if (named !== null && systemAttributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a system attribute of ${entityType} - it is managed automatically and can't be moved`,
+    );
+  }
+
+  if (named !== null && attributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a :${attributeType(entityType, named)} attribute of ${entityType} - ${stage} moves integer attributes only`,
+    );
+  }
+
+  if (named !== null && relationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a relationship in ${entityType} - ${stage} moves integer attributes only`,
+    );
+  }
+
+  const known = counters.map((counter) => `:${counter}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown attribute ${spelled} in ${entityType} - known counters: ${known}`,
+  );
+}
+
+function validateEdgeRelationshipName(name, entityType) {
+  const toManyNames = toManyRelationshipNames(entityType);
+  const named = Type.isAtom(name) ? name.value : null;
+
+  if (named !== null && toManyNames.includes(named)) {
+    return;
+  }
+
+  const spelled = Interpreter.inspect(name);
+
+  if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a to-one relationship in ${entityType} - only to-many relationships hold edges - set its reference via put_attribute(:${named}_id, id)`,
+    );
+  }
+
+  if (named !== null && attributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is an attribute in ${entityType} - only to-many relationships hold edges - put it via put_attribute`,
+    );
+  }
+
+  const known = toManyNames.map((toMany) => `:${toMany}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown relationship ${spelled} in ${entityType} - known to-many relationships: ${known}`,
+  );
+}
+
+function validatePutName(name, entityType) {
+  const settable = settableNames(entityType);
+  const named = Type.isAtom(name) ? name.value : null;
+
+  if (named !== null && settable.includes(named)) {
+    return;
+  }
+
+  const spelled = Interpreter.inspect(name);
+
+  if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a relationship in ${entityType} - only attributes can be put - set its reference via :${named}_id`,
+    );
+  }
+
+  if (named !== null && relationshipNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a relationship in ${entityType} - only attributes can be put - add its edges via add_relationship`,
+    );
+  }
+
+  if (named !== null && systemAttributeNames(entityType).includes(named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is a system attribute of ${entityType} - it is managed automatically and can't be put`,
+    );
+  }
+
+  const known = settable.map((settableName) => `:${settableName}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown attribute ${spelled} in ${entityType} - known attributes: ${known}`,
+  );
+}
+
 const Elixir_Hologram_Query = {
+  "add_relationship/3": (entity, relationshipName, targetId) =>
+    putRelationshipOp(
+      entity,
+      relationshipName,
+      targetId,
+      "add",
+      "add_relationship",
+    ),
+
+  "authorize/2": (entity, operation) => {
+    if (!Type.isAtom(operation)) {
+      Interpreter.raiseArgumentError(
+        `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
+      );
+    }
+
+    return putClaim(
+      entity,
+      Type.tuple([Type.atom("authorize"), operation]),
+      "authorize",
+    );
+  },
+
   "count/1": (query) => setCardinality(query, "count"),
+
+  "decrement/3": (entity, name, amount) =>
+    putDelta(entity, name, amount, -1, "decrement"),
+
+  "delete_relationship/3": (entity, relationshipName, targetId) =>
+    putRelationshipOp(
+      entity,
+      relationshipName,
+      targetId,
+      "delete",
+      "delete_relationship",
+    ),
 
   "filter/2": (query, predicates) => {
     const term = toTerm(query);
@@ -783,6 +1171,9 @@ const Elixir_Hologram_Query = {
     );
   },
 
+  "increment/3": (entity, name, amount) =>
+    putDelta(entity, name, amount, 1, "increment"),
+
   "limit/2": (query, value) => setViewBound(query, "limit", value),
 
   // The canonical form of a query - what the kernel runs literally.
@@ -795,6 +1186,33 @@ const Elixir_Hologram_Query = {
     const term = toTerm(query);
 
     return {...term, orderBy: orderEntries(spec, term.entity)};
+  },
+
+  "put_attribute/2": (entity, values) => {
+    const entityType = entityTypeOf(entity, "put_attribute");
+    const pairs = putPairs(values, "put_attribute");
+
+    for (const [name] of pairs) {
+      validatePutName(name, entityType);
+    }
+
+    return putAttributes(entity, pairs);
+  },
+
+  "put_attribute/3": (entity, name, value) =>
+    Elixir_Hologram_Query["put_attribute/2"](
+      entity,
+      Type.list([Type.tuple([name, value])]),
+    ),
+
+  // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
+  // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read
+  // claiming it would be asking this client's copy of the data to answer past the policies that
+  // decided what it holds. A helper reaching for it learns at its own line that it is server code.
+  "trust/1": (_subject) => {
+    Interpreter.raiseArgumentError(
+      "trust is the server's authority - a client cannot claim it",
+    );
   },
 };
 

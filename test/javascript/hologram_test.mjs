@@ -7,14 +7,18 @@ import {
   registerWebApis,
   sinon,
   UUID_REGEX,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import Batches from "../../assets/js/batches.mjs";
 import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import Debouncer from "../../assets/js/debouncer.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
+import Elixir_Task from "../../assets/js/elixir/task.mjs";
+import ERTS from "../../assets/js/erts.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -22,6 +26,7 @@ import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -35,6 +40,7 @@ registerWebApis();
 defineModule7Fixture();
 
 const cid1 = Type.bitstring("my_component_1");
+const cid2 = Type.bitstring("my_component_2");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
@@ -94,6 +100,7 @@ describe("Hologram", () => {
 
     beforeEach(() => {
       ComponentRegistry.clear();
+      Batches.reset();
 
       callNamedFunctionStub = sinon
         .stub(Interpreter, "callNamedFunction")
@@ -107,8 +114,34 @@ describe("Hologram", () => {
 
     afterEach(() => {
       ComponentRegistry.clear();
+      Batches.reset();
       sinon.restore();
     });
+
+    const registered = (cid) => {
+      ComponentRegistry.putEntry(
+        cid,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      return cid;
+    };
+
+    // Whatever the action wrote, as a DB verb would leave it on the open batch.
+    const writing = (id) =>
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) => {
+        Batches.current().append({
+          id,
+          op: "delete",
+          stamp: 1,
+          type: "MyApp.Task",
+        });
+
+        return Type.componentStruct({state: Type.map()});
+      });
 
     // The registry answers with plain null for a cid it does not hold, and null reaching
     // callNamedFunction faults on reading a module name off it.
@@ -150,6 +183,180 @@ describe("Hologram", () => {
         callNamedFunctionStub.firstCall.args[1],
         Type.atom("action"),
       );
+    });
+
+    describe("the action's batch", () => {
+      it("seals what the action wrote, taking the first sequence number", () => {
+        writing("t1");
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        assert.equal(Batches.pending.length, 1);
+        assert.equal(Batches.pending[0].seq, 1);
+        assert.equal(Batches.pending[0].target, cid1);
+      });
+
+      it("gives a second action a batch and a number of its own", () => {
+        writing("t1");
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        writing("t2");
+        Hologram.executeAction(actionFor(cid1));
+
+        assert.deepStrictEqual(
+          Batches.pending.map((batch) => batch.seq),
+          [1, 2],
+        );
+      });
+
+      it("leaves nothing pending for an action that wrote nothing", () => {
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isNull(Batches.current());
+      });
+
+      it("closes the batch before the render, so one frame shows both", () => {
+        writing("t1");
+
+        renderStub.callsFake(() => {
+          assert.equal(Batches.pending.length, 1);
+
+          return null;
+        });
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        sinon.assert.calledOnce(renderStub);
+      });
+
+      // flush() does nothing yet - the sender loop is not built - so what binds the ORDER is the
+      // call sequence rather than an effect. The screen must not wait on the network.
+      it("ships the batch after the render, not before it", () => {
+        writing("t1");
+
+        const flushStub = sinon.stub(Batches, "flush");
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        sinon.assert.callOrder(renderStub, flushStub);
+      });
+
+      it("takes back what an action wrote before it raised", () => {
+        callNamedFunctionStub.callsFake(() => {
+          Batches.current().append({
+            id: "t1",
+            op: "delete",
+            stamp: 1,
+            type: "MyApp.Task",
+          });
+
+          throw new Error("boom");
+        });
+
+        assert.throw(
+          () => Hologram.executeAction(actionFor(registered(cid1))),
+          "boom",
+        );
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isNull(Batches.current());
+        assert.isFalse(Overlay.names("MyApp.Task", "t1"));
+      });
+
+      it("seals an async action's batch when its promise resolves", async () => {
+        callNamedFunctionStub.callsFake(() => {
+          Batches.current().append({
+            id: "t1",
+            op: "delete",
+            stamp: 1,
+            type: "MyApp.Task",
+          });
+
+          return Promise.resolve(Type.componentStruct({state: Type.map()}));
+        });
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        assert.deepStrictEqual(Batches.pending, []);
+
+        await waitForEventLoop();
+
+        assert.equal(Batches.pending.length, 1);
+      });
+
+      it("takes back what an async action wrote before it rejected", async () => {
+        callNamedFunctionStub.callsFake(() => {
+          Batches.current().append({
+            id: "t1",
+            op: "delete",
+            stamp: 1,
+            type: "MyApp.Task",
+          });
+
+          return Promise.reject(new Error("boom"));
+        });
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isFalse(Overlay.names("MyApp.Task", "t1"));
+      });
+
+      // The compiler emits an async function for any action that awaits a command, so two can be
+      // open at once and the second REPLACES the first as the action running. What brings the
+      // first back to its own batch is the round trip Task.await/1 makes - the real one is called
+      // here rather than imitated, since it is the whole of what makes this work.
+      it("keeps two overlapping async actions on their own batches", async () => {
+        let resumeFirst, resumeSecond;
+
+        const firstAwaited = new Promise((resolve) => (resumeFirst = resolve));
+        const secondAwaited = new Promise(
+          (resolve) => (resumeSecond = resolve),
+        );
+
+        const suspending = (id, awaited) => async () => {
+          await Elixir_Task["await/1"](ERTS.registerPromise(awaited));
+
+          Batches.current().append({
+            id,
+            op: "delete",
+            stamp: 1,
+            type: "MyApp.Task",
+          });
+
+          return Type.componentStruct({state: Type.map()});
+        };
+
+        callNamedFunctionStub
+          .onFirstCall()
+          .callsFake(suspending("t1", firstAwaited));
+
+        callNamedFunctionStub
+          .onSecondCall()
+          .callsFake(suspending("t2", secondAwaited));
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+        Hologram.executeAction(actionFor(registered(cid2)));
+
+        // The first comes back while the second is still away, which is the order that crosses
+        // them: what the slot holds when the first resumes is the second action's batch.
+        resumeFirst();
+        await waitForEventLoop();
+
+        resumeSecond();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(
+          Batches.pending.map((batch) => [batch.target, batch.writes[0].id]),
+          [
+            [cid1, "t1"],
+            [cid2, "t2"],
+          ],
+        );
+      });
     });
 
     // A next action is a continuation of the one that produced it, so it belongs to the same page

@@ -1,11 +1,14 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
+import Clock from "../../assets/js/clock.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 
 defineRuntimeGlobals();
 
@@ -37,8 +40,14 @@ describe("Deltas", () => {
       },
     };
 
+    Clock.reset();
     LocalDatabase.reset();
     Model.reset();
+    Overlay.reset();
+  });
+
+  afterEach(() => {
+    Overlay.reset();
   });
 
   describe("apply() - put_entity", () => {
@@ -115,42 +124,14 @@ describe("Deltas", () => {
       );
     });
 
-    it("computes the sort key of a string attribute", () => {
+    // What the keys themselves are is Model.computeSortKeys's, and its own tests say so - what a
+    // filed row proves is that filing asks for them at all.
+    it("files a sort key beside the string attribute it derives from", () => {
       Deltas.apply({
         put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
       });
 
       assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "lodz");
-    });
-
-    it("computes a sort key for every string attribute", () => {
-      Deltas.apply({
-        put_entity: {
-          [TASK]: [{done: false, id: "t1", note: "Ödön", title: "Łódź"}],
-        },
-      });
-
-      const row = LocalDatabase.getRow(TASK, "t1");
-
-      assert.equal(row.note_sort, "odon");
-      assert.equal(row.title_sort, "lodz");
-    });
-
-    it("computes no sort key for an attribute of another type", () => {
-      Deltas.apply({
-        put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
-      });
-
-      assert.isUndefined(LocalDatabase.getRow(TASK, "t1").done_sort);
-      assert.isUndefined(LocalDatabase.getRow(TASK, "t1").id_sort);
-    });
-
-    it("computes a null sort key for an unset value", () => {
-      Deltas.apply({
-        put_entity: {[TASK]: [{done: false, id: "t1", title: null}]},
-      });
-
-      assert.isNull(LocalDatabase.getRow(TASK, "t1").title_sort);
     });
 
     it("files every row of every type a frame carries", () => {
@@ -358,6 +339,155 @@ describe("Deltas", () => {
       Deltas.apply({patch_entity: {[TASK]: [{id: "t9", title: "Ship it"}]}});
 
       assert.isNull(LocalDatabase.getRow(TASK, "t9"));
+    });
+  });
+
+  describe("apply() - the clock's receive rule", () => {
+    // Frozen, so every expectation below is this millisecond's stamp rather than whatever the
+    // machine's clock reads between the revision being written and the stamp being taken.
+    const nowMs = 1_756_100_000_123;
+
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(nowMs);
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    it("advances past every revision a put carries", () => {
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [
+            {
+              done: false,
+              id: "t1",
+              title: "Draft copy",
+              $revisions: {
+                done: nowMs * 1024 + 5000,
+                title: nowMs * 1024 + 9000,
+              },
+            },
+          ],
+        },
+      });
+
+      assert.equal(Clock.stamp(), nowMs * 1024 + 9001);
+    });
+
+    it("advances past every revision a patch carries", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t1", title: "Draft copy"}]},
+      });
+
+      Deltas.apply({
+        patch_entity: {
+          [TASK]: [
+            {
+              id: "t1",
+              title: "Ship it",
+              $revisions: {title: nowMs * 1024 + 7000},
+            },
+          ],
+        },
+      });
+
+      assert.equal(Clock.stamp(), nowMs * 1024 + 7001);
+    });
+
+    // The rule is about what arrived, not about what was kept. Neither this case nor the carried
+    // one below can reach a based_on today - the client either lacks the row or holds a filed copy
+    // whose own revisions it observed - so what these two pin is the placement, not a bug they
+    // would otherwise let through.
+    it("advances past the revisions of a patch for a row it does not hold", () => {
+      Deltas.apply({
+        patch_entity: {
+          [TASK]: [
+            {
+              id: "t9",
+              title: "Ship it",
+              $revisions: {title: nowMs * 1024 + 3000},
+            },
+          ],
+        },
+      });
+
+      assert.equal(Clock.stamp(), nowMs * 1024 + 3001);
+    });
+
+    it("advances past the revisions of a carried row it leaves alone", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t1", title: "Draft copy"}]},
+      });
+
+      Deltas.apply(
+        {
+          put_entity: {
+            [TASK]: [
+              {
+                done: false,
+                id: "t1",
+                title: "Carried copy",
+                $revisions: {title: nowMs * 1024 + 4000},
+              },
+            ],
+          },
+        },
+        {insertOnly: true},
+      );
+
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Draft copy");
+      assert.equal(Clock.stamp(), nowMs * 1024 + 4001);
+    });
+
+    it("leaves the clock alone for a row carrying no revisions", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t1", title: "Draft copy"}]},
+      });
+
+      assert.equal(Clock.stamp(), nowMs * 1024);
+    });
+  });
+
+  // A frame is a statement about the SERVER's row, so what ingest asks is what the server last
+  // said - never what this client has written and not yet sent. Reading the folded row instead
+  // would let a frame file a row into the base on the strength of a create the server has never
+  // seen.
+  describe("apply() - against a row that is only a pending write", () => {
+    beforeEach(() => {
+      const batch = new Batch("cid");
+
+      batch.append({
+        data: {done: false, title: "Mine, unsent"},
+        id: "t9",
+        op: "create",
+        stamp: 1024,
+        type: TASK,
+      });
+
+      Overlay.push(batch);
+    });
+
+    it("passes a patch over, as it does for any row the server has not sent", () => {
+      Deltas.apply({patch_entity: {[TASK]: [{id: "t9", title: "Ship it"}]}});
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t9"));
+      assert.equal(LocalDatabase.getRow(TASK, "t9").title, "Mine, unsent");
+    });
+
+    it("files a carried row, which the client does not yet hold from the server", () => {
+      Deltas.apply(
+        {
+          put_entity: {
+            [TASK]: [{done: true, id: "t9", title: "From the page"}],
+          },
+        },
+        {insertOnly: true},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t9").title, "From the page");
     });
   });
 

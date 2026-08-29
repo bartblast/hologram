@@ -18,18 +18,50 @@ defineRuntimeGlobals();
 // client that built them any other way would answer one way for a synced row and another for a
 // rendered one.
 describe("Model", () => {
+  const NOTIFY = "MyApp.Jobs.Notify";
+  const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
 
   // One attribute of every admitted type, a server-only one, and both relationship
   // cardinalities - the shape the build bakes for a type this client can hold.
   //
-  // Neither relationship target has an entry of its own, deliberately: a build carries a type a
-  // page queries or mentions, so a relationship nothing reaches through points at a name the
-  // model does not hold. Boxing reads the reference field and leaves the sentinel, asking the target
-  // nothing - and a query that DID include one would have put it in the model by including it.
+  // The to-many's target has NO entry of its own, deliberately: a build carries a type a page
+  // queries or mentions, so a relationship nothing reaches through points at a name the model does
+  // not hold. Boxing reads the reference field and leaves the sentinel, asking the target nothing -
+  // and a box() test would fail loudly if that ever stopped being true.
+  //
+  // The to-one's target does have one, because boxResult() boxes the rows behind an include, and
+  // a query that included a relationship would have put its type in the model by including it.
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
+        [PROJECT]: {
+          attributes: {id: "uuid", name: "string"},
+          constraints: {},
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          relationships: {},
+          serverOnly: [],
+        },
+        // A job type, whose three framework attributes are the worker's to fill and no client's
+        // to write.
+        [NOTIFY]: {
+          attributes: {
+            actor_id: "uuid",
+            created_at: "datetime",
+            error: "string",
+            id: "uuid",
+            reason: "enum",
+            status: "enum",
+          },
+          constraints: {},
+          defaults: {},
+          enumValues: {reason: ["created"], status: ["queued", "running"]},
+          frameworkAttributes: ["actor_id", "error", "status"],
+          relationships: {},
+          serverOnly: ["error"],
+        },
         [TASK]: {
           attributes: {
             done: "boolean",
@@ -310,6 +342,151 @@ describe("Model", () => {
     });
   });
 
+  describe("boxResult()", () => {
+    const node = (overrides = {}) => ({includes: {}, row: row(overrides)});
+
+    const term = (overrides = {}) =>
+      Object.assign({cardinality: "set", entity: TASK, include: {}}, overrides);
+
+    it("boxes a count as the number itself", () => {
+      assert.deepStrictEqual(
+        Model.boxResult(term({cardinality: "count"}), 7),
+        Type.integer(7),
+      );
+    });
+
+    it("boxes a set as a list of structs", () => {
+      const boxed = Model.boxResult(term(), [node(), node({id: "t2"})]);
+
+      assert.equal(boxed.data.length, 2);
+      assert.deepStrictEqual(field(boxed.data[1], "id"), Type.bitstring("t2"));
+    });
+
+    it("boxes a single result as one struct", () => {
+      const boxed = Model.boxResult(term({cardinality: "one"}), node());
+
+      assert.deepStrictEqual(
+        field(boxed, "title"),
+        Type.bitstring("Draft copy"),
+      );
+    });
+
+    it("boxes a single result that matched nothing as nil", () => {
+      assert.deepStrictEqual(
+        Model.boxResult(term({cardinality: "one"}), null),
+        Type.nil(),
+      );
+    });
+
+    // The SUB-TERM says what an included node is - a node carries no type of its own - so what is
+    // boxed under a relationship's name is whatever type the include named.
+    it("boxes an included to-one as its own struct", () => {
+      const included = node();
+      included.includes = {
+        project: {includes: {}, row: {id: "p1", name: "Website"}},
+      };
+
+      const boxed = Model.boxResult(
+        term({
+          include: {
+            project: {cardinality: "one", entity: PROJECT, include: {}},
+          },
+        }),
+        [included],
+      );
+
+      assert.deepStrictEqual(
+        field(field(boxed.data[0], "project"), "name"),
+        Type.bitstring("Website"),
+      );
+    });
+
+    it("boxes a to-one include that matched nothing as nil", () => {
+      const included = node();
+      included.includes = {project: null};
+
+      const boxed = Model.boxResult(
+        term({
+          include: {
+            project: {cardinality: "one", entity: PROJECT, include: {}},
+          },
+        }),
+        [included],
+      );
+
+      assert.deepStrictEqual(field(boxed.data[0], "project"), Type.nil());
+    });
+
+    it("boxes an included to-many as a list of structs", () => {
+      const included = node();
+      included.includes = {
+        tags: [{includes: {}, row: {id: "p1", name: "Website"}}],
+      };
+
+      const boxed = Model.boxResult(
+        term({
+          include: {tags: {cardinality: "set", entity: PROJECT, include: {}}},
+        }),
+        [included],
+      );
+
+      assert.equal(field(boxed.data[0], "tags").data.length, 1);
+    });
+
+    it("leaves a relationship the term did not include unasked-for", () => {
+      const boxed = Model.boxResult(term({cardinality: "one"}), node());
+
+      assert.deepStrictEqual(field(boxed, "tags"), Model.notIncluded("tags"));
+    });
+  });
+
+  describe("computeSortKeys()", () => {
+    it("computes a null sort key for a server-only string, whose value never arrives", () => {
+      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: "Łódź"});
+
+      assert.isNull(attributes.internal_notes_sort);
+    });
+
+    it("computes a null sort key for an unset value", () => {
+      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: null});
+
+      assert.isNull(attributes.title_sort);
+    });
+
+    it("computes a sort key for every string attribute", () => {
+      const attributes = Model.computeSortKeys(TASK, {
+        id: "t1",
+        internal_notes: "Ödön",
+        title: "Łódź",
+      });
+
+      assert.equal(attributes.internal_notes_sort, "odon");
+      assert.equal(attributes.title_sort, "lodz");
+    });
+
+    it("computes no sort key for an attribute of another type", () => {
+      const attributes = Model.computeSortKeys(TASK, {done: false, id: "t1"});
+
+      assert.isUndefined(attributes.done_sort);
+      assert.isUndefined(attributes.id_sort);
+    });
+
+    it("computes the sort key of a string attribute", () => {
+      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: "Łódź"});
+
+      assert.equal(attributes.title_sort, "lodz");
+    });
+
+    // Both callers file the object they passed in, so handing back a copy would file a row with
+    // no keys on it.
+    it("writes into the object it was given and returns it", () => {
+      const attributes = {id: "t1", title: "Łódź"};
+
+      assert.strictEqual(Model.computeSortKeys(TASK, attributes), attributes);
+      assert.equal(attributes.title_sort, "lodz");
+    });
+  });
+
   describe("unbox()", () => {
     it("unboxes a string and a uuid as the text they hold", () => {
       assert.equal(
@@ -397,6 +574,34 @@ describe("Model", () => {
           );
         }
       }
+    });
+  });
+
+  describe("unboxRow()", () => {
+    it("leaves a server-only attribute out rather than unboxing its sentinel", () => {
+      const unboxed = Model.unboxRow(TASK, Model.box(TASK, row()));
+
+      assert.notProperty(unboxed, "internal_notes");
+    });
+
+    it("spells a settable field holding nothing as null", () => {
+      const unboxed = Model.unboxRow(TASK, Model.box(TASK, row({title: null})));
+
+      assert.isNull(unboxed.title);
+    });
+
+    it("spells a struct's settable fields the way the wire does", () => {
+      const unboxed = Model.unboxRow(TASK, Model.box(TASK, row()));
+
+      assert.deepStrictEqual(unboxed, {
+        done: false,
+        due_on: "2026-08-16",
+        position: 7,
+        project_id: "p1",
+        status: "open",
+        title: "Draft copy",
+        weight: 1.5,
+      });
     });
   });
 
@@ -551,6 +756,44 @@ describe("Model", () => {
         Model.notIncluded("tags"),
         field(Model.box(TASK, row()), "tags"),
       );
+    });
+  });
+
+  describe("wireDateTime()", () => {
+    it("spells an instant the way a datetime arrives on the wire", () => {
+      const milliseconds = Date.UTC(2026, 7, 29, 14, 32, 7, 481);
+
+      assert.equal(
+        Model.wireDateTime(milliseconds),
+        "2026-08-29T14:32:07.481000Z",
+      );
+    });
+
+    it("spells a whole second with its fraction, so every value has the same shape", () => {
+      const milliseconds = Date.UTC(2026, 7, 29, 14, 32, 7);
+
+      assert.equal(
+        Model.wireDateTime(milliseconds),
+        "2026-08-29T14:32:07.000000Z",
+      );
+    });
+  });
+
+  describe("settableFields()", () => {
+    it("answers the declared attributes and a to-one's reference field, sorted", () => {
+      assert.deepStrictEqual(Model.settableFields(TASK), [
+        "done",
+        "due_on",
+        "position",
+        "project_id",
+        "status",
+        "title",
+        "weight",
+      ]);
+    });
+
+    it("leaves out the attributes a job's framework fills", () => {
+      assert.deepStrictEqual(Model.settableFields(NOTIFY), ["reason"]);
     });
   });
 
