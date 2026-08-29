@@ -62,6 +62,19 @@ function entityTypeOf(entity, verb) {
   return type;
 }
 
+// The revisions the client last saw for the fields this write sets - what the server compares
+// against to decide whether the column moved under it. A moved counter is deliberately absent: a
+// delta is never merged, so there is nothing for it to be based on.
+function basedOn(held, changes) {
+  const revisions = held["$revisions"] ?? {};
+
+  return Object.fromEntries(
+    Object.keys(changes)
+      .filter((name) => name in revisions)
+      .map((name) => [name, revisions[name]]),
+  );
+}
+
 // Placeholders exist only in compiler-registered queries, which the renderer runs with values
 // bound. One reaching a directly executed read has no value and never will.
 function assertNoPlaceholders(term) {
@@ -96,10 +109,34 @@ function placeholderNames(term) {
 // perfectly valid and server code may set it, so what makes it wrong is only that a browser is
 // the one asking. The wire drops the name, so sending it would be malformed rather than rejected -
 // which is why this is caught here, by name, before anything is built.
-function refuseServerOnlyValues(entity, entityType) {
-  const entry = Model.entry(entityType);
+// The edges an update records, each its own entry, in one order however the stages were called -
+// two clients making the same two edges send the same two writes.
+function edgeEntries(entity, entityType, relationshipOps) {
+  const claim = writeClaim(entity);
 
-  for (const name of entry.serverOnly) {
+  return Object.values(relationshipOps.data)
+    .map(([key, op]) => ({
+      claim,
+      id: Bitstring.toText(structField(entity, "id")),
+      op: `${op.value}_relationship`,
+      relationship: key.data[0].value,
+      target_id: Bitstring.toText(key.data[1]),
+      type: entityType,
+    }))
+    .sort((left, right) =>
+      `${left.relationship} ${left.target_id}`.localeCompare(
+        `${right.relationship} ${right.target_id}`,
+      ),
+    );
+}
+
+// One field off a boxed struct - an entity's, or its metadata's, which is a struct too.
+function structField(struct, name) {
+  return struct.data[Type.encodeMapKey(Type.atom(name))][1];
+}
+
+function refuseServerOnlyValues(entity, entityType) {
+  for (const name of Model.entry(entityType).serverOnly) {
     const value = entity.data[Type.encodeMapKey(Type.atom(name))]?.[1];
 
     if (
@@ -107,9 +144,25 @@ function refuseServerOnlyValues(entity, entityType) {
       !Type.isNil(value) &&
       !isServerOnlySentinel(value)
     ) {
-      Interpreter.raiseArgumentError(
-        `:${name} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
-      );
+      refuseServerOnly(entityType, name);
+    }
+  }
+}
+
+// A create is refused for holding a VALUE the client was never shown; an update for NAMING one,
+// which a put does outright. Same reason and same words either way.
+function refuseServerOnly(entityType, name) {
+  Interpreter.raiseArgumentError(
+    `:${name} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
+  );
+}
+
+function refuseServerOnlyNames(entityType, names) {
+  const serverOnly = Model.entry(entityType).serverOnly;
+
+  for (const name of names) {
+    if (serverOnly.has(name)) {
+      refuseServerOnly(entityType, name);
     }
   }
 }
@@ -120,12 +173,73 @@ function isServerOnlySentinel(value) {
   return Model.structTypeName(value) === "Hologram.Entity.ServerOnly";
 }
 
+// A put sets a column and a move shifts it, so the wire takes them apart the way the executor
+// does - and a field named by both was already refused by the stages.
+function splitAttributeOps(attributeOps) {
+  const changes = {};
+  const deltas = {};
+
+  for (const [name, op] of Object.values(attributeOps.data)) {
+    if (op.data[0].value === "put") {
+      changes[name.value] = op.data[1];
+    } else {
+      deltas[name.value] = op.data[1];
+    }
+  }
+
+  return {changes, deltas};
+}
+
+// A moved counter is judged on the value the move ARRIVES AT, which is the only value that is
+// ever true of it - the same rule the server applies to what its statement returns.
+function validateMoves(entityType, held, deltas) {
+  const moved = Object.entries(deltas).map(([name, amount]) => [
+    Type.atom(name),
+    Type.integer(BigInt(held[name]) + amount.value),
+  ]);
+
+  return moved.length === 0
+    ? Type.atom("ok")
+    : Elixir_Hologram_Entity["validate/2"](
+        Type.alias(entityType),
+        Type.map(moved),
+      );
+}
+
 function validateEntityType(query) {
   if (!Type.isAlias(query) || !Model.isEntityType(aliasName(query))) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1`,
     );
   }
+}
+
+// One entry for the columns an update sets and moves - the values it puts, the amounts it moves,
+// and the revisions it saw for what it puts.
+function updateEntry(entity, entityType, id, held, data, deltas) {
+  const entry = {
+    claim: writeClaim(entity),
+    id,
+    op: "update",
+    stamp: Clock.stamp(),
+    type: entityType,
+  };
+
+  if (Object.keys(data).length > 0) {
+    entry.based_on = basedOn(held, data);
+    entry.data = data;
+  }
+
+  if (Object.keys(deltas).length > 0) {
+    entry.deltas = Object.fromEntries(
+      Object.entries(deltas).map(([name, amount]) => [
+        name,
+        Number(amount.value),
+      ]),
+    );
+  }
+
+  return entry;
 }
 
 // The row a create will store, as the wire spells it, beside the struct the verb answers with.
@@ -239,6 +353,74 @@ const Elixir_Hologram_DB = {
       Type.atom("ok"),
       storedEntity(entity, entityType, stamp),
     ]);
+  },
+
+  "update/1": (entity) => {
+    const entityType = entityTypeOf(entity, "update");
+    const metadata = structField(entity, "__meta__");
+    const attributeOps = structField(metadata, "attribute_ops");
+    const relationshipOps = structField(metadata, "relationship_ops");
+
+    if (
+      Object.keys(attributeOps.data).length === 0 &&
+      Object.keys(relationshipOps.data).length === 0
+    ) {
+      Interpreter.raiseArgumentError(
+        "update takes recorded changes - put values with put_attribute, move counters with " +
+          "increment or decrement, and edges with add_relationship or delete_relationship. " +
+          "A field set directly on the struct is not recorded: writing the whole struct " +
+          "would overwrite concurrent changes to fields you didn't touch.",
+      );
+    }
+
+    const id = Bitstring.toText(structField(entity, "id"));
+    const held = LocalDatabase.getRow(entityType, id);
+
+    // The server locks the row and refuses when there is none. This client can only answer for
+    // the rows it holds - which is also what makes a move meaningful, since a delta needs a value
+    // to preview against.
+    if (held === null) {
+      Interpreter.raiseArgumentError(
+        `cannot update ${entityType} - no entity with id "${id}"`,
+      );
+    }
+
+    const {changes, deltas} = splitAttributeOps(attributeOps);
+
+    refuseServerOnlyNames(entityType, Object.keys(changes));
+
+    const batch = currentBatch("update");
+    const boxedChanges = Object.entries(changes).map(([name, value]) => [
+      Type.atom(name),
+      value,
+    ]);
+
+    const validation = Elixir_Hologram_Entity["validate/2"](
+      Type.alias(entityType),
+      Type.map(boxedChanges),
+    );
+
+    if (!Type.isAtom(validation)) {
+      return validation;
+    }
+
+    const movesValidation = validateMoves(entityType, held, deltas);
+
+    if (!Type.isAtom(movesValidation)) {
+      return movesValidation;
+    }
+
+    const data = Model.unboxChanges(entityType, changes);
+
+    if (Object.keys(changes).length > 0 || Object.keys(deltas).length > 0) {
+      batch.append(updateEntry(entity, entityType, id, held, data, deltas));
+    }
+
+    for (const edge of edgeEntries(entity, entityType, relationshipOps)) {
+      batch.append(edge);
+    }
+
+    return Type.atom("ok");
   },
 
   "read/1": (query) => {

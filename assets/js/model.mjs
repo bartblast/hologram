@@ -254,17 +254,27 @@ export default class Model {
   // carries. A reference field has no attribute type of its own and is always a uuid, which is
   // what the server's own field_types/1 says about it.
   static unboxRow(type, struct) {
-    const entry = Model.entry(type);
-    const row = {};
-
-    for (const field of Model.settableFields(type)) {
-      row[field] = Model.unbox(
+    const boxed = Object.fromEntries(
+      Model.settableFields(type).map((field) => [
+        field,
         Model.#field(struct, field),
-        entry.attributes[field] ?? "uuid",
-      );
-    }
+      ]),
+    );
 
-    return row;
+    return Model.unboxChanges(type, boxed);
+  }
+
+  // The same boundary for SOME of a row's fields - what an update sets rather than what a create
+  // carries. A reference field has no attribute type of its own and is always a uuid.
+  static unboxChanges(type, changes) {
+    const entry = Model.entry(type);
+
+    return Object.fromEntries(
+      Object.entries(changes).map(([name, value]) => [
+        name,
+        Model.unbox(value, entry.attributes[name] ?? "uuid"),
+      ]),
+    );
   }
 
   static reset() {

@@ -17,6 +17,7 @@ defineRuntimeGlobals();
 // own database rather than Postgres. The refusals are the server's, word for word.
 describe("Elixir_Hologram_DB", () => {
   const DOC = "MyApp.Doc";
+  const ITEM = "MyApp.Item";
   const NOTIFY = "MyApp.Jobs.Notify";
   const ROLE_GRANT = "Hologram.Auth.RoleGrant";
   const TASK = "MyApp.Task";
@@ -25,7 +26,12 @@ describe("Elixir_Hologram_DB", () => {
 
   const authorize = Elixir_Hologram_Query["authorize/2"];
   const count = Elixir_Hologram_Query["count/1"];
+  const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
+  const decrement = Elixir_Hologram_Query["decrement/3"];
+  const increment = Elixir_Hologram_Query["increment/3"];
+  const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
+  const update = Elixir_Hologram_DB["update/1"];
   const filter = Elixir_Hologram_Query["filter/2"];
   const one = Elixir_Hologram_Query["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
@@ -69,6 +75,16 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: ["api_token"],
         },
+        // A counter with a floor, so a move can be judged on the value it ARRIVES at.
+        [ITEM]: {
+          attributes: {id: "uuid", stock: "integer"},
+          constraints: {stock: {min: Type.integer(0)}},
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          relationships: {},
+          serverOnly: [],
+        },
         // A job type - the three attributes its framework fills are what tells one apart here.
         [NOTIFY]: {
           attributes: {
@@ -106,7 +122,10 @@ describe("Elixir_Hologram_DB", () => {
           defaults: {},
           enumValues: {},
           frameworkAttributes: [],
-          relationships: {},
+          // A to-many adds no settable field, so the entries a create sends are unchanged by it.
+          relationships: {
+            tags: {optional: true, toMany: true, type: "MyApp.Tag"},
+          },
           serverOnly: [],
         },
       },
@@ -335,6 +354,233 @@ describe("Elixir_Hologram_DB", () => {
         () => create(struct(TASK, {done: false, title: "alpha"})),
         HologramBoxedError,
         "create was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
+      );
+    });
+  });
+
+  describe("update/1", () => {
+    const NOW_MS = 1_756_100_000_123;
+    const STAMP = NOW_MS * 1024;
+
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(NOW_MS);
+      Batches.open("todos");
+
+      LocalDatabase.putRow(TASK, {
+        done: false,
+        id: ID_1,
+        title: "Draft copy",
+        $revisions: {done: 10, title: 11},
+      });
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    const held = () => Model.box(TASK, LocalDatabase.getRow(TASK, ID_1));
+
+    const pairs = (values) =>
+      Type.list(
+        values.map(([name, value]) => Type.tuple([Type.atom(name), value])),
+      );
+
+    it("appends one entry for the values it puts", () => {
+      update(
+        putAttribute(held(), pairs([["title", Type.bitstring("Ship it")]])),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, [
+        {
+          based_on: {title: 11},
+          claim: null,
+          data: {title: "Ship it"},
+          id: ID_1,
+          op: "update",
+          stamp: STAMP,
+          type: TASK,
+        },
+      ]);
+    });
+
+    it("says it was based on the revisions it saw, for the fields it sets", () => {
+      update(
+        putAttribute(
+          held(),
+          pairs([
+            ["done", Type.boolean(true)],
+            ["title", Type.bitstring("x")],
+          ]),
+        ),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes[0].based_on, {
+        done: 10,
+        title: 11,
+      });
+    });
+
+    it("answers :ok", () => {
+      assert.deepStrictEqual(
+        update(putAttribute(held(), pairs([["title", Type.bitstring("x")]]))),
+        Type.atom("ok"),
+      );
+    });
+
+    it("carries no deltas key for an update that only puts", () => {
+      update(putAttribute(held(), pairs([["title", Type.bitstring("x")]])));
+
+      assert.notProperty(Batches.current().writes[0], "deltas");
+    });
+
+    it("appends the edges it records, in one order", () => {
+      const entity = addRelationship(
+        addRelationship(held(), Type.atom("tags"), Type.bitstring("g2")),
+        Type.atom("tags"),
+        Type.bitstring("g1"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.target_id]),
+        [
+          ["add_relationship", "g1"],
+          ["add_relationship", "g2"],
+        ],
+      );
+    });
+
+    it("carries the claim a stage recorded on every entry it appends", () => {
+      const entity = authorize(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+        Type.atom("publish"),
+      );
+
+      update(entity);
+
+      for (const write of Batches.current().writes) {
+        assert.deepStrictEqual(write.claim, ["authorize", "publish"]);
+      }
+    });
+
+    it("answers a refusal from the declarations and appends nothing", () => {
+      const result = update(
+        putAttribute(held(), pairs([["title", Type.nil()]])),
+      );
+
+      assert.deepStrictEqual(result.data[0], Type.atom("error"));
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
+    it("appends one entry carrying only the amounts it moves", () => {
+      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      update(increment(item, Type.atom("stock"), Type.integer(2)));
+
+      assert.deepStrictEqual(Batches.current().writes, [
+        {
+          claim: null,
+          deltas: {stock: 2},
+          id: ID_2,
+          op: "update",
+          stamp: STAMP,
+          type: ITEM,
+        },
+      ]);
+    });
+
+    // A delta is never merged, so there is nothing for it to be based on - and the entry says so
+    // by carrying neither data nor based_on.
+    it("says a move was based on nothing", () => {
+      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      update(increment(item, Type.atom("stock"), Type.integer(2)));
+
+      assert.notProperty(Batches.current().writes[0], "based_on");
+      assert.notProperty(Batches.current().writes[0], "data");
+    });
+
+    it("answers a refusal judging a move on the value it arrives at", () => {
+      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 0, $revisions: {stock: 12}});
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      const result = update(
+        decrement(item, Type.atom("stock"), Type.integer(1)),
+      );
+
+      assert.deepStrictEqual(result.data[0], Type.atom("error"));
+
+      assert.deepStrictEqual(
+        result.data[1],
+        Type.map([
+          [
+            Type.atom("stock"),
+            Type.list([Type.tuple([Type.atom("min"), Type.integer(0)])]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
+    it("raises when the struct records no change", () => {
+      assert.throw(
+        () => update(held()),
+        HologramBoxedError,
+        "update takes recorded changes - put values with put_attribute, move counters with increment or decrement, and edges with add_relationship or delete_relationship. A field set directly on the struct is not recorded: writing the whole struct would overwrite concurrent changes to fields you didn't touch.",
+      );
+    });
+
+    it("raises for a row this client does not hold", () => {
+      const absent = Model.box(TASK, {done: false, id: ID_2, title: "x"});
+
+      assert.throw(
+        () =>
+          update(putAttribute(absent, pairs([["title", Type.bitstring("y")]]))),
+        HologramBoxedError,
+        `cannot update MyApp.Task - no entity with id "${ID_2}"`,
+      );
+    });
+
+    it("raises for a put naming a value the client was never shown", () => {
+      LocalDatabase.putRow(DOC, {id: ID_2, title: "x"});
+
+      const doc = Model.box(DOC, LocalDatabase.getRow(DOC, ID_2));
+
+      assert.throw(
+        () =>
+          update(
+            putAttribute(doc, pairs([["api_token", Type.bitstring("s")]])),
+          ),
+        HologramBoxedError,
+        ":api_token of MyApp.Doc is server-only - a browser cannot write it, set it in a command or a job",
+      );
+    });
+
+    it("raises when no action is open", () => {
+      const entity = putAttribute(
+        held(),
+        pairs([["title", Type.bitstring("x")]]),
+      );
+
+      Batches.reset();
+
+      assert.throw(
+        () => update(entity),
+        HologramBoxedError,
+        "update was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
       );
     });
   });
