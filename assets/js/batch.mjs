@@ -44,9 +44,10 @@ export default class Batch {
     this.state = state;
   }
 
-  // The rows this batch has anything to say about, spelled the way the database's own carried
-  // marks are - what the overlay asks in order to fold a row, and what a row's durability is
-  // derived from. An edge names its SOURCE row, which is the row whose relationships changed.
+  // The rows this batch has anything to say about, each keyed "<type> <id>" - what the overlay
+  // asks in order to fold a row. A space tells the two halves apart safely because neither an
+  // entity type's name nor an id can contain one. An edge names its SOURCE row, which is the row
+  // whose relationships changed.
   rowKeys() {
     return new Set(this.writes.map((write) => `${write.type} ${write.id}`));
   }
