@@ -35,6 +35,17 @@ defmodule Hologram.Sync.Session do
   back to a place its rows are known to cover. Without it a batch already routed but not yet
   delivered would fall outside every claim a frame makes.
 
+  `:replica_id` is the browser's own copy of the data, when the client presented one this stream
+  could vouch for - it is what tells this session's frames which of the effects they carry are
+  that browser's own doing. Absent for a client that presented none, and then no frame names a
+  number at all.
+
+  `:applied_seq` is how far that replica's batches had been applied when this session began. A
+  session cannot work it out from the rounds it sees: the first fill is read from the rows as
+  they stand, and the batches behind those values were applied before anything here was watching.
+  Read where the replica is identified and handed over, rather than looked up here, which keeps
+  the database out of this process entirely.
+
   A frame carries the place the client may resume from only once it holds a whole pot: mid-fill
   there is nothing coherent to resume from, and a place handed over early is a claim the client
   cannot honour.
@@ -63,6 +74,7 @@ defmodule Hologram.Sync.Session do
     state = %{
       actor_user_id: Keyword.get(opts, :actor_user_id),
       announced: MapSet.new(),
+      applied_seq: Keyword.get(opts, :applied_seq),
       client: Keyword.fetch!(opts, :client),
       fill_place: Keyword.get(opts, :fill_place),
       gap: gap,
@@ -71,6 +83,7 @@ defmodule Hologram.Sync.Session do
       page_windows: MapSet.new(),
       pending: MapSet.new(),
       places: %{},
+      replica_id: Keyword.get(opts, :replica_id),
       resuming: gap != nil,
       touched: %{}
     }
@@ -116,7 +129,12 @@ defmodule Hologram.Sync.Session do
   end
 
   def handle_info({:round, window_id, version, transactions, place}, state) do
-    updated = remember_place(state, window_id, place)
+    events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
+
+    updated =
+      state
+      |> remember_place(window_id, place)
+      |> remember_applied(events)
 
     {:noreply, deliver(updated, window_id, version, transactions)}
   end
@@ -211,11 +229,12 @@ defmodule Hologram.Sync.Session do
   # account of them. Everything it holds that the gap never touched is still true, and is left
   # alone - which is the whole saving over sending it the lot.
   defp catch_up(state) do
-    state.gap
-    |> Enum.chunk_every(Catchup.rows_per_frame())
-    |> Enum.each(&tell_batch(state, &1))
+    caught_up =
+      state.gap
+      |> Enum.chunk_every(Catchup.rows_per_frame())
+      |> Enum.reduce(state, &tell_batch(&2, &1))
 
-    %{state | gap: nil, touched: %{}}
+    %{caught_up | gap: nil, touched: %{}}
   end
 
   # Each batch claims ITS OWN last place rather than the whole gap's, which is what makes a replay
@@ -223,11 +242,17 @@ defmodule Hologram.Sync.Session do
   # given the rest, instead of starting the gap again. The batches are read in log order, so the
   # place of a batch's last effect is a place everything before it has been applied to.
   defp tell_batch(state, effects) do
-    deltas = Catchup.deltas(effects, state.touched)
+    updated = remember_applied(state, effects)
+    deltas = Catchup.deltas(effects, updated.touched)
 
     if deltas != [] do
-      send(state.client, {:sync_deltas, batch_cursor(state, effects), deltas})
+      send(
+        updated.client,
+        {:sync_deltas, batch_cursor(updated, effects), deltas, updated.applied_seq}
+      )
     end
+
+    updated
   end
 
   defp batch_cursor(state, effects) do
@@ -288,6 +313,42 @@ defmodule Hologram.Sync.Session do
   # one is kept. What a frame may claim is the MINIMUM of these: a window's missed changes can
   # only live in batches after its last applied round, so replaying from the slowest window's
   # place covers every window's possible gap. A fill round carries no place and changes nothing.
+  # How far this replica's own batches are applied in what the client is about to be told, taken
+  # from the effects themselves: every one of them names the batch that wrote it, and the highest
+  # number among this replica's is one the frame's values are known to include.
+  #
+  # Taken FORWARD only. A round carrying none of this replica's writes says nothing about them,
+  # which is not the same as saying they are gone - and the client reads this as "everything up to
+  # here of mine is in", so a number that fell would have it apply landed writes a second time.
+  defp remember_applied(state, events) do
+    highest =
+      events
+      |> Enum.filter(&own_batch?(state, &1))
+      |> Enum.map(& &1.mutation_ref["seq"])
+      |> Enum.max(fn -> nil end)
+
+    %{state | applied_seq: higher_seq(state.applied_seq, highest)}
+  end
+
+  # Whether an effect is one this replica's own writes caused. An effect with no batch behind it -
+  # a command's write, a seed's, the framework's own - belongs to nobody, and a session serving no
+  # replica owns nothing at all.
+  defp own_batch?(%{replica_id: nil}, _event), do: false
+
+  defp own_batch?(state, %{mutation_ref: %{"replica_id" => replica_id}}) do
+    replica_id == state.replica_id
+  end
+
+  defp own_batch?(_state, _event), do: false
+
+  # Nil is "no number", never zero: a replica that has had nothing applied and one this stream
+  # cannot name are both spoken of by saying nothing.
+  defp higher_seq(nil, seq), do: seq
+
+  defp higher_seq(seq, nil), do: seq
+
+  defp higher_seq(left, right), do: max(left, right)
+
   defp remember_place(state, _window_id, nil), do: state
 
   defp remember_place(state, window_id, place) do
@@ -349,7 +410,10 @@ defmodule Hologram.Sync.Session do
     news
     |> split_news()
     |> Enum.each(fn part ->
-      send(state.client, {:sync_deltas, cursor(state), Frame.deltas(part)})
+      send(
+        state.client,
+        {:sync_deltas, cursor(state), Frame.deltas(part), state.applied_seq}
+      )
     end)
 
     state

@@ -149,12 +149,9 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:sync_deltas, cursor, deltas} ->
+      {:sync_deltas, cursor, deltas, applied_seq} ->
         id = System.unique_integer([:positive, :monotonic])
-
-        # TODO: nil until the session names how far this replica's own batches are applied in what
-        # the frame carries.
-        chunk_data = Frame.encode_deltas_envelope(id, cursor, deltas, nil)
+        chunk_data = Frame.encode_deltas_envelope(id, cursor, deltas, applied_seq)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}

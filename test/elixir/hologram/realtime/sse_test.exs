@@ -307,7 +307,7 @@ defmodule Hologram.Realtime.SSETest do
       # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
       deltas = [Frame.put_entity(row)]
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas})
+      send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas, nil})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -318,12 +318,22 @@ defmodule Hologram.Realtime.SSETest do
       assert updated_conn.resp_body =~ ~s["cursor":"g8uxAAAAZQ"]
     end
 
-    # The field is on the wire before anything fills it, so a client can be taught to read it
-    # while every frame still says nothing.
+    test "pushes a frame naming how far the receiving replica's batches are applied" do
+      conn = prepared_test_conn()
+
+      send(self(), {:sync_deltas, "g8uxAAAAZQ", [], 7})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s["applied_seq":7]
+    end
+
+    # A stream serving no replica has no number to give, and the client must read that as nothing
+    # said rather than as nothing applied.
     test "pushes a frame naming no applied batch of the receiving replica" do
       conn = prepared_test_conn()
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", []})
+      send(self(), {:sync_deltas, "g8uxAAAAZQ", [], nil})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
