@@ -10,6 +10,7 @@
 // there is no client-side eviction, a row leaves when the server says it is no longer this
 // client's to hold.
 
+import Model from "./model.mjs";
 import Overlay from "./overlay.mjs";
 
 // What joins a type and an id into one carried-mark key. A NUL cannot occur in either half, so
@@ -147,6 +148,30 @@ export default class LocalDatabase {
     table[row.id] = row;
   }
 
+  // What one frame's rows look like on their way to durable storage: a record per row, holding the
+  // row exactly as the base holds it - plain values, sort keys, $revisions - with the target ids of
+  // its to-many relationships beside it.
+  //
+  // The facts ride WITH their source row rather than in a place of their own, because that is how
+  // they are keyed here: a row leaving takes them with it, and an edge names the row whose
+  // relationships changed. So one row is one record, and one change is one write. A to-one is not
+  // among them - it lives in the row itself, as a reference field.
+  //
+  // A key the base no longer holds answers a record with no row, which is what a frame that
+  // deleted or unsynced one leaves behind. Deciding what to do about that is the reader's.
+  static records(rowKeys) {
+    return Array.from(rowKeys, (rowKey) => {
+      const separator = rowKey.indexOf(" ");
+      const type = rowKey.slice(0, separator);
+      const id = rowKey.slice(separator + 1);
+      const row = LocalDatabase.baseRow(type, id);
+
+      return row === null
+        ? {id, row: null, type}
+        : {facts: LocalDatabase.#toManyFacts(type, id), id, row, type};
+    });
+  }
+
   // The whole current target set for one (source, relationship) - the snapshot statement a row's
   // id list carries, replacing whatever pairs were held before.
   static replaceFacts(type, relationship, sourceId, targetIds) {
@@ -176,6 +201,20 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.#carried = new Set();
+  }
+
+  static #toManyFacts(type, id) {
+    const facts = {};
+
+    for (const [name, relationship] of Object.entries(
+      Model.relationships(type),
+    )) {
+      if (relationship.toMany) {
+        facts[name] = Array.from(LocalDatabase.baseTargetIds(type, name, id));
+      }
+    }
+
+    return facts;
   }
 
   static #targetIds(type, relationship, sourceId) {

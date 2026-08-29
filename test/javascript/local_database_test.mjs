@@ -426,6 +426,106 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("records()", () => {
+    const TAG = "MyApp.Tag";
+    const TASK = "MyApp.Task";
+
+    // The model is read for one thing only - which of a type's relationships are to-many - so what
+    // is baked here is that and the little Model.entry insists on.
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TAG]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            enumValues: {},
+            relationships: {
+              project: {optional: false, toMany: false, type: "MyApp.Project"},
+              tags: {optional: true, toMany: true, type: TAG},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      Model.reset();
+    });
+
+    // The whole record is asserted rather than its facts alone, which is what pins the to-one out:
+    // a project lives in the row as a reference field, and naming it here would store it twice.
+    it("snapshots a held row with its to-many facts", () => {
+      const row = {id: "t1", project_id: "p1", title: "Draft copy"};
+
+      LocalDatabase.putRow(TASK, row);
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", ["g1", "g2"]);
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
+        {facts: {tags: ["g1", "g2"]}, id: "t1", row, type: TASK},
+      ]);
+    });
+
+    it("snapshots a row whose type declares no to-many with empty facts", () => {
+      const row = {id: "g1", name: "urgent"};
+
+      LocalDatabase.putRow(TAG, row);
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TAG} g1`]), [
+        {facts: {}, id: "g1", row, type: TAG},
+      ]);
+    });
+
+    it("answers an empty target set for a to-many nothing was filed under", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`])[0].facts, {
+        tags: [],
+      });
+    });
+
+    it("answers no row for a key the base does not hold", () => {
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
+        {id: "t1", row: null, type: TASK},
+      ]);
+    });
+
+    it("keeps the order of the keys given", () => {
+      LocalDatabase.putRow(TAG, {id: "g1", name: "urgent"});
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const snapshot = LocalDatabase.records([`${TASK} t1`, `${TAG} g1`]);
+
+      assert.deepStrictEqual(
+        snapshot.map((record) => record.id),
+        ["t1", "g1"],
+      );
+    });
+
+    // What goes to durable storage is what the SERVER said, never what this client has written and
+    // not yet had answered - a pending delete's row is still the server's row until it lands.
+    it("reads the base, not the overlay", () => {
+      const row = {id: "t1", title: "Draft copy"};
+
+      LocalDatabase.putRow(TASK, row);
+      pendingDelete(TASK, "t1");
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
+        {facts: {tags: []}, id: "t1", row, type: TASK},
+      ]);
+    });
+  });
+
   describe("replaceFacts()", () => {
     it("records the whole target set", () => {
       LocalDatabase.replaceFacts("MyApp.Project", "tasks", "p1", ["t1", "t2"]);
