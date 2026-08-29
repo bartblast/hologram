@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import AssetPathRegistry from "./asset_path_registry.mjs";
+import Batches from "./batches.mjs";
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
@@ -192,16 +193,43 @@ export default class Hologram {
       vars: {},
     });
 
-    const resultComponentStruct = Interpreter.callNamedFunction(
-      componentModule,
-      Type.atom("action"),
-      Type.list(args),
-      context,
-    );
+    // An action's writes are one batch: opened here, sealed when it returns, discarded when it
+    // raises. That is what makes "the writes of one action" need no bookkeeping from the app - a
+    // DB verb writes to whichever batch is open, and there is one open only while an action runs.
+    Batches.open(target);
+
+    let resultComponentStruct;
+
+    try {
+      resultComponentStruct = Interpreter.callNamedFunction(
+        componentModule,
+        Type.atom("action"),
+        Type.list(args),
+        context,
+      );
+    } catch (error) {
+      // Nothing half-done: an action that raises leaves no rows behind, and dropping the batch is
+      // the whole of putting them back. The error goes on to handleUncaughtError as it always did.
+      Batches.discard();
+
+      throw error;
+    }
 
     if (resultComponentStruct instanceof Promise) {
-      resultComponentStruct.then((resolved) =>
-        Hologram.#processActionResult(resolved, name, target, startTime, epoch),
+      resultComponentStruct.then(
+        (resolved) =>
+          Hologram.#processActionResult(
+            resolved,
+            name,
+            target,
+            startTime,
+            epoch,
+          ),
+        (error) => {
+          Batches.discard();
+
+          throw error;
+        },
       );
     } else {
       Hologram.#processActionResult(
@@ -1839,6 +1867,11 @@ export default class Hologram {
     startTime,
     epoch,
   ) {
+    // Sealed BEFORE the render below, so the one frame that follows shows the action's state
+    // change and its data change together - which is the whole point of the batch boundary being
+    // the action.
+    Batches.close();
+
     let nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
       resultComponentStruct,
@@ -1890,6 +1923,9 @@ export default class Hologram {
     );
 
     Hologram.render();
+
+    // After the render rather than before it: what the user sees does not wait on the network.
+    Batches.flush();
 
     Hologram.#scheduleQueuedInitActions();
 
