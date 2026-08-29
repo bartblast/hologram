@@ -382,18 +382,28 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :new, 3},
     {Hologram.JS, :set, 4},
     {Hologram.JS, :typeof, 2},
-    # The query stages build the PLAIN term the client's kernel evaluates, and validate against
-    # the model baked into the bundle rather than against entity reflection, which no client
-    # carries. Keeping the transpiled originals out of the bundle is what makes that possible.
+    # The query stages build the PLAIN term the client's kernel evaluates, and the write stages
+    # record on the entity struct an action is holding. Both validate against the model baked into
+    # the bundle rather than against entity reflection, which no client carries - and keeping the
+    # transpiled originals out of the bundle is what makes that possible. trust/1 is here to be
+    # REFUSED: the server's authority is not a client's to claim, on a write or on a read.
+    {Hologram.Query, :add_relationship, 3},
+    {Hologram.Query, :authorize, 2},
     {Hologram.Query, :count, 1},
+    {Hologram.Query, :decrement, 3},
+    {Hologram.Query, :delete_relationship, 3},
     {Hologram.Query, :filter, 2},
     {Hologram.Query, :include, 2},
     {Hologram.Query, :include, 3},
+    {Hologram.Query, :increment, 3},
     {Hologram.Query, :limit, 2},
     {Hologram.Query, :normalize, 1},
     {Hologram.Query, :offset, 2},
     {Hologram.Query, :one, 1},
     {Hologram.Query, :order_by, 2},
+    {Hologram.Query, :put_attribute, 2},
+    {Hologram.Query, :put_attribute, 3},
+    {Hologram.Query, :trust, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},

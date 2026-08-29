@@ -724,9 +724,37 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query",
+      "add_relationship/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["add_relationship/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "authorize/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["authorize/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
       "count/1",
       "public",
       ManuallyPortedElixirHologramQuery["count/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "decrement/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["decrement/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "delete_relationship/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["delete_relationship/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -748,6 +776,13 @@ export default class Hologram {
       "include/3",
       "public",
       ManuallyPortedElixirHologramQuery["include/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "increment/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["increment/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -783,6 +818,27 @@ export default class Hologram {
       "order_by/2",
       "public",
       ManuallyPortedElixirHologramQuery["order_by/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "put_attribute/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["put_attribute/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "put_attribute/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["put_attribute/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "trust/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["trust/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
