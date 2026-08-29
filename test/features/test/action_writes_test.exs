@@ -2,7 +2,7 @@ defmodule HologramFeatureTests.ActionWritesTest do
   # async: false - each test truncates the shared table.
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [update: 3]
+  import Hologram.DB.EntityOperations, only: [update: 3, update: 4]
 
   alias Hologram.DB
   alias Hologram.DB.Connection
@@ -355,5 +355,41 @@ defmodule HologramFeatureTests.ActionWritesTest do
     |> assert_text(css("#todos"), "gamma 0")
 
     assert [%Todo{title: "gamma"}] = await_server_todos(1)
+  end
+
+  # Two writers move the same counter, and neither move is a claim about the value, so both count -
+  # which is the whole of what makes a move different from a value. The move from elsewhere here is
+  # NEWER than this browser's, and the pending one still shows on top of it: five from elsewhere
+  # plus one of our own reads as six, before ours has been sent at all.
+  #
+  # Why the row's own revisions cannot answer whether our move is already in the base: when the
+  # server applies a move whose stamp is below the revision the row holds, it advances that
+  # revision by one rather than to the stamp - so a moved counter's revision is never the mover's
+  # own stamp, and the question cannot be asked of it. What answers it is the number of the last
+  # batch of THIS browser that the frame includes.
+  feature "keeps its own move on top of a newer move from elsewhere", %{session: session} do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Vote"))
+    |> assert_text(css("#result"), "voted_1")
+    |> assert_text(css("#todos"), "alpha 1")
+
+    :ok = update(Todo, todo_id, %{}, deltas: %{votes: 5})
+
+    session
+    |> assert_text(css("#todos"), "alpha 6")
+    |> release_mutations()
+    |> await_pending_writes(0)
+    |> assert_text(css("#todos"), "alpha 6")
+
+    assert [%Todo{votes: 6}] = await_server_todos(1)
   end
 end
