@@ -26,21 +26,42 @@ export default class Deltas {
   // overwriting would put back a value nothing will correct, since the server sees nothing new to
   // send. It loses nothing: every change to a row the client already has arrives on the stream,
   // in order.
+  //
+  // Answers the rows this frame WROTE, each keyed "<type> <id>" - what a pending write of this
+  // client's is matched against to learn that the base now holds its effect.
+  //
+  // Written, not merely mentioned. A delta the ingest passes over - a patch for a row the client
+  // does not hold, a carried row it already has - leaves the base exactly as it was, so nothing
+  // about it can be said to be in there. Naming it anyway would take a pending CREATE off the
+  // screen: the fold would skip a write whose row the base does not carry, and nothing would put
+  // it back until the answer arrived.
   static apply(deltas, opts = {}) {
+    const written = new Set();
+
     for (const [op, byType] of Object.entries(deltas)) {
       for (const [type, items] of Object.entries(byType)) {
         for (const item of items) {
-          Deltas.#applyOne(op, type, item, opts);
+          const id = Deltas.#applyOne(op, type, item, opts);
+
+          if (id !== null) {
+            written.add(`${type} ${id}`);
+          }
         }
       }
     }
+
+    return written;
   }
 
+  // Answers the id of the row it wrote, or null when it wrote none.
   static #applyOne(op, type, item, opts) {
     switch (op) {
+      // An edge names its SOURCE row, which is the row whose relationships changed - the same row
+      // a batch's edge write names.
       case "add_relationship":
         LocalDatabase.addFact(type, item.relationship, item.id, item.target_id);
-        break;
+
+        return item.id;
 
       case "del_relationship":
         LocalDatabase.deleteFact(
@@ -49,7 +70,8 @@ export default class Deltas {
           item.id,
           item.target_id,
         );
-        break;
+
+        return item.id;
 
       // A row gone and a row out of reach are told apart nowhere on this side: both mean the
       // client no longer holds it. The server sends only the second - the first is what offline
@@ -57,15 +79,14 @@ export default class Deltas {
       case "del_entity":
       case "unsync_entity":
         LocalDatabase.deleteRow(type, item);
-        break;
+
+        return item;
 
       case "patch_entity":
-        Deltas.#patchRow(type, item);
-        break;
+        return Deltas.#patchRow(type, item);
 
       case "put_entity":
-        Deltas.#putRow(type, item, opts);
-        break;
+        return Deltas.#putRow(type, item, opts);
 
       default:
         throw new HologramRuntimeError(`unknown sync delta op: ${op}`);
@@ -82,7 +103,7 @@ export default class Deltas {
     const held = LocalDatabase.baseRow(type, changes.id);
 
     if (held === null) {
-      return;
+      return null;
     }
 
     const merged = Object.assign({}, held, changes);
@@ -97,6 +118,8 @@ export default class Deltas {
     );
 
     Deltas.#fileRow(type, merged);
+
+    return changes.id;
   }
 
   static #putRow(type, row, opts) {
@@ -104,13 +127,13 @@ export default class Deltas {
 
     if (opts.insertOnly) {
       if (LocalDatabase.baseRow(type, row.id) !== null) {
-        return;
+        return null;
       }
 
       Deltas.#fileRow(type, row);
       LocalDatabase.markCarried(type, row.id);
 
-      return;
+      return row.id;
     }
 
     Deltas.#fileRow(type, row);
@@ -118,6 +141,8 @@ export default class Deltas {
     // The stream has delivered it, so it is no longer a row the client only has because a page
     // carried it - and no longer one the completeness marker should take away.
     LocalDatabase.unmarkCarried(type, row.id);
+
+    return row.id;
   }
 
   static #fileRow(type, row) {
