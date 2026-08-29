@@ -79,6 +79,27 @@ export default class Durability {
     Durability.mode = "indexeddb";
   }
 
+  // The number this browser has counted its batches up to, and where its clock stands.
+  //
+  // The ONE write anything waits for. A batch is identified by its replica and its number, and the
+  // server answers a number it has already seen from its record rather than applying it again - so
+  // a number handed out but never written down is a number the next page load hands out a second
+  // time, and the batch carrying it is answered with what the FIRST batch got. A crash between
+  // sealing a batch and storing its number loses a batch that was never sent, which is the cheap
+  // side of that trade.
+  //
+  // One number and one clock for the whole browser, not one per tab (D1, ruled 2026-08-30): a
+  // person has one replica, and the log should read that way. Until the multi-tab work takes the
+  // number under a lock, two tabs writing at the same moment can hand out the same one.
+  static persistCounter(seq) {
+    return Durability.#write([META], (transaction) => {
+      const meta = transaction.objectStore(META);
+
+      meta.put(seq, "seq");
+      meta.put(Clock.last(), "clock");
+    });
+  }
+
   // One frame, one transaction: the rows it wrote, the place those rows are dated at, and where
   // the clock now stands. Together, because a place is a claim about rows - stored apart, a crash
   // between them would leave a client naming a place it does not hold the rows for, and the server
@@ -108,6 +129,14 @@ export default class Durability {
       }
 
       meta.put(Clock.last(), "clock");
+    });
+  }
+
+  // The identity this browser presents, kept so that the next page load can ignore the fresh pair
+  // it is offered and go on numbering where this one left off.
+  static persistReplica(replica) {
+    return Durability.#write([META], (transaction) => {
+      transaction.objectStore(META).put(replica, "replica");
     });
   }
 

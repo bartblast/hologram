@@ -225,6 +225,47 @@ describe("Durability", () => {
     });
   });
 
+  describe("persistCounter()", () => {
+    it("writes the number and the clock together", async () => {
+      await Durability.open();
+
+      Clock.observe(1_756_100_000_123_004);
+
+      await Durability.persistCounter(41);
+
+      assert.equal(await readMeta("seq"), 41);
+      assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
+    });
+
+    // The sender waits on this one write before a batch goes out, so what it answers has to stay
+    // pending until the number is DOWN - not merely until it has been asked for. Nothing in flight
+    // at the moment it settles is what says so: a promise that resolved early would settle with
+    // the transaction still open, and the read below would pass anyway, having taken long enough
+    // for the write to land on its own.
+    it("answers a promise that settles once the number is stored", async () => {
+      await Durability.open();
+
+      const writing = Durability.persistCounter(41);
+
+      assert.equal(Durability.inFlight, 1);
+
+      await writing;
+
+      assert.equal(Durability.inFlight, 0);
+      assert.equal(await readMeta("seq"), 41);
+    });
+
+    // A browser with nowhere to store still has a sender waiting on this, so it answers something
+    // already settled rather than nothing.
+    it("answers an already-settled promise in memory mode", async () => {
+      await Durability.persistCounter(41);
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
   describe("persistFrame()", () => {
     it("puts a held row's record and deletes a gone row's", async () => {
       await Durability.open();
@@ -304,6 +345,18 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
+  describe("persistReplica()", () => {
+    it("writes the pair", async () => {
+      await Durability.open();
+      await Durability.persistReplica({id: "r1", token: "statement"});
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r1",
+        token: "statement",
+      });
     });
   });
 
