@@ -341,6 +341,38 @@ function changeValues(changes) {
   return Object.fromEntries(pairs.map(([name, value]) => [name.value, value]));
 }
 
+// The create every creating verb shares. Job.create reaches it directly, past DB.create/1's job
+// refusal, exactly as the server's reaches Writer.create past DB.create/1's.
+export function createEntity(entity, entityType) {
+  if (entityType === ROLE_GRANT) {
+    Interpreter.raiseArgumentError(
+      "role grants are written only through grant_role/revoke_role",
+    );
+  }
+
+  refuseServerOnlyValues(entity, entityType);
+
+  const batch = currentBatch("create");
+  const validation = Elixir_Hologram_Entity["validate/1"](entity);
+
+  if (!Type.isAtom(validation)) {
+    return validation;
+  }
+
+  const stamp = Clock.stamp();
+
+  batch.append(writeEntry(entity, entityType, stamp));
+
+  return Type.tuple([Type.atom("ok"), storedEntity(entity, entityType, stamp)]);
+}
+
+// The lines a refused write is described by, shared with Job.create!.
+export function writeRefusal(entityType, violations, values) {
+  return refusalLines(entityType, violations, values);
+}
+
+export {raiseWriteError, structValues};
+
 function raiseWriteError(message, reason) {
   Erlang["error/1"](
     Type.struct("Hologram.WriteError", [
@@ -581,36 +613,15 @@ const Elixir_Hologram_DB = {
   "create/1": (entity) => {
     const entityType = entityTypeOf(entity, "create");
 
-    if (entityType === ROLE_GRANT) {
-      Interpreter.raiseArgumentError(
-        "role grants are written only through grant_role/revoke_role",
-      );
-    }
-
+    // A job's create means more than storing a row - it schedules work to run after the batch
+    // commits - so it has one spelling, the way a role grant has one.
     if (Model.entry(entityType).frameworkAttributes.length > 0) {
       Interpreter.raiseArgumentError(
         `${entityType} is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits`,
       );
     }
 
-    refuseServerOnlyValues(entity, entityType);
-
-    const batch = currentBatch("create");
-    const validation = Elixir_Hologram_Entity["validate/1"](entity);
-
-    if (!Type.isAtom(validation)) {
-      return validation;
-    }
-
-    const stamp = Clock.stamp();
-    const write = writeEntry(entity, entityType, stamp);
-
-    batch.append(write);
-
-    return Type.tuple([
-      Type.atom("ok"),
-      storedEntity(entity, entityType, stamp),
-    ]);
+    return createEntity(entity, entityType);
   },
 
   "delete!/1": (entity) => Elixir_Hologram_DB["delete/1"](entity),
