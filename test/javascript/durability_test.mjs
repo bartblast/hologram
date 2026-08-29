@@ -15,11 +15,14 @@ import {
   assert,
   defineRuntimeGlobals,
   registerWebApis,
+  sinon,
 } from "./support/helpers.mjs";
 
 import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
+import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
+import Replica from "../../assets/js/replica.mjs";
 
 globalThis.indexedDB = fakeIndexedDB;
 
@@ -38,6 +41,8 @@ describe("Durability", () => {
     globalThis.Hologram.sync = {modelHash: "model-a"};
 
     Clock.reset();
+    LocalDatabase.reset();
+    Replica.reset();
     sessionStorage.clear();
 
     await Durability.reset();
@@ -53,6 +58,9 @@ describe("Durability", () => {
     await Durability.reset();
 
     Clock.reset();
+    LocalDatabase.reset();
+    Replica.reset();
+    sinon.restore();
 
     delete globalThis.Hologram.sync;
   });
@@ -117,6 +125,62 @@ describe("Durability", () => {
     row: {id, title},
     type: "MyApp.Task",
   });
+
+  const writeRecords = async (records) => {
+    const {db} = await rawOpen();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("entities", "readwrite");
+      const entities = transaction.objectStore("entities");
+
+      records.forEach((record) => entities.put(record));
+
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve();
+    });
+  };
+
+  // The seed writes before this page has opened the adapter, so it creates the schema itself.
+  // Deliberately NOT folded into rawOpen, which has to stay dumb: a reader that created stores
+  // would let the open() test pass against an upgrade that created none.
+  const createSchema = () =>
+    new Promise((resolve, reject) => {
+      const request = globalThis.indexedDB.open(DATABASE_NAME, 1);
+
+      request.onupgradeneeded = () => {
+        const db = request.result;
+
+        db.createObjectStore("entities", {keyPath: ["type", "id"]});
+        db.createObjectStore("meta");
+      };
+
+      request.onerror = () => reject(request.error);
+
+      request.onsuccess = () => {
+        raw.push(request.result);
+        resolve();
+      };
+    });
+
+  // What a browser looks like one page load in: rows, the place they are dated at, the identity it
+  // was minted, the number it counted to and where its clock stood.
+  const seedPreviousLoad = async (overrides = {}) => {
+    await createSchema();
+    await writeRecords([taskRecord("t1", "Draft copy")]);
+
+    await writeMeta({
+      actorUserId: "u1",
+      clock: 1_756_100_000_123_004,
+      cursor: "place-1",
+      modelHash: "model-a",
+      replica: {id: "r-stored", token: "statement-stored"},
+      seq: 41,
+      ...overrides,
+    });
+
+    LocalDatabase.actorUserId = "u1";
+    Replica.offer({id: "r-fresh", token: "statement-fresh"});
+  };
 
   describe("clear()", () => {
     it("drops the rows and the place, and keeps what this browser did", async () => {
@@ -357,6 +421,145 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+  });
+
+  describe("restore()", () => {
+    it("fills the database with the stored rows and answers the place they are dated at", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), {
+        id: "t1",
+        title: "Draft copy",
+      });
+
+      assert.equal(resumed.cursor, "place-1");
+    });
+
+    it("adopts the stored identity over the page's", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      Durability.restore();
+
+      assert.equal(Replica.id, "r-stored");
+      assert.equal(Replica.token, "statement-stored");
+    });
+
+    // The stored clock has to be AHEAD of this machine's wall clock for the lifting to be
+    // observable at all: a stamp is at least the wall clock, so a stored value in the past is
+    // cleared without anything being resumed. Ahead is also the case that matters - a burst of
+    // stamps inside one millisecond runs ahead of the wall clock, and a clock set back leaves
+    // every earlier stamp above it.
+    it("answers the stored counter and lifts the clock above it", async () => {
+      const stored = Date.now() * 1024 + 10_000_000;
+
+      await seedPreviousLoad({clock: stored});
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.equal(resumed.seq, 41);
+      assert.isAbove(Clock.stamp(), stored);
+    });
+
+    // Rows written by a fill that never finished. Nothing dates them, so the server cannot be
+    // asked what changed since - and a row deleted while this browser was away would never be
+    // taken off the screen.
+    it("drops the rows when no place was stored", async () => {
+      const clearing = sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad({cursor: undefined});
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+      assert.isNull(resumed.cursor);
+      assert.isTrue(clearing.calledOnce);
+    });
+
+    it("drops the rows when the model changed", async () => {
+      const clearing = sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad({modelHash: "model-before-the-deploy"});
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+      assert.isNull(resumed.cursor);
+      assert.isTrue(clearing.calledOnce);
+    });
+
+    // Their rows are what SOMEBODY ELSE was allowed to see, and a resuming stream is told what
+    // moved rather than what this client should no longer be holding - so they would stay.
+    it("drops the rows and the identity when somebody else is signed in", async () => {
+      sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad();
+
+      LocalDatabase.actorUserId = "u2";
+
+      await Durability.open();
+
+      Durability.restore();
+
+      assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+      assert.equal(Replica.id, "r-fresh");
+    });
+
+    // Two visitors on one browser share a session-bound identity the server already treats as one,
+    // so nobody has become anybody.
+    it("treats two anonymous loads as one owner", async () => {
+      await seedPreviousLoad({actorUserId: null});
+
+      LocalDatabase.actorUserId = null;
+
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.equal(resumed.cursor, "place-1");
+      assert.equal(Replica.id, "r-stored");
+    });
+
+    it("writes the page's pair when none was stored", async () => {
+      await seedPreviousLoad({replica: undefined});
+      await Durability.open();
+
+      Durability.restore();
+
+      assert.equal(Replica.id, "r-fresh");
+
+      await Durability.persistReplica(Replica.current());
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r-fresh",
+        token: "statement-fresh",
+      });
+    });
+
+    it("remembers who this page belongs to and what model it speaks", async () => {
+      await seedPreviousLoad({actorUserId: "u1", modelHash: "model-before"});
+
+      await Durability.open();
+
+      Durability.restore();
+
+      await Durability.persistCounter(41);
+
+      assert.equal(await readMeta("modelHash"), "model-a");
+      assert.equal(await readMeta("actorUserId"), "u1");
+    });
+
+    it("answers nothing to resume from in memory mode", async () => {
+      const resumed = Durability.restore();
+
+      assert.deepStrictEqual(resumed, {cursor: null, seq: 0});
     });
   });
 

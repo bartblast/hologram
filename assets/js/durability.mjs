@@ -1,7 +1,9 @@
 "use strict";
 
 import Clock from "./clock.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
+import Replica from "./replica.mjs";
 
 // What this browser keeps between page loads, and where it keeps it.
 //
@@ -38,6 +40,11 @@ export default class Durability {
   static mode = "memory";
 
   static #db = null;
+
+  // What open() read, held until restore() consumes it. Read at open so that restore has nothing
+  // to await: it runs after the page has mounted, and everything after the mount happens in one
+  // continuation, before an action could dispatch and write.
+  static #loaded = null;
 
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
@@ -77,6 +84,12 @@ export default class Durability {
     Durability.#db.onversionchange = () => Durability.#fail("version change");
 
     Durability.mode = "indexeddb";
+
+    try {
+      Durability.#loaded = await Durability.#load();
+    } catch (error) {
+      return Durability.#memoryMode(`read failed (${error})`);
+    }
   }
 
   // The number this browser has counted its batches up to, and where its clock stands.
@@ -140,6 +153,62 @@ export default class Durability {
     });
   }
 
+  // Takes up what the previous page load left, and answers the two things the runtime resumes
+  // from: the place to greet the stream with, and the number to count batches on from.
+  //
+  // SYNCHRONOUS, and called after the page has mounted rather than before. After, because the rows
+  // the page itself carried are the freshest thing this client has - the server rendered them for
+  // this request - so they go in first and a stored row fills only what the page said nothing
+  // about. Synchronous, because everything the mount leads to runs in one continuation, which is
+  // what puts this ahead of the first local write without anything having to race.
+  //
+  // The rows are dropped rather than used in three cases, and each is a case where showing them
+  // would be showing something untrue. What this browser DID - its identity, its counter, its
+  // clock - survives all three: those are not the server's to take away, and reusing a number or
+  // restarting a clock low is how a write gets answered by the wrong batch or read as moved.
+  static restore() {
+    const loaded = Durability.#loaded;
+
+    Durability.#loaded = null;
+
+    if (loaded === null) {
+      return {cursor: null, seq: 0};
+    }
+
+    // Before anything else and whatever happens below: a stamp this browser issues has to be above
+    // every stamp it issued or was told about on any earlier load.
+    Clock.observe(loaded.clock);
+
+    const ownerChanged =
+      loaded.actorUserId !== (LocalDatabase.actorUserId ?? null);
+
+    const refusal = Durability.#refusal(loaded, ownerChanged);
+
+    if (refusal === null) {
+      LocalDatabase.restore(loaded.records);
+    } else {
+      Logger.debug(
+        `Hologram: the stored rows were dropped (${refusal}), this page fills from nothing`,
+      );
+
+      Durability.clear();
+    }
+
+    // A page load offers a fresh pair and a browser already holding one ignores it - re-minting per
+    // load would abandon the numbering its batches are identified by. Somebody else signing in is
+    // the one case where the held pair goes too: it was minted for the previous owner, or for a
+    // session that is no longer theirs.
+    if (loaded.replica !== null && !ownerChanged) {
+      Replica.adopt(loaded.replica);
+    } else {
+      Durability.persistReplica(Replica.current());
+    }
+
+    Durability.#rememberOwner(loaded);
+
+    return {cursor: refusal === null ? loaded.cursor : null, seq: loaded.seq};
+  }
+
   // Drops the database entirely and puts this module back as it starts. For tests - nothing in the
   // framework throws away what a browser has kept.
   static async reset() {
@@ -183,12 +252,91 @@ export default class Durability {
     Durability.#close();
   }
 
+  // Everything the previous page load left, in one read - the six things `meta` holds and every
+  // row record. Absences are normalized here rather than at every reader: a key nothing was ever
+  // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
+  static async #load() {
+    const transaction = Durability.#db.transaction(
+      [ENTITIES, META],
+      "readonly",
+    );
+
+    const entities = transaction.objectStore(ENTITIES);
+    const meta = transaction.objectStore(META);
+
+    const [actorUserId, clock, cursor, modelHash, records, replica, seq] =
+      await Promise.all([
+        Durability.#request(meta.get("actorUserId")),
+        Durability.#request(meta.get("clock")),
+        Durability.#request(meta.get("cursor")),
+        Durability.#request(meta.get("modelHash")),
+        Durability.#request(entities.getAll()),
+        Durability.#request(meta.get("replica")),
+        Durability.#request(meta.get("seq")),
+      ]);
+
+    return {
+      actorUserId: actorUserId ?? null,
+      clock: clock ?? 0,
+      cursor: cursor ?? null,
+      modelHash: modelHash ?? null,
+      records: records ?? [],
+      replica: replica ?? null,
+      seq: seq ?? 0,
+    };
+  }
+
   static #memoryMode(reason) {
     Logger.debug(
       `Hologram: no durable storage (${reason}), the database lives in memory for this page`,
     );
 
     Durability.#close();
+  }
+
+  // Why the stored rows cannot be used, or nothing when they can.
+  //
+  // No place is the sharpest of the three: rows were written by a fill that never finished, and a
+  // base with no place is not resumable at all - the server would fill it from scratch and never
+  // say which of the held rows it is no longer sending, so a row deleted while this browser was
+  // away would stay on the screen for as long as the store lived.
+  //
+  // A model changed under them makes them unreadable by this bundle, and an owner changed makes
+  // them somebody else's - and the second is not corrected by the stream either, since a resuming
+  // client is told what MOVED, never what it should no longer be holding.
+  static #refusal(loaded, ownerChanged) {
+    if (loaded.cursor === null) {
+      return "no place to resume from";
+    }
+
+    if (loaded.modelHash !== globalThis.Hologram.sync.modelHash) {
+      return "the model changed";
+    }
+
+    if (ownerChanged) {
+      return "somebody else is signed in";
+    }
+
+    return null;
+  }
+
+  // Who this page belongs to and what model it speaks, so the next load can ask both questions of
+  // what it finds. Written only when one of them has moved, which is a page load in a new session
+  // or the first after a deploy - never on the ordinary case.
+  static #rememberOwner(loaded) {
+    const actorUserId = LocalDatabase.actorUserId ?? null;
+    const modelHash = globalThis.Hologram.sync.modelHash;
+
+    if (loaded.actorUserId === actorUserId && loaded.modelHash === modelHash) {
+      return;
+    }
+
+    Durability.#write([META], (transaction) => {
+      const meta = transaction.objectStore(META);
+
+      meta.put(actorUserId, "actorUserId");
+      meta.put(modelHash, "modelHash");
+    });
   }
 
   static #request(request) {
