@@ -1,0 +1,194 @@
+defmodule HologramFeatureTests.ActionWritesTest do
+  # async: false - each test truncates the shared table.
+  use HologramFeatureTests.TestCase, async: false
+
+  alias Hologram.DB
+  alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
+  alias HologramFeatureTests.ActionWritesPage
+  alias HologramFeatureTests.Entities.Todo
+
+  # Todo references nothing, so it truncates alone - no other table's foreign keys reach it.
+  setup do
+    await_evaluator_drain()
+
+    table = ~s("hologram_data"."#{Mapper.table_name(Todo)}")
+
+    {:ok, _result} = Connection.query("TRUNCATE #{table}", [])
+
+    :ok
+  end
+
+  # Polls the SERVER until it holds what the batch should have put there. The row arriving is the
+  # confirmation - 09a exposes no per-row durability to assert on instead.
+  defp await_server_todos(expected_count) do
+    Enum.reduce_while(1..100, [], fn _attempt, _acc ->
+      todos = Enum.sort_by(DB.read(Todo), & &1.title)
+
+      if length(todos) == expected_count do
+        {:halt, todos}
+      else
+        Process.sleep(50)
+        {:cont, todos}
+      end
+    end)
+  end
+
+  # Polls the queue's own window for the refusal, which is the deterministic point at which the
+  # rollback has happened - asserting "the row appeared and then vanished" would race the round
+  # trip in whichever direction the machine happened to be faster.
+  defp await_rejected(session) do
+    Enum.reduce_while(1..100, [], fn _attempt, _acc ->
+      rejected =
+        script_result(session, "return globalThis.Hologram.writes.rejected();")
+
+      if rejected == [] do
+        Process.sleep(50)
+        {:cont, rejected}
+      else
+        {:halt, rejected}
+      end
+    end)
+  end
+
+  # Proves the DOM changed without the page being fetched again - a reload would take this marker
+  # with it, so a passing assertion after one would say nothing.
+  defp mark_this_page_load(session) do
+    execute_script(session, "globalThis.__thisPageLoad = 'held';")
+  end
+
+  defp assert_same_page_load(session) do
+    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
+  end
+
+  defp page_replica_id(session) do
+    script_result(session, "return globalThis.Hologram.replicaId;")
+  end
+
+  # What the server kept of this browser's batches, scoped to the browser that sent them.
+  defp record_rows(replica_id) do
+    statement = """
+    SELECT "result", "seq" FROM "hologram_system"."mutation"
+    WHERE "replica_id" = $1 ORDER BY "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
+
+    Enum.map(rows, fn [result, seq] -> %{result: result, seq: seq} end)
+  end
+
+  feature "writes a row into the list before it is sent, and the server receives it", %{
+    session: session
+  } do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> mark_this_page_load()
+
+    session
+    |> click(button("Add one todo"))
+    |> assert_text(css("#result"), "created_alpha")
+    |> assert_text(css("#todos"), "alpha 0")
+    |> assert_same_page_load()
+
+    assert [%Todo{title: "alpha", done: false, votes: 0}] = await_server_todos(1)
+  end
+
+  feature "ships the writes of one action as a single batch", %{session: session} do
+    session = visit(session, ActionWritesPage)
+
+    session
+    |> click(button("Add two todos"))
+    |> assert_text(css("#result"), "created_two")
+
+    assert [%Todo{title: "alpha"}, %Todo{title: "beta"}] = await_server_todos(2)
+
+    assert [%{seq: 1}] = record_rows(page_replica_id(session))
+  end
+
+  feature "reads its own write inside the action that made it", %{session: session} do
+    session
+    |> visit(ActionWritesPage)
+    |> click(button("Read own write"))
+    |> assert_text(css("#result"), "read_alpha")
+
+    assert [%Todo{title: "alpha"}] = await_server_todos(1)
+  end
+
+  feature "refuses a value the declarations reject without sending anything", %{session: session} do
+    session = visit(session, ActionWritesPage)
+
+    session
+    |> click(button("Refuse an empty title"))
+    |> assert_text(css("#result"), "refused_min_length_1")
+
+    assert DB.read(Todo) == []
+    assert record_rows(page_replica_id(session)) == []
+  end
+
+  feature "puts a value and moves a counter", %{session: session} do
+    session = visit(session, ActionWritesPage)
+
+    session
+    |> click(button("Add one todo"))
+    |> assert_text(css("#todos"), "alpha 0")
+    |> click(button("Vote"))
+    |> assert_text(css("#result"), "voted_1")
+    |> click(button("Rename the todo"))
+    |> assert_text(css("#result"), "renamed_beta")
+    |> assert_text(css("#todos"), "beta 1")
+
+    assert [%Todo{title: "beta", votes: 1}] = await_server_todos(1)
+  end
+
+  feature "deletes a row", %{session: session} do
+    session = visit(session, ActionWritesPage)
+
+    session
+    |> click(button("Add one todo"))
+    |> assert_text(css("#todos"), "alpha 0")
+
+    assert [%Todo{title: "alpha"}] = await_server_todos(1)
+
+    session
+    |> click(button("Delete the todo"))
+    |> assert_text(css("#result"), "deleted")
+    |> refute_has(css("#todos li"))
+
+    assert await_server_todos(0) == []
+  end
+
+  feature "discards the writes of an action that raises", %{session: session} do
+    session = visit(session, ActionWritesPage)
+
+    assert_js_error(session, "boom", fn ->
+      click(session, button("Raise after adding"))
+    end)
+
+    refute_has(session, css("#todos li"))
+
+    assert DB.read(Todo) == []
+    assert record_rows(page_replica_id(session)) == []
+  end
+
+  feature "rolls a refused batch back and keeps what the server said", %{session: session} do
+    %{slug: "taken", title: "seeded"}
+    |> Todo.new()
+    |> DB.create!()
+
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> assert_text(css("#todos"), "seeded 0")
+
+    session
+    |> click(button("Add a todo with a taken slug"))
+    |> assert_text(css("#result"), "created_dup")
+
+    assert [%{"seq" => 1, "write" => 0}] = await_rejected(session)
+
+    refute_text(session, css("#todos"), "dup")
+
+    assert [%Todo{title: "seeded"}] = DB.read(Todo)
+  end
+end
