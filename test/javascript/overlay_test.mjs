@@ -4,6 +4,7 @@ import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
+import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 
@@ -268,6 +269,34 @@ describe("Overlay", () => {
       assert.equal(row.votes, 7);
     });
 
+    // The frame carrying this write has already been applied, so the base holds its effect as the
+    // server resolved it - folding it on top again would add the same move a second time.
+    it("passes over a write whose frame has already arrived", () => {
+      const batch = pushed(updateWrite({deltas: {votes: 2}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      const row = base({votes: 5});
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
+    });
+
+    // A batch's writes can reach two windows and come back as two frames, so one of its rows can
+    // be in the base while the other is still only this client's.
+    it("applies a write on a row no frame has carried, beside one that has", () => {
+      const batch = pushed(
+        updateWrite({data: {title: "Landed"}}),
+        updateWrite({data: {title: "Still mine"}, id: "t2"}),
+      );
+
+      batch.land(new Set([`${TODO} t1`]));
+
+      const landedRow = base();
+      const pendingRow = base({id: "t2"});
+
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", landedRow), landedRow);
+      assert.equal(Overlay.foldRow(TODO, "t2", pendingRow).title, "Still mine");
+    });
+
     it("stamps an update's updated_at from the write", () => {
       pushed(updateWrite({data: {title: "Ship it"}}));
 
@@ -428,6 +457,15 @@ describe("Overlay", () => {
       assert.equal(Overlay.foldTable(TODO, table(base())).t1.title, "Ship it");
     });
 
+    it("passes over a write whose frame has already arrived", () => {
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      const held = base();
+
+      assert.strictEqual(Overlay.foldTable(TODO, table(held))[held.id], held);
+    });
+
     it("leaves the base table and its rows untouched", () => {
       const row = base();
       const held = table(row);
@@ -524,6 +562,23 @@ describe("Overlay", () => {
       assert.strictEqual(Overlay.foldTargetIds(TODO, "tags", "t1", held), held);
     });
 
+    it("passes over an edge whose frame has already arrived", () => {
+      const batch = pushed({
+        id: "t1",
+        op: "add_relationship",
+        relationship: "tags",
+        target_id: "g2",
+        type: TODO,
+      });
+
+      batch.land(new Set([`${TODO} t1`]));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(TODO, "tags", "t1", new Set(["g1"])),
+        new Set(["g1"]),
+      );
+    });
+
     it("leaves the base set untouched", () => {
       const held = new Set(["g1"]);
 
@@ -541,6 +596,52 @@ describe("Overlay", () => {
       assert.isTrue(Overlay.names(TODO, "t1"));
       assert.isFalse(Overlay.names(TODO, "t2"));
       assert.isFalse(Overlay.names("MyApp.Other", "t1"));
+    });
+  });
+
+  describe("promote()", () => {
+    beforeEach(() => {
+      LocalDatabase.reset();
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    // The frame carrying this write has already been applied, so the base holds the row as the
+    // server left it. Folding the write in again would add the move a second time and write that
+    // number down for good - no later frame corrects it, because the server has nothing new to
+    // say about a row nothing has touched since.
+    it("does not promote a write whose frame has already arrived", () => {
+      LocalDatabase.putRow(TODO, base({votes: 5}));
+
+      const batch = pushed(updateWrite({deltas: {votes: 2}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 5);
+    });
+
+    it("promotes a write no frame has carried", () => {
+      LocalDatabase.putRow(TODO, base({votes: 5}));
+
+      const batch = pushed(updateWrite({deltas: {votes: 2}}));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 7);
+    });
+
+    it("drops the batch's layer either way", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+      batch.land(new Set([`${TODO} t1`]));
+
+      Overlay.promote(batch, {});
+
+      assert.isFalse(Overlay.names(TODO, "t1"));
     });
   });
 

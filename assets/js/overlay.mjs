@@ -61,11 +61,11 @@ export default class Overlay {
     const table = Object.assign({}, base);
 
     for (const batch of Overlay.#batches) {
-      for (const write of batch.writes) {
-        if (write.type === type) {
+      batch.writes.forEach((write, index) => {
+        if (write.type === type && !batch.isLanded(index)) {
           Overlay.#fold(table, type, write);
         }
-      }
+      });
     }
 
     return table;
@@ -86,6 +86,10 @@ export default class Overlay {
     return targetIds;
   }
 
+  // Whether any pending batch has anything to say about this row - which INCLUDES a write whose
+  // frame has already come back. Such a write no longer folds, but its batch is still unanswered
+  // and still the user's own work, so a row it names is still a row a pending batch names. What
+  // it is read for is durability and eviction, neither of which is a question about the fold.
   static names(type, id) {
     const key = `${type} ${id}`;
 
@@ -104,6 +108,13 @@ export default class Overlay {
   // base keeps what it has and the winner arrives with the frame.
   static promote(batch, dropped) {
     batch.writes.forEach((write, index) => {
+      // A write whose frame has already arrived is in the base as the server resolved it, so
+      // there is nothing left to move - and folding it in again would apply a moved counter a
+      // second time, which is exactly what the frame arriving first would otherwise cost.
+      if (batch.isLanded(index)) {
+        return;
+      }
+
       Overlay.#promoteWrite(write, dropped[String(index)] ?? {});
     });
 
@@ -351,7 +362,10 @@ export default class Overlay {
   // Every pending write naming one row, in the order they were made.
   static #writesFor(type, id) {
     return Overlay.#batches.flatMap((batch) =>
-      batch.writes.filter((write) => write.type === type && write.id === id),
+      batch.writes.filter(
+        (write, index) =>
+          write.type === type && write.id === id && !batch.isLanded(index),
+      ),
     );
   }
 }
