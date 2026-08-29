@@ -14,6 +14,7 @@ import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -31,6 +32,7 @@ describe("Batches", () => {
 
   afterEach(() => {
     Batches.reset();
+    Replica.reset();
     sinon.restore();
   });
 
@@ -381,6 +383,76 @@ describe("Batches", () => {
 
       assert.equal(Batches.pending[0].state, "pending");
       assert.deepStrictEqual(Batches.rejected, []);
+    });
+
+    // The 403 is about the identity, never the writes - so it is the one no-verdict answer worth
+    // doing something about rather than waiting out.
+    it("presents the page's pair and sends the batch again after a 403", async () => {
+      const persisting = sinon.stub(Durability, "persistReplica");
+      const reconnecting = sinon.stub(Sse, "reconnect");
+
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+      sendStub.onFirstCall().resolves({httpStatus: 403, status: "failed"});
+      sendStub.onSecondCall().resolves(confirmed());
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.equal(Replica.id, "r-fresh");
+
+      assert.isTrue(
+        persisting.calledOnceWithExactly({
+          id: "r-fresh",
+          token: "statement-fresh",
+        }),
+      );
+
+      assert.isTrue(reconnecting.calledOnce);
+      assert.equal(sendStub.callCount, 2);
+      assert.equal(sendStub.secondCall.args[0].seq, 1);
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    // The page's own pair was the one refused, so there is nowhere left to go - which is what a
+    // session that changed after this page loaded looks like.
+    it("leaves the batch pending after a 403 it has no other pair to answer", async () => {
+      sinon.stub(Sse, "reconnect");
+
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+      sendStub.resolves({httpStatus: 403, status: "failed"});
+
+      const batch = sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.equal(sendStub.callCount, 1);
+      assert.equal(batch.state, "pending");
+      assert.deepStrictEqual(Batches.pending, [batch]);
+    });
+
+    // The pair's twin: a dropped connection says nothing about who this client is, so what it is
+    // holding stays. Spending the page's fresh pair on a network blip would leave nothing to
+    // answer a real refusal with, and would restart the stream for no reason.
+    it("leaves the identity alone when a send fails for any other reason", async () => {
+      const reconnecting = sinon.stub(Sse, "reconnect");
+
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+      sendStub.resolves({httpStatus: 503, status: "failed"});
+
+      const batch = sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.equal(Replica.id, "r-stored");
+      assert.isFalse(reconnecting.called);
+      assert.equal(sendStub.callCount, 1);
+      assert.equal(batch.state, "pending");
     });
 
     it("keeps a failed batch's rows on screen", async () => {

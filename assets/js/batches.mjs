@@ -6,6 +6,7 @@ import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Overlay from "./overlay.mjs";
+import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
@@ -142,6 +143,27 @@ export default class Batches {
         // are the next action's close and the connection coming back - no timer, since neither a
         // base delay nor a cap has a bound anyone can state yet.
         if (answer.status === "failed") {
+          // A 403 says the IDENTITY was refused, before the writes were read - a stored statement
+          // stops verifying when the session it was bound to is gone, and after the server's
+          // signing key is rotated every stored one does. Presenting it again would be refused
+          // again forever, and the recovery is a pair this page is already holding: the fresh one
+          // the server minted for this render.
+          //
+          // The stream is restarted so the server serves the NEW replica - the one this stream was
+          // opened for is the refused one, and its frames would name no watermark, which is what
+          // stops this client applying its own writes twice. The batch keeps its number: nothing
+          // has been recorded against the new identity, so any number is free under it.
+          //
+          // Once per page load. `refresh` answers false when the fresh pair is already the one in
+          // use, which is the case where the session changed after this page loaded and there is
+          // nothing here that can help.
+          if (answer.httpStatus === 403 && Replica.refresh()) {
+            Durability.persistReplica(Replica.current());
+            Sse.reconnect();
+
+            continue;
+          }
+
           batch.mark("pending");
 
           console.warn(
