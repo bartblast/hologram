@@ -40,7 +40,7 @@ defmodule Hologram.Mutation.DedupTest do
       :go -> :ok
     end
 
-    Record.complete!(replica_id, 1, %{"status" => "confirmed", "dropped" => %{}})
+    Record.complete!(replica_id, 1, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}})
   end
 
   defp on_own_session(scratch_opts, fun) do
@@ -123,11 +123,13 @@ defmodule Hologram.Mutation.DedupTest do
     send(first.pid, :go)
 
     assert Task.await(first) == {:ok, :ok}
-    assert Task.await(second) == {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+    assert Task.await(second) ==
+             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
     assert route(scratch, fn -> Record.find(replica_id, 1) end) == %{
              actor_id: nil,
-             result: %{"status" => "confirmed", "dropped" => %{}}
+             result: %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
            }
 
     assert route(scratch, fn -> record_row_count() end) == 1

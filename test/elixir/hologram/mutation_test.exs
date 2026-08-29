@@ -227,7 +227,7 @@ defmodule Hologram.MutationTest do
       id = Entity.generate_id()
 
       assert run(envelope([publish_write(id)]), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       assert EntityOperations.get(PolicyModule2, id).public == true
     end
@@ -283,7 +283,8 @@ defmodule Hologram.MutationTest do
         server()
       )
 
-      assert Record.find(replica_id, 3).result == %{"status" => "confirmed", "dropped" => %{}}
+      assert Record.find(replica_id, 3).result ==
+               %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
     end
 
     test "answers a repeated batch from the record without applying it again" do
@@ -338,7 +339,7 @@ defmodule Hologram.MutationTest do
         )
 
       assert run(envelope([write]), server(user.id)) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       reloaded = EntityOperations.get(PolicyModule1, row.id)
 
@@ -347,7 +348,7 @@ defmodule Hologram.MutationTest do
       assert reloaded.__meta__.revisions.public == row.__meta__.revisions.public
     end
 
-    test "drops a column the row holds a newer revision of and names the value that lost" do
+    test "drops a column the row holds a newer revision of, naming what lost and what stands" do
       user = create_user("outrun@example.com")
       row = create_archivable(user, priority: 5)
       newer = row.__meta__.revisions.priority + 1_000_000
@@ -360,8 +361,14 @@ defmodule Hologram.MutationTest do
           stamp: newer - 1
         )
 
-      assert run(envelope([write]), server(user.id)) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{"0" => %{"priority" => 9}}}}
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => 9}}
+
+      # What WON, so a client can show it the moment the answer lands rather than waiting for the
+      # frame that carries it.
+      assert answer["kept"]["0"]["priority"] == 5
+      assert answer["kept"]["0"]["$revisions"]["priority"] == newer
 
       assert EntityOperations.get(PolicyModule1, row.id).priority == 5
     end
@@ -403,7 +410,7 @@ defmodule Hologram.MutationTest do
         )
 
       assert run(envelope([moved]), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       reloaded = EntityOperations.get(Module20, row.id)
 
@@ -416,8 +423,10 @@ defmodule Hologram.MutationTest do
           stamp: stale
         )
 
-      assert run(envelope([put], seq: 2), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{"0" => %{"count" => 9}}}}
+      assert {:ok, answer} = run(envelope([put], seq: 2), server())
+
+      assert answer["dropped"] == %{"0" => %{"count" => 9}}
+      assert answer["kept"]["0"]["count"] == 3
 
       assert EntityOperations.get(Module20, row.id).count == 3
     end
@@ -433,10 +442,10 @@ defmodule Hologram.MutationTest do
         )
 
       assert run(envelope([write]), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       assert run(envelope([write], replica_id: Entity.generate_id()), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       assert EntityOperations.get(Module20, row.id).count == 3
     end
@@ -453,7 +462,7 @@ defmodule Hologram.MutationTest do
         )
 
       assert run(envelope([write]), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       reloaded = EntityOperations.get(Module20, row.id)
 
@@ -488,13 +497,13 @@ defmodule Hologram.MutationTest do
           stamp: stamp_above(row)
         )
 
-      assert {:ok, %{"status" => "confirmed", "dropped" => %{}}} =
+      assert {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}} =
                run(envelope([write]), server(user.id))
 
       assert EntityOperations.get(PolicyModule1, row.id) == nil
     end
 
-    test "drops a delete when a column moved past it and names every column of the row" do
+    test "drops a delete when a column moved past it, naming every column and the row that stands" do
       user = create_user("blocked@example.com")
       row = create_archivable(user, priority: 5)
       newer = row.__meta__.revisions.priority + 1_000_000
@@ -508,8 +517,15 @@ defmodule Hologram.MutationTest do
           stamp: newer - 1
         )
 
-      assert run(envelope([write]), server(user.id)) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{"0" => %{"priority" => nil}}}}
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => nil}}
+
+      # A dropped delete kept the WHOLE row, which is what tells a client the row is still there -
+      # its own copy is already gone, and a patch for a row it does not hold is passed over.
+      assert answer["kept"]["0"]["id"] == row.id
+      assert answer["kept"]["0"]["priority"] == 5
+      assert answer["kept"]["0"]["$revisions"]["priority"] == newer
 
       assert EntityOperations.get(PolicyModule1, row.id) != nil
     end
@@ -518,7 +534,7 @@ defmodule Hologram.MutationTest do
       write = delete_write(Module2, Entity.generate_id())
 
       assert run(envelope([write]), server()) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
     end
 
     test "applies an added edge" do
@@ -590,7 +606,7 @@ defmodule Hologram.MutationTest do
       id = Entity.generate_id()
 
       assert run(envelope([create_write(JobModule1, id, %{})]), server(user.id)) ==
-               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
       job = EntityOperations.get(JobModule1, id)
 
@@ -726,7 +742,9 @@ defmodule Hologram.MutationTest do
       assert {:ok, %{"status" => "confirmed"}} = run(raw, server())
 
       assert record_envelope(replica_id, 1) == nil
-      assert Record.find(replica_id, 1).result == %{"status" => "confirmed", "dropped" => %{}}
+
+      assert Record.find(replica_id, 1).result ==
+               %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
     end
 
     test "leaves no effect of a refused batch" do

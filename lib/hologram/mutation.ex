@@ -24,6 +24,7 @@ defmodule Hologram.Mutation do
   alias Hologram.Mutation.Ref
   alias Hologram.Mutation.Write
   alias Hologram.Server
+  alias Hologram.Sync.WireData
 
   # How far ahead of this node's wall clock a writer's stamp may run. A stamp is stored as given -
   # rewriting it would break the chain its writer's next write is based on - so a clock set far
@@ -110,8 +111,8 @@ defmodule Hologram.Mutation do
 
   defp apply_delete(write, row, index) do
     case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
-      :delete -> run_delete(write, index)
-      :drop -> lost_values(write, stored_columns(row))
+      :delete -> {run_delete(write, index), nil}
+      :drop -> {lost_values(write, stored_columns(row)), stringify(WireData.row(row))}
     end
   end
 
@@ -163,7 +164,7 @@ defmodule Hologram.Mutation do
       |> Writer.create()
 
     case result do
-      {:ok, _entity} -> %{}
+      {:ok, _entity} -> {%{}, nil}
       {:error, violations} -> Connection.rollback({:rejected, index, violations})
     end
   end
@@ -179,13 +180,13 @@ defmodule Hologram.Mutation do
 
     apply_changes(write, changes, index)
 
-    lost_values(write, lost)
+    {lost_values(write, lost), kept_values(row, lost)}
   end
 
   defp apply_write(%Write{op: :delete} = write, index) do
     case EntityOperations.get(write.entity_type, write.id, lock: true) do
       # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
-      nil -> %{}
+      nil -> {%{}, nil}
       row -> apply_delete(write, row, index)
     end
   end
@@ -200,18 +201,18 @@ defmodule Hologram.Mutation do
       |> Writer.update()
 
     case result do
-      :ok -> %{}
+      :ok -> {%{}, nil}
       {:error, violations} -> Connection.rollback({:rejected, index, violations})
     end
   end
 
   defp apply_writes(writes) do
-    dropped =
+    verdicts =
       writes
       |> Enum.with_index()
-      |> Enum.reduce(%{}, &collect_lost/2)
+      |> Enum.reduce(%{dropped: %{}, kept: %{}}, &collect_verdicts/2)
 
-    %{"status" => "confirmed", "dropped" => dropped}
+    %{"status" => "confirmed", "dropped" => verdicts.dropped, "kept" => verdicts.kept}
   end
 
   # Checked before anything runs, against the writes as a whole - a stamp the server cannot vouch
@@ -236,13 +237,17 @@ defmodule Hologram.Mutation do
       Enum.any?(based_on, fn {_name, revision} -> stamp <= revision end)
   end
 
+  # What each write LOST and what the row KEPT in its place, both keyed by the write's position.
+  #
   # The index is a string because the answer is stored as jsonb and sent as JSON, where an object's
   # keys are strings whatever they started as.
-  defp collect_lost({write, index}, dropped) do
-    case apply_write(write, index) do
-      lost when lost == %{} -> dropped
-      lost -> Map.put(dropped, Integer.to_string(index), lost)
-    end
+  defp collect_verdicts({write, index}, verdicts) do
+    {lost, kept} = apply_write(write, index)
+    key = Integer.to_string(index)
+
+    verdicts
+    |> put_verdict(:dropped, key, lost)
+    |> put_verdict(:kept, key, kept)
   rescue
     # A denial is the one refusal the executor RAISES rather than returns, because on the server it
     # is a programming error to write what the acting user may not. Here it is an ordinary answer:
@@ -275,6 +280,32 @@ defmodule Hologram.Mutation do
   # Nothing is kept for an anonymous session either: an answer is replayed only to the session that
   # earned it, and one anonymous session cannot be told from another - so a refusal kept under no
   # actor would be readable by a stranger, or by nobody.
+  # What the row KEPT where this write lost, spelled the way a frame spells a patch - the winning
+  # values and the revisions they carry.
+  #
+  # Sent because the answer can reach the client BEFORE the frame carrying those values does, and
+  # a client that knows only which of its own values lost has nothing to put in their place but
+  # the value the row held before either writer touched it. Naming the winner is what lets it move
+  # straight from what it wrote to what stands, with nothing in between.
+  #
+  # Server-only columns cannot appear here: a client cannot write one, so none can lose - and
+  # WireData would drop it in any case.
+  defp kept_values(_row, []), do: nil
+
+  defp kept_values(%entity_type{} = row, names) do
+    values =
+      row
+      |> Map.from_struct()
+      |> Map.take(names)
+
+    revisions = Map.take(row.__meta__.revisions, names)
+
+    entity_type
+    |> WireData.patch(values)
+    |> Map.put(:"$revisions", revisions)
+    |> stringify()
+  end
+
   defp keep_refused(envelope, raw, actor_id, index, reason) do
     answer = rejection(index, reason)
 
@@ -334,6 +365,16 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # A write that lost nothing and a row that kept nothing are both spoken of by saying nothing -
+  # an entry per write would make every answer carry a key for each of them.
+  defp put_verdict(verdicts, _kind, _key, nil), do: verdicts
+
+  defp put_verdict(verdicts, _kind, _key, values) when values == %{}, do: verdicts
+
+  defp put_verdict(verdicts, kind, key, values) do
+    Map.update!(verdicts, kind, &Map.put(&1, key, values))
+  end
+
   defp recorded_answer(envelope, actor_id) do
     case Record.find(envelope.replica_id, envelope.seq) do
       nil -> nil
@@ -375,4 +416,13 @@ defmodule Hologram.Mutation do
     |> Map.keys()
     |> Enum.sort()
   end
+
+  # The answer travels as JSON and is stored as jsonb, where every key is a string - so it is
+  # spelled that way here, and the map a caller reads is the map a client reads whichever side it
+  # was built on.
+  defp stringify(data), do: Map.new(data, &stringify_entry/1)
+
+  defp stringify_entry({:"$revisions", revisions}), do: {"$revisions", stringify(revisions)}
+
+  defp stringify_entry({name, value}), do: {Atom.to_string(name), value}
 end
