@@ -255,7 +255,13 @@ export default class Client {
   //
   // A 400 is different again - it means this client built a malformed envelope, which is a bug in
   // the framework rather than an answer about the writes, so it is raised loudly.
+  // The deadline is not politeness either: a request that connects and then goes quiet never
+  // settles, and the sender loop holds its guard until it does - so one dead connection would stop
+  // the queue for the life of the page rather than for one send. Aborting makes it an ordinary
+  // no-verdict answer, which the loop already keeps pending and tries again.
   static async sendMutation(batch) {
+    const controller = new AbortController();
+
     const opts = {
       method: "POST",
       headers: {
@@ -263,29 +269,41 @@ export default class Client {
         "X-Csrf-Token": globalThis.Hologram.csrfToken,
       },
       body: JSON.stringify($.buildMutationPayload(batch)),
+      signal: controller.signal,
     };
 
-    const response = await fetch("/hologram/mutation", opts);
+    const deadline = setTimeout(
+      () => controller.abort(),
+      Config.mutationTimeoutMs,
+    );
 
-    if (response.status === 400) {
-      throw new HologramRuntimeError(
-        `mutation failed: ${await response.text()}`,
-      );
+    // Cleared only once the answer is READ, not once the response arrives - a body that never
+    // streams is the same silence as a request that never answers.
+    try {
+      const response = await fetch("/hologram/mutation", opts);
+
+      if (response.status === 400) {
+        throw new HologramRuntimeError(
+          `mutation failed: ${await response.text()}`,
+        );
+      }
+
+      if (!response.ok) {
+        return {httpStatus: response.status, status: "failed"};
+      }
+
+      const answer = await response.json();
+
+      return answer.status === "rejected"
+        ? {
+            reason: Interpreter.evaluateJavaScriptExpression(answer.reason),
+            status: "rejected",
+            write: answer.write,
+          }
+        : answer;
+    } finally {
+      clearTimeout(deadline);
     }
-
-    if (!response.ok) {
-      return {httpStatus: response.status, status: "failed"};
-    }
-
-    const answer = await response.json();
-
-    return answer.status === "rejected"
-      ? {
-          reason: Interpreter.evaluateJavaScriptExpression(answer.reason),
-          status: "rejected",
-          write: answer.write,
-        }
-      : answer;
   }
 
   static #failCommand(message) {

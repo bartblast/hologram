@@ -13,6 +13,7 @@ import {
 import App from "../../assets/js/app.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Config from "../../assets/js/config.mjs";
 import Connection from "../../assets/js/connection.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
@@ -605,6 +606,27 @@ describe("Client", () => {
       });
     });
 
+    it("clears the deadline once the answer is read", async () => {
+      const timers = sinon.useFakeTimers();
+
+      let signal;
+
+      sinon.stub(globalThis, "fetch").callsFake((_url, opts) => {
+        signal = opts.signal;
+
+        return Promise.resolve({
+          json: async () => ({dropped: {}, status: "confirmed"}),
+          ok: true,
+          status: 200,
+        });
+      });
+
+      await Client.sendMutation(batch);
+      await timers.tickAsync(Config.mutationTimeoutMs);
+
+      assert.isFalse(signal.aborted);
+    });
+
     // A malformed envelope is this client's own bug, not an answer about the writes.
     it("raises for an envelope the endpoint could not parse", async () => {
       responding("seq must be a non-negative integer", 400);
@@ -639,6 +661,58 @@ describe("Client", () => {
       }
 
       assert.isTrue(errorThrown, "Expected the failure to reach the caller");
+    });
+
+    // Left to itself a request that connects and goes quiet never settles, and the sender loop
+    // holds its guard until it does - so the queue would be stopped for the life of the page.
+    it("gives up on a request that never answers", async () => {
+      const timers = sinon.useFakeTimers();
+
+      sinon.stub(globalThis, "fetch").callsFake(
+        (_url, opts) =>
+          new Promise((_resolve, reject) => {
+            opts.signal.addEventListener("abort", () =>
+              reject(opts.signal.reason),
+            );
+          }),
+      );
+
+      let errorThrown = false;
+
+      const caught = Client.sendMutation(batch).catch((error) => {
+        errorThrown = true;
+
+        return error;
+      });
+
+      await timers.tickAsync(Config.mutationTimeoutMs);
+
+      assert.isTrue(errorThrown, "Expected the deadline to end the request");
+      assert.equal((await caught).name, "AbortError");
+    });
+
+    // A body that never streams is the same silence as a request that never answers, so the
+    // deadline covers reading the answer and not just receiving the response.
+    it("gives up on an answer whose body never arrives", async () => {
+      const timers = sinon.useFakeTimers();
+
+      let signal;
+
+      sinon.stub(globalThis, "fetch").callsFake((_url, opts) => {
+        signal = opts.signal;
+
+        return Promise.resolve({
+          json: () => new Promise(() => {}),
+          ok: true,
+          status: 200,
+        });
+      });
+
+      Client.sendMutation(batch);
+
+      await timers.tickAsync(Config.mutationTimeoutMs);
+
+      assert.isTrue(signal.aborted);
     });
   });
 
