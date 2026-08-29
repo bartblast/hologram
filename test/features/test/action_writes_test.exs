@@ -321,4 +321,39 @@ defmodule HologramFeatureTests.ActionWritesTest do
 
     assert [%Todo{title: "gamma"}] = await_server_todos(1)
   end
+
+  # A delete is judged like any other write: it takes the row only when nothing has moved past the
+  # stamp it was made at. A newer edit from elsewhere is such a move, so the server keeps the row -
+  # and the browser, already holding the arriving revision, can tell that before the answer comes
+  # back. The row the user deleted reappears, which is the server's ruling shown early rather than
+  # a write being undone.
+  #
+  # The failure this pins is the worst of the three, because it outlives the round trip: a delete
+  # that loses but is promoted anyway takes the row out of the base, and a later patch for a row
+  # the client no longer holds is passed over - so nothing ever puts it back.
+  feature "keeps a row whose delete lost to a newer edit", %{session: session} do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Delete the todo"))
+    |> assert_text(css("#result"), "deleted")
+    |> refute_has(css("#todos li"))
+
+    :ok = update(Todo, todo_id, %{title: "gamma"})
+
+    session
+    |> assert_text(css("#todos"), "gamma 0")
+    |> release_mutations()
+    |> await_pending_writes(0)
+    |> assert_text(css("#todos"), "gamma 0")
+
+    assert [%Todo{title: "gamma"}] = await_server_todos(1)
+  end
 end
