@@ -1,11 +1,18 @@
 "use strict";
 
-import {assert} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
+import Client from "../../assets/js/client.mjs";
+import LocalDatabase from "../../assets/js/local_database.mjs";
+import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import Sse from "../../assets/js/sse.mjs";
+
+defineRuntimeGlobals();
 
 describe("Batches", () => {
+  const TAG = "MyApp.Tag";
   const TODO = "MyApp.Todo";
 
   const write = (id) => ({id, op: "delete", stamp: 1, type: TODO});
@@ -21,6 +28,268 @@ describe("Batches", () => {
   const wrote = (id) => {
     Batches.current().append(write(id));
   };
+
+  describe("flush()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    let renderStub, sendStub;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TODO]: {
+            attributes: {
+              created_at: "datetime",
+              done: "boolean",
+              id: "uuid",
+              title: "string",
+              updated_at: "datetime",
+            },
+            constraints: {},
+            defaults: {},
+            enumValues: {},
+            frameworkAttributes: [],
+            relationships: {tags: {optional: true, toMany: true, type: TAG}},
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      renderStub = sinon.stub(Sse, "scheduleRender");
+      sendStub = sinon.stub(Client, "sendMutation");
+    });
+
+    afterEach(() => {
+      sinon.restore();
+      LocalDatabase.reset();
+    });
+
+    const confirmed = (dropped = {}) => ({dropped, status: "confirmed"});
+
+    const creating = (id, title) => ({
+      claim: null,
+      data: {done: false, title},
+      id,
+      op: "create",
+      stamp: STAMP,
+      type: TODO,
+    });
+
+    const sealed = (...writes) => {
+      Batches.open("todos");
+
+      for (const write of writes) {
+        Batches.current().append(write);
+      }
+
+      return Batches.close();
+    };
+
+    it("sends the pending batches oldest first, one at a time", async () => {
+      sealed(creating("t1", "first"));
+      sealed(creating("t2", "second"));
+
+      let inFlight = 0;
+
+      sendStub.callsFake(async () => {
+        inFlight += 1;
+        assert.equal(inFlight, 1, "two batches were in flight at once");
+        await Promise.resolve();
+        inFlight -= 1;
+
+        return confirmed();
+      });
+
+      await Batches.flush();
+
+      assert.deepStrictEqual(
+        sendStub.getCalls().map((call) => call.args[0].seq),
+        [1, 2],
+      );
+    });
+
+    it("does not enter the loop twice", async () => {
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Promise.all([Batches.flush(), Batches.flush()]);
+
+      sinon.assert.calledOnce(sendStub);
+    });
+
+    // A confirmed batch's values ARE what the server stored, so they move into the base and the
+    // layer goes - and what a reader sees does not change across the move.
+    it("writes a confirmed batch's rows into the base and drops its layer", async () => {
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "first");
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").$revisions.title, STAMP);
+      assert.isFalse(Overlay.names(TODO, "t1"));
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    it("takes a confirmed delete out of the base", async () => {
+      LocalDatabase.putRow(TODO, {done: false, id: "t1", title: "held"});
+
+      sealed({
+        based_on: {},
+        claim: null,
+        id: "t1",
+        op: "delete",
+        stamp: STAMP,
+        type: TODO,
+      });
+
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("records a confirmed edge in the base", async () => {
+      sealed({
+        claim: null,
+        id: "t1",
+        op: "add_relationship",
+        relationship: "tags",
+        target_id: "g1",
+        type: TODO,
+      });
+
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.deepStrictEqual(
+        LocalDatabase.baseTargetIds(TODO, "tags", "t1"),
+        new Set(["g1"]),
+      );
+    });
+
+    // The value lost the merge, so the base keeps what it has and the winner arrives with the
+    // frame - promoting the client's value would put back the value the server refused.
+    it("leaves a dropped column as the base holds it", async () => {
+      LocalDatabase.putRow(TODO, {
+        done: false,
+        id: "t1",
+        title: "theirs",
+        $revisions: {title: 99},
+      });
+
+      sealed({
+        based_on: {title: 98},
+        claim: null,
+        data: {title: "mine"},
+        id: "t1",
+        op: "update",
+        stamp: STAMP,
+        type: TODO,
+      });
+
+      sendStub.resolves(confirmed({0: {title: "mine"}}));
+
+      await Batches.flush();
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "theirs");
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").$revisions.title, 99);
+    });
+
+    // A later batch is still pending over the same row, and its values are not the server's to
+    // store - so the two batches touch DIFFERENT fields here, which is the only shape where
+    // promoting the folded row rather than the base row shows up.
+    it("keeps a later batch's writes out of an earlier one's promotion", async () => {
+      LocalDatabase.putRow(TODO, {
+        done: false,
+        id: "t1",
+        title: "held",
+        $revisions: {done: 10, title: 11},
+      });
+
+      Batches.open("todos");
+
+      Batches.current().append({
+        based_on: {title: 11},
+        claim: null,
+        data: {title: "first"},
+        id: "t1",
+        op: "update",
+        stamp: STAMP,
+        type: TODO,
+      });
+
+      Batches.close();
+      Batches.open("todos");
+
+      Batches.current().append({
+        based_on: {done: 10},
+        claim: null,
+        data: {done: true},
+        id: "t1",
+        op: "update",
+        stamp: STAMP + 1,
+        type: TODO,
+      });
+
+      Batches.close();
+
+      sendStub.onFirstCall().resolves(confirmed());
+      sendStub.onSecondCall().resolves({httpStatus: 503, status: "failed"});
+
+      await Batches.flush();
+
+      const base = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(base.title, "first");
+      assert.isFalse(base.done, "the pending batch's value reached the base");
+      assert.equal(base.$revisions.done, 10);
+
+      // The reader still sees both, because the second batch is still folded on top.
+      assert.isTrue(LocalDatabase.getRow(TODO, "t1").done);
+    });
+
+    it("takes a rejected batch's rows away and keeps what the server said", async () => {
+      sealed(creating("t1", "first"));
+
+      sendStub.resolves({
+        reason: "the reason",
+        status: "rejected",
+        write: 0,
+      });
+
+      await Batches.flush();
+
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.equal(Batches.rejected.length, 1);
+      assert.equal(Batches.rejected[0].seq, 1);
+      assert.equal(Batches.rejected[0].reason, "the reason");
+      assert.equal(Batches.rejected[0].write, 0);
+      assert.equal(Batches.rejected[0].state, "rejected");
+    });
+
+    it("schedules a render per answer", async () => {
+      sealed(creating("t1", "first"));
+      sealed(creating("t2", "second"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      sinon.assert.calledTwice(renderStub);
+    });
+
+    it("does nothing when nothing is pending", async () => {
+      await Batches.flush();
+
+      sinon.assert.notCalled(sendStub);
+    });
+  });
 
   describe("close()", () => {
     it("seals the open batch and queues it", () => {

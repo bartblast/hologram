@@ -1,7 +1,9 @@
 "use strict";
 
 import Batch from "./batch.mjs";
+import Client from "./client.mjs";
 import Overlay from "./overlay.mjs";
+import Sse from "./sse.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
 //
@@ -28,6 +30,10 @@ export default class Batches {
   //
   // TODO: filled when the sender loop records a refusal.
   static rejected = [];
+
+  // One batch is in flight at a time, and the loop that keeps it that way must not be entered
+  // twice - every close calls flush, and an answer can arrive while another action is running.
+  static #sending = false;
 
   static #seq = 0;
 
@@ -71,10 +77,47 @@ export default class Batches {
     return batch;
   }
 
-  // TODO: sends the pending batches, one at a time and in order, and records what the server
-  // answers for each.
-  static flush() {
-    return null;
+  // Sends the pending batches, oldest first, ONE AT A TIME. The ordering is not politeness: a
+  // later batch may name a row an earlier one created, and its based_on for a column an earlier
+  // one wrote is that batch's own stamp - so overlapping them turns a sound chain into a refusal.
+  static async flush() {
+    if (Batches.#sending || Batches.pending.length === 0) {
+      return;
+    }
+
+    Batches.#sending = true;
+
+    try {
+      while (Batches.pending.length > 0) {
+        const batch = Batches.pending[0];
+
+        batch.mark("sending");
+
+        const answer = await Client.sendMutation(batch);
+
+        // No verdict about the writes, so the batch stays where it is and the queue stops behind
+        // it.
+        //
+        // TODO: decide what wakes the loop again after a failed send.
+        if (answer.status === "failed") {
+          batch.mark("pending");
+
+          return;
+        }
+
+        Batches.pending.shift();
+
+        if (answer.status === "confirmed") {
+          Overlay.promote(batch, answer.dropped);
+        } else {
+          Batches.#reject(batch, answer);
+        }
+
+        Sse.scheduleRender();
+      }
+    } finally {
+      Batches.#sending = false;
+    }
   }
 
   // The batch is in the overlay from the moment it opens, so a write is readable on the next line
@@ -97,5 +140,19 @@ export default class Batches {
     Batches.#stack = [];
 
     Overlay.reset();
+  }
+
+  // A refused batch takes its rows with it - a created row vanishes, an updated one reverts -
+  // and what is left is the reason, on the batch, for the queue surface to show. The row carries
+  // nothing: a rejected create has no row left to carry a state, and a rejected update's row is
+  // the server's again.
+  static #reject(batch, answer) {
+    Overlay.remove(batch);
+
+    batch.mark("rejected");
+    batch.reason = answer.reason;
+    batch.write = answer.write;
+
+    Batches.rejected.push(batch);
   }
 }

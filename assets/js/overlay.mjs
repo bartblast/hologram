@@ -1,6 +1,7 @@
 "use strict";
 
 import Clock from "./clock.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
 
 // The writes this client has made and the server has not answered yet, folded over the rows the
@@ -89,6 +90,24 @@ export default class Overlay {
     const key = `${type} ${id}`;
 
     return Overlay.#batches.some((batch) => batch.rowKeys().has(key));
+  }
+
+  // A confirmed batch's values ARE what the server stored, so they move out of the overlay and
+  // into the base, and the layer goes with them. What a reader sees does not change - the folded
+  // value and the promoted value are the same - which is why nothing flickers whichever arrives
+  // first, this answer or the frame carrying the same rows.
+  //
+  // Applied against the BASE row rather than the folded one: a later batch may still be pending
+  // over the same row, and its values are not the server's to store.
+  //
+  // A column the answer names as dropped is the one exception. Its value lost the merge, so the
+  // base keeps what it has and the winner arrives with the frame.
+  static promote(batch, dropped) {
+    batch.writes.forEach((write, index) => {
+      Overlay.#promoteWrite(write, dropped[String(index)] ?? {});
+    });
+
+    Overlay.remove(batch);
   }
 
   static push(batch) {
@@ -181,6 +200,62 @@ export default class Overlay {
     return Overlay.#batches.some((batch) =>
       batch.writes.some((write) => write.type === type),
     );
+  }
+
+  static #promoteWrite(write, droppedColumns) {
+    if (write.op === "add_relationship") {
+      LocalDatabase.addFact(
+        write.type,
+        write.relationship,
+        write.id,
+        write.target_id,
+      );
+
+      return;
+    }
+
+    if (write.op === "delete_relationship") {
+      LocalDatabase.deleteFact(
+        write.type,
+        write.relationship,
+        write.id,
+        write.target_id,
+      );
+
+      return;
+    }
+
+    const base = LocalDatabase.baseRow(write.type, write.id);
+    const promoted = Overlay.#applyWrite(write.type, base, write);
+
+    if (promoted === null) {
+      LocalDatabase.deleteRow(write.type, write.id);
+
+      return;
+    }
+
+    for (const name of Object.keys(droppedColumns)) {
+      Overlay.#restoreColumn(promoted, base, name);
+    }
+
+    LocalDatabase.putRow(
+      write.type,
+      Model.computeSortKeys(write.type, promoted),
+    );
+  }
+
+  // A column whose value lost keeps what the base holds - its value AND its revision, since the
+  // revision this write would have set is not the one the row now carries.
+  static #restoreColumn(promoted, base, name) {
+    const revisions = base?.["$revisions"] ?? {};
+
+    promoted[name] = base === null ? null : base[name];
+
+    if (name in revisions) {
+      promoted["$revisions"][name] = revisions[name];
+    } else {
+      delete promoted["$revisions"][name];
+    }
   }
 
   // A moved counter takes no revision. There is nothing for a delta to be based on and nothing for
