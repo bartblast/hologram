@@ -18,6 +18,7 @@ import Connection from "../../assets/js/connection.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import HttpTransport from "../../assets/js/http_transport.mjs";
+import Replica from "../../assets/js/replica.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -506,10 +507,10 @@ describe("Client", () => {
 
       globalThis.Hologram = {
         csrfToken: "test-csrf-token-123",
-        replicaId: "test-replica-id",
-        replicaToken: "test-replica-token",
         sync: {modelHash: "test-model-hash"},
       };
+
+      Replica.adopt({id: "test-replica-id", token: "test-replica-token"});
 
       originalInstanceId = App.instanceId;
       App.instanceId = "test-instance-id";
@@ -519,6 +520,7 @@ describe("Client", () => {
       sinon.restore();
       globalThis.Hologram = originalHologram;
       App.instanceId = originalInstanceId;
+      Replica.reset();
     });
 
     it("posts the batch to the mutation endpoint", async () => {
@@ -535,7 +537,8 @@ describe("Client", () => {
       });
     });
 
-    // The identity is the page's and this client invents neither half of it.
+    // The identity is whatever pair the browser is presenting - the page's on a first visit, the
+    // one it remembered on every visit after that - and this client invents neither half of it.
     it("sends the envelope the endpoint parses", async () => {
       responding({dropped: {}, status: "confirmed"});
 
