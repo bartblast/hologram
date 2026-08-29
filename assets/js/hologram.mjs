@@ -55,8 +55,10 @@ import ManuallyPortedElixirCode from "./elixir/code.mjs";
 import ManuallyPortedElixirException from "./elixir/exception.mjs";
 import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_error.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
+import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
 import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
+import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
@@ -688,6 +690,111 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "create!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["create!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "create/1",
+      "public",
+      ManuallyPortedElixirHologramDB["create/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["delete!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete!/2",
+      "public",
+      ManuallyPortedElixirHologramDB["delete!/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete/1",
+      "public",
+      ManuallyPortedElixirHologramDB["delete/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete/2",
+      "public",
+      ManuallyPortedElixirHologramDB["delete/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "read/1",
+      "public",
+      ManuallyPortedElixirHologramDB["read/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "read/2",
+      "public",
+      ManuallyPortedElixirHologramDB["read/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "rollback/1",
+      "public",
+      ManuallyPortedElixirHologramDB["rollback/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "transaction/1",
+      "public",
+      ManuallyPortedElixirHologramDB["transaction/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "transaction/2",
+      "public",
+      ManuallyPortedElixirHologramDB["transaction/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["update!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update!/3",
+      "public",
+      ManuallyPortedElixirHologramDB["update!/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update/1",
+      "public",
+      ManuallyPortedElixirHologramDB["update/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update/3",
+      "public",
+      ManuallyPortedElixirHologramDB["update/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Hologram.Entity",
       "generate_id/0",
       "public",
@@ -909,6 +1016,55 @@ export default class Hologram {
       "typeof/2",
       "public",
       ManuallyPortedElixirHologramJS["typeof/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/1",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/2",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/3",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/1",
+      "public",
+      ManuallyPortedElixirHologramJob["create/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/2",
+      "public",
+      ManuallyPortedElixirHologramJob["create/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/3",
+      "public",
+      ManuallyPortedElixirHologramJob["create/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "framework_attribute_names/0",
+      "public",
+      ManuallyPortedElixirHologramJob["framework_attribute_names/0"],
     );
 
     Interpreter.defineManuallyPortedFunction(
