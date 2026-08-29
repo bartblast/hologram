@@ -71,8 +71,11 @@ defmodule Hologram.DB.EntityOperationsTest do
     Enum.map(rows, fn [mode] -> mode end)
   end
 
+  # Both timestamp columns are written from a stamp, which holds milliseconds - so waiting for the
+  # wall clock to pass a microsecond of the same millisecond proves nothing: the next write would
+  # land on the very same value. What has to move is the millisecond.
   defp wait_until_clock_advances_past(datetime) do
-    now = DateTime.utc_now(:microsecond)
+    now = DateTime.utc_now(:millisecond)
 
     if DateTime.compare(now, datetime) == :gt do
       :ok
@@ -332,6 +335,35 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert created_entity.__meta__.revisions == %{a: stamp, b: stamp, c: stamp}
       assert reloaded_entity.__meta__.revisions == %{a: stamp, b: stamp, c: stamp}
+    end
+
+    test "stamps the row from the moment its writer made it" do
+      # Months before this node's clock would answer - which is what a row written offline and
+      # synced later carries. The moment it arrived is not the moment it was made.
+      written_at = ~U[2026-01-15 10:30:00.000000Z]
+      stamp = DateTime.to_unix(written_at, :millisecond) * 1024
+
+      {:ok, created_entity} =
+        %{a: true, c: "abc"}
+        |> Module2.new()
+        |> Map.put(:__meta__, %Metadata{stamp: stamp})
+        |> create()
+
+      assert created_entity.created_at == written_at
+      assert created_entity.updated_at == written_at
+      assert get(Module2, created_entity.id).created_at == written_at
+    end
+
+    test "stamps the row from this node's clock when its writer authored none" do
+      taken_before = DateTime.utc_now(:millisecond)
+
+      {:ok, created_entity} =
+        %{a: true, c: "abc"}
+        |> Module2.new()
+        |> create()
+
+      assert DateTime.compare(created_entity.created_at, taken_before) in [:gt, :eq]
+      assert DateTime.compare(created_entity.created_at, DateTime.utc_now()) == :lt
     end
 
     test "answers a struct carrying nothing of the write it made" do
@@ -1004,6 +1036,23 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert reloaded_entity.b == created_entity.b
       assert reloaded_entity.created_at == created_entity.created_at
       assert DateTime.compare(reloaded_entity.updated_at, created_entity.updated_at) == :gt
+    end
+
+    test "stamps updated_at from the moment its writer made the change" do
+      # The write was authored months ago and is only arriving now, so its stamp is below the
+      # revision the row already holds - the revision advances past it, and updated_at still says
+      # when the change was actually made.
+      written_at = ~U[2026-01-15 10:30:00.000000Z]
+      stamp = DateTime.to_unix(written_at, :millisecond) * 1024
+
+      {:ok, created_entity} =
+        %{a: true, c: "before"}
+        |> Module2.new()
+        |> create()
+
+      assert update(Module2, created_entity.id, [c: "after"], stamp: stamp) == :ok
+
+      assert get(Module2, created_entity.id).updated_at == written_at
     end
 
     test "records the changed attributes and the stamp they moved" do

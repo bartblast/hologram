@@ -302,7 +302,7 @@ defmodule Hologram.DB.EntityOperations do
           changed_values = Enum.map(set_entries, fn {{_column, value}, _form} -> value end)
 
           stamp = Keyword.get_lazy(opts, :stamp, &Clock.stamp/0)
-          updated_at = DateTime.utc_now(:microsecond)
+          updated_at = written_at(stamp)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
 
@@ -592,12 +592,12 @@ defmodule Hologram.DB.EntityOperations do
     entity_type = entity.__struct__
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
-    now = DateTime.utc_now(:microsecond)
-
     # One stamp for the whole row: every column it sets was set by this write, at this moment. A
     # write authored elsewhere brings its own and it is stored as given - its writer's next write
     # says it was based on that exact value, so re-authoring it here would break that chain.
     stamp = entity.__meta__.stamp || Clock.stamp()
+
+    now = written_at(stamp)
     settable_columns = Enum.filter(columns, &settable?/1)
     revisions = Map.new(settable_columns, &{field_name(&1), stamp})
 
@@ -919,4 +919,18 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp write_violations!(_entity_type, violations), do: violations
+
+  # A row is timestamped from the moment its WRITER made it, which the stamp already carries in
+  # its upper bits - so a note written offline on Monday and synced on Wednesday is filed as
+  # Monday, rather than as the moment the batch happened to arrive. A client cannot send either
+  # column, and does not need to: the number it authored says when.
+  #
+  # A stamp holds milliseconds, so the microseconds below them are zero. Two rows written in the
+  # same millisecond therefore carry the same timestamp where they once differed - the stamps
+  # still order them, but an ordering read from these columns alone sees a tie.
+  defp written_at(stamp) do
+    microseconds = Clock.wall_clock_ms(stamp) * 1000
+
+    DateTime.from_unix!(microseconds, :microsecond)
+  end
 end
