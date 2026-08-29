@@ -2,6 +2,8 @@ defmodule HologramFeatureTests.ActionWritesTest do
   # async: false - each test truncates the shared table.
   use HologramFeatureTests.TestCase, async: false
 
+  import Hologram.DB.EntityOperations, only: [update: 3]
+
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
@@ -190,5 +192,41 @@ defmodule HologramFeatureTests.ActionWritesTest do
     refute_text(session, css("#todos"), "dup")
 
     assert [%Todo{title: "seeded"}] = DB.read(Todo)
+  end
+
+  # A write made elsewhere reaches the row while this browser holds an unsent write of its own.
+  # The two name different columns, so both stand - the frame writes the base underneath and the
+  # pending write folds over it, neither taking the other's column.
+  #
+  # Both writes here set a VALUE, which is what makes this the stable case: applying a value twice
+  # leaves what applying it once leaves, so nothing about the outcome depends on whether the
+  # answer or the frame arrives first. A moved counter is the case where that stops being true,
+  # and it is the next test.
+  feature "keeps a pending write on top of a row the server changed meanwhile", %{
+    session: session
+  } do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Rename the todo"))
+    |> assert_text(css("#result"), "renamed_beta")
+    |> assert_text(css("#todos"), "beta 0")
+
+    :ok = update(Todo, todo_id, %{votes: 5})
+
+    session
+    |> assert_text(css("#todos"), "beta 5")
+    |> release_mutations()
+    |> await_pending_writes(0)
+    |> assert_text(css("#todos"), "beta 5")
+
+    assert [%Todo{title: "beta", votes: 5}] = await_server_todos(1)
   end
 end
