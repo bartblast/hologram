@@ -1,6 +1,9 @@
 "use strict";
 
+import Batches from "../../batches.mjs";
 import Bitstring from "../../bitstring.mjs";
+import Clock from "../../clock.mjs";
+import Elixir_Hologram_Entity from "./entity.mjs";
 import Elixir_Hologram_Query from "./query.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
@@ -19,8 +22,45 @@ import Type from "../../type.mjs";
 // policies because its database holds every row; this database holds only rows the server already
 // decided this client may see, so filtering again would be asking the same question twice with
 // less information. The acting user is still carried, for the predicates that NAME them.
+const ROLE_GRANT = "Hologram.Auth.RoleGrant";
+
 const ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// A module reaches a verb as an alias, not as a struct - so its name is read off the alias rather
+// than through Model.structTypeName, which answers for a boxed struct.
+function aliasName(value) {
+  return value.value.replace(/^Elixir\./, "");
+}
+
+// The batch an action's writes go to, or a refusal naming why there is none. A write outside an
+// action has nowhere to belong: no batch would ship it and nothing would ever answer for it.
+function currentBatch(verb) {
+  const batch = Batches.current();
+
+  if (batch === null) {
+    Interpreter.raiseArgumentError(
+      `${verb} was called outside an action - a client write happens inside an action, whose writes ship together when it returns`,
+    );
+  }
+
+  return batch;
+}
+
+// The entity type a verb was handed a struct of, in the server's words when it was handed
+// something else. The server reaches for entity.__struct__ and lets Elixir complain; naming the
+// expectation is the same divergence Entity.new already carries for a non-struct argument.
+function entityTypeOf(entity, verb) {
+  const type = Model.structTypeName(entity);
+
+  if (type === null || !Model.isEntityType(type)) {
+    Interpreter.raiseArgumentError(
+      `${verb} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
+    );
+  }
+
+  return type;
+}
 
 // Placeholders exist only in compiler-registered queries, which the renderer runs with values
 // bound. One reaching a directly executed read has no value and never will.
@@ -52,12 +92,99 @@ function placeholderNames(term) {
   return [...fromFilter, ...fromBounds, ...fromOrder, ...fromIncludes];
 }
 
+// A server-only attribute is refused by the WRITE rather than by validation: the value is
+// perfectly valid and server code may set it, so what makes it wrong is only that a browser is
+// the one asking. The wire drops the name, so sending it would be malformed rather than rejected -
+// which is why this is caught here, by name, before anything is built.
+function refuseServerOnlyValues(entity, entityType) {
+  const entry = Model.entry(entityType);
+
+  for (const name of entry.serverOnly) {
+    const value = entity.data[Type.encodeMapKey(Type.atom(name))]?.[1];
+
+    if (
+      value !== undefined &&
+      !Type.isNil(value) &&
+      !isServerOnlySentinel(value)
+    ) {
+      Interpreter.raiseArgumentError(
+        `:${name} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
+      );
+    }
+  }
+}
+
+// What a row the client HOLDS shows for a server-only attribute - it stands for a value this
+// client was never given, so it is not a value being written.
+function isServerOnlySentinel(value) {
+  return Model.structTypeName(value) === "Hologram.Entity.ServerOnly";
+}
+
 function validateEntityType(query) {
-  if (!Type.isAlias(query) || !Model.isEntityType(structName(query))) {
+  if (!Type.isAlias(query) || !Model.isEntityType(aliasName(query))) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1`,
     );
   }
+}
+
+// The row a create will store, as the wire spells it, beside the struct the verb answers with.
+// Both timestamps come from the write's own stamp, so what the browser shows and what the server
+// stores are the same instant derived from one number.
+function writeEntry(entity, entityType, stamp) {
+  return {
+    claim: writeClaim(entity),
+    data: Model.unboxRow(entityType, entity),
+    id: Bitstring.toText(entity.data[Type.encodeMapKey(Type.atom("id"))][1]),
+    op: "create",
+    stamp,
+    type: entityType,
+  };
+}
+
+// What the verb answers: the struct as the row now stands, carrying the revisions this write set
+// and nothing of what it was asked to do. The server's own create answers the same way - the
+// metadata starts over, because what the struct was holding has been spent by the write.
+function storedEntity(entity, entityType, stamp) {
+  const timestamp = Model.boxValue(
+    Model.wireDateTime(Clock.wallClockMs(stamp)),
+    "datetime",
+  );
+
+  const revisions = Model.settableFields(entityType).map((name) => [
+    Type.atom(name),
+    Type.integer(stamp),
+  ]);
+
+  const metadata = Type.map([
+    [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
+    [Type.atom("attribute_ops"), Type.map([])],
+    [Type.atom("claim"), Type.nil()],
+    [Type.atom("relationship_ops"), Type.map([])],
+    [Type.atom("revisions"), Type.map(revisions)],
+    [Type.atom("stamp"), Type.nil()],
+  ]);
+
+  const stored = Type.cloneMap(entity);
+
+  for (const [key, value] of [
+    [Type.atom("__meta__"), metadata],
+    [Type.atom("created_at"), timestamp],
+    [Type.atom("updated_at"), timestamp],
+  ]) {
+    stored.data[Type.encodeMapKey(key)] = [key, value];
+  }
+
+  return stored;
+}
+
+// null for the verb's own operation, ["authorize", op] when a stage named another one. trust never
+// reaches here - the stage refuses it.
+function writeClaim(entity) {
+  const metadata = entity.data[Type.encodeMapKey(Type.atom("__meta__"))][1];
+  const claim = metadata.data[Type.encodeMapKey(Type.atom("claim"))][1];
+
+  return Type.isNil(claim) ? null : ["authorize", claim.data[1].value];
 }
 
 function validateId(id) {
@@ -66,10 +193,6 @@ function validateId(id) {
       `invalid id ${Interpreter.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
     );
   }
-}
-
-function structName(value) {
-  return value.value.replace(/^Elixir\./, "");
 }
 
 function valuePlaceholderNames(value) {
@@ -83,6 +206,41 @@ function valuePlaceholderNames(value) {
 }
 
 const Elixir_Hologram_DB = {
+  "create/1": (entity) => {
+    const entityType = entityTypeOf(entity, "create");
+
+    if (entityType === ROLE_GRANT) {
+      Interpreter.raiseArgumentError(
+        "role grants are written only through grant_role/revoke_role",
+      );
+    }
+
+    if (Model.entry(entityType).frameworkAttributes.length > 0) {
+      Interpreter.raiseArgumentError(
+        `${entityType} is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits`,
+      );
+    }
+
+    refuseServerOnlyValues(entity, entityType);
+
+    const batch = currentBatch("create");
+    const validation = Elixir_Hologram_Entity["validate/1"](entity);
+
+    if (!Type.isAtom(validation)) {
+      return validation;
+    }
+
+    const stamp = Clock.stamp();
+    const write = writeEntry(entity, entityType, stamp);
+
+    batch.append(write);
+
+    return Type.tuple([
+      Type.atom("ok"),
+      storedEntity(entity, entityType, stamp),
+    ]);
+  },
+
   "read/1": (query) => {
     const term = Elixir_Hologram_Query["normalize/1"](query);
 

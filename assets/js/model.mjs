@@ -56,7 +56,7 @@ export default class Model {
 
         data.push([
           Type.atom(referenceField),
-          Model.#boxValue(row[referenceField], "uuid"),
+          Model.boxValue(row[referenceField], "uuid"),
         ]);
       }
 
@@ -119,6 +119,21 @@ export default class Model {
     }
 
     return attributes;
+  }
+
+  // The entity type a boxed struct names, or nothing at all when the value is not a struct -
+  // which is how a verb tells "wrong kind of value" from "wrong kind of struct" without raising
+  // on the way to finding out.
+  static structTypeName(value) {
+    if (!Type.isMap(value)) {
+      return null;
+    }
+
+    const entry = value.data[Type.encodeMapKey(Type.atom("__struct__"))];
+
+    return entry === undefined || !Type.isAlias(entry[1])
+      ? null
+      : entry[1].value.replace(/^Elixir\./, "");
   }
 
   // Whether this build carries the given entity type - the client's answer to the server's
@@ -274,7 +289,7 @@ export default class Model {
       ]);
     }
 
-    return Model.#boxValue(row[name], attributeType);
+    return Model.boxValue(row[name], attributeType);
   }
 
   static #boxAttributeConstraints(options) {
@@ -392,7 +407,9 @@ export default class Model {
     return Model.box(term.entity, node.row, includes);
   }
 
-  static #boxValue(value, attributeType) {
+  // A wire value as the term a template reads - the counterpart of the public unbox/2, and the
+  // same boundary: values are stored the way the wire spells them and boxed only on the way out.
+  static boxValue(value, attributeType) {
     if (value === null || value === undefined) {
       return Type.nil();
     }

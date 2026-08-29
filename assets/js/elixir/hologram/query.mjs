@@ -55,7 +55,7 @@ function counterAttributeNames(entityType) {
 // The entity type of a struct a stage was handed, or a raise in the server's words. What the
 // client can check is that the build carries the type, which is its whole notion of "is an entity".
 function entityTypeOf(entity, stage) {
-  const type = structTypeName(entity);
+  const type = Model.structTypeName(entity);
 
   if (type !== null && Model.isEntityType(type)) {
     return type;
@@ -480,20 +480,6 @@ function settableNames(entityType) {
 
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
-}
-
-// The type a boxed struct names, or nothing at all when it is not a struct - which is how a stage
-// tells "wrong kind of value" from "wrong kind of struct" without raising on the way.
-function structTypeName(value) {
-  if (!Type.isMap(value)) {
-    return null;
-  }
-
-  const entry = value.data[Type.encodeMapKey(Type.atom("__struct__"))];
-
-  return entry === undefined || !Type.isAlias(entry[1])
-    ? null
-    : entry[1].value.replace(/^Elixir\./, "");
 }
 
 function subTermHasClauses(subTerm) {
