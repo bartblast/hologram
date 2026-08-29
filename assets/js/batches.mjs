@@ -156,6 +156,31 @@ export default class Batches {
     }
   }
 
+  // Marks, on every batch the server has already applied, the writes naming the rows a frame just
+  // wrote. Those writes are in the base now, as the server resolved them, so the fold has to stop
+  // putting them on top - and for a moved counter that is the difference between showing the
+  // number the server holds and showing one more than it.
+  //
+  // Up to the number and no further. A batch above it has not been applied, so its writes are
+  // still this client's own to show. A batch still IN FLIGHT counts: it sits in the queue until
+  // its answer arrives, and its effects can reach the stream before that answer does, which is
+  // the whole case this exists for. The open batch is not in the queue at all and cannot be
+  // landed - nothing of it has been sent.
+  //
+  // A frame naming no number says NOTHING about this client's writes, which is not the same as
+  // saying none of them have landed - so nothing is marked.
+  static land(appliedSeq, rowKeys) {
+    if (!Number.isInteger(appliedSeq)) {
+      return;
+    }
+
+    for (const batch of Batches.pending) {
+      if (batch.seq <= appliedSeq) {
+        batch.land(rowKeys);
+      }
+    }
+  }
+
   // The batch is in the overlay from the moment it opens, so a write is readable on the next line
   // of the action that made it.
   // How long the oldest unsent batch has been waiting, named by its sequence number - null when

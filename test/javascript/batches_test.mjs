@@ -386,6 +386,68 @@ describe("Batches", () => {
     });
   });
 
+  describe("land()", () => {
+    const sealed = (...writes) => {
+      Batches.open("todos");
+
+      for (const write of writes) {
+        Batches.current().append(write);
+      }
+
+      return Batches.close();
+    };
+
+    // Up to the number and no further, in one call: a batch the server has applied stops being
+    // folded, and the one after it goes on showing, because nothing has been said about it yet.
+    it("marks the writes of the batches the server has applied, and no others", () => {
+      const first = sealed(write("t1"));
+      const second = sealed(write("t2"));
+
+      Batches.land(1, new Set([`${TODO} t1`, `${TODO} t2`]));
+
+      assert.isTrue(first.isLanded(0));
+      assert.isFalse(second.isLanded(0));
+    });
+
+    // A batch whose answer has not come back yet is still in the queue, and its effects can reach
+    // the stream before the answer does - which is the ordering this whole mechanism exists for.
+    it("marks a batch that is still in flight", () => {
+      const batch = sealed(write("t1"));
+      batch.mark("sending");
+
+      Batches.land(1, new Set([`${TODO} t1`]));
+
+      assert.isTrue(batch.isLanded(0));
+    });
+
+    // Nothing of the open batch has been sent, so nothing of it can have been applied.
+    it("leaves the batch the action is still writing alone", () => {
+      Batches.open("todos");
+      Batches.current().append(write("t1"));
+
+      Batches.land(9, new Set([`${TODO} t1`]));
+
+      assert.isFalse(Batches.current().isLanded(0));
+    });
+
+    it("marks nothing when the frame names no number", () => {
+      const batch = sealed(write("t1"));
+
+      Batches.land(null, new Set([`${TODO} t1`]));
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // What a bundle talking to a server that predates the field reads off a frame.
+    it("marks nothing when the frame names no number at all", () => {
+      const batch = sealed(write("t1"));
+
+      Batches.land(undefined, new Set([`${TODO} t1`]));
+
+      assert.isFalse(batch.isLanded(0));
+    });
+  });
+
   describe("the queue reads", () => {
     const write = (id) => ({id, op: "delete", stamp: 1, type: TODO});
 
