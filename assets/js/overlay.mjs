@@ -152,8 +152,13 @@ export default class Overlay {
 
   static #applyWrite(type, row, write) {
     switch (write.op) {
+      // A base row under an id this client minted can only be the frame confirming this very
+      // create, arriving before its answer did - nothing else writes that id. What the server
+      // filed is then the better copy of the row: it carries whatever the server settled beyond
+      // what the write named, and building the row from the write again would put that back to
+      // what this client guessed.
       case "create":
-        return Overlay.#created(type, write);
+        return row === null ? Overlay.#created(type, write) : row;
 
       // A delete takes the row only when nothing has moved past the stamp it was made at, which
       // is the server's own rule for one. A newer edit from elsewhere means the server is going
@@ -178,8 +183,8 @@ export default class Overlay {
   // Every settable field takes that stamp as its revision, which is what the server's insert does
   // with the same number.
   //
-  // A base row already present means the frame confirming this create arrived before its answer
-  // did. It is overwritten rather than merged, with values equal to its own.
+  // Reached only while the base holds no such row - once one is there, it is the server's own
+  // copy and stands on its own.
   static #created(type, write) {
     const timestamp = Model.wireDateTime(Clock.wallClockMs(write.stamp));
 

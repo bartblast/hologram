@@ -147,14 +147,15 @@ describe("Overlay", () => {
       assert.equal(row.created_at, row.updated_at);
     });
 
-    it("overwrites a base row the confirming frame delivered first", () => {
+    // Nothing but this client writes an id this client minted, so a base row under one can only be
+    // the frame confirming this create. The server's copy is the better one - it carries whatever
+    // the server settled beyond what the write named - so it is what stands.
+    it("answers the base row the confirming frame delivered first", () => {
       pushed(createWrite());
 
-      const row = Overlay.foldRow(TODO, "t1", base({title: "From the frame"}));
+      const row = base({title: "From the frame"});
 
-      assert.equal(row.title, "Łódź");
-      assert.equal(row.created_at, timestamp);
-      assert.equal(row.$revisions.title, stamp);
+      assert.strictEqual(Overlay.foldRow(TODO, "t1", row), row);
     });
 
     it("writes the values an update names over the base", () => {
