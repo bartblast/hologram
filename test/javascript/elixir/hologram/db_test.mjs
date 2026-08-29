@@ -3,6 +3,7 @@
 import {assert, defineRuntimeGlobals, sinon} from "../../support/helpers.mjs";
 
 import Batches from "../../../../assets/js/batches.mjs";
+import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import Elixir_Hologram_Query from "../../../../assets/js/elixir/hologram/query.mjs";
@@ -28,6 +29,10 @@ describe("Elixir_Hologram_DB", () => {
   const count = Elixir_Hologram_Query["count/1"];
   const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
+  const createBang = Elixir_Hologram_DB["create!/1"];
+  const deleteBang = Elixir_Hologram_DB["delete!/2"];
+  const updateBang = Elixir_Hologram_DB["update!/1"];
+  const updateByIdBang = Elixir_Hologram_DB["update!/3"];
   const decrement = Elixir_Hologram_Query["decrement/3"];
   const deleteEntity = Elixir_Hologram_DB["delete/1"];
   const deleteById = Elixir_Hologram_DB["delete/2"];
@@ -938,6 +943,132 @@ describe("Elixir_Hologram_DB", () => {
         HologramBoxedError,
         "delete was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
       );
+    });
+  });
+
+  describe("the bangs", () => {
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(1_756_100_000_123);
+      Batches.open("todos");
+
+      LocalDatabase.putRow(TASK, {
+        done: false,
+        id: ID_1,
+        title: "Draft copy",
+        $revisions: {done: 10, title: 11},
+      });
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    const held = () => Model.box(TASK, LocalDatabase.getRow(TASK, ID_1));
+
+    const pairs = (values) =>
+      Type.list(
+        values.map(([name, value]) => Type.tuple([Type.atom(name), value])),
+      );
+
+    it("answers the written row when the write passes", () => {
+      const result = createBang(
+        Model.box(TASK, {done: false, id: ID_2, title: "alpha"}),
+      );
+
+      assert.deepStrictEqual(field(result, "title"), Type.bitstring("alpha"));
+    });
+
+    it("answers :ok when an update passes", () => {
+      assert.deepStrictEqual(
+        updateBang(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+        ),
+        Type.atom("ok"),
+      );
+    });
+
+    it("answers :ok when a delete passes", () => {
+      assert.deepStrictEqual(
+        deleteBang(task, Type.bitstring(ID_1)),
+        Type.atom("ok"),
+      );
+    });
+
+    it("raises naming the type and describing each violated declaration", () => {
+      assert.throw(
+        () => createBang(Model.box(TASK, {done: false, id: ID_2, title: null})),
+        HologramBoxedError,
+        "cannot create MyApp.Task:\n  * attribute :title is required",
+      );
+    });
+
+    it("raises describing a bound the value broke, quoting the value", () => {
+      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      assert.throw(
+        () =>
+          updateBang(putAttribute(item, pairs([["stock", Type.integer(-1)]]))),
+        HologramBoxedError,
+        `cannot update MyApp.Item "${ID_2}":\n  * attribute :stock must be at least 0, got: -1`,
+      );
+    });
+
+    it("raises for a type-indexed update, quoting the changes it was given", () => {
+      assert.throw(
+        () =>
+          updateByIdBang(
+            task,
+            Type.bitstring(ID_1),
+            Type.map([[Type.atom("title"), Type.nil()]]),
+          ),
+        HologramBoxedError,
+        `cannot update MyApp.Task "${ID_1}":\n  * attribute :title is required`,
+      );
+    });
+
+    it("carries the violations it raised on as its reason", () => {
+      try {
+        createBang(Model.box(TASK, {done: false, id: ID_2, title: null}));
+        assert.fail("expected a raise");
+      } catch (error) {
+        const reason = field(error.struct, "reason");
+
+        assert.deepStrictEqual(
+          reason,
+          Type.map([[Type.atom("title"), Type.list([Type.atom("required")])]]),
+        );
+      }
+    });
+
+    it("names the struct it raises", () => {
+      try {
+        createBang(Model.box(TASK, {done: false, id: ID_2, title: null}));
+        assert.fail("expected a raise");
+      } catch (error) {
+        assert.equal(Model.structTypeName(error.struct), "Hologram.WriteError");
+      }
+    });
+
+    // Two violations, so the ORDER is observable - the server sorts the boxed {field, reason}
+    // pairs and this follows Elixir's own term order rather than a rule written twice.
+    it("describes one line per violated declaration, in term order", () => {
+      try {
+        createBang(Model.box(TASK, {done: null, id: ID_2, title: null}));
+        assert.fail("expected a raise");
+      } catch (error) {
+        const message = Bitstring.toText(field(error.struct, "message"));
+
+        assert.equal(
+          message,
+          "cannot create MyApp.Task:\n" +
+            "  * attribute :done is required\n" +
+            "  * attribute :title is required",
+        );
+      }
     });
   });
 

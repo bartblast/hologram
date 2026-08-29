@@ -4,6 +4,7 @@ import Batches from "../../batches.mjs";
 import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
 import Elixir_Hologram_Entity from "./entity.mjs";
+import Erlang from "../../erlang/erlang.mjs";
 import Elixir_Hologram_Query from "./query.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
@@ -207,6 +208,133 @@ function heldRow(entityType, id, verb) {
   }
 
   return held;
+}
+
+// One bulleted line per violated declaration, sorted the way the server's are - by field, then by
+// reason, over the boxed pair, so the ordering follows Elixir's own term order rather than a rule
+// written twice.
+//
+// The :unique and :not_found lines the server also formats are NOT here: neither reason can be
+// produced on this tier, because both are questions about OTHER rows. They arrive as the batch's
+// rejection instead.
+function refusalLines(entityType, violations, values) {
+  const pairs = Object.values(violations.data).flatMap(([name, reasons]) =>
+    reasons.data.map((reason) => Type.tuple([name, reason])),
+  );
+
+  return pairs
+    .sort(Interpreter.compareTerms)
+    .map((pair) => violationLine(entityType, values, pair))
+    .join("\n");
+}
+
+function violationLine(entityType, values, pair) {
+  const [name, reason] = pair.data;
+  const spelled = Interpreter.inspect(name);
+  const isReference = referenceFieldNames(entityType).includes(name.value);
+
+  if (Type.isAtom(reason) && reason.value === "required") {
+    return `  * ${isReference ? "reference" : "attribute"} ${spelled} is required`;
+  }
+
+  if (Type.isAtom(reason) && reason.value === "unknown") {
+    return `  * ${spelled} is not a declared attribute or to-one reference`;
+  }
+
+  if (isReference) {
+    return `  * reference ${spelled} must be a valid entity id, got: ${Interpreter.inspect(values[name.value] ?? Type.nil())}`;
+  }
+
+  const requirement = requirementDescription(reason);
+
+  // A field the values do not hold has no received value to show - a moved attribute is judged on
+  // the value the write arrives at, which the caller never held.
+  return name.value in values
+    ? `  * attribute ${spelled} ${requirement}, got: ${Interpreter.inspect(values[name.value])}`
+    : `  * attribute ${spelled} ${requirement}`;
+}
+
+function requirementDescription(reason) {
+  const [key, value] = reason.data;
+  const spelled = Interpreter.inspect(value);
+
+  switch (key.value) {
+    case "format":
+      return `must match ${spelled}`;
+
+    case "in":
+      return `must be in ${spelled}`;
+
+    case "length":
+      return `must be exactly ${value.value} characters`;
+
+    case "max":
+      return `must be at most ${spelled}`;
+
+    case "max_bytes":
+      return `must hold at most ${value.value} bytes (the most its unique index can carry)`;
+
+    case "max_length":
+      return `must be at most ${value.value} characters`;
+
+    case "min":
+      return `must be at least ${spelled}`;
+
+    case "min_length":
+      return `must be at least ${value.value} characters`;
+
+    case "type":
+      return `must be of type ${spelled}`;
+
+    default:
+      return `must be one of ${spelled}`;
+  }
+}
+
+// A to-one relationship's reference field, which a violation describes as a reference rather than
+// as an attribute.
+function referenceFieldNames(entityType) {
+  return Object.entries(Model.entry(entityType).relationships)
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => `${name}_id`);
+}
+
+// The values a message quotes back. A create shows the struct's own fields, an update shows only
+// what it was ASKED to write - an increment has none, and its line names no received value.
+function structValues(entity) {
+  return Object.fromEntries(
+    Object.values(entity.data)
+      .filter(([key]) => Type.isAtom(key))
+      .map(([key, value]) => [key.value, value]),
+  );
+}
+
+function putValues(entity) {
+  const ops = structField(structField(entity, "__meta__"), "attribute_ops");
+
+  return Object.fromEntries(
+    Object.values(ops.data)
+      .filter(([_name, op]) => op.data[0].value === "put")
+      .map(([name, op]) => [name.value, op.data[1]]),
+  );
+}
+
+function changeValues(changes) {
+  const pairs = Type.isList(changes)
+    ? changes.data.map((pair) => pair.data)
+    : Object.values(changes.data);
+
+  return Object.fromEntries(pairs.map(([name, value]) => [name.value, value]));
+}
+
+function raiseWriteError(message, reason) {
+  Erlang["error/1"](
+    Type.struct("Hologram.WriteError", [
+      [Type.atom("__exception__"), Type.boolean(true)],
+      [Type.atom("message"), Type.bitstring(message)],
+      [Type.atom("reason"), reason],
+    ]),
+  );
 }
 
 // The names a type-indexed update was given, or nothing when the changes are neither a map nor a
@@ -525,6 +653,39 @@ const Elixir_Hologram_DB = {
 
   // The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
   // changes are given outright and the operation is the verb's own.
+  "update!/1": (entity) => {
+    const result = Elixir_Hologram_DB["update/1"](entity);
+
+    if (Type.isAtom(result)) {
+      return result;
+    }
+
+    const entityType = Model.structTypeName(entity);
+    const id = Interpreter.inspect(structField(entity, "id"));
+
+    raiseWriteError(
+      `cannot update ${entityType} ${id}:\n` +
+        refusalLines(entityType, result.data[1], putValues(entity)),
+      result.data[1],
+    );
+  },
+
+  "update!/3": (entityType, id, changes) => {
+    const result = Elixir_Hologram_DB["update/3"](entityType, id, changes);
+
+    if (Type.isAtom(result)) {
+      return result;
+    }
+
+    const type = aliasName(entityType);
+
+    raiseWriteError(
+      `cannot update ${type} ${Interpreter.inspect(id)}:\n` +
+        refusalLines(type, result.data[1], changeValues(changes)),
+      result.data[1],
+    );
+  },
+
   "update/3": (entityType, id, changes) => {
     const type = aliasName(entityType);
 
@@ -557,6 +718,22 @@ const Elixir_Hologram_DB = {
     return Elixir_Hologram_DB["update/1"](entity);
   },
 
+  "create!/1": (entity) => {
+    const result = Elixir_Hologram_DB["create/1"](entity);
+
+    if (Type.isAtom(result.data[0]) && result.data[0].value === "ok") {
+      return result.data[1];
+    }
+
+    const entityType = Model.structTypeName(entity);
+
+    raiseWriteError(
+      `cannot create ${entityType}:\n` +
+        refusalLines(entityType, result.data[1], structValues(entity)),
+      result.data[1],
+    );
+  },
+
   "delete/1": (entity) => {
     const entityType = entityTypeOf(entity, "delete");
 
@@ -565,6 +742,14 @@ const Elixir_Hologram_DB = {
 
   // Naming the row by type and id carries no claim - delete/1 is the spelling for one.
   "delete/2": (entityType, id) => deleteRow(aliasName(entityType), id, null),
+
+  // A delete answers :ok or raises here, and never {:error, ...}: the server's refusal names the
+  // row that still references this one, which is a question about rows this client does not have.
+  // It arrives as the batch's rejection instead, so there is no error branch to write.
+  "delete!/1": (entity) => Elixir_Hologram_DB["delete/1"](entity),
+
+  "delete!/2": (entityType, id) =>
+    Elixir_Hologram_DB["delete/2"](entityType, id),
 
   "read/1": (query) => {
     const term = Elixir_Hologram_Query["normalize/1"](query);
