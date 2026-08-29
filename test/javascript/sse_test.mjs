@@ -4,6 +4,7 @@ import {
   assert,
   defineRuntimeGlobals,
   initComponentRegistryEntry,
+  registerWebApis,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -23,6 +24,12 @@ import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_re
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
+
+// Without this the file passes only when something else in the run has installed sessionStorage
+// first: every handler here that logs - a resync, a reload notice, a stream dying inside the
+// stability window - writes there through Logger, and a suite that leans on its neighbours cannot
+// be run by itself or trusted to say which change broke it.
+registerWebApis();
 
 describe("Sse", () => {
   let animationFrames;
