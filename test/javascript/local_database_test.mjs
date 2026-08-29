@@ -325,6 +325,18 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("hasFacts()", () => {
+    it("answers true for a set that was filed and is empty", () => {
+      LocalDatabase.replaceFacts("MyApp.Task", "tags", "t1", []);
+
+      assert.isTrue(LocalDatabase.hasFacts("MyApp.Task", "tags", "t1"));
+    });
+
+    it("answers false for a triple nothing was ever filed under", () => {
+      assert.isFalse(LocalDatabase.hasFacts("MyApp.Task", "tags", "t1"));
+    });
+  });
+
   describe("isSynced()", () => {
     it("answers false before the scope's marker arrived", () => {
       assert.isFalse(LocalDatabase.isSynced("page"));
@@ -556,6 +568,100 @@ describe("LocalDatabase", () => {
         LocalDatabase.getTargetIds("MyApp.Project", "tasks", "p1"),
         new Set(),
       );
+    });
+  });
+
+  describe("restore()", () => {
+    const TASK = "MyApp.Task";
+
+    const record = (id, attributes = {}, facts = {}) => ({
+      facts,
+      id,
+      row: {id, ...attributes},
+      type: TASK,
+    });
+
+    it("files a row the base does not hold, with its facts", () => {
+      LocalDatabase.restore([
+        record("t1", {title: "Draft copy"}, {tags: ["g1", "g2"]}),
+      ]);
+
+      assert.deepStrictEqual(LocalDatabase.baseRow(TASK, "t1"), {
+        id: "t1",
+        title: "Draft copy",
+      });
+
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        ["g1", "g2"],
+      );
+    });
+
+    // The page's row is the fresher of the two, so the stored one adds nothing to it - the same
+    // object comes back, not a copy of the stored values.
+    it("leaves a held row's values alone", () => {
+      const carried = {id: "t1", title: "Ship it"};
+
+      LocalDatabase.putRow(TASK, carried);
+      LocalDatabase.restore([record("t1", {title: "Draft copy"})]);
+
+      assert.strictEqual(LocalDatabase.baseRow(TASK, "t1"), carried);
+    });
+
+    it("unmarks a held row as carried", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.restore([record("t1", {title: "Draft copy"})]);
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("leaves another row's carried mark alone", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+      LocalDatabase.putRow(TASK, {id: "t2", title: "Draft copy"});
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.restore([record("t2")]);
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+    });
+
+    it("fills a held row's facts for a relationship nothing was filed under", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+
+      LocalDatabase.restore([record("t1", {}, {tags: ["g1"]})]);
+
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        ["g1"],
+      );
+    });
+
+    // A page's row states the whole set of every relationship it named, an empty one included -
+    // so a filed set is this page's word about the world and outranks the stored one.
+    it("leaves a held row's filed facts alone, empty ones included", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", []);
+
+      LocalDatabase.restore([record("t1", {}, {tags: ["g1"]})]);
+
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        [],
+      );
+    });
+
+    // The record naming a gone row is passed over and the one behind it is still filed - a skip
+    // rather than a stop.
+    it("passes over a record whose row is gone", () => {
+      LocalDatabase.restore([
+        {id: "t1", row: null, type: TASK},
+        record("t2", {title: "Draft copy"}),
+      ]);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t2"));
     });
   });
 

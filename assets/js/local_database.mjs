@@ -107,6 +107,15 @@ export default class LocalDatabase {
     );
   }
 
+  // Whether a target set has been FILED for the triple, which is not the same as its holding
+  // something. A row states the whole set of a relationship it names, empty sets included, so
+  // "filed and empty" is a fact about the world and "never filed" is the absence of one - and the
+  // absence is what a stored set may still speak for. `baseTargetIds` cannot tell them apart,
+  // answering an empty set for both.
+  static hasFacts(type, relationship, sourceId) {
+    return LocalDatabase.#facts[type]?.[relationship]?.[sourceId] !== undefined;
+  }
+
   static isSynced(scope) {
     return LocalDatabase.#syncedScopes.has(scope);
   }
@@ -181,6 +190,44 @@ export default class LocalDatabase {
 
     for (const targetId of targetIds) {
       targets.add(targetId);
+    }
+  }
+
+  // Fills the database with what a previous page load left in durable storage, WITHOUT disturbing
+  // anything this page already carried.
+  //
+  // What the page carried is the fresher of the two by construction: the server rendered it for
+  // this request, and these records were written from frames that arrived before the last unload.
+  // So a row the page brought wins on its values, and a stored row fills only an id the page said
+  // nothing about. Facts are the one place a stored record still has something to add to a held
+  // row: a page's row states the target sets of the relationships its query included and stays
+  // silent about the rest, and a set nobody has filed is one the stored record may speak for.
+  //
+  // A held row is also unmarked as carried, because holding a stored record for it IS the evidence
+  // the stream vouched for it on an earlier load. Left marked, it would be swept the moment the
+  // server declares the pot complete - and a resuming client is told only what changed while it
+  // was away, so nothing would resend it.
+  static restore(records) {
+    for (const record of records) {
+      // A snapshot of a gone row is never written down, and the shape allows one, so it is passed
+      // over rather than filed as a row with nothing in it.
+      if (record.row === null) {
+        continue;
+      }
+
+      const {facts, id, row, type} = record;
+
+      if (LocalDatabase.baseRow(type, id) === null) {
+        LocalDatabase.putRow(type, row);
+      } else {
+        LocalDatabase.unmarkCarried(type, id);
+      }
+
+      for (const [relationship, targetIds] of Object.entries(facts)) {
+        if (!LocalDatabase.hasFacts(type, relationship, id)) {
+          LocalDatabase.replaceFacts(type, relationship, id, targetIds);
+        }
+      }
     }
   }
 
