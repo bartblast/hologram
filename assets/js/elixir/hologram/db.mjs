@@ -190,6 +190,62 @@ function splitAttributeOps(attributeOps) {
   return {changes, deltas};
 }
 
+// The names a type-indexed update was given, or nothing when the changes are neither a map nor a
+// keyword list - a shape the stage explains better than this can.
+function changeNames(changes) {
+  const pairs = Type.isList(changes)
+    ? Type.isKeywordList(changes) && changes.data.map((pair) => pair.data)
+    : Type.isMap(changes) && Object.values(changes.data);
+
+  return pairs && pairs.every(([name]) => Type.isAtom(name))
+    ? pairs.map(([name]) => name.value)
+    : null;
+}
+
+// The type-indexed form does its own name checking rather than leaning on put_attribute's,
+// because the server's does too and says something different: it names EVERY offending field at
+// once, where a stage refuses the first one it meets. A system attribute is among them - it is
+// not a settable column, so it is "not something that can be updated" rather than "managed
+// automatically", which is what the struct form says about the same name.
+function validateChangeNames(entityType, names) {
+  if (names.length === 0) {
+    Interpreter.raiseArgumentError(
+      `invalid changes for ${entityType} - at least one declared attribute or to-one relationship must be changed`,
+    );
+  }
+
+  const settable = settableFieldNames(entityType);
+  const unknown = names.filter((name) => !settable.includes(name));
+
+  if (unknown.length > 0) {
+    const listed = unknown
+      .sort()
+      .map((name) => `:${name}`)
+      .join(", ");
+
+    Interpreter.raiseArgumentError(
+      `invalid changes for ${entityType} - only declared attributes and to-one relationships can be updated: ${listed}`,
+    );
+  }
+}
+
+// What the mapping carries as a settable column: the declared attributes and every to-one
+// relationship's reference field. Server-only is IN it, the way the server's mapping is - a
+// browser writing one is refused later, by name, with a reason of its own.
+function settableFieldNames(entityType) {
+  const entry = Model.entry(entityType);
+
+  const declared = Object.keys(entry.attributes).filter(
+    (name) => !Model.systemAttributes.includes(name),
+  );
+
+  const references = Object.entries(entry.relationships)
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => `${name}_id`);
+
+  return [...declared, ...references];
+}
+
 // A moved counter is judged on the value the move ARRIVES AT, which is the only value that is
 // ever true of it - the same rule the server applies to what its statement returns.
 function validateMoves(entityType, held, deltas) {
@@ -421,6 +477,40 @@ const Elixir_Hologram_DB = {
     }
 
     return Type.atom("ok");
+  },
+
+  // The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
+  // changes are given outright and the operation is the verb's own.
+  "update/3": (entityType, id, changes) => {
+    const type = aliasName(entityType);
+
+    if (type === ROLE_GRANT) {
+      Interpreter.raiseArgumentError(
+        "role grants are written only through grant_role/revoke_role",
+      );
+    }
+
+    const rowId = Bitstring.toText(id);
+    const held = LocalDatabase.getRow(type, rowId);
+
+    if (held === null) {
+      Interpreter.raiseArgumentError(
+        `cannot update ${type} - no entity with id "${rowId}"`,
+      );
+    }
+
+    const names = changeNames(changes);
+
+    if (names !== null) {
+      validateChangeNames(type, names);
+    }
+
+    const entity = Elixir_Hologram_Query["put_attribute/2"](
+      Model.box(type, held),
+      changes,
+    );
+
+    return Elixir_Hologram_DB["update/1"](entity);
   },
 
   "read/1": (query) => {

@@ -32,6 +32,7 @@ describe("Elixir_Hologram_DB", () => {
   const increment = Elixir_Hologram_Query["increment/3"];
   const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
   const update = Elixir_Hologram_DB["update/1"];
+  const updateById = Elixir_Hologram_DB["update/3"];
   const filter = Elixir_Hologram_Query["filter/2"];
   const one = Elixir_Hologram_Query["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
@@ -652,6 +653,142 @@ describe("Elixir_Hologram_DB", () => {
         () => update(entity),
         HologramBoxedError,
         "update was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
+      );
+    });
+  });
+
+  describe("update/3", () => {
+    const NOW_MS = 1_756_100_000_123;
+    const STAMP = NOW_MS * 1024;
+
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(NOW_MS);
+      Batches.open("todos");
+
+      LocalDatabase.putRow(TASK, {
+        done: false,
+        id: ID_1,
+        title: "Draft copy",
+        $revisions: {done: 10, title: 11},
+      });
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    const changes = (values) =>
+      Type.map(values.map(([name, value]) => [Type.atom(name), value]));
+
+    it("writes the changes it was given, carrying no claim", () => {
+      assert.deepStrictEqual(
+        updateById(
+          task,
+          Type.bitstring(ID_1),
+          changes([["title", Type.bitstring("Ship it")]]),
+        ),
+        Type.atom("ok"),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, [
+        {
+          based_on: {title: 11},
+          claim: null,
+          data: {title: "Ship it"},
+          id: ID_1,
+          op: "update",
+          stamp: STAMP,
+          type: TASK,
+        },
+      ]);
+    });
+
+    it("shows the change through the database", () => {
+      updateById(
+        task,
+        Type.bitstring(ID_1),
+        changes([["title", Type.bitstring("Ship it")]]),
+      );
+
+      assert.equal(LocalDatabase.getRow(TASK, ID_1).title, "Ship it");
+    });
+
+    it("takes a keyword list as well as a map", () => {
+      updateById(
+        task,
+        Type.bitstring(ID_1),
+        Type.list([
+          Type.tuple([Type.atom("title"), Type.bitstring("Ship it")]),
+        ]),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes[0].data, {
+        title: "Ship it",
+      });
+    });
+
+    it("answers a refusal from the declarations", () => {
+      const result = updateById(
+        task,
+        Type.bitstring(ID_1),
+        changes([["title", Type.nil()]]),
+      );
+
+      assert.deepStrictEqual(result.data[0], Type.atom("error"));
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
+    it("raises for a row this client does not hold", () => {
+      assert.throw(
+        () =>
+          updateById(
+            task,
+            Type.bitstring(ID_2),
+            changes([["title", Type.bitstring("x")]]),
+          ),
+        HologramBoxedError,
+        `cannot update MyApp.Task - no entity with id "${ID_2}"`,
+      );
+    });
+
+    it("raises when nothing is changed", () => {
+      assert.throw(
+        () => updateById(task, Type.bitstring(ID_1), changes([])),
+        HologramBoxedError,
+        "invalid changes for MyApp.Task - at least one declared attribute or to-one relationship must be changed",
+      );
+    });
+
+    // Every offending name at once, where the struct form refuses the first it meets - and a
+    // system attribute is among them, because it is not a settable column.
+    it("raises naming every field that cannot be updated", () => {
+      assert.throw(
+        () =>
+          updateById(
+            task,
+            Type.bitstring(ID_1),
+            changes([
+              ["nope", Type.integer(1)],
+              ["created_at", Type.nil()],
+            ]),
+          ),
+        HologramBoxedError,
+        "invalid changes for MyApp.Task - only declared attributes and to-one relationships can be updated: :created_at, :nope",
+      );
+    });
+
+    it("raises for a role grant", () => {
+      assert.throw(
+        () =>
+          updateById(
+            Type.alias(ROLE_GRANT),
+            Type.bitstring(ID_1),
+            changes([["role", Type.bitstring("editor")]]),
+          ),
+        HologramBoxedError,
+        "role grants are written only through grant_role/revoke_role",
       );
     });
   });
