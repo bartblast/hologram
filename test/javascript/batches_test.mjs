@@ -443,6 +443,99 @@ describe("Batches", () => {
     });
   });
 
+  describe("carryAcrossSuspension()", () => {
+    const ids = (batch) => batch.writes.map((write) => write.id);
+
+    it("leaves nothing running while the action is away", () => {
+      Batches.open("todos");
+      Batches.carryAcrossSuspension(Promise.resolve());
+
+      assert.isNull(Batches.current());
+    });
+
+    it("puts the action's own batch back when it resumes", async () => {
+      const batch = Batches.open("todos");
+
+      await Batches.carryAcrossSuspension(Promise.resolve());
+
+      assert.strictEqual(Batches.current(), batch);
+    });
+
+    it("answers what the awaited promise answered", async () => {
+      Batches.open("todos");
+
+      const value = await Batches.carryAcrossSuspension(Promise.resolve("x"));
+
+      assert.equal(value, "x");
+    });
+
+    // The whole point of the round trip: an action that comes back from an await must write to,
+    // and close, the batch it opened - not whichever action ran while it was gone.
+    it("keeps the writes of two interleaved actions in their own batches", async () => {
+      let resumeFirst, resumeSecond;
+
+      const firstAwaited = new Promise((resolve) => (resumeFirst = resolve));
+      const secondAwaited = new Promise((resolve) => (resumeSecond = resolve));
+
+      const firstBatch = Batches.open("first");
+      const firstSuspension = Batches.carryAcrossSuspension(firstAwaited);
+
+      const secondBatch = Batches.open("second");
+      const secondSuspension = Batches.carryAcrossSuspension(secondAwaited);
+
+      // The first action comes back while the second is still away, which is the order a stack of
+      // open batches gets wrong: its top is the second one.
+      resumeFirst();
+      await firstSuspension;
+      wrote("t1");
+
+      assert.strictEqual(Batches.close(), firstBatch);
+
+      resumeSecond();
+      await secondSuspension;
+      wrote("t2");
+
+      assert.strictEqual(Batches.close(), secondBatch);
+
+      assert.deepStrictEqual(ids(firstBatch), ["t1"]);
+      assert.deepStrictEqual(ids(secondBatch), ["t2"]);
+    });
+
+    // Awaiting a task twice takes nothing out of the promise registry, so this is what Task.await/1
+    // hands over the second time. The action goes on to raise, and it can only drop its own writes
+    // if it is still the one running.
+    it("leaves the action running when there is nothing to await", () => {
+      const batch = Batches.open("todos");
+
+      assert.throw(() => Batches.carryAcrossSuspension(null), TypeError);
+
+      assert.strictEqual(Batches.current(), batch);
+    });
+
+    // An action that raises after resuming has to drop its own writes, which it can only do if the
+    // failure arrives with the batch back in place.
+    it("puts the batch back when the awaited promise fails", async () => {
+      const batch = Batches.open("first");
+      const suspension = Batches.carryAcrossSuspension(
+        Promise.reject(new Error("boom")),
+      );
+
+      Batches.open("second");
+
+      let errorThrown = false;
+
+      try {
+        await suspension;
+      } catch (error) {
+        errorThrown = true;
+        assert.equal(error.message, "boom");
+      }
+
+      assert.isTrue(errorThrown, "Expected the awaited promise to reject");
+      assert.strictEqual(Batches.discard(), batch);
+    });
+  });
+
   describe("close()", () => {
     it("seals the open batch and queues it", () => {
       Batches.open("todos");
@@ -486,14 +579,12 @@ describe("Batches", () => {
       assert.equal(Overlay.durability(TODO, "t1"), "applied");
     });
 
-    it("closes the batch opened last", () => {
-      const outer = Batches.open("outer");
-      const inner = Batches.open("inner");
-
+    it("leaves no batch running, so a write after it has nowhere to go", () => {
+      Batches.open("todos");
       wrote("t1");
+      Batches.close();
 
-      assert.strictEqual(Batches.close(), inner);
-      assert.strictEqual(Batches.current(), outer);
+      assert.isNull(Batches.current());
     });
 
     it("answers nothing when no batch is open", () => {
@@ -506,12 +597,10 @@ describe("Batches", () => {
       assert.isNull(Batches.current());
     });
 
-    it("answers the batch opened last", () => {
-      Batches.open("outer");
+    it("answers the batch of the action running now", () => {
+      const batch = Batches.open("todos");
 
-      const inner = Batches.open("inner");
-
-      assert.strictEqual(Batches.current(), inner);
+      assert.strictEqual(Batches.current(), batch);
     });
   });
 
@@ -538,13 +627,12 @@ describe("Batches", () => {
       assert.equal(Batches.close().seq, 1);
     });
 
-    it("discards the batch opened last", () => {
-      const outer = Batches.open("outer");
-
-      Batches.open("inner");
+    it("leaves no batch running, so a write after it has nowhere to go", () => {
+      Batches.open("todos");
+      wrote("t1");
       Batches.discard();
 
-      assert.strictEqual(Batches.current(), outer);
+      assert.isNull(Batches.current());
     });
 
     it("answers nothing when no batch is open", () => {

@@ -10,19 +10,20 @@ import Sse from "./sse.mjs";
 // Which batch an action's writes go to, and what becomes of it when the action ends.
 //
 // An action opens one on the way in and closes it on the way out, so "the writes of one action"
-// needs no bookkeeping from the app: a write goes to whichever batch is open. A batch that
-// collected nothing is dropped rather than sent, and one that collected something is sealed, takes
-// the next sequence number and joins the queue in the order it was made.
+// needs no bookkeeping from the app: a write goes to the batch of the action making it. A batch
+// that collected nothing is dropped rather than sent, and one that collected something is sealed,
+// takes the next sequence number and joins the queue in the order it was made.
 //
 // That order is the order it ships, and the ordering is load-bearing rather than tidy: a later
 // batch may name a row an earlier one created, and its based_on for a column an earlier one wrote
 // is that batch's own stamp. Shipping them out of order turns a sound chain into a refusal.
 //
-// Open batches are a STACK rather than one slot, because an action that awaits can still be open
-// when another starts. Two genuinely overlapping actions can therefore put a write on the other's
-// batch - both still ship and nothing is lost, but the "one action, one batch" boundary blurs.
-// Recorded rather than solved: the answer is a context per action, which arrives with the client's
-// own process model.
+// ONE SLOT rather than a stack of open batches, because "the batch opened last" is not "the batch
+// of the action running now": an action that awaits is still open while another runs, so a stack
+// would hand the resuming action whichever batch started while it was away - its writes would join
+// that one, and its close would seal it. The slot is emptied where an action stops running and put
+// back when it resumes, which is the whole of carryAcrossSuspension - so a write, a close and a
+// discard all reach the batch of the action that asked for them, whatever else began meanwhile.
 export default class Batches {
   // Sealed and waiting to ship, oldest first.
   static pending = [];
@@ -33,23 +34,46 @@ export default class Batches {
   // TODO: filled when the sender loop records a refusal.
   static rejected = [];
 
+  // The batch of the action running right now, and nothing when no action is - a write outside an
+  // action has nowhere to belong.
+  static #running = null;
+
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
   // twice - every close calls flush, and an answer can arrive while another action is running.
   static #sending = false;
 
   static #seq = 0;
 
-  static #stack = [];
+  // An action that awaits stops running, and another action may run to completion before it comes
+  // back - so the batch it opened is taken out of the slot here and put back in the turn it
+  // resumes, before any of its remaining code runs. Task.await/1 is the only place an action stops:
+  // every JS promise reaching Elixir is boxed as a Task, and nothing else unwraps one.
+  static carryAcrossSuspension(promise) {
+    const batch = Batches.#running;
+
+    // Registered before the slot is emptied, so nothing that is not really a promise empties it -
+    // the action stays running and its raise still reaches its own writes. The callback cannot run
+    // before this returns, since a settled promise still calls back in a later turn.
+    const carried = promise.finally(() => {
+      Batches.#running = batch;
+    });
+
+    Batches.#running = null;
+
+    return carried;
+  }
 
   // Seals the batch the action opened, or drops it when the action wrote nothing - a sequence
   // number is spent only by a batch that will ship. Answers the sealed batch, or nothing when
   // there was nothing to seal.
   static close() {
-    const batch = Batches.#stack.pop();
+    const batch = Batches.#running;
 
-    if (batch === undefined) {
+    if (batch === null) {
       return null;
     }
+
+    Batches.#running = null;
 
     if (batch.writes.length === 0) {
       Overlay.remove(batch);
@@ -64,15 +88,17 @@ export default class Batches {
   }
 
   static current() {
-    return Batches.#stack.at(-1) ?? null;
+    return Batches.#running;
   }
 
   // Everything the action wrote goes away, which is what a raise has to mean: an action's writes
   // land together or not at all, and dropping the layer is the whole of putting them back.
   static discard() {
-    const batch = Batches.#stack.pop() ?? null;
+    const batch = Batches.#running;
 
     if (batch !== null) {
+      Batches.#running = null;
+
       Overlay.remove(batch);
     }
 
@@ -157,7 +183,7 @@ export default class Batches {
   static open(target) {
     const batch = new Batch(target);
 
-    Batches.#stack.push(batch);
+    Batches.#running = batch;
     Overlay.push(batch);
 
     return batch;
@@ -168,8 +194,8 @@ export default class Batches {
   static reset() {
     Batches.pending = [];
     Batches.rejected = [];
+    Batches.#running = null;
     Batches.#seq = 0;
-    Batches.#stack = [];
 
     Overlay.reset();
   }
