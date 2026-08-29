@@ -23,6 +23,20 @@ import Type from "../../type.mjs";
 // policies because its database holds every row; this database holds only rows the server already
 // decided this client may see, so filtering again would be asking the same question twice with
 // less information. The acting user is still carried, for the predicates that NAME them.
+// Thrown by rollback/1 and caught by the transaction it names. Not a boxed error: nothing outside
+// this module should ever see it, and an app rescuing exceptions must not catch it by accident.
+class Rollback {
+  constructor(reason) {
+    this.reason = reason;
+  }
+}
+
+// How many transactions are open on the batch this action is writing to - what lets rollback/1
+// refuse outside one. It does NOT need to name a layer: a throw is caught by the innermost
+// enclosing catch, so a nested rollback stops at its own transaction by construction, where the
+// server has to carry a depth because its throw travels through Postgrex's own machinery.
+let openTransactions = 0;
+
 const ROLE_GRANT = "Hologram.Auth.RoleGrant";
 
 const ID_PATTERN =
@@ -548,6 +562,22 @@ function valuePlaceholderNames(value) {
 }
 
 const Elixir_Hologram_DB = {
+  "create!/1": (entity) => {
+    const result = Elixir_Hologram_DB["create/1"](entity);
+
+    if (Type.isAtom(result.data[0]) && result.data[0].value === "ok") {
+      return result.data[1];
+    }
+
+    const entityType = Model.structTypeName(entity);
+
+    raiseWriteError(
+      `cannot create ${entityType}:\n` +
+        refusalLines(entityType, result.data[1], structValues(entity)),
+      result.data[1],
+    );
+  },
+
   "create/1": (entity) => {
     const entityType = entityTypeOf(entity, "create");
 
@@ -581,6 +611,129 @@ const Elixir_Hologram_DB = {
       Type.atom("ok"),
       storedEntity(entity, entityType, stamp),
     ]);
+  },
+
+  "delete!/1": (entity) => Elixir_Hologram_DB["delete/1"](entity),
+
+  "delete!/2": (entityType, id) =>
+    Elixir_Hologram_DB["delete/2"](entityType, id),
+
+  // Aborts the innermost enclosing transaction, making it answer {:error, reason}.
+
+  "delete/1": (entity) => {
+    const entityType = entityTypeOf(entity, "delete");
+
+    return deleteRow(entityType, structField(entity, "id"), writeClaim(entity));
+  },
+
+  // Naming the row by type and id carries no claim - delete/1 is the spelling for one.
+
+  "delete/2": (entityType, id) => deleteRow(aliasName(entityType), id, null),
+
+  // A delete answers :ok or raises here, and never {:error, ...}: the server's refusal names the
+  // row that still references this one, which is a question about rows this client does not have.
+  // It arrives as the batch's rejection instead, so there is no error branch to write.
+
+  "read/1": (query) => {
+    const term = Elixir_Hologram_Query["normalize/1"](query);
+
+    assertNoPlaceholders(term);
+
+    const result = QueryKernel.run(term, {
+      actorUserId: LocalDatabase.actorUserId,
+    });
+
+    return Model.boxResult(term, result);
+  },
+
+  "read/2": (entityType, id) => {
+    validateId(id);
+    validateEntityType(entityType);
+
+    const query = Elixir_Hologram_Query["one/1"](
+      Elixir_Hologram_Query["filter/2"](
+        entityType,
+        Type.list([Type.tuple([Type.atom("id"), id])]),
+      ),
+    );
+
+    return Elixir_Hologram_DB["read/1"](query);
+  },
+
+  "rollback/1": (reason) => {
+    if (openTransactions === 0) {
+      Interpreter.raiseArgumentError(
+        "cannot rollback - not inside a transaction",
+      );
+    }
+
+    throw new Rollback(reason);
+  },
+
+  // The client has no database transaction to open - an action's writes already ship together -
+  // so what this marks is a position in the batch. A rollback or a raise truncates back to it,
+  // which IS the undo: the overlay folds the batch's writes, so a write removed from that list is
+  // a write the database no longer shows.
+  //
+  // The opts are accepted and ignored. Their one intended use is read-set validation, which is
+  // deferred past v1.
+
+  "transaction/1": (fun) =>
+    Elixir_Hologram_DB["transaction/2"](fun, Type.list([])),
+
+  "transaction/2": (fun, _opts) => {
+    const batch = currentBatch("transaction");
+    const mark = batch.writes.length;
+    openTransactions += 1;
+
+    try {
+      const value = Interpreter.callAnonymousFunction(fun, []);
+
+      return Type.tuple([Type.atom("ok"), value]);
+    } catch (error) {
+      batch.writes.length = mark;
+
+      if (error instanceof Rollback) {
+        return Type.tuple([Type.atom("error"), error.reason]);
+      }
+
+      throw error;
+    } finally {
+      openTransactions -= 1;
+    }
+  },
+
+  "update!/1": (entity) => {
+    const result = Elixir_Hologram_DB["update/1"](entity);
+
+    if (Type.isAtom(result)) {
+      return result;
+    }
+
+    const entityType = Model.structTypeName(entity);
+    const id = Interpreter.inspect(structField(entity, "id"));
+
+    raiseWriteError(
+      `cannot update ${entityType} ${id}:\n` +
+        refusalLines(entityType, result.data[1], putValues(entity)),
+      result.data[1],
+    );
+  },
+
+  "update!/3": (entityType, id, changes) => {
+    const result = Elixir_Hologram_DB["update/3"](entityType, id, changes);
+
+    if (Type.isAtom(result)) {
+      return result;
+    }
+
+    const type = aliasName(entityType);
+
+    raiseWriteError(
+      `cannot update ${type} ${Interpreter.inspect(id)}:\n` +
+        refusalLines(type, result.data[1], changeValues(changes)),
+      result.data[1],
+    );
   },
 
   "update/1": (entity) => {
@@ -653,38 +806,6 @@ const Elixir_Hologram_DB = {
 
   // The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
   // changes are given outright and the operation is the verb's own.
-  "update!/1": (entity) => {
-    const result = Elixir_Hologram_DB["update/1"](entity);
-
-    if (Type.isAtom(result)) {
-      return result;
-    }
-
-    const entityType = Model.structTypeName(entity);
-    const id = Interpreter.inspect(structField(entity, "id"));
-
-    raiseWriteError(
-      `cannot update ${entityType} ${id}:\n` +
-        refusalLines(entityType, result.data[1], putValues(entity)),
-      result.data[1],
-    );
-  },
-
-  "update!/3": (entityType, id, changes) => {
-    const result = Elixir_Hologram_DB["update/3"](entityType, id, changes);
-
-    if (Type.isAtom(result)) {
-      return result;
-    }
-
-    const type = aliasName(entityType);
-
-    raiseWriteError(
-      `cannot update ${type} ${Interpreter.inspect(id)}:\n` +
-        refusalLines(type, result.data[1], changeValues(changes)),
-      result.data[1],
-    );
-  },
 
   "update/3": (entityType, id, changes) => {
     const type = aliasName(entityType);
@@ -716,65 +837,6 @@ const Elixir_Hologram_DB = {
     );
 
     return Elixir_Hologram_DB["update/1"](entity);
-  },
-
-  "create!/1": (entity) => {
-    const result = Elixir_Hologram_DB["create/1"](entity);
-
-    if (Type.isAtom(result.data[0]) && result.data[0].value === "ok") {
-      return result.data[1];
-    }
-
-    const entityType = Model.structTypeName(entity);
-
-    raiseWriteError(
-      `cannot create ${entityType}:\n` +
-        refusalLines(entityType, result.data[1], structValues(entity)),
-      result.data[1],
-    );
-  },
-
-  "delete/1": (entity) => {
-    const entityType = entityTypeOf(entity, "delete");
-
-    return deleteRow(entityType, structField(entity, "id"), writeClaim(entity));
-  },
-
-  // Naming the row by type and id carries no claim - delete/1 is the spelling for one.
-  "delete/2": (entityType, id) => deleteRow(aliasName(entityType), id, null),
-
-  // A delete answers :ok or raises here, and never {:error, ...}: the server's refusal names the
-  // row that still references this one, which is a question about rows this client does not have.
-  // It arrives as the batch's rejection instead, so there is no error branch to write.
-  "delete!/1": (entity) => Elixir_Hologram_DB["delete/1"](entity),
-
-  "delete!/2": (entityType, id) =>
-    Elixir_Hologram_DB["delete/2"](entityType, id),
-
-  "read/1": (query) => {
-    const term = Elixir_Hologram_Query["normalize/1"](query);
-
-    assertNoPlaceholders(term);
-
-    const result = QueryKernel.run(term, {
-      actorUserId: LocalDatabase.actorUserId,
-    });
-
-    return Model.boxResult(term, result);
-  },
-
-  "read/2": (entityType, id) => {
-    validateId(id);
-    validateEntityType(entityType);
-
-    const query = Elixir_Hologram_Query["one/1"](
-      Elixir_Hologram_Query["filter/2"](
-        entityType,
-        Type.list([Type.tuple([Type.atom("id"), id])]),
-      ),
-    );
-
-    return Elixir_Hologram_DB["read/1"](query);
   },
 };
 

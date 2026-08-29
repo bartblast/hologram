@@ -1,8 +1,14 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals, sinon} from "../../support/helpers.mjs";
+import {
+  assert,
+  contextFixture,
+  defineRuntimeGlobals,
+  sinon,
+} from "../../support/helpers.mjs";
 
 import Batches from "../../../../assets/js/batches.mjs";
+import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
@@ -29,6 +35,8 @@ describe("Elixir_Hologram_DB", () => {
   const count = Elixir_Hologram_Query["count/1"];
   const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
+  const rollback = Elixir_Hologram_DB["rollback/1"];
+  const transaction = Elixir_Hologram_DB["transaction/2"];
   const createBang = Elixir_Hologram_DB["create!/1"];
   const deleteBang = Elixir_Hologram_DB["delete!/2"];
   const updateBang = Elixir_Hologram_DB["update!/1"];
@@ -942,6 +950,176 @@ describe("Elixir_Hologram_DB", () => {
         () => deleteById(task, Type.bitstring(ID_1)),
         HologramBoxedError,
         "delete was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
+      );
+    });
+  });
+
+  describe("transaction/2 and rollback/1", () => {
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(1_756_100_000_123);
+      Batches.open("todos");
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    // A zero-arity function as transpiled app code hands one over.
+    const fun = (body) =>
+      Type.anonymousFunction(
+        0,
+        [{params: (_context) => [], guards: [], body}],
+        contextFixture(),
+      );
+
+    const noOpts = Type.list([]);
+
+    const creating = (title) =>
+      create(Model.box(TASK, {done: false, id: ID_1, title}));
+
+    it("answers what the function returned", () => {
+      assert.deepStrictEqual(
+        transaction(
+          fun(() => Type.atom("done")),
+          noOpts,
+        ),
+        Type.tuple([Type.atom("ok"), Type.atom("done")]),
+      );
+    });
+
+    it("keeps the writes made inside it", () => {
+      transaction(
+        fun(() => {
+          creating("alpha");
+
+          return Type.atom("done");
+        }),
+        noOpts,
+      );
+
+      assert.equal(Batches.current().writes.length, 1);
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    it("answers the reason a rollback named", () => {
+      assert.deepStrictEqual(
+        transaction(
+          fun(() => rollback(Type.atom("locked"))),
+          noOpts,
+        ),
+        Type.tuple([Type.atom("error"), Type.atom("locked")]),
+      );
+    });
+
+    it("takes back the writes a rollback undoes", () => {
+      transaction(
+        fun(() => {
+          creating("alpha");
+
+          return rollback(Type.atom("locked"));
+        }),
+        noOpts,
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+      assert.isNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    // The action's own writes are not the transaction's to take back - only what it opened over.
+    it("leaves the writes made before it alone", () => {
+      creating("before");
+
+      transaction(
+        fun(() => {
+          create(Model.box(TASK, {done: false, id: ID_2, title: "inside"}));
+
+          return rollback(Type.atom("locked"));
+        }),
+        noOpts,
+      );
+
+      assert.equal(Batches.current().writes.length, 1);
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+      assert.isNull(LocalDatabase.getRow(TASK, ID_2));
+    });
+
+    it("takes back the writes a raise undoes, and re-raises", () => {
+      assert.throw(
+        () =>
+          transaction(
+            fun(() => {
+              creating("alpha");
+
+              return Interpreter.raiseArgumentError("boom");
+            }),
+            noOpts,
+          ),
+        HologramBoxedError,
+        "boom",
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
+    // A nested rollback stops at its own layer, and the enclosing transaction carries on.
+    it("undoes what a nested transaction wrote and nothing more", () => {
+      const result = transaction(
+        fun(() => {
+          creating("outer");
+
+          const inner = transaction(
+            fun(() => {
+              create(Model.box(TASK, {done: false, id: ID_2, title: "inner"}));
+
+              return rollback(Type.atom("nope"));
+            }),
+            noOpts,
+          );
+
+          return inner;
+        }),
+        noOpts,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.atom("ok"),
+          Type.tuple([Type.atom("error"), Type.atom("nope")]),
+        ]),
+      );
+
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+      assert.isNull(LocalDatabase.getRow(TASK, ID_2));
+    });
+
+    it("takes the arity-one spelling too", () => {
+      assert.deepStrictEqual(
+        Elixir_Hologram_DB["transaction/1"](fun(() => Type.atom("done"))),
+        Type.tuple([Type.atom("ok"), Type.atom("done")]),
+      );
+    });
+
+    it("raises for a rollback outside a transaction", () => {
+      assert.throw(
+        () => rollback(Type.atom("locked")),
+        HologramBoxedError,
+        "cannot rollback - not inside a transaction",
+      );
+    });
+
+    it("raises for a rollback after its transaction returned", () => {
+      transaction(
+        fun(() => Type.atom("done")),
+        noOpts,
+      );
+
+      assert.throw(
+        () => rollback(Type.atom("locked")),
+        HologramBoxedError,
+        "cannot rollback - not inside a transaction",
       );
     });
   });
