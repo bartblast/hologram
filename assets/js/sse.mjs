@@ -79,6 +79,17 @@ export default class Sse {
       greeting.cursor = $.syncCursor;
     }
 
+    // The identity the page was given, presented unchanged - this client invents neither half, the
+    // same as when it sends a batch. What it buys on this stream is being told how far its own
+    // writes are in what a frame carries, which is what stops it applying them a second time.
+    //
+    // Both or neither: an id is only worth what the statement beside it vouches for, and the
+    // server reads an id with no statement as no identity at all.
+    if (globalThis.Hologram.replicaId && globalThis.Hologram.replicaToken) {
+      greeting.replica_id = globalThis.Hologram.replicaId;
+      greeting.replica_token = globalThis.Hologram.replicaToken;
+    }
+
     return greeting;
   }
 

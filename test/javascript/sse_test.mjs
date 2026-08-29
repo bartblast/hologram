@@ -163,6 +163,8 @@ describe("Sse", () => {
     const pageModule = Type.atom("Elixir.MyApp.BoardPage");
 
     afterEach(() => {
+      delete globalThis.Hologram.replicaId;
+      delete globalThis.Hologram.replicaToken;
       delete globalThis.Hologram.sync;
     });
 
@@ -204,6 +206,40 @@ describe("Sse", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
       assert.notProperty(Sse.buildSyncGreeting(pageModule), "cursor");
+    });
+
+    // The pair the page was given, presented unchanged - what earns this client frames that say
+    // how far its own writes are in.
+    it("presents the replica identity the page was given", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.replicaId = "r1";
+      globalThis.Hologram.replicaToken = "SFMyNTY.stated";
+
+      const greeting = Sse.buildSyncGreeting(pageModule);
+
+      assert.equal(greeting.replica_id, "r1");
+      assert.equal(greeting.replica_token, "SFMyNTY.stated");
+    });
+
+    // An id is only worth the statement beside it, so half a pair is presented as none - the
+    // server reads an id with no statement as no identity at all.
+    it("presents neither half when the page minted no identity", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      const greeting = Sse.buildSyncGreeting(pageModule);
+
+      assert.notProperty(greeting, "replica_id");
+      assert.notProperty(greeting, "replica_token");
+    });
+
+    it("presents neither half when the page gave an id with no statement", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.replicaId = "r1";
+
+      const greeting = Sse.buildSyncGreeting(pageModule);
+
+      assert.notProperty(greeting, "replica_id");
+      assert.notProperty(greeting, "replica_token");
     });
   });
 
