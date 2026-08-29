@@ -12,6 +12,14 @@ describe("LocalDatabase", () => {
     Overlay.reset();
   });
 
+  // The overlay is module state and only a reset drops a pushed batch - LocalDatabase.reset() does
+  // not touch it - so a suite that leaves one behind folds its own pending writes into whatever
+  // reads next. Only the LAST test to push is exposed, which is what makes this a trap rather than
+  // a bug: the ordering decides, not the code.
+  afterEach(() => {
+    Overlay.reset();
+  });
+
   // A delete is the one write that folds without asking the model anything, which is what makes it
   // the cheapest way to prove a getter goes through the overlay at all. What the fold ANSWERS is
   // Overlay's own suite's business - these three say only that the reads route and the base reads
