@@ -27,6 +27,7 @@ describe("Elixir_Hologram_Query", () => {
   const user = Type.alias(USER);
 
   const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
+  const authorize = Elixir_Hologram_Query["authorize/2"];
   const count = Elixir_Hologram_Query["count/1"];
   const deleteRelationship = Elixir_Hologram_Query["delete_relationship/3"];
   const decrement = Elixir_Hologram_Query["decrement/3"];
@@ -38,6 +39,7 @@ describe("Elixir_Hologram_Query", () => {
   const offset = Elixir_Hologram_Query["offset/2"];
   const one = Elixir_Hologram_Query["one/1"];
   const orderBy = Elixir_Hologram_Query["order_by/2"];
+  const trust = Elixir_Hologram_Query["trust/1"];
   const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
   const putAttributeValue = Elixir_Hologram_Query["put_attribute/3"];
 
@@ -862,6 +864,116 @@ describe("Elixir_Hologram_Query", () => {
           putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
         HologramBoxedError,
         "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :status, :title",
+      );
+    });
+  });
+
+  describe("authorize/2", () => {
+    const claim = (struct) => field(field(struct, "__meta__"), "claim");
+
+    it("keeps the rest of the metadata", () => {
+      const result = authorize(
+        addRelationship(
+          putAttribute(
+            entity(PROJECT),
+            predicates([["name", Type.bitstring("x")]]),
+          ),
+          Type.atom("tasks"),
+          Type.bitstring("t1"),
+        ),
+        Type.atom("archive"),
+      );
+
+      assert.deepStrictEqual(
+        ops(result),
+        Type.map([
+          [
+            Type.atom("name"),
+            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        edgeOps(result),
+        Type.map([
+          [
+            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
+            Type.atom("add"),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        claim(result),
+        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
+      );
+    });
+
+    it("records the claim for the operation", () => {
+      const result = authorize(entity(TASK), Type.atom("archive"));
+
+      assert.deepStrictEqual(
+        claim(result),
+        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
+      );
+    });
+
+    it("raises when the entity is not an entity struct", () => {
+      assert.throw(
+        () => authorize(Type.bitstring("x"), Type.atom("archive")),
+        HologramBoxedError,
+        'authorize takes an entity struct, got: "x"',
+      );
+    });
+
+    it("raises when the operation is not an atom", () => {
+      assert.throw(
+        () => authorize(entity(TASK), Type.bitstring("archive")),
+        HologramBoxedError,
+        'authorize takes an operation atom, got: "archive"',
+      );
+    });
+
+    it("raises when the struct already carries a claim", () => {
+      assert.throw(
+        () =>
+          authorize(
+            authorize(entity(TASK), Type.atom("archive")),
+            Type.atom("publish"),
+          ),
+        HologramBoxedError,
+        "MyApp.Task already carries a claim ({:authorize, :archive}) - a write claims exactly one authority",
+      );
+    });
+  });
+
+  // The server records a claim here and the client refuses one, so these have no twin in
+  // query_test.exs. Trust is the SERVER's authority on either half - a write claiming it is
+  // refused by the wire, and a read claiming it would ask this client's copy of the data to
+  // answer past the policies that decided what it holds.
+  describe("trust/1", () => {
+    it("refuses an entity struct", () => {
+      assert.throw(
+        () => trust(entity(TASK)),
+        HologramBoxedError,
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
+
+    it("refuses a query", () => {
+      assert.throw(
+        () => trust(task),
+        HologramBoxedError,
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
+
+    it("refuses a query term", () => {
+      assert.throw(
+        () => trust(filter(task, predicates([["done", Type.boolean(true)]]))),
+        HologramBoxedError,
+        "trust is the server's authority - a client cannot claim it",
       );
     });
   });

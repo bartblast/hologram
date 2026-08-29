@@ -610,6 +610,26 @@ function toTerm(query) {
 
 // The actor leaf carries the acting user's entity id, so it compares only against names holding
 // one - any other type would build a comparison that never matches.
+// A second claim is refused where it is written: a struct carrying two authorities would have to
+// pick one at the write, silently.
+function putClaim(entity, claim, stage) {
+  const entityType = entityTypeOf(entity, stage);
+  const metadata = field(entity, "__meta__");
+  const recorded = field(metadata, "claim");
+
+  if (!Type.isNil(recorded)) {
+    Interpreter.raiseArgumentError(
+      `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
+    );
+  }
+
+  return putField(
+    entity,
+    Type.atom("__meta__"),
+    putField(metadata, Type.atom("claim"), claim),
+  );
+}
+
 // The two counter stages share everything but the sign they record. A sum that reaches zero is
 // dropped rather than recorded: a delta of nothing is not a change, and the wire refuses one.
 function putDelta(entity, name, amount, sign, stage) {
@@ -1073,6 +1093,20 @@ const Elixir_Hologram_Query = {
       "add_relationship",
     ),
 
+  "authorize/2": (entity, operation) => {
+    if (!Type.isAtom(operation)) {
+      Interpreter.raiseArgumentError(
+        `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
+      );
+    }
+
+    return putClaim(
+      entity,
+      Type.tuple([Type.atom("authorize"), operation]),
+      "authorize",
+    );
+  },
+
   "count/1": (query) => setCardinality(query, "count"),
 
   "decrement/3": (entity, name, amount) =>
@@ -1176,6 +1210,16 @@ const Elixir_Hologram_Query = {
       entity,
       Type.list([Type.tuple([name, value])]),
     ),
+
+  // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
+  // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read
+  // claiming it would be asking this client's copy of the data to answer past the policies that
+  // decided what it holds. A helper reaching for it learns at its own line that it is server code.
+  "trust/1": (_subject) => {
+    Interpreter.raiseArgumentError(
+      "trust is the server's authority - a client cannot claim it",
+    );
+  },
 };
 
 export default Elixir_Hologram_Query;
