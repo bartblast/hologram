@@ -9,6 +9,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Sync.Frame
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
@@ -247,8 +248,21 @@ defmodule Hologram.Realtime.SSETest do
                cursor: nil,
                model_hash: "a3f9c2",
                page: MyApp.BoardPage,
-               protocol_version: 1
+               protocol_version: 1,
+               replica_id: nil,
+               replica_token: nil
              }
+    end
+
+    test "reads the replica a client presents" do
+      conn =
+        Plug.Test.conn(
+          :get,
+          sync_query_string("&replica_id=r1&replica_token=SFMyNTY.stated")
+        )
+
+      assert greeting(conn).replica_id == "r1"
+      assert greeting(conn).replica_token == "SFMyNTY.stated"
     end
 
     test "reads the place a returning client names" do
@@ -261,6 +275,50 @@ defmodule Hologram.Realtime.SSETest do
       conn = Plug.Test.conn(:get, "/?instance_id=whatever")
 
       assert greeting(conn) == %{}
+    end
+  end
+
+  # What a stream is willing to say about a client's own writes rests on this: a frame naming how
+  # far a replica's batches are applied is only safe to send to a session that is really that
+  # replica's, and the statement is checked the same way a batch's is.
+  describe "verified_replica_id/3" do
+    @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+
+    defp greeting_with(replica_id, token) do
+      %{replica_id: replica_id, replica_token: token}
+    end
+
+    test "answers the replica a genuine statement vouches for" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      token = ReplicaIdentity.issue(@replica_id, session_id, nil)
+
+      conn = conn_with_identities(instance_id: "i1", session_id: session_id)
+
+      assert verified_replica_id(greeting_with(@replica_id, token), conn, nil) == @replica_id
+    end
+
+    # The statement names a session, and a stream opened by another one is not the replica's own -
+    # so the frames it gets say nothing about anybody's writes.
+    test "answers nothing for a statement minted for another session" do
+      token = ReplicaIdentity.issue(@replica_id, "some-other-session", nil)
+
+      conn = conn_with_identities(instance_id: "i1", session_id: "this-session")
+
+      assert verified_replica_id(greeting_with(@replica_id, token), conn, nil) == nil
+    end
+
+    test "answers nothing for a statement that is not genuine" do
+      conn = conn_with_identities(instance_id: "i1", session_id: "this-session")
+
+      assert verified_replica_id(greeting_with(@replica_id, "SFMyNTY.forged"), conn, nil) == nil
+    end
+
+    # A client built before any of this, or one whose page minted no identity. It syncs like any
+    # other - what it loses is only the ability to be told about its own batches.
+    test "answers nothing for a client presenting no replica" do
+      conn = conn_with_identities(instance_id: "i1", session_id: "this-session")
+
+      assert verified_replica_id(greeting_with(nil, nil), conn, nil) == nil
     end
   end
 
