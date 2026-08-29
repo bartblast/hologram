@@ -213,6 +213,59 @@ describe("Durability", () => {
     });
   });
 
+  // A row carrying something the browser cannot copy into its own storage. Real rather than
+  // stubbed: what reaches this store is JSON the wire spelled, so a value like this is a bug in
+  // the framework - and what the store does about one is what these tests are for.
+  const unstorableRecord = () => ({
+    facts: {},
+    id: "t9",
+    row: {id: "t9", title: () => "not JSON"},
+    type: "MyApp.Task",
+  });
+
+  describe("a write that fails", () => {
+    it("drops the rows and the place, and stops storing for this page", async () => {
+      await Durability.open();
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy")],
+        "place-1",
+      );
+
+      await Durability.persistFrame([unstorableRecord()], "place-2");
+
+      assert.equal(Durability.mode, "memory");
+      assert.include(Logger.getLogs(), "durable storage stopped");
+      assert.deepStrictEqual(await readAll("entities"), []);
+      assert.isUndefined(await readMeta("cursor"));
+    });
+
+    // The rows are the server's and can be fetched again. A number handed out twice cannot be
+    // taken back, and a clock that restarts low writes revisions the server reads as moved.
+    it("keeps the identity, the counter and the clock", async () => {
+      await Durability.open();
+      await Durability.persistCounter(41);
+      await Durability.persistReplica({id: "r1", token: "statement"});
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(await readMeta("seq"), 41);
+      assert.isNumber(await readMeta("clock"));
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r1",
+        token: "statement",
+      });
+    });
+
+    it("leaves nothing in flight", async () => {
+      await Durability.open();
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.equal(Durability.inFlight, 0);
+    });
+  });
+
   describe("open()", () => {
     it("opens in indexeddb mode and creates the two object stores", async () => {
       await Durability.open();

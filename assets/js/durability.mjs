@@ -50,10 +50,7 @@ export default class Durability {
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
   // resync replaces the whole pot, and when what is stored cannot be read by this page.
   static clear() {
-    return Durability.#write([ENTITIES, META], (transaction) => {
-      transaction.objectStore(ENTITIES).clear();
-      transaction.objectStore(META).delete("cursor");
-    });
+    return Durability.#write([ENTITIES, META], Durability.#wipe);
   }
 
   // Answers nothing, and never throws: a browser that cannot store is a browser that carries on
@@ -242,12 +239,29 @@ export default class Durability {
   }
 
   // Something the database was asked to do could not be done. What follows is always the same:
-  // this page stops storing and carries on from memory, because a partial record is worse than
-  // none - it cannot be told from a whole one at the next startup.
+  // what is stored goes, and this page carries on from memory.
+  //
+  // The rows go because a base missing one frame's is worse than no base at all - the next startup
+  // cannot tell the two apart, and would resume from a place claiming rows that were never
+  // written. What this browser DID is left alone, as everywhere else: a number reused and a clock
+  // restarted low cost more than a re-download.
+  //
+  // The wipe deliberately does NOT go through the ordinary write path. A failure here must not
+  // come back round to this function, and it cannot: nothing in this block reports one. That is
+  // also why there is no "already failing" flag to keep in step - the shape rules the case out
+  // rather than catching it.
   static #fail(reason) {
     Logger.debug(
       `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
     );
+
+    try {
+      Durability.#wipe(
+        Durability.#db.transaction([ENTITIES, META], "readwrite"),
+      );
+    } catch {
+      // There is nothing further to try - this page stops storing either way.
+    }
 
     Durability.#close();
   }
@@ -360,6 +374,13 @@ export default class Durability {
   static #upgrade(db) {
     db.createObjectStore(ENTITIES, {keyPath: ["type", "id"]});
     db.createObjectStore(META);
+  }
+
+  // What is stored ON BEHALF OF THE SERVER, gone: the rows and the place they are dated at. Shared
+  // by the resync path, which means it deliberately, and by the failure path, which has no choice.
+  static #wipe(transaction) {
+    transaction.objectStore(ENTITIES).clear();
+    transaction.objectStore(META).delete("cursor");
   }
 
   // Every write goes through here, so there is one place that counts what is in flight and one
