@@ -647,48 +647,6 @@ export default class Renderer {
   }
 
   // Based on cast_props/2
-  // Deps: [:maps.from_list/1]
-  // A result node becomes the entity struct a template can read, its includes boxed with it.
-  // The node carries the row and what was included of it, and the TERM says what each of those
-  // is - a node has no type of its own.
-  static #boxNode(term, node) {
-    const includes = {};
-
-    for (const [name, subTerm] of Object.entries(term.include)) {
-      includes[name] = Renderer.#boxIncluded(subTerm, node.includes[name]);
-    }
-
-    return Model.box(term.entity, node.row, includes);
-  }
-
-  // A to-many include is a list of nodes, a to-one is one node or nothing at all - an absent
-  // to-one is nil, which is what the relationship not being there means.
-  static #boxIncluded(subTerm, included) {
-    if (Array.isArray(included)) {
-      return Type.list(
-        included.map((subNode) => Renderer.#boxNode(subTerm, subNode)),
-      );
-    }
-
-    return included === null
-      ? Type.nil()
-      : Renderer.#boxNode(subTerm, included);
-  }
-
-  // What the kernel evaluated to, in the form a template reads: a count is a number, a
-  // single-result query is one struct or nil, and everything else is a list.
-  static #boxResult(term, result) {
-    if (term.cardinality === "count") {
-      return Type.integer(result);
-    }
-
-    if (term.cardinality === "one") {
-      return result === null ? Type.nil() : Renderer.#boxNode(term, result);
-    }
-
-    return Type.list(result.map((node) => Renderer.#boxNode(term, node)));
-  }
-
   // What the render that handed this page over counted, for as long as this client's own database
   // cannot count for itself.
   //
@@ -1480,7 +1438,7 @@ export default class Renderer {
       actorUserId: LocalDatabase.actorUserId,
     });
 
-    return Renderer.#boxResult(term, result);
+    return Model.boxResult(term, result);
   }
 
   // Based on inject_props_from_query/2

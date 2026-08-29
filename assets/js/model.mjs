@@ -80,6 +80,23 @@ export default class Model {
     return first >= "A" && first <= "Z" ? Type.alias(label) : Type.atom(label);
   }
 
+  // Why this lives here rather than in the renderer, where it was written: a query result is boxed
+  // for a template AND for a read inside an action, and the two must agree. A row read one way and
+  // rendered the other would otherwise be two different structs of the same row.
+  // What the kernel evaluated to, in the form a template reads: a count is a number, a
+  // single-result query is one struct or nil, and everything else is a list.
+  static boxResult(term, result) {
+    if (term.cardinality === "count") {
+      return Type.integer(result);
+    }
+
+    if (term.cardinality === "one") {
+      return result === null ? Type.nil() : Model.#boxNode(term, result);
+    }
+
+    return Type.list(result.map((node) => Model.#boxNode(term, node)));
+  }
+
   // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
   // compared by its key on both tiers - so it is read from the entry's attribute types rather than
   // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
@@ -339,6 +356,32 @@ export default class Model {
       [Type.atom("year"), Type.integer(year)],
       [Type.atom("zone_abbr"), Type.bitstring("UTC")],
     ]);
+  }
+
+  // A to-many include is a list of nodes, a to-one is one node or nothing at all - an absent
+  // to-one is nil, which is what the relationship not being there means.
+  static #boxIncluded(subTerm, included) {
+    if (Array.isArray(included)) {
+      return Type.list(
+        included.map((subNode) => Model.#boxNode(subTerm, subNode)),
+      );
+    }
+
+    return included === null ? Type.nil() : Model.#boxNode(subTerm, included);
+  }
+
+  // Deps: [:maps.from_list/1]
+  // A result node becomes the entity struct a template can read, its includes boxed with it.
+  // The node carries the row and what was included of it, and the TERM says what each of those
+  // is - a node has no type of its own.
+  static #boxNode(term, node) {
+    const includes = {};
+
+    for (const [name, subTerm] of Object.entries(term.include)) {
+      includes[name] = Model.#boxIncluded(subTerm, node.includes[name]);
+    }
+
+    return Model.box(term.entity, node.row, includes);
   }
 
   static #boxValue(value, attributeType) {

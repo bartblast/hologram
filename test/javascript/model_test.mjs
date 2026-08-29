@@ -19,18 +19,31 @@ defineRuntimeGlobals();
 // rendered one.
 describe("Model", () => {
   const NOTIFY = "MyApp.Jobs.Notify";
+  const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
 
   // One attribute of every admitted type, a server-only one, and both relationship
   // cardinalities - the shape the build bakes for a type this client can hold.
   //
-  // Neither relationship target has an entry of its own, deliberately: a build carries a type a
-  // page queries or mentions, so a relationship nothing reaches through points at a name the
-  // model does not hold. Boxing reads the reference field and leaves the sentinel, asking the target
-  // nothing - and a query that DID include one would have put it in the model by including it.
+  // The to-many's target has NO entry of its own, deliberately: a build carries a type a page
+  // queries or mentions, so a relationship nothing reaches through points at a name the model does
+  // not hold. Boxing reads the reference field and leaves the sentinel, asking the target nothing -
+  // and a box() test would fail loudly if that ever stopped being true.
+  //
+  // The to-one's target does have one, because boxResult() boxes the rows behind an include, and
+  // a query that included a relationship would have put its type in the model by including it.
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
+        [PROJECT]: {
+          attributes: {id: "uuid", name: "string"},
+          constraints: {},
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          relationships: {},
+          serverOnly: [],
+        },
         // A job type, whose three framework attributes are the worker's to fill and no client's
         // to write.
         [NOTIFY]: {
@@ -326,6 +339,104 @@ describe("Model", () => {
       const boxed = Model.box(TASK, row(), {tags: tags});
 
       assert.deepEqual(field(boxed, "tags"), tags);
+    });
+  });
+
+  describe("boxResult()", () => {
+    const node = (overrides = {}) => ({includes: {}, row: row(overrides)});
+
+    const term = (overrides = {}) =>
+      Object.assign({cardinality: "set", entity: TASK, include: {}}, overrides);
+
+    it("boxes a count as the number itself", () => {
+      assert.deepStrictEqual(
+        Model.boxResult(term({cardinality: "count"}), 7),
+        Type.integer(7),
+      );
+    });
+
+    it("boxes a set as a list of structs", () => {
+      const boxed = Model.boxResult(term(), [node(), node({id: "t2"})]);
+
+      assert.equal(boxed.data.length, 2);
+      assert.deepStrictEqual(field(boxed.data[1], "id"), Type.bitstring("t2"));
+    });
+
+    it("boxes a single result as one struct", () => {
+      const boxed = Model.boxResult(term({cardinality: "one"}), node());
+
+      assert.deepStrictEqual(
+        field(boxed, "title"),
+        Type.bitstring("Draft copy"),
+      );
+    });
+
+    it("boxes a single result that matched nothing as nil", () => {
+      assert.deepStrictEqual(
+        Model.boxResult(term({cardinality: "one"}), null),
+        Type.nil(),
+      );
+    });
+
+    // The SUB-TERM says what an included node is - a node carries no type of its own - so what is
+    // boxed under a relationship's name is whatever type the include named.
+    it("boxes an included to-one as its own struct", () => {
+      const included = node();
+      included.includes = {
+        project: {includes: {}, row: {id: "p1", name: "Website"}},
+      };
+
+      const boxed = Model.boxResult(
+        term({
+          include: {
+            project: {cardinality: "one", entity: PROJECT, include: {}},
+          },
+        }),
+        [included],
+      );
+
+      assert.deepStrictEqual(
+        field(field(boxed.data[0], "project"), "name"),
+        Type.bitstring("Website"),
+      );
+    });
+
+    it("boxes a to-one include that matched nothing as nil", () => {
+      const included = node();
+      included.includes = {project: null};
+
+      const boxed = Model.boxResult(
+        term({
+          include: {
+            project: {cardinality: "one", entity: PROJECT, include: {}},
+          },
+        }),
+        [included],
+      );
+
+      assert.deepStrictEqual(field(boxed.data[0], "project"), Type.nil());
+    });
+
+    it("boxes an included to-many as a list of structs", () => {
+      const included = node();
+      included.includes = {
+        tags: [{includes: {}, row: {id: "p1", name: "Website"}}],
+      };
+
+      const boxed = Model.boxResult(
+        term({
+          include: {tags: {cardinality: "set", entity: PROJECT, include: {}}},
+        }),
+        [included],
+      );
+
+      assert.equal(field(boxed.data[0], "tags").data.length, 1);
+    });
+
+    it("leaves a relationship the term did not include unasked-for", () => {
+      const boxed = Model.boxResult(term({cardinality: "one"}), node());
+
+      assert.deepStrictEqual(field(boxed, "tags"), Model.notIncluded("tags"));
     });
   });
 
