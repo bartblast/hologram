@@ -169,6 +169,19 @@ export default class Batches {
   //
   // A frame naming no number says NOTHING about this client's writes, which is not the same as
   // saying none of them have landed - so nothing is marked.
+  //
+  // WHAT MAKES THIS SAFE IS THE SENDER, NOT THE NUMBER. The number is a MAXIMUM over the batches
+  // the server confirmed, and the set can be sparse: a batch can be refused with a later one
+  // confirmed above it. Taking every batch at or below a maximum would then be wrong, were it not
+  // for how the queue drains - flush() keeps ONE batch in flight and takes the head off `pending`
+  // BEFORE it reads the answer, so a refused batch leaves with the answer that refused it. While
+  // batch N is pending, nothing above N has been sent, so nothing above N can be confirmed, so a
+  // number at or above N can only mean N ITSELF was confirmed - which is exactly when its effects
+  // are in the base and landing it is right, answer lost or not.
+  //
+  // Anything that changes how the queue drains has to keep that property or replace this test. A
+  // durable queue, or one leader draining several tabs, is where it would go: batches of one
+  // replica answered out of order would make a maximum admit a batch nobody applied.
   static land(appliedSeq, rowKeys) {
     if (!Number.isInteger(appliedSeq)) {
       return;
