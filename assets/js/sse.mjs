@@ -165,10 +165,30 @@ export default class Sse {
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
 
+      const greeting = $.buildSyncGreeting(Hologram.currentPageModule());
+
+      // A greeting that asks for sync and names no place asks for EVERYTHING, so what this client
+      // holds goes back to awaiting the server's word exactly as it does on a resync - there is no
+      // frame in front of this one saying so, and a whole fill follows all the same.
+      //
+      // The case it exists for is a client cut off part way through a fill: it gave up its place
+      // when that fill began and never got a new one, so it comes back here - and the rows the
+      // unfinished fill had already delivered are unmarked, which would leave one revoked since
+      // standing for the life of the tab.
+      //
+      // Read off the greeting rather than from `syncCursor` and `Tabs.leader` separately, because
+      // the greeting is what decides whether a fill comes at all: a tab that does not lead, a page
+      // that has not mounted and a bundle carrying no sync all greet with nothing, and marking
+      // rows for a fill that never arrives would have the leader's own completeness sweep take
+      // away rows this browser rightly holds.
+      if (greeting.page !== undefined && greeting.cursor === undefined) {
+        LocalDatabase.beginRefill();
+      }
+
       const params = new URLSearchParams({
         instance_id: App.instanceId,
         handshake_id: handshakeId,
-        ...$.buildSyncGreeting(Hologram.currentPageModule()),
+        ...greeting,
       });
 
       // Whatever was here goes first. Two connects can be in flight at once - a retry scheduled

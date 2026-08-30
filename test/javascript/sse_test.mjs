@@ -481,6 +481,63 @@ describe("Sse", () => {
       );
     });
 
+    // A fill follows a greeting that names no place, with no resync frame in front of it - which
+    // is where a client cut off part way through a fill comes back.
+    it("marks every held row when it greets with no place", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [
+        ["MyApp.Task", "t1"],
+      ]);
+    });
+
+    it("leaves the rows alone when it greets with a place", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      Sse.syncCursor = "Nzc4LjA";
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    // A tab that does not lead greets with nothing about sync, so NO fill follows - and rows
+    // marked here would be swept the moment the leading tab says the pot is complete, taking away
+    // rows this browser holds rightly. The same goes for a page that has not mounted and for a
+    // bundle carrying no sync at all.
+    it("leaves the rows alone for a tab greeting with no sync at all", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      Tabs.leader = false;
+
+      try {
+        await Sse.connect();
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
     // The listeners are registered again on every new stream, so the place has to outlive the
     // one that delivered it - a reconnect is exactly when the client needs to say what it has.
     it("opens the EventSource naming the place a previous stream left it at", async () => {
