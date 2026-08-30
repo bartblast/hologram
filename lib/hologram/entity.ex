@@ -62,7 +62,7 @@ defmodule Hologram.Entity do
         The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
         To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
         """
-        @spec new(%{optional(atom) => any} | keyword) :: struct
+        @spec new(%{optional(atom) => any} | keyword) :: t
         def new(values \\ []), do: Hologram.Entity.new(__MODULE__, values)
 
         defoverridable new: 0, new: 1

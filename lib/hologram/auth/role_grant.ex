@@ -125,7 +125,7 @@ defmodule Hologram.Auth.RoleGrant do
   Raises - a role grant is written through grant_role/revoke_role and constructed nowhere.
   Present so that this type answers the constructor every entity type answers, with the refusal the engine already gives it.
   """
-  @spec new(%{optional(atom) => any} | keyword) :: struct
+  @spec new(%{optional(atom) => any} | keyword) :: t
   def new(values \\ []), do: Entity.new(__MODULE__, values)
 
   @doc false

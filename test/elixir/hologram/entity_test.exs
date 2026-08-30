@@ -350,6 +350,21 @@ defmodule Hologram.EntityTest do
       assert InlineConstructorFixture1.new().a == "overridden"
     end
 
+    # The spec is written in __using__ and names a type generated in __before_compile__ - legal,
+    # because types are resolved at module end rather than where they are mentioned.
+    test "is typed as answering the entity type's own struct" do
+      {:ok, specs} = Code.Typespec.fetch_specs(Module1)
+
+      forms_by_name = Map.new(specs)
+
+      [form] = Map.fetch!(forms_by_name, {:new, 1})
+
+      quoted_spec = Code.Typespec.spec_to_quoted(:new, form)
+
+      assert Macro.to_string(quoted_spec) ==
+               "new(%{optional(atom()) => any()} | keyword()) :: t()"
+    end
+
     test "refuses what the engine refuses, in its words" do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
