@@ -1,5 +1,7 @@
 "use strict";
 
+import Logger from "./logger.mjs";
+
 // The tabs of one replica, and which of them speaks to the server for the rest.
 //
 // Two tabs of one app are two views onto ONE browser's copy of the data: they share the stored
@@ -62,6 +64,23 @@ export default class Tabs {
   // the server with sync on its first connect, and a follower never opens a sync session it would
   // have to drop a moment later.
   static async join(name, {onLead, onMessage}) {
+    // A browser that cannot hold a lock, or cannot carry a message between tabs, has no group to
+    // join: this tab leads itself and speaks for nobody, which is what every tab there does. Its
+    // database is in memory mode for the same reason, so there is no shared counter to protect and
+    // nothing for a second tab to collide with.
+    if (
+      typeof BroadcastChannel !== "function" ||
+      !globalThis.navigator?.locks
+    ) {
+      Logger.debug(
+        "Hologram: this browser cannot coordinate its tabs, this one syncs on its own",
+      );
+
+      Tabs.leader = true;
+
+      return true;
+    }
+
     const token = {};
 
     Tabs.#held = [];

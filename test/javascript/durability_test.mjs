@@ -492,6 +492,30 @@ describe("Durability", () => {
       }
     });
 
+    // A shared counter moved without a lock is a number two tabs can spend at once, and the batch
+    // written over is lost with nothing said - so a browser that cannot lock does not store.
+    it("stays in memory mode when the browser has no Web Locks", async () => {
+      const navigator = Object.getOwnPropertyDescriptor(
+        globalThis,
+        "navigator",
+      );
+
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          configurable: true,
+          value: {},
+        });
+
+        await Durability.open();
+
+        assert.equal(Durability.mode, "memory");
+
+        assert.include(Logger.getLogs(), "no durable storage (no Web Locks)");
+      } finally {
+        Object.defineProperty(globalThis, "navigator", navigator);
+      }
+    });
+
     it("stays in memory mode when the build carries no data model", async () => {
       delete globalThis.Hologram.sync;
 

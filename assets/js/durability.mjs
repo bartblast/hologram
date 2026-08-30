@@ -132,6 +132,15 @@ export default class Durability {
         return Durability.#memoryMode("IndexedDB unavailable");
       }
 
+      // What is stored is shared by every tab of this browser, and a shared counter is only safe
+      // to move under a lock: without one, two tabs read the same number, spend it on two
+      // different batches, and the second one written over the first is a write lost in silence.
+      // A browser that cannot lock keeps every tab working from its own memory instead, which
+      // costs it durability and cannot cost it a write.
+      if (!globalThis.navigator?.locks) {
+        return Durability.#memoryMode("no Web Locks");
+      }
+
       const request = globalThis.indexedDB.open(
         Durability.#databaseName(),
         VERSION,

@@ -1,8 +1,17 @@
 "use strict";
 
-import {assert, sinon, waitForEventLoop} from "./support/helpers.mjs";
+import {
+  assert,
+  registerWebApis,
+  sinon,
+  waitForEventLoop,
+} from "./support/helpers.mjs";
 
 import Tabs from "../../assets/js/tabs.mjs";
+
+// Without this the file passes only when something else in the run has installed sessionStorage
+// first: a browser that cannot coordinate its tabs is told so through Logger, which writes there.
+registerWebApis();
 
 // Node's own BroadcastChannel, made to work under jsdom - it does not otherwise, and the reason is
 // worth knowing before anyone treats this as decoration.
@@ -149,6 +158,28 @@ describe("Tabs", () => {
       await hasLed;
 
       assert.isTrue(Tabs.leader);
+    });
+
+    // Where the browser cannot lock, its database is in memory mode for the same reason - so there
+    // is no shared counter to protect, and a tab that speaks for nobody is what every tab there is.
+    it("leads itself where the browser cannot coordinate its tabs", async () => {
+      const navigator = Object.getOwnPropertyDescriptor(
+        globalThis,
+        "navigator",
+      );
+
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          configurable: true,
+          value: {},
+        });
+
+        assert.isTrue(await Tabs.join(nextGroup(), stubs()));
+        assert.isTrue(Tabs.leader);
+        assert.isNull(Tabs.name);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", navigator);
+      }
     });
 
     it("names the group it joined", async () => {
