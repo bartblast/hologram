@@ -31,6 +31,9 @@ export default class Tabs {
 
   static #channel = null;
 
+  // Frames that arrived before this tab had finished starting up, in the order they arrived.
+  static #held = [];
+
   // The lock request that IS this tab's leadership - answered once the lock has really been let
   // go, which is what makes leaving something a caller can wait for.
   static #holding = null;
@@ -38,6 +41,9 @@ export default class Tabs {
   static #onLead = null;
 
   static #onMessage = null;
+
+  // Whether this tab has taken up what it holds and can be told what the server said.
+  static #ready = false;
 
   static #release = null;
 
@@ -58,13 +64,15 @@ export default class Tabs {
   static async join(name, {onLead, onMessage}) {
     const token = {};
 
+    Tabs.#held = [];
     Tabs.#onLead = onLead;
     Tabs.#onMessage = onMessage;
+    Tabs.#ready = false;
     Tabs.#token = token;
     Tabs.name = name;
 
     Tabs.#channel = new BroadcastChannel(name);
-    Tabs.#channel.onmessage = (event) => Tabs.#onMessage(event.data);
+    Tabs.#channel.onmessage = (event) => Tabs.#deliver(event.data);
 
     let answer;
 
@@ -108,9 +116,11 @@ export default class Tabs {
     Tabs.#channel?.close();
 
     Tabs.#channel = null;
+    Tabs.#held = [];
     Tabs.#holding = null;
     Tabs.#onLead = null;
     Tabs.#onMessage = null;
+    Tabs.#ready = false;
     Tabs.#release = null;
     Tabs.#token = null;
 
@@ -124,6 +134,38 @@ export default class Tabs {
   // posted, so nothing here needs to know which tab it is. Silent outside a group.
   static post(message) {
     Tabs.#channel?.postMessage(message);
+  }
+
+  // This tab has everything it starts with - the rows its own page carried, and what a previous
+  // page load left in the browser - so what the server has said since may land on it now. Whatever
+  // was held goes through in the order it arrived.
+  static ready() {
+    const held = Tabs.#held;
+
+    Tabs.#held = [];
+    Tabs.#ready = true;
+
+    for (const message of held) {
+      Tabs.#onMessage(message);
+    }
+  }
+
+  // A frame is what the SERVER said, and it lands on top of what this tab already holds: the rows
+  // its own page carried, which go in at the mount, and the rows the browser had stored, which go
+  // in just after it. A frame arriving before either has nothing to land on - and one declaring a
+  // scope complete would be declaring it over rows this tab has not put in yet - so it waits.
+  //
+  // Nothing else waits. A batch another tab filed, an answer, and the group's state are all about
+  // what this BROWSER did rather than what the server said, and none of them has an order to keep
+  // against the page's own rows.
+  static #deliver(message) {
+    if (!Tabs.#ready && message.kind === "frame") {
+      Tabs.#held.push(message);
+
+      return;
+    }
+
+    Tabs.#onMessage(message);
   }
 
   // The promise that IS the lock being held. A lock lasts exactly as long as the function granted

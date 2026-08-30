@@ -220,6 +220,100 @@ describe("Tabs", () => {
     });
   });
 
+  describe("ready()", () => {
+    const frame = (id) => ({event: "sync_deltas", frame: id, kind: "frame"});
+
+    // The barrier is not decoration: a message that is NOT held travels the same channel behind the
+    // two that are, and a channel keeps one sender's order - so its arrival is what says the frames
+    // have been delivered and held rather than merely not delivered yet.
+    const barrier = {kind: "sealed"};
+
+    it("holds frames until the tab is ready and drains them in order", async () => {
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+
+          if (message.kind === "sealed") {
+            arrived();
+          }
+        },
+      });
+
+      const other = sibling(Tabs.name);
+
+      other.postMessage(frame(1));
+      other.postMessage(frame(2));
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      assert.deepStrictEqual(seen, [barrier]);
+
+      Tabs.ready();
+
+      assert.deepStrictEqual(seen, [barrier, frame(1), frame(2)]);
+    });
+
+    it("hands a frame straight through once the tab is ready", async () => {
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+          arrived();
+        },
+      });
+
+      Tabs.ready();
+
+      sibling(Tabs.name).postMessage(frame(1));
+
+      await hasArrived;
+
+      assert.deepStrictEqual(seen, [frame(1)]);
+    });
+
+    it("holds nothing that is not a frame", async () => {
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+          arrived();
+        },
+      });
+
+      sibling(Tabs.name).postMessage(barrier);
+
+      await hasArrived;
+
+      assert.deepStrictEqual(seen, [barrier]);
+    });
+  });
+
   describe("post()", () => {
     it("reaches a tab listening on the group's channel", async () => {
       const group = nextGroup();
