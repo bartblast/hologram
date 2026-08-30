@@ -24,8 +24,6 @@ import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Replica from "../../assets/js/replica.mjs";
 
-globalThis.indexedDB = fakeIndexedDB;
-
 // registerWebApis puts sessionStorage on the global, which is where Logger writes - and every path
 // through this module that gives up on storage says so through Logger.
 defineRuntimeGlobals();
@@ -34,6 +32,26 @@ registerWebApis();
 describe("Durability", () => {
   // Named for the model the runtime globals below declare, and the store layout.
   const DATABASE_NAME = "hologram.model-a.1";
+
+  // Installed for this suite and taken back down after it, never at module scope: mocha runs every
+  // file in one process, and `open()` reads the absence of indexedDB as "this browser cannot
+  // store" - so a factory left on the global would hand every later suite a working IndexedDB and
+  // make its storage-mode answers depend on file order. Restored by deletion when it was absent,
+  // so what comes after finds exactly what it would have found alone.
+  let previousIndexedDB;
+
+  before(() => {
+    previousIndexedDB = globalThis.indexedDB;
+    globalThis.indexedDB = fakeIndexedDB;
+  });
+
+  after(() => {
+    if (previousIndexedDB === undefined) {
+      delete globalThis.indexedDB;
+    } else {
+      globalThis.indexedDB = previousIndexedDB;
+    }
+  });
 
   // Every connection this suite opens for itself, closed centrally below.
   let raw = [];
