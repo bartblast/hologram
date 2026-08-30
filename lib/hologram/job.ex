@@ -58,7 +58,7 @@ defmodule Hologram.Job do
   evaluated as that user's. Returns :ok when the work is done, or {:error, reason} when it
   failed. Raising fails the job with the exception.
   """
-  @callback run(job :: struct) :: :ok | {:error, any}
+  @callback run(job :: Entity.t()) :: :ok | {:error, any}
 
   defmacro __using__(opts) do
     Validator.validate_use_job_opts!(__CALLER__.module, opts)
@@ -127,7 +127,7 @@ defmodule Hologram.Job do
   the job type declares no allow lines, since no rule can then grant the write.
   """
   @spec create(module, %{optional(atom) => any} | keyword, keyword) ::
-          {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
+          {:ok, Entity.t()} | {:error, %{atom => list(atom | {atom, any})}}
   def create(job_type, values \\ %{}, opts \\ []) do
     job_type
     |> build(values, opts)
@@ -140,7 +140,7 @@ defmodule Hologram.Job do
   The spelling for a call site where a refused job is a reason to stop rather than something to
   answer.
   """
-  @spec create!(module, %{optional(atom) => any} | keyword, keyword) :: struct
+  @spec create!(module, %{optional(atom) => any} | keyword, keyword) :: Entity.t()
   def create!(job_type, values \\ %{}, opts \\ []) do
     job = build(job_type, values, opts)
 
