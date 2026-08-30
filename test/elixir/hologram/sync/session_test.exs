@@ -469,7 +469,7 @@ defmodule Hologram.Sync.SessionTest do
 
     # The claim a place makes is "everything up to here is applied", which a client holding one
     # page of several cannot honour.
-    test "names no place while only the client's own page is answerable" do
+    test "names no place while only a first arrival's own page is answerable" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
       hold_windows([@board_window])
       hold_silently(@other_window)
@@ -478,6 +478,18 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :page, cursor}
       assert cursor == nil
+    end
+
+    # A client that came back kept what it had and is told only what moved, so it holds a whole
+    # pot from its first frame - and its page marker is as honourable a claim as its last.
+    test "names a place on the page marker of a client that came back" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!(fill_place: {200, 0}, gap: [])
+
+      assert_receive {:sync_synced, :page, cursor}
+      assert cursor == Cursor.encode(200, 0)
     end
   end
 

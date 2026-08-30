@@ -104,8 +104,11 @@ defmodule Hologram.Sync.Frame do
   without this a quiet app would keep everything it was sent and still have nowhere to resume
   from, and would be filled from nothing on its next visit.
 
-  Nil for `:page`, whose scope is narrower than the claim - and nil for `:all` on a build whose
-  windows have no places to speak of.
+  Whether the marker names a place is about the CLIENT, not the scope. A first arrival holds a
+  whole pot only once `:all` has been announced, so its `:page` marker names none - the scope is
+  narrower than the claim. A client that came back holds one from its first frame, since it kept
+  what it had and is being told only what moved - so both of its markers name a place. And nil
+  for `:all` on a build whose windows have no places to speak of.
   """
   @spec encode_synced_envelope(integer, :all | :page, String.t() | nil) :: String.t()
   def encode_synced_envelope(id, scope, cursor) do
