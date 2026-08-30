@@ -959,6 +959,99 @@ describe("Batches", () => {
     });
   });
 
+  describe("settle()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    const queued = (seq, id) => {
+      const record = {
+        actorUserId: null,
+        landed: [],
+        seq,
+        writes: [
+          {
+            claim: null,
+            data: {done: false, title: "made elsewhere"},
+            id,
+            op: "create",
+            stamp: STAMP,
+            type: TODO,
+          },
+        ],
+      };
+
+      Batches.adopt([record]);
+
+      return Batches.pending.find((batch) => batch.seq === seq);
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      sinon.stub(Sse, "scheduleRender");
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("promotes a confirmed batch into the base", () => {
+      queued(3, "t1");
+
+      Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "made elsewhere");
+    });
+
+    it("takes a refused batch's rows away and keeps what the server said", () => {
+      queued(3, "t1");
+
+      Batches.settle(3, {
+        reason: 'Type.atom("nope")',
+        status: "rejected",
+        write: 0,
+      });
+
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      assert.equal(Batches.rejected.length, 1);
+      assert.deepStrictEqual(Batches.rejected[0].reason, Type.atom("nope"));
+    });
+
+    it("repaints for what the answer changed", () => {
+      queued(3, "t1");
+
+      Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.isTrue(Sse.scheduleRender.called);
+    });
+
+    // A tab that never took the batch up, or has settled it already, has nothing to do - and every
+    // tab of the browser is told every answer.
+    it("passes over a number it does not hold", () => {
+      const batch = queued(3, "t1");
+
+      Batches.settle(5, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(Batches.pending, [batch]);
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("settles the batch the number names, not the one at the head", () => {
+      const first = queued(3, "t1");
+
+      queued(5, "t2");
+
+      Batches.settle(5, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(Batches.pending, [first]);
+      assert.equal(LocalDatabase.baseRow(TODO, "t2").title, "made elsewhere");
+    });
+  });
+
   describe("carryAcrossSuspension()", () => {
     const ids = (batch) => batch.writes.map((write) => write.id);
 

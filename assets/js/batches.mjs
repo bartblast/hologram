@@ -263,12 +263,6 @@ export default class Batches {
           return;
         }
 
-        Batches.pending.shift();
-
-        // Answered, so the server is answering: the next failure starts the backoff from the
-        // beginning rather than from wherever the last run of failures left it.
-        Batches.#retryAttempts = 0;
-
         // A verdict is a verdict, whichever way it went: nothing is waiting on this batch any
         // more, and a later page load has no reason to take it up. Confirmed and refused alike -
         // including the two refusals that judge the BUILD and the STAMPS rather than the writes
@@ -279,13 +273,7 @@ export default class Batches {
         // page load with nothing in v1 able to discard it.
         Durability.forgetBatch(batch.seq);
 
-        if (answer.status === "confirmed") {
-          Overlay.promote(batch, answer.kept);
-        } else {
-          Batches.#reject(batch, answer);
-        }
-
-        Sse.scheduleRender();
+        Batches.settle(batch.seq, answer);
       }
     } finally {
       Batches.#sending = false;
@@ -384,6 +372,36 @@ export default class Batches {
     Batches.#seq = 0;
 
     Overlay.reset();
+  }
+
+  // What an answer does to the batch it names, wherever that batch is held.
+  //
+  // Written once and reached two ways: by the tab that sent the batch, and by every other tab of
+  // the browser, which holds the same batch and is told the verdict. A tab that does not hold it -
+  // one that never took it up, or took it up and has already settled it - has nothing to do.
+  //
+  // Named by NUMBER rather than by the batch, because the batch a message reaches is not the object
+  // the sender holds: it is that tab's own copy, built from the same record.
+  static settle(seq, answer) {
+    const batch = Batches.pending.find((held) => held.seq === seq);
+
+    if (batch === undefined) {
+      return;
+    }
+
+    Batches.pending = Batches.pending.filter((held) => held !== batch);
+
+    // Answered, so the server is answering: the next failure starts the backoff from the beginning
+    // rather than from wherever the last run of failures left it.
+    Batches.#retryAttempts = 0;
+
+    if (answer.status === "confirmed") {
+      Overlay.promote(batch, answer.kept);
+    } else {
+      Batches.#reject(batch, answer);
+    }
+
+    Sse.scheduleRender();
   }
 
   // Where the previous page load's numbering got to, so this one counts on from there. Never
