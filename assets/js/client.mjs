@@ -9,6 +9,7 @@ import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import HttpTransport from "./http_transport.mjs";
 import Interpreter from "./interpreter.mjs";
+import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
@@ -168,16 +169,17 @@ export default class Client {
   // The envelope a batch ships as. Plain JSON, the spelling a sync frame uses in reverse - the
   // client holds rows as the wire spells them, so what goes back is what came in.
   //
-  // The identity is the page's, and this client invents neither half: replicaId and replicaToken
-  // are minted at the initial page render and emitted by the runtime script. The token is the
-  // server's signed statement of whom the id belongs to, which is what stops a stranger who
-  // learns an id from spending its sequence numbers.
+  // The identity is whichever pair this browser presents - the one it remembered from an earlier
+  // page load, or the current page's when it remembers none. Both halves are the server's: it
+  // mints them at an initial page render, and the token is its signed statement of whom the id
+  // belongs to, which is what stops a stranger who learns an id from spending its sequence
+  // numbers.
   static buildMutationPayload(batch) {
     return {
       instance_id: App.instanceId,
       model_hash: globalThis.Hologram.sync.modelHash,
-      replica_id: globalThis.Hologram.replicaId,
-      replica_token: globalThis.Hologram.replicaToken,
+      replica_id: Replica.id,
+      replica_token: Replica.token,
       seq: batch.seq,
       writes: batch.writes,
     };

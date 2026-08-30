@@ -4,11 +4,13 @@ import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
+import Durability from "./durability.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
+import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
@@ -36,6 +38,10 @@ export default class Sse {
 
   static eventSource = null;
   static reconnectAttempts = 0;
+
+  // The pending retry after a stream died, held so a deliberate restart can call it off - the same
+  // bookkeeping `Connection` keeps for the websocket's.
+  static reconnectTimer = null;
   static renderScheduled = false;
   static stabilityTimer = null;
 
@@ -79,15 +85,16 @@ export default class Sse {
       greeting.cursor = $.syncCursor;
     }
 
-    // The identity the page was given, presented unchanged - this client invents neither half, the
-    // same as when it sends a batch. What it buys on this stream is being told how far its own
-    // writes are in what a frame carries, which is what stops it applying them a second time.
+    // The identity this browser presents - the pair it remembered from an earlier page load, or
+    // the current page's when it remembers none. This client invents neither half, the same as
+    // when it sends a batch. What it buys on this stream is being told how far its own writes are
+    // in what a frame carries, which is what stops it applying them a second time.
     //
     // Both or neither: an id is only worth what the statement beside it vouches for, and the
     // server reads an id with no statement as no identity at all.
-    if (globalThis.Hologram.replicaId && globalThis.Hologram.replicaToken) {
-      greeting.replica_id = globalThis.Hologram.replicaId;
-      greeting.replica_token = globalThis.Hologram.replicaToken;
+    if (Replica.id && Replica.token) {
+      greeting.replica_id = Replica.id;
+      greeting.replica_token = Replica.token;
     }
 
     return greeting;
@@ -154,6 +161,12 @@ export default class Sse {
         handshake_id: handshakeId,
         ...$.buildSyncGreeting(Hologram.currentPageModule()),
       });
+
+      // Whatever was here goes first. Two connects can be in flight at once - a retry scheduled
+      // by a dying stream, and a deliberate restart under a new identity - and the second to
+      // arrive would otherwise leave the first's stream open with nothing referring to it,
+      // delivering every action and every frame a second time.
+      $.eventSource?.close();
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
@@ -229,6 +242,15 @@ export default class Sse {
           $.syncCursor = frame.cursor;
         }
 
+        // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
+        // place they are dated at, in one transaction. Rows a page carried are not written - every
+        // visit carries them again - and neither are the rows a confirmed batch promoted, since
+        // the server sends its own frame for that change.
+        //
+        // Not awaited. What is on screen is already correct, and what this buys is only whether it
+        // is still there after a reload.
+        Durability.persistFrame(LocalDatabase.records(written), frame.cursor);
+
         $.scheduleRender();
       });
 
@@ -268,10 +290,33 @@ export default class Sse {
         Logger.debug(`Hologram: sync starting over (${frame.reason})`);
         LocalDatabase.reset();
         $.syncCursor = null;
+
+        // The stored rows go with the place that dated them, for the same reason the memory ones
+        // do. What this browser DID - its identity, its counter, its clock - stays: a resync
+        // replaces what the SERVER said, and none of those three are the server's to take away.
+        Durability.clear();
       });
 
       $.eventSource.addEventListener("synced", (event) => {
         const frame = JSON.parse(event.data);
+
+        // The place a client that was filled and then left alone would otherwise never get. A
+        // deltas frame carries none until the pot is whole, and once it is whole a quiet app
+        // produces no further frame at all - so without this the client would hold everything it
+        // was sent and still have nowhere to come back from, and would be filled from nothing on
+        // its next visit.
+        //
+        // Written down through the same call a frame's rows go down by, with no rows, because this
+        // frame carries none - which also takes the clock down beside it.
+        //
+        // Truthy rather than a null test, unlike the deltas handler: a server built before this
+        // frame carried a place sends no such key at all, and a rolling deploy can put a new bundle
+        // in front of an old node.
+        if (frame.cursor) {
+          $.syncCursor = frame.cursor;
+
+          Durability.persistFrame([], frame.cursor);
+        }
 
         LocalDatabase.markSynced(frame.scope);
 
@@ -318,6 +363,28 @@ export default class Sse {
     }
   }
 
+  // Drops the stream and opens a new one, for a client whose greeting has changed since it
+  // connected - a replica whose identity was refused and replaced is the case that needs it. The
+  // server decides what a stream serves from what it was greeted with, so a client that becomes
+  // somebody else mid-page has to say so, and the only place it says anything is the connect.
+  //
+  // Deliberate rather than a failure, which is why the attempt counter is left alone and no backoff
+  // applies: nothing went wrong, and the delay a failing stream has earned is not this one's to
+  // serve.
+  // Answers the connect's own promise, so a caller that wants to know the new stream is up can
+  // wait for it. Nothing in the framework does - a replaced stream is opened and forgotten.
+  static reconnect() {
+    // A retry the dying stream had already scheduled is called off, or it would open a second
+    // stream on top of this one a moment later.
+    clearTimeout($.reconnectTimer);
+    $.reconnectTimer = null;
+
+    $.eventSource?.close();
+    $.eventSource = null;
+
+    return $.connect();
+  }
+
   // One render per animation frame, however many frames arrive in between: a fill lands as a
   // burst, and a repaint per frame would be work nobody sees.
   //
@@ -355,7 +422,7 @@ export default class Sse {
     $.reconnectAttempts++;
     const delay = $.computeReconnectDelay($.reconnectAttempts);
 
-    setTimeout(() => $.connect(), delay);
+    $.reconnectTimer = setTimeout(() => $.connect(), delay);
   }
 }
 

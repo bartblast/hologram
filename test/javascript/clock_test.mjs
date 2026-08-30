@@ -20,6 +20,25 @@ describe("Clock", () => {
     timers.restore();
   });
 
+  describe("last()", () => {
+    it("answers zero before anything is stamped or observed", () => {
+      assert.equal(Clock.last(), 0);
+    });
+
+    it("answers the stamp just issued", () => {
+      Clock.stamp();
+
+      assert.equal(Clock.last(), nowMs * 1024);
+    });
+
+    it("answers a stamp observed above the last issued", () => {
+      Clock.stamp();
+      Clock.observe(nowMs * 1024 + 5000);
+
+      assert.equal(Clock.last(), nowMs * 1024 + 5000);
+    });
+  });
+
   describe("observe()", () => {
     it("lifts the clock above a stamp ahead of the wall clock", () => {
       Clock.observe(nowMs * 1024 + 5000);

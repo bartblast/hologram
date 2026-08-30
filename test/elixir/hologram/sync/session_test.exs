@@ -148,7 +148,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
       assert Evaluators.live() == [{@board_window, Query.normalize(Module2)}]
     end
 
@@ -158,7 +158,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
 
       live_window_ids =
         Evaluators.live()
@@ -173,7 +173,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
       assert Evaluators.live() == []
     end
 
@@ -183,7 +183,7 @@ defmodule Hologram.Sync.SessionTest do
 
       session = start_session!([])
 
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
       assert Process.alive?(session)
       assert Evaluators.live() == [{@board_window, Query.normalize(Module2)}]
     end
@@ -193,7 +193,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
 
       other_client = spawn_link(fn -> Process.sleep(:infinity) end)
 
@@ -296,7 +296,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: [])
 
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
       refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
     end
 
@@ -309,7 +309,7 @@ defmodule Hologram.Sync.SessionTest do
 
       # Received in this order, so the client never reads its own store while it is still stale.
       assert_receive {:sync_deltas, _cursor, _deltas, _applied_seq}
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
     end
 
     test "keeps telling a returning client the news once it has been caught up" do
@@ -348,7 +348,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, nil, second, _applied_seq}
       assert length(second) == 1
 
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     # Everything that is not an appeared row rides with the first frame rather than being repeated:
@@ -360,7 +360,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
       assert_receive {:sync_deltas, nil, _fill, _applied_seq}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       put_app_env(:sync, rows_per_frame: 2)
 
@@ -386,7 +386,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       live_window_ids =
         Evaluators.live()
@@ -406,8 +406,8 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
-      refute_receive {:sync_synced, :all}, 100
+      assert_receive {:sync_synced, :page, _cursor}
+      refute_receive {:sync_synced, :all, _cursor}, 100
     end
 
     test "says every page is answerable once the last window has filled" do
@@ -416,8 +416,8 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "says a page reading nothing is answerable at once, and waits for the rest" do
@@ -426,8 +426,8 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "says both at once for a build downloading nothing" do
@@ -435,8 +435,8 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "says each scope once, however many windows fill after it" do
@@ -445,13 +445,51 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
 
       Evaluator.round(@board_window, [])
       Evaluator.round(@other_window, [])
 
-      refute_receive {:sync_synced, _scope}, 100
+      refute_receive {:sync_synced, _scope, _cursor}, 100
+    end
+
+    # The marker is what a filled client resumes from: a deltas frame carries no place until the
+    # pot is whole, and a client that is filled and then left alone receives no further frame at
+    # all - so without this it would hold everything it was sent and have nowhere to come back to.
+    test "hands over the place the client may come back from" do
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(fill_place: {200, 0})
+
+      assert_receive {:sync_synced, :all, cursor}
+      assert cursor == Cursor.encode(200, 0)
+    end
+
+    # The claim a place makes is "everything up to here is applied", which a client holding one
+    # page of several cannot honour.
+    test "names no place while only a first arrival's own page is answerable" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window])
+      hold_silently(@other_window)
+
+      start_session!(fill_place: {200, 0})
+
+      assert_receive {:sync_synced, :page, cursor}
+      assert cursor == nil
+    end
+
+    # A client that came back kept what it had and is told only what moved, so it holds a whole
+    # pot from its first frame - and its page marker is as honourable a claim as its last.
+    test "names a place on the page marker of a client that came back" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!(fill_place: {200, 0}, gap: [])
+
+      assert_receive {:sync_synced, :page, cursor}
+      assert cursor == Cursor.encode(200, 0)
     end
   end
 
@@ -481,7 +519,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
     end
 
@@ -534,7 +572,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert_receive {:sync_deltas, _cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
     end
 
     test "says it is done immediately for a page reaching no window" do
@@ -542,7 +580,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
     end
 
     test "reads the round a running evaluator already has rather than asking for another" do
@@ -578,7 +616,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window, @other_window])
 
       session = start_session!([])
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), @other_window)
 
@@ -615,7 +653,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :page, _cursor}
 
       task = create("appeared later")
       Evaluator.round(@board_window, [])
@@ -790,7 +828,7 @@ defmodule Hologram.Sync.SessionTest do
 
       # The fill's own frame carries no place and has to be taken out of the way first.
       assert_receive {:sync_deltas, nil, _fill, _applied_seq}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       DB.update(Module2, task.id, %{c: "moved"})
       Evaluator.round(@board_window, transactions(task.id, ["c"]), nil)
@@ -825,7 +863,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0})
 
       assert_receive {:sync_deltas, nil, _fill, _applied_seq}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       DB.update(Module2, task.id, %{c: "moved"})
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 7})
@@ -1011,7 +1049,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
       assert_receive {:sync_deltas, _board_cursor, _board_fill, _applied_seq}
       assert_receive {:sync_deltas, _include_cursor, _include_fill, _applied_seq}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       # The child leaves the include window's reach without leaving the database - the board
       # window still roots it, so the client keeps the row and is told nothing.
@@ -1033,7 +1071,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
       assert_receive {:sync_deltas, _board_cursor, _board_fill, _applied_seq}
       assert_receive {:sync_deltas, _include_cursor, _include_fill, _applied_seq}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       source
       |> delete_relationship(:a, child.id)
@@ -1058,7 +1096,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
       assert_receive {:sync_deltas, _fill_cursor, _fill, _applied_seq}
-      assert_receive {:sync_synced, :all}
+      assert_receive {:sync_synced, :all, _cursor}
 
       source
       |> delete_relationship(:a, child.id)

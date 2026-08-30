@@ -326,19 +326,31 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "encode_synced_envelope/2" do
+  describe "encode_synced_envelope/3" do
     test "wraps the completeness marker in a synced SSE event envelope" do
-      payload = %{protocol_version: 1, scope: :page}
+      payload = %{cursor: nil, protocol_version: 1, scope: :page}
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, :page) == "event: synced\nid: 42\ndata: #{encoded}\n\n"
+      assert encode_synced_envelope(42, :page, nil) ==
+               "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
     test "says which queries the client may now answer itself" do
-      payload = %{protocol_version: 1, scope: :all}
+      payload = %{cursor: nil, protocol_version: 1, scope: :all}
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, :all) == "event: synced\nid: 42\ndata: #{encoded}\n\n"
+      assert encode_synced_envelope(42, :all, nil) ==
+               "event: synced\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    # The marker is the moment a place becomes a claim the client can honour, and for a client that
+    # is filled and then left alone it is the only frame that will ever carry one.
+    test "hands over the place the client may come back from" do
+      payload = %{cursor: "Nzc4LjA", protocol_version: 1, scope: :all}
+      encoded = Jason.encode!(payload)
+
+      assert encode_synced_envelope(42, :all, "Nzc4LjA") ==
+               "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
   end
 

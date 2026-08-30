@@ -2,9 +2,11 @@
 
 import Batch from "./batch.mjs";
 import Client from "./client.mjs";
+import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Overlay from "./overlay.mjs";
+import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
@@ -82,6 +84,11 @@ export default class Batches {
     }
 
     batch.seal(++Batches.#seq);
+
+    // Started here and awaited by the sender, so the number is on its way down while the action's
+    // own render happens - the store is never on the path of what the user sees.
+    batch.recorded = Durability.persistCounter(Batches.#seq);
+
     Batches.pending.push(batch);
 
     return batch;
@@ -119,6 +126,10 @@ export default class Batches {
       while (Batches.pending.length > 0) {
         const batch = Batches.pending[0];
 
+        // Before anything leaves: a batch may not be answered under a number this browser could
+        // hand out again after a reload.
+        await batch.recorded;
+
         batch.mark("sending");
 
         const answer = await Batches.#answerFor(batch);
@@ -132,6 +143,34 @@ export default class Batches {
         // are the next action's close and the connection coming back - no timer, since neither a
         // base delay nor a cap has a bound anyone can state yet.
         if (answer.status === "failed") {
+          // A 403 says the IDENTITY was refused, before the writes were read - a stored statement
+          // stops verifying when the session it was bound to is gone, and after the server's
+          // signing key is rotated every stored one does. Presenting it again would be refused
+          // again forever, and the recovery is a pair this page is already holding: the fresh one
+          // the server minted for this render.
+          //
+          // The stream is restarted so the server serves the NEW replica - the one this stream was
+          // opened for is the refused one, and its frames would name no watermark, which is what
+          // stops this client applying its own writes twice. The batch keeps its number: nothing
+          // has been recorded against the new identity, so any number is free under it.
+          //
+          // Once per page load. `refresh` answers false when the fresh pair is already the one in
+          // use, which is the case where the session changed after this page loaded and there is
+          // nothing here that can help.
+          //
+          // AWAITED, the same discipline the counter's write gets and for the same reason: nothing
+          // is sent under an identity that is not recorded. Fired and forgotten, a reload landing
+          // before the write commits would take up the REFUSED pair again while the counter had
+          // moved on - and the batch that followed would be refused a second time before this path
+          // could recover it.
+          if (answer.httpStatus === 403 && Replica.refresh()) {
+            await Durability.persistReplica(Replica.current());
+
+            Sse.reconnect();
+
+            continue;
+          }
+
           batch.mark("pending");
 
           console.warn(
@@ -236,6 +275,20 @@ export default class Batches {
     Batches.#seq = 0;
 
     Overlay.reset();
+  }
+
+  // Where the previous page load's numbering got to, so this one counts on from there. Never
+  // backwards: a number is identified with its replica, and the server answers a repeat from its
+  // record of the first batch to carry it.
+  //
+  // The counter moves in THIS tab's memory while being stored once per browser, so two tabs that
+  // resume from the same number can hand out the same next one - and the server, seeing the pair
+  // twice, answers the second with the first one's verdict rather than applying it. Known and
+  // deliberate for as long as one identity per browser means an unlocked counter: the multi-tab
+  // work takes the number inside the same lock that puts the batch in the shared queue, which
+  // removes the case rather than detecting it.
+  static resumeFrom(seq) {
+    Batches.#seq = seq;
   }
 
   // A network failure and a status carrying no verdict are the same thing to this loop: nobody

@@ -325,6 +325,18 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("hasFacts()", () => {
+    it("answers true for a set that was filed and is empty", () => {
+      LocalDatabase.replaceFacts("MyApp.Task", "tags", "t1", []);
+
+      assert.isTrue(LocalDatabase.hasFacts("MyApp.Task", "tags", "t1"));
+    });
+
+    it("answers false for a triple nothing was ever filed under", () => {
+      assert.isFalse(LocalDatabase.hasFacts("MyApp.Task", "tags", "t1"));
+    });
+  });
+
   describe("isSynced()", () => {
     it("answers false before the scope's marker arrived", () => {
       assert.isFalse(LocalDatabase.isSynced("page"));
@@ -426,6 +438,119 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("records()", () => {
+    const TAG = "MyApp.Tag";
+    const TASK = "MyApp.Task";
+
+    // The model is read for one thing only - which of a type's relationships are to-many - so what
+    // is baked here is that and the little Model.entry insists on.
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TAG]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            enumValues: {},
+            relationships: {
+              project: {optional: false, toMany: false, type: "MyApp.Project"},
+              tags: {optional: true, toMany: true, type: TAG},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      Model.reset();
+    });
+
+    // The whole record is asserted rather than its facts alone, which is what pins the to-one out:
+    // a project lives in the row as a reference field, and naming it here would store it twice.
+    it("snapshots a held row with its to-many facts", () => {
+      const row = {id: "t1", project_id: "p1", title: "Draft copy"};
+
+      LocalDatabase.putRow(TASK, row);
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", ["g1", "g2"]);
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
+        {facts: {tags: ["g1", "g2"]}, id: "t1", row, type: TASK},
+      ]);
+    });
+
+    it("snapshots a row whose type declares no to-many with empty facts", () => {
+      const row = {id: "g1", name: "urgent"};
+
+      LocalDatabase.putRow(TAG, row);
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TAG} g1`]), [
+        {facts: {}, id: "g1", row, type: TAG},
+      ]);
+    });
+
+    // Written down as empty, it would say the server declared the relationship empty - which
+    // nobody did - and restoring it would file that assertion. The pair below is the whole claim:
+    // a set that WAS filed and is empty is stored, one nobody filed is left out.
+    it("leaves out a to-many nothing was filed under", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      assert.deepStrictEqual(
+        LocalDatabase.records([`${TASK} t1`])[0].facts,
+        {},
+      );
+    });
+
+    it("stores a filed to-many that is empty", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", []);
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`])[0].facts, {
+        tags: [],
+      });
+    });
+
+    it("answers no row for a key the base does not hold", () => {
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
+        {id: "t1", row: null, type: TASK},
+      ]);
+    });
+
+    it("keeps the order of the keys given", () => {
+      LocalDatabase.putRow(TAG, {id: "g1", name: "urgent"});
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const snapshot = LocalDatabase.records([`${TASK} t1`, `${TAG} g1`]);
+
+      assert.deepStrictEqual(
+        snapshot.map((record) => record.id),
+        ["t1", "g1"],
+      );
+    });
+
+    // What goes to durable storage is what the SERVER said, never what this client has written and
+    // not yet had answered - a pending delete's row is still the server's row until it lands.
+    it("reads the base, not the overlay", () => {
+      const row = {id: "t1", title: "Draft copy"};
+
+      LocalDatabase.putRow(TASK, row);
+      pendingDelete(TASK, "t1");
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
+        {facts: {}, id: "t1", row, type: TASK},
+      ]);
+    });
+  });
+
   describe("replaceFacts()", () => {
     it("records the whole target set", () => {
       LocalDatabase.replaceFacts("MyApp.Project", "tasks", "p1", ["t1", "t2"]);
@@ -456,6 +581,100 @@ describe("LocalDatabase", () => {
         LocalDatabase.getTargetIds("MyApp.Project", "tasks", "p1"),
         new Set(),
       );
+    });
+  });
+
+  describe("restore()", () => {
+    const TASK = "MyApp.Task";
+
+    const record = (id, attributes = {}, facts = {}) => ({
+      facts,
+      id,
+      row: {id, ...attributes},
+      type: TASK,
+    });
+
+    it("files a row the base does not hold, with its facts", () => {
+      LocalDatabase.restore([
+        record("t1", {title: "Draft copy"}, {tags: ["g1", "g2"]}),
+      ]);
+
+      assert.deepStrictEqual(LocalDatabase.baseRow(TASK, "t1"), {
+        id: "t1",
+        title: "Draft copy",
+      });
+
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        ["g1", "g2"],
+      );
+    });
+
+    // The page's row is the fresher of the two, so the stored one adds nothing to it - the same
+    // object comes back, not a copy of the stored values.
+    it("leaves a held row's values alone", () => {
+      const carried = {id: "t1", title: "Ship it"};
+
+      LocalDatabase.putRow(TASK, carried);
+      LocalDatabase.restore([record("t1", {title: "Draft copy"})]);
+
+      assert.strictEqual(LocalDatabase.baseRow(TASK, "t1"), carried);
+    });
+
+    it("unmarks a held row as carried", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.restore([record("t1", {title: "Draft copy"})]);
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("leaves another row's carried mark alone", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+      LocalDatabase.putRow(TASK, {id: "t2", title: "Draft copy"});
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.restore([record("t2")]);
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+    });
+
+    it("fills a held row's facts for a relationship nothing was filed under", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+
+      LocalDatabase.restore([record("t1", {}, {tags: ["g1"]})]);
+
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        ["g1"],
+      );
+    });
+
+    // A page's row states the whole set of every relationship it named, an empty one included -
+    // so a filed set is this page's word about the world and outranks the stored one.
+    it("leaves a held row's filed facts alone, empty ones included", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Ship it"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", []);
+
+      LocalDatabase.restore([record("t1", {}, {tags: ["g1"]})]);
+
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        [],
+      );
+    });
+
+    // The record naming a gone row is passed over and the one behind it is still filed - a skip
+    // rather than a stop.
+    it("passes over a record whose row is gone", () => {
+      LocalDatabase.restore([
+        {id: "t1", row: null, type: TASK},
+        record("t2", {title: "Draft copy"}),
+      ]);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t2"));
     });
   });
 

@@ -10,6 +10,7 @@
 // there is no client-side eviction, a row leaves when the server says it is no longer this
 // client's to hold.
 
+import Model from "./model.mjs";
 import Overlay from "./overlay.mjs";
 
 // What joins a type and an id into one carried-mark key. A NUL cannot occur in either half, so
@@ -106,6 +107,15 @@ export default class LocalDatabase {
     );
   }
 
+  // Whether a target set has been FILED for the triple, which is not the same as its holding
+  // something. A row states the whole set of a relationship it names, empty sets included, so
+  // "filed and empty" is a fact about the world and "never filed" is the absence of one - and the
+  // absence is what a stored set may still speak for. `baseTargetIds` cannot tell them apart,
+  // answering an empty set for both.
+  static hasFacts(type, relationship, sourceId) {
+    return LocalDatabase.#facts[type]?.[relationship]?.[sourceId] !== undefined;
+  }
+
   static isSynced(scope) {
     return LocalDatabase.#syncedScopes.has(scope);
   }
@@ -147,6 +157,30 @@ export default class LocalDatabase {
     table[row.id] = row;
   }
 
+  // What one frame's rows look like on their way to durable storage: a record per row, holding the
+  // row exactly as the base holds it - plain values, sort keys, $revisions - with the target ids of
+  // its to-many relationships beside it.
+  //
+  // The facts ride WITH their source row rather than in a place of their own, because that is how
+  // they are keyed here: a row leaving takes them with it, and an edge names the row whose
+  // relationships changed. So one row is one record, and one change is one write. A to-one is not
+  // among them - it lives in the row itself, as a reference field.
+  //
+  // A key the base no longer holds answers a record with no row, which is what a frame that
+  // deleted or unsynced one leaves behind. Deciding what to do about that is the reader's.
+  static records(rowKeys) {
+    return Array.from(rowKeys, (rowKey) => {
+      const separator = rowKey.indexOf(" ");
+      const type = rowKey.slice(0, separator);
+      const id = rowKey.slice(separator + 1);
+      const row = LocalDatabase.baseRow(type, id);
+
+      return row === null
+        ? {id, row: null, type}
+        : {facts: LocalDatabase.#toManyFacts(type, id), id, row, type};
+    });
+  }
+
   // The whole current target set for one (source, relationship) - the snapshot statement a row's
   // id list carries, replacing whatever pairs were held before.
   static replaceFacts(type, relationship, sourceId, targetIds) {
@@ -156,6 +190,44 @@ export default class LocalDatabase {
 
     for (const targetId of targetIds) {
       targets.add(targetId);
+    }
+  }
+
+  // Fills the database with what a previous page load left in durable storage, WITHOUT disturbing
+  // anything this page already carried.
+  //
+  // What the page carried is the fresher of the two by construction: the server rendered it for
+  // this request, and these records were written from frames that arrived before the last unload.
+  // So a row the page brought wins on its values, and a stored row fills only an id the page said
+  // nothing about. Facts are the one place a stored record still has something to add to a held
+  // row: a page's row states the target sets of the relationships its query included and stays
+  // silent about the rest, and a set nobody has filed is one the stored record may speak for.
+  //
+  // A held row is also unmarked as carried, because holding a stored record for it IS the evidence
+  // the stream vouched for it on an earlier load. Left marked, it would be swept the moment the
+  // server declares the pot complete - and a resuming client is told only what changed while it
+  // was away, so nothing would resend it.
+  static restore(records) {
+    for (const record of records) {
+      // A snapshot of a gone row is never written down, and the shape allows one, so it is passed
+      // over rather than filed as a row with nothing in it.
+      if (record.row === null) {
+        continue;
+      }
+
+      const {facts, id, row, type} = record;
+
+      if (LocalDatabase.baseRow(type, id) === null) {
+        LocalDatabase.putRow(type, row);
+      } else {
+        LocalDatabase.unmarkCarried(type, id);
+      }
+
+      for (const [relationship, targetIds] of Object.entries(facts)) {
+        if (!LocalDatabase.hasFacts(type, relationship, id)) {
+          LocalDatabase.replaceFacts(type, relationship, id, targetIds);
+        }
+      }
     }
   }
 
@@ -176,6 +248,25 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.#carried = new Set();
+  }
+
+  // A relationship nothing has FILED a set for is left out, rather than written down as empty.
+  // `baseTargetIds` answers an empty set for both, so storing what it returns would turn "nobody
+  // has said" into "the server said none" - an assertion nobody made, which `restore` would then
+  // act on by filing it. The two are told apart by `hasFacts`, and the whole point of that
+  // distinction is lost if the snapshot flattens it.
+  static #toManyFacts(type, id) {
+    const facts = {};
+
+    for (const [name, relationship] of Object.entries(
+      Model.relationships(type),
+    )) {
+      if (relationship.toMany && LocalDatabase.hasFacts(type, name, id)) {
+        facts[name] = Array.from(LocalDatabase.baseTargetIds(type, name, id));
+      }
+    }
+
+    return facts;
   }
 
   static #targetIds(type, relationship, sourceId) {

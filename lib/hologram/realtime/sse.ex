@@ -180,9 +180,9 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:sync_synced, scope} ->
+      {:sync_synced, scope, cursor} ->
         id = System.unique_integer([:positive, :monotonic])
-        chunk_data = Frame.encode_synced_envelope(id, scope)
+        chunk_data = Frame.encode_synced_envelope(id, scope, cursor)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}

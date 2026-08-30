@@ -26,6 +26,15 @@ export default class Clock {
     return Math.floor(stamp / Clock.#logicalSpan);
   }
 
+  // Where the clock stands, which is what gets written down beside a frame's rows and beside a
+  // batch's number. A page load reads it back and observes it, so the first stamp of the new load
+  // is above every stamp the previous one issued or was told about - the invariant "a column's
+  // revision never decreases" is what would otherwise break across a restart, since a fresh clock
+  // starts from the wall clock alone and a wall clock can be set backwards.
+  static last() {
+    return Clock.#last;
+  }
+
   // Advances the clock past the given stamp, so every stamp authored afterwards is above it.
   static observe(stamp) {
     Clock.#last = Math.max(Clock.#last, stamp);

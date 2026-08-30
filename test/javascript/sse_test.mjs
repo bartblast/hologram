@@ -4,11 +4,13 @@ import {
   assert,
   defineRuntimeGlobals,
   initComponentRegistryEntry,
+  registerWebApis,
   sinon,
 } from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
+import Durability from "../../assets/js/durability.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -16,11 +18,18 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
+import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
+
+// Without this the file passes only when something else in the run has installed sessionStorage
+// first: every handler here that logs - a resync, a reload notice, a stream dying inside the
+// stability window - writes there through Logger, and a suite that leans on its neighbours cannot
+// be run by itself or trusted to say which change broke it.
+registerWebApis();
 
 describe("Sse", () => {
   let animationFrames;
@@ -162,9 +171,14 @@ describe("Sse", () => {
   describe("buildSyncGreeting()", () => {
     const pageModule = Type.atom("Elixir.MyApp.BoardPage");
 
+    // Both sides, so a test asserting that NO identity is presented states its own premise
+    // rather than inheriting whatever the previous test or the previous suite adopted.
+    beforeEach(() => {
+      Replica.reset();
+    });
+
     afterEach(() => {
-      delete globalThis.Hologram.replicaId;
-      delete globalThis.Hologram.replicaToken;
+      Replica.reset();
       delete globalThis.Hologram.sync;
     });
 
@@ -208,12 +222,11 @@ describe("Sse", () => {
       assert.notProperty(Sse.buildSyncGreeting(pageModule), "cursor");
     });
 
-    // The pair the page was given, presented unchanged - what earns this client frames that say
-    // how far its own writes are in.
-    it("presents the replica identity the page was given", () => {
+    // The pair the browser is presenting, unchanged - what earns this client frames that say how
+    // far its own writes are in.
+    it("presents the replica identity the browser holds", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
-      globalThis.Hologram.replicaId = "r1";
-      globalThis.Hologram.replicaToken = "SFMyNTY.stated";
+      Replica.adopt({id: "r1", token: "SFMyNTY.stated"});
 
       const greeting = Sse.buildSyncGreeting(pageModule);
 
@@ -223,7 +236,7 @@ describe("Sse", () => {
 
     // An id is only worth the statement beside it, so half a pair is presented as none - the
     // server reads an id with no statement as no identity at all.
-    it("presents neither half when the page minted no identity", () => {
+    it("presents neither half when the browser holds no identity", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
       const greeting = Sse.buildSyncGreeting(pageModule);
@@ -232,14 +245,120 @@ describe("Sse", () => {
       assert.notProperty(greeting, "replica_token");
     });
 
-    it("presents neither half when the page gave an id with no statement", () => {
+    it("presents neither half for an id with no statement beside it", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
-      globalThis.Hologram.replicaId = "r1";
+      Replica.adopt({id: "r1", token: null});
 
       const greeting = Sse.buildSyncGreeting(pageModule);
 
       assert.notProperty(greeting, "replica_id");
       assert.notProperty(greeting, "replica_token");
+    });
+  });
+
+  describe("reconnect()", () => {
+    // Both sides. The identity is module state, and the connect() tests below assert their whole
+    // greeting URL - one left adopted here puts a replica on theirs and fails them, a long way
+    // from anything that mentions an identity.
+    beforeEach(() => {
+      Replica.reset();
+    });
+
+    // The greeting is removed here rather than at the end of the test that sets it, as this file's
+    // connect() describe already learned: a failed assertion skips the line and leaves it standing
+    // for every test after it.
+    afterEach(() => {
+      Replica.reset();
+
+      delete globalThis.Hologram.sync;
+    });
+
+    // The greeting is built at connect time and nowhere else, so a client whose identity changed
+    // has to open a stream again for the server to hear about it.
+    it("closes the stream and opens a new one carrying the current identity", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      sinon.stub(Logger, "debug");
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      Replica.adopt({id: "r-refused", token: "statement-refused"});
+
+      await Sse.connect();
+
+      Replica.adopt({id: "r-fresh", token: "statement-fresh"});
+
+      await Sse.reconnect();
+
+      assert.isTrue(mockEventSource.close.calledOnce);
+      assert.equal(globalThis.EventSource.callCount, 2);
+
+      assert.include(
+        globalThis.EventSource.secondCall.args[0],
+        "replica_id=r-fresh&replica_token=statement-fresh",
+      );
+    });
+
+    // A dying stream schedules its own retry. Left running, it opens a SECOND stream on top of
+    // this one a moment later, and both deliver every action and every frame.
+    it("calls off a retry the dying stream had scheduled", async () => {
+      const timers = sinon.useFakeTimers();
+
+      try {
+        stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+        sinon.stub(Logger, "debug");
+
+        await Sse.connect();
+
+        Sse.eventSource.onerror({type: "error"});
+
+        await Sse.reconnect();
+
+        const opened = globalThis.EventSource.callCount;
+
+        await timers.runAllAsync();
+
+        assert.equal(globalThis.EventSource.callCount, opened);
+      } finally {
+        timers.restore();
+      }
+    });
+
+    // Two connects can be in flight at once, and the one that arrives second must not leave the
+    // first's stream open with nothing referring to it.
+    it("closes a stream another connect had already opened", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.connect();
+      await Sse.connect();
+
+      assert.isTrue(mockEventSource.close.calledOnce);
+      assert.equal(globalThis.EventSource.callCount, 2);
+    });
+
+    // A stream that is replaced on purpose has earned no delay, and counting it as a failure would
+    // make the next real one back off further than it should.
+    it("leaves the failure count alone", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.connect();
+      await Sse.reconnect();
+
+      assert.equal(Sse.reconnectAttempts, 0);
+    });
+
+    it("opens a stream when there is none to close", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.reconnect();
+
+      assert.equal(globalThis.EventSource.callCount, 1);
     });
   });
 
@@ -775,6 +894,39 @@ describe("Sse", () => {
       assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Draft copy");
     });
 
+    // What goes down is what LocalDatabase would hand back for the rows this frame wrote - built
+    // there rather than here, so there is one spelling of a record in the system.
+    it("writes the rows the frame wrote, with the place they are dated at", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isTrue(persisting.calledOnce);
+
+      assert.deepStrictEqual(
+        persisting.firstCall.args[0],
+        LocalDatabase.records([`${TASK} t1`]),
+      );
+
+      assert.equal(persisting.firstCall.args[1], "Nzc4LjA");
+    });
+
+    // Mid-fill frames name no place, and the adapter leaves the stored one standing rather than
+    // clearing it - so the null is passed on rather than filtered out here.
+    it("passes a frame naming no place straight through", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame({cursor: null})});
+
+      assert.isNull(persisting.firstCall.args[1]);
+    });
+
     it("keeps the place the frame leaves the client at", async () => {
       stubHandshakeResponse();
 
@@ -916,6 +1068,17 @@ describe("Sse", () => {
       assert.isNull(LocalDatabase.getRow(TASK, "t1"));
     });
 
+    it("drops the stored rows and the place that dated them", async () => {
+      const clearing = sinon.stub(Durability, "clear");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.isTrue(clearing.calledOnce);
+    });
+
     it("drops the completeness it had, since the refill has not finished", async () => {
       stubHandshakeResponse();
 
@@ -1016,8 +1179,8 @@ describe("Sse", () => {
   });
 
   describe("synced event", () => {
-    const envelope = (scope) =>
-      JSON.stringify({protocol_version: 1, scope: scope});
+    const envelope = (scope, cursor = null) =>
+      JSON.stringify({cursor: cursor, protocol_version: 1, scope: scope});
 
     it("records the scope the client may now answer for itself", async () => {
       stubHandshakeResponse();
@@ -1038,6 +1201,51 @@ describe("Sse", () => {
       Sse.eventSource.listeners.synced({data: envelope("all")});
 
       assert.equal(animationFrames.length, 1);
+    });
+
+    // For a client filled and then left alone this is the only frame that ever names a place, so
+    // it is the only thing standing between it and being filled from nothing on its next visit.
+    it("keeps the place the completeness marker names", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    it("writes the place the completeness marker names", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
+
+      assert.isTrue(persisting.calledOnce);
+      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
+    });
+
+    // The page scope is narrower than the claim a place makes, so its marker names none - and a
+    // server built before this frame carried one names nothing at all.
+    it("leaves the place alone for a marker naming none", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({
+        data: JSON.stringify({
+          applied_seq: null,
+          cursor: "Nzc4LjA",
+          deltas: {},
+        }),
+      });
+
+      Sse.eventSource.listeners.synced({data: envelope("page")});
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.isTrue(persisting.calledOnce);
     });
   });
 

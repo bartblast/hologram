@@ -210,6 +210,10 @@ defmodule Hologram.Sync.Session do
     |> announce_scope(:all)
   end
 
+  # The marker carries the place, and the place is computed from the state that ALREADY records
+  # the scope as announced - `cursor/1` answers nil until the client holds a whole pot, and
+  # announcing `:all` is precisely what makes that true. Computed from `state` instead, the frame
+  # that says "you have everything" would be the one frame unable to say where everything ends.
   defp announce_scope(state, scope) do
     filled? =
       state
@@ -217,9 +221,11 @@ defmodule Hologram.Sync.Session do
       |> Enum.empty?()
 
     if filled? and not MapSet.member?(state.announced, scope) do
-      send(state.client, {:sync_synced, scope})
+      announced = %{state | announced: MapSet.put(state.announced, scope)}
 
-      %{state | announced: MapSet.put(state.announced, scope)}
+      send(announced.client, {:sync_synced, scope, cursor(announced)})
+
+      announced
     else
       state
     end
