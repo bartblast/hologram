@@ -107,11 +107,20 @@ defmodule HologramFeatureTests.DurabilityTest do
     |> assert_page(DurabilityPage)
     |> await_durable_writes()
 
-    assert script_result(session, "return globalThis.Hologram.durability.replicaId();") ==
-             held
+    kept = script_result(session, "return globalThis.Hologram.durability.replicaId();")
+    minted = script_result(session, "return globalThis.Hologram.replicaId;")
+
+    # Every comparison below has two halves that can be nil - the client presents no identity until
+    # one is adopted - and nil == nil would pass while proving neither that a pair was kept nor
+    # that the page offered a different one. So each is pinned as a real id first.
+    assert is_binary(held) and held != ""
+    assert is_binary(kept) and kept != ""
+    assert is_binary(minted) and minted != ""
+
+    assert kept == held
 
     # The page did mint a fresh one, and the client is not presenting it.
-    refute script_result(session, "return globalThis.Hologram.replicaId;") == held
+    refute minted == held
   end
 
   # The place is what earns a returning client a catch-up rather than the whole database again.
