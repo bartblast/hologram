@@ -29,6 +29,7 @@ import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Tabs from "../../assets/js/tabs.mjs";
 
 // registerWebApis puts sessionStorage on the global, which is where Logger writes - and every path
 // through this module that gives up on storage says so through Logger.
@@ -1042,7 +1043,7 @@ describe("Durability", () => {
       await seedPreviousLoad();
       await Durability.open();
 
-      const resumed = Durability.restore();
+      const resumed = Durability.restore(true);
 
       assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), {
         id: "t1",
@@ -1056,7 +1057,7 @@ describe("Durability", () => {
       await seedPreviousLoad();
       await Durability.open();
 
-      Durability.restore();
+      Durability.restore(true);
 
       assert.equal(Replica.id, "r-stored");
       assert.equal(Replica.token, "statement-stored");
@@ -1073,7 +1074,7 @@ describe("Durability", () => {
       await seedPreviousLoad({clock: stored});
       await Durability.open();
 
-      const resumed = Durability.restore();
+      const resumed = Durability.restore(true);
 
       assert.equal(resumed.seq, 41);
       assert.isAbove(Clock.stamp(), stored);
@@ -1094,7 +1095,7 @@ describe("Durability", () => {
       await Durability.open();
 
       assert.deepStrictEqual(
-        Durability.restore().batches.map((record) => record.seq),
+        Durability.restore(true).batches.map((record) => record.seq),
         [7, 9],
       );
     });
@@ -1111,7 +1112,7 @@ describe("Durability", () => {
       LocalDatabase.actorUserId = "u2";
 
       assert.deepStrictEqual(
-        Durability.restore().batches.map((record) => record.seq),
+        Durability.restore(true).batches.map((record) => record.seq),
         [8],
       );
 
@@ -1129,7 +1130,7 @@ describe("Durability", () => {
       LocalDatabase.actorUserId = null;
 
       assert.deepStrictEqual(
-        Durability.restore().batches.map((record) => record.seq),
+        Durability.restore(true).batches.map((record) => record.seq),
         [7],
       );
     });
@@ -1144,7 +1145,7 @@ describe("Durability", () => {
       await writeBatches([batchRecord(7)]);
       await Durability.open();
 
-      const resumed = Durability.restore();
+      const resumed = Durability.restore(true);
 
       assert.isNull(resumed.cursor);
 
@@ -1165,7 +1166,115 @@ describe("Durability", () => {
 
       await Durability.open();
 
-      assert.equal(Durability.restore().seq, 4);
+      assert.equal(Durability.restore(true).seq, 4);
+    });
+
+    // The other tabs hold the same rows out of the same store, and are told to let go the way a
+    // server resync tells everyone - one judgement, made once, for the group.
+    it("tells the group to start over when it refuses the stored rows", async () => {
+      sinon.stub(Durability, "clear");
+
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad({cursor: undefined});
+      await Durability.open();
+
+      Durability.restore(true);
+
+      sinon.assert.calledOnceWithExactly(posting, {
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
+    });
+
+    it("tells the group nothing when it takes the stored rows", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+
+      Durability.restore(true);
+
+      sinon.assert.notCalled(posting);
+    });
+
+    // A follower takes what the store holds and judges nothing: the leader judges once for the
+    // group, and a follower that took stale rows is told to start over by it. What that buys is
+    // the case where a follower's own judgement would be WRONG - rows with no place because the
+    // leader is filling right now, half of a base the frames are about to complete.
+    describe("for a follower", () => {
+      it("takes the rows when there is no place to resume from", async () => {
+        const clearing = sinon.stub(Durability, "clear");
+
+        await seedPreviousLoad({cursor: undefined});
+        await Durability.open();
+
+        const resumed = Durability.restore(false);
+
+        assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), {
+          id: "t1",
+          title: "Draft copy",
+        });
+
+        assert.isNull(resumed.cursor);
+        assert.isFalse(clearing.called);
+      });
+
+      it("takes the rows when somebody else is signed in, and clears nothing", async () => {
+        await seedPreviousLoad();
+        await Durability.open();
+
+        LocalDatabase.actorUserId = "u2";
+
+        Durability.restore(false);
+
+        assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), {
+          id: "t1",
+          title: "Draft copy",
+        });
+
+        assert.equal((await readAll("entities")).length, 1);
+      });
+
+      it("adopts a stored identity", async () => {
+        await seedPreviousLoad();
+        await Durability.open();
+
+        Durability.restore(false);
+
+        assert.equal(Replica.id, "r-stored");
+      });
+
+      it("writes no identity when none is stored", async () => {
+        await seedPreviousLoad({replica: undefined});
+        await Durability.open();
+
+        Durability.restore(false);
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isUndefined(await readMeta("replica"));
+      });
+
+      it("writes no owner", async () => {
+        await seedPreviousLoad({actorUserId: "u2"});
+        await Durability.open();
+
+        Durability.restore(false);
+
+        assert.equal(await readMeta("actorUserId"), "u2");
+      });
+
+      it("tells the group nothing", async () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        await seedPreviousLoad({cursor: undefined});
+        await Durability.open();
+
+        Durability.restore(false);
+
+        sinon.assert.notCalled(posting);
+      });
     });
 
     it("drops the rows when no place was stored", async () => {
@@ -1174,7 +1283,7 @@ describe("Durability", () => {
       await seedPreviousLoad({cursor: undefined});
       await Durability.open();
 
-      const resumed = Durability.restore();
+      const resumed = Durability.restore(true);
 
       assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
       assert.isNull(resumed.cursor);
@@ -1191,7 +1300,7 @@ describe("Durability", () => {
 
       await Durability.open();
 
-      const resumed = Durability.restore();
+      const resumed = Durability.restore(true);
 
       assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
       assert.isNull(resumed.cursor);
@@ -1211,7 +1320,7 @@ describe("Durability", () => {
 
       await Durability.open();
 
-      Durability.restore();
+      Durability.restore(true);
 
       assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
       assert.equal(Replica.id, "r-fresh");
@@ -1226,7 +1335,7 @@ describe("Durability", () => {
 
       await Durability.open();
 
-      const resumed = Durability.restore();
+      const resumed = Durability.restore(true);
 
       assert.equal(resumed.cursor, "place-1");
       assert.equal(Replica.id, "r-stored");
@@ -1236,7 +1345,7 @@ describe("Durability", () => {
       await seedPreviousLoad({replica: undefined});
       await Durability.open();
 
-      Durability.restore();
+      Durability.restore(true);
 
       assert.equal(Replica.id, "r-fresh");
 
@@ -1257,7 +1366,7 @@ describe("Durability", () => {
 
       await Durability.open();
 
-      Durability.restore();
+      Durability.restore(true);
 
       await Durability.persistBatch(sealedBatch(41));
 
@@ -1265,7 +1374,7 @@ describe("Durability", () => {
     });
 
     it("answers nothing to resume from in memory mode", () => {
-      assert.isNull(Durability.restore());
+      assert.isNull(Durability.restore(true));
     });
 
     // Called once per page visit, and only the first visit has anything to take up. A later one
@@ -1274,9 +1383,9 @@ describe("Durability", () => {
       await seedPreviousLoad();
       await Durability.open();
 
-      Durability.restore();
+      Durability.restore(true);
 
-      assert.isNull(Durability.restore());
+      assert.isNull(Durability.restore(true));
     });
   });
 

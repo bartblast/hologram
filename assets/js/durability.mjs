@@ -4,6 +4,7 @@ import Clock from "./clock.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
+import Tabs from "./tabs.mjs";
 
 // What this browser keeps between page loads, and where it keeps it.
 //
@@ -419,6 +420,17 @@ export default class Durability {
   // from: the place to greet the stream with, the number to count batches on from, and the batches
   // this page may send.
   //
+  // `leader` says whether this tab is the one that speaks to the store for the group of tabs
+  // sharing it. A FOLLOWER TAKES WHAT THE STORE HOLDS AND JUDGES NOTHING: it refuses no rows,
+  // clears nothing, writes no identity and records no owner. Not because the judgements below are
+  // wrong for it - they are the same store, so they would come out the same - but because the
+  // leader makes them once for everyone, and tells the group to start over when it refuses (the
+  // same frame a server resync sends). A follower that read a stale store resets on that and takes
+  // the refill from the channel, and one that reads the store after the leader cleared it finds it
+  // empty. What that buys is the one case where a follower's own judgement WOULD be wrong: rows
+  // with no place because the leader is filling right now, which are half of a base the frames
+  // are about to complete - refused, nothing would bring that half back.
+  //
   // SYNCHRONOUS, and called after the page has mounted rather than before. After, because the rows
   // the page itself carried are the freshest thing this client has - the server rendered them for
   // this request - so they go in first and a stored row fills only what the page said nothing
@@ -457,7 +469,7 @@ export default class Durability {
   // nothing would then hand a new batch a number a stored one already holds, and its record would
   // be overwritten by a batch that is not it. The maximum is what makes keeping one and dropping
   // the other safe.
-  static restore() {
+  static restore(leader) {
     const loaded = Durability.#loaded;
 
     Durability.#loaded = null;
@@ -473,7 +485,7 @@ export default class Durability {
     const ownerChanged =
       loaded.actorUserId !== (LocalDatabase.actorUserId ?? null);
 
-    const refusal = Durability.#refusal(loaded, ownerChanged);
+    const refusal = leader ? Durability.#refusal(loaded, ownerChanged) : null;
 
     if (refusal === null) {
       LocalDatabase.restore(loaded.records);
@@ -483,19 +495,32 @@ export default class Durability {
       );
 
       Durability.clear();
+
+      // The other tabs of the group hold the same rows, read from the same store, and are told to
+      // let go of them the way a server resync tells everyone - AFTER the clear's transaction is
+      // created, so a tab that reads the store on hearing this reads it cleared.
+      Tabs.post({
+        event: "sync_resync",
+        frame: {reason: refusal},
+        kind: "frame",
+      });
     }
 
     // A page load offers a fresh pair and a browser already holding one ignores it - re-minting per
     // load would abandon the numbering its batches are identified by. Somebody else signing in is
     // the one case where the held pair goes too: it was minted for the previous owner, or for a
-    // session that is no longer theirs.
+    // session that is no longer theirs - and the leader writes the page's pair in its place, once
+    // for the group. A follower writes none: it presents no identity of its own to the server, and
+    // the pair the leader settled on reaches it with the group's state.
     if (loaded.replica !== null && !ownerChanged) {
       Replica.adopt(loaded.replica);
-    } else {
+    } else if (leader) {
       Durability.persistReplica(Replica.current());
     }
 
-    Durability.#rememberOwner(loaded);
+    if (leader) {
+      Durability.#rememberOwner(loaded);
+    }
 
     const owner = LocalDatabase.actorUserId ?? null;
 

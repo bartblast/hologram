@@ -2026,7 +2026,9 @@ export default class Hologram {
   // visit after the first, since the runtime's page-script listener fires again on each
   // client-side navigation and this runs once per page visit.
   static #restoreDurable() {
-    const resumed = Durability.restore();
+    // TODO: the role is this tab's own, once the runtime joins its group - until then every tab
+    // is the one that speaks to the store.
+    const resumed = Durability.restore(true);
 
     if (resumed === null) {
       return;
