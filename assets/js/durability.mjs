@@ -143,6 +143,32 @@ export default class Durability {
     }
   }
 
+  // A batch this browser has sealed and the number it spent on it, written down as one fact.
+  //
+  // The ONE write anything waits for. A batch is identified by its replica and its number, and the
+  // server answers a number it has already seen from its record rather than applying it again - so
+  // a number handed out but never written down is a number the next page load hands out a second
+  // time, and the batch carrying it is answered with what the FIRST batch got.
+  //
+  // The batch and its number go down TOGETHER, in one transaction, because either one without the
+  // other is wrong in its own way. A number with no batch is what the counter alone bought: the
+  // next load counts on from work that no longer exists anywhere. A batch with no number is worse
+  // - the next load would count from below it and hand the same number to something else, and
+  // whichever of the two reached the server second would be answered with the other's verdict.
+  //
+  // What a crash between sealing and committing costs is a batch that was never sent, which is the
+  // cheap side of the trade and the only side left once the two are one write.
+  static persistBatch(batch) {
+    return Durability.#write([META, QUEUE], (transaction) => {
+      transaction.objectStore(QUEUE).put(batch.record());
+
+      const meta = transaction.objectStore(META);
+
+      meta.put(batch.seq, "seq");
+      meta.put(Clock.last(), "clock");
+    });
+  }
+
   // The number this browser has counted its batches up to, and where its clock stands.
   //
   // The ONE write anything waits for. A batch is identified by its replica and its number, and the

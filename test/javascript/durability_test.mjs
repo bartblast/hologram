@@ -18,6 +18,7 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -171,12 +172,19 @@ describe("Durability", () => {
     type: "MyApp.Task",
   });
 
-  const batchRecord = (seq) => ({
-    actorUserId: "u1",
-    landed: [],
-    seq,
-    writes: [{id: "t1", op: "delete", type: "MyApp.Task"}],
-  });
+  const sealedBatch = (seq) => {
+    const batch = new Batch(null);
+
+    batch.actorUserId = "u1";
+    batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+    batch.seal(seq);
+
+    return batch;
+  };
+
+  // Through a real batch rather than a literal of its own, so a seed writes exactly what the
+  // module writes and the two cannot drift apart.
+  const batchRecord = (seq) => sealedBatch(seq).record();
 
   const writeBatches = async (records) => {
     const {db} = await rawOpen();
@@ -526,6 +534,63 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+  });
+
+  describe("persistBatch()", () => {
+    it("writes the batch, its number and the clock together", async () => {
+      await Durability.open();
+
+      Clock.observe(1_756_100_000_123_004);
+
+      await Durability.persistBatch(sealedBatch(7));
+
+      assert.deepStrictEqual(await readAll("queue"), [batchRecord(7)]);
+      assert.equal(await readMeta("seq"), 7);
+      assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
+    });
+
+    // The sender waits on this one write before a batch goes out, so what it answers has to stay
+    // pending until the batch is DOWN - not merely until it has been asked for. Nothing in flight
+    // at the moment it settles is what says so, and one thing in flight before that is what says
+    // the batch and its number went in a single transaction rather than two.
+    it("answers a promise that settles once the batch is stored", async () => {
+      await Durability.open();
+
+      const writing = Durability.persistBatch(sealedBatch(7));
+
+      assert.equal(Durability.inFlight, 1);
+
+      await writing;
+
+      assert.equal(Durability.inFlight, 0);
+      assert.deepStrictEqual(await readAll("queue"), [batchRecord(7)]);
+    });
+
+    // A batch that has to be sent again is stored again - its marks may have moved since - and the
+    // number it is keyed by is what makes the second write replace the first rather than pile up.
+    it("replaces the record of the same number", async () => {
+      await Durability.open();
+
+      const batch = sealedBatch(7);
+
+      await Durability.persistBatch(batch);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistBatch(batch);
+
+      assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
+    });
+
+    // A browser with nowhere to store still has a sender waiting on this, so it answers something
+    // already settled rather than nothing.
+    it("answers an already-settled promise in memory mode", async () => {
+      await Durability.persistBatch(sealedBatch(7));
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
     });
   });
 
