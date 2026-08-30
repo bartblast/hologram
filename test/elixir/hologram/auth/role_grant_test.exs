@@ -159,4 +159,17 @@ defmodule Hologram.Auth.RoleGrantTest do
       end
     end
   end
+
+  describe "t/0" do
+    # Module1 declares nothing, so its field types are exactly the set use Hologram.Entity owns.
+    # The two parity tests above cannot see a TYPE the macro gains, which is the same blind spot
+    # that let __meta__ slip in once already.
+    test "types every field the entity macro types on an entity that declares nothing" do
+      macro_types = struct_field_types(Module1)
+
+      own_types = struct_field_types(RoleGrant)
+
+      assert Map.take(own_types, Map.keys(macro_types)) == macro_types
+    end
+  end
 end

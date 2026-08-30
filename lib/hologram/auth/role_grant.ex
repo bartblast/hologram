@@ -45,14 +45,14 @@ defmodule Hologram.Auth.RoleGrant do
           __meta__: Metadata.t(),
           created_at: DateTime.t() | nil,
           granted_by: struct | NotIncluded.t() | nil,
-          granted_by_id: String.t() | nil,
-          id: String.t() | nil,
-          resource_id: String.t() | nil,
+          granted_by_id: Entity.id() | nil,
+          id: Entity.id() | nil,
+          resource_id: Entity.id() | nil,
           resource_type: atom | nil,
           role: atom | module | nil,
           updated_at: DateTime.t() | nil,
-          user: struct | NotIncluded.t(),
-          user_id: String.t() | nil
+          user: struct | NotIncluded.t() | nil,
+          user_id: Entity.id() | nil
         }
 
   @doc """
@@ -125,7 +125,7 @@ defmodule Hologram.Auth.RoleGrant do
   Raises - a role grant is written through grant_role/revoke_role and constructed nowhere.
   Present so that this type answers the constructor every entity type answers, with the refusal the engine already gives it.
   """
-  @spec new(%{optional(atom) => any} | keyword) :: struct
+  @spec new(%{optional(atom) => any} | keyword) :: t
   def new(values \\ []), do: Entity.new(__MODULE__, values)
 
   @doc false

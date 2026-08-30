@@ -17,6 +17,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
 
   describe "__attributes__/0" do
@@ -349,6 +350,21 @@ defmodule Hologram.EntityTest do
       assert InlineConstructorFixture1.new().a == "overridden"
     end
 
+    # The spec is written in __using__ and names a type generated in __before_compile__ - legal,
+    # because types are resolved at module end rather than where they are mentioned.
+    test "is typed as answering the entity type's own struct" do
+      {:ok, specs} = Code.Typespec.fetch_specs(Module1)
+
+      forms_by_name = Map.new(specs)
+
+      [form] = Map.fetch!(forms_by_name, {:new, 1})
+
+      quoted_spec = Code.Typespec.spec_to_quoted(:new, form)
+
+      assert Macro.to_string(quoted_spec) ==
+               "new(%{optional(atom()) => any()} | keyword()) :: t()"
+    end
+
     test "refuses what the engine refuses, in its words" do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
@@ -677,6 +693,97 @@ defmodule Hologram.EntityTest do
       term = %{a: [1, {:b, "c"}], d: nil}
 
       assert strip_server_only_deep(term) == term
+    end
+  end
+
+  describe "t/0" do
+    test "types a declared enum attribute as its declared values" do
+      assert struct_field_types(Module4) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a: "Date.t() | nil",
+               b: "DateTime.t() | nil",
+               c: ":x | :y | nil",
+               created_at: "DateTime.t() | nil",
+               d: "float() | nil",
+               id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    # The self-reference reads back as a bare t() rather than as the module's own name - that is
+    # how Erlang stores a type naming the module it is defined in, not something to correct.
+    test "types a self-referencing relationship as the entity type's own type" do
+      assert struct_field_types(Module5) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a:
+                 "Hologram.Test.Fixtures.Entity.Module3.t() | Hologram.Entity.NotIncluded.t() | nil",
+               a_id: "Hologram.Entity.id() | nil",
+               b: "t() | Hologram.Entity.NotIncluded.t() | nil",
+               b_id: "Hologram.Entity.id() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types a server-only attribute as admitting its sentinel" do
+      assert struct_field_types(Module15) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               label: "String.t() | nil",
+               secret_note: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
+               token: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types declared attributes from the types their declarations name" do
+      assert struct_field_types(Module2) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a: "boolean() | nil",
+               b: "integer() | nil",
+               c: "String.t() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types relationship fields from the entity types they target" do
+      assert struct_field_types(Module3) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a: "[Hologram.Test.Fixtures.Entity.Module2.t()] | Hologram.Entity.NotIncluded.t()",
+               b:
+                 "Hologram.Test.Fixtures.Entity.Module2.t() | Hologram.Entity.NotIncluded.t() | nil",
+               b_id: "Hologram.Entity.id() | nil",
+               c:
+                 "Hologram.Test.Fixtures.Entity.Module1.t() | Hologram.Entity.NotIncluded.t() | nil",
+               c_id: "Hologram.Entity.id() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types the framework's own names for an entity struct and an entity id" do
+      {:ok, types} = Code.Typespec.fetch_types(Hologram.Entity)
+
+      sources =
+        Enum.map(types, fn {_kind, type} ->
+          Macro.to_string(Code.Typespec.type_to_quoted(type))
+        end)
+
+      assert Enum.sort(sources) == ["id() :: String.t()", "t() :: struct()"]
+    end
+
+    test "types the metadata and system attribute fields on an entity type declaring nothing" do
+      assert struct_field_types(Module1) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
     end
   end
 

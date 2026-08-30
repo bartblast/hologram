@@ -12,6 +12,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.Writer
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
   alias Hologram.Query
@@ -83,7 +84,7 @@ defmodule Hologram.DB do
   grant_role/revoke_role, and a job, which is created through Job.create/2 - as does a
   constraint violation the mapping does not explain.
   """
-  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
+  @spec create(Entity.t()) :: {:ok, Entity.t()} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
     validate_not_job!(entity.__struct__)
     Validator.validate_writable!(entity.__struct__)
@@ -98,7 +99,7 @@ defmodule Hologram.DB do
   The spelling for seeds, scripts and fixtures, where a conflict is a reason to stop rather than
   something to answer. Code that acts on a conflict - a command handling a form - takes create/1.
   """
-  @spec create!(struct) :: struct
+  @spec create!(Entity.t()) :: Entity.t()
   def create!(entity) do
     case create(entity) do
       {:ok, stamped_entity} ->
@@ -129,7 +130,8 @@ defmodule Hologram.DB do
   claim, so delete/1 is the spelling for one on another operation's authority. Without an
   acting user the delete is raw.
   """
-  @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
+  @spec delete(module, Entity.id()) ::
+          :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
     Validator.validate_writable!(entity_type)
 
@@ -150,7 +152,7 @@ defmodule Hologram.DB do
   without an acting user an unclaimed delete is raw. A struct whose id names no row is not
   evaluated at all: there is nothing to authorize against.
   """
-  @spec delete(struct) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
+  @spec delete(Entity.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity) when is_struct(entity) do
     Validator.validate_writable!(entity.__struct__)
 
@@ -163,7 +165,7 @@ defmodule Hologram.DB do
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a
   restriction takes delete/1. A denied claim raises Hologram.AccessDeniedError from either.
   """
-  @spec delete!(struct) :: :ok
+  @spec delete!(Entity.t()) :: :ok
   def delete!(entity) when is_struct(entity) do
     case delete(entity) do
       :ok ->
@@ -184,7 +186,7 @@ defmodule Hologram.DB do
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes delete/2.
   """
-  @spec delete!(module, String.t()) :: :ok
+  @spec delete!(module, Entity.id()) :: :ok
   def delete!(entity_type, id) do
     case delete(entity_type, id) do
       :ok ->
@@ -229,7 +231,7 @@ defmodule Hologram.DB do
   A query marked with trust/1 is read raw whether or not a user is acting - the server's own
   authority, the spelling for a read that must see past the acting user's policies.
   """
-  @spec read(module | Query.t()) :: list(struct) | struct | integer | nil
+  @spec read(module | Query.t()) :: list(Entity.t()) | Entity.t() | integer | nil
   def read(query) do
     term = Query.normalize(query)
 
@@ -256,7 +258,7 @@ defmodule Hologram.DB do
   Raises ArgumentError when the id is not a canonical entity id (a lowercase
   8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
   """
-  @spec read(module, String.t()) :: struct | nil
+  @spec read(module, Entity.id()) :: Entity.t() | nil
   def read(entity_type, id) do
     EntityOperations.validate_id!(id)
     validate_entity_type!(entity_type)
@@ -320,7 +322,7 @@ defmodule Hologram.DB do
   claim, so update/1 is the spelling for one on another operation's authority. Without an
   acting user the update is raw.
   """
-  @spec update(module, String.t(), map | keyword) ::
+  @spec update(module, Entity.id(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     Validator.validate_writable!(entity_type)
@@ -351,7 +353,7 @@ defmodule Hologram.DB do
   judged on the value the write leaves, so a move that would cross a declared bound is reported
   the same way.
   """
-  @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
+  @spec update(Entity.t()) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) when is_struct(entity) do
     Validator.validate_writable!(entity.__struct__)
 
@@ -364,7 +366,7 @@ defmodule Hologram.DB do
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes update/1. A denied claim raises Hologram.AccessDeniedError from either.
   """
-  @spec update!(struct) :: :ok
+  @spec update!(Entity.t()) :: :ok
   def update!(entity) when is_struct(entity) do
     case update(entity) do
       :ok ->
@@ -387,7 +389,7 @@ defmodule Hologram.DB do
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes update/3.
   """
-  @spec update!(module, String.t(), map | keyword) :: :ok
+  @spec update!(module, Entity.id(), map | keyword) :: :ok
   def update!(entity_type, id, changes) do
     case update(entity_type, id, changes) do
       :ok ->

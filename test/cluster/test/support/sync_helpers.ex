@@ -14,7 +14,7 @@ defmodule HologramClusterTests.SyncHelpers do
   @doc """
   Creates an Item on the node this runs on and returns it.
   """
-  @spec create_item(String.t(), String.t()) :: struct
+  @spec create_item(String.t(), String.t()) :: Item.t()
   def create_item(slug, title) do
     %{slug: slug, title: title}
     |> Item.new()

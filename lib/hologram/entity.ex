@@ -14,6 +14,17 @@ defmodule Hologram.Entity do
     {:updated_at, :datetime, []}
   ]
 
+  @typedoc """
+  An entity id - the canonical lowercase 8-4-4-4-12 spelling generate_id/0 mints.
+  """
+  @type id :: String.t()
+
+  @typedoc """
+  An entity struct - a struct of a module that uses Hologram.Entity.
+  The entity types cannot be named here, since the framework is compiled before any of them exist.
+  """
+  @type t :: struct
+
   defmacro __using__(opts) do
     Validator.validate_use_opts!(__CALLER__.module, opts)
 
@@ -51,7 +62,7 @@ defmodule Hologram.Entity do
         The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
         To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
         """
-        @spec new(%{optional(atom) => any} | keyword) :: struct
+        @spec new(%{optional(atom) => any} | keyword) :: t
         def new(values \\ []), do: Hologram.Entity.new(__MODULE__, values)
 
         defoverridable new: 0, new: 1
@@ -78,6 +89,8 @@ defmodule Hologram.Entity do
       |> struct_fields()
       |> Macro.escape()
 
+    struct_type = struct_type(env.module)
+
     quote do
       # The metadata struct is expanded HERE, in the entity's own module body, so the module
       # carries a compile-time dependency on it. Escaping a pre-built one instead bakes a copy of
@@ -87,6 +100,12 @@ defmodule Hologram.Entity do
       defstruct Enum.sort([
                   {:__meta__, %Hologram.Entity.Metadata{}} | unquote(struct_fields)
                 ])
+
+      @typedoc """
+      An entity struct of this entity type.
+      Every attribute field admits nil - a struct carries whatever it was built with, and declarations are checked at the write.
+      """
+      @type t :: unquote(struct_type)
 
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
@@ -204,7 +223,7 @@ defmodule Hologram.Entity do
   Generates a new entity id - a UUIDv7 string built from the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits).
   Entity ids come only from this function, on the server and on the client alike.
   """
-  @spec generate_id() :: String.t()
+  @spec generate_id() :: id
   def generate_id do
     unix_ms = System.system_time(:millisecond)
     <<rand_a::12, rand_b::62, _discarded::6>> = :crypto.strong_rand_bytes(10)
@@ -223,7 +242,7 @@ defmodule Hologram.Entity do
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
   This is the form for an entity type held in a variable - a type written by name has its own generated new/1, which delegates here.
   """
-  @spec new(module, %{optional(atom) => any} | keyword) :: struct
+  @spec new(module, %{optional(atom) => any} | keyword) :: t
   def new(entity_type, values \\ %{}) do
     values_map = Map.new(values)
 
@@ -400,7 +419,7 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec strip_server_only(struct) :: struct
+  @spec strip_server_only(t) :: t
   def strip_server_only(entity) do
     attribute_names = server_only_attribute_names(entity.__struct__)
 
@@ -490,7 +509,7 @@ defmodule Hologram.Entity do
   Validates the given entity struct against its entity type's declarations - attribute types, enum values, required presence, the declared constraint options, and to-one references (required presence, canonical entity id format).
   Returns :ok, or {:error, violations} where violations maps each violating field name to the list of its violation reasons, all violations accumulated.
   """
-  @spec validate(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
+  @spec validate(t) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def validate(entity) when is_struct(entity) do
     entity_type = entity.__struct__
     data = Map.take(entity, validated_field_names(entity_type))
@@ -513,6 +532,35 @@ defmodule Hologram.Entity do
     |> group_errors()
   end
 
+  # A server-only attribute holds its sentinel in a struct on its way to the client - the page
+  # context and a from_query prop both carry one - so the field admits it beside the declared type.
+  defp attribute_field_type_ast(type, opts) do
+    sentinel_types =
+      if opts[:server_only] == true do
+        [remote_type_ast(Entity.ServerOnly)]
+      else
+        []
+      end
+
+    union_types = Enum.concat([attribute_type_asts(type, opts), sentinel_types, [nil]])
+
+    type_union(union_types)
+  end
+
+  # The Elixir types an attribute's field holds, from the type its declaration names. A uuid is a
+  # string here - the canonical id format is a declaration check, not something a type can state.
+  # An enum answers with its values rather than with a union of them, so that the field's own
+  # union stays flat: a nested one is equivalent but renders as ":x | :y | nil" wrapped in
+  # parentheses, and this type is what ExDoc shows on every entity's page.
+  defp attribute_type_asts(:boolean, _opts), do: [quote(do: boolean())]
+  defp attribute_type_asts(:date, _opts), do: [remote_type_ast(Date)]
+  defp attribute_type_asts(:datetime, _opts), do: [remote_type_ast(DateTime)]
+  defp attribute_type_asts(:enum, opts), do: Keyword.fetch!(opts, :values)
+  defp attribute_type_asts(:float, _opts), do: [quote(do: float())]
+  defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
+  defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
+  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(Entity, :id)]
+
   # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
   # so a role reaching the given one through any number of hops ends up in the result.
   defp expand_role_names(names, extends_by_name) do
@@ -532,6 +580,32 @@ defmodule Hologram.Entity do
     end
   end
 
+  defp field_type_asts(module) do
+    attribute_field_types =
+      module
+      |> Module.get_attribute(:__attributes__)
+      |> Enum.map(fn {name, type, opts} -> {name, attribute_field_type_ast(type, opts)} end)
+
+    relationship_field_types =
+      module
+      |> Module.get_attribute(:__relationships__)
+      |> Enum.flat_map(&relationship_field_type_asts/1)
+
+    system_attribute_field_types =
+      Enum.map(@system_attributes, fn {name, type, opts} ->
+        {name, attribute_field_type_ast(type, opts)}
+      end)
+
+    [
+      {:__meta__, remote_type_ast(Entity.Metadata)}
+      | Enum.concat([
+          attribute_field_types,
+          relationship_field_types,
+          system_attribute_field_types
+        ])
+    ]
+  end
+
   defp group_errors(:ok), do: :ok
 
   defp group_errors({:error, errors}) do
@@ -539,6 +613,49 @@ defmodule Hologram.Entity do
       Enum.group_by(errors, fn {name, _reason} -> name end, fn {_name, reason} -> reason end)
 
     {:error, grouped}
+  end
+
+  # Spelled with the module ATOM rather than with an alias, so that an entity module's own
+  # aliases cannot redirect the name.
+  defp remote_type_ast(module, name \\ :t), do: {{:., [], [module, name]}, [], []}
+
+  # A to-many holds its sentinel until a query includes it and a list of the target's structs
+  # after. A to-one splits into a reference field and an embed, and the embed admits nil whether
+  # or not the reference is optional - a struct built by hand can carry one.
+  defp relationship_field_type_asts({name, [target], _opts}) do
+    union_types = [{:list, [], [remote_type_ast(target)]}, remote_type_ast(Entity.NotIncluded)]
+
+    [{name, type_union(union_types)}]
+  end
+
+  defp relationship_field_type_asts({name, target, _opts}) do
+    union_types = [remote_type_ast(target), remote_type_ast(Entity.NotIncluded), nil]
+
+    # The reference field's atom is created by struct_fields/1, called just above in
+    # __before_compile__ - this only has to find it.
+    reference_name = String.to_existing_atom("#{name}_id")
+
+    [
+      {reference_name, type_union([remote_type_ast(Entity, :id), nil])},
+      {name, type_union(union_types)}
+    ]
+  end
+
+  # A type is AST, not data: the field types name other modules' t/0, and those names have to
+  # arrive in the entity's module unexpanded - which is why this is built rather than escaped.
+  defp struct_type(module) do
+    fields =
+      module
+      |> field_type_asts()
+      |> Enum.sort()
+
+    {:%, [], [{:__MODULE__, [], nil}, {:%{}, [], fields}]}
+  end
+
+  defp type_union(asts) do
+    asts
+    |> Enum.reverse()
+    |> Enum.reduce(fn ast, acc -> {:|, [], [ast, acc]} end)
   end
 
   defp user_entity_marker(opts) do

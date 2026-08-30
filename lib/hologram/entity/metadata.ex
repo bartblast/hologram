@@ -13,6 +13,8 @@ defmodule Hologram.Entity.Metadata do
   # revision of every column the write sets, in place of one from this node's clock - the writer's
   # next write says it was based on that exact value, so nothing may re-author it on the way in.
 
+  alias Hologram.Entity
+
   defstruct attribute_ops: %{}, claim: nil, relationship_ops: %{}, revisions: %{}, stamp: nil
 
   @type attribute_op :: {:put, any} | {:increment, integer}
@@ -20,7 +22,7 @@ defmodule Hologram.Entity.Metadata do
   @type t :: %__MODULE__{
           attribute_ops: %{atom => attribute_op},
           claim: {:authorize, atom} | :trust | nil,
-          relationship_ops: %{{atom, String.t()} => :add | :delete},
+          relationship_ops: %{{atom, Entity.id()} => :add | :delete},
           revisions: %{atom => pos_integer},
           stamp: pos_integer | nil
         }
