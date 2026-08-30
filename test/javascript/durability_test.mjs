@@ -172,10 +172,10 @@ describe("Durability", () => {
     type: "MyApp.Task",
   });
 
-  const sealedBatch = (seq) => {
+  const sealedBatch = (seq, actorUserId = "u1") => {
     const batch = new Batch(null);
 
-    batch.actorUserId = "u1";
+    batch.actorUserId = actorUserId;
     batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
     batch.seal(seq);
 
@@ -184,7 +184,8 @@ describe("Durability", () => {
 
   // Through a real batch rather than a literal of its own, so a seed writes exactly what the
   // module writes and the two cannot drift apart.
-  const batchRecord = (seq) => sealedBatch(seq).record();
+  const batchRecord = (seq, actorUserId = "u1") =>
+    sealedBatch(seq, actorUserId).record();
 
   const writeBatches = async (records) => {
     const {db} = await rawOpen();
@@ -829,6 +830,92 @@ describe("Durability", () => {
     // Rows written by a fill that never finished. Nothing dates them, so the server cannot be
     // asked what changed since - and a row deleted while this browser was away would never be
     // taken off the screen.
+    // Sent under the user of the session that sends them, so a page takes up only what its own
+    // user made - and reads them back in the order they were made, which is the order they ship.
+    it("answers the stored batches of the page's own user, oldest first", async () => {
+      await seedPreviousLoad();
+      await writeBatches([
+        batchRecord(9),
+        batchRecord(7),
+        batchRecord(8, "u2"),
+      ]);
+      await Durability.open();
+
+      assert.deepStrictEqual(
+        Durability.restore().batches.map((record) => record.seq),
+        [7, 9],
+      );
+    });
+
+    // Not dropped and not sent - somebody else's unfinished work, waiting for a page that mounts
+    // under them. Nothing else can deliver it: the server knows nothing of a batch never sent.
+    it("leaves another user's batches in the store", async () => {
+      sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7), batchRecord(8, "u2")]);
+      await Durability.open();
+
+      LocalDatabase.actorUserId = "u2";
+
+      assert.deepStrictEqual(
+        Durability.restore().batches.map((record) => record.seq),
+        [8],
+      );
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [7, 8],
+      );
+    });
+
+    it("treats two anonymous loads as one owner's batches", async () => {
+      await seedPreviousLoad({actorUserId: null});
+      await writeBatches([batchRecord(7, null)]);
+      await Durability.open();
+
+      LocalDatabase.actorUserId = null;
+
+      assert.deepStrictEqual(
+        Durability.restore().batches.map((record) => record.seq),
+        [7],
+      );
+    });
+
+    // The rows going does not take the queue with it. A pending write over a base that has started
+    // again is the resync case: a create folds as a new row, and an update waits for the fill to
+    // bring the row its revisions are weighed against.
+    it("answers the batches when the stored rows are refused", async () => {
+      sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad({cursor: null});
+      await writeBatches([batchRecord(7)]);
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.isNull(resumed.cursor);
+
+      assert.deepStrictEqual(
+        resumed.batches.map((record) => record.seq),
+        [7],
+      );
+    });
+
+    // A storage failure drops the counter and keeps the queue, so the two can disagree - and
+    // counting from below a stored batch would hand its number to something else, overwriting its
+    // record with a batch that is not it.
+    it("counts on from above the stored batches when the counter was dropped", async () => {
+      await createSchema();
+      await writeBatches([batchRecord(4)]);
+
+      LocalDatabase.actorUserId = "u1";
+
+      await Durability.open();
+
+      assert.equal(Durability.restore().seq, 4);
+    });
+
     it("drops the rows when no place was stored", async () => {
       const clearing = sinon.stub(Durability, "clear");
 

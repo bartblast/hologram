@@ -271,8 +271,9 @@ export default class Durability {
     });
   }
 
-  // Takes up what the previous page load left, and answers the two things the runtime resumes
-  // from: the place to greet the stream with, and the number to count batches on from.
+  // Takes up what the previous page load left, and answers the three things the runtime resumes
+  // from: the place to greet the stream with, the number to count batches on from, and the batches
+  // this page may send.
   //
   // SYNCHRONOUS, and called after the page has mounted rather than before. After, because the rows
   // the page itself carried are the freshest thing this client has - the server rendered them for
@@ -290,6 +291,28 @@ export default class Durability {
   // another model opens another database, and finds it empty.) What this browser DID - its identity, its counter, its
   // clock - survives all three: those are not the server's to take away, and reusing a number or
   // restarting a clock low is how a write gets answered by the wrong batch or read as moved.
+  //
+  // The batches are taken up whether or not the ROWS are, and the queue is not dropped in either
+  // case. A pending write over a base that has started again is the same case as a resync with
+  // writes pending: a create folds as a new row, an update of a row the base does not hold yet
+  // folds nothing until the fill brings it, and the fill's rows carry the revisions the fold
+  // weighs the write against.
+  //
+  // ONLY THIS PAGE'S OWN USER'S BATCHES. A batch is applied by the server under the user of the
+  // session that SENDS it, so a batch taken up by a page somebody else has since signed in on
+  // would be written in their name - or refused by their policies, and the work thrown away.
+  // Somebody else's batches are left in the store untouched: not loaded, not folded, not sent, not
+  // forgotten, and taken up by the next load that mounts under their own owner. (Nothing else can
+  // deliver them - the server knows nothing of a batch it has never been sent - so waiting is the
+  // whole of what is available, and it costs nothing.)
+  //
+  // The counter resumes above every STORED BATCH as well as above the number itself, which are
+  // normally the same. They part after a storage failure: the counter is dropped there, because a
+  // page that goes on spending numbers nothing records leaves a stale one behind - and the queue is
+  // kept, because a batch already written down is still the user's unfinished work. Counting from
+  // nothing would then hand a new batch a number a stored one already holds, and its record would
+  // be overwritten by a batch that is not it. The maximum is what makes keeping one and dropping
+  // the other safe.
   static restore() {
     const loaded = Durability.#loaded;
 
@@ -330,7 +353,13 @@ export default class Durability {
 
     Durability.#rememberOwner(loaded);
 
-    return {cursor: refusal === null ? loaded.cursor : null, seq: loaded.seq};
+    const owner = LocalDatabase.actorUserId ?? null;
+
+    return {
+      batches: loaded.queue.filter((record) => record.actorUserId === owner),
+      cursor: refusal === null ? loaded.cursor : null,
+      seq: Math.max(loaded.seq, ...loaded.queue.map((record) => record.seq)),
+    };
   }
 
   // Drops the database entirely and puts this module back as it starts. For tests - nothing in the
