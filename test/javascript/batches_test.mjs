@@ -635,6 +635,41 @@ describe("Batches", () => {
       return Batches.close();
     };
 
+    // What a reload would otherwise cost: a batch whose frame arrived and whose ANSWER was lost is
+    // taken up again by the next page load and sent again, answered from the server's record, and
+    // promoted - and a moved counter promoted onto a base that already holds the move counts it
+    // twice, for good, since the server has nothing further to say about a row nobody has touched.
+    it("writes the marks down when a frame lands a write", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+      const batch = sealed(write("t1"));
+
+      Batches.land(1, new Set([`${TODO} t1`]));
+
+      assert.isTrue(writing.calledOnceWithExactly(batch));
+    });
+
+    it("writes nothing down when the frame marks nothing new", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      sealed(write("t1"));
+
+      Batches.land(1, new Set([`${TODO} t1`]));
+      Batches.land(1, new Set([`${TODO} t1`]));
+
+      assert.isTrue(writing.calledOnce);
+    });
+
+    it("writes nothing down for a batch above the number", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      sealed(write("t1"));
+      sealed(write("t2"));
+
+      Batches.land(1, new Set([`${TODO} t1`, `${TODO} t2`]));
+
+      assert.isTrue(writing.calledOnce);
+    });
+
     // Up to the number and no further, in one call: a batch the server has applied stops being
     // folded, and the one after it goes on showing, because nothing has been said about it yet.
     it("marks the writes of the batches the server has applied, and no others", () => {

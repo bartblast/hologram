@@ -247,8 +247,11 @@ export default class Batches {
     }
 
     for (const batch of Batches.pending) {
-      if (batch.seq <= appliedSeq) {
-        batch.land(rowKeys);
+      // Written down only where a mark actually moved. Most frames name rows no pending batch has
+      // anything to say about, and a batch whose marks are unchanged is already stored the way it
+      // stands - so `land` answering false is what keeps the ordinary frame off the disk entirely.
+      if (batch.seq <= appliedSeq && batch.land(rowKeys)) {
+        Durability.persistLanded(batch);
       }
     }
   }
