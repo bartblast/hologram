@@ -299,15 +299,11 @@ export default class Client {
         return {httpStatus: response.status, status: "failed"};
       }
 
-      const answer = await response.json();
-
-      return answer.status === "rejected"
-        ? {
-            reason: Interpreter.evaluateJavaScriptExpression(answer.reason),
-            status: "rejected",
-            write: answer.write,
-          }
-        : answer;
+      // Answered exactly as the server spelled it, the encoded reason of a refusal included.
+      // Reading that term is the queue's, at the one place a reason is ever looked at - which is
+      // what leaves this answer a plain JSON value, and so something a browser can hand from one
+      // tab to another the way it hands a frame.
+      return await response.json();
     } finally {
       clearTimeout(deadline);
     }

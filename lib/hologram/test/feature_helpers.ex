@@ -93,6 +93,27 @@ defmodule Hologram.Test.FeatureHelpers do
   end
 
   @doc """
+  Closes the tab the session is looking at and focuses `handle`, returning the `session`.
+
+  A session drives one tab at a time, so closing the current one leaves it pointing at nothing -
+  the handle to move to is passed in rather than guessed.
+  """
+  @spec close_tab(struct, String.t()) :: struct
+  def close_tab(session, handle) do
+    Browser.close_window(session)
+
+    focus_tab(session, handle)
+  end
+
+  @doc """
+  Points the session at the tab named by `handle` and returns the `session`.
+  """
+  @spec focus_tab(struct, String.t()) :: struct
+  def focus_tab(session, handle) do
+    Browser.focus_window(session, handle)
+  end
+
+  @doc """
   Holds every mutation request the page makes AFTER it is sent, parking its answer until
   `release_mutations/1`.
 
@@ -114,6 +135,36 @@ defmodule Hologram.Test.FeatureHelpers do
   @spec hold_mutation_requests(struct) :: struct
   def hold_mutation_requests(session) do
     hold_mutations(session, "requests")
+  end
+
+  @doc """
+  Opens `page_module` in a second tab of the same browser, points the session at it, and blocks
+  until the Hologram client runtime has mounted it and established its server connections.
+
+  A second Wallaby SESSION is a second browser: its own profile, its own stored data, its own
+  locks. A second TAB is what a person opens, and the only way to reach anything a browser shares
+  between them - the local database, the queue of writes waiting to go out, and the tab that
+  speaks to the server for the rest.
+
+  Answers the `session`, now driving the new tab. `tab_handle/1` taken before the call is what
+  goes back to the first one.
+  """
+  @spec open_tab(struct, module, keyword) :: struct
+  def open_tab(session, page_module, params \\ []) do
+    path = Router.Helpers.page_path(page_module, params)
+
+    known =
+      session
+      |> Browser.window_handles()
+      |> MapSet.new()
+
+    Browser.execute_script(session, "window.open(arguments[0]);", [path])
+
+    session
+    |> focus_tab(wait_for_new_tab(session, known))
+    |> wait_for_page_mounting(page_module, [])
+    |> wait_for_ws_connection()
+    |> wait_for_sse_connection()
   end
 
   @doc """
@@ -150,6 +201,14 @@ defmodule Hologram.Test.FeatureHelpers do
       count when is_number(count) -> Utils.start_session([], start_session_opts)
     end)
     |> Utils.build_setup_return()
+  end
+
+  @doc """
+  Returns the handle of the tab the session is looking at, so it can be returned to later.
+  """
+  @spec tab_handle(struct) :: String.t()
+  def tab_handle(session) do
+    Browser.window_handle(session)
   end
 
   @doc """
@@ -275,6 +334,29 @@ defmodule Hologram.Test.FeatureHelpers do
 
   defp timed_out?(start_time) do
     current_time() - start_time > max_wait_time()
+  end
+
+  # The handle a window.open() produced, which the browser reports when it feels like it - so this
+  # waits for a handle that was not there before rather than assuming the last one is new.
+  defp wait_for_new_tab(session, known, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    opened =
+      session
+      |> Browser.window_handles()
+      |> Enum.find(&(!MapSet.member?(known, &1)))
+
+    cond do
+      opened ->
+        opened
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError, "Timed out waiting for a second tab to open"
+
+      true ->
+        :timer.sleep(50)
+        wait_for_new_tab(session, known, start_time)
+    end
   end
 
   defp wait_for_page_mounting(session, expected_page, opts, start_time \\ nil) do

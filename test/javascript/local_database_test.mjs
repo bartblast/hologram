@@ -678,6 +678,57 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("syncedScopes()", () => {
+    it("answers nothing before any marker has arrived", () => {
+      assert.deepStrictEqual(LocalDatabase.syncedScopes(), []);
+    });
+
+    it("answers the scopes marked so far", () => {
+      LocalDatabase.markSynced("all");
+      LocalDatabase.markSynced("page");
+
+      assert.sameMembers(LocalDatabase.syncedScopes(), ["all", "page"]);
+    });
+  });
+
+  describe("vouchedRowKeys()", () => {
+    const TASK = "MyApp.Task";
+
+    it("answers every base row that no page carried", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "from the stream"});
+      LocalDatabase.putRow(TASK, {id: "t2", title: "from the page"});
+      LocalDatabase.markCarried(TASK, "t2");
+
+      assert.deepStrictEqual(Array.from(LocalDatabase.vouchedRowKeys()), [
+        `${TASK} t1`,
+      ]);
+    });
+
+    it("answers the rows of every type it holds", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "a task"});
+      LocalDatabase.putRow("MyApp.Project", {id: "p1", name: "a project"});
+
+      assert.sameMembers(Array.from(LocalDatabase.vouchedRowKeys()), [
+        "MyApp.Project p1",
+        `${TASK} t1`,
+      ]);
+    });
+
+    it("answers a row again once it is unmarked", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "from the page"});
+      LocalDatabase.markCarried(TASK, "t1");
+      LocalDatabase.unmarkCarried(TASK, "t1");
+
+      assert.deepStrictEqual(Array.from(LocalDatabase.vouchedRowKeys()), [
+        `${TASK} t1`,
+      ]);
+    });
+
+    it("answers nothing for a database holding nothing", () => {
+      assert.deepStrictEqual(Array.from(LocalDatabase.vouchedRowKeys()), []);
+    });
+  });
+
   describe("carriedEntries()", () => {
     it("returns the rows marked as arrived with a page", () => {
       LocalDatabase.markCarried("MyApp.Task", "t1");

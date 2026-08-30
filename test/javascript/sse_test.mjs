@@ -12,6 +12,7 @@ import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Deltas from "../../assets/js/deltas.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -21,6 +22,7 @@ import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
+import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -190,6 +192,22 @@ describe("Sse", () => {
         page: "MyApp.BoardPage",
         protocol_version: 1,
       });
+    });
+
+    // One sync session per browser: the tab that leads is served sync and hands what it receives
+    // to the rest, so a follower greets the way a bundle with no sync at all does.
+    it("says nothing for a tab that does not lead its group", () => {
+      // The bundle DOES carry sync here, or this would answer nothing for a reason that has
+      // nothing to do with which tab leads.
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      Tabs.leader = false;
+
+      try {
+        assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {});
+      } finally {
+        Tabs.leader = true;
+      }
     });
 
     it("says nothing for a bundle built before any of this existed", () => {
@@ -589,6 +607,140 @@ describe("Sse", () => {
 
       sinon.assert.notCalled(globalThis.window.location.reload);
       sinon.assert.calledOnce(globalThis.EventSource);
+    });
+  });
+
+  // What a frame does to memory, driven directly rather than through a stream: the same call a
+  // tab handed a frame by another tab will make.
+  describe("receiveFrame()", () => {
+    it("applies a deltas frame to memory and answers what it wrote", () => {
+      const written = new Set(["MyApp.Task t1"]);
+
+      const applying = sinon.stub(Deltas, "apply").returns(written);
+      const landing = sinon.stub(Batches, "land");
+
+      const answered = Sse.receiveFrame("sync_deltas", {
+        applied_seq: 7,
+        cursor: "Nzc4LjA",
+        deltas: {put_entity: {}},
+      });
+
+      sinon.assert.calledOnceWithExactly(applying, {put_entity: {}});
+      sinon.assert.calledOnceWithExactly(landing, 7, written);
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(animationFrames.length, 1);
+      assert.strictEqual(answered, written);
+    });
+
+    it("keeps the cursor a mid-fill deltas frame does not name", () => {
+      sinon.stub(Deltas, "apply").returns(new Set());
+
+      Sse.syncCursor = "Nzc4LjA";
+
+      Sse.receiveFrame("sync_deltas", {
+        applied_seq: null,
+        cursor: null,
+        deltas: {},
+      });
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    it("marks the scope a synced marker names and takes its place", () => {
+      Sse.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
+
+      assert.isTrue(LocalDatabase.isSynced("all"));
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(animationFrames.length, 1);
+    });
+
+    // Nothing is repainted here on purpose - the refill's own frames schedule that.
+    it("starts over on a resync", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+
+      Sse.syncCursor = "Nzc4LjA";
+
+      Sse.receiveFrame("sync_resync", {reason: "cursor_unreadable"});
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.isNull(Sse.syncCursor);
+      assert.equal(animationFrames.length, 0);
+    });
+  });
+
+  // The tabs of a browser that have no stream of their own are handed what this one receives.
+  describe("telling the group", () => {
+    const frame = () =>
+      JSON.stringify({
+        applied_seq: null,
+        cursor: "Nzc4LjA",
+        deltas: {},
+        model_hash: "a3f9c2",
+        protocol_version: 1,
+      });
+
+    it("hands each frame to the group, naming the page the stream was greeted with", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      GlobalRegistry.set("connectPageModule", "MyApp.TodosPage");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isTrue(posting.calledOnce);
+
+      assert.deepStrictEqual(posting.firstCall.args[0], {
+        event: "sync_deltas",
+        frame: JSON.parse(frame()),
+        kind: "frame",
+        page: "MyApp.TodosPage",
+      });
+    });
+
+    // The order is the whole reason a tab joining the group cannot miss a frame: the write
+    // transaction is created before the message goes out, and IndexedDB orders what follows behind
+    // it - so a tab that reads the store on hearing this reads a store that already holds it.
+    it("writes the frame down before telling anyone about it", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+      const posting = sinon.stub(Tabs, "post");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isTrue(persisting.calledBefore(posting));
+    });
+
+    it("hands over a completeness marker, a resync and a stale-bundle notice too", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({cursor: null, protocol_version: 1, scope: "all"}),
+      });
+
+      Sse.eventSource.listeners.sync_resync({
+        data: JSON.stringify({
+          protocol_version: 1,
+          reason: "cursor_unreadable",
+        }),
+      });
+
+      Sse.eventSource.listeners.sync_reload({
+        data: JSON.stringify({protocol_version: 1, reason: "model_hash"}),
+      });
+
+      assert.deepStrictEqual(
+        posting.args.map(([message]) => message.event),
+        ["synced", "sync_resync", "sync_reload"],
+      );
     });
   });
 

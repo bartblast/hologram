@@ -583,8 +583,9 @@ describe("Client", () => {
     });
 
     // The reason travels as an encoded client term, because it carries regexes, ranges and
-    // exception structs - read here the way a command's next action is.
-    it("answers a rejection with the reason decoded", async () => {
+    // exception structs - and it is handed on exactly as it arrived, so what this answers stays a
+    // plain JSON value. Reading the term is the queue's, at the one place it is looked at.
+    it("answers a rejection as the server spelled it", async () => {
       responding({
         reason: 'Type.atom("stale_build")',
         status: "rejected",
@@ -592,7 +593,7 @@ describe("Client", () => {
       });
 
       assert.deepStrictEqual(await Client.sendMutation(batch), {
-        reason: Type.atom("stale_build"),
+        reason: 'Type.atom("stale_build")',
         status: "rejected",
         write: null,
       });

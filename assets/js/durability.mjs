@@ -4,6 +4,7 @@ import Clock from "./clock.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
+import Tabs from "./tabs.mjs";
 
 // What this browser keeps between page loads, and where it keeps it.
 //
@@ -94,11 +95,144 @@ export default class Durability {
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
 
+  // The batches this browser has filed above a number, oldest first - what a tab reads before it
+  // sends, so that what it ships is the queue as the DATABASE holds it rather than as messages
+  // happened to reach it.
+  //
+  // Why it is read at all: any tab of a group can file a batch, and it says so on the channel - but
+  // a message can be missed by a tab that was starting up, and a tab that filed one and closed
+  // before saying anything sends no message at all. The store is the record either way, and reading
+  // it back is reading it in number order, which is the order batches must go out in.
+  //
+  // A READ, so it is deliberately not `#write`: it starts no read-write transaction, and it is not
+  // counted as work in flight, which is what a test waits on to know a WRITE has landed. A read
+  // that fails answers nothing rather than tearing the storage down - nothing has been lost, and
+  // the next send asks again.
+  static async batchesAbove(seq) {
+    if (Durability.mode === "memory") {
+      return [];
+    }
+
+    try {
+      const transaction = Durability.#db.transaction([QUEUE], "readonly");
+
+      const records = await Durability.#request(
+        transaction
+          .objectStore(QUEUE)
+          .getAll(globalThis.IDBKeyRange.lowerBound(seq, true)),
+      );
+
+      return records ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
   // resync replaces the whole pot, and when what is stored cannot be read by this page.
   static clear() {
     return Durability.#write([ENTITIES, META], Durability.#wipe);
+  }
+
+  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
+  // model, opens a database of its own. Null when the build has no data model, and so nothing to
+  // name one for.
+  //
+  // The framework's half comes first and the app's second, broad before narrow: the layout is
+  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
+  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
+  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
+  // parse for anything that ever has to gate on a shape it cannot read.
+  //
+  // Public because the group of tabs sharing this database is named from it, and so is the lock
+  // that elects their leader - one database, one queue, one leader.
+  static databaseName() {
+    const modelHash = globalThis.Hologram.sync?.modelHash;
+
+    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
+  }
+
+  // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
+  // group could not write: that tab wiped what had to be wiped and closed, and this one has to stop
+  // writing too - a leader that went on storing frames would be dating rows the store no longer
+  // holds - but has nothing of its own to answer for.
+  static detach() {
+    Durability.#close();
+  }
+
+  // A batch this browser has sealed, given the next number and written down - all three inside ONE
+  // TRANSACTION, which is what makes the number safe to share between tabs.
+  //
+  // The number is READ where it is spent. Every tab of a browser writes into one queue keyed by
+  // that number, so a counter moved in a tab's own memory is a counter two tabs can move to the
+  // same value - and the second `put` would then overwrite the first tab's batch, losing a write
+  // with nothing said.
+  //
+  // WHAT MAKES THE READ AND THE WRITE ONE STEP IS THE TRANSACTION, and it is worth saying outright
+  // because it is easy to read this as unguarded. IndexedDB orders read-write transactions whose
+  // scopes overlap, and it orders them per DATABASE rather than per connection - so a second tab
+  // asking for `meta` and `queue` waits until the first tab's transaction has committed, and then
+  // reads the number that transaction wrote. A Web Lock around this was written and removed: it
+  // guarded nothing this does not already guarantee, and every mutation of it stayed green.
+  //
+  // What that costs is testability, which is the price of the guarantee living in the database
+  // rather than in this file: a fake IndexedDB serializes everything anyway, so no unit test here
+  // can tell a correct version from one that reads the counter outside the transaction. The two
+  // tabs of `multi_tab_test.exs` are what bind it, in a browser where the case is real.
+  //
+  // The number taken is above the counter AND above every batch already in the queue, which are
+  // the same thing until a storage failure: that drops the counter (a page that goes on spending
+  // numbers nothing records leaves a stale one) and keeps the queue (a stored batch is still the
+  // user's unfinished work). 10b applied that rule when a page load resumed; applying it at every
+  // seal is what makes it hold for a tab that never resumed anything.
+  //
+  // The batch and its number go down TOGETHER, in one transaction, because either without the
+  // other is wrong in its own way. A number with no batch is one the next load counts on from for
+  // work that no longer exists anywhere. A batch with no number is worse - the next load would
+  // count from below it and hand the same number to something else, and whichever reached the
+  // server second would be answered with the other's verdict.
+  //
+  // Nothing is read with `await` inside the transaction: an IndexedDB transaction commits the
+  // moment it has no request outstanding, so the write has to be chained onto the read's own
+  // callback rather than sequenced by the event loop.
+  //
+  // In memory mode the batch is left UNNUMBERED and the caller numbers it: there is nothing to file
+  // and no transaction to order it against.
+  static fileBatch(batch) {
+    if (Durability.mode === "memory") {
+      return Promise.resolve();
+    }
+
+    // The first batch stored is the first moment this browser holds something that exists nowhere
+    // else - a row can always be downloaded again, an unsent write cannot - so it is the moment to
+    // ask for the storage to be kept. Once per page load, and never awaited: the batch's own write
+    // does not wait on a permission being read.
+    if (!Durability.#persistenceAsked) {
+      Durability.#persistenceAsked = true;
+
+      Durability.#requestPersistence();
+    }
+
+    return Durability.#write([META, QUEUE], (transaction) => {
+      const meta = transaction.objectStore(META);
+      const queue = transaction.objectStore(QUEUE);
+      const counter = meta.get("seq");
+
+      counter.onsuccess = () => {
+        const highest = queue.openKeyCursor(null, "prev");
+
+        highest.onsuccess = () => {
+          const spent = Math.max(counter.result ?? 0, highest.result?.key ?? 0);
+
+          batch.seal(spent + 1);
+
+          queue.put(batch.record());
+          meta.put(batch.seq, "seq");
+          meta.put(Clock.last(), "clock");
+        };
+      };
+    });
   }
 
   // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
@@ -132,8 +266,23 @@ export default class Durability {
         return Durability.#memoryMode("IndexedDB unavailable");
       }
 
+      // What is stored is shared by every tab of this browser, and sharing it needs one tab to
+      // speak for the rest - which is what a Web Lock elects. Without one, every tab leads itself:
+      // two streams downloading every frame twice, and two senders draining ONE queue under one
+      // replica identity, where the watermark a frame carries - the number that stops this client
+      // applying its own write a second time - describes a single sender. So a browser that cannot
+      // elect keeps its tabs independent, each working from its own memory: it costs durability
+      // there, and it cannot cost a write.
+      //
+      // (The COUNTER is not the reason, though it reads like one: the number is read and spent
+      // inside the transaction that files the batch, and IndexedDB orders those across tabs on its
+      // own - see `fileBatch`.)
+      if (!globalThis.navigator?.locks) {
+        return Durability.#memoryMode("no Web Locks");
+      }
+
       const request = globalThis.indexedDB.open(
-        Durability.#databaseName(),
+        Durability.databaseName(),
         VERSION,
       );
 
@@ -169,48 +318,6 @@ export default class Durability {
     } catch (error) {
       return Durability.#memoryMode(`read failed (${error})`);
     }
-  }
-
-  // A batch this browser has sealed and the number it spent on it, written down as one fact.
-  //
-  // The ONE write anything waits for. A batch is identified by its replica and its number, and the
-  // server answers a number it has already seen from its record rather than applying it again - so
-  // a number handed out but never written down is a number the next page load hands out a second
-  // time, and the batch carrying it is answered with what the FIRST batch got.
-  //
-  // The batch and its number go down TOGETHER, in one transaction, because either one without the
-  // other is wrong in its own way. A number with no batch is what the counter alone bought: the
-  // next load counts on from work that no longer exists anywhere. A batch with no number is worse
-  // - the next load would count from below it and hand the same number to something else, and
-  // whichever of the two reached the server second would be answered with the other's verdict.
-  //
-  // What a crash between sealing and committing costs is a batch that was never sent, which is the
-  // cheap side of the trade and the only side left once the two are one write.
-  //
-  // One number and one queue for the whole browser, not one per tab (10a's D1): a person has one
-  // replica, and the log should read that way. Until the multi-tab work takes the number inside the
-  // same lock that files the batch, two tabs writing at the same moment can spend one number - and
-  // the second tab's write here overwrites the first tab's batch, which is the same known limit
-  // with a sharper edge than it had when only a counter was stored.
-  static persistBatch(batch) {
-    // The first batch stored is the first moment this browser holds something that exists nowhere
-    // else - a row can always be downloaded again, an unsent write cannot - so it is the moment to
-    // ask for the storage to be kept. Once per page load, and never awaited: the batch's own write
-    // does not wait on a permission being read.
-    if (!Durability.#persistenceAsked) {
-      Durability.#persistenceAsked = true;
-
-      Durability.#requestPersistence();
-    }
-
-    return Durability.#write([META, QUEUE], (transaction) => {
-      transaction.objectStore(QUEUE).put(batch.record());
-
-      const meta = transaction.objectStore(META);
-
-      meta.put(batch.seq, "seq");
-      meta.put(Clock.last(), "clock");
-    });
   }
 
   // One frame, one transaction: the rows it wrote, the place those rows are dated at, and where
@@ -275,9 +382,69 @@ export default class Durability {
     });
   }
 
+  // The store brought up to what this tab holds in memory, where it is behind - what a tab does
+  // on taking the lead of its group.
+  //
+  // Why it can be behind: the tab that led before wrote each frame down after applying it and
+  // without waiting, so a tab closed right after posting a frame leaves that frame in every other
+  // tab's memory and not on disk. Were the new leader simply to carry on from the next frame, the
+  // store would hold a place claiming rows it never received - a hole no page load could detect,
+  // since a resuming client is told only what moved after its place. So the rows memory holds are
+  // written whole, with the place they stand at, in one transaction.
+  //
+  // Only where it is behind. A place is a string, so equal places mean the store already holds
+  // exactly what the memory does, and nothing is written - which is the usual case, and the reason
+  // this costs a read rather than a rewrite on every succession.
+  static async repair(records, cursor) {
+    if (Durability.mode === "memory") {
+      return;
+    }
+
+    let stored;
+
+    try {
+      const transaction = Durability.#db.transaction([META], "readonly");
+
+      stored = await Durability.#request(
+        transaction.objectStore(META).get("cursor"),
+      );
+    } catch {
+      return;
+    }
+
+    if ((stored ?? null) === cursor) {
+      return;
+    }
+
+    return Durability.#write([ENTITIES, META], (transaction) => {
+      const entities = transaction.objectStore(ENTITIES);
+      const meta = transaction.objectStore(META);
+
+      entities.clear();
+
+      for (const record of records) {
+        entities.put(record);
+      }
+
+      meta.put(cursor, "cursor");
+      meta.put(Clock.last(), "clock");
+    });
+  }
+
   // Takes up what the previous page load left, and answers the three things the runtime resumes
   // from: the place to greet the stream with, the number to count batches on from, and the batches
   // this page may send.
+  //
+  // `leader` says whether this tab is the one that speaks to the store for the group of tabs
+  // sharing it. A FOLLOWER TAKES WHAT THE STORE HOLDS AND JUDGES NOTHING: it refuses no rows,
+  // clears nothing, writes no identity and records no owner. Not because the judgements below are
+  // wrong for it - they are the same store, so they would come out the same - but because the
+  // leader makes them once for everyone, and tells the group to start over when it refuses (the
+  // same frame a server resync sends). A follower that read a stale store resets on that and takes
+  // the refill from the channel, and one that reads the store after the leader cleared it finds it
+  // empty. What that buys is the one case where a follower's own judgement WOULD be wrong: rows
+  // with no place because the leader is filling right now, which are half of a base the frames
+  // are about to complete - refused, nothing would bring that half back.
   //
   // SYNCHRONOUS, and called after the page has mounted rather than before. After, because the rows
   // the page itself carried are the freshest thing this client has - the server rendered them for
@@ -317,7 +484,7 @@ export default class Durability {
   // nothing would then hand a new batch a number a stored one already holds, and its record would
   // be overwritten by a batch that is not it. The maximum is what makes keeping one and dropping
   // the other safe.
-  static restore() {
+  static restore(leader) {
     const loaded = Durability.#loaded;
 
     Durability.#loaded = null;
@@ -333,7 +500,7 @@ export default class Durability {
     const ownerChanged =
       loaded.actorUserId !== (LocalDatabase.actorUserId ?? null);
 
-    const refusal = Durability.#refusal(loaded, ownerChanged);
+    const refusal = leader ? Durability.#refusal(loaded, ownerChanged) : null;
 
     if (refusal === null) {
       LocalDatabase.restore(loaded.records);
@@ -343,19 +510,32 @@ export default class Durability {
       );
 
       Durability.clear();
+
+      // The other tabs of the group hold the same rows, read from the same store, and are told to
+      // let go of them the way a server resync tells everyone - AFTER the clear's transaction is
+      // created, so a tab that reads the store on hearing this reads it cleared.
+      Tabs.post({
+        event: "sync_resync",
+        frame: {reason: refusal},
+        kind: "frame",
+      });
     }
 
     // A page load offers a fresh pair and a browser already holding one ignores it - re-minting per
     // load would abandon the numbering its batches are identified by. Somebody else signing in is
     // the one case where the held pair goes too: it was minted for the previous owner, or for a
-    // session that is no longer theirs.
+    // session that is no longer theirs - and the leader writes the page's pair in its place, once
+    // for the group. A follower writes none: it presents no identity of its own to the server, and
+    // the pair the leader settled on reaches it with the group's state.
     if (loaded.replica !== null && !ownerChanged) {
       Replica.adopt(loaded.replica);
-    } else {
+    } else if (leader) {
       Durability.persistReplica(Replica.current());
     }
 
-    Durability.#rememberOwner(loaded);
+    if (leader) {
+      Durability.#rememberOwner(loaded);
+    }
 
     const owner = LocalDatabase.actorUserId ?? null;
 
@@ -373,7 +553,7 @@ export default class Durability {
 
     try {
       await Durability.#request(
-        globalThis.indexedDB.deleteDatabase(Durability.#databaseName()),
+        globalThis.indexedDB.deleteDatabase(Durability.databaseName()),
       );
       // eslint-disable-next-line no-empty
     } catch {}
@@ -383,21 +563,6 @@ export default class Durability {
     Durability.storedBatches = 0;
 
     Durability.#persistenceAsked = false;
-  }
-
-  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
-  // model, opens a database of its own. Null when the build has no data model, and so nothing to
-  // name one for.
-  //
-  // The framework's half comes first and the app's second, broad before narrow: the layout is
-  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
-  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
-  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
-  // parse for anything that ever has to gate on a shape it cannot read.
-  static #databaseName() {
-    const modelHash = globalThis.Hologram.sync?.modelHash;
-
-    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
   }
 
   static #close() {
@@ -463,6 +628,12 @@ export default class Durability {
     }
 
     Durability.#close();
+
+    // The other tabs of the group share this database and have just had the rows and the place
+    // taken out from under them. They let go of it too rather than going on writing into a store
+    // whose place no longer describes what it holds - and they wipe nothing, since the wipe above
+    // is the whole of what had to happen and happened once.
+    Tabs.post({kind: "storage_failed"});
   }
 
   // Everything the previous page load left, in one read - the six things `meta` holds and every

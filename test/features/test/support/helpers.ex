@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Todo
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -17,6 +18,10 @@ defmodule HologramFeatureTests.Helpers do
   alias Wallaby.StaleReferenceError
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
+  # What a GenServer records about the function that started it, which is how a sync session is
+  # told apart from every other process the node is running.
+  @sync_session_initial_call {Session, :init, 1}
 
   def assert_client_error(session, expected_module, expected_msg, fun) do
     fun.()
@@ -231,6 +236,35 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until the server is running exactly `count` sync sessions for `replica_id`, and returns
+  the count.
+
+  Scoped to one replica because the number is what this browser costs the server: one session for
+  however many tabs it has open, where every tab used to bring its own. Unscoped it would be a
+  claim about every browser the suite has ever connected, and a session outlives its stream by a
+  moment - so it is polled rather than read once.
+  """
+  @spec await_sync_sessions(String.t(), non_neg_integer, integer | nil) :: non_neg_integer
+  def await_sync_sessions(replica_id, count, start_time \\ nil) do
+    start_time = start_time || current_time()
+    running = sync_session_count(replica_id)
+
+    cond do
+      running == count ->
+        running
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for #{count} sync sessions for replica #{replica_id}, " <>
+                "the server runs #{running}"
+
+      true ->
+        :timer.sleep(50)
+        await_sync_sessions(replica_id, count, start_time)
+    end
+  end
+
+  @doc """
   Polls the SERVER until it holds the given number of todos, and returns them sorted by title.
 
   The row arriving is the confirmation that a batch landed - nothing app-facing exposes a per-row
@@ -439,6 +473,19 @@ defmodule HologramFeatureTests.Helpers do
 
   def scroll_to(session, x, y) do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
+  end
+
+  @doc """
+  Returns how many sync sessions the server is running for `replica_id`.
+
+  A session is a process the stream starts and links to, so counting the live ones is asking what
+  the server is doing for this browser right now. Its replica is read from its own state rather
+  than from anything it publishes - there is no registry of them, and there does not need to be
+  for a test to count.
+  """
+  @spec sync_session_count(String.t()) :: non_neg_integer
+  def sync_session_count(replica_id) do
+    Enum.count(Process.list(), &(sync_session_replica_id(&1) == replica_id))
   end
 
   @doc """
@@ -797,6 +844,19 @@ defmodule HologramFeatureTests.Helpers do
       {:ok, element_text} -> element_text =~ ~r/#{Regex.escape(text)}/
       {:error, _reason} -> false
     end
+  end
+
+  # The replica a sync session is serving, or nothing for any other process - including a session
+  # whose client presented no identity, and one that dies between being listed and being asked.
+  defp sync_session_replica_id(pid) do
+    with {:dictionary, dictionary} <- Process.info(pid, :dictionary),
+         @sync_session_initial_call <- dictionary[:"$initial_call"] do
+      :sys.get_state(pid, 100).replica_id
+    else
+      _no_session -> nil
+    end
+  catch
+    :exit, _reason -> nil
   end
 
   defp timed_out?(start_time) do

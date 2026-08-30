@@ -9,6 +9,7 @@ import {
 
 import Batches from "../../assets/js/batches.mjs";
 import Client from "../../assets/js/client.mjs";
+import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -16,6 +17,7 @@ import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -52,6 +54,15 @@ describe("Batches", () => {
 
   afterEach(() => {
     Batches.reset();
+
+    // Module state of another module's, like the store's mode below: a test that follows must put
+    // the tab back in the lead, or every test after it sends nothing.
+    Tabs.leader = true;
+
+    // Module state, and not Batches's to reset: this suite runs the store in memory mode, so a
+    // test that puts it in another leaves every test after it - in this file and in the next -
+    // filing batches into a database that is not there.
+    Durability.mode = "memory";
 
     // Not covered by LocalDatabase.reset(), which leaves the acting user alone on purpose - a
     // resync replaces what the server said and does not change who is signed in. So a test that
@@ -111,6 +122,58 @@ describe("Batches", () => {
       return Batches.close();
     };
 
+    // A batch made in any tab is filed in the one queue they share, so a follower that sent as well
+    // would put a second copy of every batch on the wire under the same replica and number.
+    it("sends nothing from a tab that does not lead the group", async () => {
+      Tabs.leader = false;
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+    });
+
+    // The store is the order, not the messages: a batch filed by a tab that closed straight after
+    // is in the queue with nothing said about it, and it ships before anything numbered above it.
+    it("takes up what the store holds above what it has seen, before sending", async () => {
+      const filed = {
+        actorUserId: null,
+        landed: [],
+        seq: 3,
+        writes: [creating("t3", "filed elsewhere")],
+      };
+
+      // Once, the way the store answers it: the read is exclusive of what this tab has already
+      // seen, so a record it has taken up is not offered again.
+      const reading = sinon.stub(Durability, "batchesAbove").resolves([]);
+
+      reading.onFirstCall().resolves([filed]);
+
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.equal(sendStub.firstCall.args[0].seq, 3);
+    });
+
+    it("tells the group what the server answered", async () => {
+      const posting = sinon.stub(Tabs, "post");
+      const answer = confirmed();
+
+      sendStub.resolves(answer);
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      // Not the only thing this tab told the group - sealing the batch told it too.
+      assert.isTrue(
+        posting.calledWithExactly({answer, kind: "answered", seq: 1}),
+      );
+    });
+
     it("sends the pending batches oldest first, one at a time", async () => {
       sealed(creating("t1", "first"));
       sealed(creating("t2", "second"));
@@ -145,7 +208,7 @@ describe("Batches", () => {
         record = resolve;
       });
 
-      sinon.stub(Durability, "persistBatch").returns(recording);
+      sinon.stub(Durability, "fileBatch").returns(recording);
       sendStub.resolves(confirmed());
 
       sealed(creating("t1", "first"));
@@ -357,7 +420,7 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason: "the reason",
+        reason: 'Type.atom("nope")',
         status: "rejected",
         write: 0,
       });
@@ -368,9 +431,29 @@ describe("Batches", () => {
       assert.deepStrictEqual(Batches.pending, []);
       assert.equal(Batches.rejected.length, 1);
       assert.equal(Batches.rejected[0].seq, 1);
-      assert.equal(Batches.rejected[0].reason, "the reason");
+      assert.deepStrictEqual(Batches.rejected[0].reason, Type.atom("nope"));
       assert.equal(Batches.rejected[0].write, 0);
       assert.equal(Batches.rejected[0].state, "rejected");
+    });
+
+    // The answer arrives as the server spelled it, so the term a refusal carries is built here -
+    // the one place anything needs it rather than the JSON it travelled as.
+    it("reads the term a refusal's reason was encoded as", async () => {
+      sealed(creating("t1", "first"));
+
+      sendStub.resolves({
+        reason:
+          'Type.map([[Type.atom("slug"), Type.list([Type.atom("unique")])]])',
+        status: "rejected",
+        write: 0,
+      });
+
+      await Batches.flush();
+
+      assert.deepStrictEqual(
+        Batches.rejected[0].reason,
+        Type.map([[Type.atom("slug"), Type.list([Type.atom("unique")])]]),
+      );
     });
 
     it("forgets a confirmed batch", async () => {
@@ -392,7 +475,7 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason: "the reason",
+        reason: 'Type.atom("nope")',
         status: "rejected",
         write: 0,
       });
@@ -535,7 +618,7 @@ describe("Batches", () => {
         sealed(creating("t1", "first"));
 
         sendStub.resolves({
-          reason: "the reason",
+          reason: 'Type.atom("nope")',
           status: "rejected",
           write: 0,
         });
@@ -597,6 +680,27 @@ describe("Batches", () => {
       assert.equal(sendStub.callCount, 2);
       assert.equal(sendStub.secondCall.args[0].seq, 1);
       assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    // Every tab of this browser presents the pair that was just refused, and would each find that
+    // out the hard way. One switch, told once.
+    it("tells the group the identity it switched to after a 403", async () => {
+      const telling = sinon.stub(Tabs, "postState");
+
+      sinon.stub(Durability, "persistReplica");
+      sinon.stub(Sse, "reconnect");
+
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+      sendStub.onFirstCall().resolves({httpStatus: 403, status: "failed"});
+      sendStub.onSecondCall().resolves(confirmed());
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isTrue(telling.calledOnce);
     });
 
     // The identity gets the discipline the number gets: nothing goes out under a pair that is not
@@ -796,6 +900,24 @@ describe("Batches", () => {
       assert.isTrue(writing.calledOnce);
     });
 
+    // Nothing the server says can be about a batch it has never been sent - and a number it does
+    // not have yet is below every number, which is what makes this worth spelling out.
+    it("passes over a batch that has no number yet", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      Durability.mode = "indexeddb";
+
+      sinon.stub(Durability, "fileBatch").returns(new Promise(() => {}));
+
+      const batch = sealed(write("t1"));
+
+      Batches.land(5, new Set([`${TODO} t1`]));
+
+      assert.isNull(batch.seq);
+      assert.isFalse(batch.isLanded(0));
+      assert.isFalse(writing.called);
+    });
+
     it("writes nothing down for a batch above the number", () => {
       const writing = sinon.stub(Durability, "persistLanded");
 
@@ -912,6 +1034,99 @@ describe("Batches", () => {
           write: 0,
         },
       ]);
+    });
+  });
+
+  describe("settle()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    const queued = (seq, id) => {
+      const record = {
+        actorUserId: null,
+        landed: [],
+        seq,
+        writes: [
+          {
+            claim: null,
+            data: {done: false, title: "made elsewhere"},
+            id,
+            op: "create",
+            stamp: STAMP,
+            type: TODO,
+          },
+        ],
+      };
+
+      Batches.adopt([record]);
+
+      return Batches.pending.find((batch) => batch.seq === seq);
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      sinon.stub(Sse, "scheduleRender");
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("promotes a confirmed batch into the base", () => {
+      queued(3, "t1");
+
+      Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "made elsewhere");
+    });
+
+    it("takes a refused batch's rows away and keeps what the server said", () => {
+      queued(3, "t1");
+
+      Batches.settle(3, {
+        reason: 'Type.atom("nope")',
+        status: "rejected",
+        write: 0,
+      });
+
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      assert.equal(Batches.rejected.length, 1);
+      assert.deepStrictEqual(Batches.rejected[0].reason, Type.atom("nope"));
+    });
+
+    it("repaints for what the answer changed", () => {
+      queued(3, "t1");
+
+      Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.isTrue(Sse.scheduleRender.called);
+    });
+
+    // A tab that never took the batch up, or has settled it already, has nothing to do - and every
+    // tab of the browser is told every answer.
+    it("passes over a number it does not hold", () => {
+      const batch = queued(3, "t1");
+
+      Batches.settle(5, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(Batches.pending, [batch]);
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("settles the batch the number names, not the one at the head", () => {
+      const first = queued(3, "t1");
+
+      queued(5, "t2");
+
+      Batches.settle(5, {dropped: {}, kept: {}, status: "confirmed"});
+
+      assert.deepStrictEqual(Batches.pending, [first]);
+      assert.equal(LocalDatabase.baseRow(TODO, "t2").title, "made elsewhere");
     });
   });
 
@@ -1061,7 +1276,7 @@ describe("Batches", () => {
 
     it("writes the batch down, and hands the write to the sender", () => {
       const recording = Promise.resolve();
-      const writing = sinon.stub(Durability, "persistBatch").returns(recording);
+      const writing = sinon.stub(Durability, "fileBatch").returns(recording);
 
       Batches.open("todos");
       wrote("t1");
@@ -1092,7 +1307,7 @@ describe("Batches", () => {
       let stored = null;
 
       sinon
-        .stub(Durability, "persistBatch")
+        .stub(Durability, "fileBatch")
         .callsFake((batch) => (stored = batch.record()));
 
       Batches.open("todos");
@@ -1105,6 +1320,62 @@ describe("Batches", () => {
     // UNDEFINED rather than null, which is what a page mount leaves when its data names no actor.
     // It has to reach the batch as null: the owner filter that decides whether a later load takes
     // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
+    // What puts a write made in one tab on the screen of the next before the server has heard of
+    // it - and what lets the tab that sends send it without reading the store again.
+    it("tells the group about a batch it has filed", () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const batch = Batches.close();
+
+      assert.isTrue(
+        posting.calledOnceWithExactly({
+          kind: "sealed",
+          record: batch.record(),
+        }),
+      );
+    });
+
+    it("takes the number the store gives it", () => {
+      sinon.stub(Durability, "fileBatch").callsFake((batch) => batch.seal(7));
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 7);
+    });
+
+    // What every tab did before there was anywhere to file a batch, and what a browser that cannot
+    // store still does: nothing is shared, so nothing can collide.
+    it("numbers the batch itself where there is nowhere to file it", () => {
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 1);
+
+      Batches.open("todos");
+      wrote("t2");
+
+      assert.equal(Batches.close().seq, 2);
+    });
+
+    it("counts on from the highest number the store has given", () => {
+      sinon.stub(Durability, "fileBatch").callsFake((batch) => batch.seal(7));
+
+      Batches.open("todos");
+      wrote("t1");
+      Batches.close();
+
+      sinon.restore();
+
+      Batches.open("todos");
+      wrote("t2");
+
+      assert.equal(Batches.close().seq, 8);
+    });
+
     it("seals a visitor's batch under nobody", () => {
       LocalDatabase.actorUserId = undefined;
 
@@ -1112,6 +1383,86 @@ describe("Batches", () => {
       wrote("t1");
 
       assert.isNull(Batches.close().actorUserId);
+    });
+
+    // A batch waiting for the store to number it cannot be wrong at the tail: whatever number it
+    // gets will be above every number already spent.
+    it("keeps a batch waiting for its number at the tail, and files it in order", async () => {
+      let file;
+
+      const filing = new Promise((resolve) => {
+        file = resolve;
+      });
+
+      // Adopting repaints, and this describe installs no animation frame to repaint into.
+      sinon.stub(Sse, "scheduleRender");
+
+      Durability.mode = "indexeddb";
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .callsFake((batch) => filing.then(() => batch.seal(4)));
+
+      Batches.adopt([
+        {actorUserId: null, landed: [], seq: 9, writes: [write("t9")]},
+      ]);
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const batch = Batches.close();
+
+      assert.deepStrictEqual(
+        Batches.pending.map((held) => held.seq),
+        [9, null],
+      );
+
+      file();
+      await batch.recorded;
+
+      assert.deepStrictEqual(
+        Batches.pending.map((held) => held.seq),
+        [4, 9],
+      );
+    });
+
+    // The sort runs when a batch is numbered, and what it has to get right is the OTHER batch that
+    // is still waiting for one: numbered or not, a batch behind this one in the queue was closed
+    // after it and will be numbered above it.
+    it("keeps a batch still waiting behind one that has just been numbered", async () => {
+      const filings = [];
+
+      // Adopting repaints, and this describe installs no animation frame to repaint into.
+      sinon.stub(Sse, "scheduleRender");
+
+      Durability.mode = "indexeddb";
+
+      sinon.stub(Durability, "fileBatch").callsFake(
+        (batch) =>
+          new Promise((resolve) => {
+            filings.push({batch, file: resolve});
+          }),
+      );
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const first = Batches.close();
+
+      Batches.open("todos");
+      wrote("t2");
+
+      Batches.close();
+
+      filings[0].batch.seal(4);
+      filings[0].file();
+
+      await first.recorded;
+
+      assert.deepStrictEqual(
+        Batches.pending.map((held) => held.seq),
+        [4, null],
+      );
     });
 
     it("answers nothing when no batch is open", () => {
@@ -1128,6 +1479,65 @@ describe("Batches", () => {
       const batch = Batches.open("todos");
 
       assert.strictEqual(Batches.current(), batch);
+    });
+  });
+
+  describe("disown()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      sinon.stub(Sse, "scheduleRender");
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("lets every pending batch go, and takes its rows with it", () => {
+      Batches.adopt([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [
+            {
+              claim: null,
+              data: {done: false, title: "made elsewhere"},
+              id: "t1",
+              op: "create",
+              stamp: STAMP,
+              type: TODO,
+            },
+          ],
+        },
+      ]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "made elsewhere");
+
+      Batches.disown();
+
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+    });
+
+    // The numbers stay spent: what this tab has seen is still true, and a batch it makes next has
+    // to be above them whatever identity it is making it under.
+    it("leaves the numbers it has seen alone", () => {
+      Batches.adopt([
+        {actorUserId: null, landed: [], seq: 9, writes: [write("t9")]},
+      ]);
+
+      Batches.disown();
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 10);
     });
   });
 
@@ -1208,7 +1618,7 @@ describe("Batches", () => {
     });
   });
 
-  describe("resume()", () => {
+  describe("adopt()", () => {
     const STAMP = 1_798_246_400_125_952;
 
     const stored = (seq, id, landed = []) => ({
@@ -1230,16 +1640,26 @@ describe("Batches", () => {
     beforeEach(() => {
       globalThis.Hologram.sync = {model: TODO_MODEL};
 
+      LocalDatabase.actorUserId = "u1";
+
       LocalDatabase.reset();
       Model.reset();
+
+      // Taking a batch up puts a row on the screen, so it asks for a repaint - and this describe
+      // installs no animation frame to repaint into.
+      sinon.stub(Sse, "scheduleRender");
     });
 
     afterEach(() => {
       LocalDatabase.reset();
+
+      // One test lifts the clock above this machine's wall clock, and a clock left there answers
+      // every stamp in every suite that runs after this file.
+      Clock.reset();
     });
 
     it("queues the stored batches oldest first", () => {
-      Batches.resume([stored(3, "t1"), stored(5, "t2")]);
+      Batches.adopt([stored(3, "t1"), stored(5, "t2")]);
 
       assert.deepStrictEqual(
         Batches.pending.map((batch) => batch.seq),
@@ -1256,14 +1676,14 @@ describe("Batches", () => {
     // previous page load put there comes back with the batches that made it, still this client's
     // own unanswered work.
     it("folds their writes over the base", () => {
-      Batches.resume([stored(3, "t1")]);
+      Batches.adopt([stored(3, "t1")]);
 
       assert.equal(LocalDatabase.getRow(TODO, "t1").title, "stored");
       assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
     });
 
     it("keeps their landed marks", () => {
-      Batches.resume([stored(3, "t1", [0])]);
+      Batches.adopt([stored(3, "t1", [0])]);
 
       assert.isTrue(Batches.pending[0].isLanded(0));
     });
@@ -1276,7 +1696,7 @@ describe("Batches", () => {
     it("sends nothing", async () => {
       const sendStub = sinon.stub(Client, "sendMutation");
 
-      Batches.resume([stored(3, "t1")]);
+      Batches.adopt([stored(3, "t1")]);
 
       await waitForEventLoop();
 
@@ -1284,9 +1704,77 @@ describe("Batches", () => {
     });
 
     it("takes up nothing from an empty store", () => {
-      Batches.resume([]);
+      Batches.adopt([]);
 
       assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    it("puts a batch another tab filed in its place in the queue", () => {
+      Batches.adopt([stored(5, "t2")]);
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.seq),
+        [3, 5],
+      );
+    });
+
+    // Twice over the same record is what a tab gets when a message and the store both carry it -
+    // and a batch held twice would be folded twice and sent twice.
+    it("passes over a batch it already holds", () => {
+      Batches.adopt([stored(3, "t1")]);
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.equal(Batches.pending.length, 1);
+    });
+
+    // Left where it is rather than dropped: the server applies a batch under the user of the
+    // session that sends it, so the page mounted under its owner is what takes it up.
+    it("passes over another user's batch", () => {
+      Batches.adopt([{...stored(3, "t1"), actorUserId: "u2"}]);
+
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    // Even the ones it does not take. A number another tab has spent is a number this tab must not
+    // spend, whoever made that batch - the server answers a repeat from the first one's record.
+    it("counts past every number it is shown", () => {
+      Batches.adopt([{...stored(9, "t1"), actorUserId: "u2"}]);
+
+      Batches.open("todos");
+      wrote("t2");
+
+      assert.equal(Batches.close().seq, 10);
+    });
+
+    // A batch this tab seals next may name a row one of these wrote, and its based_on for that
+    // column is this stamp - a stamp of its own that did not clear it would be refused.
+    //
+    // AHEAD of this machine's wall clock, which is what makes the lifting observable at all: a
+    // stamp is at least the wall clock, so a write stamped in the past is cleared whether or not
+    // anything observed it. Ahead is also the case that matters - a burst of stamps inside one
+    // millisecond runs ahead of the wall clock, and every tab of a browser shares one clock.
+    it("lifts the clock past the writes it takes", () => {
+      const ahead = Date.now() * 1024 + 10_000_000;
+      const record = stored(3, "t1");
+
+      record.writes[0].stamp = ahead;
+
+      Batches.adopt([record]);
+
+      assert.isAbove(Clock.stamp(), ahead);
+    });
+
+    it("repaints for what it took, and not for what it passed over", () => {
+      const rendering = Sse.scheduleRender;
+
+      Batches.adopt([{...stored(3, "t1"), actorUserId: "u2"}]);
+
+      assert.isFalse(rendering.called);
+
+      Batches.adopt([stored(4, "t2")]);
+
+      assert.isTrue(rendering.calledOnce);
     });
   });
 

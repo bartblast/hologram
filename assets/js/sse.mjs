@@ -12,6 +12,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
+import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
 
 export default class Sse {
@@ -61,7 +62,15 @@ export default class Sse {
   static buildSyncGreeting(pageModule) {
     const sync = globalThis.Hologram.sync;
 
-    if (!sync || pageModule === null) {
+    // A tab that does not lead its group says nothing about sync, which is what a bundle built
+    // before any of this existed says - so the server starts no session for it and sends it no
+    // frames. ONE session per browser, however many tabs are open: the tab that leads is served
+    // sync and hands what it receives to the rest.
+    //
+    // The connection itself stays. It carries this tab's own realtime traffic - the actions and
+    // receipts the server addresses to this instance - which is per tab by design and not the
+    // sync session's to consolidate.
+    if (!sync || pageModule === null || !Tabs.leader) {
       return {};
     }
 
@@ -220,27 +229,12 @@ export default class Sse {
       // The four sync kinds carry JSON rather than the JavaScript every other kind on this
       // stream is written in - a delta holds the values a database stores, and spelling those as
       // source costs ten times the bytes on the payload a whole-app fill is mostly made of.
+      //
+      // Each of the four hands its MEMORY work to receiveFrame and does its own STORING here,
+      // which is what separates what a frame means from who received it.
       $.eventSource.addEventListener("sync_deltas", (event) => {
         const frame = JSON.parse(event.data);
-
-        const written = Deltas.apply(frame.deltas);
-
-        // What this client's own pending writes are worth against what just arrived: every batch
-        // up to the number the frame names has been applied, so its writes on these rows are in
-        // the base now and the fold has to stop putting them on top.
-        //
-        // In the same handler as the ingest, which is what matters - the repaint below is
-        // SCHEDULED rather than run, so the fold that draws the screen happens a frame later and
-        // sees the base and the marks together whichever order these two lines are in.
-        Batches.land(frame.applied_seq, written);
-
-        // Mid-fill the server hands over no place, because a client holding part of a pot could
-        // not honour the claim one makes. Keeping the last place it DID name is what lets a
-        // client cut off mid-fill come back asking for everything again rather than for the
-        // little that changed since.
-        if (frame.cursor !== null) {
-          $.syncCursor = frame.cursor;
-        }
+        const written = $.receiveFrame("sync_deltas", frame);
 
         // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
         // place they are dated at, in one transaction. Rows a page carried are not written - every
@@ -251,79 +245,44 @@ export default class Sse {
         // is still there after a reload.
         Durability.persistFrame(LocalDatabase.records(written), frame.cursor);
 
-        $.scheduleRender();
+        $.tell("sync_deltas", frame);
       });
 
-      // A notice rather than an order, and saying so is the whole of what the client does with
-      // it. Restarting the page would throw away what the person was doing to fix a mismatch
-      // they did not cause - and it is not where this is going: the server learns to serve a
-      // client built against an older model through lens chains, so a bundle behind the server
-      // becomes a thing to adapt to rather than to correct. Until then such a client keeps the
-      // stream it has, and its database stops filling - no session was started for it, so no
-      // completeness marker arrives and everything that waits on one keeps waiting.
       $.eventSource.addEventListener("sync_reload", (event) => {
         const frame = JSON.parse(event.data);
 
-        Logger.debug(`Hologram: bundle behind the server (${frame.reason})`);
+        $.receiveFrame("sync_reload", frame);
 
-        // TODO: nothing reads this yet - an app surfaces it as its own "a new version is
-        // available" notice, and a feature helper asserts it the way `sseConnected?` is
-        // asserted.
-        GlobalRegistry.set("syncStaleReason", frame.reason);
+        $.tell("sync_reload", frame);
       });
 
-      // What follows is the whole of what this client may see rather than what changed in it, so
-      // what it holds now is no part of the answer and goes.
-      //
-      // The place goes with the rows, because it described them: a client cut off before the
-      // refill lands would otherwise come back naming a place it no longer holds anything from,
-      // and be told what moved since instead of what it may see - an empty store, filled with a
-      // few deltas, calling itself complete. The refill's frames name no place while it runs, so
-      // the next one to arrive is one this client can honour.
-      //
-      // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
-      // marker ending the refill schedules one even when the refill is empty - which is what
-      // takes rows the client may no longer see off the screen in the case that produced them.
       $.eventSource.addEventListener("sync_resync", (event) => {
         const frame = JSON.parse(event.data);
 
-        Logger.debug(`Hologram: sync starting over (${frame.reason})`);
-        LocalDatabase.reset();
-        $.syncCursor = null;
+        $.receiveFrame("sync_resync", frame);
 
         // The stored rows go with the place that dated them, for the same reason the memory ones
         // do. What this browser DID - its identity, its counter, its clock - stays: a resync
         // replaces what the SERVER said, and none of those three are the server's to take away.
         Durability.clear();
+
+        $.tell("sync_resync", frame);
       });
 
       $.eventSource.addEventListener("synced", (event) => {
         const frame = JSON.parse(event.data);
 
-        // The place a client that was filled and then left alone would otherwise never get. A
-        // deltas frame carries none until the pot is whole, and once it is whole a quiet app
-        // produces no further frame at all - so without this the client would hold everything it
-        // was sent and still have nowhere to come back from, and would be filled from nothing on
-        // its next visit.
-        //
-        // Written down through the same call a frame's rows go down by, with no rows, because this
-        // frame carries none - which also takes the clock down beside it.
-        //
-        // Truthy rather than a null test, unlike the deltas handler: a server built before this
-        // frame carried a place sends no such key at all, and a rolling deploy can put a new bundle
-        // in front of an old node.
-        if (frame.cursor) {
-          $.syncCursor = frame.cursor;
+        $.receiveFrame("synced", frame);
 
+        // Written down through the same call a frame's rows go down by, with no rows, because this
+        // frame carries none - which also takes the clock down beside it. The same truthiness the
+        // memory half tests, for the same reason: a marker naming no place says nothing about
+        // where this client stands.
+        if (frame.cursor) {
           Durability.persistFrame([], frame.cursor);
         }
 
-        LocalDatabase.markSynced(frame.scope);
-
-        // What a query answers can change the moment a scope is complete - a count that was
-        // reading the server's number starts counting rows - so the marker is a reason to
-        // render like any frame is.
-        $.scheduleRender();
+        $.tell("synced", frame);
       });
 
       $.eventSource.onopen = () => {
@@ -383,6 +342,115 @@ export default class Sse {
     $.eventSource = null;
 
     return $.connect();
+  }
+
+  // What a frame does to MEMORY - shared by the stream that delivered it and by a tab that was
+  // handed it by another tab, since a frame means the same thing wherever it arrives from.
+  // Answers the rows a deltas frame wrote, and nothing for the other three kinds.
+  //
+  // What is deliberately NOT here is the storing. Which caller writes the frame down is a question
+  // about ROLES rather than about frames: one tab of a browser holds the stream and stores what it
+  // delivered, and the rest apply the same frame to their own memory and store nothing.
+  static receiveFrame(event, frame) {
+    switch (event) {
+      case "sync_deltas": {
+        const written = Deltas.apply(frame.deltas);
+
+        // What this client's own pending writes are worth against what just arrived: every batch
+        // up to the number the frame names has been applied, so its writes on these rows are in
+        // the base now and the fold has to stop putting them on top.
+        //
+        // In the same turn as the ingest, which is what matters - the repaint below is SCHEDULED
+        // rather than run, so the fold that draws the screen happens a frame later and sees the
+        // base and the marks together whichever order these two lines are in.
+        Batches.land(frame.applied_seq, written);
+
+        // Mid-fill the server hands over no place, because a client holding part of a pot could
+        // not honour the claim one makes. Keeping the last place it DID name is what lets a
+        // client cut off mid-fill come back asking for everything again rather than for the
+        // little that changed since.
+        if (frame.cursor !== null) {
+          $.syncCursor = frame.cursor;
+        }
+
+        $.scheduleRender();
+
+        return written;
+      }
+
+      // A notice rather than an order, and saying so is the whole of what the client does with
+      // it. Restarting the page would throw away what the person was doing to fix a mismatch
+      // they did not cause - and it is not where this is going: the server learns to serve a
+      // client built against an older model through lens chains, so a bundle behind the server
+      // becomes a thing to adapt to rather than to correct. Until then such a client keeps the
+      // stream it has, and its database stops filling - no session was started for it, so no
+      // completeness marker arrives and everything that waits on one keeps waiting.
+      case "sync_reload":
+        Logger.debug(`Hologram: bundle behind the server (${frame.reason})`);
+
+        // TODO: nothing reads this yet - an app surfaces it as its own "a new version is
+        // available" notice, and a feature helper asserts it the way `sseConnected?` is
+        // asserted.
+        GlobalRegistry.set("syncStaleReason", frame.reason);
+
+        return null;
+
+      // What follows is the whole of what this client may see rather than what changed in it, so
+      // what it holds now is no part of the answer and goes - the place with it, because the place
+      // described those rows.
+      //
+      // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
+      // marker ending the refill schedules one even when the refill is empty - which is what
+      // takes rows the client may no longer see off the screen in the case that produced them.
+      case "sync_resync":
+        Logger.debug(`Hologram: sync starting over (${frame.reason})`);
+        LocalDatabase.reset();
+        $.syncCursor = null;
+
+        return null;
+
+      // The place a client that was filled and then left alone would otherwise never get. A
+      // deltas frame carries none until the pot is whole, and once it is whole a quiet app
+      // produces no further frame at all - so without this the client would hold everything it
+      // was sent and still have nowhere to come back from, and would be filled from nothing on
+      // its next visit.
+      //
+      // Truthy rather than a null test, unlike the deltas kind: a server built before this frame
+      // carried a place sends no such key at all, and a rolling deploy can put a new bundle in
+      // front of an old node.
+      case "synced":
+        if (frame.cursor) {
+          $.syncCursor = frame.cursor;
+        }
+
+        LocalDatabase.markSynced(frame.scope);
+
+        // What a query answers can change the moment a scope is complete - a count that was
+        // reading the server's number starts counting rows - so the marker is a reason to
+        // render like any frame is.
+        $.scheduleRender();
+
+        return null;
+    }
+  }
+
+  // The frame handed to the other tabs of this browser, which have no stream of their own: only
+  // one tab is served sync, and what it receives is every tab's.
+  //
+  // AFTER the frame has been written down, and that order is the whole of why a tab joining the
+  // group cannot miss anything. A write transaction is created before this returns, and IndexedDB
+  // orders what follows behind it - so a tab that reads the store on hearing this reads a store
+  // that already holds the frame, and a tab that was too late to read it is told by the message.
+  //
+  // The page the stream was GREETED with rides along, because a completeness marker for a page is
+  // a claim about that page rather than about whatever page each tab happens to be on.
+  static tell(event, frame) {
+    Tabs.post({
+      event,
+      frame,
+      kind: "frame",
+      page: GlobalRegistry.get("connectPageModule"),
+    });
   }
 
   // One render per animation frame, however many frames arrive in between: a fill lands as a

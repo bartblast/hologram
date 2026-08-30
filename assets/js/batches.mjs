@@ -2,6 +2,7 @@
 
 import Batch from "./batch.mjs";
 import Client from "./client.mjs";
+import Clock from "./clock.mjs";
 import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -9,6 +10,7 @@ import LocalDatabase from "./local_database.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
+import Tabs from "./tabs.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
 //
@@ -63,6 +65,61 @@ export default class Batches {
   // back - so the batch it opened is taken out of the slot here and put back in the turn it
   // resumes, before any of its remaining code runs. Task.await/1 is the only place an action stops:
   // every JS promise reaching Elixir is boxed as a Task, and nothing else unwraps one.
+  // Batches this tab did not make, taken up as its own: the ones a previous page load left behind,
+  // and the ones another tab of this browser has filed since. Into the queue, so they ship, and
+  // into the overlay, so their rows are on the screen before anything is sent - which is what makes
+  // two tabs of one browser show the same thing.
+  //
+  // In the order they were made, which is the order they must go out in: a later batch may name a
+  // row an earlier one created.
+  //
+  // Passed over three ways. A batch this tab already holds - its own, or one adopted twice - would
+  // otherwise be folded and sent twice. A batch of ANOTHER user is left where it is, since the
+  // server applies a batch under the user of the session that sends it, and the page mounted under
+  // its owner is what will take it up. And in both cases the counter still follows it: `#seq` is
+  // what this tab has SEEN, so a number spent by another tab is a number this one will not spend.
+  //
+  // The CLOCK follows the writes it takes, for the same reason it follows a frame's revisions: a
+  // batch this tab seals next may name a row one of these wrote, and its `based_on` for that column
+  // is that batch's stamp - a stamp of this tab's own that did not clear it would be refused.
+  //
+  // Deliberately does NOT send. Waking the sender belongs to whatever took these up, once
+  // everything it takes up is in place - and a function that only picks things up is one a test can
+  // call without reaching the network.
+  static adopt(records) {
+    const owner = LocalDatabase.actorUserId ?? null;
+
+    let taken = false;
+
+    for (const record of records) {
+      Batches.#seq = Math.max(Batches.#seq, record.seq);
+
+      const held = Batches.pending.some((batch) => batch.seq === record.seq);
+
+      if (held || record.actorUserId !== owner) {
+        continue;
+      }
+
+      const batch = Batch.fromRecord(record);
+
+      for (const write of batch.writes) {
+        if (write.stamp) {
+          Clock.observe(write.stamp);
+        }
+      }
+
+      Batches.pending.push(batch);
+      Overlay.push(batch);
+
+      taken = true;
+    }
+
+    if (taken) {
+      Batches.#sort();
+      Sse.scheduleRender();
+    }
+  }
+
   static carryAcrossSuspension(promise) {
     const batch = Batches.#running;
 
@@ -101,23 +158,43 @@ export default class Batches {
     // under this user will take it up again.
     batch.actorUserId = LocalDatabase.actorUserId ?? null;
 
-    batch.seal(++Batches.#seq);
+    batch.mark("pending");
+
+    Batches.pending.push(batch);
 
     // Started here and awaited by the sender, so the batch is on its way down while the action's
     // own render happens - the store is never on the path of what the user sees.
     //
-    // The batch goes down WITH its number, in one write. A number stored without the batch it was
-    // spent on is a number the next load counts on from for work that no longer exists, and a
-    // batch stored without its number is one the next load can number over.
-    batch.recorded = Durability.persistBatch(batch);
-
-    Batches.pending.push(batch);
+    // The NUMBER comes with the filing rather than before it, which is the whole of what makes a
+    // browser's tabs safe to share a queue: a counter each tab moved in its own memory is a number
+    // two tabs can spend at once, and the second batch filed under it overwrites the first. So the
+    // batch joins the queue unnumbered and takes its place in the order once it has one.
+    batch.recorded = Batches.#number(batch);
 
     return batch;
   }
 
   static current() {
     return Batches.#running;
+  }
+
+  // Every batch this tab is holding, let go: out of the queue, so this tab does not send it, and
+  // out of the overlay, so nothing is shown that this tab can no longer learn the fate of.
+  //
+  // For a tab whose group has DISSOLVED. Those batches were numbered under the group's identity,
+  // the tab that kept that identity is still sending them, and this one - which has just taken a
+  // fresh identity of its own - would be sending a second copy of each under a number nothing has
+  // recorded against it. The server would apply them twice.
+  //
+  // The rows go back to what the server last said, and come back when its answer to those batches
+  // does, through this tab's own stream, as an ordinary frame. That gap is what a store breaking
+  // mid-session costs a tab that was not the one sending.
+  static disown() {
+    for (const batch of Batches.pending) {
+      Overlay.remove(batch);
+    }
+
+    Batches.pending = [];
   }
 
   // Everything the action wrote goes away, which is what a raise has to mean: an action's writes
@@ -138,15 +215,30 @@ export default class Batches {
   // later batch may name a row an earlier one created, and its based_on for a column an earlier
   // one wrote is that batch's own stamp - so overlapping them turns a sound chain into a refusal.
   static async flush() {
-    if (Batches.#sending || Batches.pending.length === 0) {
+    // ONE TAB OF A BROWSER SENDS, and it is the one holding the group's lock. A batch made in any
+    // tab is filed in the one queue they share, so the leader's own reading of that queue is what
+    // ships - and a follower that sent as well would put a second copy of every batch on the wire,
+    // under the same replica and number, for the server to answer twice from one record.
+    if (!Tabs.leader || Batches.#sending) {
       return;
     }
 
     Batches.#sending = true;
 
     try {
-      while (Batches.pending.length > 0) {
+      while (true) {
+        // The queue as the STORE holds it, before every send rather than once: any tab can file a
+        // batch, and the message saying so can be missed by a tab that was starting up or never
+        // sent at all by a tab that closed straight after filing. Reading it back is reading it in
+        // number order, so what ships is the order the batches were made in whatever order this
+        // tab heard about them.
+        Batches.adopt(await Durability.batchesAbove(Batches.#seq));
+
         const batch = Batches.pending[0];
+
+        if (batch === undefined) {
+          return;
+        }
 
         // Before anything leaves: a batch may not be answered under a number this browser could
         // hand out again after a reload.
@@ -190,6 +282,10 @@ export default class Batches {
           if (answer.httpStatus === 403 && Replica.refresh()) {
             await Durability.persistReplica(Replica.current());
 
+            // The other tabs of this browser present the refused pair too, and would each find
+            // that out the hard way. One switch, told once.
+            Tabs.postState();
+
             Sse.reconnect();
 
             continue;
@@ -206,12 +302,6 @@ export default class Batches {
           return;
         }
 
-        Batches.pending.shift();
-
-        // Answered, so the server is answering: the next failure starts the backoff from the
-        // beginning rather than from wherever the last run of failures left it.
-        Batches.#retryAttempts = 0;
-
         // A verdict is a verdict, whichever way it went: nothing is waiting on this batch any
         // more, and a later page load has no reason to take it up. Confirmed and refused alike -
         // including the two refusals that judge the BUILD and the STAMPS rather than the writes
@@ -222,13 +312,12 @@ export default class Batches {
         // page load with nothing in v1 able to discard it.
         Durability.forgetBatch(batch.seq);
 
-        if (answer.status === "confirmed") {
-          Overlay.promote(batch, answer.kept);
-        } else {
-          Batches.#reject(batch, answer);
-        }
+        // Every tab of the group holds this batch and every one of them has to let it go - the
+        // answer reaches them as it arrived, undecoded, because a client term is not something a
+        // browser can carry from one tab to another.
+        Tabs.post({answer, kind: "answered", seq: batch.seq});
 
-        Sse.scheduleRender();
+        Batches.settle(batch.seq, answer);
       }
     } finally {
       Batches.#sending = false;
@@ -270,7 +359,13 @@ export default class Batches {
       // Written down only where a mark actually moved. Most frames name rows no pending batch has
       // anything to say about, and a batch whose marks are unchanged is already stored the way it
       // stands - so `land` answering false is what keeps the ordinary frame off the disk entirely.
-      if (batch.seq <= appliedSeq && batch.land(rowKeys)) {
+      // A batch still waiting for its number has not been sent, so nothing the server says can be
+      // about it - and `null <= appliedSeq` is true, which is why this is spelled out.
+      if (
+        batch.seq !== null &&
+        batch.seq <= appliedSeq &&
+        batch.land(rowKeys)
+      ) {
         Durability.persistLanded(batch);
       }
     }
@@ -323,24 +418,34 @@ export default class Batches {
     Overlay.reset();
   }
 
-  // The batches a previous page load could not send, back where they were - in the queue, so they
-  // ship, and in the overlay, so their rows are on the screen before anything is sent. In the
-  // order they were made, which is the order they must go out in: a later batch may name a row an
-  // earlier one created.
+  // What an answer does to the batch it names, wherever that batch is held.
   //
-  // Only the ones this page may send reach here - a batch is applied by the server under the user
-  // of the session that sends it, so whose they are is decided before this is called.
+  // Written once and reached two ways: by the tab that sent the batch, and by every other tab of
+  // the browser, which holds the same batch and is told the verdict. A tab that does not hold it -
+  // one that never took it up, or took it up and has already settled it - has nothing to do.
   //
-  // Deliberately does NOT send. Waking the sender belongs to the page load, once everything it
-  // takes up is in place - and a function that only picks things up is one a test can call without
-  // reaching the network.
-  static resume(records) {
-    for (const record of records) {
-      const batch = Batch.fromRecord(record);
+  // Named by NUMBER rather than by the batch, because the batch a message reaches is not the object
+  // the sender holds: it is that tab's own copy, built from the same record.
+  static settle(seq, answer) {
+    const batch = Batches.pending.find((held) => held.seq === seq);
 
-      Batches.pending.push(batch);
-      Overlay.push(batch);
+    if (batch === undefined) {
+      return;
     }
+
+    Batches.pending = Batches.pending.filter((held) => held !== batch);
+
+    // Answered, so the server is answering: the next failure starts the backoff from the beginning
+    // rather than from wherever the last run of failures left it.
+    Batches.#retryAttempts = 0;
+
+    if (answer.status === "confirmed") {
+      Overlay.promote(batch, answer.kept);
+    } else {
+      Batches.#reject(batch, answer);
+    }
+
+    Sse.scheduleRender();
   }
 
   // Where the previous page load's numbering got to, so this one counts on from there. Never
@@ -355,6 +460,72 @@ export default class Batches {
   // removes the case rather than detecting it.
   static resumeFrom(seq) {
     Batches.#seq = seq;
+  }
+
+  // The number a batch ships under, and its place in the queue once it has one.
+  //
+  // Where there is a store, the store gives it: read and spent inside the transaction that files
+  // the batch, so two tabs cannot take one number. Where there is not - private browsing, a browser
+  // that cannot store - this tab counts for itself, which is what it did everywhere before there
+  // was anywhere to file a batch, and is safe for the same reason it was then: nothing is shared.
+  //
+  // `#seq` is what this tab has SEEN rather than what it has spent: it follows a number the store
+  // handed out, so a tab that later has to count for itself counts on from there.
+  static #number(batch) {
+    const filed = Durability.fileBatch(batch);
+
+    // Where there is nowhere to file it the number is taken HERE, in the turn the batch was
+    // closed, rather than in the one the filing settles - so a batch closed where nothing can be
+    // stored has its number the moment the action ends, exactly as it did before there was
+    // anywhere to file one.
+    if (Durability.mode === "memory") {
+      Batches.#numbered(batch);
+
+      return filed;
+    }
+
+    return filed.then(() => Batches.#numbered(batch));
+  }
+
+  // A batch whose number is settled: taken from this tab's own count if the store gave none, and
+  // followed by `#seq` either way, so a tab that later has to count for itself counts on from the
+  // highest number it has seen rather than from the last one it spent.
+  static #numbered(batch) {
+    if (batch.seq === null) {
+      batch.seal(++Batches.#seq);
+    } else {
+      Batches.#seq = Math.max(Batches.#seq, batch.seq);
+    }
+
+    Batches.#sort();
+
+    // The other tabs of this browser take it up and show it, and the one that sends sends it -
+    // which is what puts a write made in one tab on the screen of the next before the server has
+    // heard of it. As the RECORD, because that is what a tab rebuilds a batch from whether it
+    // reads it here or out of the store, and because a Batch is not something a browser can carry
+    // from one tab to another.
+    Tabs.post({kind: "sealed", record: batch.record()});
+  }
+
+  // Oldest first, which is the order batches must ship in - a later batch may name a row an earlier
+  // one created. A batch still waiting for its number sits at the TAIL, and cannot be wrong there:
+  // whatever number it gets will be above every number already spent.
+  static #sort() {
+    Batches.pending.sort((left, right) => {
+      if (left.seq === right.seq) {
+        return 0;
+      }
+
+      if (left.seq === null) {
+        return 1;
+      }
+
+      if (right.seq === null) {
+        return -1;
+      }
+
+      return left.seq - right.seq;
+    });
   }
 
   // A network failure and a status carrying no verdict are the same thing to this loop: nobody
@@ -389,7 +560,12 @@ export default class Batches {
     Overlay.remove(batch);
 
     batch.mark("rejected");
-    batch.reason = answer.reason;
+
+    // Read HERE and nowhere earlier: the reason is a client term the server encoded, and the
+    // answer carrying it stays a plain JSON value until it reaches the one reader that needs the
+    // term itself.
+    batch.reason = Interpreter.evaluateJavaScriptExpression(answer.reason);
+
     batch.write = answer.write;
 
     Batches.rejected.push(batch);
