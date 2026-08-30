@@ -16,6 +16,7 @@ import {
   defineRuntimeGlobals,
   registerWebApis,
   sinon,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
@@ -564,6 +565,107 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+  });
+
+  describe("asking the browser to keep the data", () => {
+    let persistStub, previousNavigator;
+
+    // Neither exists under jsdom, so both are installed here and taken back down after - a stub
+    // left on the global would answer for every suite that runs later in this process.
+    const equipBrowser = (state) => {
+      persistStub = sinon.stub().resolves(true);
+
+      navigator.storage = {persist: persistStub};
+
+      navigator.permissions = {
+        query:
+          state === null
+            ? sinon.stub().rejects(new TypeError("unknown permission"))
+            : sinon.stub().resolves({state}),
+      };
+    };
+
+    beforeEach(() => {
+      previousNavigator = {
+        permissions: navigator.permissions,
+        storage: navigator.storage,
+      };
+    });
+
+    afterEach(() => {
+      navigator.permissions = previousNavigator.permissions;
+      navigator.storage = previousNavigator.storage;
+    });
+
+    it("asks the browser to keep the data the first time a batch is stored", async () => {
+      equipBrowser("granted");
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isTrue(persistStub.calledOnce);
+      assert.isTrue(Durability.persisted);
+    });
+
+    it("asks once, however many batches are stored", async () => {
+      equipBrowser("granted");
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await Durability.persistBatch(sealedBatch(8));
+      await waitForEventLoop();
+
+      assert.isTrue(persistStub.calledOnce);
+    });
+
+    // The whole of how a dialog is avoided: the permission is READ first, and `prompt` means
+    // asking would raise one.
+    it("does not ask where the browser would put a dialog in front of the user", async () => {
+      equipBrowser("prompt");
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isFalse(persistStub.called);
+      assert.isFalse(Durability.persisted);
+    });
+
+    // Safari knows no such permission and never prompts - and its seven-day eviction is what makes
+    // this worth doing at all, so an unknown permission is the case to go ahead on.
+    it("asks where the browser does not know the permission", async () => {
+      equipBrowser(null);
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isTrue(persistStub.calledOnce);
+    });
+
+    it("records a refusal", async () => {
+      equipBrowser("denied");
+      persistStub.resolves(false);
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isFalse(Durability.persisted);
+      assert.include(Logger.getLogs(), "did not agree to keep");
+    });
+
+    it("asks nothing in memory mode", async () => {
+      equipBrowser("granted");
+
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isFalse(persistStub.called);
+      assert.isNull(Durability.persisted);
     });
   });
 

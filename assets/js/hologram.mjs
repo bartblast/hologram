@@ -1568,6 +1568,7 @@ export default class Hologram {
       cursor: () => Sse.syncCursor,
       mode: () => Durability.mode,
       pendingWrites: () => Durability.inFlight,
+      persisted: () => Durability.persisted,
       replicaId: () => Replica.id,
       storedBatches: () => Durability.storedBatches,
     };

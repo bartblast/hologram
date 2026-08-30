@@ -73,6 +73,11 @@ export default class Durability {
   // "indexeddb" once a database is open, "memory" before that and after anything goes wrong.
   static mode = "memory";
 
+  // Whether the browser has agreed to keep this origin's storage rather than evicting it under
+  // pressure, and nothing until it has been asked or where it cannot be. A devtools read; nothing
+  // in the framework reads it.
+  static persisted = null;
+
   // How many batch records the open found, of every owner - not only the ones this page may take
   // up. Taken once and not kept current: a test and a devtools panel read it to tell "this page
   // is not sending them" apart from "there are none", and nothing in the framework reads it.
@@ -84,6 +89,10 @@ export default class Durability {
   // to await: it runs after the page has mounted, and everything after the mount happens in one
   // continuation, before an action could dispatch and write.
   static #loaded = null;
+
+  // Whether this page load has already put the question to the browser. Flipped BEFORE the asking
+  // starts, which is what stops two batches stored in the same turn from both asking.
+  static #persistenceAsked = false;
 
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
@@ -184,6 +193,16 @@ export default class Durability {
   // the second tab's write here overwrites the first tab's batch, which is the same known limit
   // with a sharper edge than it had when only a counter was stored.
   static persistBatch(batch) {
+    // The first batch stored is the first moment this browser holds something that exists nowhere
+    // else - a row can always be downloaded again, an unsent write cannot - so it is the moment to
+    // ask for the storage to be kept. Once per page load, and never awaited: the batch's own write
+    // does not wait on a permission being read.
+    if (!Durability.#persistenceAsked) {
+      Durability.#persistenceAsked = true;
+
+      Durability.#requestPersistence();
+    }
+
     return Durability.#write([META, QUEUE], (transaction) => {
       transaction.objectStore(QUEUE).put(batch.record());
 
@@ -360,7 +379,10 @@ export default class Durability {
     } catch {}
 
     Durability.inFlight = 0;
+    Durability.persisted = null;
     Durability.storedBatches = 0;
+
+    Durability.#persistenceAsked = false;
   }
 
   // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
@@ -484,6 +506,57 @@ export default class Durability {
     );
 
     Durability.#close();
+  }
+
+  // Asks the browser to exempt this origin from eviction - and NEVER puts a dialog in front of
+  // anyone to do it.
+  //
+  // Worth asking at all because of Safari: it clears a site's storage after about seven days
+  // without a visit, and where that used to cost a re-download it now costs writes that were never
+  // sent. Chrome and Firefox evict only under disk pressure, and Chrome grants this on its own to
+  // a site somebody actually uses.
+  //
+  // The permission is READ before it is requested, which is the whole of how the dialog is avoided:
+  // `prompt` means asking would raise one, so this does not ask. Not a browser check - there is no
+  // honest way to write one, since every browser's user agent lies about what it is - but a
+  // question put to the browser about its own behaviour.
+  //
+  // A browser that does not know the permission name throws, and that is the case to go AHEAD on:
+  // it does not gate this behind a dialog, and Safari - which knows no such permission - is exactly
+  // the browser the seven-day rule makes this worth doing for.
+  //
+  // The lever that beats all of this is INSTALLING the app, which is exempt from Safari's rule and
+  // auto-granted by Chrome. Nothing here can ask for that, and it is where the mobile and desktop
+  // story goes.
+  static async #requestPersistence() {
+    if (Durability.mode !== "indexeddb" || !navigator.storage?.persist) {
+      return;
+    }
+
+    try {
+      const {state} = await navigator.permissions.query({
+        name: "persistent-storage",
+      });
+
+      if (state === "prompt") {
+        Durability.persisted = false;
+
+        Logger.debug(
+          "Hologram: this browser would ask permission to keep the data, so it was not asked - storage here may be evicted",
+        );
+
+        return;
+      }
+      // eslint-disable-next-line no-empty
+    } catch {}
+
+    Durability.persisted = await navigator.storage.persist();
+
+    if (!Durability.persisted) {
+      Logger.debug(
+        "Hologram: the browser did not agree to keep this site's data, storage here may be evicted",
+      );
+    }
   }
 
   // Why the stored rows cannot be used, or nothing when they can.
