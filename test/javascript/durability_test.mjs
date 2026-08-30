@@ -67,9 +67,17 @@ describe("Durability", () => {
 
   // Read back through a database of the test's own, never through the module under test - a module
   // trusted to read its own writes can agree with itself about a mistake in both directions.
-  const rawOpen = (version = 1) =>
+  //
+  // No version by default, which opens whatever is current: a reader that pinned one would fail
+  // against a database another tab had already upgraded, which is precisely the state one of these
+  // tests leaves behind. A version is passed only to FORCE an upgrade.
+  const rawOpen = (version) =>
     new Promise((resolve, reject) => {
-      const request = globalThis.indexedDB.open(DATABASE_NAME, version);
+      const request =
+        version === undefined
+          ? globalThis.indexedDB.open(DATABASE_NAME)
+          : globalThis.indexedDB.open(DATABASE_NAME, version);
+
       let upgraded = false;
 
       request.onupgradeneeded = () => (upgraded = true);
@@ -367,14 +375,32 @@ describe("Durability", () => {
 
     // Holding it open would block that tab for as long as this page lives, and the durability this
     // page gives up is one page's worth.
+    // Nothing stored has become untrue, and the bundle doing the upgrading decides what to carry
+    // across - so this lets go without taking anything with it. Wiping would also block the very
+    // upgrade the event exists to get out of the way of.
     it("lets the database go when another tab needs a new version", async () => {
       await Durability.open();
+      await Durability.persistCounter(41);
+      await Durability.persistReplica({id: "r1", token: "statement"});
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy")],
+        "place-1",
+      );
 
       const {db} = await rawOpen(2);
 
       assert.equal(Durability.mode, "memory");
 
       db.close();
+
+      assert.equal(await readMeta("seq"), 41);
+      assert.equal(await readMeta("cursor"), "place-1");
+      assert.equal((await readAll("entities")).length, 1);
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r1",
+        token: "statement",
+      });
     });
   });
 

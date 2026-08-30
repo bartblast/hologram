@@ -85,10 +85,22 @@ export default class Durability {
       return Durability.#memoryMode(`open failed (${error})`);
     }
 
-    // Another tab is trying to move the database to a version this bundle does not speak, and
-    // holding it open would block that tab indefinitely. Letting go costs this page its durability
-    // and nothing else.
-    Durability.#db.onversionchange = () => Durability.#fail("version change");
+    // Another tab is moving the database to a version this bundle does not speak. Letting go AT
+    // ONCE is the whole of what the event asks for: holding on blocks that upgrade for as long as
+    // this page lives, and even starting a transaction here would block it for as long as the
+    // transaction takes.
+    //
+    // Closed rather than failed, and the difference matters: nothing stored has become untrue. The
+    // rows, the place and the counter are all still exactly what they were, and the bundle doing
+    // the upgrading is the one that decides what to carry across. Wiping would block the upgrade
+    // in order to throw away a store that the upgrading bundle wanted.
+    Durability.#db.onversionchange = () => {
+      Logger.debug(
+        "Hologram: another tab needs a new database version, the database lives in memory for this page",
+      );
+
+      Durability.#close();
+    };
 
     Durability.mode = "indexeddb";
 
