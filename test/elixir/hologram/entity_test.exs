@@ -17,6 +17,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
 
   describe "__attributes__/0" do
@@ -694,6 +695,22 @@ defmodule Hologram.EntityTest do
              }
     end
 
+    # The self-reference reads back as a bare t() rather than as the module's own name - that is
+    # how Erlang stores a type naming the module it is defined in, not something to correct.
+    test "types a self-referencing relationship as the entity type's own type" do
+      assert struct_field_types(Module5) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a:
+                 "Hologram.Test.Fixtures.Entity.Module3.t() | Hologram.Entity.NotIncluded.t() | nil",
+               a_id: "String.t() | nil",
+               b: "t() | Hologram.Entity.NotIncluded.t() | nil",
+               b_id: "String.t() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "String.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
     test "types a server-only attribute as admitting its sentinel" do
       assert struct_field_types(Module15) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
@@ -712,6 +729,22 @@ defmodule Hologram.EntityTest do
                a: "boolean() | nil",
                b: "integer() | nil",
                c: "String.t() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "String.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types relationship fields from the entity types they target" do
+      assert struct_field_types(Module3) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a: "[Hologram.Test.Fixtures.Entity.Module2.t()] | Hologram.Entity.NotIncluded.t()",
+               b:
+                 "Hologram.Test.Fixtures.Entity.Module2.t() | Hologram.Entity.NotIncluded.t() | nil",
+               b_id: "String.t() | nil",
+               c:
+                 "Hologram.Test.Fixtures.Entity.Module1.t() | Hologram.Entity.NotIncluded.t() | nil",
+               c_id: "String.t() | nil",
                created_at: "DateTime.t() | nil",
                id: "String.t() | nil",
                updated_at: "DateTime.t() | nil"

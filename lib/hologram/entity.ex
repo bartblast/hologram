@@ -575,6 +575,11 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__attributes__)
       |> Enum.map(fn {name, type, opts} -> {name, attribute_field_type_ast(type, opts)} end)
 
+    relationship_field_types =
+      module
+      |> Module.get_attribute(:__relationships__)
+      |> Enum.flat_map(&relationship_field_type_asts/1)
+
     system_attribute_field_types =
       Enum.map(@system_attributes, fn {name, type, opts} ->
         {name, attribute_field_type_ast(type, opts)}
@@ -582,7 +587,11 @@ defmodule Hologram.Entity do
 
     [
       {:__meta__, remote_type_ast(Entity.Metadata)}
-      | attribute_field_types ++ system_attribute_field_types
+      | Enum.concat([
+          attribute_field_types,
+          relationship_field_types,
+          system_attribute_field_types
+        ])
     ]
   end
 
@@ -598,6 +607,28 @@ defmodule Hologram.Entity do
   # Spelled with the module ATOM rather than with an alias, so that an entity module's own
   # aliases cannot redirect the name.
   defp remote_type_ast(module), do: {{:., [], [module, :t]}, [], []}
+
+  # A to-many holds its sentinel until a query includes it and a list of the target's structs
+  # after. A to-one splits into a reference field and an embed, and the embed admits nil whether
+  # or not the reference is optional - a struct built by hand can carry one.
+  defp relationship_field_type_asts({name, [target], _opts}) do
+    union_types = [{:list, [], [remote_type_ast(target)]}, remote_type_ast(Entity.NotIncluded)]
+
+    [{name, type_union(union_types)}]
+  end
+
+  defp relationship_field_type_asts({name, target, _opts}) do
+    union_types = [remote_type_ast(target), remote_type_ast(Entity.NotIncluded), nil]
+
+    # The reference field's atom is created by struct_fields/1, called just above in
+    # __before_compile__ - this only has to find it.
+    reference_name = String.to_existing_atom("#{name}_id")
+
+    [
+      {reference_name, type_union([remote_type_ast(String), nil])},
+      {name, type_union(union_types)}
+    ]
+  end
 
   # A type is AST, not data: the field types name other modules' t/0, and those names have to
   # arrive in the entity's module unexpanded - which is why this is built rather than escaped.
