@@ -492,8 +492,9 @@ describe("Durability", () => {
       }
     });
 
-    // A shared counter moved without a lock is a number two tabs can spend at once, and the batch
-    // written over is lost with nothing said - so a browser that cannot lock does not store.
+    // A store shared by tabs needs one of them to speak for the rest, and the lock is what elects
+    // it. Without one, every tab streams and sends on its own under one identity - so a browser
+    // that cannot elect keeps its tabs independent instead, each from its own memory.
     it("stays in memory mode when the browser has no Web Locks", async () => {
       const navigator = Object.getOwnPropertyDescriptor(
         globalThis,
@@ -747,6 +748,109 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
+  describe("fileBatch()", () => {
+    // Unsealed, because filing is what gives a batch its number - the whole difference between
+    // this and the counter each tab used to move in its own memory.
+    const unsealedBatch = (actorUserId = "u1") => {
+      const batch = new Batch(null);
+
+      batch.actorUserId = actorUserId;
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+
+      return batch;
+    };
+
+    it("writes the batch, its number and the clock together", async () => {
+      await Durability.open();
+
+      Clock.observe(1_756_100_000_123_004);
+
+      const batch = unsealedBatch();
+
+      await Durability.fileBatch(batch);
+
+      assert.equal(batch.seq, 1);
+      assert.deepStrictEqual(await readAll("queue"), [batchRecord(1)]);
+      assert.equal(await readMeta("seq"), 1);
+      assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
+    });
+
+    it("numbers the batch above the stored counter", async () => {
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(4));
+
+      const batch = unsealedBatch();
+
+      await Durability.fileBatch(batch);
+
+      assert.equal(batch.seq, 5);
+      assert.equal(await readMeta("seq"), 5);
+    });
+
+    // The ordinary state of a browser that has been using the app: every batch was answered and
+    // dropped from the queue, and the counter is the only thing that remembers what has been spent.
+    // Numbering from the queue alone would start again at 1, on numbers the server has already
+    // answered - so it would answer the new batch from the record of an old one.
+    it("numbers the batch above the counter when the queue is empty", async () => {
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(9));
+      await Durability.forgetBatch(9);
+
+      const batch = unsealedBatch();
+
+      await Durability.fileBatch(batch);
+
+      assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
+      assert.equal(batch.seq, 10);
+    });
+
+    // The two part after a storage failure, which drops the counter and keeps the queue - and
+    // counting from below a stored batch would hand its number to something else, whose record
+    // would then overwrite it.
+    it("numbers the batch above every stored batch when the counter was dropped", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(7)]);
+
+      const batch = unsealedBatch();
+
+      await Durability.fileBatch(batch);
+
+      assert.equal(batch.seq, 8);
+      assert.equal(await readMeta("seq"), 8);
+    });
+
+    // Two tabs filing at the same moment is the case this exists for: the lock is what makes the
+    // second read the first one's number rather than the number they both started from.
+    it("numbers two batches filed at once apart", async () => {
+      await Durability.open();
+
+      const first = unsealedBatch();
+      const second = unsealedBatch();
+
+      await Promise.all([
+        Durability.fileBatch(first),
+        Durability.fileBatch(second),
+      ]);
+
+      assert.sameMembers([first.seq, second.seq], [1, 2]);
+
+      assert.sameMembers(
+        (await readAll("queue")).map((record) => record.seq),
+        [1, 2],
+      );
+    });
+
+    it("leaves the batch unnumbered in memory mode", async () => {
+      const batch = unsealedBatch();
+
+      await Durability.fileBatch(batch);
+
+      assert.isNull(batch.seq);
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
     });
   });
 

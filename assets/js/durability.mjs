@@ -101,6 +101,98 @@ export default class Durability {
     return Durability.#write([ENTITIES, META], Durability.#wipe);
   }
 
+  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
+  // model, opens a database of its own. Null when the build has no data model, and so nothing to
+  // name one for.
+  //
+  // The framework's half comes first and the app's second, broad before narrow: the layout is
+  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
+  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
+  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
+  // parse for anything that ever has to gate on a shape it cannot read.
+  //
+  // Public because the group of tabs sharing this database is named from it, and so is the lock
+  // that elects their leader - one database, one queue, one leader.
+  static databaseName() {
+    const modelHash = globalThis.Hologram.sync?.modelHash;
+
+    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
+  }
+
+  // A batch this browser has sealed, given the next number and written down - all three inside ONE
+  // TRANSACTION, which is what makes the number safe to share between tabs.
+  //
+  // The number is READ where it is spent. Every tab of a browser writes into one queue keyed by
+  // that number, so a counter moved in a tab's own memory is a counter two tabs can move to the
+  // same value - and the second `put` would then overwrite the first tab's batch, losing a write
+  // with nothing said.
+  //
+  // WHAT MAKES THE READ AND THE WRITE ONE STEP IS THE TRANSACTION, and it is worth saying outright
+  // because it is easy to read this as unguarded. IndexedDB orders read-write transactions whose
+  // scopes overlap, and it orders them per DATABASE rather than per connection - so a second tab
+  // asking for `meta` and `queue` waits until the first tab's transaction has committed, and then
+  // reads the number that transaction wrote. A Web Lock around this was written and removed: it
+  // guarded nothing this does not already guarantee, and every mutation of it stayed green.
+  //
+  // What that costs is testability, which is the price of the guarantee living in the database
+  // rather than in this file: a fake IndexedDB serializes everything anyway, so no unit test here
+  // can tell a correct version from one that reads the counter outside the transaction. The two
+  // tabs of `multi_tab_test.exs` are what bind it, in a browser where the case is real.
+  //
+  // The number taken is above the counter AND above every batch already in the queue, which are
+  // the same thing until a storage failure: that drops the counter (a page that goes on spending
+  // numbers nothing records leaves a stale one) and keeps the queue (a stored batch is still the
+  // user's unfinished work). 10b applied that rule when a page load resumed; applying it at every
+  // seal is what makes it hold for a tab that never resumed anything.
+  //
+  // The batch and its number go down TOGETHER, in one transaction, because either without the
+  // other is wrong in its own way. A number with no batch is one the next load counts on from for
+  // work that no longer exists anywhere. A batch with no number is worse - the next load would
+  // count from below it and hand the same number to something else, and whichever reached the
+  // server second would be answered with the other's verdict.
+  //
+  // Nothing is read with `await` inside the transaction: an IndexedDB transaction commits the
+  // moment it has no request outstanding, so the write has to be chained onto the read's own
+  // callback rather than sequenced by the event loop.
+  //
+  // In memory mode the batch is left UNNUMBERED and the caller numbers it: there is nothing to file
+  // and no transaction to order it against.
+  static fileBatch(batch) {
+    if (Durability.mode === "memory") {
+      return Promise.resolve();
+    }
+
+    // The first batch stored is the first moment this browser holds something that exists nowhere
+    // else - a row can always be downloaded again, an unsent write cannot - so it is the moment to
+    // ask for the storage to be kept. Once per page load, and never awaited: the batch's own write
+    // does not wait on a permission being read.
+    if (!Durability.#persistenceAsked) {
+      Durability.#persistenceAsked = true;
+
+      Durability.#requestPersistence();
+    }
+
+    return Durability.#write([META, QUEUE], (transaction) => {
+      const meta = transaction.objectStore(META);
+      const queue = transaction.objectStore(QUEUE);
+      const counter = meta.get("seq");
+
+      counter.onsuccess = () => {
+        const highest = queue.openKeyCursor(null, "prev");
+
+        highest.onsuccess = () => {
+          const spent = Math.max(counter.result ?? 0, highest.result?.key ?? 0);
+
+          batch.seal(spent + 1);
+
+          queue.put(batch.record());
+          meta.put(batch.seq, "seq");
+          meta.put(Clock.last(), "clock");
+        };
+      };
+    });
+  }
+
   // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
   // nothing is waiting on it any more, and a later page load has no reason to take it up.
   //
@@ -132,17 +224,23 @@ export default class Durability {
         return Durability.#memoryMode("IndexedDB unavailable");
       }
 
-      // What is stored is shared by every tab of this browser, and a shared counter is only safe
-      // to move under a lock: without one, two tabs read the same number, spend it on two
-      // different batches, and the second one written over the first is a write lost in silence.
-      // A browser that cannot lock keeps every tab working from its own memory instead, which
-      // costs it durability and cannot cost it a write.
+      // What is stored is shared by every tab of this browser, and sharing it needs one tab to
+      // speak for the rest - which is what a Web Lock elects. Without one, every tab leads itself:
+      // two streams downloading every frame twice, and two senders draining ONE queue under one
+      // replica identity, where the watermark a frame carries - the number that stops this client
+      // applying its own write a second time - describes a single sender. So a browser that cannot
+      // elect keeps its tabs independent, each working from its own memory: it costs durability
+      // there, and it cannot cost a write.
+      //
+      // (The COUNTER is not the reason, though it reads like one: the number is read and spent
+      // inside the transaction that files the batch, and IndexedDB orders those across tabs on its
+      // own - see `fileBatch`.)
       if (!globalThis.navigator?.locks) {
         return Durability.#memoryMode("no Web Locks");
       }
 
       const request = globalThis.indexedDB.open(
-        Durability.#databaseName(),
+        Durability.databaseName(),
         VERSION,
       );
 
@@ -382,7 +480,7 @@ export default class Durability {
 
     try {
       await Durability.#request(
-        globalThis.indexedDB.deleteDatabase(Durability.#databaseName()),
+        globalThis.indexedDB.deleteDatabase(Durability.databaseName()),
       );
       // eslint-disable-next-line no-empty
     } catch {}
@@ -392,21 +490,6 @@ export default class Durability {
     Durability.storedBatches = 0;
 
     Durability.#persistenceAsked = false;
-  }
-
-  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
-  // model, opens a database of its own. Null when the build has no data model, and so nothing to
-  // name one for.
-  //
-  // The framework's half comes first and the app's second, broad before narrow: the layout is
-  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
-  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
-  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
-  // parse for anything that ever has to gate on a shape it cannot read.
-  static #databaseName() {
-    const modelHash = globalThis.Hologram.sync?.modelHash;
-
-    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
   }
 
   static #close() {

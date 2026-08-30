@@ -66,8 +66,8 @@ export default class Tabs {
   static async join(name, {onLead, onMessage}) {
     // A browser that cannot hold a lock, or cannot carry a message between tabs, has no group to
     // join: this tab leads itself and speaks for nobody, which is what every tab there does. Its
-    // database is in memory mode for the same reason, so there is no shared counter to protect and
-    // nothing for a second tab to collide with.
+    // database is in memory mode for the same reason, so the tabs of such a browser share nothing
+    // and there is nothing for this one to coordinate.
     if (
       typeof BroadcastChannel !== "function" ||
       !globalThis.navigator?.locks
