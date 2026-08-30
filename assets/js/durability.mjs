@@ -18,10 +18,15 @@ import Replica from "./replica.mjs";
 // change, and a client cut off before it arrives is dated before the batch and replays it.
 //
 // Beside the rows it holds what this BROWSER did rather than what the server said - the replica
-// identity, the batch counter and the clock - and those three outlive everything else here,
-// including a resync, a model change and somebody else signing in. A number reused is a batch the
+// identity, the batch counter and the clock. Those outlive a resync, a model change and somebody
+// else signing in, because none of the three makes them untrue: a number reused is a batch the
 // server answers from the record of a different batch, and a clock restarted low is a write the
 // server reads as moved.
+//
+// They do NOT outlive a storage failure, and that is the one exception. After one, this page goes
+// on spending numbers that nothing records, so a stored counter is stale rather than merely old -
+// and a later load resuming from it would hand out numbers already answered. Absent is safe where
+// stale is not.
 //
 // Where the browser offers no durable storage - private browsing, an odd embedder, a failed
 // transaction - the whole thing degrades to memory mode: fully functional, and honest about it
@@ -256,6 +261,18 @@ export default class Durability {
   // written. What this browser DID is left alone, as everywhere else: a number reused and a clock
   // restarted low cost more than a re-download.
   //
+  // The identity and its counter go too, and this is the ONE place they do. They survive a
+  // resync, a model change and somebody else signing in because they stay TRUE through all three -
+  // but a counter that has stopped advancing on disk while this page goes on spending numbers is
+  // no longer true, and keeping it would cause the very thing it exists to prevent: the next load
+  // would resume from it and hand out numbers the server has already answered, which it answers
+  // again from the record of the batch that first carried them. The distinct writes would be
+  // dropped in silence.
+  //
+  // Absent is safe where stale is not. A load that finds no identity takes the fresh pair its own
+  // page was minted - a new id, with no record anywhere - and counts from nothing. The clock is
+  // left, because it only ever moves forward and cannot go stale in this way.
+  //
   // The wipe deliberately does NOT go through the ordinary write path. A failure here must not
   // come back round to this function, and it cannot: nothing in this block reports one. That is
   // also why there is no "already failing" flag to keep in step - the shape rules the case out
@@ -266,9 +283,17 @@ export default class Durability {
     );
 
     try {
-      Durability.#wipe(
-        Durability.#db.transaction([ENTITIES, META], "readwrite"),
+      const transaction = Durability.#db.transaction(
+        [ENTITIES, META],
+        "readwrite",
       );
+
+      Durability.#wipe(transaction);
+
+      const meta = transaction.objectStore(META);
+
+      meta.delete("replica");
+      meta.delete("seq");
     } catch {
       // There is nothing further to try - this page stops storing either way.
     }

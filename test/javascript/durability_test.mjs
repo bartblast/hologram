@@ -239,9 +239,13 @@ describe("Durability", () => {
       assert.isUndefined(await readMeta("cursor"));
     });
 
-    // The rows are the server's and can be fetched again. A number handed out twice cannot be
-    // taken back, and a clock that restarts low writes revisions the server reads as moved.
-    it("keeps the identity, the counter and the clock", async () => {
+    // A stored counter exists only so that a later load does not reuse a number. Once storing has
+    // stopped, this page goes on spending numbers that nothing records - so the stored one is
+    // stale, and a load resuming from it would hand out numbers the server answers from the record
+    // of the batch that first carried them, dropping the new writes in silence. Absent is safe
+    // where stale is not: a load finding no identity takes its own page's fresh pair and counts
+    // from nothing.
+    it("drops the identity and the counter, which have stopped being true", async () => {
       await Durability.open();
       await Durability.persistCounter(41);
       await Durability.persistReplica({id: "r1", token: "statement"});
@@ -249,13 +253,20 @@ describe("Durability", () => {
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
       assert.equal(Durability.mode, "memory");
-      assert.equal(await readMeta("seq"), 41);
-      assert.isNumber(await readMeta("clock"));
+      assert.isUndefined(await readMeta("seq"));
+      assert.isUndefined(await readMeta("replica"));
+    });
 
-      assert.deepStrictEqual(await readMeta("replica"), {
-        id: "r1",
-        token: "statement",
-      });
+    // It only ever moves forward, so it cannot go stale the way the counter does - and a clock
+    // restarted low writes revisions the server reads as moved.
+    it("keeps the clock", async () => {
+      await Durability.open();
+      await Durability.persistCounter(41);
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.equal(Durability.mode, "memory");
+      assert.isNumber(await readMeta("clock"));
     });
 
     it("leaves nothing in flight", async () => {
