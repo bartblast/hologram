@@ -300,6 +300,26 @@ export default class Batches {
     Overlay.reset();
   }
 
+  // The batches a previous page load could not send, back where they were - in the queue, so they
+  // ship, and in the overlay, so their rows are on the screen before anything is sent. In the
+  // order they were made, which is the order they must go out in: a later batch may name a row an
+  // earlier one created.
+  //
+  // Only the ones this page may send reach here - a batch is applied by the server under the user
+  // of the session that sends it, so whose they are is decided before this is called.
+  //
+  // Deliberately does NOT send. Waking the sender belongs to the page load, once everything it
+  // takes up is in place - and a function that only picks things up is one a test can call without
+  // reaching the network.
+  static resume(records) {
+    for (const record of records) {
+      const batch = Batch.fromRecord(record);
+
+      Batches.pending.push(batch);
+      Overlay.push(batch);
+    }
+  }
+
   // Where the previous page load's numbering got to, so this one counts on from there. Never
   // backwards: a number is identified with its replica, and the server answers a repeat from its
   // record of the first batch to carry it.

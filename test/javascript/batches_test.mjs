@@ -26,6 +26,26 @@ describe("Batches", () => {
 
   const write = (id) => ({id, op: "delete", stamp: 1, type: TODO});
 
+  // Shared by every describe that needs a write to FOLD - the overlay builds a created row from
+  // the model's settable fields, so a fold against no model is a fold of nothing.
+  const TODO_MODEL = {
+    [TODO]: {
+      attributes: {
+        created_at: "datetime",
+        done: "boolean",
+        id: "uuid",
+        title: "string",
+        updated_at: "datetime",
+      },
+      constraints: {},
+      defaults: {},
+      enumValues: {},
+      frameworkAttributes: [],
+      relationships: {tags: {optional: true, toMany: true, type: TAG}},
+      serverOnly: [],
+    },
+  };
+
   beforeEach(() => {
     Batches.reset();
   });
@@ -52,25 +72,7 @@ describe("Batches", () => {
     let renderStub, sendStub;
 
     beforeEach(() => {
-      globalThis.Hologram.sync = {
-        model: {
-          [TODO]: {
-            attributes: {
-              created_at: "datetime",
-              done: "boolean",
-              id: "uuid",
-              title: "string",
-              updated_at: "datetime",
-            },
-            constraints: {},
-            defaults: {},
-            enumValues: {},
-            frameworkAttributes: [],
-            relationships: {tags: {optional: true, toMany: true, type: TAG}},
-            serverOnly: [],
-          },
-        },
-      };
+      globalThis.Hologram.sync = {model: TODO_MODEL};
 
       LocalDatabase.reset();
       Model.reset();
@@ -1068,6 +1070,88 @@ describe("Batches", () => {
       wrote("t2");
 
       assert.equal(Batches.close().seq, 1);
+    });
+  });
+
+  describe("resume()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    const stored = (seq, id, landed = []) => ({
+      actorUserId: "u1",
+      landed,
+      seq,
+      writes: [
+        {
+          claim: null,
+          data: {done: false, title: "stored"},
+          id,
+          op: "create",
+          stamp: STAMP,
+          type: TODO,
+        },
+      ],
+    });
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("queues the stored batches oldest first", () => {
+      Batches.resume([stored(3, "t1"), stored(5, "t2")]);
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.seq),
+        [3, 5],
+      );
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.state),
+        ["pending", "pending"],
+      );
+    });
+
+    // On the screen before anything is sent, and out of the overlay rather than the base: what the
+    // previous page load put there comes back with the batches that made it, still this client's
+    // own unanswered work.
+    it("folds their writes over the base", () => {
+      Batches.resume([stored(3, "t1")]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "stored");
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("keeps their landed marks", () => {
+      Batches.resume([stored(3, "t1", [0])]);
+
+      assert.isTrue(Batches.pending[0].isLanded(0));
+    });
+
+    // Waking the sender belongs to the page load, once everything it takes up is in place.
+    //
+    // The wait is load-bearing: the sender awaits the batch's own write before anything leaves, so
+    // a synchronous assertion here passes whether or not this function sends - it would be reading
+    // the moment before the first await either way.
+    it("sends nothing", async () => {
+      const sendStub = sinon.stub(Client, "sendMutation");
+
+      Batches.resume([stored(3, "t1")]);
+
+      await waitForEventLoop();
+
+      assert.isFalse(sendStub.called);
+    });
+
+    it("takes up nothing from an empty store", () => {
+      Batches.resume([]);
+
+      assert.deepStrictEqual(Batches.pending, []);
     });
   });
 
