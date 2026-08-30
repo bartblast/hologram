@@ -81,6 +81,11 @@ defmodule HologramFeatureTests.WriteQueueTest do
   # the client does not hold, so the create passes in the browser, is stored, and is refused only
   # when the NEXT page load sends it - and that page has to roll back a row it restored from the
   # store rather than one an action of its own put there.
+  #
+  # Signed in throughout, and not incidentally: the server keeps a refused batch only when it has
+  # an actor to keep it FOR (`keep_refused/5` writes the record inside `if actor_id`), so the
+  # record assertion at the end is only true under a user. `mutations_test.exs`'s "keeps nothing of
+  # a batch refused before anyone is logged in" is the feature that pins the other half.
   feature "rolls back a write refused after a reload", %{session: session} do
     %{slug: "taken", title: "taken"}
     |> Todo.new()
@@ -89,6 +94,10 @@ defmodule HologramFeatureTests.WriteQueueTest do
     session =
       session
       |> visit(WriteQueuePage)
+      |> click(button("Log in as Alice"))
+      |> assert_text(css("#result"), "logged_in_alice")
+      |> reload()
+      |> assert_page(WriteQueuePage)
       |> assert_text(css("#todos"), "taken 0")
       |> hold_mutation_requests()
       |> click(button("Create a duplicate slug"))
