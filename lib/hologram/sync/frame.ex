@@ -97,10 +97,19 @@ defmodule Hologram.Sync.Frame do
 
   Two scopes rather than one per window, because window ids are the server's business and never
   cross the wire - and "can I answer this page myself?" is the whole of what a client asks.
+
+  The place comes with the marker for the same reason the marker exists: this is the moment the
+  client holds a whole pot, and a place is a claim only a client holding one can honour. A deltas
+  frame carries it too, but a client filled and then left alone receives no further frame - so
+  without this a quiet app would keep everything it was sent and still have nowhere to resume
+  from, and would be filled from nothing on its next visit.
+
+  Nil for `:page`, whose scope is narrower than the claim - and nil for `:all` on a build whose
+  windows have no places to speak of.
   """
-  @spec encode_synced_envelope(integer, :all | :page) :: String.t()
-  def encode_synced_envelope(id, scope) do
-    payload = %{protocol_version: @protocol_version, scope: scope}
+  @spec encode_synced_envelope(integer, :all | :page, String.t() | nil) :: String.t()
+  def encode_synced_envelope(id, scope, cursor) do
+    payload = %{cursor: cursor, protocol_version: @protocol_version, scope: scope}
 
     "event: synced\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end

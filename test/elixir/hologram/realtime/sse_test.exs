@@ -423,10 +423,10 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "process_message/4 on {:sync_synced, scope}" do
+  describe "process_message/4 on {:sync_synced, scope, cursor}" do
     test "pushes a synced SSE event" do
       conn = prepared_test_conn()
-      send(self(), {:sync_synced, :page})
+      send(self(), {:sync_synced, :page, nil})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -435,11 +435,22 @@ defmodule Hologram.Realtime.SSETest do
 
     test "carries the scope the client may now answer from its own store" do
       conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all})
+      send(self(), {:sync_synced, :all, "Nzc4LjA"})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ ~s["scope":"all"]
+    end
+
+    # The one frame a client filled and then left alone ever receives, so the place has to be on
+    # it or that client has nowhere to come back from.
+    test "carries the place the client may come back from" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced, :all, "Nzc4LjA"})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s["cursor":"Nzc4LjA"]
     end
   end
 
