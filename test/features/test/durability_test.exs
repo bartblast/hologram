@@ -123,27 +123,14 @@ defmodule HologramFeatureTests.DurabilityTest do
     refute minted == held
   end
 
-  # The place is what earns a returning client a catch-up rather than the whole database again.
-  # With every table empty the server sends no deltas at all, so it hands over no place either -
-  # a client that had not kept one would be holding nothing here.
-  feature "knows where it left off without being told again", %{session: session} do
-    %{name: "bicycle"}
-    |> Product.new()
-    |> DB.create!()
-
-    session
-    |> visit(DurabilityPage)
-    |> click(button("Show products"))
-    |> assert_text(css("#live_products"), ~r/^bicycle$/)
-    |> await_durable_writes()
-
-    truncate_every_entity_table()
-
-    session
-    |> visit(DurabilityPage)
-    |> assert_script_result(
-      "return globalThis.Hologram.durability.cursor() !== null;",
-      true
-    )
-  end
+  # There is deliberately no feature here for the place a returning client resumes from, and the
+  # reason is worth keeping: nothing a browser can be asked would discriminate. The completeness
+  # marker now hands over a place on every connect, a first arrival included, so a client that
+  # restored nothing still reports one - and the only honest signal, the `cursor` the greeting
+  # carries, is not readable from a driven browser. A feature asserting it would pass whether or
+  # not anything was restored, which is worse than not having one.
+  #
+  # What covers the claim instead: `durability_test.mjs`'s "fills the database with the stored rows
+  # and answers the place they are dated at" for the round trip, and `sse_test.mjs`'s "keeps the
+  # place the completeness marker names" for the frame that supplies it.
 end
