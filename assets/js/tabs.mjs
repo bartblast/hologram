@@ -348,9 +348,13 @@ export default class Tabs {
   static async #lead() {
     if (Sse.syncCursor === null) {
       // Nowhere to be brought up to date FROM: the tab that was leading died mid-fill, or never
-      // got far enough to have a place. So this one starts over, and says so to the group, whose
-      // tabs hold the same rows out of the same store and would otherwise keep showing them.
-      LocalDatabase.reset();
+      // got far enough to have a place. So this one asks for everything again, and says so to the
+      // group, whose tabs hold the same rows out of the same store.
+      //
+      // The rows stay on every screen in the meantime, each tab's included: the fill that follows
+      // confirms the ones this browser may still see and the marker ending it takes away the rest,
+      // which is the same answer arriving without a gap in the middle of it.
+      LocalDatabase.beginRefill();
       Durability.clear();
 
       Tabs.post({

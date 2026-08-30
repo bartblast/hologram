@@ -19,6 +19,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
@@ -481,6 +482,63 @@ describe("Sse", () => {
       );
     });
 
+    // A fill follows a greeting that names no place, with no resync frame in front of it - which
+    // is where a client cut off part way through a fill comes back.
+    it("marks every held row when it greets with no place", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [
+        ["MyApp.Task", "t1"],
+      ]);
+    });
+
+    it("leaves the rows alone when it greets with a place", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      Sse.syncCursor = "Nzc4LjA";
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    // A tab that does not lead greets with nothing about sync, so NO fill follows - and rows
+    // marked here would be swept the moment the leading tab says the pot is complete, taking away
+    // rows this browser holds rightly. The same goes for a page that has not mounted and for a
+    // bundle carrying no sync at all.
+    it("leaves the rows alone for a tab greeting with no sync at all", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      Tabs.leader = false;
+
+      try {
+        await Sse.connect();
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
     // The listeners are registered again on every new stream, so the place has to outlive the
     // one that delivered it - a reconnect is exactly when the client needs to say what it has.
     it("opens the EventSource naming the place a previous stream left it at", async () => {
@@ -655,15 +713,34 @@ describe("Sse", () => {
       assert.equal(animationFrames.length, 1);
     });
 
+    // A follower reaches this through the group rather than through a stream, and the page-load
+    // half of a change of identity is posted to it exactly this way.
+    it("starts over on a resync naming a change of identity", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+
+      Sse.receiveFrame("sync_resync", {reason: "identity"});
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
     // Nothing is repainted here on purpose - the refill's own frames schedule that.
-    it("starts over on a resync", () => {
+    it("keeps what it holds on a resync, awaiting the refill", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
 
       Sse.syncCursor = "Nzc4LjA";
 
-      Sse.receiveFrame("sync_resync", {reason: "cursor_unreadable"});
+      Sse.receiveFrame("sync_resync", {reason: "cursor"});
 
-      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.deepStrictEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
+        id: "t1",
+        title: "held",
+      });
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [
+        ["MyApp.Task", "t1"],
+      ]);
+
       assert.isNull(Sse.syncCursor);
       assert.equal(animationFrames.length, 0);
     });
@@ -1203,19 +1280,107 @@ describe("Sse", () => {
   describe("sync_resync event", () => {
     const TASK = "MyApp.Task";
 
-    const envelope = () =>
-      JSON.stringify({protocol_version: 1, reason: "retention"});
+    const envelope = (reason = "retention") =>
+      JSON.stringify({protocol_version: 1, reason: reason});
 
     beforeEach(() => {
+      // The refill's own frames are ingested here rather than stubbed, so the model the ingest
+      // reads has to be the one a page would have been built with.
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        modelHash: "a3f9c2",
+        protocolVersion: 1,
+      };
+
       LocalDatabase.putRow(TASK, {id: "t1", title: "held before the resync"});
       LocalDatabase.markSynced("all");
     });
 
-    it("drops what the client holds, because what follows is everything again", async () => {
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    // The rows stay on the screen and stay usable while the refill lands - an action reading or
+    // writing one of them finds it there, where an emptied database answers that it holds no such
+    // row and refuses the write.
+    it("keeps what the client holds, awaiting the refill's word", async () => {
       stubHandshakeResponse();
 
       await Sse.connect();
       Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
+        id: "t1",
+        title: "held before the resync",
+      });
+    });
+
+    it("marks every held row as awaiting the fill", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+    });
+
+    // The one resync that replaces WHO is asking rather than what the server said. Those rows
+    // were the previous person's, and this one may not see them - so they go now rather than at
+    // the end of a fill, before anything can read them.
+    it("drops what it holds when who is asking changed", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope("identity")});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("keeps a row the refill delivered, as the server now spells it", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      Sse.eventSource.listeners.sync_deltas({
+        data: JSON.stringify({
+          applied_seq: null,
+          cursor: null,
+          deltas: {
+            put_entity: {[TASK]: [{id: "t1", title: "as it now stands"}]},
+          },
+          model_hash: "a3f9c2",
+          protocol_version: 1,
+        }),
+      });
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({protocol_version: 1, scope: "all"}),
+      });
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
+        id: "t1",
+        title: "as it now stands",
+        title_sort: "as it now stands",
+      });
+    });
+
+    it("takes a row the refill never delivered off at the marker", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({protocol_version: 1, scope: "all"}),
+      });
 
       assert.isNull(LocalDatabase.getRow(TASK, "t1"));
     });
@@ -1254,8 +1419,8 @@ describe("Sse", () => {
       assert.isNull(Sse.syncCursor);
     });
 
-    // Repainting an emptied database would show the gap between the discard and the refill,
-    // which lands milliseconds later and schedules its own repaint.
+    // Repainting here would draw the rows exactly as they already are - the refill has changed
+    // nothing yet - so the frames that do change something schedule the repaints.
     it("schedules no repaint of the gap it opens", async () => {
       stubHandshakeResponse();
 
@@ -1278,6 +1443,198 @@ describe("Sse", () => {
       });
 
       assert.equal(animationFrames.length, 1);
+    });
+  });
+
+  // What a refill does to writes this client has made and not had answered. Every case is one the
+  // design had to be written out for, because a resync is where the two halves of the seam meet:
+  // the base is being replaced wholesale while the overlay goes on folding over it.
+  describe("a refill over pending writes", () => {
+    const TASK = "MyApp.Task";
+
+    const deltasFrame = (rows) =>
+      JSON.stringify({
+        applied_seq: null,
+        cursor: null,
+        deltas: {put_entity: {[TASK]: rows}},
+        model_hash: "a3f9c2",
+        protocol_version: 1,
+      });
+
+    const resyncFrame = () =>
+      JSON.stringify({protocol_version: 1, reason: "retention"});
+
+    const syncedFrame = () =>
+      JSON.stringify({protocol_version: 1, scope: "all"});
+
+    // A batch of this client's own, sealed and waiting for an answer.
+    const pending = (write) => {
+      Batches.open("tasks");
+      Batches.current().append(write);
+
+      return Batches.close();
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {
+              created_at: "datetime",
+              id: "uuid",
+              title: "string",
+              updated_at: "datetime",
+            },
+            constraints: {},
+            defaults: {},
+            enumValues: {},
+            frameworkAttributes: [],
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        modelHash: "a3f9c2",
+        protocolVersion: 1,
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      Batches.reset();
+      Model.reset();
+
+      delete globalThis.Hologram.sync;
+    });
+
+    // The base takes the server's copy and the pending edit still shows on top of it, which is
+    // the ordinary overlay rule reaching across a resync unchanged.
+    it("folds a pending update over the row the refill delivered", async () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "before the resync"});
+
+      pending({
+        data: {title: "mine"},
+        id: "t1",
+        op: "update",
+        stamp: 1,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      // Before a single row of the refill has landed: the write still has something to fold over,
+      // which is what an action reading its own edit mid-refill depends on.
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "mine");
+
+      Sse.eventSource.listeners.sync_deltas({
+        data: deltasFrame([{id: "t1", title: "from the server"}]),
+      });
+
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").title, "from the server");
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "mine");
+    });
+
+    // A create answered while the refill was still running is in the base as the SERVER's row,
+    // filed by the promotion rather than delivered by a frame - so nothing marked it, and the
+    // sweep has no reason to take it.
+    it("keeps a create confirmed while the refill ran", async () => {
+      const batch = pending({
+        data: {title: "made here"},
+        id: "t2",
+        op: "create",
+        stamp: 1024,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      Overlay.promote(batch, null);
+
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.equal(LocalDatabase.getRow(TASK, "t2").title, "made here");
+    });
+
+    // A row the base never held cannot be marked and cannot be swept: it is on the screen because
+    // the overlay puts it there, and it stays until the server rules on it.
+    it("keeps a create still pending across the marker", async () => {
+      pending({
+        data: {title: "made here"},
+        id: "t2",
+        op: "create",
+        stamp: 1024,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.equal(LocalDatabase.getRow(TASK, "t2").title, "made here");
+      assert.isNull(LocalDatabase.baseRow(TASK, "t2"));
+    });
+
+    // A second resync arriving part way through the first one's refill puts the rows it had
+    // already delivered back to awaiting - otherwise a row delivered by the abandoned fill would
+    // outlive one that no longer sends it.
+    it("marks a row again when a second resync arrives mid-refill", async () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "before the resync"});
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      Sse.eventSource.listeners.sync_deltas({
+        data: deltasFrame([{id: "t1", title: "from the first refill"}]),
+      });
+
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      // Delivered by the first refill and therefore unmarked, then marked again by the second -
+      // and still readable in between, which is the whole of what the second resync changed.
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+      assert.equal(
+        LocalDatabase.getRow(TASK, "t1").title,
+        "from the first refill",
+      );
+
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    // The batch goes on naming the row whatever the refill said, because an unanswered write is
+    // still this client's own work - what it has nothing left to fold over is a different matter.
+    it("sweeps a row a pending update names when the refill did not deliver it", async () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "before the resync"});
+
+      pending({
+        data: {title: "mine"},
+        id: "t1",
+        op: "update",
+        stamp: 1,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.isTrue(Overlay.names(TASK, "t1"));
     });
   });
 

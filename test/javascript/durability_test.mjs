@@ -1249,6 +1249,28 @@ describe("Durability", () => {
       });
     });
 
+    // Spelled the way the SERVER spells a change of identity, because it is the same event
+    // noticed here rather than there - and the reader keeps its rows or drops them on that one
+    // word, where the sentence beside it is only ever read in a log.
+    it("tells the group somebody else is signed in the way the server would", async () => {
+      sinon.stub(Durability, "clear");
+
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+
+      LocalDatabase.actorUserId = "u2";
+
+      Durability.restore(true);
+
+      sinon.assert.calledOnceWithExactly(posting, {
+        event: "sync_resync",
+        frame: {reason: "identity"},
+        kind: "frame",
+      });
+    });
+
     it("tells the group nothing when it takes the stored rows", async () => {
       const posting = sinon.stub(Tabs, "post");
 

@@ -514,9 +514,13 @@ export default class Durability {
       // The other tabs of the group hold the same rows, read from the same store, and are told to
       // let go of them the way a server resync tells everyone - AFTER the clear's transaction is
       // created, so a tab that reads the store on hearing this reads it cleared.
+      //
+      // Somebody else signing in is spelled the way the SERVER spells it, because it is the same
+      // event noticed here rather than there, and the reader keeps rows or drops them on that one
+      // word. The sentence above stays what it is: a line to read in a log, free to be reworded.
       Tabs.post({
         event: "sync_resync",
-        frame: {reason: refusal},
+        frame: {reason: ownerChanged ? "identity" : refusal},
         kind: "frame",
       });
     }

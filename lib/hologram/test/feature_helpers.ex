@@ -138,6 +138,72 @@ defmodule Hologram.Test.FeatureHelpers do
   end
 
   @doc """
+  Holds every row a sync fill delivers, and the marker that ends it, until `release_sync_frames/1`.
+
+  What it buys a test: the window between a client being told to start over and its replacement
+  rows arriving. That window is milliseconds in the wild, so nothing a browser test does lands
+  inside it on its own - and it is where the rows a client keeps on screen are the only rows it
+  has.
+
+  The starting-over frame itself is NOT held, so a test can wait for the client to report that it
+  holds no place any more and know it is inside the window.
+
+  Wraps the `EventSource` constructor, so it must be called BEFORE the stream it means to hold is
+  opened. A client opens a fresh one whenever it reconnects, which is what makes this usable in
+  the middle of a test: hold, then provoke the disconnect.
+  """
+  @spec hold_sync_frames(struct) :: struct
+  def hold_sync_frames(session) do
+    script = """
+    (() => {
+      const held = globalThis.__hologramSyncGate;
+
+      if (held) {
+        held.open = false;
+        held.parked = [];
+
+        return;
+      }
+
+      const gate = {native: globalThis.EventSource, open: false, parked: []};
+
+      globalThis.__hologramSyncGate = gate;
+
+      gate.release = () => {
+        gate.open = true;
+
+        const parked = gate.parked;
+        gate.parked = [];
+
+        for (const [listener, event] of parked) {
+          listener(event);
+        }
+      };
+
+      globalThis.EventSource = class extends gate.native {
+        addEventListener(type, listener, ...rest) {
+          const holdable = type === "sync_deltas" || type === "synced";
+
+          const wrapped = holdable
+            ? (event) => {
+                if (gate.open) {
+                  listener(event);
+                } else {
+                  gate.parked.push([listener, event]);
+                }
+              }
+            : listener;
+
+          return super.addEventListener(type, wrapped, ...rest);
+        }
+      };
+    })();\
+    """
+
+    Browser.execute_script(session, script)
+  end
+
+  @doc """
   Opens `page_module` in a second tab of the same browser, points the session at it, and blocks
   until the Hologram client runtime has mounted it and established its server connections.
 
@@ -176,6 +242,17 @@ defmodule Hologram.Test.FeatureHelpers do
   @spec release_mutations(struct) :: struct
   def release_mutations(session) do
     Browser.execute_script(session, "globalThis.__hologramMutationGate?.release();")
+  end
+
+  @doc """
+  Releases whatever `hold_sync_frames/1` is holding, in the order it arrived.
+
+  Does nothing when nothing is held, and nothing again when called twice - a released gate stays
+  released, so a test may release without tracking whether it has.
+  """
+  @spec release_sync_frames(struct) :: struct
+  def release_sync_frames(session) do
+    Browser.execute_script(session, "globalThis.__hologramSyncGate?.release();")
   end
 
   @doc """

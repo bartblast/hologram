@@ -294,6 +294,26 @@ describe("Tabs", () => {
       assert.isFalse(clearing.called);
     });
 
+    // The store goes, because it is dated by a place this tab does not have - but what is on the
+    // screens does not. Every tab of the group keeps showing what it showed until the fill this
+    // asks for says which of those rows are still this browser's.
+    it("keeps its rows for the fill to confirm, when it has no place", async () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "from the stream"});
+
+      sinon.stub(Tabs, "post");
+
+      await succeed(nextGroup());
+
+      assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), {
+        id: "t1",
+        title: "from the stream",
+      });
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [
+        ["MyApp.Task", "t1"],
+      ]);
+    });
+
     it("starts over when it has no place to resume from", async () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "from the stream"});
 
@@ -301,7 +321,6 @@ describe("Tabs", () => {
 
       await succeed(nextGroup());
 
-      assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
       assert.isTrue(clearing.calledOnce);
       assert.isFalse(repairing.called);
 
