@@ -32,7 +32,8 @@ defineRuntimeGlobals();
 registerWebApis();
 
 describe("Durability", () => {
-  const DATABASE_NAME = "hologram";
+  // Named for the model the runtime globals below declare, and the store layout.
+  const DATABASE_NAME = "hologram.model-a.1";
 
   // Every connection this suite opens for itself, closed centrally below.
   let raw = [];
@@ -56,6 +57,7 @@ describe("Durability", () => {
     raw = [];
 
     await Durability.reset();
+    await deleteEveryDatabase();
 
     Clock.reset();
     LocalDatabase.reset();
@@ -65,18 +67,35 @@ describe("Durability", () => {
     delete globalThis.Hologram.sync;
   });
 
+  // Every database this suite may have left, gone - `reset()` deletes only the one the current
+  // model names, and a test that opens under another model leaves a second one behind.
+  const deleteEveryDatabase = async () => {
+    const databases = await globalThis.indexedDB.databases();
+
+    for (const {name} of databases) {
+      if (name.startsWith("hologram.")) {
+        await new Promise((resolve) => {
+          const request = globalThis.indexedDB.deleteDatabase(name);
+
+          request.onsuccess = resolve;
+          request.onerror = resolve;
+        });
+      }
+    }
+  };
+
   // Read back through a database of the test's own, never through the module under test - a module
   // trusted to read its own writes can agree with itself about a mistake in both directions.
   //
   // No version by default, which opens whatever is current: a reader that pinned one would fail
   // against a database another tab had already upgraded, which is precisely the state one of these
   // tests leaves behind. A version is passed only to FORCE an upgrade.
-  const rawOpen = (version) =>
+  const rawOpen = (version, name = DATABASE_NAME) =>
     new Promise((resolve, reject) => {
       const request =
         version === undefined
-          ? globalThis.indexedDB.open(DATABASE_NAME)
-          : globalThis.indexedDB.open(DATABASE_NAME, version);
+          ? globalThis.indexedDB.open(name)
+          : globalThis.indexedDB.open(name, version);
 
       let upgraded = false;
 
@@ -89,8 +108,8 @@ describe("Durability", () => {
       };
     });
 
-  const readAll = async (storeName) => {
-    const {db} = await rawOpen();
+  const readAll = async (storeName, name = DATABASE_NAME) => {
+    const {db} = await rawOpen(undefined, name);
 
     return new Promise((resolve, reject) => {
       const request = db.transaction(storeName).objectStore(storeName).getAll();
@@ -180,7 +199,6 @@ describe("Durability", () => {
       actorUserId: "u1",
       clock: 1_756_100_000_123_004,
       cursor: "place-1",
-      modelHash: "model-a",
       replica: {id: "r-stored", token: "statement-stored"},
       seq: 41,
       ...overrides,
@@ -200,7 +218,6 @@ describe("Durability", () => {
 
       await writeMeta({
         actorUserId: "u1",
-        modelHash: "model-a",
         replica: {id: "r1", token: "statement"},
         seq: 41,
       });
@@ -211,7 +228,6 @@ describe("Durability", () => {
       assert.isUndefined(await readMeta("cursor"));
 
       assert.equal(await readMeta("actorUserId"), "u1");
-      assert.equal(await readMeta("modelHash"), "model-a");
       assert.equal(await readMeta("seq"), 41);
 
       assert.deepStrictEqual(await readMeta("replica"), {
@@ -286,6 +302,18 @@ describe("Durability", () => {
   });
 
   describe("open()", () => {
+    // A bundle on another model, or carrying another store layout, must open a database of its
+    // own - which is what stops two tabs on different versions from ever sharing one.
+    it("names the database for the model it speaks and the layout of the store", async () => {
+      await Durability.open();
+
+      const names = (await globalThis.indexedDB.databases()).map(
+        (db) => db.name,
+      );
+
+      assert.include(names, "hologram.model-a.1");
+    });
+
     it("opens in indexeddb mode and creates the two object stores", async () => {
       await Durability.open();
 
@@ -597,17 +625,23 @@ describe("Durability", () => {
       assert.isTrue(clearing.calledOnce);
     });
 
-    it("drops the rows when the model changed", async () => {
-      const clearing = sinon.stub(Durability, "clear");
+    // Not "drops the rows when the model changed" - there is nothing to drop. A bundle on another
+    // model never sees the old model's database at all, and the old one is left exactly as it was
+    // for the tabs still on it.
+    it("finds nothing under another model, and leaves the old model's database alone", async () => {
+      await seedPreviousLoad();
 
-      await seedPreviousLoad({modelHash: "model-before-the-deploy"});
+      globalThis.Hologram.sync = {modelHash: "model-b"};
+
       await Durability.open();
 
       const resumed = Durability.restore();
 
       assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
       assert.isNull(resumed.cursor);
-      assert.isTrue(clearing.calledOnce);
+      assert.equal(resumed.seq, 0);
+
+      assert.equal((await readAll("entities", "hologram.model-a.1")).length, 1);
     });
 
     // Their rows are what SOMEBODY ELSE was allowed to see, and a resuming stream is told what
@@ -658,8 +692,12 @@ describe("Durability", () => {
       });
     });
 
-    it("remembers who this page belongs to and what model it speaks", async () => {
-      await seedPreviousLoad({actorUserId: "u1", modelHash: "model-before"});
+    it("remembers who this page belongs to", async () => {
+      sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad({actorUserId: null});
+
+      LocalDatabase.actorUserId = "u1";
 
       await Durability.open();
 
@@ -667,7 +705,6 @@ describe("Durability", () => {
 
       await Durability.persistCounter(41);
 
-      assert.equal(await readMeta("modelHash"), "model-a");
       assert.equal(await readMeta("actorUserId"), "u1");
     });
 

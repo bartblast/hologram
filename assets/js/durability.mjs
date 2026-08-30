@@ -28,11 +28,25 @@ import Replica from "./replica.mjs";
 // and a later load resuming from it would hand out numbers already answered. Absent is safe where
 // stale is not.
 //
+// ONE DATABASE PER MODEL VERSION, named for the model this bundle speaks and the layout of the
+// store itself. A deploy that changes the model lands in a new tab while an old tab is still open,
+// and the two would otherwise share one store - a v1 tab must never read rows v2 rewrote, and no
+// lens code ships to the browser to translate them. Named apart, they cannot meet: every tab is
+// durable the whole time, in its own bundle's shape, and nothing has to decide which of them
+// yields. The price is one refill per model change, which is what a model change costs anyway.
+// (Draining an old model's database and deleting it once its tabs are gone is version skew's to
+// build - what this step owes is only that the two never share.)
+//
 // Where the browser offers no durable storage - private browsing, an odd embedder, a failed
 // transaction - the whole thing degrades to memory mode: fully functional, and honest about it
 // through `mode`.
-const DATABASE_NAME = "hologram";
 const ENTITIES = "entities";
+
+// The shape of the store: which object stores exist, keyed how. Part of the database's NAME, so a
+// bundle with a different layout opens a different database rather than upgrading this one - which
+// is why VERSION below never moves.
+const LAYOUT = 1;
+
 const META = "meta";
 const VERSION = 1;
 
@@ -76,7 +90,10 @@ export default class Durability {
         return Durability.#memoryMode("IndexedDB unavailable");
       }
 
-      const request = globalThis.indexedDB.open(DATABASE_NAME, VERSION);
+      const request = globalThis.indexedDB.open(
+        Durability.#databaseName(),
+        VERSION,
+      );
 
       request.onupgradeneeded = () => Durability.#upgrade(request.result);
 
@@ -186,8 +203,9 @@ export default class Durability {
   // on each client-side navigation, so this is reached once per page visit, and a later call that
   // answered a place of null would take away the one the stream had been keeping all along.
   //
-  // The rows are dropped rather than used in three cases, and each is a case where showing them
-  // would be showing something untrue. What this browser DID - its identity, its counter, its
+  // The rows are dropped rather than used in two cases, and each is a case where showing them
+  // would be showing something untrue. (A model change is not among them any more: a bundle on
+  // another model opens another database, and finds it empty.) What this browser DID - its identity, its counter, its
   // clock - survives all three: those are not the server's to take away, and reusing a number or
   // restarting a clock low is how a write gets answered by the wrong batch or read as moved.
   static restore() {
@@ -240,12 +258,21 @@ export default class Durability {
 
     try {
       await Durability.#request(
-        globalThis.indexedDB.deleteDatabase(DATABASE_NAME),
+        globalThis.indexedDB.deleteDatabase(Durability.#databaseName()),
       );
       // eslint-disable-next-line no-empty
     } catch {}
 
     Durability.inFlight = 0;
+  }
+
+  // `hologram.<model hash>.<layout>` - a bundle speaking another model, or carrying another store
+  // layout, opens a database of its own. Null when the build has no data model, and so nothing to
+  // name one for.
+  static #databaseName() {
+    const modelHash = globalThis.Hologram.sync?.modelHash;
+
+    return modelHash ? `hologram.${modelHash}.${LAYOUT}` : null;
   }
 
   static #close() {
@@ -325,12 +352,11 @@ export default class Durability {
     const entities = transaction.objectStore(ENTITIES);
     const meta = transaction.objectStore(META);
 
-    const [actorUserId, clock, cursor, modelHash, records, replica, seq] =
+    const [actorUserId, clock, cursor, records, replica, seq] =
       await Promise.all([
         Durability.#request(meta.get("actorUserId")),
         Durability.#request(meta.get("clock")),
         Durability.#request(meta.get("cursor")),
-        Durability.#request(meta.get("modelHash")),
         Durability.#request(entities.getAll()),
         Durability.#request(meta.get("replica")),
         Durability.#request(meta.get("seq")),
@@ -340,7 +366,6 @@ export default class Durability {
       actorUserId: actorUserId ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
-      modelHash: modelHash ?? null,
       records: records ?? [],
       replica: replica ?? null,
       seq: seq ?? 0,
@@ -357,21 +382,16 @@ export default class Durability {
 
   // Why the stored rows cannot be used, or nothing when they can.
   //
-  // No place is the sharpest of the three: rows were written by a fill that never finished, and a
+  // No place is the sharper of the two: rows were written by a fill that never finished, and a
   // base with no place is not resumable at all - the server would fill it from scratch and never
   // say which of the held rows it is no longer sending, so a row deleted while this browser was
   // away would stay on the screen for as long as the store lived.
   //
-  // A model changed under them makes them unreadable by this bundle, and an owner changed makes
-  // them somebody else's - and the second is not corrected by the stream either, since a resuming
-  // client is told what MOVED, never what it should no longer be holding.
+  // An owner changed makes them somebody else's - and that is not corrected by the stream either,
+  // since a resuming client is told what MOVED, never what it should no longer be holding.
   static #refusal(loaded, ownerChanged) {
     if (loaded.cursor === null) {
       return "no place to resume from";
-    }
-
-    if (loaded.modelHash !== globalThis.Hologram.sync.modelHash) {
-      return "the model changed";
     }
 
     if (ownerChanged) {
@@ -381,22 +401,17 @@ export default class Durability {
     return null;
   }
 
-  // Who this page belongs to and what model it speaks, so the next load can ask both questions of
-  // what it finds. Written only when one of them has moved, which is a page load in a new session
-  // or the first after a deploy - never on the ordinary case.
+  // Who this page belongs to, so the next load can ask whether it still does. Written only when
+  // that has moved - a page load in a new session - never on the ordinary case.
   static #rememberOwner(loaded) {
     const actorUserId = LocalDatabase.actorUserId ?? null;
-    const modelHash = globalThis.Hologram.sync.modelHash;
 
-    if (loaded.actorUserId === actorUserId && loaded.modelHash === modelHash) {
+    if (loaded.actorUserId === actorUserId) {
       return;
     }
 
     Durability.#write([META], (transaction) => {
-      const meta = transaction.objectStore(META);
-
-      meta.put(actorUserId, "actorUserId");
-      meta.put(modelHash, "modelHash");
+      transaction.objectStore(META).put(actorUserId, "actorUserId");
     });
   }
 
