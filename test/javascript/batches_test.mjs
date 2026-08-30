@@ -682,6 +682,27 @@ describe("Batches", () => {
       assert.deepStrictEqual(Batches.pending, []);
     });
 
+    // Every tab of this browser presents the pair that was just refused, and would each find that
+    // out the hard way. One switch, told once.
+    it("tells the group the identity it switched to after a 403", async () => {
+      const telling = sinon.stub(Tabs, "postState");
+
+      sinon.stub(Durability, "persistReplica");
+      sinon.stub(Sse, "reconnect");
+
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+      sendStub.onFirstCall().resolves({httpStatus: 403, status: "failed"});
+      sendStub.onSecondCall().resolves(confirmed());
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isTrue(telling.calledOnce);
+    });
+
     // The identity gets the discipline the number gets: nothing goes out under a pair that is not
     // recorded, or a reload landing in between would take up the refused one again.
     it("waits for the new pair to be recorded before sending again", async () => {

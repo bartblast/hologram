@@ -116,7 +116,7 @@ export default class Tabs {
     const token = {};
 
     Tabs.#held = [];
-    Tabs.#onLead = onLead;
+    Tabs.#onLead = onLead ?? Tabs.#lead;
     Tabs.#ready = false;
     Tabs.#token = token;
     Tabs.name = name;
@@ -151,7 +151,12 @@ export default class Tabs {
 
     Tabs.leader = await granted;
 
-    if (!Tabs.leader) {
+    if (Tabs.leader) {
+      // For the tab that joins while this one is still asking for the lock: it finds the lock
+      // taken, follows, and asks for the state - and nothing answers, because the tab that would
+      // was not yet leading when it asked. Saying so unprompted closes that window.
+      Tabs.postState();
+    } else {
       Tabs.#wait(name, token);
     }
 
@@ -314,6 +319,44 @@ export default class Tabs {
       pageModule === null ||
       Interpreter.moduleExName(pageModule) !== message.page
     );
+  }
+
+  // What a tab does the moment the group becomes its to lead, which is the moment the tab that was
+  // leading closed, crashed or went elsewhere - with nothing handed over, because there may have
+  // been nobody left to hand anything over.
+  //
+  // Everything it needs is in its own memory, in the store, or in the grant itself.
+  static async #lead() {
+    if (Sse.syncCursor === null) {
+      // Nowhere to be brought up to date FROM: the tab that was leading died mid-fill, or never
+      // got far enough to have a place. So this one starts over, and says so to the group, whose
+      // tabs hold the same rows out of the same store and would otherwise keep showing them.
+      LocalDatabase.reset();
+      Durability.clear();
+
+      Tabs.post({
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
+    } else {
+      // The store can be BEHIND what this tab holds: a frame is written down without waiting, so
+      // the tab that was leading can have posted one and closed before its write landed. Carrying
+      // on from the next frame would leave the store naming a place it does not hold the rows for.
+      await Durability.repair(
+        LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
+        Sse.syncCursor,
+      );
+    }
+
+    Tabs.postState();
+
+    // The stream this tab has is a realtime one - it greeted the server with no sync, being a
+    // follower at the time - so it is replaced by one the server serves sync on.
+    Sse.reconnect();
+
+    // And the queue is this tab's to drain now.
+    Batches.flush();
   }
 
   // The promise that IS the lock being held. A lock lasts exactly as long as the function granted

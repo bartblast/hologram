@@ -282,6 +282,10 @@ export default class Batches {
           if (answer.httpStatus === 403 && Replica.refresh()) {
             await Durability.persistReplica(Replica.current());
 
+            // The other tabs of this browser present the refused pair too, and would each find
+            // that out the hard way. One switch, told once.
+            Tabs.postState();
+
             Sse.reconnect();
 
             continue;

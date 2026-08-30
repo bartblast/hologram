@@ -13,6 +13,7 @@ import Durability from "../../assets/js/durability.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
+import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
@@ -207,6 +208,108 @@ describe("Tabs", () => {
       Tabs.dissolve();
 
       assert.isTrue(reconnecting.calledOnce);
+    });
+  });
+
+  // What a tab does the moment the group becomes its to lead, with nothing handed over by the tab
+  // that was leading - which may have closed without warning.
+  describe("taking the lead", () => {
+    let clearing, flushing, reconnecting, repairing;
+
+    // Takes the group's lock, hands this tab the follower's place in the queue behind it, and
+    // answers what makes the tab lead. Waits for the lead to be taken, so what follows is settled.
+    const succeed = async (group) => {
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, {});
+
+      release();
+
+      await waitForEventLoop();
+    };
+
+    beforeEach(() => {
+      // Reading the rows back for the repair asks the model which relationships are to-many, so a
+      // suite with no model cannot build the argument at all.
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {id: "uuid", title: "string"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+
+      clearing = sinon.stub(Durability, "clear");
+      flushing = sinon.stub(Batches, "flush");
+      reconnecting = sinon.stub(Sse, "reconnect");
+      repairing = sinon.stub(Durability, "repair").resolves();
+
+      sinon.stub(Tabs, "postState");
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      Sse.syncCursor = null;
+    });
+
+    it("opens a stream of its own and starts sending", async () => {
+      Sse.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      assert.isTrue(Tabs.leader);
+      assert.isTrue(reconnecting.calledOnce);
+      assert.isTrue(flushing.calledOnce);
+      assert.isTrue(Tabs.postState.calledOnce);
+    });
+
+    // The store is written without waiting, so the tab that was leading can have posted a frame and
+    // closed before its write landed - and carrying on would leave a place naming rows nothing
+    // holds.
+    it("brings the store up to what it holds, when it has a place", async () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "from the stream"});
+
+      Sse.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      assert.isTrue(repairing.calledOnce);
+
+      assert.deepStrictEqual(repairing.firstCall.args[1], "place-1");
+
+      assert.deepStrictEqual(
+        repairing.firstCall.args[0].map((record) => record.id),
+        ["t1"],
+      );
+
+      assert.isFalse(clearing.called);
+    });
+
+    it("starts over when it has no place to resume from", async () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "from the stream"});
+
+      const posting = sinon.stub(Tabs, "post");
+
+      await succeed(nextGroup());
+
+      assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+      assert.isTrue(clearing.calledOnce);
+      assert.isFalse(repairing.called);
+
+      assert.deepStrictEqual(posting.firstCall.args[0], {
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
     });
   });
 
@@ -448,6 +551,29 @@ describe("Tabs", () => {
     it("leads when nobody holds the group's lock", async () => {
       assert.isTrue(await Tabs.join(nextGroup(), stubs()));
       assert.isTrue(Tabs.leader);
+    });
+
+    // For the tab that joins while this one is still asking for the lock: it finds the lock taken,
+    // follows, and asks for the state - and nothing answers, because the tab that would was not
+    // leading yet when it asked.
+    it("says what it holds to a group it has just taken the lead of", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await Tabs.join(nextGroup(), stubs());
+
+      assert.equal(posting.firstCall.args[0].kind, "state");
+    });
+
+    it("says nothing to a group it has joined as a follower", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+
+      const posting = sinon.stub(Tabs, "post");
+
+      await Tabs.join(group, stubs());
+
+      assert.isFalse(posting.called);
     });
 
     it("follows when another tab holds it", async () => {
