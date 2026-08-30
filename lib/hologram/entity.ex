@@ -521,20 +521,34 @@ defmodule Hologram.Entity do
     |> group_errors()
   end
 
+  # A server-only attribute holds its sentinel in a struct on its way to the client - the page
+  # context and a from_query prop both carry one - so the field admits it beside the declared type.
   defp attribute_field_type_ast(type, opts) do
-    type_union([attribute_type_ast(type, opts), nil])
+    sentinel_types =
+      if opts[:server_only] == true do
+        [remote_type_ast(Entity.ServerOnly)]
+      else
+        []
+      end
+
+    union_types = Enum.concat([attribute_type_asts(type, opts), sentinel_types, [nil]])
+
+    type_union(union_types)
   end
 
-  # The Elixir type an attribute's field holds, from the type its declaration names. A uuid is a
+  # The Elixir types an attribute's field holds, from the type its declaration names. A uuid is a
   # string here - the canonical id format is a declaration check, not something a type can state.
-  defp attribute_type_ast(:boolean, _opts), do: quote(do: boolean())
-  defp attribute_type_ast(:date, _opts), do: remote_type_ast(Date)
-  defp attribute_type_ast(:datetime, _opts), do: remote_type_ast(DateTime)
-  defp attribute_type_ast(:enum, opts), do: type_union(Keyword.fetch!(opts, :values))
-  defp attribute_type_ast(:float, _opts), do: quote(do: float())
-  defp attribute_type_ast(:integer, _opts), do: quote(do: integer())
-  defp attribute_type_ast(:string, _opts), do: remote_type_ast(String)
-  defp attribute_type_ast(:uuid, _opts), do: remote_type_ast(String)
+  # An enum answers with its values rather than with a union of them, so that the field's own
+  # union stays flat: a nested one is equivalent but renders as ":x | :y | nil" wrapped in
+  # parentheses, and this type is what ExDoc shows on every entity's page.
+  defp attribute_type_asts(:boolean, _opts), do: [quote(do: boolean())]
+  defp attribute_type_asts(:date, _opts), do: [remote_type_ast(Date)]
+  defp attribute_type_asts(:datetime, _opts), do: [remote_type_ast(DateTime)]
+  defp attribute_type_asts(:enum, opts), do: Keyword.fetch!(opts, :values)
+  defp attribute_type_asts(:float, _opts), do: [quote(do: float())]
+  defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
+  defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
+  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(String)]
 
   # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
   # so a role reaching the given one through any number of hops ends up in the result.
@@ -555,13 +569,21 @@ defmodule Hologram.Entity do
     end
   end
 
-  defp field_type_asts(_module) do
+  defp field_type_asts(module) do
+    attribute_field_types =
+      module
+      |> Module.get_attribute(:__attributes__)
+      |> Enum.map(fn {name, type, opts} -> {name, attribute_field_type_ast(type, opts)} end)
+
     system_attribute_field_types =
       Enum.map(@system_attributes, fn {name, type, opts} ->
         {name, attribute_field_type_ast(type, opts)}
       end)
 
-    [{:__meta__, remote_type_ast(Entity.Metadata)} | system_attribute_field_types]
+    [
+      {:__meta__, remote_type_ast(Entity.Metadata)}
+      | attribute_field_types ++ system_attribute_field_types
+    ]
   end
 
   defp group_errors(:ok), do: :ok

@@ -681,6 +681,43 @@ defmodule Hologram.EntityTest do
   end
 
   describe "t/0" do
+    test "types a declared enum attribute as its declared values" do
+      assert struct_field_types(Module4) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a: "Date.t() | nil",
+               b: "DateTime.t() | nil",
+               c: ":x | :y | nil",
+               created_at: "DateTime.t() | nil",
+               d: "float() | nil",
+               id: "String.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types a server-only attribute as admitting its sentinel" do
+      assert struct_field_types(Module15) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               created_at: "DateTime.t() | nil",
+               id: "String.t() | nil",
+               label: "String.t() | nil",
+               secret_note: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
+               token: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types declared attributes from the types their declarations name" do
+      assert struct_field_types(Module2) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               a: "boolean() | nil",
+               b: "integer() | nil",
+               c: "String.t() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "String.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
     test "types the metadata and system attribute fields on an entity type declaring nothing" do
       assert struct_field_types(Module1) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
