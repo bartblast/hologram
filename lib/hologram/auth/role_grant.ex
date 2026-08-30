@@ -51,7 +51,7 @@ defmodule Hologram.Auth.RoleGrant do
           resource_type: atom | nil,
           role: atom | module | nil,
           updated_at: DateTime.t() | nil,
-          user: struct | NotIncluded.t(),
+          user: struct | NotIncluded.t() | nil,
           user_id: String.t() | nil
         }
 
