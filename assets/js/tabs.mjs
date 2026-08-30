@@ -1,6 +1,7 @@
 "use strict";
 
 import Batches from "./batches.mjs";
+import Durability from "./durability.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -187,6 +188,13 @@ export default class Tabs {
   // the handler when a caller names none - which is every caller but a test.
   static receive(message) {
     switch (message.kind) {
+      // What the server said about a batch, on its way to every tab that is holding one. A tab
+      // that holds it promotes or rolls it back; a tab that does not has nothing to do.
+      case "answered":
+        Batches.settle(message.seq, message.answer);
+
+        return;
+
       // What the tab holding the stream was told, applied here to this tab's own memory. Nothing
       // is stored: the tab that received it wrote it down already, and one store written by two
       // tabs is two tabs racing over one place.
@@ -213,8 +221,31 @@ export default class Tabs {
 
         return;
 
+      // A batch another tab has just filed. Taken up here so this tab folds it too - two views of
+      // one browser's data disagreeing about a write the same person just made is the thing the
+      // group exists to prevent - and, in the tab that sends, sent without waiting to read the
+      // store again.
+      case "sealed":
+        Batches.adopt([message.record]);
+
+        if (Tabs.leader) {
+          Batches.flush();
+        }
+
+        return;
+
       case "state":
         Tabs.#takeState(message);
+
+        return;
+
+      // Another tab could not write, and what it wiped it wiped for the whole browser: the rows
+      // and the place they were dated at are gone from a store every tab of the group shares. So
+      // this tab stops writing too - going on would date rows the store no longer holds - and the
+      // group ends, because what made it one was the store.
+      case "storage_failed":
+        Durability.detach();
+        Tabs.dissolve();
 
         return;
     }

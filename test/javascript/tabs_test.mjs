@@ -9,6 +9,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
+import Durability from "../../assets/js/durability.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -308,6 +309,69 @@ describe("Tabs", () => {
       });
 
       assert.isTrue(Sse.receiveFrame.calledOnce);
+    });
+
+    it("takes up a batch another tab has filed", () => {
+      const adopting = sinon.stub(Batches, "adopt");
+      const record = {actorUserId: null, landed: [], seq: 3, writes: []};
+
+      Tabs.receive({kind: "sealed", record});
+
+      assert.isTrue(adopting.calledOnceWithExactly([record]));
+    });
+
+    // The tab that sends does not wait to read the store again for a batch it has just been told
+    // about - and a tab that does not send has nothing to wake.
+    it("wakes the sender for a filed batch when it leads", () => {
+      sinon.stub(Batches, "adopt");
+
+      const flushing = sinon.stub(Batches, "flush");
+
+      Tabs.receive({
+        kind: "sealed",
+        record: {actorUserId: null, landed: [], seq: 3, writes: []},
+      });
+
+      assert.isTrue(flushing.calledOnce);
+    });
+
+    it("leaves the sender alone for a filed batch when it follows", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, {onLead: () => {}});
+
+      sinon.stub(Batches, "adopt");
+
+      const flushing = sinon.stub(Batches, "flush");
+
+      Tabs.receive({
+        kind: "sealed",
+        record: {actorUserId: null, landed: [], seq: 3, writes: []},
+      });
+
+      assert.isFalse(flushing.called);
+    });
+
+    it("settles the answer a message carries", () => {
+      const settling = sinon.stub(Batches, "settle");
+      const answer = {dropped: {}, kept: {}, status: "confirmed"};
+
+      Tabs.receive({answer, kind: "answered", seq: 3});
+
+      assert.isTrue(settling.calledOnceWithExactly(3, answer));
+    });
+
+    // What that tab wiped it wiped for the whole browser, so this one stops writing too - and the
+    // group ends, because the store was what made it one.
+    it("lets the store go, and the group with it, when another tab could not write", () => {
+      const detaching = sinon.stub(Durability, "detach");
+      const dissolving = sinon.stub(Tabs, "dissolve");
+
+      Tabs.receive({kind: "storage_failed"});
+
+      assert.isTrue(detaching.calledOnce);
+      assert.isTrue(dissolving.calledOnce);
     });
 
     it("answers a tab that has joined with the group's state, when it leads", async () => {
