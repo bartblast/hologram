@@ -2,46 +2,68 @@ defmodule HologramFeatureTests.DurabilityTest do
   # async: false - each test truncates the shared tables.
   use HologramFeatureTests.TestCase, async: false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.DurabilityPage
+  alias HologramFeatureTests.Entities.Account
+  alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ticket
+  alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.RestockItem
 
-  # What the client held in memory until now it keeps between page loads, so these read the second
-  # visit rather than the first. The lever throughout is a stream that never attaches: with no
-  # frames arriving, anything on screen came out of the browser's own store.
+  # What the client held in memory until now it keeps between page loads, so these read the SECOND
+  # visit rather than the first.
+  #
+  # The lever is emptying the SERVER between the two: a TRUNCATE writes nothing to the operations
+  # log, so a returning client is never told the rows are gone and the stream has nothing to send
+  # it. Anything on screen after that came out of the browser's own store, and there is no timing
+  # to get right. (Holding the stream open instead does not work: `visit/3` blocks until the client
+  # reports a connection, so a page whose stream never attaches never finishes visiting.)
   #
   # Every one of these leans on a Wallaby session being a fresh Chrome profile, and so an empty
-  # store. Nothing truncates a browser's database - a TRUNCATE writes no effects to the log either,
-  # so a client resuming from a stored place is never told the rows are gone.
+  # store to begin with - nothing truncates a browser's database.
 
-  # Review references Product, so PostgreSQL refuses to truncate the referenced table alone.
   setup do
     await_evaluator_drain()
-
-    tables =
-      Enum.map_join([Product, Review, Ticket], ", ", fn entity_type ->
-        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-      end)
-
-    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
+    truncate_every_entity_table()
 
     :ok
   end
 
-  # Blocks until the runtime has attached its window and settled whatever it had to write - which
-  # is also the earliest moment anything below may be read out of the browser.
-  defp await_runtime(session) do
-    await_durable_writes(session)
-  end
+  # Every table, not only the products: the client's pot is app-wide, so a row left in ANY synced
+  # table by an earlier file would arrive in the fill and could stand in for what the browser is
+  # supposed to have kept. One statement, because PostgreSQL refuses to truncate a table another
+  # one references without it.
+  defp truncate_every_entity_table do
+    tables =
+      Enum.map_join(
+        [
+          Account,
+          Document,
+          Folder,
+          Item,
+          Note,
+          Product,
+          RestockItem,
+          Review,
+          RoleGrant,
+          Ticket,
+          Todo,
+          User
+        ],
+        ", ",
+        fn entity_type -> ~s("hologram_data"."#{Mapper.table_name(entity_type)}") end
+      )
 
-  # A stream held open long past anything Wallaby waits for, so no frame can arrive during the
-  # visit that follows. Navigates away first, since a cookie needs a document to be set on.
-  defp without_a_stream(session) do
-    simulate_slow_sse_attach(session, 60_000)
+    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
   end
 
   feature "shows rows the page did not carry, out of what the browser kept", %{session: session} do
@@ -58,9 +80,11 @@ defmodule HologramFeatureTests.DurabilityTest do
     |> click(button("Show products"))
     |> assert_text(css("#live_products"), ~r/^abacus,armchair$/)
     |> await_durable_writes()
-    |> without_a_stream()
+
+    truncate_every_entity_table()
+
+    session
     |> visit(DurabilityPage)
-    |> await_runtime()
     |> click(button("Show products"))
     |> assert_text(css("#live_products"), ~r/^abacus,armchair$/)
     |> assert_script_result(
@@ -74,14 +98,14 @@ defmodule HologramFeatureTests.DurabilityTest do
   feature "keeps the identity it was given across a page load", %{session: session} do
     session
     |> visit(DurabilityPage)
-    |> await_runtime()
+    |> await_durable_writes()
 
     held = script_result(session, "return globalThis.Hologram.durability.replicaId();")
 
     session
     |> reload()
     |> assert_page(DurabilityPage)
-    |> await_runtime()
+    |> await_durable_writes()
 
     assert script_result(session, "return globalThis.Hologram.durability.replicaId();") ==
              held
@@ -91,7 +115,9 @@ defmodule HologramFeatureTests.DurabilityTest do
   end
 
   # The place is what earns a returning client a catch-up rather than the whole database again.
-  feature "knows where it left off before a stream says anything", %{session: session} do
+  # With every table empty the server sends no deltas at all, so it hands over no place either -
+  # a client that had not kept one would be holding nothing here.
+  feature "knows where it left off without being told again", %{session: session} do
     %{name: "bicycle"}
     |> Product.new()
     |> DB.create!()
@@ -101,9 +127,11 @@ defmodule HologramFeatureTests.DurabilityTest do
     |> click(button("Show products"))
     |> assert_text(css("#live_products"), ~r/^bicycle$/)
     |> await_durable_writes()
-    |> without_a_stream()
+
+    truncate_every_entity_table()
+
+    session
     |> visit(DurabilityPage)
-    |> await_runtime()
     |> assert_script_result(
       "return globalThis.Hologram.durability.cursor() !== null;",
       true
