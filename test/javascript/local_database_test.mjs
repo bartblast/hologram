@@ -496,8 +496,21 @@ describe("LocalDatabase", () => {
       ]);
     });
 
-    it("answers an empty target set for a to-many nothing was filed under", () => {
+    // Written down as empty, it would say the server declared the relationship empty - which
+    // nobody did - and restoring it would file that assertion. The pair below is the whole claim:
+    // a set that WAS filed and is empty is stored, one nobody filed is left out.
+    it("leaves out a to-many nothing was filed under", () => {
       LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      assert.deepStrictEqual(
+        LocalDatabase.records([`${TASK} t1`])[0].facts,
+        {},
+      );
+    });
+
+    it("stores a filed to-many that is empty", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", []);
 
       assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`])[0].facts, {
         tags: [],
@@ -533,7 +546,7 @@ describe("LocalDatabase", () => {
       assert.isNull(LocalDatabase.getRow(TASK, "t1"));
 
       assert.deepStrictEqual(LocalDatabase.records([`${TASK} t1`]), [
-        {facts: {tags: []}, id: "t1", row, type: TASK},
+        {facts: {}, id: "t1", row, type: TASK},
       ]);
     });
   });

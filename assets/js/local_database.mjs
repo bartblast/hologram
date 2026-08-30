@@ -250,13 +250,18 @@ export default class LocalDatabase {
     LocalDatabase.#carried = new Set();
   }
 
+  // A relationship nothing has FILED a set for is left out, rather than written down as empty.
+  // `baseTargetIds` answers an empty set for both, so storing what it returns would turn "nobody
+  // has said" into "the server said none" - an assertion nobody made, which `restore` would then
+  // act on by filing it. The two are told apart by `hasFacts`, and the whole point of that
+  // distinction is lost if the snapshot flattens it.
   static #toManyFacts(type, id) {
     const facts = {};
 
     for (const [name, relationship] of Object.entries(
       Model.relationships(type),
     )) {
-      if (relationship.toMany) {
+      if (relationship.toMany && LocalDatabase.hasFacts(type, name, id)) {
         facts[name] = Array.from(LocalDatabase.baseTargetIds(type, name, id));
       }
     }
