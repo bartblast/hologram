@@ -357,7 +357,7 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason: "the reason",
+        reason: 'Type.atom("nope")',
         status: "rejected",
         write: 0,
       });
@@ -368,9 +368,29 @@ describe("Batches", () => {
       assert.deepStrictEqual(Batches.pending, []);
       assert.equal(Batches.rejected.length, 1);
       assert.equal(Batches.rejected[0].seq, 1);
-      assert.equal(Batches.rejected[0].reason, "the reason");
+      assert.deepStrictEqual(Batches.rejected[0].reason, Type.atom("nope"));
       assert.equal(Batches.rejected[0].write, 0);
       assert.equal(Batches.rejected[0].state, "rejected");
+    });
+
+    // The answer arrives as the server spelled it, so the term a refusal carries is built here -
+    // the one place anything needs it rather than the JSON it travelled as.
+    it("reads the term a refusal's reason was encoded as", async () => {
+      sealed(creating("t1", "first"));
+
+      sendStub.resolves({
+        reason:
+          'Type.map([[Type.atom("slug"), Type.list([Type.atom("unique")])]])',
+        status: "rejected",
+        write: 0,
+      });
+
+      await Batches.flush();
+
+      assert.deepStrictEqual(
+        Batches.rejected[0].reason,
+        Type.map([[Type.atom("slug"), Type.list([Type.atom("unique")])]]),
+      );
     });
 
     it("forgets a confirmed batch", async () => {
@@ -392,7 +412,7 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason: "the reason",
+        reason: 'Type.atom("nope")',
         status: "rejected",
         write: 0,
       });
@@ -535,7 +555,7 @@ describe("Batches", () => {
         sealed(creating("t1", "first"));
 
         sendStub.resolves({
-          reason: "the reason",
+          reason: 'Type.atom("nope")',
           status: "rejected",
           write: 0,
         });

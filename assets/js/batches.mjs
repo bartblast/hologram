@@ -389,7 +389,12 @@ export default class Batches {
     Overlay.remove(batch);
 
     batch.mark("rejected");
-    batch.reason = answer.reason;
+
+    // Read HERE and nowhere earlier: the reason is a client term the server encoded, and the
+    // answer carrying it stays a plain JSON value until it reaches the one reader that needs the
+    // term itself.
+    batch.reason = Interpreter.evaluateJavaScriptExpression(answer.reason);
+
     batch.write = answer.write;
 
     Batches.rejected.push(batch);
