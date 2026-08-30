@@ -38,6 +38,10 @@ export default class Sse {
 
   static eventSource = null;
   static reconnectAttempts = 0;
+
+  // The pending retry after a stream died, held so a deliberate restart can call it off - the same
+  // bookkeeping `Connection` keeps for the websocket's.
+  static reconnectTimer = null;
   static renderScheduled = false;
   static stabilityTimer = null;
 
@@ -157,6 +161,12 @@ export default class Sse {
         handshake_id: handshakeId,
         ...$.buildSyncGreeting(Hologram.currentPageModule()),
       });
+
+      // Whatever was here goes first. Two connects can be in flight at once - a retry scheduled
+      // by a dying stream, and a deliberate restart under a new identity - and the second to
+      // arrive would otherwise leave the first's stream open with nothing referring to it,
+      // delivering every action and every frame a second time.
+      $.eventSource?.close();
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
@@ -364,6 +374,11 @@ export default class Sse {
   // Answers the connect's own promise, so a caller that wants to know the new stream is up can
   // wait for it. Nothing in the framework does - a replaced stream is opened and forgotten.
   static reconnect() {
+    // A retry the dying stream had already scheduled is called off, or it would open a second
+    // stream on top of this one a moment later.
+    clearTimeout($.reconnectTimer);
+    $.reconnectTimer = null;
+
     $.eventSource?.close();
     $.eventSource = null;
 
@@ -407,7 +422,7 @@ export default class Sse {
     $.reconnectAttempts++;
     const delay = $.computeReconnectDelay($.reconnectAttempts);
 
-    setTimeout(() => $.connect(), delay);
+    $.reconnectTimer = setTimeout(() => $.connect(), delay);
   }
 }
 

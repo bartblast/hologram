@@ -302,6 +302,44 @@ describe("Sse", () => {
       );
     });
 
+    // A dying stream schedules its own retry. Left running, it opens a SECOND stream on top of
+    // this one a moment later, and both deliver every action and every frame.
+    it("calls off a retry the dying stream had scheduled", async () => {
+      const timers = sinon.useFakeTimers();
+
+      try {
+        stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+        sinon.stub(Logger, "debug");
+
+        await Sse.connect();
+
+        Sse.eventSource.onerror({type: "error"});
+
+        await Sse.reconnect();
+
+        const opened = globalThis.EventSource.callCount;
+
+        await timers.runAllAsync();
+
+        assert.equal(globalThis.EventSource.callCount, opened);
+      } finally {
+        timers.restore();
+      }
+    });
+
+    // Two connects can be in flight at once, and the one that arrives second must not leave the
+    // first's stream open with nothing referring to it.
+    it("closes a stream another connect had already opened", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.connect();
+      await Sse.connect();
+
+      assert.isTrue(mockEventSource.close.calledOnce);
+      assert.equal(globalThis.EventSource.callCount, 2);
+    });
+
     // A stream that is replaced on purpose has earned no delay, and counting it as a failure would
     // make the next real one back off further than it should.
     it("leaves the failure count alone", async () => {
