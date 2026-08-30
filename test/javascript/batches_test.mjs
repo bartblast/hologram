@@ -416,6 +416,39 @@ describe("Batches", () => {
       assert.deepStrictEqual(Batches.pending, []);
     });
 
+    // The identity gets the discipline the number gets: nothing goes out under a pair that is not
+    // recorded, or a reload landing in between would take up the refused one again.
+    it("waits for the new pair to be recorded before sending again", async () => {
+      let record;
+
+      const recording = new Promise((resolve) => {
+        record = resolve;
+      });
+
+      sinon.stub(Durability, "persistReplica").returns(recording);
+      sinon.stub(Sse, "reconnect");
+
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+      sendStub.onFirstCall().resolves({httpStatus: 403, status: "failed"});
+      sendStub.onSecondCall().resolves(confirmed());
+
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+
+      await waitForEventLoop();
+
+      assert.equal(sendStub.callCount, 1);
+
+      record();
+
+      await flushing;
+
+      assert.equal(sendStub.callCount, 2);
+    });
+
     // The page's own pair was the one refused, so there is nowhere left to go - which is what a
     // session that changed after this page loaded looks like.
     it("leaves the batch pending after a 403 it has no other pair to answer", async () => {

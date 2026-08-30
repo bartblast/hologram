@@ -157,8 +157,15 @@ export default class Batches {
           // Once per page load. `refresh` answers false when the fresh pair is already the one in
           // use, which is the case where the session changed after this page loaded and there is
           // nothing here that can help.
+          //
+          // AWAITED, the same discipline the counter's write gets and for the same reason: nothing
+          // is sent under an identity that is not recorded. Fired and forgotten, a reload landing
+          // before the write commits would take up the REFUSED pair again while the counter had
+          // moved on - and the batch that followed would be refused a second time before this path
+          // could recover it.
           if (answer.httpStatus === 403 && Replica.refresh()) {
-            Durability.persistReplica(Replica.current());
+            await Durability.persistReplica(Replica.current());
+
             Sse.reconnect();
 
             continue;
