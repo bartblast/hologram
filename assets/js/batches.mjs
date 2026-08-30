@@ -192,6 +192,16 @@ export default class Batches {
 
         Batches.pending.shift();
 
+        // A verdict is a verdict, whichever way it went: nothing is waiting on this batch any
+        // more, and a later page load has no reason to take it up. Confirmed and refused alike -
+        // including the two refusals that judge the BUILD and the STAMPS rather than the writes
+        // (`:stale_build`, `:clock`), which the server does not record and would evaluate afresh
+        // on a resend. Keeping one for that resend was weighed and refused (D5): the rows are off
+        // the screen already, so a batch kept would come back days later as a write the user
+        // watched fail, and a device whose clock is permanently wrong would resend it on every
+        // page load with nothing in v1 able to discard it.
+        Durability.forgetBatch(batch.seq);
+
         if (answer.status === "confirmed") {
           Overlay.promote(batch, answer.kept);
         } else {

@@ -371,6 +371,46 @@ describe("Batches", () => {
       assert.equal(Batches.rejected[0].state, "rejected");
     });
 
+    it("forgets a confirmed batch", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.isTrue(forgetting.calledOnceWithExactly(1));
+    });
+
+    // Refused for the writes or refused for the build, it is answered either way - and a batch
+    // kept for a resend would come back on a later page load as a write the user watched fail.
+    it("forgets a refused batch", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      sealed(creating("t1", "first"));
+
+      sendStub.resolves({
+        reason: "the reason",
+        status: "rejected",
+        write: 0,
+      });
+
+      await Batches.flush();
+
+      assert.isTrue(forgetting.calledOnceWithExactly(1));
+    });
+
+    it("forgets nothing about a batch nobody answered", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      sealed(creating("t1", "first"));
+      sendStub.resolves({httpStatus: 502, status: "failed"});
+
+      await Batches.flush();
+
+      assert.isFalse(forgetting.called);
+    });
+
     it("leaves a batch nobody answered pending, and stops the queue behind it", async () => {
       sealed(creating("t1", "first"));
       sealed(creating("t2", "second"));
