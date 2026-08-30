@@ -1442,6 +1442,65 @@ describe("Batches", () => {
     });
   });
 
+  describe("disown()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      sinon.stub(Sse, "scheduleRender");
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("lets every pending batch go, and takes its rows with it", () => {
+      Batches.adopt([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [
+            {
+              claim: null,
+              data: {done: false, title: "made elsewhere"},
+              id: "t1",
+              op: "create",
+              stamp: STAMP,
+              type: TODO,
+            },
+          ],
+        },
+      ]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "made elsewhere");
+
+      Batches.disown();
+
+      assert.deepStrictEqual(Batches.pending, []);
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+    });
+
+    // The numbers stay spent: what this tab has seen is still true, and a batch it makes next has
+    // to be above them whatever identity it is making it under.
+    it("leaves the numbers it has seen alone", () => {
+      Batches.adopt([
+        {actorUserId: null, landed: [], seq: 9, writes: [write("t9")]},
+      ]);
+
+      Batches.disown();
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 10);
+    });
+  });
+
   describe("discard()", () => {
     it("takes the batch's writes out of the overlay", () => {
       Batches.open("todos");

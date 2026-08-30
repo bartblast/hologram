@@ -1,6 +1,9 @@
 "use strict";
 
+import Batches from "./batches.mjs";
 import Logger from "./logger.mjs";
+import Replica from "./replica.mjs";
+import Sse from "./sse.mjs";
 
 // The tabs of one replica, and which of them speaks to the server for the rest.
 //
@@ -55,6 +58,30 @@ export default class Tabs {
   // request fires rather than called off with a signal, because the check also covers the grant
   // that arrives in the same turn as the leaving.
   static #token = null;
+
+  // The group is over, because the thing that made it one is gone: with no store there is nowhere
+  // to file a batch and nothing to share, so every tab goes back to being a replica of its own -
+  // which is exactly what a tab is in a browser that never had storage at all.
+  //
+  // The tab that was LEADING keeps the identity and the queue. Those batches were numbered under
+  // that identity, it is the only tab that can still send them, and nothing else about it changes.
+  //
+  // Every other tab takes the fresh identity its own page was minted, lets the batches go, and
+  // opens a stream of its own - which it needs, because the frames it was being handed stop here.
+  // Answers once the lock is really gone, the way leaving does - which is what lets anything
+  // waiting on this tab's place in the group wait for it rather than for a moment.
+  static dissolve() {
+    const followed = !Tabs.leader;
+    const released = Tabs.leave();
+
+    if (followed) {
+      Batches.disown();
+      Replica.refresh();
+      Sse.reconnect();
+    }
+
+    return released;
+  }
 
   // Joins the group, answering whether this tab leads it.
   //

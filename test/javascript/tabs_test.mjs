@@ -7,6 +7,9 @@ import {
   waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import Batches from "../../assets/js/batches.mjs";
+import Replica from "../../assets/js/replica.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 
 // Without this the file passes only when something else in the run has installed sessionStorage
@@ -125,6 +128,75 @@ describe("Tabs", () => {
 
     releases.forEach((release) => release());
     openChannels.forEach((channel) => channel.close());
+  });
+
+  // What a tab does when the store it was sharing is gone: the group is over, and every tab goes
+  // back to being a replica of its own.
+  describe("dissolve()", () => {
+    let disowning, reconnecting;
+
+    beforeEach(() => {
+      disowning = sinon.stub(Batches, "disown");
+      reconnecting = sinon.stub(Sse, "reconnect");
+
+      Replica.offer({id: "r-fresh", token: "statement-fresh"});
+    });
+
+    afterEach(() => {
+      Replica.reset();
+      sinon.restore();
+    });
+
+    it("leaves the group", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      await Tabs.dissolve();
+
+      assert.isNull(Tabs.name);
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // Those batches were numbered under the identity this tab is holding, and it is the only tab
+    // that can still send them.
+    it("keeps the identity and the queue in the tab that was leading", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      Replica.adopt({id: "r-group", token: "statement-group"});
+
+      Tabs.dissolve();
+
+      assert.equal(Replica.id, "r-group");
+      assert.isFalse(disowning.called);
+      assert.isFalse(reconnecting.called);
+    });
+
+    it("takes a fresh identity and lets the batches go in a tab that was following", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Replica.adopt({id: "r-group", token: "statement-group"});
+
+      Tabs.dissolve();
+
+      assert.equal(Replica.id, "r-fresh");
+      assert.isTrue(disowning.calledOnce);
+    });
+
+    // The frames it was being handed stop here, so it needs a stream the server serves sync on.
+    it("opens a stream of its own in a tab that was following", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Tabs.dissolve();
+
+      assert.isTrue(reconnecting.calledOnce);
+    });
   });
 
   describe("join()", () => {

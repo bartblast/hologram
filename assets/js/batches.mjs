@@ -178,6 +178,25 @@ export default class Batches {
     return Batches.#running;
   }
 
+  // Every batch this tab is holding, let go: out of the queue, so this tab does not send it, and
+  // out of the overlay, so nothing is shown that this tab can no longer learn the fate of.
+  //
+  // For a tab whose group has DISSOLVED. Those batches were numbered under the group's identity,
+  // the tab that kept that identity is still sending them, and this one - which has just taken a
+  // fresh identity of its own - would be sending a second copy of each under a number nothing has
+  // recorded against it. The server would apply them twice.
+  //
+  // The rows go back to what the server last said, and come back when its answer to those batches
+  // does, through this tab's own stream, as an ordinary frame. That gap is what a store breaking
+  // mid-session costs a tab that was not the one sending.
+  static disown() {
+    for (const batch of Batches.pending) {
+      Overlay.remove(batch);
+    }
+
+    Batches.pending = [];
+  }
+
   // Everything the action wrote goes away, which is what a raise has to mean: an action's writes
   // land together or not at all, and dropping the layer is the whole of putting them back.
   static discard() {
