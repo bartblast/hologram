@@ -19,6 +19,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
@@ -1442,6 +1443,198 @@ describe("Sse", () => {
       });
 
       assert.equal(animationFrames.length, 1);
+    });
+  });
+
+  // What a refill does to writes this client has made and not had answered. Every case is one the
+  // design had to be written out for, because a resync is where the two halves of the seam meet:
+  // the base is being replaced wholesale while the overlay goes on folding over it.
+  describe("a refill over pending writes", () => {
+    const TASK = "MyApp.Task";
+
+    const deltasFrame = (rows) =>
+      JSON.stringify({
+        applied_seq: null,
+        cursor: null,
+        deltas: {put_entity: {[TASK]: rows}},
+        model_hash: "a3f9c2",
+        protocol_version: 1,
+      });
+
+    const resyncFrame = () =>
+      JSON.stringify({protocol_version: 1, reason: "retention"});
+
+    const syncedFrame = () =>
+      JSON.stringify({protocol_version: 1, scope: "all"});
+
+    // A batch of this client's own, sealed and waiting for an answer.
+    const pending = (write) => {
+      Batches.open("tasks");
+      Batches.current().append(write);
+
+      return Batches.close();
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {
+              created_at: "datetime",
+              id: "uuid",
+              title: "string",
+              updated_at: "datetime",
+            },
+            constraints: {},
+            defaults: {},
+            enumValues: {},
+            frameworkAttributes: [],
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        modelHash: "a3f9c2",
+        protocolVersion: 1,
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      Batches.reset();
+      Model.reset();
+
+      delete globalThis.Hologram.sync;
+    });
+
+    // The base takes the server's copy and the pending edit still shows on top of it, which is
+    // the ordinary overlay rule reaching across a resync unchanged.
+    it("folds a pending update over the row the refill delivered", async () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "before the resync"});
+
+      pending({
+        data: {title: "mine"},
+        id: "t1",
+        op: "update",
+        stamp: 1,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      // Before a single row of the refill has landed: the write still has something to fold over,
+      // which is what an action reading its own edit mid-refill depends on.
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "mine");
+
+      Sse.eventSource.listeners.sync_deltas({
+        data: deltasFrame([{id: "t1", title: "from the server"}]),
+      });
+
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").title, "from the server");
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "mine");
+    });
+
+    // A create answered while the refill was still running is in the base as the SERVER's row,
+    // filed by the promotion rather than delivered by a frame - so nothing marked it, and the
+    // sweep has no reason to take it.
+    it("keeps a create confirmed while the refill ran", async () => {
+      const batch = pending({
+        data: {title: "made here"},
+        id: "t2",
+        op: "create",
+        stamp: 1024,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      Overlay.promote(batch, null);
+
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.equal(LocalDatabase.getRow(TASK, "t2").title, "made here");
+    });
+
+    // A row the base never held cannot be marked and cannot be swept: it is on the screen because
+    // the overlay puts it there, and it stays until the server rules on it.
+    it("keeps a create still pending across the marker", async () => {
+      pending({
+        data: {title: "made here"},
+        id: "t2",
+        op: "create",
+        stamp: 1024,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.equal(LocalDatabase.getRow(TASK, "t2").title, "made here");
+      assert.isNull(LocalDatabase.baseRow(TASK, "t2"));
+    });
+
+    // A second resync arriving part way through the first one's refill puts the rows it had
+    // already delivered back to awaiting - otherwise a row delivered by the abandoned fill would
+    // outlive one that no longer sends it.
+    it("marks a row again when a second resync arrives mid-refill", async () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "before the resync"});
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      Sse.eventSource.listeners.sync_deltas({
+        data: deltasFrame([{id: "t1", title: "from the first refill"}]),
+      });
+
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+
+      // Delivered by the first refill and therefore unmarked, then marked again by the second -
+      // and still readable in between, which is the whole of what the second resync changed.
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+      assert.equal(
+        LocalDatabase.getRow(TASK, "t1").title,
+        "from the first refill",
+      );
+
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    // The batch goes on naming the row whatever the refill said, because an unanswered write is
+    // still this client's own work - what it has nothing left to fold over is a different matter.
+    it("sweeps a row a pending update names when the refill did not deliver it", async () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "before the resync"});
+
+      pending({
+        data: {title: "mine"},
+        id: "t1",
+        op: "update",
+        stamp: 1,
+        type: TASK,
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: resyncFrame()});
+      Sse.eventSource.listeners.synced({data: syncedFrame()});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.isTrue(Overlay.names(TASK, "t1"));
     });
   });
 
