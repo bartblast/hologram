@@ -168,8 +168,9 @@ describe("Batches", () => {
 
       await Batches.flush();
 
+      // Not the only thing this tab told the group - sealing the batch told it too.
       assert.isTrue(
-        posting.calledOnceWithExactly({answer, kind: "answered", seq: 1}),
+        posting.calledWithExactly({answer, kind: "answered", seq: 1}),
       );
     });
 
@@ -1298,6 +1299,24 @@ describe("Batches", () => {
     // UNDEFINED rather than null, which is what a page mount leaves when its data names no actor.
     // It has to reach the batch as null: the owner filter that decides whether a later load takes
     // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
+    // What puts a write made in one tab on the screen of the next before the server has heard of
+    // it - and what lets the tab that sends send it without reading the store again.
+    it("tells the group about a batch it has filed", () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const batch = Batches.close();
+
+      assert.isTrue(
+        posting.calledOnceWithExactly({
+          kind: "sealed",
+          record: batch.record(),
+        }),
+      );
+    });
+
     it("takes the number the store gives it", () => {
       sinon.stub(Durability, "fileBatch").callsFake((batch) => batch.seal(7));
 

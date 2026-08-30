@@ -12,6 +12,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
+import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
 
 export default class Sse {
@@ -235,19 +236,29 @@ export default class Sse {
         // Not awaited. What is on screen is already correct, and what this buys is only whether it
         // is still there after a reload.
         Durability.persistFrame(LocalDatabase.records(written), frame.cursor);
+
+        $.tell("sync_deltas", frame);
       });
 
       $.eventSource.addEventListener("sync_reload", (event) => {
-        $.receiveFrame("sync_reload", JSON.parse(event.data));
+        const frame = JSON.parse(event.data);
+
+        $.receiveFrame("sync_reload", frame);
+
+        $.tell("sync_reload", frame);
       });
 
       $.eventSource.addEventListener("sync_resync", (event) => {
-        $.receiveFrame("sync_resync", JSON.parse(event.data));
+        const frame = JSON.parse(event.data);
+
+        $.receiveFrame("sync_resync", frame);
 
         // The stored rows go with the place that dated them, for the same reason the memory ones
         // do. What this browser DID - its identity, its counter, its clock - stays: a resync
         // replaces what the SERVER said, and none of those three are the server's to take away.
         Durability.clear();
+
+        $.tell("sync_resync", frame);
       });
 
       $.eventSource.addEventListener("synced", (event) => {
@@ -262,6 +273,8 @@ export default class Sse {
         if (frame.cursor) {
           Durability.persistFrame([], frame.cursor);
         }
+
+        $.tell("synced", frame);
       });
 
       $.eventSource.onopen = () => {
@@ -411,6 +424,25 @@ export default class Sse {
 
         return null;
     }
+  }
+
+  // The frame handed to the other tabs of this browser, which have no stream of their own: only
+  // one tab is served sync, and what it receives is every tab's.
+  //
+  // AFTER the frame has been written down, and that order is the whole of why a tab joining the
+  // group cannot miss anything. A write transaction is created before this returns, and IndexedDB
+  // orders what follows behind it - so a tab that reads the store on hearing this reads a store
+  // that already holds the frame, and a tab that was too late to read it is told by the message.
+  //
+  // The page the stream was GREETED with rides along, because a completeness marker for a page is
+  // a claim about that page rather than about whatever page each tab happens to be on.
+  static tell(event, frame) {
+    Tabs.post({
+      event,
+      frame,
+      kind: "frame",
+      page: GlobalRegistry.get("connectPageModule"),
+    });
   }
 
   // One render per animation frame, however many frames arrive in between: a fill lands as a

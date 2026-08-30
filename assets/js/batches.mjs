@@ -494,6 +494,13 @@ export default class Batches {
     }
 
     Batches.#sort();
+
+    // The other tabs of this browser take it up and show it, and the one that sends sends it -
+    // which is what puts a write made in one tab on the screen of the next before the server has
+    // heard of it. As the RECORD, because that is what a tab rebuilds a batch from whether it
+    // reads it here or out of the store, and because a Batch is not something a browser can carry
+    // from one tab to another.
+    Tabs.post({kind: "sealed", record: batch.record()});
   }
 
   // Oldest first, which is the order batches must ship in - a later batch may name a row an earlier

@@ -22,6 +22,7 @@ import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
+import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -649,6 +650,81 @@ describe("Sse", () => {
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
       assert.isNull(Sse.syncCursor);
       assert.equal(animationFrames.length, 0);
+    });
+  });
+
+  // The tabs of a browser that have no stream of their own are handed what this one receives.
+  describe("telling the group", () => {
+    const frame = () =>
+      JSON.stringify({
+        applied_seq: null,
+        cursor: "Nzc4LjA",
+        deltas: {},
+        model_hash: "a3f9c2",
+        protocol_version: 1,
+      });
+
+    it("hands each frame to the group, naming the page the stream was greeted with", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      GlobalRegistry.set("connectPageModule", "MyApp.TodosPage");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isTrue(posting.calledOnce);
+
+      assert.deepStrictEqual(posting.firstCall.args[0], {
+        event: "sync_deltas",
+        frame: JSON.parse(frame()),
+        kind: "frame",
+        page: "MyApp.TodosPage",
+      });
+    });
+
+    // The order is the whole reason a tab joining the group cannot miss a frame: the write
+    // transaction is created before the message goes out, and IndexedDB orders what follows behind
+    // it - so a tab that reads the store on hearing this reads a store that already holds it.
+    it("writes the frame down before telling anyone about it", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+      const posting = sinon.stub(Tabs, "post");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.isTrue(persisting.calledBefore(posting));
+    });
+
+    it("hands over a completeness marker, a resync and a stale-bundle notice too", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({cursor: null, protocol_version: 1, scope: "all"}),
+      });
+
+      Sse.eventSource.listeners.sync_resync({
+        data: JSON.stringify({
+          protocol_version: 1,
+          reason: "cursor_unreadable",
+        }),
+      });
+
+      Sse.eventSource.listeners.sync_reload({
+        data: JSON.stringify({protocol_version: 1, reason: "model_hash"}),
+      });
+
+      assert.deepStrictEqual(
+        posting.args.map(([message]) => message.event),
+        ["synced", "sync_resync", "sync_reload"],
+      );
     });
   });
 
