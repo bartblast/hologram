@@ -36,8 +36,8 @@ import Replica from "./replica.mjs";
 // and a later load resuming from it would hand out numbers already answered. Absent is safe where
 // stale is not.
 //
-// ONE DATABASE PER MODEL VERSION, named for the model this bundle speaks and the layout of the
-// store itself. A deploy that changes the model lands in a new tab while an old tab is still open,
+// ONE DATABASE PER MODEL VERSION, named for the layout of the store itself and the model this
+// bundle speaks. A deploy that changes the model lands in a new tab while an old tab is still open,
 // and the two would otherwise share one store - a v1 tab must never read rows v2 rewrote, and no
 // lens code ships to the browser to translate them. Named apart, they cannot meet: every tab is
 // durable the whole time, in its own bundle's shape, and nothing has to decide which of them
@@ -314,13 +314,19 @@ export default class Durability {
     Durability.storedBatches = 0;
   }
 
-  // `hologram.<model hash>.<layout>` - a bundle speaking another model, or carrying another store
-  // layout, opens a database of its own. Null when the build has no data model, and so nothing to
+  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
+  // model, opens a database of its own. Null when the build has no data model, and so nothing to
   // name one for.
+  //
+  // The framework's half comes first and the app's second, broad before narrow: the layout is
+  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
+  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
+  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
+  // parse for anything that ever has to gate on a shape it cannot read.
   static #databaseName() {
     const modelHash = globalThis.Hologram.sync?.modelHash;
 
-    return modelHash ? `hologram.${modelHash}.${LAYOUT}` : null;
+    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
   }
 
   static #close() {
