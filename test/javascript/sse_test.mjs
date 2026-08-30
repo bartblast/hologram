@@ -1141,8 +1141,8 @@ describe("Sse", () => {
   });
 
   describe("synced event", () => {
-    const envelope = (scope) =>
-      JSON.stringify({protocol_version: 1, scope: scope});
+    const envelope = (scope, cursor = null) =>
+      JSON.stringify({cursor: cursor, protocol_version: 1, scope: scope});
 
     it("records the scope the client may now answer for itself", async () => {
       stubHandshakeResponse();
@@ -1163,6 +1163,51 @@ describe("Sse", () => {
       Sse.eventSource.listeners.synced({data: envelope("all")});
 
       assert.equal(animationFrames.length, 1);
+    });
+
+    // For a client filled and then left alone this is the only frame that ever names a place, so
+    // it is the only thing standing between it and being filled from nothing on its next visit.
+    it("keeps the place the completeness marker names", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    it("writes the place the completeness marker names", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
+
+      assert.isTrue(persisting.calledOnce);
+      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
+    });
+
+    // The page scope is narrower than the claim a place makes, so its marker names none - and a
+    // server built before this frame carried one names nothing at all.
+    it("leaves the place alone for a marker naming none", async () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({
+        data: JSON.stringify({
+          applied_seq: null,
+          cursor: "Nzc4LjA",
+          deltas: {},
+        }),
+      });
+
+      Sse.eventSource.listeners.synced({data: envelope("page")});
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.isTrue(persisting.calledOnce);
     });
   });
 

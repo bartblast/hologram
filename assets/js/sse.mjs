@@ -290,6 +290,24 @@ export default class Sse {
       $.eventSource.addEventListener("synced", (event) => {
         const frame = JSON.parse(event.data);
 
+        // The place a client that was filled and then left alone would otherwise never get. A
+        // deltas frame carries none until the pot is whole, and once it is whole a quiet app
+        // produces no further frame at all - so without this the client would hold everything it
+        // was sent and still have nowhere to come back from, and would be filled from nothing on
+        // its next visit.
+        //
+        // Written down through the same call a frame's rows go down by, with no rows, because this
+        // frame carries none - which also takes the clock down beside it.
+        //
+        // Truthy rather than a null test, unlike the deltas handler: a server built before this
+        // frame carried a place sends no such key at all, and a rolling deploy can put a new bundle
+        // in front of an old node.
+        if (frame.cursor) {
+          $.syncCursor = frame.cursor;
+
+          Durability.persistFrame([], frame.cursor);
+        }
+
         LocalDatabase.markSynced(frame.scope);
 
         // What a query answers can change the moment a scope is complete - a count that was
