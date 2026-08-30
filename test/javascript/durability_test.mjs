@@ -209,6 +209,22 @@ describe("Durability", () => {
   const batchRecord = (seq, actorUserId = "u1") =>
     sealedBatch(seq, actorUserId).record();
 
+  // A batch as filing leaves it: its record in the queue, and its number and the clock in meta.
+  const storeBatch = async (seq, actorUserId = "u1") => {
+    await writeBatches([batchRecord(seq, actorUserId)]);
+    await writeMeta({clock: Clock.last(), seq});
+  };
+
+  // Unsealed, because filing is what gives a batch its number.
+  const unfiledBatch = (actorUserId = "u1") => {
+    const batch = new Batch(null);
+
+    batch.actorUserId = actorUserId;
+    batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+
+    return batch;
+  };
+
   const writeBatches = async (records) => {
     const {db} = await rawOpen();
 
@@ -410,7 +426,7 @@ describe("Durability", () => {
 
     it("drops the identity and the counter, which have stopped being true", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(41));
+      await storeBatch(41);
       await Durability.persistReplica({id: "r1", token: "statement"});
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
@@ -424,7 +440,7 @@ describe("Durability", () => {
     // restarted low writes revisions the server reads as moved.
     it("keeps the clock", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(41));
+      await storeBatch(41);
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
@@ -477,8 +493,8 @@ describe("Durability", () => {
   describe("forgetBatch()", () => {
     it("deletes the record of the given number and no other", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
-      await Durability.persistBatch(sealedBatch(8));
+      await storeBatch(7);
+      await storeBatch(8);
 
       await Durability.forgetBatch(7);
 
@@ -653,9 +669,12 @@ describe("Durability", () => {
     // Nothing stored has become untrue, and the bundle doing the upgrading decides what to carry
     // across - so this lets go without taking anything with it. Wiping would also block the very
     // upgrade the event exists to get out of the way of.
+    // Seeded through the module's own connection rather than a raw one: a raw connection stays
+    // open for the rest of the test, and an upgrade cannot start while anything else holds the
+    // database - the very thing this test is here to drive.
     it("lets the database go when another tab needs a new version", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(41));
+      await Durability.fileBatch(unfiledBatch());
       await Durability.persistReplica({id: "r1", token: "statement"});
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy")],
@@ -668,7 +687,7 @@ describe("Durability", () => {
 
       db.close();
 
-      assert.equal(await readMeta("seq"), 41);
+      assert.equal(await readMeta("seq"), 1);
       assert.equal(await readMeta("cursor"), "place-1");
       assert.equal((await readAll("entities")).length, 1);
 
@@ -713,7 +732,7 @@ describe("Durability", () => {
       equipBrowser("granted");
 
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
+      await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
       assert.isTrue(persistStub.calledOnce);
@@ -724,8 +743,8 @@ describe("Durability", () => {
       equipBrowser("granted");
 
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
-      await Durability.persistBatch(sealedBatch(8));
+      await Durability.fileBatch(unfiledBatch());
+      await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
       assert.isTrue(persistStub.calledOnce);
@@ -737,7 +756,7 @@ describe("Durability", () => {
       equipBrowser("prompt");
 
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
+      await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
       assert.isFalse(persistStub.called);
@@ -750,7 +769,7 @@ describe("Durability", () => {
       equipBrowser(null);
 
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
+      await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
       assert.isTrue(persistStub.calledOnce);
@@ -761,7 +780,7 @@ describe("Durability", () => {
       persistStub.resolves(false);
 
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
+      await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
       assert.isFalse(Durability.persisted);
@@ -771,7 +790,7 @@ describe("Durability", () => {
     it("asks nothing in memory mode", async () => {
       equipBrowser("granted");
 
-      await Durability.persistBatch(sealedBatch(7));
+      await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
       assert.equal(Durability.mode, "memory");
@@ -780,16 +799,19 @@ describe("Durability", () => {
     });
   });
 
-  describe("persistBatch()", () => {
+  describe("fileBatch()", () => {
     it("writes the batch, its number and the clock together", async () => {
       await Durability.open();
 
       Clock.observe(1_756_100_000_123_004);
 
-      await Durability.persistBatch(sealedBatch(7));
+      const batch = unfiledBatch();
 
-      assert.deepStrictEqual(await readAll("queue"), [batchRecord(7)]);
-      assert.equal(await readMeta("seq"), 7);
+      await Durability.fileBatch(batch);
+
+      assert.equal(batch.seq, 1);
+      assert.deepStrictEqual(await readAll("queue"), [batchRecord(1)]);
+      assert.equal(await readMeta("seq"), 1);
       assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
     });
 
@@ -800,75 +822,22 @@ describe("Durability", () => {
     it("answers a promise that settles once the batch is stored", async () => {
       await Durability.open();
 
-      const writing = Durability.persistBatch(sealedBatch(7));
+      const batch = unfiledBatch();
+      const filing = Durability.fileBatch(batch);
 
       assert.equal(Durability.inFlight, 1);
 
-      await writing;
+      await filing;
 
       assert.equal(Durability.inFlight, 0);
-      assert.deepStrictEqual(await readAll("queue"), [batchRecord(7)]);
-    });
-
-    // A batch that has to be sent again is stored again - its marks may have moved since - and the
-    // number it is keyed by is what makes the second write replace the first rather than pile up.
-    it("replaces the record of the same number", async () => {
-      await Durability.open();
-
-      const batch = sealedBatch(7);
-
-      await Durability.persistBatch(batch);
-
-      batch.land(new Set(["MyApp.Task t1"]));
-
-      await Durability.persistBatch(batch);
-
       assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
-    });
-
-    // A browser with nowhere to store still has a sender waiting on this, so it answers something
-    // already settled rather than nothing.
-    it("answers an already-settled promise in memory mode", async () => {
-      await Durability.persistBatch(sealedBatch(7));
-
-      assert.equal(Durability.mode, "memory");
-      assert.equal(Durability.inFlight, 0);
-      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
-    });
-  });
-
-  describe("fileBatch()", () => {
-    // Unsealed, because filing is what gives a batch its number - the whole difference between
-    // this and the counter each tab used to move in its own memory.
-    const unsealedBatch = (actorUserId = "u1") => {
-      const batch = new Batch(null);
-
-      batch.actorUserId = actorUserId;
-      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
-
-      return batch;
-    };
-
-    it("writes the batch, its number and the clock together", async () => {
-      await Durability.open();
-
-      Clock.observe(1_756_100_000_123_004);
-
-      const batch = unsealedBatch();
-
-      await Durability.fileBatch(batch);
-
-      assert.equal(batch.seq, 1);
-      assert.deepStrictEqual(await readAll("queue"), [batchRecord(1)]);
-      assert.equal(await readMeta("seq"), 1);
-      assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
     });
 
     it("numbers the batch above the stored counter", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(4));
+      await storeBatch(4);
 
-      const batch = unsealedBatch();
+      const batch = unfiledBatch();
 
       await Durability.fileBatch(batch);
 
@@ -882,10 +851,10 @@ describe("Durability", () => {
     // answered - so it would answer the new batch from the record of an old one.
     it("numbers the batch above the counter when the queue is empty", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(9));
+      await storeBatch(9);
       await Durability.forgetBatch(9);
 
-      const batch = unsealedBatch();
+      const batch = unfiledBatch();
 
       await Durability.fileBatch(batch);
 
@@ -900,7 +869,7 @@ describe("Durability", () => {
       await Durability.open();
       await writeBatches([batchRecord(7)]);
 
-      const batch = unsealedBatch();
+      const batch = unfiledBatch();
 
       await Durability.fileBatch(batch);
 
@@ -913,8 +882,8 @@ describe("Durability", () => {
     it("numbers two batches filed at once apart", async () => {
       await Durability.open();
 
-      const first = unsealedBatch();
-      const second = unsealedBatch();
+      const first = unfiledBatch();
+      const second = unfiledBatch();
 
       await Promise.all([
         Durability.fileBatch(first),
@@ -930,7 +899,7 @@ describe("Durability", () => {
     });
 
     it("leaves the batch unnumbered in memory mode", async () => {
-      const batch = unsealedBatch();
+      const batch = unfiledBatch();
 
       await Durability.fileBatch(batch);
 
@@ -1028,7 +997,7 @@ describe("Durability", () => {
 
       const batch = sealedBatch(7);
 
-      await Durability.persistBatch(batch);
+      await writeBatches([batch.record()]);
 
       batch.land(new Set(["MyApp.Task t1"]));
 
@@ -1045,8 +1014,8 @@ describe("Durability", () => {
     // backwards, onto a number a later batch has already spent.
     it("leaves the counter where it was", async () => {
       await Durability.open();
-      await Durability.persistBatch(sealedBatch(7));
-      await Durability.persistBatch(sealedBatch(8));
+      await storeBatch(7);
+      await storeBatch(8);
 
       await Durability.persistLanded(sealedBatch(7));
 
@@ -1460,7 +1429,7 @@ describe("Durability", () => {
 
       Durability.restore(true);
 
-      await Durability.persistBatch(sealedBatch(41));
+      await storeBatch(41);
 
       assert.equal(await readMeta("actorUserId"), "u1");
     });

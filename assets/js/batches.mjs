@@ -101,17 +101,18 @@ export default class Batches {
     // under this user will take it up again.
     batch.actorUserId = LocalDatabase.actorUserId ?? null;
 
-    batch.seal(++Batches.#seq);
+    batch.mark("pending");
+
+    Batches.pending.push(batch);
 
     // Started here and awaited by the sender, so the batch is on its way down while the action's
     // own render happens - the store is never on the path of what the user sees.
     //
-    // The batch goes down WITH its number, in one write. A number stored without the batch it was
-    // spent on is a number the next load counts on from for work that no longer exists, and a
-    // batch stored without its number is one the next load can number over.
-    batch.recorded = Durability.persistBatch(batch);
-
-    Batches.pending.push(batch);
+    // The NUMBER comes with the filing rather than before it, which is the whole of what makes a
+    // browser's tabs safe to share a queue: a counter each tab moved in its own memory is a number
+    // two tabs can spend at once, and the second batch filed under it overwrites the first. So the
+    // batch joins the queue unnumbered and takes its place in the order once it has one.
+    batch.recorded = Batches.#number(batch);
 
     return batch;
   }
@@ -270,7 +271,13 @@ export default class Batches {
       // Written down only where a mark actually moved. Most frames name rows no pending batch has
       // anything to say about, and a batch whose marks are unchanged is already stored the way it
       // stands - so `land` answering false is what keeps the ordinary frame off the disk entirely.
-      if (batch.seq <= appliedSeq && batch.land(rowKeys)) {
+      // A batch still waiting for its number has not been sent, so nothing the server says can be
+      // about it - and `null <= appliedSeq` is true, which is why this is spelled out.
+      if (
+        batch.seq !== null &&
+        batch.seq <= appliedSeq &&
+        batch.land(rowKeys)
+      ) {
         Durability.persistLanded(batch);
       }
     }
@@ -355,6 +362,65 @@ export default class Batches {
   // removes the case rather than detecting it.
   static resumeFrom(seq) {
     Batches.#seq = seq;
+  }
+
+  // The number a batch ships under, and its place in the queue once it has one.
+  //
+  // Where there is a store, the store gives it: read and spent inside the transaction that files
+  // the batch, so two tabs cannot take one number. Where there is not - private browsing, a browser
+  // that cannot store - this tab counts for itself, which is what it did everywhere before there
+  // was anywhere to file a batch, and is safe for the same reason it was then: nothing is shared.
+  //
+  // `#seq` is what this tab has SEEN rather than what it has spent: it follows a number the store
+  // handed out, so a tab that later has to count for itself counts on from there.
+  static #number(batch) {
+    const filed = Durability.fileBatch(batch);
+
+    // Where there is nowhere to file it the number is taken HERE, in the turn the batch was
+    // closed, rather than in the one the filing settles - so a batch closed where nothing can be
+    // stored has its number the moment the action ends, exactly as it did before there was
+    // anywhere to file one.
+    if (Durability.mode === "memory") {
+      Batches.#numbered(batch);
+
+      return filed;
+    }
+
+    return filed.then(() => Batches.#numbered(batch));
+  }
+
+  // A batch whose number is settled: taken from this tab's own count if the store gave none, and
+  // followed by `#seq` either way, so a tab that later has to count for itself counts on from the
+  // highest number it has seen rather than from the last one it spent.
+  static #numbered(batch) {
+    if (batch.seq === null) {
+      batch.seal(++Batches.#seq);
+    } else {
+      Batches.#seq = Math.max(Batches.#seq, batch.seq);
+    }
+
+    Batches.#sort();
+  }
+
+  // Oldest first, which is the order batches must ship in - a later batch may name a row an earlier
+  // one created. A batch still waiting for its number sits at the TAIL, and cannot be wrong there:
+  // whatever number it gets will be above every number already spent.
+  static #sort() {
+    Batches.pending.sort((left, right) => {
+      if (left.seq === right.seq) {
+        return 0;
+      }
+
+      if (left.seq === null) {
+        return 1;
+      }
+
+      if (right.seq === null) {
+        return -1;
+      }
+
+      return left.seq - right.seq;
+    });
   }
 
   // A network failure and a status carrying no verdict are the same thing to this loop: nobody

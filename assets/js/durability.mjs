@@ -320,48 +320,6 @@ export default class Durability {
     }
   }
 
-  // A batch this browser has sealed and the number it spent on it, written down as one fact.
-  //
-  // The ONE write anything waits for. A batch is identified by its replica and its number, and the
-  // server answers a number it has already seen from its record rather than applying it again - so
-  // a number handed out but never written down is a number the next page load hands out a second
-  // time, and the batch carrying it is answered with what the FIRST batch got.
-  //
-  // The batch and its number go down TOGETHER, in one transaction, because either one without the
-  // other is wrong in its own way. A number with no batch is what the counter alone bought: the
-  // next load counts on from work that no longer exists anywhere. A batch with no number is worse
-  // - the next load would count from below it and hand the same number to something else, and
-  // whichever of the two reached the server second would be answered with the other's verdict.
-  //
-  // What a crash between sealing and committing costs is a batch that was never sent, which is the
-  // cheap side of the trade and the only side left once the two are one write.
-  //
-  // One number and one queue for the whole browser, not one per tab (10a's D1): a person has one
-  // replica, and the log should read that way. Until the multi-tab work takes the number inside the
-  // same lock that files the batch, two tabs writing at the same moment can spend one number - and
-  // the second tab's write here overwrites the first tab's batch, which is the same known limit
-  // with a sharper edge than it had when only a counter was stored.
-  static persistBatch(batch) {
-    // The first batch stored is the first moment this browser holds something that exists nowhere
-    // else - a row can always be downloaded again, an unsent write cannot - so it is the moment to
-    // ask for the storage to be kept. Once per page load, and never awaited: the batch's own write
-    // does not wait on a permission being read.
-    if (!Durability.#persistenceAsked) {
-      Durability.#persistenceAsked = true;
-
-      Durability.#requestPersistence();
-    }
-
-    return Durability.#write([META, QUEUE], (transaction) => {
-      transaction.objectStore(QUEUE).put(batch.record());
-
-      const meta = transaction.objectStore(META);
-
-      meta.put(batch.seq, "seq");
-      meta.put(Clock.last(), "clock");
-    });
-  }
-
   // One frame, one transaction: the rows it wrote, the place those rows are dated at, and where
   // the clock now stands. Together, because a place is a claim about rows - stored apart, a crash
   // between them would leave a client naming a place it does not hold the rows for, and the server

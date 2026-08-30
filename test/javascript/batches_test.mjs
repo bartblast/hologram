@@ -53,6 +53,11 @@ describe("Batches", () => {
   afterEach(() => {
     Batches.reset();
 
+    // Module state, and not Batches's to reset: this suite runs the store in memory mode, so a
+    // test that puts it in another leaves every test after it - in this file and in the next -
+    // filing batches into a database that is not there.
+    Durability.mode = "memory";
+
     // Not covered by LocalDatabase.reset(), which leaves the acting user alone on purpose - a
     // resync replaces what the server said and does not change who is signed in. So a test that
     // sets one has to put it back, or it reaches every suite that runs after this file.
@@ -145,7 +150,7 @@ describe("Batches", () => {
         record = resolve;
       });
 
-      sinon.stub(Durability, "persistBatch").returns(recording);
+      sinon.stub(Durability, "fileBatch").returns(recording);
       sendStub.resolves(confirmed());
 
       sealed(creating("t1", "first"));
@@ -816,6 +821,24 @@ describe("Batches", () => {
       assert.isTrue(writing.calledOnce);
     });
 
+    // Nothing the server says can be about a batch it has never been sent - and a number it does
+    // not have yet is below every number, which is what makes this worth spelling out.
+    it("passes over a batch that has no number yet", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      Durability.mode = "indexeddb";
+
+      sinon.stub(Durability, "fileBatch").returns(new Promise(() => {}));
+
+      const batch = sealed(write("t1"));
+
+      Batches.land(5, new Set([`${TODO} t1`]));
+
+      assert.isNull(batch.seq);
+      assert.isFalse(batch.isLanded(0));
+      assert.isFalse(writing.called);
+    });
+
     it("writes nothing down for a batch above the number", () => {
       const writing = sinon.stub(Durability, "persistLanded");
 
@@ -1081,7 +1104,7 @@ describe("Batches", () => {
 
     it("writes the batch down, and hands the write to the sender", () => {
       const recording = Promise.resolve();
-      const writing = sinon.stub(Durability, "persistBatch").returns(recording);
+      const writing = sinon.stub(Durability, "fileBatch").returns(recording);
 
       Batches.open("todos");
       wrote("t1");
@@ -1112,7 +1135,7 @@ describe("Batches", () => {
       let stored = null;
 
       sinon
-        .stub(Durability, "persistBatch")
+        .stub(Durability, "fileBatch")
         .callsFake((batch) => (stored = batch.record()));
 
       Batches.open("todos");
@@ -1125,6 +1148,44 @@ describe("Batches", () => {
     // UNDEFINED rather than null, which is what a page mount leaves when its data names no actor.
     // It has to reach the batch as null: the owner filter that decides whether a later load takes
     // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
+    it("takes the number the store gives it", () => {
+      sinon.stub(Durability, "fileBatch").callsFake((batch) => batch.seal(7));
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 7);
+    });
+
+    // What every tab did before there was anywhere to file a batch, and what a browser that cannot
+    // store still does: nothing is shared, so nothing can collide.
+    it("numbers the batch itself where there is nowhere to file it", () => {
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 1);
+
+      Batches.open("todos");
+      wrote("t2");
+
+      assert.equal(Batches.close().seq, 2);
+    });
+
+    it("counts on from the highest number the store has given", () => {
+      sinon.stub(Durability, "fileBatch").callsFake((batch) => batch.seal(7));
+
+      Batches.open("todos");
+      wrote("t1");
+      Batches.close();
+
+      sinon.restore();
+
+      Batches.open("todos");
+      wrote("t2");
+
+      assert.equal(Batches.close().seq, 8);
+    });
+
     it("seals a visitor's batch under nobody", () => {
       LocalDatabase.actorUserId = undefined;
 
@@ -1132,6 +1193,80 @@ describe("Batches", () => {
       wrote("t1");
 
       assert.isNull(Batches.close().actorUserId);
+    });
+
+    // A batch waiting for the store to number it cannot be wrong at the tail: whatever number it
+    // gets will be above every number already spent.
+    it("keeps a batch waiting for its number at the tail, and files it in order", async () => {
+      let file;
+
+      const filing = new Promise((resolve) => {
+        file = resolve;
+      });
+
+      Durability.mode = "indexeddb";
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .callsFake((batch) => filing.then(() => batch.seal(4)));
+
+      Batches.resume([
+        {actorUserId: null, landed: [], seq: 9, writes: [write("t9")]},
+      ]);
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const batch = Batches.close();
+
+      assert.deepStrictEqual(
+        Batches.pending.map((held) => held.seq),
+        [9, null],
+      );
+
+      file();
+      await batch.recorded;
+
+      assert.deepStrictEqual(
+        Batches.pending.map((held) => held.seq),
+        [4, 9],
+      );
+    });
+
+    // The sort runs when a batch is numbered, and what it has to get right is the OTHER batch that
+    // is still waiting for one: numbered or not, a batch behind this one in the queue was closed
+    // after it and will be numbered above it.
+    it("keeps a batch still waiting behind one that has just been numbered", async () => {
+      const filings = [];
+
+      Durability.mode = "indexeddb";
+
+      sinon.stub(Durability, "fileBatch").callsFake(
+        (batch) =>
+          new Promise((resolve) => {
+            filings.push({batch, file: resolve});
+          }),
+      );
+
+      Batches.open("todos");
+      wrote("t1");
+
+      const first = Batches.close();
+
+      Batches.open("todos");
+      wrote("t2");
+
+      Batches.close();
+
+      filings[0].batch.seal(4);
+      filings[0].file();
+
+      await first.recorded;
+
+      assert.deepStrictEqual(
+        Batches.pending.map((held) => held.seq),
+        [4, null],
+      );
     });
 
     it("answers nothing when no batch is open", () => {
