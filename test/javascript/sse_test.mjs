@@ -12,6 +12,7 @@ import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Deltas from "../../assets/js/deltas.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -589,6 +590,65 @@ describe("Sse", () => {
 
       sinon.assert.notCalled(globalThis.window.location.reload);
       sinon.assert.calledOnce(globalThis.EventSource);
+    });
+  });
+
+  // What a frame does to memory, driven directly rather than through a stream: the same call a
+  // tab handed a frame by another tab will make.
+  describe("receiveFrame()", () => {
+    it("applies a deltas frame to memory and answers what it wrote", () => {
+      const written = new Set(["MyApp.Task t1"]);
+
+      const applying = sinon.stub(Deltas, "apply").returns(written);
+      const landing = sinon.stub(Batches, "land");
+
+      const answered = Sse.receiveFrame("sync_deltas", {
+        applied_seq: 7,
+        cursor: "Nzc4LjA",
+        deltas: {put_entity: {}},
+      });
+
+      sinon.assert.calledOnceWithExactly(applying, {put_entity: {}});
+      sinon.assert.calledOnceWithExactly(landing, 7, written);
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(animationFrames.length, 1);
+      assert.strictEqual(answered, written);
+    });
+
+    it("keeps the cursor a mid-fill deltas frame does not name", () => {
+      sinon.stub(Deltas, "apply").returns(new Set());
+
+      Sse.syncCursor = "Nzc4LjA";
+
+      Sse.receiveFrame("sync_deltas", {
+        applied_seq: null,
+        cursor: null,
+        deltas: {},
+      });
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    it("marks the scope a synced marker names and takes its place", () => {
+      Sse.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
+
+      assert.isTrue(LocalDatabase.isSynced("all"));
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(animationFrames.length, 1);
+    });
+
+    // Nothing is repainted here on purpose - the refill's own frames schedule that.
+    it("starts over on a resync", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+
+      Sse.syncCursor = "Nzc4LjA";
+
+      Sse.receiveFrame("sync_resync", {reason: "cursor_unreadable"});
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.isNull(Sse.syncCursor);
+      assert.equal(animationFrames.length, 0);
     });
   });
 
