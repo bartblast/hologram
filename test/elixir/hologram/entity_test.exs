@@ -751,6 +751,17 @@ defmodule Hologram.EntityTest do
              }
     end
 
+    test "types the framework's own names for an entity struct and an entity id" do
+      {:ok, types} = Code.Typespec.fetch_types(Hologram.Entity)
+
+      sources =
+        Enum.map(types, fn {_kind, type} ->
+          Macro.to_string(Code.Typespec.type_to_quoted(type))
+        end)
+
+      assert Enum.sort(sources) == ["id() :: String.t()", "t() :: struct()"]
+    end
+
     test "types the metadata and system attribute fields on an entity type declaring nothing" do
       assert struct_field_types(Module1) == %{
                __meta__: "Hologram.Entity.Metadata.t()",

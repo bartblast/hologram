@@ -14,6 +14,17 @@ defmodule Hologram.Entity do
     {:updated_at, :datetime, []}
   ]
 
+  @typedoc """
+  An entity id - the canonical lowercase 8-4-4-4-12 spelling generate_id/0 mints.
+  """
+  @type id :: String.t()
+
+  @typedoc """
+  An entity struct - a struct of a module that uses Hologram.Entity.
+  The entity types cannot be named here, since the framework is compiled before any of them exist.
+  """
+  @type t :: struct
+
   defmacro __using__(opts) do
     Validator.validate_use_opts!(__CALLER__.module, opts)
 
@@ -212,7 +223,7 @@ defmodule Hologram.Entity do
   Generates a new entity id - a UUIDv7 string built from the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits).
   Entity ids come only from this function, on the server and on the client alike.
   """
-  @spec generate_id() :: String.t()
+  @spec generate_id() :: id
   def generate_id do
     unix_ms = System.system_time(:millisecond)
     <<rand_a::12, rand_b::62, _discarded::6>> = :crypto.strong_rand_bytes(10)
@@ -231,7 +242,7 @@ defmodule Hologram.Entity do
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
   This is the form for an entity type held in a variable - a type written by name has its own generated new/1, which delegates here.
   """
-  @spec new(module, %{optional(atom) => any} | keyword) :: struct
+  @spec new(module, %{optional(atom) => any} | keyword) :: t
   def new(entity_type, values \\ %{}) do
     values_map = Map.new(values)
 
@@ -408,7 +419,7 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec strip_server_only(struct) :: struct
+  @spec strip_server_only(t) :: t
   def strip_server_only(entity) do
     attribute_names = server_only_attribute_names(entity.__struct__)
 
@@ -498,7 +509,7 @@ defmodule Hologram.Entity do
   Validates the given entity struct against its entity type's declarations - attribute types, enum values, required presence, the declared constraint options, and to-one references (required presence, canonical entity id format).
   Returns :ok, or {:error, violations} where violations maps each violating field name to the list of its violation reasons, all violations accumulated.
   """
-  @spec validate(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
+  @spec validate(t) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def validate(entity) when is_struct(entity) do
     entity_type = entity.__struct__
     data = Map.take(entity, validated_field_names(entity_type))
