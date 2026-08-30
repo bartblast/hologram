@@ -62,7 +62,15 @@ export default class Sse {
   static buildSyncGreeting(pageModule) {
     const sync = globalThis.Hologram.sync;
 
-    if (!sync || pageModule === null) {
+    // A tab that does not lead its group says nothing about sync, which is what a bundle built
+    // before any of this existed says - so the server starts no session for it and sends it no
+    // frames. ONE session per browser, however many tabs are open: the tab that leads is served
+    // sync and hands what it receives to the rest.
+    //
+    // The connection itself stays. It carries this tab's own realtime traffic - the actions and
+    // receipts the server addresses to this instance - which is per tab by design and not the
+    // sync session's to consolidate.
+    if (!sync || pageModule === null || !Tabs.leader) {
       return {};
     }
 

@@ -194,6 +194,22 @@ describe("Sse", () => {
       });
     });
 
+    // One sync session per browser: the tab that leads is served sync and hands what it receives
+    // to the rest, so a follower greets the way a bundle with no sync at all does.
+    it("says nothing for a tab that does not lead its group", () => {
+      // The bundle DOES carry sync here, or this would answer nothing for a reason that has
+      // nothing to do with which tab leads.
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      Tabs.leader = false;
+
+      try {
+        assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {});
+      } finally {
+        Tabs.leader = true;
+      }
+    });
+
     it("says nothing for a bundle built before any of this existed", () => {
       assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {});
     });
