@@ -273,6 +273,13 @@ export default class Batches {
   // Where the previous page load's numbering got to, so this one counts on from there. Never
   // backwards: a number is identified with its replica, and the server answers a repeat from its
   // record of the first batch to carry it.
+  //
+  // The counter moves in THIS tab's memory while being stored once per browser, so two tabs that
+  // resume from the same number can hand out the same next one - and the server, seeing the pair
+  // twice, answers the second with the first one's verdict rather than applying it. Known and
+  // deliberate for as long as one identity per browser means an unlocked counter: the multi-tab
+  // work takes the number inside the same lock that puts the batch in the shared queue, which
+  // removes the case rather than detecting it.
   static resumeFrom(seq) {
     Batches.#seq = seq;
   }
