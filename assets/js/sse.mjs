@@ -396,15 +396,28 @@ export default class Sse {
         return null;
 
       // What follows is the whole of what this client may see rather than what changed in it, so
-      // what it holds now is no part of the answer and goes - the place with it, because the place
-      // described those rows.
+      // every row it holds goes back to awaiting the server's word - and stays on the screen, and
+      // stays readable and writable, until the marker ending the refill says which of them the
+      // server no longer sends. The place goes now either way, because it described the rows the
+      // refill replaces.
+      //
+      // Somebody else signing in is the exception, and the only one: those rows were another
+      // person's and this person may not see them, so they go before anything can read them. Told
+      // apart by the reason the server itself spells for it - `durability.mjs` posts the same word
+      // for the page-load half of the same event, rather than the sentence it logs.
       //
       // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
       // marker ending the refill schedules one even when the refill is empty - which is what
       // takes rows the client may no longer see off the screen in the case that produced them.
       case "sync_resync":
         Logger.debug(`Hologram: sync starting over (${frame.reason})`);
-        LocalDatabase.reset();
+
+        if (frame.reason === "identity") {
+          LocalDatabase.reset();
+        } else {
+          LocalDatabase.beginRefill();
+        }
+
         $.syncCursor = null;
 
         return null;

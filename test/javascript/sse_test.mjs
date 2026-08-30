@@ -655,15 +655,34 @@ describe("Sse", () => {
       assert.equal(animationFrames.length, 1);
     });
 
+    // A follower reaches this through the group rather than through a stream, and the page-load
+    // half of a change of identity is posted to it exactly this way.
+    it("starts over on a resync naming a change of identity", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+
+      Sse.receiveFrame("sync_resync", {reason: "identity"});
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
     // Nothing is repainted here on purpose - the refill's own frames schedule that.
-    it("starts over on a resync", () => {
+    it("keeps what it holds on a resync, awaiting the refill", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
 
       Sse.syncCursor = "Nzc4LjA";
 
-      Sse.receiveFrame("sync_resync", {reason: "cursor_unreadable"});
+      Sse.receiveFrame("sync_resync", {reason: "cursor"});
 
-      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.deepStrictEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
+        id: "t1",
+        title: "held",
+      });
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [
+        ["MyApp.Task", "t1"],
+      ]);
+
       assert.isNull(Sse.syncCursor);
       assert.equal(animationFrames.length, 0);
     });
@@ -1203,19 +1222,107 @@ describe("Sse", () => {
   describe("sync_resync event", () => {
     const TASK = "MyApp.Task";
 
-    const envelope = () =>
-      JSON.stringify({protocol_version: 1, reason: "retention"});
+    const envelope = (reason = "retention") =>
+      JSON.stringify({protocol_version: 1, reason: reason});
 
     beforeEach(() => {
+      // The refill's own frames are ingested here rather than stubbed, so the model the ingest
+      // reads has to be the one a page would have been built with.
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        modelHash: "a3f9c2",
+        protocolVersion: 1,
+      };
+
       LocalDatabase.putRow(TASK, {id: "t1", title: "held before the resync"});
       LocalDatabase.markSynced("all");
     });
 
-    it("drops what the client holds, because what follows is everything again", async () => {
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    // The rows stay on the screen and stay usable while the refill lands - an action reading or
+    // writing one of them finds it there, where an emptied database answers that it holds no such
+    // row and refuses the write.
+    it("keeps what the client holds, awaiting the refill's word", async () => {
       stubHandshakeResponse();
 
       await Sse.connect();
       Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
+        id: "t1",
+        title: "held before the resync",
+      });
+    });
+
+    it("marks every held row as awaiting the fill", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+    });
+
+    // The one resync that replaces WHO is asking rather than what the server said. Those rows
+    // were the previous person's, and this one may not see them - so they go now rather than at
+    // the end of a fill, before anything can read them.
+    it("drops what it holds when who is asking changed", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope("identity")});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("keeps a row the refill delivered, as the server now spells it", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      Sse.eventSource.listeners.sync_deltas({
+        data: JSON.stringify({
+          applied_seq: null,
+          cursor: null,
+          deltas: {
+            put_entity: {[TASK]: [{id: "t1", title: "as it now stands"}]},
+          },
+          model_hash: "a3f9c2",
+          protocol_version: 1,
+        }),
+      });
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({protocol_version: 1, scope: "all"}),
+      });
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
+        id: "t1",
+        title: "as it now stands",
+        title_sort: "as it now stands",
+      });
+    });
+
+    it("takes a row the refill never delivered off at the marker", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({protocol_version: 1, scope: "all"}),
+      });
 
       assert.isNull(LocalDatabase.getRow(TASK, "t1"));
     });
@@ -1254,8 +1361,8 @@ describe("Sse", () => {
       assert.isNull(Sse.syncCursor);
     });
 
-    // Repainting an emptied database would show the gap between the discard and the refill,
-    // which lands milliseconds later and schedules its own repaint.
+    // Repainting here would draw the rows exactly as they already are - the refill has changed
+    // nothing yet - so the frames that do change something schedule the repaints.
     it("schedules no repaint of the gap it opens", async () => {
       stubHandshakeResponse();
 
