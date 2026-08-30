@@ -10,6 +10,10 @@ defmodule HologramFeatureTests.ResyncTest do
   alias HologramFeatureTests.ActionWritesPage
   alias HologramFeatureTests.Entities.Todo
 
+  # The place the client would greet a stream with: held once a fill has declared the pot complete,
+  # and given up the moment it is told to start over. Read in five places below.
+  @place_script "return globalThis.Hologram.durability.cursor();"
+
   # What a browser does between being told to start over and being sent everything again. It keeps
   # what it holds, on screen and readable, and the marker ending the refill takes away whatever the
   # refill did not bring back.
@@ -36,10 +40,17 @@ defmodule HologramFeatureTests.ResyncTest do
   # so this is how a test waits for a whole fill to have finished.
   defp await_place(session, attempts_left \\ 100)
 
-  defp await_place(session, 0), do: session
+  # Raising rather than returning: every assertion this gates would otherwise pass on the rows the
+  # client kept, which is exactly what a refill that never landed leaves on the screen. Same shape
+  # as `await_pending_writes/3` and `await_evaluator_drain/1` in the framework's own helpers.
+  defp await_place(session, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for the refill to complete, the client holds place " <>
+            inspect(script_result(session, @place_script))
+  end
 
   defp await_place(session, attempts_left) do
-    if script_result(session, "return globalThis.Hologram.durability.cursor();") do
+    if script_result(session, @place_script) do
       session
     else
       Process.sleep(50)
@@ -51,10 +62,16 @@ defmodule HologramFeatureTests.ResyncTest do
   # is how a test waits for the "start over" frame to have been processed.
   defp await_no_place(session, attempts_left \\ 100)
 
-  defp await_no_place(session, 0), do: session
+  # Raising for a second reason: a client that was never told to start over goes on holding its
+  # place, and the click that follows would then act on a client this test never disturbed.
+  defp await_no_place(session, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for the client to be told to start over, it still holds place " <>
+            inspect(script_result(session, @place_script))
+  end
 
   defp await_no_place(session, attempts_left) do
-    if script_result(session, "return globalThis.Hologram.durability.cursor();") do
+    if script_result(session, @place_script) do
       Process.sleep(50)
       await_no_place(session, attempts_left - 1)
     else
@@ -63,7 +80,7 @@ defmodule HologramFeatureTests.ResyncTest do
   end
 
   defp assert_no_place(session) do
-    assert_script_result(session, "return globalThis.Hologram.durability.cursor();", nil)
+    assert_script_result(session, @place_script, nil)
   end
 
   # Proves the DOM changed without the page being fetched again: a reload would take this marker
