@@ -32,9 +32,10 @@ export default class LocalDatabase {
   // type -> relationship -> source id -> Set of target ids
   static #facts = {};
 
-  // The rows that arrived with the page rather than from the stream, until the stream confirms
-  // them. What is still here when the fill declares itself complete was never the client's to
-  // hold - a grant revoked between the render and the connect leaves exactly that.
+  // The rows held on an earlier word of the server's - a page render's, or a stream's from before
+  // a resync - until this fill confirms them. What is still here when the fill declares itself
+  // complete was never the client's to hold, or is no longer: a grant revoked between a render
+  // and a connect, or a row deleted while the browser was away.
   static #carried = new Set();
 
   // The scopes the server has declared complete ("page", "all") - until a scope arrives, the
@@ -62,6 +63,26 @@ export default class LocalDatabase {
 
   static baseTargetIds(type, relationship, sourceId) {
     return LocalDatabase.#facts[type]?.[relationship]?.[sourceId] ?? new Set();
+  }
+
+  // Every held row goes back to awaiting the server's word, because a whole fill is about to say
+  // which of them are still this client's. The rows and their facts STAY - the screen goes on
+  // showing them and an action can still read and write them - and the marker ending the fill
+  // takes away whatever it never delivered, through the same sweep that takes away the rows a
+  // page carried and the stream never vouched for.
+  //
+  // The counts and the scope marks go, because neither is true of a database being filled: a
+  // count is answered from the rows as they stand once the client can count for itself, and no
+  // scope is complete again until a marker says so.
+  static beginRefill() {
+    for (const [type, table] of Object.entries(LocalDatabase.#tables)) {
+      for (const id of Object.keys(table)) {
+        LocalDatabase.markCarried(type, id);
+      }
+    }
+
+    LocalDatabase.syncCounts = {};
+    LocalDatabase.#syncedScopes = new Set();
   }
 
   static deleteFact(type, relationship, sourceId, targetId) {

@@ -199,6 +199,81 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("beginRefill()", () => {
+    const PROJECT = "MyApp.Project";
+    const TASK = "MyApp.Task";
+
+    it("drops the carried counts and the scope marks", () => {
+      LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
+      LocalDatabase.markSynced("all");
+
+      LocalDatabase.beginRefill();
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.isFalse(LocalDatabase.isSynced("all"));
+    });
+
+    // The whole point of marking rather than dropping: the screen goes on showing what it showed,
+    // and an action that reads or writes one of these rows finds it there.
+    it("keeps the rows and their relationship facts", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "held before the resync"});
+      LocalDatabase.addFact(PROJECT, "tasks", "p1", "t1");
+
+      LocalDatabase.beginRefill();
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
+        id: "t1",
+        title: "held before the resync",
+      });
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
+        new Set(["t1"]),
+      );
+    });
+
+    // The other half of the design, stated end to end: the fill delivers what this client may
+    // still see, and the marker ending it takes away the rest.
+    it("lets the marker sweep what the fill did not confirm", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "delivered again"});
+      LocalDatabase.putRow(TASK, {id: "t2", title: "no longer sent"});
+
+      LocalDatabase.beginRefill();
+      LocalDatabase.unmarkCarried(TASK, "t1");
+      LocalDatabase.markSynced("all");
+
+      assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
+        id: "t1",
+        title: "delivered again",
+      });
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t2"));
+    });
+
+    it("marks a row already carried once", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "carried by the page"});
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.beginRefill();
+
+      assert.deepStrictEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+    });
+
+    it("marks every held row as awaiting the fill", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "a task"});
+      LocalDatabase.putRow(TASK, {id: "t2", title: "another task"});
+      LocalDatabase.putRow(PROJECT, {id: "p1", name: "a project"});
+
+      LocalDatabase.beginRefill();
+
+      assert.sameDeepMembers(LocalDatabase.carriedEntries(), [
+        [PROJECT, "p1"],
+        [TASK, "t1"],
+        [TASK, "t2"],
+      ]);
+    });
+  });
+
   describe("deleteFact()", () => {
     it("removes a pair, keeping the source's other pairs", () => {
       LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
