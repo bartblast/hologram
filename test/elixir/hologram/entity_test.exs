@@ -680,6 +680,17 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "t/0" do
+    test "types the metadata and system attribute fields on an entity type declaring nothing" do
+      assert struct_field_types(Module1) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               created_at: "DateTime.t() | nil",
+               id: "String.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+  end
+
   describe "validate/1" do
     test "returns :ok for a valid entity struct" do
       entity = new(Module10, count: 5)

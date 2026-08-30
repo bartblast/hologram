@@ -78,6 +78,8 @@ defmodule Hologram.Entity do
       |> struct_fields()
       |> Macro.escape()
 
+    struct_type = struct_type(env.module)
+
     quote do
       # The metadata struct is expanded HERE, in the entity's own module body, so the module
       # carries a compile-time dependency on it. Escaping a pre-built one instead bakes a copy of
@@ -87,6 +89,12 @@ defmodule Hologram.Entity do
       defstruct Enum.sort([
                   {:__meta__, %Hologram.Entity.Metadata{}} | unquote(struct_fields)
                 ])
+
+      @typedoc """
+      An entity struct of this entity type.
+      Every attribute field admits nil - a struct carries whatever it was built with, and declarations are checked at the write.
+      """
+      @type t :: unquote(struct_type)
 
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
@@ -513,6 +521,21 @@ defmodule Hologram.Entity do
     |> group_errors()
   end
 
+  defp attribute_field_type_ast(type, opts) do
+    type_union([attribute_type_ast(type, opts), nil])
+  end
+
+  # The Elixir type an attribute's field holds, from the type its declaration names. A uuid is a
+  # string here - the canonical id format is a declaration check, not something a type can state.
+  defp attribute_type_ast(:boolean, _opts), do: quote(do: boolean())
+  defp attribute_type_ast(:date, _opts), do: remote_type_ast(Date)
+  defp attribute_type_ast(:datetime, _opts), do: remote_type_ast(DateTime)
+  defp attribute_type_ast(:enum, opts), do: type_union(Keyword.fetch!(opts, :values))
+  defp attribute_type_ast(:float, _opts), do: quote(do: float())
+  defp attribute_type_ast(:integer, _opts), do: quote(do: integer())
+  defp attribute_type_ast(:string, _opts), do: remote_type_ast(String)
+  defp attribute_type_ast(:uuid, _opts), do: remote_type_ast(String)
+
   # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
   # so a role reaching the given one through any number of hops ends up in the result.
   defp expand_role_names(names, extends_by_name) do
@@ -532,6 +555,15 @@ defmodule Hologram.Entity do
     end
   end
 
+  defp field_type_asts(_module) do
+    system_attribute_field_types =
+      Enum.map(@system_attributes, fn {name, type, opts} ->
+        {name, attribute_field_type_ast(type, opts)}
+      end)
+
+    [{:__meta__, remote_type_ast(Entity.Metadata)} | system_attribute_field_types]
+  end
+
   defp group_errors(:ok), do: :ok
 
   defp group_errors({:error, errors}) do
@@ -539,6 +571,27 @@ defmodule Hologram.Entity do
       Enum.group_by(errors, fn {name, _reason} -> name end, fn {_name, reason} -> reason end)
 
     {:error, grouped}
+  end
+
+  # Spelled with the module ATOM rather than with an alias, so that an entity module's own
+  # aliases cannot redirect the name.
+  defp remote_type_ast(module), do: {{:., [], [module, :t]}, [], []}
+
+  # A type is AST, not data: the field types name other modules' t/0, and those names have to
+  # arrive in the entity's module unexpanded - which is why this is built rather than escaped.
+  defp struct_type(module) do
+    fields =
+      module
+      |> field_type_asts()
+      |> Enum.sort()
+
+    {:%, [], [{:__MODULE__, [], nil}, {:%{}, [], fields}]}
+  end
+
+  defp type_union(asts) do
+    asts
+    |> Enum.reverse()
+    |> Enum.reduce(fn ast, acc -> {:|, [], [ast, acc]} end)
   end
 
   defp user_entity_marker(opts) do

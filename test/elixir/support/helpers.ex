@@ -334,6 +334,22 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns the field types of the given entity type's t/0, as a map of field name to the type's source form.
+
+  The type is read back from the module's BEAM file, so the entity type must be one compiled to
+  disk - a module defined inside a test function carries no readable type chunk.
+  """
+  @spec struct_field_types(module) :: %{atom => String.t()}
+  def struct_field_types(entity_type) do
+    {:ok, [type: type]} = Code.Typespec.fetch_types(entity_type)
+
+    {:"::", _meta, [_name, {:%, _struct_meta, [_module, {:%{}, _map_meta, fields}]}]} =
+      Code.Typespec.type_to_quoted(type)
+
+    Map.new(fields, fn {name, field_type} -> {name, Macro.to_string(field_type)} end)
+  end
+
+  @doc """
   Subscribes the calling process to a Hologram identity-channel PubSub topic
   with a unique generated id. Returns the generated id so the caller can build
   matching channel tuples (e.g. `{:instance, id}`).
