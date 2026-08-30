@@ -24,6 +24,39 @@ describe("Batch", () => {
     });
   });
 
+  describe("fromRecord()", () => {
+    const record = {
+      actorUserId: "u1",
+      landed: [1],
+      seq: 4,
+      writes: [create("n1"), create("n2")],
+    };
+
+    it("builds a pending batch out of what was kept", async () => {
+      const batch = Batch.fromRecord(record);
+
+      assert.equal(batch.actorUserId, "u1");
+      assert.equal(batch.seq, 4);
+      assert.equal(batch.state, "pending");
+      assert.deepStrictEqual(batch.writes, [create("n1"), create("n2")]);
+
+      assert.isFalse(batch.isLanded(0));
+      assert.isTrue(batch.isLanded(1));
+
+      // Already written down, so the sender has nothing to wait for before shipping it.
+      assert.isUndefined(await batch.recorded);
+    });
+
+    // The page that opened it is gone, and so is the component its cid named.
+    it("names no target", () => {
+      assert.isNull(Batch.fromRecord(record).target);
+    });
+
+    it("round-trips through record()", () => {
+      assert.deepStrictEqual(Batch.fromRecord(record).record(), record);
+    });
+  });
+
   describe("isLanded() and land()", () => {
     it("marks the writes naming the given rows", () => {
       const batch = new Batch("notes");
@@ -96,6 +129,16 @@ describe("Batch", () => {
 
       assert.isFalse(batch.isLanded(0));
     });
+
+    it("answers whether it marked anything that was not marked already", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+
+      assert.isTrue(batch.land(new Set([`${NOTE} n1`])));
+      assert.isFalse(batch.land(new Set([`${NOTE} n1`])));
+      assert.isFalse(batch.land(new Set([`${NOTE} n9`])));
+    });
   });
 
   describe("mark()", () => {
@@ -105,6 +148,36 @@ describe("Batch", () => {
       batch.mark("sending");
 
       assert.equal(batch.state, "sending");
+    });
+  });
+
+  describe("record()", () => {
+    it("spells the kept fields and nothing else", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+      batch.seal(4);
+
+      assert.deepStrictEqual(Object.keys(batch.record()), [
+        "actorUserId",
+        "landed",
+        "seq",
+        "writes",
+      ]);
+    });
+
+    it("lists the landed indices in order", () => {
+      const batch = new Batch("notes");
+
+      batch.append(create("n1"));
+      batch.append(create("n2"));
+      batch.append(create("n3"));
+      batch.seal(4);
+
+      batch.land(new Set([`${NOTE} n3`]));
+      batch.land(new Set([`${NOTE} n1`]));
+
+      assert.deepStrictEqual(batch.record().landed, [0, 2]);
     });
   });
 
