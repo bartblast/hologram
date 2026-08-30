@@ -52,8 +52,14 @@ const ENTITIES = "entities";
 
 // The shape of the store: which object stores exist, keyed how. Part of the database's NAME, so a
 // bundle with a different layout opens a different database rather than upgrading this one - which
-// is why VERSION below never moves. 2 added the queue.
-const LAYOUT = 2;
+// is why VERSION below never moves.
+//
+// Still 1 with the queue added to it: the shape is edited in place while nothing anywhere holds
+// data in the old one, and the number starts moving when there is something to move it for. A
+// browser that a person opened by hand before the queue existed holds a two-store database and
+// drops to memory mode on the missing store - clearing site data is the whole of the fix, and
+// nothing automated is in that position, since every driven browser starts from an empty profile.
+const LAYOUT = 1;
 
 const META = "meta";
 const QUEUE = "queue";

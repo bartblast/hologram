@@ -32,7 +32,7 @@ registerWebApis();
 
 describe("Durability", () => {
   // Named for the model the runtime globals below declare, and the store layout.
-  const DATABASE_NAME = "hologram.model-a.2";
+  const DATABASE_NAME = "hologram.model-a.1";
 
   // Installed for this suite and taken back down after it, never at module scope: mocha runs every
   // file in one process, and `open()` reads the absence of indexedDB as "this browser cannot
@@ -390,7 +390,7 @@ describe("Durability", () => {
         (db) => db.name,
       );
 
-      assert.include(names, "hologram.model-a.2");
+      assert.include(names, "hologram.model-a.1");
     });
 
     it("opens in indexeddb mode and creates the three object stores", async () => {
@@ -803,7 +803,7 @@ describe("Durability", () => {
       assert.isNull(resumed.cursor);
       assert.equal(resumed.seq, 0);
 
-      assert.equal((await readAll("entities", "hologram.model-a.2")).length, 1);
+      assert.equal((await readAll("entities", "hologram.model-a.1")).length, 1);
     });
 
     // Their rows are what SOMEBODY ELSE was allowed to see, and a resuming stream is told what
