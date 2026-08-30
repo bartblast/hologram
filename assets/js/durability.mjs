@@ -670,6 +670,12 @@ export default class Durability {
     }
 
     Durability.#close();
+
+    // The other tabs of the group share this database and have just had the rows and the place
+    // taken out from under them. They let go of it too rather than going on writing into a store
+    // whose place no longer describes what it holds - and they wipe nothing, since the wipe above
+    // is the whole of what had to happen and happened once.
+    Tabs.post({kind: "storage_failed"});
   }
 
   // Everything the previous page load left, in one read - the six things `meta` holds and every

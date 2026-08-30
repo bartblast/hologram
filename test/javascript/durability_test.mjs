@@ -397,6 +397,17 @@ describe("Durability", () => {
     // of the batch that first carried them, dropping the new writes in silence. Absent is safe
     // where stale is not: a load finding no identity takes its own page's fresh pair and counts
     // from nothing.
+    // The rows and the place are gone for the whole browser, not for this tab - so a tab that goes
+    // on writing frames into it would be dating rows the store no longer holds.
+    it("tells the group it has stopped storing", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await Durability.open();
+      await Durability.persistFrame([unstorableRecord()], "place-2");
+
+      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+    });
+
     it("drops the identity and the counter, which have stopped being true", async () => {
       await Durability.open();
       await Durability.persistBatch(sealedBatch(41));
