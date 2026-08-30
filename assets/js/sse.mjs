@@ -165,10 +165,30 @@ export default class Sse {
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
 
+      const greeting = $.buildSyncGreeting(Hologram.currentPageModule());
+
+      // A greeting that asks for sync and names no place asks for EVERYTHING, so what this client
+      // holds goes back to awaiting the server's word exactly as it does on a resync - there is no
+      // frame in front of this one saying so, and a whole fill follows all the same.
+      //
+      // The case it exists for is a client cut off part way through a fill: it gave up its place
+      // when that fill began and never got a new one, so it comes back here - and the rows the
+      // unfinished fill had already delivered are unmarked, which would leave one revoked since
+      // standing for the life of the tab.
+      //
+      // Read off the greeting rather than from `syncCursor` and `Tabs.leader` separately, because
+      // the greeting is what decides whether a fill comes at all: a tab that does not lead, a page
+      // that has not mounted and a bundle carrying no sync all greet with nothing, and marking
+      // rows for a fill that never arrives would have the leader's own completeness sweep take
+      // away rows this browser rightly holds.
+      if (greeting.page !== undefined && greeting.cursor === undefined) {
+        LocalDatabase.beginRefill();
+      }
+
       const params = new URLSearchParams({
         instance_id: App.instanceId,
         handshake_id: handshakeId,
-        ...$.buildSyncGreeting(Hologram.currentPageModule()),
+        ...greeting,
       });
 
       // Whatever was here goes first. Two connects can be in flight at once - a retry scheduled
@@ -396,15 +416,28 @@ export default class Sse {
         return null;
 
       // What follows is the whole of what this client may see rather than what changed in it, so
-      // what it holds now is no part of the answer and goes - the place with it, because the place
-      // described those rows.
+      // every row it holds goes back to awaiting the server's word - and stays on the screen, and
+      // stays readable and writable, until the marker ending the refill says which of them the
+      // server no longer sends. The place goes now either way, because it described the rows the
+      // refill replaces.
+      //
+      // Somebody else signing in is the exception, and the only one: those rows were another
+      // person's and this person may not see them, so they go before anything can read them. Told
+      // apart by the reason the server itself spells for it - `durability.mjs` posts the same word
+      // for the page-load half of the same event, rather than the sentence it logs.
       //
       // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
       // marker ending the refill schedules one even when the refill is empty - which is what
       // takes rows the client may no longer see off the screen in the case that produced them.
       case "sync_resync":
         Logger.debug(`Hologram: sync starting over (${frame.reason})`);
-        LocalDatabase.reset();
+
+        if (frame.reason === "identity") {
+          LocalDatabase.reset();
+        } else {
+          LocalDatabase.beginRefill();
+        }
+
         $.syncCursor = null;
 
         return null;
