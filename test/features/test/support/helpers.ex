@@ -271,7 +271,7 @@ defmodule HologramFeatureTests.Helpers do
   durability to assert on instead. Answers whatever the server holds after the last attempt, so a
   caller matching on the result gets a real assertion failure rather than a timeout.
   """
-  @spec await_server_todos(non_neg_integer) :: [struct]
+  @spec await_server_todos(non_neg_integer) :: [Todo.t()]
   def await_server_todos(expected_count) do
     Enum.reduce_while(1..100, [], fn _attempt, _acc ->
       todos = Enum.sort_by(DB.read(Todo), & &1.title)
