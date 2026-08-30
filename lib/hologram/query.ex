@@ -1,6 +1,7 @@
 defmodule Hologram.Query do
   @moduledoc false
 
+  alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
@@ -68,7 +69,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the entity is not an entity struct, when the target id is not a
   string, or when the relationship is a to-one relationship, an attribute, or unknown.
   """
-  @spec add_relationship(struct, atom, String.t()) :: struct
+  @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   def add_relationship(entity, relationship_name, target_id) do
     put_relationship_op(entity, relationship_name, target_id, :add, "add_relationship")
   end
@@ -88,7 +89,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the entity is not an entity struct, when the operation is not an
   atom, or when the struct already carries a claim.
   """
-  @spec authorize(struct, atom) :: struct
+  @spec authorize(Entity.t(), atom) :: Entity.t()
   def authorize(entity, operation) when is_atom(operation) do
     put_claim(entity, {:authorize, operation}, "authorize")
   end
@@ -127,7 +128,7 @@ defmodule Hologram.Query do
   sign goes through increment/3. Otherwise the same arguments, the same recording and the same
   rules - see increment/3.
   """
-  @spec decrement(struct, atom, pos_integer) :: struct
+  @spec decrement(Entity.t(), atom, pos_integer) :: Entity.t()
   def decrement(entity, name, amount) do
     put_delta(entity, name, amount, -1, "decrement")
   end
@@ -142,7 +143,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the entity is not an entity struct, when the target id is not a
   string, or when the relationship is a to-one relationship, an attribute, or unknown.
   """
-  @spec delete_relationship(struct, atom, String.t()) :: struct
+  @spec delete_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   def delete_relationship(entity, relationship_name, target_id) do
     put_relationship_op(entity, relationship_name, target_id, :delete, "delete_relationship")
   end
@@ -333,7 +334,7 @@ defmodule Hologram.Query do
   is not an integer, or when the struct's field holds nil - a counter always holds a number,
   and a struct that has none has nothing to move.
   """
-  @spec increment(struct, atom, integer) :: struct
+  @spec increment(Entity.t(), atom, integer) :: Entity.t()
   def increment(entity, name, amount) do
     put_delta(entity, name, amount, 1, "increment")
   end
@@ -538,7 +539,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the entity is not an entity struct, when the values are neither a
   keyword list nor a map, or when a name is a relationship, a system attribute, or unknown.
   """
-  @spec put_attribute(struct, keyword | map) :: struct
+  @spec put_attribute(Entity.t(), keyword | map) :: Entity.t()
   def put_attribute(entity, values) when is_list(values) or is_map(values) do
     entity_type = entity_type!(entity, "put_attribute")
 
@@ -576,7 +577,7 @@ defmodule Hologram.Query do
   Puts the given attribute value on the given entity struct and returns it, with the value
   recorded as a change DB.update/1 writes - put_attribute/2 for one name and value.
   """
-  @spec put_attribute(struct, atom, any) :: struct
+  @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   def put_attribute(entity, name, value) do
     put_attribute(entity, [{name, value}])
   end
@@ -603,7 +604,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the subject is neither an entity struct, an entity type module nor
   a query term, or when a struct already carries a claim.
   """
-  @spec trust(struct | module | t) :: struct | t
+  @spec trust(Entity.t() | module | t) :: Entity.t() | t
   # A query term is a struct too, so the entity-struct clause has to say which struct it means -
   # every other stage takes one or the other, and this one takes both.
   def trust(%{__struct__: entity_type} = entity) when entity_type != __MODULE__ do
