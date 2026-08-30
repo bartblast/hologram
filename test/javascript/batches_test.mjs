@@ -26,12 +26,38 @@ describe("Batches", () => {
 
   const write = (id) => ({id, op: "delete", stamp: 1, type: TODO});
 
+  // Shared by every describe that needs a write to FOLD - the overlay builds a created row from
+  // the model's settable fields, so a fold against no model is a fold of nothing.
+  const TODO_MODEL = {
+    [TODO]: {
+      attributes: {
+        created_at: "datetime",
+        done: "boolean",
+        id: "uuid",
+        title: "string",
+        updated_at: "datetime",
+      },
+      constraints: {},
+      defaults: {},
+      enumValues: {},
+      frameworkAttributes: [],
+      relationships: {tags: {optional: true, toMany: true, type: TAG}},
+      serverOnly: [],
+    },
+  };
+
   beforeEach(() => {
     Batches.reset();
   });
 
   afterEach(() => {
     Batches.reset();
+
+    // Not covered by LocalDatabase.reset(), which leaves the acting user alone on purpose - a
+    // resync replaces what the server said and does not change who is signed in. So a test that
+    // sets one has to put it back, or it reaches every suite that runs after this file.
+    LocalDatabase.actorUserId = null;
+
     Replica.reset();
     sinon.restore();
   });
@@ -46,25 +72,7 @@ describe("Batches", () => {
     let renderStub, sendStub;
 
     beforeEach(() => {
-      globalThis.Hologram.sync = {
-        model: {
-          [TODO]: {
-            attributes: {
-              created_at: "datetime",
-              done: "boolean",
-              id: "uuid",
-              title: "string",
-              updated_at: "datetime",
-            },
-            constraints: {},
-            defaults: {},
-            enumValues: {},
-            frameworkAttributes: [],
-            relationships: {tags: {optional: true, toMany: true, type: TAG}},
-            serverOnly: [],
-          },
-        },
-      };
+      globalThis.Hologram.sync = {model: TODO_MODEL};
 
       LocalDatabase.reset();
       Model.reset();
@@ -137,7 +145,7 @@ describe("Batches", () => {
         record = resolve;
       });
 
-      sinon.stub(Durability, "persistCounter").returns(recording);
+      sinon.stub(Durability, "persistBatch").returns(recording);
       sendStub.resolves(confirmed());
 
       sealed(creating("t1", "first"));
@@ -365,6 +373,181 @@ describe("Batches", () => {
       assert.equal(Batches.rejected[0].state, "rejected");
     });
 
+    it("forgets a confirmed batch", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.isTrue(forgetting.calledOnceWithExactly(1));
+    });
+
+    // Refused for the writes or refused for the build, it is answered either way - and a batch
+    // kept for a resend would come back on a later page load as a write the user watched fail.
+    it("forgets a refused batch", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      sealed(creating("t1", "first"));
+
+      sendStub.resolves({
+        reason: "the reason",
+        status: "rejected",
+        write: 0,
+      });
+
+      await Batches.flush();
+
+      assert.isTrue(forgetting.calledOnceWithExactly(1));
+    });
+
+    it("forgets nothing about a batch nobody answered", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      sealed(creating("t1", "first"));
+      sendStub.resolves({httpStatus: 502, status: "failed"});
+
+      await Batches.flush();
+
+      assert.isFalse(forgetting.called);
+    });
+
+    describe("the retry", () => {
+      let timers;
+
+      beforeEach(() => {
+        timers = sinon.useFakeTimers();
+      });
+
+      afterEach(() => {
+        timers.restore();
+      });
+
+      // The stream is up so no reconnect is coming, and the user is idle so no action is - without
+      // this a batch sits unsent while the page looks perfectly healthy.
+      it("goes again on its own, on the stream's backoff", async () => {
+        sinon.stub(Sse, "computeReconnectDelay").returns(250);
+
+        sealed(creating("t1", "first"));
+
+        sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+        sendStub.onSecondCall().resolves(confirmed());
+
+        await Batches.flush();
+
+        sinon.assert.calledOnce(sendStub);
+
+        await timers.tickAsync(249);
+
+        sinon.assert.calledOnce(sendStub);
+
+        await timers.tickAsync(1);
+
+        sinon.assert.calledTwice(sendStub);
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      // One tick per retry rather than one tick for all: a retry scheduled DURING a tick, at the
+      // same instant, waits for the next one - so each tick is one try, and the attempt count is
+      // read after each.
+      it("backs off further with every unanswered try", async () => {
+        const delay = sinon.stub(Sse, "computeReconnectDelay").returns(1);
+
+        sealed(creating("t1", "first"));
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1],
+        );
+
+        await timers.tickAsync(1);
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1, 2],
+        );
+
+        await timers.tickAsync(1);
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1, 2, 3],
+        );
+      });
+
+      // A server that is answering again has earned the short delay, whatever it took to get there.
+      it("starts the backoff over once a batch is answered", async () => {
+        const delay = sinon.stub(Sse, "computeReconnectDelay").returns(1);
+
+        sealed(creating("t1", "first"));
+        sealed(creating("t2", "second"));
+
+        sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+        sendStub.onSecondCall().resolves(confirmed());
+        sendStub.onThirdCall().resolves({httpStatus: 503, status: "failed"});
+
+        // The first try fails and schedules attempt 1. The retry answers batch 1 and then fails
+        // batch 2 in the same run - so the count was reset between the two, and the second
+        // schedule asks for attempt 1 again rather than 2.
+        await Batches.flush();
+        await timers.tickAsync(1);
+
+        sinon.assert.calledThrice(sendStub);
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1, 1],
+        );
+      });
+
+      // A second failure replaces the first retry rather than adding to it. The delays differ per
+      // attempt so the two are told apart: a first-attempt timer left standing would fire at 100
+      // and send, where the replacement fires at 200.
+      it("schedules one retry at a time", async () => {
+        sinon
+          .stub(Sse, "computeReconnectDelay")
+          .callsFake((attempts) => attempts * 100);
+
+        sealed(creating("t1", "first"));
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+
+        await Batches.flush();
+        await Batches.flush();
+
+        sinon.assert.calledTwice(sendStub);
+
+        await timers.tickAsync(150);
+
+        sinon.assert.calledTwice(sendStub);
+
+        await timers.tickAsync(50);
+
+        sinon.assert.calledThrice(sendStub);
+      });
+
+      it("is not scheduled for a batch that was answered", async () => {
+        const delay = sinon.stub(Sse, "computeReconnectDelay").returns(250);
+
+        sealed(creating("t1", "first"));
+
+        sendStub.resolves({
+          reason: "the reason",
+          status: "rejected",
+          write: 0,
+        });
+
+        await Batches.flush();
+        await timers.tickAsync(250);
+
+        sinon.assert.calledOnce(sendStub);
+        assert.isFalse(delay.called);
+      });
+    });
+
     it("leaves a batch nobody answered pending, and stops the queue behind it", async () => {
       sealed(creating("t1", "first"));
       sealed(creating("t2", "second"));
@@ -588,6 +771,41 @@ describe("Batches", () => {
 
       return Batches.close();
     };
+
+    // What a reload would otherwise cost: a batch whose frame arrived and whose ANSWER was lost is
+    // taken up again by the next page load and sent again, answered from the server's record, and
+    // promoted - and a moved counter promoted onto a base that already holds the move counts it
+    // twice, for good, since the server has nothing further to say about a row nobody has touched.
+    it("writes the marks down when a frame lands a write", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+      const batch = sealed(write("t1"));
+
+      Batches.land(1, new Set([`${TODO} t1`]));
+
+      assert.isTrue(writing.calledOnceWithExactly(batch));
+    });
+
+    it("writes nothing down when the frame marks nothing new", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      sealed(write("t1"));
+
+      Batches.land(1, new Set([`${TODO} t1`]));
+      Batches.land(1, new Set([`${TODO} t1`]));
+
+      assert.isTrue(writing.calledOnce);
+    });
+
+    it("writes nothing down for a batch above the number", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      sealed(write("t1"));
+      sealed(write("t2"));
+
+      Batches.land(1, new Set([`${TODO} t1`, `${TODO} t2`]));
+
+      assert.isTrue(writing.calledOnce);
+    });
 
     // Up to the number and no further, in one call: a batch the server has applied stops being
     // folded, and the one after it goes on showing, because nothing has been said about it yet.
@@ -841,19 +1059,59 @@ describe("Batches", () => {
       assert.isNull(Batches.current());
     });
 
-    it("records the batch's number, and hands the write to the sender", () => {
+    it("writes the batch down, and hands the write to the sender", () => {
       const recording = Promise.resolve();
-      const counter = sinon
-        .stub(Durability, "persistCounter")
-        .returns(recording);
+      const writing = sinon.stub(Durability, "persistBatch").returns(recording);
 
       Batches.open("todos");
       wrote("t1");
 
       const batch = Batches.close();
 
-      assert.isTrue(counter.calledOnceWithExactly(1));
+      assert.isTrue(writing.calledOnceWithExactly(batch));
       assert.strictEqual(batch.recorded, recording);
+    });
+
+    // Taken at seal rather than at send: the page that eventually sends this batch may belong to
+    // somebody else, and only a page mounted under this user takes it up again.
+    it("seals the batch under the page's user", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().actorUserId, "u1");
+    });
+
+    // Set BEFORE the write rather than after it. The record is built at the moment the batch is
+    // written down, so an owner assigned afterwards would be stored as nobody - and no later page
+    // load would ever take the batch up, whoever signed in.
+    it("writes the batch down under the page's user", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      let stored = null;
+
+      sinon
+        .stub(Durability, "persistBatch")
+        .callsFake((batch) => (stored = batch.record()));
+
+      Batches.open("todos");
+      wrote("t1");
+      Batches.close();
+
+      assert.equal(stored.actorUserId, "u1");
+    });
+
+    // UNDEFINED rather than null, which is what a page mount leaves when its data names no actor.
+    // It has to reach the batch as null: the owner filter that decides whether a later load takes
+    // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
+    it("seals a visitor's batch under nobody", () => {
+      LocalDatabase.actorUserId = undefined;
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.isNull(Batches.close().actorUserId);
     });
 
     it("answers nothing when no batch is open", () => {
@@ -947,6 +1205,88 @@ describe("Batches", () => {
       wrote("t2");
 
       assert.equal(Batches.close().seq, 1);
+    });
+  });
+
+  describe("resume()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    const stored = (seq, id, landed = []) => ({
+      actorUserId: "u1",
+      landed,
+      seq,
+      writes: [
+        {
+          claim: null,
+          data: {done: false, title: "stored"},
+          id,
+          op: "create",
+          stamp: STAMP,
+          type: TODO,
+        },
+      ],
+    });
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("queues the stored batches oldest first", () => {
+      Batches.resume([stored(3, "t1"), stored(5, "t2")]);
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.seq),
+        [3, 5],
+      );
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.state),
+        ["pending", "pending"],
+      );
+    });
+
+    // On the screen before anything is sent, and out of the overlay rather than the base: what the
+    // previous page load put there comes back with the batches that made it, still this client's
+    // own unanswered work.
+    it("folds their writes over the base", () => {
+      Batches.resume([stored(3, "t1")]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "stored");
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("keeps their landed marks", () => {
+      Batches.resume([stored(3, "t1", [0])]);
+
+      assert.isTrue(Batches.pending[0].isLanded(0));
+    });
+
+    // Waking the sender belongs to the page load, once everything it takes up is in place.
+    //
+    // The wait is load-bearing: the sender awaits the batch's own write before anything leaves, so
+    // a synchronous assertion here passes whether or not this function sends - it would be reading
+    // the moment before the first await either way.
+    it("sends nothing", async () => {
+      const sendStub = sinon.stub(Client, "sendMutation");
+
+      Batches.resume([stored(3, "t1")]);
+
+      await waitForEventLoop();
+
+      assert.isFalse(sendStub.called);
+    });
+
+    it("takes up nothing from an empty store", () => {
+      Batches.resume([]);
+
+      assert.deepStrictEqual(Batches.pending, []);
     });
   });
 

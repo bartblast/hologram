@@ -1568,7 +1568,9 @@ export default class Hologram {
       cursor: () => Sse.syncCursor,
       mode: () => Durability.mode,
       pendingWrites: () => Durability.inFlight,
+      persisted: () => Durability.persisted,
       replicaId: () => Replica.id,
+      storedBatches: () => Durability.storedBatches,
     };
 
     delete globalThis.Hologram._pendingJsInteropActions;
@@ -2019,9 +2021,10 @@ export default class Hologram {
     }
   }
 
-  // Takes up what a previous page load left, and answers nothing on every visit after the first -
-  // this runs once per page visit, since the runtime's page-script listener fires again on each
-  // client-side navigation.
+  // Takes up what a previous page load left - the place to resume the stream from, the number to
+  // count batches on from, and the batches it never managed to send - and answers nothing on every
+  // visit after the first, since the runtime's page-script listener fires again on each
+  // client-side navigation and this runs once per page visit.
   static #restoreDurable() {
     const resumed = Durability.restore();
 
@@ -2031,6 +2034,13 @@ export default class Hologram {
 
     Sse.syncCursor = resumed.cursor;
     Batches.resumeFrom(resumed.seq);
+    Batches.resume(resumed.batches);
+
+    // The third thing that wakes the sender, beside an action finishing and the stream opening.
+    // It is needed rather than tidy: the stream is connected before the mount, so it can have
+    // opened - and flushed an empty queue - before these batches were taken up. Without this they
+    // would wait for the user to do something.
+    Batches.flush();
   }
 
   static async #restoreEts() {

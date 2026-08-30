@@ -23,13 +23,21 @@ import Replica from "./replica.mjs";
 // server answers from the record of a different batch, and a clock restarted low is a write the
 // server reads as moved.
 //
+// And it holds the QUEUE: the batches this browser has written and not yet had an answer to,
+// which is the one thing here that is nobody else's copy of anything. A row can always be
+// downloaded again; a write nothing has taken delivery of exists only where it was made. So the
+// queue outlives more than the rest - a resync and somebody else signing in leave it alone, and
+// even a storage failure keeps what is already on disk, because those batches are still the
+// user's unfinished work whatever has gone wrong since. Its record shape is FROZEN, spelled and
+// argued in `batch.mjs`: a bundle drains what an older bundle wrote.
+//
 // They do NOT outlive a storage failure, and that is the one exception. After one, this page goes
 // on spending numbers that nothing records, so a stored counter is stale rather than merely old -
 // and a later load resuming from it would hand out numbers already answered. Absent is safe where
 // stale is not.
 //
-// ONE DATABASE PER MODEL VERSION, named for the model this bundle speaks and the layout of the
-// store itself. A deploy that changes the model lands in a new tab while an old tab is still open,
+// ONE DATABASE PER MODEL VERSION, named for the layout of the store itself and the model this
+// bundle speaks. A deploy that changes the model lands in a new tab while an old tab is still open,
 // and the two would otherwise share one store - a v1 tab must never read rows v2 rewrote, and no
 // lens code ships to the browser to translate them. Named apart, they cannot meet: every tab is
 // durable the whole time, in its own bundle's shape, and nothing has to decide which of them
@@ -45,9 +53,16 @@ const ENTITIES = "entities";
 // The shape of the store: which object stores exist, keyed how. Part of the database's NAME, so a
 // bundle with a different layout opens a different database rather than upgrading this one - which
 // is why VERSION below never moves.
+//
+// Still 1 with the queue added to it: the shape is edited in place while nothing anywhere holds
+// data in the old one, and the number starts moving when there is something to move it for. A
+// browser that a person opened by hand before the queue existed holds a two-store database and
+// drops to memory mode on the missing store - clearing site data is the whole of the fix, and
+// nothing automated is in that position, since every driven browser starts from an empty profile.
 const LAYOUT = 1;
 
 const META = "meta";
+const QUEUE = "queue";
 const VERSION = 1;
 
 export default class Durability {
@@ -58,6 +73,16 @@ export default class Durability {
   // "indexeddb" once a database is open, "memory" before that and after anything goes wrong.
   static mode = "memory";
 
+  // Whether the browser has agreed to keep this origin's storage rather than evicting it under
+  // pressure, and nothing until it has been asked or where it cannot be. A devtools read; nothing
+  // in the framework reads it.
+  static persisted = null;
+
+  // How many batch records the open found, of every owner - not only the ones this page may take
+  // up. Taken once and not kept current: a test and a devtools panel read it to tell "this page
+  // is not sending them" apart from "there are none", and nothing in the framework reads it.
+  static storedBatches = 0;
+
   static #db = null;
 
   // What open() read, held until restore() consumes it. Read at open so that restore has nothing
@@ -65,11 +90,28 @@ export default class Durability {
   // continuation, before an action could dispatch and write.
   static #loaded = null;
 
+  // Whether this page load has already put the question to the browser. Flipped BEFORE the asking
+  // starts, which is what stops two batches stored in the same turn from both asking.
+  static #persistenceAsked = false;
+
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
   // resync replaces the whole pot, and when what is stored cannot be read by this page.
   static clear() {
     return Durability.#write([ENTITIES, META], Durability.#wipe);
+  }
+
+  // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
+  // nothing is waiting on it any more, and a later page load has no reason to take it up.
+  //
+  // Fire and forget, unlike the write that put it there. What a crash between the verdict and this
+  // delete costs is one batch sent a second time on the next load - and a second arrival of the
+  // same replica and number is answered from the server's record of the first rather than applied
+  // again, so the cost is a round trip rather than a duplicate write.
+  static forgetBatch(seq) {
+    return Durability.#write([QUEUE], (transaction) =>
+      transaction.objectStore(QUEUE).delete(seq),
+    );
   }
 
   // Answers nothing, and never throws: a browser that cannot store is a browser that carries on
@@ -123,28 +165,50 @@ export default class Durability {
 
     try {
       Durability.#loaded = await Durability.#load();
+      Durability.storedBatches = Durability.#loaded.queue.length;
     } catch (error) {
       return Durability.#memoryMode(`read failed (${error})`);
     }
   }
 
-  // The number this browser has counted its batches up to, and where its clock stands.
+  // A batch this browser has sealed and the number it spent on it, written down as one fact.
   //
   // The ONE write anything waits for. A batch is identified by its replica and its number, and the
   // server answers a number it has already seen from its record rather than applying it again - so
   // a number handed out but never written down is a number the next page load hands out a second
-  // time, and the batch carrying it is answered with what the FIRST batch got. A crash between
-  // sealing a batch and storing its number loses a batch that was never sent, which is the cheap
-  // side of that trade.
+  // time, and the batch carrying it is answered with what the FIRST batch got.
   //
-  // One number and one clock for the whole browser, not one per tab (D1, ruled 2026-08-30): a
-  // person has one replica, and the log should read that way. Until the multi-tab work takes the
-  // number under a lock, two tabs writing at the same moment can hand out the same one.
-  static persistCounter(seq) {
-    return Durability.#write([META], (transaction) => {
+  // The batch and its number go down TOGETHER, in one transaction, because either one without the
+  // other is wrong in its own way. A number with no batch is what the counter alone bought: the
+  // next load counts on from work that no longer exists anywhere. A batch with no number is worse
+  // - the next load would count from below it and hand the same number to something else, and
+  // whichever of the two reached the server second would be answered with the other's verdict.
+  //
+  // What a crash between sealing and committing costs is a batch that was never sent, which is the
+  // cheap side of the trade and the only side left once the two are one write.
+  //
+  // One number and one queue for the whole browser, not one per tab (10a's D1): a person has one
+  // replica, and the log should read that way. Until the multi-tab work takes the number inside the
+  // same lock that files the batch, two tabs writing at the same moment can spend one number - and
+  // the second tab's write here overwrites the first tab's batch, which is the same known limit
+  // with a sharper edge than it had when only a counter was stored.
+  static persistBatch(batch) {
+    // The first batch stored is the first moment this browser holds something that exists nowhere
+    // else - a row can always be downloaded again, an unsent write cannot - so it is the moment to
+    // ask for the storage to be kept. Once per page load, and never awaited: the batch's own write
+    // does not wait on a permission being read.
+    if (!Durability.#persistenceAsked) {
+      Durability.#persistenceAsked = true;
+
+      Durability.#requestPersistence();
+    }
+
+    return Durability.#write([META, QUEUE], (transaction) => {
+      transaction.objectStore(QUEUE).put(batch.record());
+
       const meta = transaction.objectStore(META);
 
-      meta.put(seq, "seq");
+      meta.put(batch.seq, "seq");
       meta.put(Clock.last(), "clock");
     });
   }
@@ -181,6 +245,28 @@ export default class Durability {
     });
   }
 
+  // A pending batch whose writes the base has caught up with, written down again for the marks.
+  //
+  // Why the marks are worth storing at all: a batch can be sent, committed, have its frame arrive
+  // and be stored, and then lose its ANSWER to a dropped connection. The next page load takes the
+  // batch up and sends it again, the server answers from its record, and the client promotes it -
+  // and a moved counter promoted onto a base that already holds the move counts it twice, for
+  // good. Nothing later corrects that, because the server has nothing new to say about a row
+  // nobody has touched since. The marks are what makes the promotion pass over it.
+  //
+  // The counter is deliberately NOT rewritten here, which is what makes this different from the
+  // write that first stored the batch. A frame can land the writes of a batch that is not the
+  // newest one sealed, and putting this batch's number down would walk the counter backwards -
+  // onto a number a later batch has already spent.
+  //
+  // Fire and forget: the marks are already in memory, and what storing them buys is only whether
+  // they are still true after a reload.
+  static persistLanded(batch) {
+    return Durability.#write([QUEUE], (transaction) =>
+      transaction.objectStore(QUEUE).put(batch.record()),
+    );
+  }
+
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair
   // it is offered and go on numbering where this one left off.
   static persistReplica(replica) {
@@ -189,8 +275,9 @@ export default class Durability {
     });
   }
 
-  // Takes up what the previous page load left, and answers the two things the runtime resumes
-  // from: the place to greet the stream with, and the number to count batches on from.
+  // Takes up what the previous page load left, and answers the three things the runtime resumes
+  // from: the place to greet the stream with, the number to count batches on from, and the batches
+  // this page may send.
   //
   // SYNCHRONOUS, and called after the page has mounted rather than before. After, because the rows
   // the page itself carried are the freshest thing this client has - the server rendered them for
@@ -208,6 +295,28 @@ export default class Durability {
   // another model opens another database, and finds it empty.) What this browser DID - its identity, its counter, its
   // clock - survives all three: those are not the server's to take away, and reusing a number or
   // restarting a clock low is how a write gets answered by the wrong batch or read as moved.
+  //
+  // The batches are taken up whether or not the ROWS are, and the queue is not dropped in either
+  // case. A pending write over a base that has started again is the same case as a resync with
+  // writes pending: a create folds as a new row, an update of a row the base does not hold yet
+  // folds nothing until the fill brings it, and the fill's rows carry the revisions the fold
+  // weighs the write against.
+  //
+  // ONLY THIS PAGE'S OWN USER'S BATCHES. A batch is applied by the server under the user of the
+  // session that SENDS it, so a batch taken up by a page somebody else has since signed in on
+  // would be written in their name - or refused by their policies, and the work thrown away.
+  // Somebody else's batches are left in the store untouched: not loaded, not folded, not sent, not
+  // forgotten, and taken up by the next load that mounts under their own owner. (Nothing else can
+  // deliver them - the server knows nothing of a batch it has never been sent - so waiting is the
+  // whole of what is available, and it costs nothing.)
+  //
+  // The counter resumes above every STORED BATCH as well as above the number itself, which are
+  // normally the same. They part after a storage failure: the counter is dropped there, because a
+  // page that goes on spending numbers nothing records leaves a stale one behind - and the queue is
+  // kept, because a batch already written down is still the user's unfinished work. Counting from
+  // nothing would then hand a new batch a number a stored one already holds, and its record would
+  // be overwritten by a batch that is not it. The maximum is what makes keeping one and dropping
+  // the other safe.
   static restore() {
     const loaded = Durability.#loaded;
 
@@ -248,7 +357,13 @@ export default class Durability {
 
     Durability.#rememberOwner(loaded);
 
-    return {cursor: refusal === null ? loaded.cursor : null, seq: loaded.seq};
+    const owner = LocalDatabase.actorUserId ?? null;
+
+    return {
+      batches: loaded.queue.filter((record) => record.actorUserId === owner),
+      cursor: refusal === null ? loaded.cursor : null,
+      seq: Math.max(loaded.seq, ...loaded.queue.map((record) => record.seq)),
+    };
   }
 
   // Drops the database entirely and puts this module back as it starts. For tests - nothing in the
@@ -264,15 +379,25 @@ export default class Durability {
     } catch {}
 
     Durability.inFlight = 0;
+    Durability.persisted = null;
+    Durability.storedBatches = 0;
+
+    Durability.#persistenceAsked = false;
   }
 
-  // `hologram.<model hash>.<layout>` - a bundle speaking another model, or carrying another store
-  // layout, opens a database of its own. Null when the build has no data model, and so nothing to
+  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
+  // model, opens a database of its own. Null when the build has no data model, and so nothing to
   // name one for.
+  //
+  // The framework's half comes first and the app's second, broad before narrow: the layout is
+  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
+  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
+  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
+  // parse for anything that ever has to gate on a shape it cannot read.
   static #databaseName() {
     const modelHash = globalThis.Hologram.sync?.modelHash;
 
-    return modelHash ? `hologram.${modelHash}.${LAYOUT}` : null;
+    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
   }
 
   static #close() {
@@ -345,18 +470,20 @@ export default class Durability {
   // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
   static async #load() {
     const transaction = Durability.#db.transaction(
-      [ENTITIES, META],
+      [ENTITIES, META, QUEUE],
       "readonly",
     );
 
     const entities = transaction.objectStore(ENTITIES);
     const meta = transaction.objectStore(META);
+    const queue = transaction.objectStore(QUEUE);
 
-    const [actorUserId, clock, cursor, records, replica, seq] =
+    const [actorUserId, clock, cursor, queued, records, replica, seq] =
       await Promise.all([
         Durability.#request(meta.get("actorUserId")),
         Durability.#request(meta.get("clock")),
         Durability.#request(meta.get("cursor")),
+        Durability.#request(queue.getAll()),
         Durability.#request(entities.getAll()),
         Durability.#request(meta.get("replica")),
         Durability.#request(meta.get("seq")),
@@ -366,6 +493,7 @@ export default class Durability {
       actorUserId: actorUserId ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
+      queue: queued ?? [],
       records: records ?? [],
       replica: replica ?? null,
       seq: seq ?? 0,
@@ -378,6 +506,57 @@ export default class Durability {
     );
 
     Durability.#close();
+  }
+
+  // Asks the browser to exempt this origin from eviction - and NEVER puts a dialog in front of
+  // anyone to do it.
+  //
+  // Worth asking at all because of Safari: it clears a site's storage after about seven days
+  // without a visit, and where that used to cost a re-download it now costs writes that were never
+  // sent. Chrome and Firefox evict only under disk pressure, and Chrome grants this on its own to
+  // a site somebody actually uses.
+  //
+  // The permission is READ before it is requested, which is the whole of how the dialog is avoided:
+  // `prompt` means asking would raise one, so this does not ask. Not a browser check - there is no
+  // honest way to write one, since every browser's user agent lies about what it is - but a
+  // question put to the browser about its own behaviour.
+  //
+  // A browser that does not know the permission name throws, and that is the case to go AHEAD on:
+  // it does not gate this behind a dialog, and Safari - which knows no such permission - is exactly
+  // the browser the seven-day rule makes this worth doing for.
+  //
+  // The lever that beats all of this is INSTALLING the app, which is exempt from Safari's rule and
+  // auto-granted by Chrome. Nothing here can ask for that, and it is where the mobile and desktop
+  // story goes.
+  static async #requestPersistence() {
+    if (Durability.mode !== "indexeddb" || !navigator.storage?.persist) {
+      return;
+    }
+
+    try {
+      const {state} = await navigator.permissions.query({
+        name: "persistent-storage",
+      });
+
+      if (state === "prompt") {
+        Durability.persisted = false;
+
+        Logger.debug(
+          "Hologram: this browser would ask permission to keep the data, so it was not asked - storage here may be evicted",
+        );
+
+        return;
+      }
+      // eslint-disable-next-line no-empty
+    } catch {}
+
+    Durability.persisted = await navigator.storage.persist();
+
+    if (!Durability.persisted) {
+      Logger.debug(
+        "Hologram: the browser did not agree to keep this site's data, storage here may be evicted",
+      );
+    }
   }
 
   // Why the stored rows cannot be used, or nothing when they can.
@@ -427,19 +606,28 @@ export default class Durability {
     });
   }
 
-  // Two stores, and the facts ride inside a row's record rather than in a third: they are keyed by
+  // The facts ride inside a row's record rather than in a store of their own: they are keyed by
   // their source row, a row leaving takes them with it, and an edge names the row whose
   // relationships changed - so one row is one record and one change is one write.
   //
-  // A record is keyed by its type and id together, which is how a frame's rows are named, and how
-  // one type's rows are dropped without touching another's.
+  // A row record is keyed by its type and id together, which is how a frame's rows are named, and
+  // how one type's rows are dropped without touching another's.
+  //
+  // A batch is keyed by its number, because that is the order batches were made in and therefore
+  // the order they ship in - a later batch may name a row an earlier one created. Reading them
+  // back in key order is reading them back in the order to send them, with nothing to sort.
   static #upgrade(db) {
     db.createObjectStore(ENTITIES, {keyPath: ["type", "id"]});
     db.createObjectStore(META);
+    db.createObjectStore(QUEUE, {keyPath: "seq"});
   }
 
   // What is stored ON BEHALF OF THE SERVER, gone: the rows and the place they are dated at. Shared
   // by the resync path, which means it deliberately, and by the failure path, which has no choice.
+  //
+  // The queue is deliberately not touched by either. A batch waiting to go out is this browser's
+  // own work rather than a copy of the server's, so neither the server replacing what it says nor
+  // this page losing the ability to store anything further makes one untrue.
   static #wipe(transaction) {
     transaction.objectStore(ENTITIES).clear();
     transaction.objectStore(META).delete("cursor");

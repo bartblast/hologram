@@ -16,8 +16,10 @@ import {
   defineRuntimeGlobals,
   registerWebApis,
   sinon,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -30,8 +32,8 @@ defineRuntimeGlobals();
 registerWebApis();
 
 describe("Durability", () => {
-  // Named for the model the runtime globals below declare, and the store layout.
-  const DATABASE_NAME = "hologram.model-a.1";
+  // Named for the store layout and the model the runtime globals below declare.
+  const DATABASE_NAME = "hologram.1.model-a";
 
   // Installed for this suite and taken back down after it, never at module scope: mocha runs every
   // file in one process, and `open()` reads the absence of indexedDB as "this browser cannot
@@ -79,6 +81,12 @@ describe("Durability", () => {
 
     Clock.reset();
     LocalDatabase.reset();
+
+    // Left alone by LocalDatabase.reset() on purpose - a resync replaces what the server said and
+    // does not change who is signed in - so the seed's owner has to be put back by hand, or it
+    // reaches every suite that runs after this file.
+    LocalDatabase.actorUserId = null;
+
     Replica.reset();
     sinon.restore();
 
@@ -171,6 +179,35 @@ describe("Durability", () => {
     type: "MyApp.Task",
   });
 
+  const sealedBatch = (seq, actorUserId = "u1") => {
+    const batch = new Batch(null);
+
+    batch.actorUserId = actorUserId;
+    batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+    batch.seal(seq);
+
+    return batch;
+  };
+
+  // Through a real batch rather than a literal of its own, so a seed writes exactly what the
+  // module writes and the two cannot drift apart.
+  const batchRecord = (seq, actorUserId = "u1") =>
+    sealedBatch(seq, actorUserId).record();
+
+  const writeBatches = async (records) => {
+    const {db} = await rawOpen();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("queue", "readwrite");
+      const queue = transaction.objectStore("queue");
+
+      records.forEach((record) => queue.put(record));
+
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve();
+    });
+  };
+
   const writeRecords = async (records) => {
     const {db} = await rawOpen();
 
@@ -197,6 +234,7 @@ describe("Durability", () => {
 
         db.createObjectStore("entities", {keyPath: ["type", "id"]});
         db.createObjectStore("meta");
+        db.createObjectStore("queue", {keyPath: "seq"});
       };
 
       request.onerror = () => reject(request.error);
@@ -253,6 +291,20 @@ describe("Durability", () => {
         token: "statement",
       });
     });
+
+    // A batch waiting to go out is this browser's own work rather than a copy of anything the
+    // server holds, so the server replacing everything it says leaves it where it was.
+    it("keeps the stored batches", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(1)]);
+
+      await Durability.clear();
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [1],
+      );
+    });
   });
 
   // A row carrying something the browser cannot copy into its own storage. Real rather than
@@ -289,7 +341,7 @@ describe("Durability", () => {
     // from nothing.
     it("drops the identity and the counter, which have stopped being true", async () => {
       await Durability.open();
-      await Durability.persistCounter(41);
+      await Durability.persistBatch(sealedBatch(41));
       await Durability.persistReplica({id: "r1", token: "statement"});
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
@@ -303,7 +355,7 @@ describe("Durability", () => {
     // restarted low writes revisions the server reads as moved.
     it("keeps the clock", async () => {
       await Durability.open();
-      await Durability.persistCounter(41);
+      await Durability.persistBatch(sealedBatch(41));
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
@@ -317,22 +369,62 @@ describe("Durability", () => {
 
       assert.equal(Durability.inFlight, 0);
     });
+
+    // Unlike the counter, a stored batch cannot go stale through this page carrying on: nothing
+    // has answered it, and nothing will while there is nowhere to send it. It is the user's
+    // unfinished work, and a later page load is the only thing that can still deliver it.
+    it("keeps the stored batches", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(1)]);
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.equal(Durability.mode, "memory");
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [1],
+      );
+    });
+  });
+
+  describe("forgetBatch()", () => {
+    it("deletes the record of the given number and no other", async () => {
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await Durability.persistBatch(sealedBatch(8));
+
+      await Durability.forgetBatch(7);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [8],
+      );
+    });
+
+    it("does nothing in memory mode", async () => {
+      await Durability.forgetBatch(7);
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
   });
 
   describe("open()", () => {
-    // A bundle on another model, or carrying another store layout, must open a database of its
+    // A bundle carrying another store layout, or on another model, must open a database of its
     // own - which is what stops two tabs on different versions from ever sharing one.
-    it("names the database for the model it speaks and the layout of the store", async () => {
+    it("names the database for the layout of the store and the model it speaks", async () => {
       await Durability.open();
 
       const names = (await globalThis.indexedDB.databases()).map(
         (db) => db.name,
       );
 
-      assert.include(names, "hologram.model-a.1");
+      assert.include(names, "hologram.1.model-a");
     });
 
-    it("opens in indexeddb mode and creates the two object stores", async () => {
+    it("opens in indexeddb mode and creates the three object stores", async () => {
       await Durability.open();
 
       assert.equal(Durability.mode, "indexeddb");
@@ -342,6 +434,7 @@ describe("Durability", () => {
       assert.deepStrictEqual(Array.from(db.objectStoreNames), [
         "entities",
         "meta",
+        "queue",
       ]);
 
       db.close();
@@ -358,6 +451,31 @@ describe("Durability", () => {
       );
 
       db.close();
+    });
+
+    // Keyed by its number rather than out of line, which is what makes reading the queue back a
+    // read in the order the batches ship - a later batch may name a row an earlier one created,
+    // and its based_on for a column an earlier one wrote is that batch's own stamp.
+    it("keys a batch record by its number, so they read back in the order they ship", async () => {
+      await Durability.open();
+
+      await writeBatches([batchRecord(9), batchRecord(2)]);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [2, 9],
+      );
+    });
+
+    it("counts the stored batches when it opens", async () => {
+      await createSchema();
+      await writeBatches([batchRecord(1), batchRecord(2)]);
+
+      assert.equal(Durability.storedBatches, 0);
+
+      await Durability.open();
+
+      assert.equal(Durability.storedBatches, 2);
     });
 
     it("stays in memory mode when the browser has no IndexedDB", async () => {
@@ -426,7 +544,7 @@ describe("Durability", () => {
     // upgrade the event exists to get out of the way of.
     it("lets the database go when another tab needs a new version", async () => {
       await Durability.open();
-      await Durability.persistCounter(41);
+      await Durability.persistBatch(sealedBatch(41));
       await Durability.persistReplica({id: "r1", token: "statement"});
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy")],
@@ -450,40 +568,157 @@ describe("Durability", () => {
     });
   });
 
-  describe("persistCounter()", () => {
-    it("writes the number and the clock together", async () => {
+  describe("asking the browser to keep the data", () => {
+    let persistStub, previousNavigator;
+
+    // Neither exists under jsdom, so both are installed here and taken back down after - a stub
+    // left on the global would answer for every suite that runs later in this process.
+    const equipBrowser = (state) => {
+      persistStub = sinon.stub().resolves(true);
+
+      navigator.storage = {persist: persistStub};
+
+      navigator.permissions = {
+        query:
+          state === null
+            ? sinon.stub().rejects(new TypeError("unknown permission"))
+            : sinon.stub().resolves({state}),
+      };
+    };
+
+    beforeEach(() => {
+      previousNavigator = {
+        permissions: navigator.permissions,
+        storage: navigator.storage,
+      };
+    });
+
+    afterEach(() => {
+      navigator.permissions = previousNavigator.permissions;
+      navigator.storage = previousNavigator.storage;
+    });
+
+    it("asks the browser to keep the data the first time a batch is stored", async () => {
+      equipBrowser("granted");
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isTrue(persistStub.calledOnce);
+      assert.isTrue(Durability.persisted);
+    });
+
+    it("asks once, however many batches are stored", async () => {
+      equipBrowser("granted");
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await Durability.persistBatch(sealedBatch(8));
+      await waitForEventLoop();
+
+      assert.isTrue(persistStub.calledOnce);
+    });
+
+    // The whole of how a dialog is avoided: the permission is READ first, and `prompt` means
+    // asking would raise one.
+    it("does not ask where the browser would put a dialog in front of the user", async () => {
+      equipBrowser("prompt");
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isFalse(persistStub.called);
+      assert.isFalse(Durability.persisted);
+    });
+
+    // Safari knows no such permission and never prompts - and its seven-day eviction is what makes
+    // this worth doing at all, so an unknown permission is the case to go ahead on.
+    it("asks where the browser does not know the permission", async () => {
+      equipBrowser(null);
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isTrue(persistStub.calledOnce);
+    });
+
+    it("records a refusal", async () => {
+      equipBrowser("denied");
+      persistStub.resolves(false);
+
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.isFalse(Durability.persisted);
+      assert.include(Logger.getLogs(), "did not agree to keep");
+    });
+
+    it("asks nothing in memory mode", async () => {
+      equipBrowser("granted");
+
+      await Durability.persistBatch(sealedBatch(7));
+      await waitForEventLoop();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isFalse(persistStub.called);
+      assert.isNull(Durability.persisted);
+    });
+  });
+
+  describe("persistBatch()", () => {
+    it("writes the batch, its number and the clock together", async () => {
       await Durability.open();
 
       Clock.observe(1_756_100_000_123_004);
 
-      await Durability.persistCounter(41);
+      await Durability.persistBatch(sealedBatch(7));
 
-      assert.equal(await readMeta("seq"), 41);
+      assert.deepStrictEqual(await readAll("queue"), [batchRecord(7)]);
+      assert.equal(await readMeta("seq"), 7);
       assert.equal(await readMeta("clock"), 1_756_100_000_123_004);
     });
 
     // The sender waits on this one write before a batch goes out, so what it answers has to stay
-    // pending until the number is DOWN - not merely until it has been asked for. Nothing in flight
-    // at the moment it settles is what says so: a promise that resolved early would settle with
-    // the transaction still open, and the read below would pass anyway, having taken long enough
-    // for the write to land on its own.
-    it("answers a promise that settles once the number is stored", async () => {
+    // pending until the batch is DOWN - not merely until it has been asked for. Nothing in flight
+    // at the moment it settles is what says so, and one thing in flight before that is what says
+    // the batch and its number went in a single transaction rather than two.
+    it("answers a promise that settles once the batch is stored", async () => {
       await Durability.open();
 
-      const writing = Durability.persistCounter(41);
+      const writing = Durability.persistBatch(sealedBatch(7));
 
       assert.equal(Durability.inFlight, 1);
 
       await writing;
 
       assert.equal(Durability.inFlight, 0);
-      assert.equal(await readMeta("seq"), 41);
+      assert.deepStrictEqual(await readAll("queue"), [batchRecord(7)]);
+    });
+
+    // A batch that has to be sent again is stored again - its marks may have moved since - and the
+    // number it is keyed by is what makes the second write replace the first rather than pile up.
+    it("replaces the record of the same number", async () => {
+      await Durability.open();
+
+      const batch = sealedBatch(7);
+
+      await Durability.persistBatch(batch);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistBatch(batch);
+
+      assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
     });
 
     // A browser with nowhere to store still has a sender waiting on this, so it answers something
     // already settled rather than nothing.
     it("answers an already-settled promise in memory mode", async () => {
-      await Durability.persistCounter(41);
+      await Durability.persistBatch(sealedBatch(7));
 
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
@@ -573,6 +808,38 @@ describe("Durability", () => {
     });
   });
 
+  describe("persistLanded()", () => {
+    it("rewrites the record with the marks", async () => {
+      await Durability.open();
+
+      const batch = sealedBatch(7);
+
+      await Durability.persistBatch(batch);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
+    // A frame can land the writes of a batch that is not the newest one sealed - the counter
+    // belongs to whatever was sealed last, and putting this batch's number down would walk it
+    // backwards, onto a number a later batch has already spent.
+    it("leaves the counter where it was", async () => {
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await Durability.persistBatch(sealedBatch(8));
+
+      await Durability.persistLanded(sealedBatch(7));
+
+      assert.equal(await readMeta("seq"), 8);
+    });
+  });
+
   describe("persistReplica()", () => {
     it("writes the pair", async () => {
       await Durability.open();
@@ -630,6 +897,92 @@ describe("Durability", () => {
     // Rows written by a fill that never finished. Nothing dates them, so the server cannot be
     // asked what changed since - and a row deleted while this browser was away would never be
     // taken off the screen.
+    // Sent under the user of the session that sends them, so a page takes up only what its own
+    // user made - and reads them back in the order they were made, which is the order they ship.
+    it("answers the stored batches of the page's own user, oldest first", async () => {
+      await seedPreviousLoad();
+      await writeBatches([
+        batchRecord(9),
+        batchRecord(7),
+        batchRecord(8, "u2"),
+      ]);
+      await Durability.open();
+
+      assert.deepStrictEqual(
+        Durability.restore().batches.map((record) => record.seq),
+        [7, 9],
+      );
+    });
+
+    // Not dropped and not sent - somebody else's unfinished work, waiting for a page that mounts
+    // under them. Nothing else can deliver it: the server knows nothing of a batch never sent.
+    it("leaves another user's batches in the store", async () => {
+      sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7), batchRecord(8, "u2")]);
+      await Durability.open();
+
+      LocalDatabase.actorUserId = "u2";
+
+      assert.deepStrictEqual(
+        Durability.restore().batches.map((record) => record.seq),
+        [8],
+      );
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [7, 8],
+      );
+    });
+
+    it("treats two anonymous loads as one owner's batches", async () => {
+      await seedPreviousLoad({actorUserId: null});
+      await writeBatches([batchRecord(7, null)]);
+      await Durability.open();
+
+      LocalDatabase.actorUserId = null;
+
+      assert.deepStrictEqual(
+        Durability.restore().batches.map((record) => record.seq),
+        [7],
+      );
+    });
+
+    // The rows going does not take the queue with it. A pending write over a base that has started
+    // again is the resync case: a create folds as a new row, and an update waits for the fill to
+    // bring the row its revisions are weighed against.
+    it("answers the batches when the stored rows are refused", async () => {
+      sinon.stub(Durability, "clear");
+
+      await seedPreviousLoad({cursor: null});
+      await writeBatches([batchRecord(7)]);
+      await Durability.open();
+
+      const resumed = Durability.restore();
+
+      assert.isNull(resumed.cursor);
+
+      assert.deepStrictEqual(
+        resumed.batches.map((record) => record.seq),
+        [7],
+      );
+    });
+
+    // A storage failure drops the counter and keeps the queue, so the two can disagree - and
+    // counting from below a stored batch would hand its number to something else, overwriting its
+    // record with a batch that is not it.
+    it("counts on from above the stored batches when the counter was dropped", async () => {
+      await createSchema();
+      await writeBatches([batchRecord(4)]);
+
+      LocalDatabase.actorUserId = "u1";
+
+      await Durability.open();
+
+      assert.equal(Durability.restore().seq, 4);
+    });
+
     it("drops the rows when no place was stored", async () => {
       const clearing = sinon.stub(Durability, "clear");
 
@@ -659,7 +1012,7 @@ describe("Durability", () => {
       assert.isNull(resumed.cursor);
       assert.equal(resumed.seq, 0);
 
-      assert.equal((await readAll("entities", "hologram.model-a.1")).length, 1);
+      assert.equal((await readAll("entities", "hologram.1.model-a")).length, 1);
     });
 
     // Their rows are what SOMEBODY ELSE was allowed to see, and a resuming stream is told what
@@ -721,7 +1074,7 @@ describe("Durability", () => {
 
       Durability.restore();
 
-      await Durability.persistCounter(41);
+      await Durability.persistBatch(sealedBatch(41));
 
       assert.equal(await readMeta("actorUserId"), "u1");
     });

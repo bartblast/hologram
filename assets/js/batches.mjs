@@ -5,6 +5,7 @@ import Client from "./client.mjs";
 import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
@@ -38,6 +39,18 @@ export default class Batches {
 
   // The batch of the action running right now, and nothing when no action is - a write outside an
   // action has nowhere to belong.
+  // The tries a batch nobody answered has had so far, which is what the next delay is computed
+  // from. Back to nothing the moment any batch is answered - a server that is answering again
+  // has earned the short delay, whatever it cost to reach it.
+  static #retryAttempts = 0;
+
+  // The retry waiting to fire, and nothing while none is. Not cleared by the other wake-ups, and
+  // deliberately: a run of the loop ends either with the queue empty or with a retry it has just
+  // rescheduled itself, so a timer left standing by an earlier run never finds work - it is the
+  // guard and the empty queue that make it harmless, and a clear on every entry would be a line
+  // nothing could ever observe.
+  static #retryTimer = null;
+
   static #running = null;
 
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
@@ -83,11 +96,20 @@ export default class Batches {
       return null;
     }
 
+    // Whose work this is, taken at seal rather than at send: a batch outlives the page that made
+    // it, and the page that eventually sends it may belong to somebody else. Only a page mounted
+    // under this user will take it up again.
+    batch.actorUserId = LocalDatabase.actorUserId ?? null;
+
     batch.seal(++Batches.#seq);
 
-    // Started here and awaited by the sender, so the number is on its way down while the action's
+    // Started here and awaited by the sender, so the batch is on its way down while the action's
     // own render happens - the store is never on the path of what the user sees.
-    batch.recorded = Durability.persistCounter(Batches.#seq);
+    //
+    // The batch goes down WITH its number, in one write. A number stored without the batch it was
+    // spent on is a number the next load counts on from for work that no longer exists, and a
+    // batch stored without its number is one the next load can number over.
+    batch.recorded = Durability.persistBatch(batch);
 
     Batches.pending.push(batch);
 
@@ -139,9 +161,11 @@ export default class Batches {
         //
         // Kept rather than discarded, because a failed send does NOT mean the batch did not land:
         // a response can be lost after the server committed, and a resend of the same
-        // (replica_id, seq) is answered from the record rather than applied twice. The wake-ups
-        // are the next action's close and the connection coming back - no timer, since neither a
-        // base delay nor a cap has a bound anyone can state yet.
+        // (replica_id, seq) is answered from the record rather than applied twice.
+        //
+        // Three things wake it: the next action's close, the connection coming back, and - since
+        // neither of those is coming when the stream stays up while the endpoint fails - a retry
+        // on the stream's own backoff, scheduled below.
         if (answer.status === "failed") {
           // A 403 says the IDENTITY was refused, before the writes were read - a stored statement
           // stops verifying when the session it was bound to is gone, and after the server's
@@ -174,13 +198,29 @@ export default class Batches {
           batch.mark("pending");
 
           console.warn(
-            `Hologram: batch ${batch.seq} was not answered (${answer.httpStatus}) - it stays pending and goes again on the next write or reconnect`,
+            `Hologram: batch ${batch.seq} was not answered (${answer.httpStatus}) - it stays pending and goes again shortly, on the next write, or on reconnect`,
           );
+
+          Batches.#scheduleRetry();
 
           return;
         }
 
         Batches.pending.shift();
+
+        // Answered, so the server is answering: the next failure starts the backoff from the
+        // beginning rather than from wherever the last run of failures left it.
+        Batches.#retryAttempts = 0;
+
+        // A verdict is a verdict, whichever way it went: nothing is waiting on this batch any
+        // more, and a later page load has no reason to take it up. Confirmed and refused alike -
+        // including the two refusals that judge the BUILD and the STAMPS rather than the writes
+        // (`:stale_build`, `:clock`), which the server does not record and would evaluate afresh
+        // on a resend. Keeping one for that resend was weighed and refused (D5): the rows are off
+        // the screen already, so a batch kept would come back days later as a write the user
+        // watched fail, and a device whose clock is permanently wrong would resend it on every
+        // page load with nothing in v1 able to discard it.
+        Durability.forgetBatch(batch.seq);
 
         if (answer.status === "confirmed") {
           Overlay.promote(batch, answer.kept);
@@ -227,8 +267,11 @@ export default class Batches {
     }
 
     for (const batch of Batches.pending) {
-      if (batch.seq <= appliedSeq) {
-        batch.land(rowKeys);
+      // Written down only where a mark actually moved. Most frames name rows no pending batch has
+      // anything to say about, and a batch whose marks are unchanged is already stored the way it
+      // stands - so `land` answering false is what keeps the ordinary frame off the disk entirely.
+      if (batch.seq <= appliedSeq && batch.land(rowKeys)) {
+        Durability.persistLanded(batch);
       }
     }
   }
@@ -269,12 +312,35 @@ export default class Batches {
   // Drops the overlay's batches too: forgetting them here while it went on folding them would
   // leave writes on the screen that nothing could ever confirm or take back.
   static reset() {
+    Batches.#clearRetry();
+
     Batches.pending = [];
     Batches.rejected = [];
+    Batches.#retryAttempts = 0;
     Batches.#running = null;
     Batches.#seq = 0;
 
     Overlay.reset();
+  }
+
+  // The batches a previous page load could not send, back where they were - in the queue, so they
+  // ship, and in the overlay, so their rows are on the screen before anything is sent. In the
+  // order they were made, which is the order they must go out in: a later batch may name a row an
+  // earlier one created.
+  //
+  // Only the ones this page may send reach here - a batch is applied by the server under the user
+  // of the session that sends it, so whose they are is decided before this is called.
+  //
+  // Deliberately does NOT send. Waking the sender belongs to the page load, once everything it
+  // takes up is in place - and a function that only picks things up is one a test can call without
+  // reaching the network.
+  static resume(records) {
+    for (const record of records) {
+      const batch = Batch.fromRecord(record);
+
+      Batches.pending.push(batch);
+      Overlay.push(batch);
+    }
   }
 
   // Where the previous page load's numbering got to, so this one counts on from there. Never
@@ -308,6 +374,13 @@ export default class Batches {
     }
   }
 
+  static #clearRetry() {
+    if (Batches.#retryTimer !== null) {
+      clearTimeout(Batches.#retryTimer);
+      Batches.#retryTimer = null;
+    }
+  }
+
   // A refused batch takes its rows with it - a created row vanishes, an updated one reverts -
   // and what is left is the reason, on the batch, for the queue surface to show. The row carries
   // nothing: a rejected create has no row left to carry a state, and a rejected update's row is
@@ -320,5 +393,22 @@ export default class Batches {
     batch.write = answer.write;
 
     Batches.rejected.push(batch);
+  }
+
+  // The one wake-up that needs nothing to happen. The stream is up, so no reconnect is coming, and
+  // the user is idle, so no action is - and without this a batch would sit unsent while the page
+  // looked perfectly healthy, for as long as the user left it alone.
+  //
+  // The DELAY IS THE STREAM'S, not one of this module's own. How eagerly this client retries a
+  // server that is not answering is one policy, already argued and bounded where the stream
+  // defines it, and a second set of numbers here would be a second answer to the same question.
+  static #scheduleRetry() {
+    Batches.#clearRetry();
+
+    Batches.#retryTimer = setTimeout(() => {
+      Batches.#retryTimer = null;
+
+      Batches.flush();
+    }, Sse.computeReconnectDelay(++Batches.#retryAttempts));
   }
 }

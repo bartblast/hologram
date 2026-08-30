@@ -8,6 +8,14 @@
 // so the array folded over the base rows here is the array posted to the endpoint - there is one
 // spelling of a write in the system, and no step that could translate it wrongly.
 export default class Batch {
+  // Who was signed in on the page that sealed this batch, and nothing at all for a visitor.
+  //
+  // A batch outlives the page that made it, so what is kept of one has to say whose work it is:
+  // the server applies a batch under the user of the session that SENDS it, so a batch taken up
+  // by a page somebody else has since signed in on would be written in their name. Alice's note
+  // would become Bob's.
+  actorUserId = null;
+
   // The writes whose effect the base already holds, by their position in `writes`. A frame naming
   // this batch's number is what puts one here: the server applied it, resolved it against
   // whatever else had moved, and sent back the row it left - so folding the write on top again
@@ -61,6 +69,26 @@ export default class Batch {
     this.writes.push(write);
   }
 
+  // A batch as it was sealed, out of what was kept of it. Pending by construction: a batch that
+  // was kept is a batch nothing has answered.
+  //
+  // It carries no target. The cid of a component on a page that has since been torn down names
+  // nothing in the page running now, and reading one would be worse than having none.
+  //
+  // `recorded` is left as the settled promise it starts as, which is true rather than convenient:
+  // this batch is already written down, so there is nothing to wait for before it ships.
+  static fromRecord(record) {
+    const batch = new Batch(null);
+
+    batch.actorUserId = record.actorUserId;
+    batch.landed = new Set(record.landed);
+    batch.writes = record.writes;
+
+    batch.seal(record.seq);
+
+    return batch;
+  }
+
   isLanded(index) {
     return this.landed.has(index);
   }
@@ -69,16 +97,44 @@ export default class Batch {
   // frame just wrote, per row rather than per batch: one batch's writes can reach two windows and
   // arrive as two frames, and marking the second row's write on the first frame would take it off
   // the screen until its own frame caught up.
+  //
+  // Answers whether anything was marked that was not marked already. Most frames name rows no
+  // pending batch has anything to say about, and a mark that did not move is not worth writing
+  // down.
   land(rowKeys) {
+    const marked = this.landed.size;
+
     this.writes.forEach((write, index) => {
       if (rowKeys.has(`${write.type} ${write.id}`)) {
         this.landed.add(index);
       }
     });
+
+    return this.landed.size > marked;
   }
 
   mark(state) {
     this.state = state;
+  }
+
+  // What is kept of this batch, and the whole of what a later page load rebuilds it from.
+  //
+  // THE SHAPE IS FROZEN. A bundle reads what an older bundle wrote - a deploy that changes the
+  // model leaves the old model's database standing with its unsent batches in it, and draining
+  // that is a later step's - so a field is added only with a reader that tolerates its absence,
+  // and none is ever renamed or given a second meaning.
+  //
+  // Four things, each here because rebuilding without it would be wrong: the writes, which are
+  // what gets sent; the number, which identifies the batch and is the order it ships in; who made
+  // it, which decides who may send it; and which of its writes the base already holds, without
+  // which a moved counter is added a second time on the next load.
+  record() {
+    return {
+      actorUserId: this.actorUserId,
+      landed: Array.from(this.landed).sort((left, right) => left - right),
+      seq: this.seq,
+      writes: this.writes,
+    };
   }
 
   // The rows this batch has anything to say about, each keyed "<type> <id>" - what the overlay

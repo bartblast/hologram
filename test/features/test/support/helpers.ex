@@ -3,9 +3,12 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
+  alias Hologram.DB
+  alias Hologram.DB.Connection
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
+  alias HologramFeatureTests.Entities.Todo
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -200,6 +203,54 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  @doc """
+  Blocks until the client's write queue holds at least one refused batch, and returns the
+  refusals as the queue's own window reads them.
+
+  The deterministic point at which a rollback has happened - asserting "the row appeared and then
+  vanished" would race the round trip in whichever direction the machine happened to be faster.
+  Raises if nothing is refused within `@max_wait_time`.
+  """
+  @spec await_rejected_writes(Wallaby.Session.t(), integer | nil) :: list
+  def await_rejected_writes(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    case script_result(session, "return globalThis.Hologram.writes.rejected();") do
+      [] ->
+        if timed_out?(start_time) do
+          raise Wallaby.ExpectationNotMetError,
+                "Timed out waiting for the client to refuse a write batch"
+        end
+
+        :timer.sleep(50)
+        await_rejected_writes(session, start_time)
+
+      rejected ->
+        rejected
+    end
+  end
+
+  @doc """
+  Polls the SERVER until it holds the given number of todos, and returns them sorted by title.
+
+  The row arriving is the confirmation that a batch landed - nothing app-facing exposes a per-row
+  durability to assert on instead. Answers whatever the server holds after the last attempt, so a
+  caller matching on the result gets a real assertion failure rather than a timeout.
+  """
+  @spec await_server_todos(non_neg_integer) :: [struct]
+  def await_server_todos(expected_count) do
+    Enum.reduce_while(1..100, [], fn _attempt, _acc ->
+      todos = Enum.sort_by(DB.read(Todo), & &1.title)
+
+      if length(todos) == expected_count do
+        {:halt, todos}
+      else
+        Process.sleep(50)
+        {:cont, todos}
+      end
+    end)
+  end
+
   def cookies(session) do
     session
     |> Browser.cookies()
@@ -353,6 +404,22 @@ defmodule HologramFeatureTests.Helpers do
 
       refute_has(unquote(parent), text_query, unquote(opts))
     end
+  end
+
+  @doc """
+  What the server kept of one browser's batches - the number and the answer of each - scoped to
+  the replica that sent them and ordered by number.
+  """
+  @spec mutation_record_rows(String.t()) :: [%{result: map | nil, seq: non_neg_integer}]
+  def mutation_record_rows(replica_id) do
+    statement = """
+    SELECT "result", "seq" FROM "hologram_system"."mutation"
+    WHERE "replica_id" = $1 ORDER BY "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
+
+    Enum.map(rows, fn [result, seq] -> %{result: result, seq: seq} end)
   end
 
   def reload(session) do

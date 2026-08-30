@@ -21,21 +21,6 @@ defmodule HologramFeatureTests.ActionWritesTest do
     :ok
   end
 
-  # Polls the SERVER until it holds what the batch should have put there. The row arriving is the
-  # confirmation - 09a exposes no per-row durability to assert on instead.
-  defp await_server_todos(expected_count) do
-    Enum.reduce_while(1..100, [], fn _attempt, _acc ->
-      todos = Enum.sort_by(DB.read(Todo), & &1.title)
-
-      if length(todos) == expected_count do
-        {:halt, todos}
-      else
-        Process.sleep(50)
-        {:cont, todos}
-      end
-    end)
-  end
-
   # Polls the SERVER until the one row holds the given number of votes.
   #
   # What it is for: while a batch's answer is held, nothing on the client says whether the server
@@ -54,23 +39,6 @@ defmodule HologramFeatureTests.ActionWritesTest do
     end)
   end
 
-  # Polls the queue's own window for the refusal, which is the deterministic point at which the
-  # rollback has happened - asserting "the row appeared and then vanished" would race the round
-  # trip in whichever direction the machine happened to be faster.
-  defp await_rejected(session) do
-    Enum.reduce_while(1..100, [], fn _attempt, _acc ->
-      rejected =
-        script_result(session, "return globalThis.Hologram.writes.rejected();")
-
-      if rejected == [] do
-        Process.sleep(50)
-        {:cont, rejected}
-      else
-        {:halt, rejected}
-      end
-    end)
-  end
-
   # Proves the DOM changed without the page being fetched again - a reload would take this marker
   # with it, so a passing assertion after one would say nothing.
   defp mark_this_page_load(session) do
@@ -83,18 +51,6 @@ defmodule HologramFeatureTests.ActionWritesTest do
 
   defp page_replica_id(session) do
     script_result(session, "return globalThis.Hologram.replicaId;")
-  end
-
-  # What the server kept of this browser's batches, scoped to the browser that sent them.
-  defp record_rows(replica_id) do
-    statement = """
-    SELECT "result", "seq" FROM "hologram_system"."mutation"
-    WHERE "replica_id" = $1 ORDER BY "seq"
-    """
-
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
-
-    Enum.map(rows, fn [result, seq] -> %{result: result, seq: seq} end)
   end
 
   feature "writes a row into the list before it is sent, and the server receives it", %{
@@ -123,7 +79,7 @@ defmodule HologramFeatureTests.ActionWritesTest do
 
     assert [%Todo{title: "alpha"}, %Todo{title: "beta"}] = await_server_todos(2)
 
-    assert [%{seq: 1}] = record_rows(page_replica_id(session))
+    assert [%{seq: 1}] = mutation_record_rows(page_replica_id(session))
   end
 
   feature "reads its own write inside the action that made it", %{session: session} do
@@ -143,7 +99,7 @@ defmodule HologramFeatureTests.ActionWritesTest do
     |> assert_text(css("#result"), "refused_min_length_1")
 
     assert DB.read(Todo) == []
-    assert record_rows(page_replica_id(session)) == []
+    assert mutation_record_rows(page_replica_id(session)) == []
   end
 
   feature "puts a value and moves a counter", %{session: session} do
@@ -188,7 +144,7 @@ defmodule HologramFeatureTests.ActionWritesTest do
     refute_has(session, css("#todos li"))
 
     assert DB.read(Todo) == []
-    assert record_rows(page_replica_id(session)) == []
+    assert mutation_record_rows(page_replica_id(session)) == []
   end
 
   feature "rolls a refused batch back and keeps what the server said", %{session: session} do
@@ -205,7 +161,7 @@ defmodule HologramFeatureTests.ActionWritesTest do
     |> click(button("Add a todo with a taken slug"))
     |> assert_text(css("#result"), "created_dup")
 
-    assert [%{"seq" => 1, "write" => 0}] = await_rejected(session)
+    assert [%{"seq" => 1, "write" => 0}] = await_rejected_writes(session)
 
     refute_text(session, css("#todos"), "dup")
 
