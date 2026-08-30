@@ -9,6 +9,7 @@ import {
 
 import Batches from "../../assets/js/batches.mjs";
 import Client from "../../assets/js/client.mjs";
+import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -1204,13 +1205,16 @@ describe("Batches", () => {
         file = resolve;
       });
 
+      // Adopting repaints, and this describe installs no animation frame to repaint into.
+      sinon.stub(Sse, "scheduleRender");
+
       Durability.mode = "indexeddb";
 
       sinon
         .stub(Durability, "fileBatch")
         .callsFake((batch) => filing.then(() => batch.seal(4)));
 
-      Batches.resume([
+      Batches.adopt([
         {actorUserId: null, landed: [], seq: 9, writes: [write("t9")]},
       ]);
 
@@ -1238,6 +1242,9 @@ describe("Batches", () => {
     // after it and will be numbered above it.
     it("keeps a batch still waiting behind one that has just been numbered", async () => {
       const filings = [];
+
+      // Adopting repaints, and this describe installs no animation frame to repaint into.
+      sinon.stub(Sse, "scheduleRender");
 
       Durability.mode = "indexeddb";
 
@@ -1363,7 +1370,7 @@ describe("Batches", () => {
     });
   });
 
-  describe("resume()", () => {
+  describe("adopt()", () => {
     const STAMP = 1_798_246_400_125_952;
 
     const stored = (seq, id, landed = []) => ({
@@ -1385,16 +1392,26 @@ describe("Batches", () => {
     beforeEach(() => {
       globalThis.Hologram.sync = {model: TODO_MODEL};
 
+      LocalDatabase.actorUserId = "u1";
+
       LocalDatabase.reset();
       Model.reset();
+
+      // Taking a batch up puts a row on the screen, so it asks for a repaint - and this describe
+      // installs no animation frame to repaint into.
+      sinon.stub(Sse, "scheduleRender");
     });
 
     afterEach(() => {
       LocalDatabase.reset();
+
+      // One test lifts the clock above this machine's wall clock, and a clock left there answers
+      // every stamp in every suite that runs after this file.
+      Clock.reset();
     });
 
     it("queues the stored batches oldest first", () => {
-      Batches.resume([stored(3, "t1"), stored(5, "t2")]);
+      Batches.adopt([stored(3, "t1"), stored(5, "t2")]);
 
       assert.deepStrictEqual(
         Batches.pending.map((batch) => batch.seq),
@@ -1411,14 +1428,14 @@ describe("Batches", () => {
     // previous page load put there comes back with the batches that made it, still this client's
     // own unanswered work.
     it("folds their writes over the base", () => {
-      Batches.resume([stored(3, "t1")]);
+      Batches.adopt([stored(3, "t1")]);
 
       assert.equal(LocalDatabase.getRow(TODO, "t1").title, "stored");
       assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
     });
 
     it("keeps their landed marks", () => {
-      Batches.resume([stored(3, "t1", [0])]);
+      Batches.adopt([stored(3, "t1", [0])]);
 
       assert.isTrue(Batches.pending[0].isLanded(0));
     });
@@ -1431,7 +1448,7 @@ describe("Batches", () => {
     it("sends nothing", async () => {
       const sendStub = sinon.stub(Client, "sendMutation");
 
-      Batches.resume([stored(3, "t1")]);
+      Batches.adopt([stored(3, "t1")]);
 
       await waitForEventLoop();
 
@@ -1439,9 +1456,77 @@ describe("Batches", () => {
     });
 
     it("takes up nothing from an empty store", () => {
-      Batches.resume([]);
+      Batches.adopt([]);
 
       assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    it("puts a batch another tab filed in its place in the queue", () => {
+      Batches.adopt([stored(5, "t2")]);
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.seq),
+        [3, 5],
+      );
+    });
+
+    // Twice over the same record is what a tab gets when a message and the store both carry it -
+    // and a batch held twice would be folded twice and sent twice.
+    it("passes over a batch it already holds", () => {
+      Batches.adopt([stored(3, "t1")]);
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.equal(Batches.pending.length, 1);
+    });
+
+    // Left where it is rather than dropped: the server applies a batch under the user of the
+    // session that sends it, so the page mounted under its owner is what takes it up.
+    it("passes over another user's batch", () => {
+      Batches.adopt([{...stored(3, "t1"), actorUserId: "u2"}]);
+
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    // Even the ones it does not take. A number another tab has spent is a number this tab must not
+    // spend, whoever made that batch - the server answers a repeat from the first one's record.
+    it("counts past every number it is shown", () => {
+      Batches.adopt([{...stored(9, "t1"), actorUserId: "u2"}]);
+
+      Batches.open("todos");
+      wrote("t2");
+
+      assert.equal(Batches.close().seq, 10);
+    });
+
+    // A batch this tab seals next may name a row one of these wrote, and its based_on for that
+    // column is this stamp - a stamp of its own that did not clear it would be refused.
+    //
+    // AHEAD of this machine's wall clock, which is what makes the lifting observable at all: a
+    // stamp is at least the wall clock, so a write stamped in the past is cleared whether or not
+    // anything observed it. Ahead is also the case that matters - a burst of stamps inside one
+    // millisecond runs ahead of the wall clock, and every tab of a browser shares one clock.
+    it("lifts the clock past the writes it takes", () => {
+      const ahead = Date.now() * 1024 + 10_000_000;
+      const record = stored(3, "t1");
+
+      record.writes[0].stamp = ahead;
+
+      Batches.adopt([record]);
+
+      assert.isAbove(Clock.stamp(), ahead);
+    });
+
+    it("repaints for what it took, and not for what it passed over", () => {
+      const rendering = Sse.scheduleRender;
+
+      Batches.adopt([{...stored(3, "t1"), actorUserId: "u2"}]);
+
+      assert.isFalse(rendering.called);
+
+      Batches.adopt([stored(4, "t2")]);
+
+      assert.isTrue(rendering.calledOnce);
     });
   });
 

@@ -2036,7 +2036,7 @@ export default class Hologram {
 
     Sse.syncCursor = resumed.cursor;
     Batches.resumeFrom(resumed.seq);
-    Batches.resume(resumed.batches);
+    Batches.adopt(resumed.batches);
 
     // The third thing that wakes the sender, beside an action finishing and the stream opening.
     // It is needed rather than tidy: the stream is connected before the mount, so it can have

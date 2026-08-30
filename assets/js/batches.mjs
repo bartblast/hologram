@@ -2,6 +2,7 @@
 
 import Batch from "./batch.mjs";
 import Client from "./client.mjs";
+import Clock from "./clock.mjs";
 import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -63,6 +64,61 @@ export default class Batches {
   // back - so the batch it opened is taken out of the slot here and put back in the turn it
   // resumes, before any of its remaining code runs. Task.await/1 is the only place an action stops:
   // every JS promise reaching Elixir is boxed as a Task, and nothing else unwraps one.
+  // Batches this tab did not make, taken up as its own: the ones a previous page load left behind,
+  // and the ones another tab of this browser has filed since. Into the queue, so they ship, and
+  // into the overlay, so their rows are on the screen before anything is sent - which is what makes
+  // two tabs of one browser show the same thing.
+  //
+  // In the order they were made, which is the order they must go out in: a later batch may name a
+  // row an earlier one created.
+  //
+  // Passed over three ways. A batch this tab already holds - its own, or one adopted twice - would
+  // otherwise be folded and sent twice. A batch of ANOTHER user is left where it is, since the
+  // server applies a batch under the user of the session that sends it, and the page mounted under
+  // its owner is what will take it up. And in both cases the counter still follows it: `#seq` is
+  // what this tab has SEEN, so a number spent by another tab is a number this one will not spend.
+  //
+  // The CLOCK follows the writes it takes, for the same reason it follows a frame's revisions: a
+  // batch this tab seals next may name a row one of these wrote, and its `based_on` for that column
+  // is that batch's stamp - a stamp of this tab's own that did not clear it would be refused.
+  //
+  // Deliberately does NOT send. Waking the sender belongs to whatever took these up, once
+  // everything it takes up is in place - and a function that only picks things up is one a test can
+  // call without reaching the network.
+  static adopt(records) {
+    const owner = LocalDatabase.actorUserId ?? null;
+
+    let taken = false;
+
+    for (const record of records) {
+      Batches.#seq = Math.max(Batches.#seq, record.seq);
+
+      const held = Batches.pending.some((batch) => batch.seq === record.seq);
+
+      if (held || record.actorUserId !== owner) {
+        continue;
+      }
+
+      const batch = Batch.fromRecord(record);
+
+      for (const write of batch.writes) {
+        if (write.stamp) {
+          Clock.observe(write.stamp);
+        }
+      }
+
+      Batches.pending.push(batch);
+      Overlay.push(batch);
+
+      taken = true;
+    }
+
+    if (taken) {
+      Batches.#sort();
+      Sse.scheduleRender();
+    }
+  }
+
   static carryAcrossSuspension(promise) {
     const batch = Batches.#running;
 
@@ -328,26 +384,6 @@ export default class Batches {
     Batches.#seq = 0;
 
     Overlay.reset();
-  }
-
-  // The batches a previous page load could not send, back where they were - in the queue, so they
-  // ship, and in the overlay, so their rows are on the screen before anything is sent. In the
-  // order they were made, which is the order they must go out in: a later batch may name a row an
-  // earlier one created.
-  //
-  // Only the ones this page may send reach here - a batch is applied by the server under the user
-  // of the session that sends it, so whose they are is decided before this is called.
-  //
-  // Deliberately does NOT send. Waking the sender belongs to the page load, once everything it
-  // takes up is in place - and a function that only picks things up is one a test can call without
-  // reaching the network.
-  static resume(records) {
-    for (const record of records) {
-      const batch = Batch.fromRecord(record);
-
-      Batches.pending.push(batch);
-      Overlay.push(batch);
-    }
   }
 
   // Where the previous page load's numbering got to, so this one counts on from there. Never
