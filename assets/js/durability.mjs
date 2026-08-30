@@ -153,6 +153,14 @@ export default class Durability {
     return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
   }
 
+  // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
+  // group could not write: that tab wiped what had to be wiped and closed, and this one has to stop
+  // writing too - a leader that went on storing frames would be dating rows the store no longer
+  // holds - but has nothing of its own to answer for.
+  static detach() {
+    Durability.#close();
+  }
+
   // A batch this browser has sealed, given the next number and written down - all three inside ONE
   // TRANSACTION, which is what makes the number safe to share between tabs.
   //
@@ -413,6 +421,55 @@ export default class Durability {
   static persistReplica(replica) {
     return Durability.#write([META], (transaction) => {
       transaction.objectStore(META).put(replica, "replica");
+    });
+  }
+
+  // The store brought up to what this tab holds in memory, where it is behind - what a tab does
+  // on taking the lead of its group.
+  //
+  // Why it can be behind: the tab that led before wrote each frame down after applying it and
+  // without waiting, so a tab closed right after posting a frame leaves that frame in every other
+  // tab's memory and not on disk. Were the new leader simply to carry on from the next frame, the
+  // store would hold a place claiming rows it never received - a hole no page load could detect,
+  // since a resuming client is told only what moved after its place. So the rows memory holds are
+  // written whole, with the place they stand at, in one transaction.
+  //
+  // Only where it is behind. A place is a string, so equal places mean the store already holds
+  // exactly what the memory does, and nothing is written - which is the usual case, and the reason
+  // this costs a read rather than a rewrite on every succession.
+  static async repair(records, cursor) {
+    if (Durability.mode === "memory") {
+      return;
+    }
+
+    let stored;
+
+    try {
+      const transaction = Durability.#db.transaction([META], "readonly");
+
+      stored = await Durability.#request(
+        transaction.objectStore(META).get("cursor"),
+      );
+    } catch {
+      return;
+    }
+
+    if ((stored ?? null) === cursor) {
+      return;
+    }
+
+    return Durability.#write([ENTITIES, META], (transaction) => {
+      const entities = transaction.objectStore(ENTITIES);
+      const meta = transaction.objectStore(META);
+
+      entities.clear();
+
+      for (const record of records) {
+        entities.put(record);
+      }
+
+      meta.put(cursor, "cursor");
+      meta.put(Clock.last(), "clock");
     });
   }
 

@@ -446,6 +446,23 @@ describe("Durability", () => {
     });
   });
 
+  describe("detach()", () => {
+    it("closes the database and keeps everything stored", async () => {
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7)]);
+      await Durability.open();
+
+      Durability.detach();
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal((await readAll("entities")).length, 1);
+      assert.equal((await readAll("queue")).length, 1);
+      assert.equal(await readMeta("cursor"), "place-1");
+      assert.equal(await readMeta("seq"), 41);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
   describe("forgetBatch()", () => {
     it("deletes the record of the given number and no other", async () => {
       await Durability.open();
@@ -1035,6 +1052,70 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+  });
+
+  describe("repair()", () => {
+    it("writes nothing when the store already holds the place", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      const repairing = Durability.repair(
+        [taskRecord("t2", "in memory")],
+        "place-1",
+      );
+
+      await repairing;
+
+      assert.equal(Durability.inFlight, 0);
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t1"],
+      );
+    });
+
+    it("rewrites the rows and the place when the store is behind", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      Clock.observe(1_756_100_000_999_000);
+
+      await Durability.repair(
+        [taskRecord("t2", "second"), taskRecord("t3", "third")],
+        "place-2",
+      );
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2", "t3"],
+      );
+
+      assert.equal(await readMeta("cursor"), "place-2");
+      assert.equal(await readMeta("clock"), 1_756_100_000_999_000);
+    });
+
+    // A store with no place at all is behind any memory that has one - the rows it holds were left
+    // by a fill that never finished, and the memory's are dated.
+    it("rewrites a store holding no place", async () => {
+      await seedPreviousLoad({cursor: undefined});
+      await Durability.open();
+
+      await Durability.repair([taskRecord("t2", "second")], "place-2");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2"],
+      );
+
+      assert.equal(await readMeta("cursor"), "place-2");
+    });
+
+    it("does nothing in memory mode", async () => {
+      await Durability.repair([taskRecord("t2", "second")], "place-2");
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
     });
   });
 
