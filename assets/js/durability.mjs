@@ -92,6 +92,19 @@ export default class Durability {
     return Durability.#write([ENTITIES, META], Durability.#wipe);
   }
 
+  // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
+  // nothing is waiting on it any more, and a later page load has no reason to take it up.
+  //
+  // Fire and forget, unlike the write that put it there. What a crash between the verdict and this
+  // delete costs is one batch sent a second time on the next load - and a second arrival of the
+  // same replica and number is answered from the server's record of the first rather than applied
+  // again, so the cost is a round trip rather than a duplicate write.
+  static forgetBatch(seq) {
+    return Durability.#write([QUEUE], (transaction) =>
+      transaction.objectStore(QUEUE).delete(seq),
+    );
+  }
+
   // Answers nothing, and never throws: a browser that cannot store is a browser that carries on
   // from memory. Every way that can happen is named, because the reason is what a developer needs
   // when a page is unexpectedly re-downloading everything.
@@ -226,6 +239,28 @@ export default class Durability {
 
       meta.put(Clock.last(), "clock");
     });
+  }
+
+  // A pending batch whose writes the base has caught up with, written down again for the marks.
+  //
+  // Why the marks are worth storing at all: a batch can be sent, committed, have its frame arrive
+  // and be stored, and then lose its ANSWER to a dropped connection. The next page load takes the
+  // batch up and sends it again, the server answers from its record, and the client promotes it -
+  // and a moved counter promoted onto a base that already holds the move counts it twice, for
+  // good. Nothing later corrects that, because the server has nothing new to say about a row
+  // nobody has touched since. The marks are what makes the promotion pass over it.
+  //
+  // The counter is deliberately NOT rewritten here, which is what makes this different from the
+  // write that first stored the batch. A frame can land the writes of a batch that is not the
+  // newest one sealed, and putting this batch's number down would walk the counter backwards -
+  // onto a number a later batch has already spent.
+  //
+  // Fire and forget: the marks are already in memory, and what storing them buys is only whether
+  // they are still true after a reload.
+  static persistLanded(batch) {
+    return Durability.#write([QUEUE], (transaction) =>
+      transaction.objectStore(QUEUE).put(batch.record()),
+    );
   }
 
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair

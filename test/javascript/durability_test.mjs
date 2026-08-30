@@ -380,6 +380,29 @@ describe("Durability", () => {
     });
   });
 
+  describe("forgetBatch()", () => {
+    it("deletes the record of the given number and no other", async () => {
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await Durability.persistBatch(sealedBatch(8));
+
+      await Durability.forgetBatch(7);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [8],
+      );
+    });
+
+    it("does nothing in memory mode", async () => {
+      await Durability.forgetBatch(7);
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.inFlight, 0);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
   describe("open()", () => {
     // A bundle carrying another store layout, or on another model, must open a database of its
     // own - which is what stops two tabs on different versions from ever sharing one.
@@ -714,6 +737,38 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
+  describe("persistLanded()", () => {
+    it("rewrites the record with the marks", async () => {
+      await Durability.open();
+
+      const batch = sealedBatch(7);
+
+      await Durability.persistBatch(batch);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
+    // A frame can land the writes of a batch that is not the newest one sealed - the counter
+    // belongs to whatever was sealed last, and putting this batch's number down would walk it
+    // backwards, onto a number a later batch has already spent.
+    it("leaves the counter where it was", async () => {
+      await Durability.open();
+      await Durability.persistBatch(sealedBatch(7));
+      await Durability.persistBatch(sealedBatch(8));
+
+      await Durability.persistLanded(sealedBatch(7));
+
+      assert.equal(await readMeta("seq"), 8);
     });
   });
 
