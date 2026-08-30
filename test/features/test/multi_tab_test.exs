@@ -148,28 +148,52 @@ defmodule HologramFeatureTests.MultiTabTest do
 
   # The write is made in the tab that does not send, refused at the server, and rolled back in BOTH
   # tabs - the tab that made it hears the verdict from the tab that asked for it.
+  #
+  # The send is HELD, and not for convenience: a duplicate slug is refused in milliseconds, so
+  # asserting the row is on screen without holding races the round trip - and lost that race on CI,
+  # where the server answered before the driver could look. Holding makes the optimistic row a
+  # state the test can stand in, and every claim after the release is anchored on the refusal
+  # arriving rather than on a moment.
   feature "rolls a refused write back in the tab that made it", %{session: session} do
     %{slug: "taken", title: "taken"}
     |> Todo.new()
     |> DB.create!()
 
-    leading = visit(session, WriteQueuePage)
-    first = tab_handle(leading)
+    sender =
+      session
+      |> visit(WriteQueuePage)
+      |> hold_mutation_requests()
+
+    first = tab_handle(sender)
 
     writer =
-      leading
+      sender
       |> open_tab(WriteQueuePage)
       |> assert_text(css("#todos"), "taken 0")
       |> click(button("Create a duplicate slug"))
       |> assert_text(css("#todos"), "dup 0")
 
-    assert [%{"seq" => 1, "write" => 0}] = await_rejected_writes(writer)
+    second = tab_handle(writer)
 
-    refute_text(writer, css("#todos"), "dup")
+    # On screen in the tab that did not make it, and still unsent - the gate lives in this tab,
+    # which is why the release happens here.
+    releasing =
+      writer
+      |> focus_tab(first)
+      |> assert_text(css("#todos"), "dup 0")
 
-    writer
-    |> focus_tab(first)
-    |> refute_text(css("#todos"), "dup")
+    release_mutations(releasing)
+
+    assert [%{"seq" => 1, "write" => 0}] = await_rejected_writes(releasing)
+
+    refute_text(releasing, css("#todos"), "dup")
+
+    # And the tab that MADE the write learns a verdict it never asked for.
+    author = focus_tab(releasing, second)
+
+    assert [%{"seq" => 1, "write" => 0}] = await_rejected_writes(author)
+
+    refute_text(author, css("#todos"), "dup")
 
     assert [%Todo{title: "taken"}] = DB.read(Todo)
   end
