@@ -94,6 +94,39 @@ export default class Durability {
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
 
+  // The batches this browser has filed above a number, oldest first - what a tab reads before it
+  // sends, so that what it ships is the queue as the DATABASE holds it rather than as messages
+  // happened to reach it.
+  //
+  // Why it is read at all: any tab of a group can file a batch, and it says so on the channel - but
+  // a message can be missed by a tab that was starting up, and a tab that filed one and closed
+  // before saying anything sends no message at all. The store is the record either way, and reading
+  // it back is reading it in number order, which is the order batches must go out in.
+  //
+  // A READ, so it is deliberately not `#write`: it starts no read-write transaction, and it is not
+  // counted as work in flight, which is what a test waits on to know a WRITE has landed. A read
+  // that fails answers nothing rather than tearing the storage down - nothing has been lost, and
+  // the next send asks again.
+  static async batchesAbove(seq) {
+    if (Durability.mode === "memory") {
+      return [];
+    }
+
+    try {
+      const transaction = Durability.#db.transaction([QUEUE], "readonly");
+
+      const records = await Durability.#request(
+        transaction
+          .objectStore(QUEUE)
+          .getAll(globalThis.IDBKeyRange.lowerBound(seq, true)),
+      );
+
+      return records ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
   // resync replaces the whole pot, and when what is stored cannot be read by this page.

@@ -11,6 +11,10 @@
 // resolves upward from the importing file, which never reaches it.
 import fakeIndexedDB from "../../assets/node_modules/fake-indexeddb/build/esm/fakeIndexedDB.js";
 
+// Installed beside the factory and for the same reason: a range is how a read names the part of a
+// store it wants, and jsdom puts no IDBKeyRange on the global any more than it puts indexedDB there.
+import FDBKeyRange from "../../assets/node_modules/fake-indexeddb/build/esm/FDBKeyRange.js";
+
 import {
   assert,
   defineRuntimeGlobals,
@@ -41,10 +45,14 @@ describe("Durability", () => {
   // make its storage-mode answers depend on file order. Restored by deletion when it was absent,
   // so what comes after finds exactly what it would have found alone.
   let previousIndexedDB;
+  let previousKeyRange;
 
   before(() => {
     previousIndexedDB = globalThis.indexedDB;
+    previousKeyRange = globalThis.IDBKeyRange;
+
     globalThis.indexedDB = fakeIndexedDB;
+    globalThis.IDBKeyRange = FDBKeyRange;
   });
 
   after(() => {
@@ -52,6 +60,12 @@ describe("Durability", () => {
       delete globalThis.indexedDB;
     } else {
       globalThis.indexedDB = previousIndexedDB;
+    }
+
+    if (previousKeyRange === undefined) {
+      delete globalThis.IDBKeyRange;
+    } else {
+      globalThis.IDBKeyRange = previousKeyRange;
     }
   });
 
@@ -263,6 +277,49 @@ describe("Durability", () => {
     LocalDatabase.actorUserId = "u1";
     Replica.offer({id: "r-fresh", token: "statement-fresh"});
   };
+
+  describe("batchesAbove()", () => {
+    it("answers the records above the number, oldest first", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
+
+      assert.deepStrictEqual(await Durability.batchesAbove(2), [
+        batchRecord(5),
+        batchRecord(9),
+      ]);
+    });
+
+    it("answers nothing for a number nothing was filed above", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(2), batchRecord(5)]);
+
+      assert.deepStrictEqual(await Durability.batchesAbove(5), []);
+    });
+
+    it("answers nothing in memory mode", async () => {
+      assert.deepStrictEqual(await Durability.batchesAbove(0), []);
+      assert.equal(Durability.mode, "memory");
+    });
+
+    // A read that cannot be answered has lost nothing - the batches are still filed, and the next
+    // send asks again - so it does not take the storage down the way a failed WRITE does.
+    it("answers nothing when the store cannot be read, and goes on storing", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(2)]);
+
+      const range = globalThis.IDBKeyRange;
+
+      try {
+        globalThis.IDBKeyRange = undefined;
+
+        assert.deepStrictEqual(await Durability.batchesAbove(0), []);
+      } finally {
+        globalThis.IDBKeyRange = range;
+      }
+
+      assert.equal(Durability.mode, "indexeddb");
+    });
+  });
 
   describe("clear()", () => {
     it("drops the rows and the place, and keeps what this browser did", async () => {
