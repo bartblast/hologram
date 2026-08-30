@@ -33,6 +33,11 @@ import Sse from "./sse.mjs";
 //
 // A tab in no group LEADS ITSELF, which is what keeps every single-tab case exactly what it was
 // before any of this: joining is what makes a tab a follower, and nothing else does.
+
+// What a tab that has not finished starting up holds rather than acts on, because each of these
+// lands ON something the tab has not taken up yet - see `#deliver`.
+const HELD_UNTIL_READY = new Set(["answered", "frame", "state"]);
+
 export default class Tabs {
   static leader = true;
 
@@ -276,16 +281,30 @@ export default class Tabs {
     }
   }
 
-  // A frame is what the SERVER said, and it lands on top of what this tab already holds: the rows
-  // its own page carried, which go in at the mount, and the rows the browser had stored, which go
-  // in just after it. A frame arriving before either has nothing to land on - and one declaring a
-  // scope complete would be declaring it over rows this tab has not put in yet - so it waits.
+  // Acted on as it arrives, or held until this tab has taken up what it starts with - the rows its
+  // own page carried, which go in at the mount, and the rows and batches the browser had stored,
+  // which go in just after it.
   //
-  // Nothing else waits. A batch another tab filed, an answer, and the group's state are all about
-  // what this BROWSER did rather than what the server said, and none of them has an order to keep
-  // against the page's own rows.
+  // THREE KINDS WAIT, each because it lands on something that is not there yet:
+  //
+  // A FRAME is the server's word about rows the page and the store have not put in yet.
+  //
+  // The group's STATE carries the completeness scopes, and marking the pot complete is what SWEEPS
+  // the rows a page carried but the stream never vouched for. Swept before the mount it sweeps an
+  // empty set, and the page's own carried rows - filed a moment later - are never looked at again,
+  // so a row the server would no longer send sits there for the life of the tab. (Reachable
+  // whenever a tab is between joining and mounting while another posts state: two tabs opened
+  // together, a succession, an identity switch. Found by CodeRabbit on PR #1169.)
+  //
+  // An ANSWER names a batch this tab takes up in the same breath: settling before the batch is
+  // there settles nothing, and the batch is then folded for ever - nothing answers it twice.
+  //
+  // What does not wait: a batch another tab filed (taking one up twice is taking it up once, since
+  // the adopt passes over what it already holds), a tab asking for the group's state (which can be
+  // answered at any time), and a storage failure, which is the one message a tab should act on
+  // before it has finished anything else.
   static #deliver(message) {
-    if (!Tabs.#ready && message.kind === "frame") {
+    if (!Tabs.#ready && HELD_UNTIL_READY.has(message.kind)) {
       Tabs.#held.push(message);
 
       return;

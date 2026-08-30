@@ -644,9 +644,9 @@ describe("Tabs", () => {
 
       await Tabs.join(group, {onLead: () => {}, onMessage: received});
 
-      sibling(group).postMessage({kind: "state"});
+      sibling(group).postMessage({kind: "sealed"});
 
-      assert.deepStrictEqual(await hasReceived, {kind: "state"});
+      assert.deepStrictEqual(await hasReceived, {kind: "sealed"});
     });
   });
 
@@ -763,7 +763,94 @@ describe("Tabs", () => {
       assert.deepStrictEqual(seen, [frame(1)]);
     });
 
-    it("holds nothing that is not a frame", async () => {
+    // Marking the pot complete is what sweeps the rows a page carried, and a sweep before the mount
+    // sweeps an empty set - leaving the page's own carried rows to sit there for the life of the
+    // tab. Reachable whenever a tab is between joining and mounting while another posts state.
+    it("holds the group's state until the tab is ready", async () => {
+      const state = {
+        cursor: null,
+        kind: "state",
+        page: null,
+        replica: {id: null, token: null},
+        synced: ["all"],
+      };
+
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+
+          if (message.kind === "sealed") {
+            arrived();
+          }
+        },
+      });
+
+      const other = sibling(Tabs.name);
+
+      other.postMessage(state);
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      assert.deepStrictEqual(seen, [barrier]);
+
+      Tabs.ready();
+
+      assert.deepStrictEqual(seen, [barrier, state]);
+    });
+
+    // An answer names a batch this tab takes up in the same breath, and settling before the batch
+    // is there settles nothing - leaving it folded for ever, since nothing answers it twice.
+    it("holds an answer until the tab is ready", async () => {
+      const answer = {
+        answer: {dropped: {}, kept: {}, status: "confirmed"},
+        kind: "answered",
+        seq: 3,
+      };
+
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+
+          if (message.kind === "sealed") {
+            arrived();
+          }
+        },
+      });
+
+      const other = sibling(Tabs.name);
+
+      other.postMessage(answer);
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      assert.deepStrictEqual(seen, [barrier]);
+
+      Tabs.ready();
+
+      assert.deepStrictEqual(seen, [barrier, answer]);
+    });
+
+    it("holds nothing a starting tab can act on at once", async () => {
       const seen = [];
 
       let arrived;
