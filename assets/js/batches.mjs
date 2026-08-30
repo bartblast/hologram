@@ -10,6 +10,7 @@ import LocalDatabase from "./local_database.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
+import Tabs from "./tabs.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
 //
@@ -195,15 +196,30 @@ export default class Batches {
   // later batch may name a row an earlier one created, and its based_on for a column an earlier
   // one wrote is that batch's own stamp - so overlapping them turns a sound chain into a refusal.
   static async flush() {
-    if (Batches.#sending || Batches.pending.length === 0) {
+    // ONE TAB OF A BROWSER SENDS, and it is the one holding the group's lock. A batch made in any
+    // tab is filed in the one queue they share, so the leader's own reading of that queue is what
+    // ships - and a follower that sent as well would put a second copy of every batch on the wire,
+    // under the same replica and number, for the server to answer twice from one record.
+    if (!Tabs.leader || Batches.#sending) {
       return;
     }
 
     Batches.#sending = true;
 
     try {
-      while (Batches.pending.length > 0) {
+      while (true) {
+        // The queue as the STORE holds it, before every send rather than once: any tab can file a
+        // batch, and the message saying so can be missed by a tab that was starting up or never
+        // sent at all by a tab that closed straight after filing. Reading it back is reading it in
+        // number order, so what ships is the order the batches were made in whatever order this
+        // tab heard about them.
+        Batches.adopt(await Durability.batchesAbove(Batches.#seq));
+
         const batch = Batches.pending[0];
+
+        if (batch === undefined) {
+          return;
+        }
 
         // Before anything leaves: a batch may not be answered under a number this browser could
         // hand out again after a reload.
@@ -272,6 +288,11 @@ export default class Batches {
         // watched fail, and a device whose clock is permanently wrong would resend it on every
         // page load with nothing in v1 able to discard it.
         Durability.forgetBatch(batch.seq);
+
+        // Every tab of the group holds this batch and every one of them has to let it go - the
+        // answer reaches them as it arrived, undecoded, because a client term is not something a
+        // browser can carry from one tab to another.
+        Tabs.post({answer, kind: "answered", seq: batch.seq});
 
         Batches.settle(batch.seq, answer);
       }

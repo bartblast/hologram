@@ -17,6 +17,7 @@ import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -53,6 +54,10 @@ describe("Batches", () => {
 
   afterEach(() => {
     Batches.reset();
+
+    // Module state of another module's, like the store's mode below: a test that follows must put
+    // the tab back in the lead, or every test after it sends nothing.
+    Tabs.leader = true;
 
     // Module state, and not Batches's to reset: this suite runs the store in memory mode, so a
     // test that puts it in another leaves every test after it - in this file and in the next -
@@ -116,6 +121,57 @@ describe("Batches", () => {
 
       return Batches.close();
     };
+
+    // A batch made in any tab is filed in the one queue they share, so a follower that sent as well
+    // would put a second copy of every batch on the wire under the same replica and number.
+    it("sends nothing from a tab that does not lead the group", async () => {
+      Tabs.leader = false;
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+    });
+
+    // The store is the order, not the messages: a batch filed by a tab that closed straight after
+    // is in the queue with nothing said about it, and it ships before anything numbered above it.
+    it("takes up what the store holds above what it has seen, before sending", async () => {
+      const filed = {
+        actorUserId: null,
+        landed: [],
+        seq: 3,
+        writes: [creating("t3", "filed elsewhere")],
+      };
+
+      // Once, the way the store answers it: the read is exclusive of what this tab has already
+      // seen, so a record it has taken up is not offered again.
+      const reading = sinon.stub(Durability, "batchesAbove").resolves([]);
+
+      reading.onFirstCall().resolves([filed]);
+
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.equal(sendStub.firstCall.args[0].seq, 3);
+    });
+
+    it("tells the group what the server answered", async () => {
+      const posting = sinon.stub(Tabs, "post");
+      const answer = confirmed();
+
+      sendStub.resolves(answer);
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isTrue(
+        posting.calledOnceWithExactly({answer, kind: "answered", seq: 1}),
+      );
+    });
 
     it("sends the pending batches oldest first, one at a time", async () => {
       sealed(creating("t1", "first"));
