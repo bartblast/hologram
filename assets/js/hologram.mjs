@@ -29,6 +29,7 @@ import Renderer from "./renderer.mjs";
 import Replica from "./replica.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
+import Tabs from "./tabs.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import UncaughtErrorOverlay from "./uncaught_error_overlay.mjs";
@@ -1535,6 +1536,30 @@ export default class Hologram {
     // write cannot land ahead of what a previous page load left.
     await Durability.open();
 
+    // The group this browser's tabs share, joined before the mount and before the stream opens -
+    // which is what lets the tab that leads greet the server with sync on its FIRST connect, and
+    // stops a follower opening a sync session it would have to drop a moment later.
+    //
+    // Named for the database and for the user this page mounts under. Per database because tabs on
+    // different models cannot share a store, and per user because the leader can only send what
+    // the session it holds is allowed to send - a tab still mounted under somebody else must not
+    // be sending, or reading, for this one.
+    //
+    // Nothing to join where there is no store: the tabs of such a browser share nothing, so each
+    // is a replica of its own, exactly as every tab was before any of this.
+    const database = Durability.databaseName();
+
+    if (database !== null && Durability.mode === "indexeddb") {
+      // Read HERE rather than at the mount, because the group cannot be named without it. The
+      // mount finds it already read - it has always taken what is held over what the page defines.
+      $.#mountData ??= globalThis.Hologram.pageMountData(Hologram.#deps);
+
+      await Tabs.join(
+        `${database}.${$.#mountData.actorUserId ?? "anonymous"}`,
+        {},
+      );
+    }
+
     App.maybeLoadInstanceId();
     Client.connect(false);
 
@@ -1566,6 +1591,8 @@ export default class Hologram {
     // framework reads them.
     globalThis.Hologram.durability = {
       cursor: () => Sse.syncCursor,
+      group: () => Tabs.name,
+      leader: () => Tabs.leader,
       mode: () => Durability.mode,
       pendingWrites: () => Durability.inFlight,
       persisted: () => Durability.persisted,
@@ -2026,9 +2053,7 @@ export default class Hologram {
   // visit after the first, since the runtime's page-script listener fires again on each
   // client-side navigation and this runs once per page visit.
   static #restoreDurable() {
-    // TODO: the role is this tab's own, once the runtime joins its group - until then every tab
-    // is the one that speaks to the store.
-    const resumed = Durability.restore(true);
+    const resumed = Durability.restore(Tabs.leader);
 
     if (resumed === null) {
       return;
@@ -2037,6 +2062,14 @@ export default class Hologram {
     Sse.syncCursor = resumed.cursor;
     Batches.resumeFrom(resumed.seq);
     Batches.adopt(resumed.batches);
+
+    // Everything this tab starts with is in place, so what the group has said since may land on it
+    // - and whatever arrived while it was starting up is applied now, in the order it arrived.
+    Tabs.ready();
+
+    // And what the store could not tell it is asked for: the completeness scopes, which nothing
+    // writes down, and the place and the identity as they stand in the tab that has them.
+    Tabs.post({kind: "joined"});
 
     // The third thing that wakes the sender, beside an action finishing and the stream opening.
     // It is needed rather than tidy: the stream is connected before the mount, so it can have
