@@ -559,7 +559,7 @@ defmodule Hologram.Entity do
   defp attribute_type_asts(:float, _opts), do: [quote(do: float())]
   defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
   defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
-  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(String)]
+  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(Entity, :id)]
 
   # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
   # so a role reaching the given one through any number of hops ends up in the result.
@@ -617,7 +617,7 @@ defmodule Hologram.Entity do
 
   # Spelled with the module ATOM rather than with an alias, so that an entity module's own
   # aliases cannot redirect the name.
-  defp remote_type_ast(module), do: {{:., [], [module, :t]}, [], []}
+  defp remote_type_ast(module, name \\ :t), do: {{:., [], [module, name]}, [], []}
 
   # A to-many holds its sentinel until a query includes it and a list of the target's structs
   # after. A to-one splits into a reference field and an embed, and the embed admits nil whether
@@ -636,7 +636,7 @@ defmodule Hologram.Entity do
     reference_name = String.to_existing_atom("#{name}_id")
 
     [
-      {reference_name, type_union([remote_type_ast(String), nil])},
+      {reference_name, type_union([remote_type_ast(Entity, :id), nil])},
       {name, type_union(union_types)}
     ]
   end

@@ -45,14 +45,14 @@ defmodule Hologram.Auth.RoleGrant do
           __meta__: Metadata.t(),
           created_at: DateTime.t() | nil,
           granted_by: struct | NotIncluded.t() | nil,
-          granted_by_id: String.t() | nil,
-          id: String.t() | nil,
-          resource_id: String.t() | nil,
+          granted_by_id: Entity.id() | nil,
+          id: Entity.id() | nil,
+          resource_id: Entity.id() | nil,
           resource_type: atom | nil,
           role: atom | module | nil,
           updated_at: DateTime.t() | nil,
           user: struct | NotIncluded.t() | nil,
-          user_id: String.t() | nil
+          user_id: Entity.id() | nil
         }
 
   @doc """

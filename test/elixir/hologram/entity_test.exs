@@ -690,7 +690,7 @@ defmodule Hologram.EntityTest do
                c: ":x | :y | nil",
                created_at: "DateTime.t() | nil",
                d: "float() | nil",
-               id: "String.t() | nil",
+               id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end
@@ -702,11 +702,11 @@ defmodule Hologram.EntityTest do
                __meta__: "Hologram.Entity.Metadata.t()",
                a:
                  "Hologram.Test.Fixtures.Entity.Module3.t() | Hologram.Entity.NotIncluded.t() | nil",
-               a_id: "String.t() | nil",
+               a_id: "Hologram.Entity.id() | nil",
                b: "t() | Hologram.Entity.NotIncluded.t() | nil",
-               b_id: "String.t() | nil",
+               b_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
-               id: "String.t() | nil",
+               id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end
@@ -715,7 +715,7 @@ defmodule Hologram.EntityTest do
       assert struct_field_types(Module15) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
-               id: "String.t() | nil",
+               id: "Hologram.Entity.id() | nil",
                label: "String.t() | nil",
                secret_note: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
                token: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
@@ -730,7 +730,7 @@ defmodule Hologram.EntityTest do
                b: "integer() | nil",
                c: "String.t() | nil",
                created_at: "DateTime.t() | nil",
-               id: "String.t() | nil",
+               id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end
@@ -741,12 +741,12 @@ defmodule Hologram.EntityTest do
                a: "[Hologram.Test.Fixtures.Entity.Module2.t()] | Hologram.Entity.NotIncluded.t()",
                b:
                  "Hologram.Test.Fixtures.Entity.Module2.t() | Hologram.Entity.NotIncluded.t() | nil",
-               b_id: "String.t() | nil",
+               b_id: "Hologram.Entity.id() | nil",
                c:
                  "Hologram.Test.Fixtures.Entity.Module1.t() | Hologram.Entity.NotIncluded.t() | nil",
-               c_id: "String.t() | nil",
+               c_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
-               id: "String.t() | nil",
+               id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end
@@ -766,7 +766,7 @@ defmodule Hologram.EntityTest do
       assert struct_field_types(Module1) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
-               id: "String.t() | nil",
+               id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end
