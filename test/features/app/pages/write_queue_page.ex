@@ -28,6 +28,7 @@ defmodule HologramFeatureTests.WriteQueuePage do
     <p>
       <button $click={action: :create_alpha}> Create alpha </button>
       <button $click={action: :create_duplicate_slug}> Create a duplicate slug </button>
+      <button $click={action: :create_gamma}> Create gamma </button>
       <button $click={command: :log_in_as_alice}> Log in as Alice </button>
       <button $click={command: :log_in_as_bob}> Log in as Bob </button>
       <button $click={action: :rename_alpha}> Rename alpha </button>
@@ -58,6 +59,17 @@ defmodule HologramFeatureTests.WriteQueuePage do
       |> DB.create()
 
     put_state(component, :result, "created_dup")
+  end
+
+  # A second create, so that two TABS can each make one and the numbers they are filed under can be
+  # told apart. Nothing about it differs from creating alpha but the title.
+  def action(:create_gamma, _params, component) do
+    {:ok, todo} =
+      %{title: "gamma"}
+      |> Todo.new()
+      |> DB.create()
+
+    put_state(component, :result, "created_#{todo.title}")
   end
 
   # Reads alpha from the client's own database - through the overlay, so a pending create of it
