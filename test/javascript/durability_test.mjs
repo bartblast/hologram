@@ -329,6 +329,31 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
     });
 
+    // Storage that is present but refuses to be REACHED: a sandboxed iframe, an opaque origin, a
+    // browser told to block site data. Both the property read and the open() call throw
+    // synchronously there, and the runtime awaits this during boot - so a throw escaping would
+    // fail the whole page, not merely leave it without a store.
+    it("stays in memory mode when reaching IndexedDB throws", async () => {
+      const indexedDB = globalThis.indexedDB;
+
+      try {
+        globalThis.indexedDB = {
+          open: () => {
+            throw new DOMException(
+              "The operation is insecure.",
+              "SecurityError",
+            );
+          },
+        };
+
+        await Durability.open();
+
+        assert.equal(Durability.mode, "memory");
+      } finally {
+        globalThis.indexedDB = indexedDB;
+      }
+    });
+
     // Holding it open would block that tab for as long as this page lives, and the durability this
     // page gives up is one page's worth.
     it("lets the database go when another tab needs a new version", async () => {

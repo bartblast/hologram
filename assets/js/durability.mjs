@@ -61,15 +61,20 @@ export default class Durability {
       return Durability.#memoryMode("no data model");
     }
 
-    if (!globalThis.indexedDB) {
-      return Durability.#memoryMode("IndexedDB unavailable");
-    }
-
-    const request = globalThis.indexedDB.open(DATABASE_NAME, VERSION);
-
-    request.onupgradeneeded = () => Durability.#upgrade(request.result);
-
+    // Reaching the API AT ALL is inside the try, not only awaiting its answer. Where storage is
+    // restricted - a sandboxed iframe, an opaque origin, a browser told to block site data - both
+    // the property read and the open() call throw SYNCHRONOUSLY, and a throw escaping here would
+    // not merely cost this page its durability: the runtime awaits this during boot, so the whole
+    // page would fail to start in exactly the context this function exists to absorb.
     try {
+      if (!globalThis.indexedDB) {
+        return Durability.#memoryMode("IndexedDB unavailable");
+      }
+
+      const request = globalThis.indexedDB.open(DATABASE_NAME, VERSION);
+
+      request.onupgradeneeded = () => Durability.#upgrade(request.result);
+
       Durability.#db = await Durability.#request(request);
     } catch (error) {
       return Durability.#memoryMode(`open failed (${error})`);
