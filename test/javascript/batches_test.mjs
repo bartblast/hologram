@@ -32,6 +32,12 @@ describe("Batches", () => {
 
   afterEach(() => {
     Batches.reset();
+
+    // Not covered by LocalDatabase.reset(), which leaves the acting user alone on purpose - a
+    // resync replaces what the server said and does not change who is signed in. So a test that
+    // sets one has to put it back, or it reaches every suite that runs after this file.
+    LocalDatabase.actorUserId = null;
+
     Replica.reset();
     sinon.restore();
   });
@@ -137,7 +143,7 @@ describe("Batches", () => {
         record = resolve;
       });
 
-      sinon.stub(Durability, "persistCounter").returns(recording);
+      sinon.stub(Durability, "persistBatch").returns(recording);
       sendStub.resolves(confirmed());
 
       sealed(creating("t1", "first"));
@@ -841,19 +847,59 @@ describe("Batches", () => {
       assert.isNull(Batches.current());
     });
 
-    it("records the batch's number, and hands the write to the sender", () => {
+    it("writes the batch down, and hands the write to the sender", () => {
       const recording = Promise.resolve();
-      const counter = sinon
-        .stub(Durability, "persistCounter")
-        .returns(recording);
+      const writing = sinon.stub(Durability, "persistBatch").returns(recording);
 
       Batches.open("todos");
       wrote("t1");
 
       const batch = Batches.close();
 
-      assert.isTrue(counter.calledOnceWithExactly(1));
+      assert.isTrue(writing.calledOnceWithExactly(batch));
       assert.strictEqual(batch.recorded, recording);
+    });
+
+    // Taken at seal rather than at send: the page that eventually sends this batch may belong to
+    // somebody else, and only a page mounted under this user takes it up again.
+    it("seals the batch under the page's user", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().actorUserId, "u1");
+    });
+
+    // Set BEFORE the write rather than after it. The record is built at the moment the batch is
+    // written down, so an owner assigned afterwards would be stored as nobody - and no later page
+    // load would ever take the batch up, whoever signed in.
+    it("writes the batch down under the page's user", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      let stored = null;
+
+      sinon
+        .stub(Durability, "persistBatch")
+        .callsFake((batch) => (stored = batch.record()));
+
+      Batches.open("todos");
+      wrote("t1");
+      Batches.close();
+
+      assert.equal(stored.actorUserId, "u1");
+    });
+
+    // UNDEFINED rather than null, which is what a page mount leaves when its data names no actor.
+    // It has to reach the batch as null: the owner filter that decides whether a later load takes
+    // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
+    it("seals a visitor's batch under nobody", () => {
+      LocalDatabase.actorUserId = undefined;
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.isNull(Batches.close().actorUserId);
     });
 
     it("answers nothing when no batch is open", () => {

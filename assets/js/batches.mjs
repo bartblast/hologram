@@ -5,6 +5,7 @@ import Client from "./client.mjs";
 import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
@@ -83,11 +84,20 @@ export default class Batches {
       return null;
     }
 
+    // Whose work this is, taken at seal rather than at send: a batch outlives the page that made
+    // it, and the page that eventually sends it may belong to somebody else. Only a page mounted
+    // under this user will take it up again.
+    batch.actorUserId = LocalDatabase.actorUserId ?? null;
+
     batch.seal(++Batches.#seq);
 
-    // Started here and awaited by the sender, so the number is on its way down while the action's
+    // Started here and awaited by the sender, so the batch is on its way down while the action's
     // own render happens - the store is never on the path of what the user sees.
-    batch.recorded = Durability.persistCounter(Batches.#seq);
+    //
+    // The batch goes down WITH its number, in one write. A number stored without the batch it was
+    // spent on is a number the next load counts on from for work that no longer exists, and a
+    // batch stored without its number is one the next load can number over.
+    batch.recorded = Durability.persistBatch(batch);
 
     Batches.pending.push(batch);
 

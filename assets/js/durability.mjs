@@ -177,6 +177,12 @@ export default class Durability {
   //
   // What a crash between sealing and committing costs is a batch that was never sent, which is the
   // cheap side of the trade and the only side left once the two are one write.
+  //
+  // One number and one queue for the whole browser, not one per tab (10a's D1): a person has one
+  // replica, and the log should read that way. Until the multi-tab work takes the number inside the
+  // same lock that files the batch, two tabs writing at the same moment can spend one number - and
+  // the second tab's write here overwrites the first tab's batch, which is the same known limit
+  // with a sharper edge than it had when only a counter was stored.
   static persistBatch(batch) {
     return Durability.#write([META, QUEUE], (transaction) => {
       transaction.objectStore(QUEUE).put(batch.record());
@@ -184,27 +190,6 @@ export default class Durability {
       const meta = transaction.objectStore(META);
 
       meta.put(batch.seq, "seq");
-      meta.put(Clock.last(), "clock");
-    });
-  }
-
-  // The number this browser has counted its batches up to, and where its clock stands.
-  //
-  // The ONE write anything waits for. A batch is identified by its replica and its number, and the
-  // server answers a number it has already seen from its record rather than applying it again - so
-  // a number handed out but never written down is a number the next page load hands out a second
-  // time, and the batch carrying it is answered with what the FIRST batch got. A crash between
-  // sealing a batch and storing its number loses a batch that was never sent, which is the cheap
-  // side of that trade.
-  //
-  // One number and one clock for the whole browser, not one per tab (D1, ruled 2026-08-30): a
-  // person has one replica, and the log should read that way. Until the multi-tab work takes the
-  // number under a lock, two tabs writing at the same moment can hand out the same one.
-  static persistCounter(seq) {
-    return Durability.#write([META], (transaction) => {
-      const meta = transaction.objectStore(META);
-
-      meta.put(seq, "seq");
       meta.put(Clock.last(), "clock");
     });
   }
