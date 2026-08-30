@@ -2,19 +2,28 @@
 
 import {
   assert,
+  defineRuntimeGlobals,
   registerWebApis,
   sinon,
   waitForEventLoop,
 } from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
+import GlobalRegistry from "../../assets/js/global_registry.mjs";
+import Hologram from "../../assets/js/hologram.mjs";
+import LocalDatabase from "../../assets/js/local_database.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
+import Type from "../../assets/js/type.mjs";
 
 // Without this the file passes only when something else in the run has installed sessionStorage
 // first: a browser that cannot coordinate its tabs is told so through Logger, which writes there.
 registerWebApis();
+
+// Hologram.currentPageModule() answers a boxed module, and reading its name goes through the
+// interpreter - so the runtime globals have to be there before a page-scoped message is judged.
+defineRuntimeGlobals();
 
 // Node's own BroadcastChannel, made to work under jsdom - it does not otherwise, and the reason is
 // worth knowing before anyone treats this as decoration.
@@ -128,6 +137,8 @@ describe("Tabs", () => {
 
     releases.forEach((release) => release());
     openChannels.forEach((channel) => channel.close());
+
+    sinon.restore();
   });
 
   // What a tab does when the store it was sharing is gone: the group is over, and every tab goes
@@ -144,7 +155,6 @@ describe("Tabs", () => {
 
     afterEach(() => {
       Replica.reset();
-      sinon.restore();
     });
 
     it("leaves the group", async () => {
@@ -196,6 +206,177 @@ describe("Tabs", () => {
       Tabs.dissolve();
 
       assert.isTrue(reconnecting.calledOnce);
+    });
+  });
+
+  describe("postState()", () => {
+    afterEach(() => {
+      GlobalRegistry.set("connectPageModule", null);
+
+      LocalDatabase.reset();
+      Replica.reset();
+
+      Sse.syncCursor = null;
+    });
+
+    // The three things a joining tab cannot read out of the store: the scopes, which nothing writes
+    // down, and the place and the identity as they stand now.
+    it("says what this tab knows that the store cannot tell", () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      GlobalRegistry.set("connectPageModule", "MyApp.TodosPage");
+      LocalDatabase.markSynced("page");
+      Replica.offer({id: "r-group", token: "statement-group"});
+
+      Sse.syncCursor = "place-1";
+
+      Tabs.postState();
+
+      assert.deepStrictEqual(posting.firstCall.args[0], {
+        cursor: "place-1",
+        kind: "state",
+        page: "MyApp.TodosPage",
+        replica: {id: "r-group", token: "statement-group"},
+        synced: ["page"],
+      });
+    });
+  });
+
+  describe("receive()", () => {
+    const PAGE = "MyApp.TodosPage";
+
+    // The page a message names is the page the STREAM was greeted with, and what this tab does
+    // with a page-scoped claim depends on whether it is the page this tab is on.
+    const mountPage = (name) =>
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(name === null ? null : Type.alias(name));
+
+    beforeEach(() => {
+      sinon.stub(Sse, "receiveFrame");
+      sinon.stub(LocalDatabase, "markSynced");
+
+      mountPage(PAGE);
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+      Replica.reset();
+      Sse.syncCursor = null;
+    });
+
+    it("applies a frame to this tab's own memory", () => {
+      const frame = {applied_seq: null, cursor: "place-1", deltas: {}};
+
+      Tabs.receive({event: "sync_deltas", frame, kind: "frame"});
+
+      assert.isTrue(
+        Sse.receiveFrame.calledOnceWithExactly("sync_deltas", frame),
+      );
+    });
+
+    it("applies a completeness marker for the page this tab is on", () => {
+      Tabs.receive({
+        event: "synced",
+        frame: {cursor: "place-1", scope: "page"},
+        kind: "frame",
+        page: PAGE,
+      });
+
+      assert.isTrue(Sse.receiveFrame.calledOnce);
+    });
+
+    // The claim is that the page the stream was greeted with can be answered from what the client
+    // holds - which says nothing about a tab sitting on another page.
+    it("passes over a completeness marker for a page this tab is not on", () => {
+      Tabs.receive({
+        event: "synced",
+        frame: {cursor: "place-1", scope: "page"},
+        kind: "frame",
+        page: "MyApp.SettingsPage",
+      });
+
+      assert.isFalse(Sse.receiveFrame.called);
+    });
+
+    it("applies a whole-app completeness marker whatever page this tab is on", () => {
+      Tabs.receive({
+        event: "synced",
+        frame: {cursor: "place-1", scope: "all"},
+        kind: "frame",
+        page: "MyApp.SettingsPage",
+      });
+
+      assert.isTrue(Sse.receiveFrame.calledOnce);
+    });
+
+    it("answers a tab that has joined with the group's state, when it leads", async () => {
+      await Tabs.join(nextGroup(), {onLead: () => {}});
+
+      const posting = sinon.stub(Tabs, "post");
+
+      Tabs.receive({kind: "joined"});
+
+      assert.isTrue(posting.calledOnce);
+      assert.equal(posting.firstCall.args[0].kind, "state");
+    });
+
+    it("answers a tab that has joined with nothing, when it follows", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, {onLead: () => {}});
+
+      const posting = sinon.stub(Tabs, "post");
+
+      Tabs.receive({kind: "joined"});
+
+      assert.isFalse(posting.called);
+    });
+
+    it("takes the identity, the place and the scopes from the group's state", () => {
+      Tabs.receive({
+        cursor: "place-1",
+        kind: "state",
+        page: PAGE,
+        replica: {id: "r-group", token: "statement-group"},
+        synced: ["all", "page"],
+      });
+
+      assert.equal(Replica.id, "r-group");
+      assert.equal(Sse.syncCursor, "place-1");
+
+      assert.deepStrictEqual(
+        LocalDatabase.markSynced.args.map(([scope]) => scope),
+        ["all", "page"],
+      );
+    });
+
+    // Its own reading has already brought it further, or to somewhere else entirely.
+    it("keeps a place it already holds", () => {
+      Sse.syncCursor = "place-2";
+
+      Tabs.receive({
+        cursor: "place-1",
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        synced: [],
+      });
+
+      assert.equal(Sse.syncCursor, "place-2");
+    });
+
+    it("takes no scope for a page this tab is not on", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: "MyApp.SettingsPage",
+        replica: {id: null, token: null},
+        synced: ["page"],
+      });
+
+      assert.isFalse(LocalDatabase.markSynced.called);
     });
   });
 

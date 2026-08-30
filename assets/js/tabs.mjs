@@ -1,6 +1,10 @@
 "use strict";
 
 import Batches from "./batches.mjs";
+import GlobalRegistry from "./global_registry.mjs";
+import Hologram from "./hologram.mjs";
+import Interpreter from "./interpreter.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
@@ -112,10 +116,11 @@ export default class Tabs {
 
     Tabs.#held = [];
     Tabs.#onLead = onLead;
-    Tabs.#onMessage = onMessage;
     Tabs.#ready = false;
     Tabs.#token = token;
     Tabs.name = name;
+
+    Tabs.#onMessage = onMessage ?? Tabs.receive;
 
     Tabs.#channel = new BroadcastChannel(name);
     Tabs.#channel.onmessage = (event) => Tabs.#deliver(event.data);
@@ -176,6 +181,45 @@ export default class Tabs {
     return released ?? Promise.resolve();
   }
 
+  // What the group's messages mean, and the whole of what one tab does on hearing another.
+  //
+  // Public so a test can drive it without a channel, and because `join` hands it to the channel as
+  // the handler when a caller names none - which is every caller but a test.
+  static receive(message) {
+    switch (message.kind) {
+      // What the tab holding the stream was told, applied here to this tab's own memory. Nothing
+      // is stored: the tab that received it wrote it down already, and one store written by two
+      // tabs is two tabs racing over one place.
+      //
+      // A "page" scope is the exception, because it is not the same claim for everyone: it says
+      // the page the STREAM was greeted with can be answered from what the client holds, which is
+      // this tab's business only if it is on that page.
+      case "frame":
+        if (Tabs.#foreignPageScope(message)) {
+          return;
+        }
+
+        Sse.receiveFrame(message.event, message.frame);
+
+        return;
+
+      // A tab that has finished starting up, asking for what the store could not tell it: the
+      // scopes, which nothing writes down, and the place and the identity as they stand now.
+      // Answered by the tab that has them.
+      case "joined":
+        if (Tabs.leader) {
+          Tabs.postState();
+        }
+
+        return;
+
+      case "state":
+        Tabs.#takeState(message);
+
+        return;
+    }
+  }
+
   // Says something to every OTHER tab of the group: a channel never delivers to the tab that
   // posted, so nothing here needs to know which tab it is. Silent outside a group.
   static post(message) {
@@ -214,10 +258,62 @@ export default class Tabs {
     Tabs.#onMessage(message);
   }
 
+  // What this tab knows that a tab joining cannot read out of the store: the identity in use, the
+  // place the stream has reached, and the scopes the server has declared complete.
+  static postState() {
+    Tabs.post({
+      cursor: Sse.syncCursor,
+      kind: "state",
+      page: GlobalRegistry.get("connectPageModule"),
+      replica: Replica.current(),
+      synced: LocalDatabase.syncedScopes(),
+    });
+  }
+
+  // Whether a completeness marker is about a page this tab is not on. The scope travels with the
+  // page the STREAM was greeted with, which is the leader's page rather than everyone's.
+  static #foreignPageScope(message) {
+    if (message.event !== "synced" || message.frame.scope !== "page") {
+      return false;
+    }
+
+    const pageModule = Hologram.currentPageModule();
+
+    return (
+      pageModule === null ||
+      Interpreter.moduleExName(pageModule) !== message.page
+    );
+  }
+
   // The promise that IS the lock being held. A lock lasts exactly as long as the function granted
   // it has not finished, so leading is spelled as a promise nothing resolves until this tab lets
   // go - and the browser releases it for us whatever ends the tab, which is the whole reason the
   // succession needs nothing said.
+  // The group's state, taken by a tab that has just joined or has just been told the leader
+  // changed. The identity is taken outright - one browser presents one - and the place only when
+  // this tab holds none, since a place it has is one its own reading has already brought it to.
+  static #takeState(message) {
+    if (message.replica?.id) {
+      Replica.adopt(message.replica);
+    }
+
+    if (Sse.syncCursor === null && message.cursor !== null) {
+      Sse.syncCursor = message.cursor;
+    }
+
+    for (const scope of message.synced) {
+      if (
+        !Tabs.#foreignPageScope({
+          event: "synced",
+          frame: {scope},
+          page: message.page,
+        })
+      ) {
+        LocalDatabase.markSynced(scope);
+      }
+    }
+  }
+
   static #hold() {
     return new Promise((resolve) => {
       Tabs.#release = resolve;
