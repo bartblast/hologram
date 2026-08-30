@@ -120,6 +120,16 @@ export default class LocalDatabase {
     return LocalDatabase.#syncedScopes.has(scope);
   }
 
+  // Every scope marked complete so far, as one value.
+  //
+  // Nothing stores them: a scope is made complete by a marker on a STREAM, so a database read back
+  // at a page load has been told nothing about completeness and starts with none, however much it
+  // holds. Which is why they can be asked for whole - the answer is only ever what this run of the
+  // client has been told.
+  static syncedScopes() {
+    return Array.from(LocalDatabase.#syncedScopes);
+  }
+
   static carriedEntries() {
     return Array.from(LocalDatabase.#carried, (entry) =>
       entry.split(SEPARATOR),
@@ -179,6 +189,27 @@ export default class LocalDatabase {
         ? {id, row: null, type}
         : {facts: LocalDatabase.#toManyFacts(type, id), id, row, type};
     });
+  }
+
+  // The rows the STREAM vouched for, each keyed "<type> <id>" the way a frame names one - so the
+  // answer is what `records` takes, and a whole database can be written down the way one frame's
+  // rows are.
+  //
+  // A carried row is left out, which is the same rule durable storage already follows a frame at a
+  // time: a page's rows are the server's word for one render, every visit carries them again, and
+  // a row held only because a page carried it is one a completeness marker may yet take away.
+  static vouchedRowKeys() {
+    const rowKeys = new Set();
+
+    for (const [type, table] of Object.entries(LocalDatabase.#tables)) {
+      for (const id of Object.keys(table)) {
+        if (!LocalDatabase.#carried.has(`${type}${SEPARATOR}${id}`)) {
+          rowKeys.add(`${type} ${id}`);
+        }
+      }
+    }
+
+    return rowKeys;
   }
 
   // The whole current target set for one (source, relationship) - the snapshot statement a row's
