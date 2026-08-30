@@ -413,6 +413,141 @@ describe("Batches", () => {
       assert.isFalse(forgetting.called);
     });
 
+    describe("the retry", () => {
+      let timers;
+
+      beforeEach(() => {
+        timers = sinon.useFakeTimers();
+      });
+
+      afterEach(() => {
+        timers.restore();
+      });
+
+      // The stream is up so no reconnect is coming, and the user is idle so no action is - without
+      // this a batch sits unsent while the page looks perfectly healthy.
+      it("goes again on its own, on the stream's backoff", async () => {
+        sinon.stub(Sse, "computeReconnectDelay").returns(250);
+
+        sealed(creating("t1", "first"));
+
+        sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+        sendStub.onSecondCall().resolves(confirmed());
+
+        await Batches.flush();
+
+        sinon.assert.calledOnce(sendStub);
+
+        await timers.tickAsync(249);
+
+        sinon.assert.calledOnce(sendStub);
+
+        await timers.tickAsync(1);
+
+        sinon.assert.calledTwice(sendStub);
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      // One tick per retry rather than one tick for all: a retry scheduled DURING a tick, at the
+      // same instant, waits for the next one - so each tick is one try, and the attempt count is
+      // read after each.
+      it("backs off further with every unanswered try", async () => {
+        const delay = sinon.stub(Sse, "computeReconnectDelay").returns(1);
+
+        sealed(creating("t1", "first"));
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1],
+        );
+
+        await timers.tickAsync(1);
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1, 2],
+        );
+
+        await timers.tickAsync(1);
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1, 2, 3],
+        );
+      });
+
+      // A server that is answering again has earned the short delay, whatever it took to get there.
+      it("starts the backoff over once a batch is answered", async () => {
+        const delay = sinon.stub(Sse, "computeReconnectDelay").returns(1);
+
+        sealed(creating("t1", "first"));
+        sealed(creating("t2", "second"));
+
+        sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+        sendStub.onSecondCall().resolves(confirmed());
+        sendStub.onThirdCall().resolves({httpStatus: 503, status: "failed"});
+
+        // The first try fails and schedules attempt 1. The retry answers batch 1 and then fails
+        // batch 2 in the same run - so the count was reset between the two, and the second
+        // schedule asks for attempt 1 again rather than 2.
+        await Batches.flush();
+        await timers.tickAsync(1);
+
+        sinon.assert.calledThrice(sendStub);
+
+        assert.deepStrictEqual(
+          delay.getCalls().map((call) => call.args[0]),
+          [1, 1],
+        );
+      });
+
+      // A second failure replaces the first retry rather than adding to it. The delays differ per
+      // attempt so the two are told apart: a first-attempt timer left standing would fire at 100
+      // and send, where the replacement fires at 200.
+      it("schedules one retry at a time", async () => {
+        sinon
+          .stub(Sse, "computeReconnectDelay")
+          .callsFake((attempts) => attempts * 100);
+
+        sealed(creating("t1", "first"));
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+
+        await Batches.flush();
+        await Batches.flush();
+
+        sinon.assert.calledTwice(sendStub);
+
+        await timers.tickAsync(150);
+
+        sinon.assert.calledTwice(sendStub);
+
+        await timers.tickAsync(50);
+
+        sinon.assert.calledThrice(sendStub);
+      });
+
+      it("is not scheduled for a batch that was answered", async () => {
+        const delay = sinon.stub(Sse, "computeReconnectDelay").returns(250);
+
+        sealed(creating("t1", "first"));
+
+        sendStub.resolves({
+          reason: "the reason",
+          status: "rejected",
+          write: 0,
+        });
+
+        await Batches.flush();
+        await timers.tickAsync(250);
+
+        sinon.assert.calledOnce(sendStub);
+        assert.isFalse(delay.called);
+      });
+    });
+
     it("leaves a batch nobody answered pending, and stops the queue behind it", async () => {
       sealed(creating("t1", "first"));
       sealed(creating("t2", "second"));
