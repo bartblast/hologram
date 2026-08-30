@@ -31,7 +31,7 @@ registerWebApis();
 
 describe("Durability", () => {
   // Named for the model the runtime globals below declare, and the store layout.
-  const DATABASE_NAME = "hologram.model-a.1";
+  const DATABASE_NAME = "hologram.model-a.2";
 
   // Installed for this suite and taken back down after it, never at module scope: mocha runs every
   // file in one process, and `open()` reads the absence of indexedDB as "this browser cannot
@@ -171,6 +171,27 @@ describe("Durability", () => {
     type: "MyApp.Task",
   });
 
+  const batchRecord = (seq) => ({
+    actorUserId: "u1",
+    landed: [],
+    seq,
+    writes: [{id: "t1", op: "delete", type: "MyApp.Task"}],
+  });
+
+  const writeBatches = async (records) => {
+    const {db} = await rawOpen();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("queue", "readwrite");
+      const queue = transaction.objectStore("queue");
+
+      records.forEach((record) => queue.put(record));
+
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve();
+    });
+  };
+
   const writeRecords = async (records) => {
     const {db} = await rawOpen();
 
@@ -197,6 +218,7 @@ describe("Durability", () => {
 
         db.createObjectStore("entities", {keyPath: ["type", "id"]});
         db.createObjectStore("meta");
+        db.createObjectStore("queue", {keyPath: "seq"});
       };
 
       request.onerror = () => reject(request.error);
@@ -252,6 +274,20 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+
+    // A batch waiting to go out is this browser's own work rather than a copy of anything the
+    // server holds, so the server replacing everything it says leaves it where it was.
+    it("keeps the stored batches", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(1)]);
+
+      await Durability.clear();
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [1],
+      );
     });
   });
 
@@ -317,6 +353,23 @@ describe("Durability", () => {
 
       assert.equal(Durability.inFlight, 0);
     });
+
+    // Unlike the counter, a stored batch cannot go stale through this page carrying on: nothing
+    // has answered it, and nothing will while there is nowhere to send it. It is the user's
+    // unfinished work, and a later page load is the only thing that can still deliver it.
+    it("keeps the stored batches", async () => {
+      await Durability.open();
+      await writeBatches([batchRecord(1)]);
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.equal(Durability.mode, "memory");
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [1],
+      );
+    });
   });
 
   describe("open()", () => {
@@ -329,10 +382,10 @@ describe("Durability", () => {
         (db) => db.name,
       );
 
-      assert.include(names, "hologram.model-a.1");
+      assert.include(names, "hologram.model-a.2");
     });
 
-    it("opens in indexeddb mode and creates the two object stores", async () => {
+    it("opens in indexeddb mode and creates the three object stores", async () => {
       await Durability.open();
 
       assert.equal(Durability.mode, "indexeddb");
@@ -342,6 +395,7 @@ describe("Durability", () => {
       assert.deepStrictEqual(Array.from(db.objectStoreNames), [
         "entities",
         "meta",
+        "queue",
       ]);
 
       db.close();
@@ -358,6 +412,31 @@ describe("Durability", () => {
       );
 
       db.close();
+    });
+
+    // Keyed by its number rather than out of line, which is what makes reading the queue back a
+    // read in the order the batches ship - a later batch may name a row an earlier one created,
+    // and its based_on for a column an earlier one wrote is that batch's own stamp.
+    it("keys a batch record by its number, so they read back in the order they ship", async () => {
+      await Durability.open();
+
+      await writeBatches([batchRecord(9), batchRecord(2)]);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [2, 9],
+      );
+    });
+
+    it("counts the stored batches when it opens", async () => {
+      await createSchema();
+      await writeBatches([batchRecord(1), batchRecord(2)]);
+
+      assert.equal(Durability.storedBatches, 0);
+
+      await Durability.open();
+
+      assert.equal(Durability.storedBatches, 2);
     });
 
     it("stays in memory mode when the browser has no IndexedDB", async () => {
@@ -659,7 +738,7 @@ describe("Durability", () => {
       assert.isNull(resumed.cursor);
       assert.equal(resumed.seq, 0);
 
-      assert.equal((await readAll("entities", "hologram.model-a.1")).length, 1);
+      assert.equal((await readAll("entities", "hologram.model-a.2")).length, 1);
     });
 
     // Their rows are what SOMEBODY ELSE was allowed to see, and a resuming stream is told what

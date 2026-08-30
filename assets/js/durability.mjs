@@ -23,6 +23,14 @@ import Replica from "./replica.mjs";
 // server answers from the record of a different batch, and a clock restarted low is a write the
 // server reads as moved.
 //
+// And it holds the QUEUE: the batches this browser has written and not yet had an answer to,
+// which is the one thing here that is nobody else's copy of anything. A row can always be
+// downloaded again; a write nothing has taken delivery of exists only where it was made. So the
+// queue outlives more than the rest - a resync and somebody else signing in leave it alone, and
+// even a storage failure keeps what is already on disk, because those batches are still the
+// user's unfinished work whatever has gone wrong since. Its record shape is FROZEN, spelled and
+// argued in `batch.mjs`: a bundle drains what an older bundle wrote.
+//
 // They do NOT outlive a storage failure, and that is the one exception. After one, this page goes
 // on spending numbers that nothing records, so a stored counter is stale rather than merely old -
 // and a later load resuming from it would hand out numbers already answered. Absent is safe where
@@ -44,10 +52,11 @@ const ENTITIES = "entities";
 
 // The shape of the store: which object stores exist, keyed how. Part of the database's NAME, so a
 // bundle with a different layout opens a different database rather than upgrading this one - which
-// is why VERSION below never moves.
-const LAYOUT = 1;
+// is why VERSION below never moves. 2 added the queue.
+const LAYOUT = 2;
 
 const META = "meta";
+const QUEUE = "queue";
 const VERSION = 1;
 
 export default class Durability {
@@ -57,6 +66,11 @@ export default class Durability {
 
   // "indexeddb" once a database is open, "memory" before that and after anything goes wrong.
   static mode = "memory";
+
+  // How many batch records the open found, of every owner - not only the ones this page may take
+  // up. Taken once and not kept current: a test and a devtools panel read it to tell "this page
+  // is not sending them" apart from "there are none", and nothing in the framework reads it.
+  static storedBatches = 0;
 
   static #db = null;
 
@@ -123,6 +137,7 @@ export default class Durability {
 
     try {
       Durability.#loaded = await Durability.#load();
+      Durability.storedBatches = Durability.#loaded.queue.length;
     } catch (error) {
       return Durability.#memoryMode(`read failed (${error})`);
     }
@@ -264,6 +279,7 @@ export default class Durability {
     } catch {}
 
     Durability.inFlight = 0;
+    Durability.storedBatches = 0;
   }
 
   // `hologram.<model hash>.<layout>` - a bundle speaking another model, or carrying another store
@@ -345,18 +361,20 @@ export default class Durability {
   // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
   static async #load() {
     const transaction = Durability.#db.transaction(
-      [ENTITIES, META],
+      [ENTITIES, META, QUEUE],
       "readonly",
     );
 
     const entities = transaction.objectStore(ENTITIES);
     const meta = transaction.objectStore(META);
+    const queue = transaction.objectStore(QUEUE);
 
-    const [actorUserId, clock, cursor, records, replica, seq] =
+    const [actorUserId, clock, cursor, queued, records, replica, seq] =
       await Promise.all([
         Durability.#request(meta.get("actorUserId")),
         Durability.#request(meta.get("clock")),
         Durability.#request(meta.get("cursor")),
+        Durability.#request(queue.getAll()),
         Durability.#request(entities.getAll()),
         Durability.#request(meta.get("replica")),
         Durability.#request(meta.get("seq")),
@@ -366,6 +384,7 @@ export default class Durability {
       actorUserId: actorUserId ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
+      queue: queued ?? [],
       records: records ?? [],
       replica: replica ?? null,
       seq: seq ?? 0,
@@ -427,19 +446,28 @@ export default class Durability {
     });
   }
 
-  // Two stores, and the facts ride inside a row's record rather than in a third: they are keyed by
+  // The facts ride inside a row's record rather than in a store of their own: they are keyed by
   // their source row, a row leaving takes them with it, and an edge names the row whose
   // relationships changed - so one row is one record and one change is one write.
   //
-  // A record is keyed by its type and id together, which is how a frame's rows are named, and how
-  // one type's rows are dropped without touching another's.
+  // A row record is keyed by its type and id together, which is how a frame's rows are named, and
+  // how one type's rows are dropped without touching another's.
+  //
+  // A batch is keyed by its number, because that is the order batches were made in and therefore
+  // the order they ship in - a later batch may name a row an earlier one created. Reading them
+  // back in key order is reading them back in the order to send them, with nothing to sort.
   static #upgrade(db) {
     db.createObjectStore(ENTITIES, {keyPath: ["type", "id"]});
     db.createObjectStore(META);
+    db.createObjectStore(QUEUE, {keyPath: "seq"});
   }
 
   // What is stored ON BEHALF OF THE SERVER, gone: the rows and the place they are dated at. Shared
   // by the resync path, which means it deliberately, and by the failure path, which has no choice.
+  //
+  // The queue is deliberately not touched by either. A batch waiting to go out is this browser's
+  // own work rather than a copy of the server's, so neither the server replacing what it says nor
+  // this page losing the ability to store anything further makes one untrue.
   static #wipe(transaction) {
     transaction.objectStore(ENTITIES).clear();
     transaction.objectStore(META).delete("cursor");
