@@ -8,7 +8,6 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
-  alias Hologram.DB.Outbox
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Entity.Validator
@@ -312,23 +311,25 @@ defmodule Hologram.Auth do
 
   defp delegates?(target, actor_user_id, operation), do: can?(actor_user_id, operation, target)
 
-  # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
+  # Nils encode the type-wide and global grant shapes, so the lookup matches them as values -
   # the same comparison the store's unique index makes, which is what identifies ONE grant and
-  # why the row is not looked up by id first.
+  # why the row is not found by id. It is locked as it is found, so the delete that follows
+  # removes the row this statement read rather than whatever stands there by then.
   #
-  # The deletion is recorded the way every other one is, in the transaction that made it: a
-  # client watching its own grants is told a row is gone by the round an effect wakes, so a
-  # revocation nothing records is a revocation no client hears about until it renders afresh.
-  # Revoking a role the user does not hold returns no rows and records nothing.
+  # Removing it through the delete verb rather than with a DELETE of its own is what records it:
+  # one path records every deletion, and a grant row is spoken of on the stream exactly as any
+  # other row is. A client watching its own grants is told a row is gone by the round the effect
+  # wakes, so a revocation nothing records is a revocation no client hears about until it renders
+  # afresh. Revoking a role the user does not hold finds no rows and records nothing.
   # sobelow_skip ["SQL.Query"]
   defp delete_grant(user_id, resource_type, resource_id, role) do
     statement = """
-    DELETE FROM "hologram_data"."hologram_role_grant"
+    SELECT "id" FROM "hologram_data"."hologram_role_grant"
     WHERE "user_id" = $1
       AND "resource_type" IS NOT DISTINCT FROM $2::#{qualified_enum_type("resource_type")}
       AND "resource_id" IS NOT DISTINCT FROM $3
       AND "role" = $4::#{qualified_enum_type("role")}
-    RETURNING "id"
+    FOR UPDATE
     """
 
     params = [
@@ -342,9 +343,9 @@ defmodule Hologram.Auth do
       Connection.transaction(fn ->
         {:ok, %{rows: rows}} = Connection.query(statement, params)
 
-        rows
-        |> Enum.map(&revocation_effect/1)
-        |> Outbox.append()
+        Enum.each(rows, fn [id] ->
+          :ok = EntityOperations.delete(RoleGrant, Codec.decode(id, :uuid))
+        end)
       end)
 
     :ok
@@ -495,10 +496,6 @@ defmodule Hologram.Auth do
     entity_type
     |> RoleGrant.resource_type()
     |> Atom.to_string()
-  end
-
-  defp revocation_effect([id]) do
-    %{op: :del_entity, entity_type: RoleGrant, entity_id: Codec.decode(id, :uuid)}
   end
 
   defp scope_condition({:own, entity_type, resource_id}) do
