@@ -88,6 +88,61 @@ defmodule Hologram.Sync.Diff do
   end
 
   @doc """
+  Returns what a returning client's rows look like judged again because a row they LEAN ON moved -
+  the rows that appeared and the rows that vanished, the split `shift/3` answers with.
+
+  A rule saying `via:` decides one row's visibility by reading another, so a folder going private
+  hides the documents in it without any of them moving. The log names what moved, so those
+  documents are never spoken of unless something asks after them. This is that asking: for every
+  row the client holds, the policy's dependency edges say which related row decides it, the chain
+  is followed to that row's id, and a row landing on an id the gap names is judged afresh - handed
+  over as it now stands if the client may see it, dropped if it may not.
+
+  Nothing here asks what was visible THEN, which is what makes it work at all: a patched value at
+  a past place is not in the log in any order that can be trusted. Judging against NOW alone comes
+  out right in both directions - a row the change hid fails the check and is dropped, one it
+  revealed passes and is sent - and harmless in the two cases that are neither, since a row visible
+  throughout is handed over unchanged and one visible neither time is dropped from a client that
+  never held it.
+
+  Only the columns the rule READS count. An effect carries the revisions the write set, one stamp
+  per column it moved, so a folder renamed is told apart from a folder made private and the rows
+  leaning on it are left alone. `Hologram.Sync.Scoper` deliberately does not narrow this way and
+  its reason does not reach here: its edge is about a type the window's own query reads, where a
+  client holding the row wants any change to it, while a delegated target is not held by the
+  window at all. An effect carrying no revisions - a delete, a relationship edge - says nothing
+  about which columns moved and counts as all of them, erring towards including the way every rule
+  on this path does.
+
+  Rows reached only through an include are members in their own right and are judged the same way,
+  and what appears is scrubbed against what the client may see NOW, so no id list names a row it
+  was not given.
+  """
+  @spec reach(%{ids: MapSet.t(), rows: map}, String.t() | nil, list(map), %{
+          {module, atom} => list(tuple)
+        }) :: %{appeared: list(struct), vanished: list(struct)}
+  def reach(result, actor_user_id, named, edges) do
+    members = members(result.rows)
+    moved = moved_by_id(named)
+    named_types = MapSet.new(named, & &1.type)
+
+    visible = Map.filter(members, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
+    visible_ids = member_ids(visible)
+
+    reached = Map.filter(members, fn {_id, row} -> reached?(row, edges, named_types, moved) end)
+
+    {visible_reached, hidden_reached} =
+      Map.split_with(reached, fn {id, _row} -> MapSet.member?(visible_ids, id) end)
+
+    appeared =
+      visible_reached
+      |> Map.values()
+      |> Enum.map(&scrub(&1, visible_ids))
+
+    %{appeared: appeared, vanished: Map.values(hidden_reached)}
+  end
+
+  @doc """
   Returns what a returning client's rows look like judged twice - under the grants it holds now,
   and under the ones given as `grants_then` - as the rows that appeared between the two and the
   rows that vanished.
@@ -192,6 +247,25 @@ defmodule Hologram.Sync.Diff do
     end
   end
 
+  # A row is reached through an edge when the gap names a row of the type the edge points at, the
+  # chain leads to that very row, and the columns it moved on include one the rule reads.
+  defp edge_reaches?(
+         {:relationship_attributes, chain, target_type, names},
+         row,
+         named_types,
+         moved
+       ) do
+    if MapSet.member?(named_types, target_type) do
+      target_id = Auth.chain_target_id(row, chain)
+
+      moved_meets?(Map.get(moved, target_id), target_type, names)
+    else
+      false
+    end
+  end
+
+  defp edge_reaches?(_edge, _row, _named_types, _moved), do: false
+
   defp edges(visible, visible_ids, transactions) do
     transactions
     |> Enum.flat_map(fn {_tx, events} -> events end)
@@ -240,6 +314,28 @@ defmodule Hologram.Sync.Diff do
     Enum.reduce(rows, %{}, fn {_id, row}, members -> collect(row, members) end)
   end
 
+  # What the gap says about each row it names: the row's type, and the columns that moved on it.
+  # One row touched several times moves on the union of what its effects say.
+  defp moved_by_id(named) do
+    Enum.reduce(named, %{}, fn effect, moved ->
+      entry = {effect.type, revision_names(effect)}
+
+      Map.update(moved, effect.entity_id, entry, fn {type, names} ->
+        {type, union_moved(names, revision_names(effect))}
+      end)
+    end)
+  end
+
+  # The type is matched as well as the id, so a chain landing on an id of another type reaches
+  # nothing by construction rather than by ids happening not to collide.
+  defp moved_meets?({target_type, :all}, target_type, _names), do: true
+
+  defp moved_meets?({target_type, moved_names}, target_type, names) do
+    not MapSet.disjoint?(moved_names, MapSet.new(names, &Atom.to_string/1))
+  end
+
+  defp moved_meets?(_entry, _target_type, _names), do: false
+
   # Names arrive as they were written rather than as atoms, so they are matched against the row's
   # own fields - which never invents an atom for something this node has never compiled.
   defp patch(row, names) do
@@ -254,6 +350,22 @@ defmodule Hologram.Sync.Diff do
     |> Enum.map(fn {row, names} -> {row, patch(row, names)} end)
     |> Enum.reject(fn {_row, patch} -> patch == %{} end)
   end
+
+  defp reached?(row, edges, named_types, moved) do
+    edges
+    |> Map.get({row.__struct__, :read}, [])
+    |> Enum.any?(&edge_reaches?(&1, row, named_types, moved))
+  end
+
+  # An effect that recorded no revisions - a delete, a relationship edge - says nothing about which
+  # columns moved, so it stands for all of them.
+  defp revision_names(%{revisions: revisions}) when is_map(revisions) do
+    revisions
+    |> Map.keys()
+    |> MapSet.new()
+  end
+
+  defp revision_names(_effect), do: :all
 
   # What leaves here is what this client may see, embedded lists included: an unreadable member
   # loses its slot in every to-many list, however deep, not only its own deltas. To-one embeds
@@ -276,6 +388,12 @@ defmodule Hologram.Sync.Diff do
     |> Enum.filter(&MapSet.member?(visible_ids, &1.id))
     |> Enum.map(&scrub(&1, visible_ids))
   end
+
+  defp union_moved(:all, _names), do: :all
+
+  defp union_moved(_names, :all), do: :all
+
+  defp union_moved(left, right), do: MapSet.union(left, right)
 
   defp vanished(held_ids, visible_ids) do
     held_ids
