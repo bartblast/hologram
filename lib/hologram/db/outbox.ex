@@ -167,6 +167,42 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
+  Returns the effects written to rows of the given entity type since the given place, whose stored
+  data holds every pair of `data_match` - in place order, and carrying the data each was written
+  with. An empty match takes every effect of the type.
+
+  What one type's rows have been through since a place, where `read_after/3` answers WHICH rows
+  moved across every type. The payload is read here, which `read_after/3` deliberately does not
+  do: this exists for a caller reconstructing what a small, insert-and-delete-only type held, and
+  the values are the whole point of asking.
+
+  Deliberately unlimited. It is read for a gap whose size has already been decided, over the same
+  range - so it can answer no more rows than that gap holds, and a limit here would be a second
+  bound on a thing already bounded.
+
+  An op or entity type this node does not know stays the label it was written with, exactly as
+  `read_window/2` leaves it.
+  """
+  @spec read_type_after(module, non_neg_integer, non_neg_integer, map) :: list(map)
+  def read_type_after(entity_type, tx, seq, data_match) do
+    statement = """
+    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
+           "mutation_ref"
+    FROM "hologram_system"."outbox"
+    WHERE "type" = $1
+      AND ("tx" > $2 OR ("tx" = $2 AND "seq" > $3))
+      AND "data" @> $4::jsonb
+    ORDER BY "tx", "seq"
+    """
+
+    params = [Codec.encode_enum_value(entity_type), tx, seq, data_match]
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
+
+    Enum.map(rows, &event/1)
+  end
+
+  @doc """
   Returns the effects written by transactions from `last_xmin` up to but excluding `current_xmin`,
   grouped into `{transaction id, effects}` pairs and ordered by transaction and then by insert
   order, so a transaction's effects arrive together and in the order they happened.

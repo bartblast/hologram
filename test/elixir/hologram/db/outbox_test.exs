@@ -180,6 +180,50 @@ defmodule Hologram.DB.OutboxTest do
     end
   end
 
+  describe "read_type_after/4" do
+    test "returns nothing when the log holds no effects of the given type" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @entity_id, %{c: "other"})
+
+      assert read_type_after(Module2, 0, 0, %{}) == []
+    end
+
+    test "returns the effects of the given type since the given place, in place order" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
+
+      [{_tx, first_seq}] = places()
+
+      seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @target_id, %{c: "other"})
+      seed(202, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "after"})
+      seed(203, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
+
+      assert [put, delete] = read_type_after(Module2, 200, first_seq, %{})
+
+      assert put.entity_id == @target_id
+      assert put.op == :put_entity
+      assert put.data == %{"c" => "after"}
+
+      assert delete.entity_id == @entity_id
+      assert delete.op == :del_entity
+      assert delete.data == %{"c" => "gone"}
+    end
+
+    test "returns nothing written before the given place" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
+
+      [{tx, seq}] = places()
+
+      assert read_type_after(Module2, tx, seq, %{}) == []
+    end
+
+    test "returns only the effects whose data holds every pair of the given match" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "wanted"})
+      seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "other"})
+
+      assert [effect] = read_type_after(Module2, 0, 0, %{c: "wanted"})
+      assert effect.entity_id == @entity_id
+    end
+  end
+
   describe "read_window/2" do
     test "returns nothing when the window holds no effects" do
       assert read_window(1, 2) == []
