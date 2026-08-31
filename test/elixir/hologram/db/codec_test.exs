@@ -160,14 +160,18 @@ defmodule Hologram.DB.CodecTest do
       assert round_tripped == values
     end
 
-    # A Time carries {value, precision} of its own, so a value is spelled at the precision it
-    # holds and reads back at the same one - no digits gained and none lost.
-    test "keeps a :time value's precision across its JSON round trip" do
-      {:ok, whole_second} = decode_json(encode_json(~T[11:00:00], :time), :time)
-      {:ok, microsecond} = decode_json(encode_json(~T[11:00:00.123456], :time), :time)
+    # The plain inverse, taking the wire at its word - promoting to full precision is encode_json/2's
+    # job, and a value read here has already been through it. What has not is a value Postgres
+    # itself spelled, which strips a fraction's trailing zeros: those are normalized where they
+    # are read, not here.
+    test "reads a :time value back at the precision its spelling carries" do
+      {:ok, whole_second} = decode_json("11:00:00", :time)
+      {:ok, stripped} = decode_json("11:00:00.1", :time)
+      {:ok, full} = decode_json("11:00:00.123456", :time)
 
       assert whole_second.microsecond == {0, 0}
-      assert microsecond.microsecond == {123_456, 6}
+      assert stripped.microsecond == {100_000, 1}
+      assert full.microsecond == {123_456, 6}
     end
 
     # An integer with arbitrary precision cannot always become a 64-bit float, and the promotion
@@ -256,7 +260,9 @@ defmodule Hologram.DB.CodecTest do
       assert encode("xyz", :string) == "xyz"
     end
 
-    test "passes :time values through" do
+    test "promotes :time values to microsecond precision" do
+      assert encode(~T[11:00:00], :time) == ~T[11:00:00.000000]
+      assert encode(~T[11:00:00.1], :time) == ~T[11:00:00.100000]
       assert encode(~T[11:00:00.123456], :time) == ~T[11:00:00.123456]
     end
 
@@ -276,6 +282,17 @@ defmodule Hologram.DB.CodecTest do
       {:ok, %Postgrex.Result{rows: [[raw]]}} = Connection.query("SELECT $1::time", [encoded])
 
       assert decode(raw, :time) == ~T[11:00:00.123456]
+    end
+
+    # This is why encode/2 promotes: the column keeps no record of how few digits a value was
+    # written with, so a whole second put in as {0, 0} comes back as {0, 6} and would spell
+    # itself two ways depending on which side of the write it was read from.
+    test "reads a whole-second :time value back at microsecond precision" do
+      encoded = encode(~T[11:00:00], :time)
+
+      {:ok, %Postgrex.Result{rows: [[raw]]}} = Connection.query("SELECT $1::time", [encoded])
+
+      assert decode(raw, :time) == ~T[11:00:00.000000]
     end
   end
 
@@ -340,8 +357,12 @@ defmodule Hologram.DB.CodecTest do
       assert encode_json("xyz", :string) == "xyz"
     end
 
-    test "encodes :time values as ISO 8601 strings" do
-      assert encode_json(~T[11:00:00], :time) == "11:00:00"
+    # One time of day is one wire spelling, always six fractional digits - the client compares
+    # temporal values as the plain strings they are, so a value written with fewer digits and
+    # left that way would be a second spelling of a time the server already has.
+    test "encodes :time values as ISO 8601 strings at full precision" do
+      assert encode_json(~T[11:00:00], :time) == "11:00:00.000000"
+      assert encode_json(~T[11:00:00.1], :time) == "11:00:00.100000"
       assert encode_json(~T[11:00:00.123456], :time) == "11:00:00.123456"
     end
 
