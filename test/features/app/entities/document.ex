@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.Entities.Document do
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Policies.Editable
   alias HologramFeatureTests.Policies.PubliclyReadable
+  alias HologramFeatureTests.Policies.ReadableThroughFolder
 
   attribute :api_token, :string, optional: true, server_only: true
   attribute :public, :boolean, default: false
@@ -13,6 +14,7 @@ defmodule HologramFeatureTests.Entities.Document do
 
   policy Editable
   policy PubliclyReadable
+  policy ReadableThroughFolder
 
   role :owner, granted_to: :creator
 end
