@@ -28,7 +28,7 @@ defmodule Hologram.DB.Outbox do
     "mutation_ref"
   ]
 
-  @data_ops [:patch_entity, :put_entity]
+  @data_ops [:del_entity, :patch_entity, :put_entity]
 
   @relationship_ops [:add_relationship, :del_relationship]
 
@@ -37,8 +37,12 @@ defmodule Hologram.DB.Outbox do
   listening for them. Appending nothing does nothing.
 
   An effect names its `:op`, the `:entity_type` and `:entity_id` it happened to, and what the op
-  carries: `:data` for `:put_entity` (every attribute) and `:patch_entity` (the changed ones),
-  `:relationship` and `:target_id` for the relationship ops, nothing for `:del_entity`.
+  carries: `:data` for `:put_entity` (every attribute), `:patch_entity` (the changed ones) and
+  `:del_entity` (every attribute the row held when it was removed), `:relationship` and
+  `:target_id` for the relationship ops.
+
+  A put says what a row became and a delete says what it was, so a row that is gone stays
+  readable for as long as the log keeps its entry.
 
   An effect of a create or an update carries the `:revisions` it set - the stamp per column, keyed
   by field - which is stored beside it. An edge or a delete carries none.
@@ -216,8 +220,6 @@ defmodule Hologram.DB.Outbox do
        when op in @relationship_ops do
     %{relationship: relationship, target_id: target_id}
   end
-
-  defp data(%{op: :del_entity}), do: nil
 
   defp entity_type(label) do
     String.to_existing_atom("Elixir." <> label)

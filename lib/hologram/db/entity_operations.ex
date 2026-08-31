@@ -148,8 +148,9 @@ defmodule Hologram.DB.EntityOperations do
 
         # The edges the delete took with it are not recorded one by one: a row that is gone
         # takes whatever hung off it, and a reader learning the entity is gone knows that.
-        if delete_entity_row(table, encoded_id) == 1 do
-          Outbox.append([%{op: :del_entity, entity_type: entity_type, entity_id: id}])
+        case delete_entity_row(entity_type, table, encoded_id) do
+          nil -> :ok
+          entity -> Outbox.append([delete_effect(entity)])
         end
 
         :ok
@@ -516,12 +517,21 @@ defmodule Hologram.DB.EntityOperations do
   # back to the relationship that derives it, so the caller learns who still needs the row - a
   # constraint the mapping does not know is not ours and raises.
   # sobelow_skip ["SQL.Query"]
-  defp delete_entity_row(table, encoded_id) do
-    statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
+  defp delete_entity_row(entity_type, table, encoded_id) do
+    column_list =
+      entity_type
+      |> persisted_columns()
+      |> Enum.map_join(", ", &Mapper.quote_identifier(&1.name))
+
+    statement =
+      ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1 RETURNING #{column_list}|
 
     case Connection.query(statement, [encoded_id]) do
-      {:ok, %Postgrex.Result{num_rows: num_rows}} ->
-        num_rows
+      {:ok, %Postgrex.Result{rows: []}} ->
+        nil
+
+      {:ok, %Postgrex.Result{rows: [row]}} ->
+        decode_row(entity_type, row)
 
       {:error,
        %Postgrex.Error{postgres: %{code: :foreign_key_violation, constraint: constraint}} =
@@ -675,26 +685,38 @@ defmodule Hologram.DB.EntityOperations do
     :ok
   end
 
-  # What the entity is, as the effect log records it: every column the row carries except the
-  # sort-key companions, which are derived from the values beside them rather than written.
+  # A delete says what the row WAS, the way a put says what it became - so a row that is gone
+  # stays readable for as long as the log keeps its entry. No revisions: the stamps went with
+  # the row, and a deletion sets no column.
+  defp delete_effect(entity) do
+    %{
+      op: :del_entity,
+      entity_type: entity.__struct__,
+      entity_id: entity.id,
+      data: effect_data(entity)
+    }
+  end
+
+  # What a row held, as the effect log records it: every column it carries except the sort-key
+  # companions, which are derived from the values beside them rather than written.
+  defp effect_data(entity) do
+    entity.__struct__
+    |> persisted_columns()
+    |> Enum.reject(&(&1.source == :revisions))
+    |> Map.new(fn column ->
+      name = field_name(column)
+
+      {name, Map.fetch!(entity, name)}
+    end)
+  end
+
+  # What the entity now is, as the effect log records it, with the revisions the write set.
   defp put_effect(entity) do
-    entity_type = entity.__struct__
-    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
-
-    data =
-      columns
-      |> Enum.reject(&(&1.source == :revisions or match?({:sort_key, _name}, &1.source)))
-      |> Map.new(fn column ->
-        name = field_name(column)
-
-        {name, Map.fetch!(entity, name)}
-      end)
-
     %{
       op: :put_entity,
-      entity_type: entity_type,
+      entity_type: entity.__struct__,
       entity_id: entity.id,
-      data: data,
+      data: effect_data(entity),
       revisions: entity.__meta__.revisions
     }
   end

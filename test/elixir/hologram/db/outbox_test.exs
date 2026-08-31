@@ -314,12 +314,12 @@ defmodule Hologram.DB.OutboxTest do
       assert [%{data: %{"c" => "updated"}, op: "patch_entity"}] = rows()
     end
 
-    test "records a deletion without data" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+    test "records a deletion with the row it removed" do
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
-      assert [%{data: nil, op: "del_entity"}] = rows()
+      assert [%{data: %{"c" => "gone"}, op: "del_entity"}] = rows()
     end
 
     test "records a relationship op with the edge it moved" do
@@ -341,7 +341,7 @@ defmodule Hologram.DB.OutboxTest do
     test "records each effect of a transaction in the order given" do
       effects = [
         %{op: :patch_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "first"}},
-        %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+        %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
       ]
 
       assert append(effects) == :ok
@@ -350,7 +350,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "stamps the model the values were written under" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
@@ -362,7 +362,12 @@ defmodule Hologram.DB.OutboxTest do
       user_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
 
       Context.with_actor(user_id, fn ->
-        effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+        effect = %{
+          op: :del_entity,
+          entity_type: Module2,
+          entity_id: @entity_id,
+          data: %{c: "gone"}
+        }
 
         assert append([effect]) == :ok
       end)
@@ -371,7 +376,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "records no actor for a write the framework made itself" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
@@ -379,7 +384,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "records the batch an effect was written under" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert Ref.with_ref(%{replica_id: @replica_id, seq: 7}, fn -> append([effect]) end) == :ok
 
@@ -387,7 +392,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "records no batch for an effect written outside one" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
