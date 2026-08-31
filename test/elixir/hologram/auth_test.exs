@@ -9,9 +9,11 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity
+  alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Role
 
   defp create_user(email) do
@@ -387,6 +389,177 @@ defmodule Hologram.AuthTest do
 
       assert can?(owner, :read, grant)
       refute can?(editor, :read, grant)
+    end
+  end
+
+  describe "can?/4" do
+    test "answers from the given grants rather than the stored ones" do
+      user = create_user("user_60@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module1),
+        resource_id: entity.id,
+        role: :viewer
+      }
+
+      refute can?(user, :read, entity)
+      assert can?(user, :read, entity, [grant])
+    end
+
+    test "denies what the given grants do not hold though the store does" do
+      user = create_user("user_61@example.com")
+      entity = create_resource()
+
+      grant_role(user, entity, :viewer)
+
+      assert can?(user, :read, entity)
+      refute can?(user, :read, entity, [])
+    end
+
+    test "matches a global grant" do
+      user = create_user("user_62@example.com")
+      entity = %Module2{id: Entity.generate_id()}
+
+      grant = %RoleGrant{user_id: user.id, role: Role.Module1}
+
+      assert can?(user, :archive, entity, [grant])
+    end
+
+    test "matches a type-wide grant" do
+      user = create_user("user_63@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        role: :admin
+      }
+
+      assert can?(user, :read, entity, [grant])
+    end
+
+    # An own-scope check admits the row's grant AND the type-wide one, which the store's own
+    # condition spells as "resource_id = $3 OR resource_id IS NULL".
+    test "matches a type-wide grant of the row's own type" do
+      user = create_user("user_72@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module1),
+        role: :viewer
+      }
+
+      assert can?(user, :read, entity, [grant])
+    end
+
+    test "matches a grant on the row itself" do
+      user = create_user("user_64@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module1),
+        resource_id: entity.id,
+        role: :editor
+      }
+
+      assert can?(user, :update, entity, [grant])
+    end
+
+    test "matches a grant on a related row" do
+      user = create_user("user_65@example.com")
+      parent = %Module2{id: Entity.generate_id()}
+      entity = %Module1{id: Entity.generate_id(), parent_id: parent.id}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        resource_id: parent.id,
+        role: :admin
+      }
+
+      assert can?(user, :delete, entity, [grant])
+    end
+
+    # A delegation asks the RELATED row's policy, so the list has to reach that far too - a
+    # fallback to the store there would judge half the policy under grants nobody asked about.
+    test "matches a grant through a delegation" do
+      user = create_user("user_66@example.com")
+      parent = create_parent()
+      entity = %Module4{id: Entity.generate_id(), parent_id: parent.id}
+
+      grant = %RoleGrant{user_id: user.id, role: Role.Module1}
+
+      refute can?(user, :archive, entity)
+      assert can?(user, :archive, entity, [grant])
+    end
+
+    test "matches a grant for the grant store's own rows" do
+      user = create_user("user_67@example.com")
+      other_user = create_user("user_68@example.com")
+      resource = create_parent()
+
+      row = %RoleGrant{
+        user_id: other_user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        resource_id: resource.id
+      }
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        resource_id: resource.id,
+        role: :member
+      }
+
+      refute can?(user, :read, row, [])
+      assert can?(user, :read, row, [grant])
+    end
+
+    test "denies a grant held by somebody else" do
+      user = create_user("user_69@example.com")
+      other_user = create_user("user_70@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        resource_type: RoleGrant.resource_type(Module1),
+        resource_id: entity.id,
+        role: :viewer
+      }
+
+      refute can?(user, :read, entity, [grant])
+    end
+
+    # A check answered from a list is nobody's question, so a render gathers nothing from it -
+    # where the stored check records the scope so the answering row can travel with the page.
+    test "records nothing for a render to carry" do
+      user = create_user("user_71@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        resource_type: RoleGrant.resource_type(Module1),
+        resource_id: entity.id,
+        role: :viewer
+      }
+
+      Carry.start()
+      assert can?(user, :read, entity, [grant])
+      assert Carry.take_grant_scopes() == MapSet.new()
+
+      Carry.start()
+      refute can?(user, :read, entity)
+      # Both of the type's read rules reference a grant, and a stored check records every one it
+      # asks - which is what a render needs to carry the rows answering them.
+      assert Carry.take_grant_scopes() ==
+               MapSet.new([
+                 {user.id, {:own, Module1, entity.id}},
+                 {user.id, {:type, Module2}}
+               ])
     end
   end
 
