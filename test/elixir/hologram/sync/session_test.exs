@@ -5,6 +5,8 @@ defmodule Hologram.Sync.SessionTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.DB
   alias Hologram.Entity
@@ -112,13 +114,24 @@ defmodule Hologram.Sync.SessionTest do
     holder
   end
 
+  # Let into the sandbox the way an evaluator is, and for the same reason: the session reads the
+  # grant store itself to decide what this client may see, so without this it judges every rule
+  # against the committed database rather than against what the test wrote.
+  #
+  # Allowed after starting rather than before, since the pid is what is being allowed - the same
+  # shape hold_windows/1 uses. The session's first read is several messages and a query past the
+  # continue that starts it, so the allow is not on a knife edge.
   defp start_session!(opts) do
     opts =
       opts
       |> Keyword.put_new(:client, self())
       |> Keyword.put_new(:page, @page)
 
-    start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
+    session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
+
+    :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), session, [])
+
+    session
   end
 
   # The page windows are a build artifact read from a dump file, so a test says what the build
@@ -326,6 +339,155 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
       assert [%{data: patch, op: :patch_entity}] = deltas
       assert patch.c == "moved again, this time watched"
+    end
+  end
+
+  # A grant given or taken away while a client was gone moves ONE row and changes what it may see
+  # of many, which the gap names none of. So the rows are judged twice - under the grants it held
+  # then and the ones it holds now - and the difference is told after the gap's own batches.
+  describe "start_link/1 - coming back to changed grants" do
+    setup do
+      user =
+        %{email: "resumed@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{user: user}
+    end
+
+    defp viewer_grant(user_id, row) do
+      %RoleGrant{
+        user_id: user_id,
+        resource_type: RoleGrant.resource_type(PolicyModule1),
+        resource_id: row.id,
+        role: :viewer
+      }
+    end
+
+    defp gated_row do
+      DB.create!(PolicyModule1.new())
+    end
+
+    test "tells a returning client to drop what a revoked grant covered", %{user: user} do
+      revoked = gated_row()
+      windows(%{@page => [@other_window]})
+      hold_windows([@other_window])
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [gap_effect(Entity.generate_id())],
+        grants_then: [viewer_grant(user.id, revoked)]
+      )
+
+      assert_receive {:sync_deltas, _cursor, gap_deltas, _applied_seq}
+      assert [%{op: :unsync_entity}] = gap_deltas
+
+      assert_receive {:sync_deltas, _cursor, shift_deltas, _applied_seq}
+
+      assert shift_deltas == [
+               %{
+                 id: revoked.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Policy.Module1"
+               }
+             ]
+    end
+
+    test "hands over what a grant given while away covers", %{user: user} do
+      granted = gated_row()
+      windows(%{@page => [@other_window]})
+      hold_windows([@other_window])
+
+      Auth.grant_role(user, granted, :viewer)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [gap_effect(Entity.generate_id())],
+        grants_then: []
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, shift_deltas, _applied_seq}
+
+      assert [%{data: data, id: id, op: :put_entity}] = shift_deltas
+      assert id == granted.id
+      assert data.public == false
+    end
+
+    # The replay has already spoken of a row the gap named, so the shift leaves it alone - saying
+    # it twice would have the client answer a question it was given the answer to.
+    test "says nothing twice about a row the gap already named", %{user: user} do
+      revoked = gated_row()
+      windows(%{@page => [@other_window]})
+      hold_windows([@other_window])
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [gap_effect(revoked.id)],
+        grants_then: [viewer_grant(user.id, revoked)]
+      )
+
+      assert_receive {:sync_deltas, _cursor, gap_deltas, _applied_seq}
+      assert [%{id: named_id, op: :unsync_entity}] = gap_deltas
+      assert named_id == revoked.id
+
+      refute_receive {:sync_deltas, _cursor, _shift_deltas, _applied_seq}, 100
+    end
+
+    test "says the pages are answerable only once the shift has been told", %{user: user} do
+      revoked = gated_row()
+      windows(%{@page => [@other_window]})
+      hold_windows([@other_window])
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [gap_effect(Entity.generate_id())],
+        grants_then: [viewer_grant(user.id, revoked)]
+      )
+
+      # Received in this order, so the client never reads its own store while it still holds a
+      # row a revoked grant covered.
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, _shift_deltas, _applied_seq}
+      assert_receive {:sync_synced, :page, _cursor}
+    end
+
+    # The shift is judged per window and merged by id: a window with nothing to say about grants
+    # must not wipe what another window found. The board window is delivered last and contributes
+    # nothing, since its type is readable by everyone whatever grants are held.
+    test "keeps what one window found when another has nothing to say", %{user: user} do
+      revoked = gated_row()
+      create("in the board window")
+
+      # The board window is listed LAST, so it is the one that reports with nothing to say after
+      # the other has already found something.
+      windows(%{@page => [@other_window, @board_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [gap_effect(Entity.generate_id())],
+        grants_then: [viewer_grant(user.id, revoked)]
+      )
+
+      # A window's own rounds send nothing while a replay is in flight - they are remembered as
+      # the rows the gap named - so the frames are the gap's batch and then the shift's.
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, shift_deltas, _applied_seq}
+
+      assert [%{id: id, op: :unsync_entity}] = shift_deltas
+      assert id == revoked.id
+    end
+
+    test "gives a returning client with unchanged grants no second look", %{user: user} do
+      gated_row()
+      windows(%{@page => [@other_window]})
+      hold_windows([@other_window])
+
+      start_session!(actor_user_id: user.id, gap: [gap_effect(Entity.generate_id())])
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      refute_receive {:sync_deltas, _cursor, _shift_deltas, _applied_seq}, 100
     end
   end
 
