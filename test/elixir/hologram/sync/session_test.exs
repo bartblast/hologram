@@ -10,6 +10,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Commons.PLT
   alias Hologram.DB
   alias Hologram.Entity
+  alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Evaluator
@@ -23,6 +24,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   use_module_stub :query_cache
   use_module_stub :sync_page_windows
@@ -35,6 +37,7 @@ defmodule Hologram.Sync.SessionTest do
   @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
+  @reach_window "w_reach"
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
   setup do
@@ -46,7 +49,8 @@ defmodule Hologram.Sync.SessionTest do
       prop_params: %{},
       windows: %{
         @board_window => Query.normalize(Module2),
-        @other_window => Query.normalize(PolicyModule1)
+        @other_window => Query.normalize(PolicyModule1),
+        @reach_window => Query.normalize(PolicyModule5)
       }
     })
 
@@ -77,10 +81,20 @@ defmodule Hologram.Sync.SessionTest do
       entity_id: entity_id,
       mutation_ref: mutation_ref,
       op: :patch_entity,
+      revisions: nil,
       seq: seq,
       tx: tx,
       type: Module2
     }
+  end
+
+  # One entry naming a row of ANOTHER type, with the columns that moved on it - what decides
+  # whether a row leaning on that one is worth judging again. Written as an override of the plain
+  # entry rather than as more parameters on it, so the four call sites read as what they are.
+  defp related_effect(entity_id, type, revisions) do
+    entity_id
+    |> gap_effect()
+    |> Map.merge(%{revisions: revisions, type: type})
   end
 
   # Takes a window's place in the registry with a process that answers a subscription and then says
@@ -488,6 +502,175 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
       refute_receive {:sync_deltas, _cursor, _shift_deltas, _applied_seq}, 100
+    end
+  end
+
+  describe "start_link/1 - coming back to a moved related row" do
+    setup do
+      user =
+        %{email: "reached@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{edges: Edges.derive([PolicyModule5]), user: user}
+    end
+
+    defp child_of(parent) do
+      %{parent_id: parent.id}
+      |> PolicyModule5.new()
+      |> DB.create!()
+    end
+
+    defp public_parent do
+      %{public: true}
+      |> PolicyModule1.new()
+      |> DB.create!()
+    end
+
+    defp start_reach_session!(opts) do
+      windows(%{@page => [@reach_window]})
+      hold_windows([@reach_window])
+
+      start_session!(opts)
+    end
+
+    test "drops what a moved related row no longer admits", %{edges: edges, user: user} do
+      parent = DB.create!(PolicyModule1.new())
+      child = child_of(parent)
+
+      start_reach_session!(
+        actor_user_id: user.id,
+        edges: edges,
+        gap: [related_effect(parent.id, PolicyModule1, %{"public" => 1})]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, reach_deltas, _applied_seq}
+
+      assert reach_deltas == [
+               %{
+                 id: child.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Policy.Module5"
+               }
+             ]
+    end
+
+    # The session is a state machine over what it is handed, and `start_link/1` documents the
+    # index as absent for a first arrival - so a caller naming a gap without one asks for the
+    # replay alone rather than for a crash.
+    test "gives a returning client handed no dependency index no second look", %{user: user} do
+      child_of(public_parent())
+
+      start_reach_session!(
+        actor_user_id: user.id,
+        gap: [related_effect(Entity.generate_id(), PolicyModule1, %{"public" => 1})]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      refute_receive {:sync_deltas, _cursor, _reach_deltas, _applied_seq}, 100
+    end
+
+    test "hands over what a moved related row now admits", %{edges: edges, user: user} do
+      parent = public_parent()
+      child = child_of(parent)
+
+      start_reach_session!(
+        actor_user_id: user.id,
+        edges: edges,
+        gap: [related_effect(parent.id, PolicyModule1, %{"public" => 1})]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, reach_deltas, _applied_seq}
+
+      assert [%{id: id, op: :put_entity}] = reach_deltas
+      assert id == child.id
+    end
+
+    test "leaves rows alone when the gap names nothing they lean on", %{edges: edges, user: user} do
+      child_of(public_parent())
+
+      start_reach_session!(
+        actor_user_id: user.id,
+        edges: edges,
+        gap: [gap_effect(Entity.generate_id())]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      refute_receive {:sync_deltas, _cursor, _reach_deltas, _applied_seq}, 100
+    end
+
+    # The same setup as "drops what a moved related row no longer admits", differing only in which
+    # column the gap says moved - so the pair is what binds the narrowing end to end.
+    test "leaves rows alone when the named row moved on an attribute the rule does not read", %{
+      edges: edges,
+      user: user
+    } do
+      parent = DB.create!(PolicyModule1.new())
+      child_of(parent)
+
+      start_reach_session!(
+        actor_user_id: user.id,
+        edges: edges,
+        gap: [related_effect(parent.id, PolicyModule1, %{"priority" => 1})]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      refute_receive {:sync_deltas, _cursor, _reach_deltas, _applied_seq}, 100
+    end
+
+    # The replay has already handed the row over, so the reach leaves it alone - the same dedupe a
+    # grant change answers to, reached from the other source.
+    test "says nothing twice about a row the gap already named", %{edges: edges, user: user} do
+      parent = public_parent()
+      child = child_of(parent)
+
+      start_reach_session!(
+        actor_user_id: user.id,
+        edges: edges,
+        gap: [
+          related_effect(parent.id, PolicyModule1, %{"public" => 1}),
+          related_effect(child.id, PolicyModule5, %{"parent_id" => 1})
+        ]
+      )
+
+      assert_receive {:sync_deltas, _cursor, gap_deltas, _applied_seq}
+      assert [%{id: named_id, op: :put_entity}] = Enum.filter(gap_deltas, &(&1.id == child.id))
+      assert named_id == child.id
+
+      refute_receive {:sync_deltas, _cursor, _reach_deltas, _applied_seq}, 100
+    end
+
+    # The two sources feed ONE accumulator, so a batch carries what the grants decided differently
+    # and what a moved related row now decides together. Nothing else covers the pair: the reach
+    # tests hold one window each, where merging into a fresh map is indistinguishable from merging
+    # into what is already there.
+    test "sends what grants and a related row decided in one batch", %{edges: edges, user: user} do
+      revoked = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyModule1.new())
+      child = child_of(parent)
+
+      windows(%{@page => [@other_window, @reach_window]})
+      hold_windows([@other_window, @reach_window])
+
+      start_session!(
+        actor_user_id: user.id,
+        edges: edges,
+        gap: [related_effect(parent.id, PolicyModule1, %{"public" => 1})],
+        grants_then: [viewer_grant(user.id, revoked)]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, shift_deltas, _applied_seq}
+
+      dropped_ids =
+        shift_deltas
+        |> Enum.filter(&(&1.op == :unsync_entity))
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert dropped_ids == Enum.sort([child.id, revoked.id])
     end
   end
 

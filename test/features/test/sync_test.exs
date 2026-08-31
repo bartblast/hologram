@@ -283,6 +283,110 @@ defmodule HologramFeatureTests.SyncTest do
     refute gap_data =~ "held_across_the_gap"
   end
 
+  # A row can be readable because ANOTHER row is - `Document` takes `ReadableThroughFolder`, so a
+  # document is readable when its folder is. Nothing writes to the document when the folder moves,
+  # so the log never names it and the replay would pass over it.
+  #
+  # What isolates the folder's rule in both features below: the document is `public: false` and
+  # nobody holds a role on it, so `PubliclyReadable` and `Editable` admit nothing and the folder is
+  # the only thing that can. Each asserts that rather than assuming it - this one by requiring the
+  # document in the fill, its mirror by requiring it absent.
+  feature "drops what a folder made private no longer admits", %{session: _session} do
+    folder =
+      %{name: "folder_open_then_shut", public: true}
+      |> Folder.new()
+      |> DB.create!()
+
+    document =
+      %{folder_id: folder.id, public: false, title: "held_through_its_folder"}
+      |> Document.new()
+      |> DB.create!()
+
+    # Awaited BEFORE draining, since drain_initial_sync/1 passes over the deltas frames and drops
+    # them - the fill's own content can be read here and nowhere after. Its arrival is what proves
+    # the folder's rule is admitting it, which is what the folder going private then takes away.
+    {_fill_data, filling_client} =
+      await_deltas_carrying(connect(), ~s["title":"held_through_its_folder"])
+
+    filled_client = drain_initial_sync(filling_client)
+
+    # A frame carries a place only once the store is whole, so the client is given something to
+    # be told about after its fill - that frame is the first one carrying a cursor.
+    %{public: true, title: "dated_the_store_before_shutting"}
+    |> Document.new()
+    |> DB.create!()
+
+    {dating_data, departing_client} =
+      await_deltas_carrying(filled_client, ~s["title":"dated_the_store_before_shutting"])
+
+    cursor = cursor_of(dating_data)
+    :ok = SyncClient.close(departing_client)
+
+    update(Folder, folder.id, %{public: false})
+
+    {gap_data, _returned} = await_deltas_carrying(connect(cursor: cursor), document.id)
+
+    # Fails against the framework before this issue: the gap names the folder alone, so the only
+    # unsync arriving is the folder's own.
+    unsynced_ids =
+      gap_data
+      |> Jason.decode!()
+      |> get_in(["deltas", "unsync_entity", "HologramFeatureTests.Entities.Document"])
+
+    assert unsynced_ids == [document.id]
+  end
+
+  feature "hands over what a folder made public now admits", %{session: _session} do
+    folder =
+      %{name: "folder_shut_then_open"}
+      |> Folder.new()
+      |> DB.create!()
+
+    document =
+      %{folder_id: folder.id, public: false, title: "revealed_by_its_folder"}
+      |> Document.new()
+      |> DB.create!()
+
+    %{public: true, title: "visible_all_along"}
+    |> Document.new()
+    |> DB.create!()
+
+    # The anchor is the positive artifact beside the negative one: this is the frame the document
+    # WOULD have travelled in, so its absence there is the client never having held it - which is
+    # what makes the put_entity below a row being revealed rather than one being sent again.
+    {fill_data, filling_client} =
+      await_deltas_carrying(connect(), ~s["title":"visible_all_along"])
+
+    refute fill_data =~ "revealed_by_its_folder"
+
+    filled_client = drain_initial_sync(filling_client)
+
+    %{public: true, title: "dated_the_store_before_opening"}
+    |> Document.new()
+    |> DB.create!()
+
+    {dating_data, departing_client} =
+      await_deltas_carrying(filled_client, ~s["title":"dated_the_store_before_opening"])
+
+    cursor = cursor_of(dating_data)
+    :ok = SyncClient.close(departing_client)
+
+    update(Folder, folder.id, %{public: true})
+
+    {gap_data, _returned} =
+      await_deltas_carrying(connect(cursor: cursor), ~s["title":"revealed_by_its_folder"])
+
+    # Fails against the framework before this issue: the gap names the folder alone, so nothing
+    # names the document at all.
+    put_documents =
+      gap_data
+      |> Jason.decode!()
+      |> get_in(["deltas", "put_entity", "HologramFeatureTests.Entities.Document"])
+
+    assert [%{"id" => put_id, "title" => "revealed_by_its_folder"}] = put_documents
+    assert put_id == document.id
+  end
+
   feature "tells a client whose place cannot be read to start over", %{session: _session} do
     %{public: true, title: "sent_again_after_resync"}
     |> Document.new()

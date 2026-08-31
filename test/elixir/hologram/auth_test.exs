@@ -16,6 +16,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
   alias Hologram.Test.Fixtures.Policy.Module4
+  alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Role
 
   defp create_user(email) do
@@ -562,6 +563,41 @@ defmodule Hologram.AuthTest do
                  {user.id, {:own, Module1, entity.id}},
                  {user.id, {:type, Module2}}
                ])
+    end
+  end
+
+  describe "chain_target_id/2" do
+    test "answers nil for a hop naming a row that is gone" do
+      entity = %Module5{parent_id: Entity.generate_id()}
+
+      assert chain_target_id(entity, [:parent, :parent]) == nil
+    end
+
+    test "answers nil for an empty hop" do
+      assert chain_target_id(%Module5{parent_id: nil}, [:parent]) == nil
+    end
+
+    test "answers nil for an empty hop later in the chain" do
+      middle = DB.create!(Module1.new())
+
+      assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == nil
+    end
+
+    test "answers the id one hop away" do
+      target_id = Entity.generate_id()
+
+      assert chain_target_id(%Module5{parent_id: target_id}, [:parent]) == target_id
+    end
+
+    test "follows a chain through stored rows" do
+      target = create_parent()
+
+      middle =
+        %{parent_id: target.id}
+        |> Module1.new()
+        |> DB.create!()
+
+      assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == target.id
     end
   end
 

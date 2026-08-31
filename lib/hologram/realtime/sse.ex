@@ -5,10 +5,12 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Component.Action
   alias Hologram.DB.Outbox
   alias Hologram.Mutation.Record
+  alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Reflection
   alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Session
   alias Hologram.Sync.Catchup
@@ -764,6 +766,16 @@ defmodule Hologram.Realtime.SSE do
         # else and it sets about replaying something it cannot walk.
         {gap, grants_then} = if resume?, do: gap(cursor, user_id), else: {nil, nil}
 
+        # What a rule reads besides its own row, so a row the gap never names can be judged again
+        # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
+        # is sent every row it may see, so there is nothing to reach back for.
+        #
+        # Derived per resume rather than kept, for the reason `Fanout.route/2` derives per batch:
+        # it follows the compiled model, which a live reload can change under a running node. A
+        # connect already fills every window, which is where this cost belongs - never a per-frame
+        # path.
+        edges = if gap, do: Edges.derive(Reflection.list_entities())
+
         replica_id = verified_replica_id(greeting, conn, user_id)
 
         # Read HERE rather than in the session, so the database work of starting a stream stays in
@@ -776,6 +788,7 @@ defmodule Hologram.Realtime.SSE do
             actor_user_id: user_id,
             applied_seq: applied_seq,
             client: self(),
+            edges: edges,
             fill_place: {Outbox.current_xmin(), 0},
             gap: gap,
             grants_then: grants_then,

@@ -8,12 +8,14 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.Entity
+  alias Hologram.Policy.Edges
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   defp events(entity_id, names) do
     data = Map.new(names, &{&1, "whatever the log said"})
@@ -570,6 +572,117 @@ defmodule Hologram.Sync.DiffTest do
 
       assert shift.appeared == [gated_child]
       assert shift.vanished == []
+    end
+  end
+
+  # Module5's :read is `via: :parent` at Policy.Module1, whose own :read reads `public` - so its
+  # only relationship_attributes edge is {[:parent], PolicyModule1, [:public]}, a ONE-hop chain.
+  # No two-hop test lives here: no fixture delegates :read twice, `Auth.chain_target_id/2` is
+  # tested to two hops in auth_test.exs, and reach/4 hands the chain through untouched. No scrub
+  # test either - `scrub/2` belongs to deltas/4 and is tested there, and nothing embeds a Module5.
+  describe "reach/4" do
+    setup do
+      user =
+        %{email: "reached@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{edges: Edges.derive([PolicyModule5]), user: user}
+    end
+
+    # The three fields reach/4 reads off a gap entry. Nil revisions is what a delete or a
+    # relationship edge leaves behind, and it stands for every column.
+    defp named_effect(entity_id, type, revisions) do
+      %{entity_id: entity_id, revisions: revisions, type: type}
+    end
+
+    defp child_of(parent) do
+      %{parent_id: parent.id}
+      |> PolicyModule5.new()
+      |> DB.create!()
+    end
+
+    defp public_parent do
+      %{public: true}
+      |> PolicyModule1.new()
+      |> DB.create!()
+    end
+
+    test "lists a row that leans on a named row and the client may not see", %{
+      edges: edges,
+      user: user
+    } do
+      parent = DB.create!(PolicyModule1.new())
+      child = child_of(parent)
+
+      named = [named_effect(parent.id, PolicyModule1, %{"public" => 1})]
+
+      reach = reach(result([child]), user.id, named, edges)
+
+      assert reach.appeared == []
+      assert reach.vanished == [child]
+    end
+
+    test "lists a row that leans on a named row and the client may see", %{
+      edges: edges,
+      user: user
+    } do
+      parent = public_parent()
+      child = child_of(parent)
+
+      named = [named_effect(parent.id, PolicyModule1, %{"public" => 1})]
+
+      reach = reach(result([child]), user.id, named, edges)
+
+      assert reach.appeared == [child]
+      assert reach.vanished == []
+    end
+
+    test "lists a row whose named row moved with nothing to narrow by", %{
+      edges: edges,
+      user: user
+    } do
+      parent = public_parent()
+      child = child_of(parent)
+
+      named = [named_effect(parent.id, PolicyModule1, nil)]
+
+      reach = reach(result([child]), user.id, named, edges)
+
+      assert reach.appeared == [child]
+      assert reach.vanished == []
+    end
+
+    test "lists nothing for a row whose related row is not named", %{edges: edges, user: user} do
+      child = child_of(public_parent())
+      other_parent = public_parent()
+
+      named = [named_effect(other_parent.id, PolicyModule1, %{"public" => 1})]
+
+      assert reach(result([child]), user.id, named, edges) == %{appeared: [], vanished: []}
+    end
+
+    test "lists nothing when the named row moved on an attribute the rule does not read", %{
+      edges: edges,
+      user: user
+    } do
+      parent = public_parent()
+      child = child_of(parent)
+
+      named = [named_effect(parent.id, PolicyModule1, %{"priority" => 1})]
+
+      assert reach(result([child]), user.id, named, edges) == %{appeared: [], vanished: []}
+    end
+
+    test "lists nothing when the named type is not one the rule reads", %{
+      edges: edges,
+      user: user
+    } do
+      child = child_of(public_parent())
+
+      named = [named_effect(child.id, PolicyModule5, %{"public" => 1})]
+
+      assert reach(result([child]), user.id, named, edges) == %{appeared: [], vanished: []}
     end
   end
 end
