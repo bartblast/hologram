@@ -15,6 +15,9 @@ defmodule HologramFeatureTests.Components.TimeAttribute.Shops do
         <li>{shop.name} {shop.opens_at} {shop.closes_at}</li>
       {/for}
     </ul>
+    <p>
+      Order: <strong id="shop_order"><code>{Enum.map_join(@shops, ",", & &1.name)}</code></strong>
+    </p>
     """
   end
 
