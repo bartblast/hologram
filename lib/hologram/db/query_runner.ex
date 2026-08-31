@@ -193,6 +193,15 @@ defmodule Hologram.DB.QueryRunner do
 
   defp decode_embedded_value(value, :enum), do: Codec.decode_enum_label(value)
 
+  # Same story as :datetime one type over - JSON drops a fraction's trailing zeros, so a time
+  # arriving this way is spelled shorter than the same time read from its own column, which is
+  # always six digits. Promoted here so that one time of day is one struct however it was read.
+  defp decode_embedded_value(value, :time) do
+    value
+    |> Time.from_iso8601!()
+    |> Codec.encode(:time)
+  end
+
   defp decode_embedded_value(value, _type), do: value
 
   defp decode_result(%{rows: [[count]]}, %{cardinality: :count}, _mapping), do: count

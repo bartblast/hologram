@@ -19,6 +19,8 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module22
+  alias Hologram.Test.Fixtures.Entity.Module23
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module8
@@ -37,6 +39,8 @@ defmodule Hologram.DB.QueryRunnerTest do
                     PolicyModule3,
                     RoleGrant
                   ])
+
+  @time_mapping Mapper.derive!([Module22, Module23])
 
   defp create_module_2_entities do
     {:ok, first} =
@@ -440,6 +444,60 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert embedded.created_at == run(direct_term, @mapping).created_at
       assert embedded.created_at == stamp
+    end
+
+    # The same trap as the datetime above, one type over: a time column is time(6) and always
+    # reads back with six fractional digits, while JSON drops a fraction's trailing zeros - so an
+    # embedded 11am and a column-read 11am would be two structs of one time of day.
+    test "decodes an embedded time the way the column path decodes it" do
+      {:ok, target} =
+        %{opens_at: ~T[11:00:00]}
+        |> Module22.new()
+        |> create()
+
+      {:ok, source} =
+        %{a_id: target.id}
+        |> Module23.new()
+        |> create()
+
+      embedding_term =
+        Module23
+        |> filter(id: source.id)
+        |> include(:a)
+        |> one()
+        |> Query.normalize()
+
+      direct_term =
+        Module22
+        |> filter(id: target.id)
+        |> one()
+        |> Query.normalize()
+
+      assert %Module23{a: %Module22{} = embedded} = run(embedding_term, @time_mapping)
+
+      assert embedded.opens_at == run(direct_term, @time_mapping).opens_at
+      assert embedded.opens_at == ~T[11:00:00.000000]
+    end
+
+    test "decodes an embedded time whose fraction JSON stripped to fewer digits" do
+      {:ok, target} =
+        %{opens_at: ~T[11:00:00.100000]}
+        |> Module22.new()
+        |> create()
+
+      {:ok, source} =
+        %{a_id: target.id}
+        |> Module23.new()
+        |> create()
+
+      term =
+        Module23
+        |> filter(id: source.id)
+        |> include(:a)
+        |> one()
+        |> Query.normalize()
+
+      assert run(term, @time_mapping).a.opens_at == ~T[11:00:00.100000]
     end
 
     test "decodes a to-one include as a nested entity struct" do
