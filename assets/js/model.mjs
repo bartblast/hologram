@@ -245,6 +245,9 @@ export default class Model {
       case "integer":
         return Number(value.value);
 
+      case "time":
+        return Model.#unboxTime(value);
+
       default:
         return Bitstring.toText(value);
     }
@@ -417,6 +420,35 @@ export default class Model {
     return Model.box(term.entity, node.row, includes);
   }
 
+  // A time of day carries no date and no zone, so there is nothing to read but the clock - and
+  // the fraction, which is what the struct's own precision counts.
+  static #boxTime(value) {
+    const match = value.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/);
+
+    if (!match) {
+      throw new HologramRuntimeError(`invalid time on the wire: ${value}`);
+    }
+
+    const [_full, hour, minute, second, rawFraction = ""] = match;
+
+    // Digits past the sixth are dropped rather than read, for the reason #boxDateTime gives.
+    const fraction = rawFraction.slice(0, 6);
+
+    const microsecond = Type.tuple([
+      Type.integer(fraction === "" ? 0 : parseInt(fraction.padEnd(6, "0"), 10)),
+      Type.integer(fraction.length),
+    ]);
+
+    return Type.map([
+      [Type.atom("__struct__"), Type.alias("Time")],
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("hour"), Type.integer(hour)],
+      [Type.atom("microsecond"), microsecond],
+      [Type.atom("minute"), Type.integer(minute)],
+      [Type.atom("second"), Type.integer(second)],
+    ]);
+  }
+
   // A wire value as the term a template reads - the counterpart of the public unbox/2, and the
   // same boundary: values are stored the way the wire spells them and boxed only on the way out.
   static boxValue(value, attributeType) {
@@ -442,6 +474,9 @@ export default class Model {
 
       case "integer":
         return Type.integer(value);
+
+      case "time":
+        return Model.#boxTime(value);
 
       default:
         return Type.bitstring(value);
@@ -511,23 +546,10 @@ export default class Model {
     return `${Model.#pad(year, 4)}-${Model.#pad(month, 2)}-${Model.#pad(day, 2)}`;
   }
 
-  // Always six fractional digits, whatever precision the value was written at: the wire carries
-  // one spelling per instant, which is what lets these compare as plain strings at all. A value
-  // written with fewer digits and left that way would sort before an instant it comes after.
+  // The two halves it is made of, spelled by the two that spell them - a datetime and a time
+  // that disagreed on the clock would be a bug nothing here could see.
   static #unboxDateTime(value) {
-    const microsecond = Model.#field(value, "microsecond");
-    const [amount, precision] = microsecond.data.map((part) =>
-      Number(part.value),
-    );
-    const fraction = amount * 10 ** (6 - precision);
-
-    const date = Model.#unboxDate(value);
-
-    const hour = Model.#pad(Model.#field(value, "hour").value, 2);
-    const minute = Model.#pad(Model.#field(value, "minute").value, 2);
-    const second = Model.#pad(Model.#field(value, "second").value, 2);
-
-    return `${date}T${hour}:${minute}:${second}.${Model.#pad(fraction, 6)}Z`;
+    return `${Model.#unboxDate(value)}T${Model.#unboxTime(value)}Z`;
   }
 
   // A module travels as its name without the prefix every module atom carries, a plain atom as
@@ -536,5 +558,23 @@ export default class Model {
     return Type.isAlias(value)
       ? value.value.replace(/^Elixir\./, "")
       : value.value;
+  }
+
+  // Always six fractional digits, whatever precision the value was written at: the wire carries
+  // one spelling per time of day, which is what lets these compare as plain strings at all. A
+  // value written with fewer digits and left that way would sort before a time it comes after,
+  // and would not equal the same time read back from a column, which is always all six.
+  static #unboxTime(value) {
+    const microsecond = Model.#field(value, "microsecond");
+    const [amount, precision] = microsecond.data.map((part) =>
+      Number(part.value),
+    );
+    const fraction = amount * 10 ** (6 - precision);
+
+    const hour = Model.#pad(Model.#field(value, "hour").value, 2);
+    const minute = Model.#pad(Model.#field(value, "minute").value, 2);
+    const second = Model.#pad(Model.#field(value, "second").value, 2);
+
+    return `${hour}:${minute}:${second}.${Model.#pad(fraction, 6)}`;
   }
 }

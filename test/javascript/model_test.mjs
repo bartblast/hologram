@@ -69,6 +69,7 @@ describe("Model", () => {
             id: "uuid",
             internal_notes: "string",
             position: "integer",
+            starts_at: "time",
             status: "enum",
             title: "string",
             updated_at: "datetime",
@@ -117,6 +118,7 @@ describe("Model", () => {
         id: "t1",
         position: 7,
         project_id: "p1",
+        starts_at: "11:00:00.000000",
         status: "open",
         title: "Draft copy",
         updated_at: "2026-08-16T15:18:13.022508Z",
@@ -146,6 +148,19 @@ describe("Model", () => {
       [Type.atom("utc_offset"), Type.integer(0)],
       [Type.atom("year"), Type.integer(2026)],
       [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+    ]);
+
+  const time = (amount, precision) =>
+    Type.map([
+      [Type.atom("__struct__"), Type.alias("Time")],
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("hour"), Type.integer(11)],
+      [
+        Type.atom("microsecond"),
+        Type.tuple([Type.integer(amount), Type.integer(precision)]),
+      ],
+      [Type.atom("minute"), Type.integer(0)],
+      [Type.atom("second"), Type.integer(0)],
     ]);
 
   describe("box()", () => {
@@ -285,6 +300,51 @@ describe("Model", () => {
       const boxed = Model.box(TASK, row({status: "MyApp.Status.Open"}));
 
       assert.deepEqual(field(boxed, "status"), Type.alias("MyApp.Status.Open"));
+    });
+
+    it("boxes a time as the struct a template reads", () => {
+      const boxed = Model.box(TASK, row({starts_at: "11:00:00.022508"}));
+
+      assert.deepEqual(
+        field(boxed, "starts_at"),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Time")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("hour"), Type.integer(11)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(22508), Type.integer(6)]),
+          ],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("second"), Type.integer(0)],
+        ]),
+      );
+    });
+
+    it("boxes a time carrying no fractional seconds", () => {
+      const boxed = Model.box(TASK, row({starts_at: "11:00:00"}));
+
+      assert.deepEqual(
+        field(field(boxed, "starts_at"), "microsecond"),
+        Type.tuple([Type.integer(0), Type.integer(0)]),
+      );
+    });
+
+    it("boxes a time carrying more fractional digits than microseconds", () => {
+      const boxed = Model.box(TASK, row({starts_at: "11:00:00.0225081"}));
+
+      assert.deepEqual(
+        field(field(boxed, "starts_at"), "microsecond"),
+        Type.tuple([Type.integer(22508), Type.integer(6)]),
+      );
+    });
+
+    it("raises for a time the wire spelled some other way", () => {
+      assert.throw(
+        () => Model.box(TASK, row({starts_at: "11:00"})),
+        HologramRuntimeError,
+        "invalid time on the wire: 11:00",
+      );
     });
 
     it("boxes an unset attribute as nil", () => {
@@ -546,6 +606,15 @@ describe("Model", () => {
       );
     });
 
+    // One spelling per time of day, the same rule a datetime follows and for the same reason -
+    // and a time read back from a column is always six digits, so a value written at fewer would
+    // not equal the one the server holds.
+    it("unboxes a time at the precision the wire carries", () => {
+      assert.equal(Model.unbox(time(22508, 6), "time"), "11:00:00.022508");
+      assert.equal(Model.unbox(time(0, 0), "time"), "11:00:00.000000");
+      assert.equal(Model.unbox(time(5, 1), "time"), "11:00:00.500000");
+    });
+
     // What leaves here goes back through boxing when a result is read, so the pair has to be a
     // round trip - a value that changed shape on the way out would compare against rows fine and
     // render as something else.
@@ -598,6 +667,7 @@ describe("Model", () => {
         due_on: "2026-08-16",
         position: 7,
         project_id: "p1",
+        starts_at: "11:00:00.000000",
         status: "open",
         title: "Draft copy",
         weight: 1.5,
@@ -786,6 +856,7 @@ describe("Model", () => {
         "due_on",
         "position",
         "project_id",
+        "starts_at",
         "status",
         "title",
         "weight",
