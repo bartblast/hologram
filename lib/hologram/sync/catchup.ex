@@ -12,7 +12,14 @@ defmodule Hologram.Sync.Catchup do
   # than a thing that went wrong: a place that cannot be read, a place predating the log, a gap
   # too big to be worth replaying, and a gap spanning a change of model. All of them are decided
   # before a single ROW is looked at - the effects name which rows to read, and none is read here.
+  #
+  # A grant given or taken away while the client was gone is the one change the gap cannot speak
+  # of: it moves one row and changes what the client may see of many, which no effect names. So
+  # the gap comes back with the grants as they stood at the client's place beside it, for the
+  # session to judge its rows under both and say what moved between them.
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Outbox
   alias Hologram.Entity.Model
   alias Hologram.Sync.Cursor
@@ -85,21 +92,32 @@ defmodule Hologram.Sync.Catchup do
   end
 
   @doc """
-  Returns the effects written since the given cursor, or why everything must be sent again.
+  Returns the effects written since the given cursor and the grants the given actor held at it,
+  or why everything must be sent again.
 
   What comes back names WHICH rows moved, never what they now hold - the values come from reading
   those rows as they stand. That is what makes the log safe to read as history: its order is not
   commit order, so folding it would build a past that never happened, while using it as an index
   of ids cannot.
+
+  The grants are nil unless the gap holds a change to this actor's own, which is the only case a
+  row nothing touched can have changed hands in. Nil for an anonymous client too: no grant names
+  it, so nothing about it can have moved.
   """
-  @spec gap(term) :: {:ok, list(map)} | {:full_resync, atom}
-  def gap(cursor) do
+  @spec gap(term, String.t() | nil) ::
+          {:ok, list(map), list(struct) | nil} | {:full_resync, atom}
+  def gap(cursor, actor_user_id) do
     with {:ok, tx, seq} <- decode_place(cursor),
-         :ok <- check_retention(tx, seq) do
-      tx
-      |> Outbox.read_after(seq, gap_limit() + 1)
-      |> check_size()
+         :ok <- check_retention(tx, seq),
+         {:ok, effects} <- read_gap(tx, seq) do
+      {:ok, effects, grants_then(effects, tx, seq, actor_user_id)}
     end
+  end
+
+  defp read_gap(tx, seq) do
+    tx
+    |> Outbox.read_after(seq, gap_limit() + 1)
+    |> check_size()
   end
 
   # Read one past the limit, so "too many" is answered without holding them all: the extra row is
@@ -121,6 +139,25 @@ defmodule Hologram.Sync.Catchup do
       {:ok, effects}
     else
       {:full_resync, :model_hash}
+    end
+  end
+
+  # Asked only when the gap holds a grant effect at all, which is a walk of what is already in
+  # memory - an ordinary resume reads nothing extra. Asked AFTER the model door, so every effect
+  # here is this build's own and a type compares as the module it is rather than as a label a
+  # newer peer wrote.
+  #
+  # A gap holding grants that are all somebody else's answers nil the same way an empty one does:
+  # what another user may see is not this client's business, and no rule grants by a grant held
+  # by somebody else.
+  defp grants_then(_effects, _tx, _seq, nil), do: nil
+
+  defp grants_then(effects, tx, seq, actor_user_id) do
+    if Enum.any?(effects, &(&1.type == RoleGrant)) do
+      case Outbox.read_type_after(RoleGrant, tx, seq, %{"user_id" => actor_user_id}) do
+        [] -> nil
+        grant_effects -> Auth.grants_before(actor_user_id, grant_effects)
+      end
     end
   end
 

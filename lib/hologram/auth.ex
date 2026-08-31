@@ -69,10 +69,42 @@ defmodule Hologram.Auth do
   """
   @spec can?(struct | String.t() | nil, atom, struct) :: boolean
   def can?(user_or_id, operation, entity) do
-    policy = Policy.build(entity.__struct__)
-    checker = &check_requirement(&1, &2, &3, operation)
+    evaluate(user_or_id, operation, entity, :stored)
+  end
 
-    Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
+  # The same evaluation against grants the caller supplies rather than the ones the store holds,
+  # for asking what a user COULD have seen under a set of grants that is not the current one.
+  # Every rule kind is answered from the list, delegations included - a rule that fell back to
+  # the store would judge half the policy under grants the caller did not ask about.
+  @doc false
+  @spec can?(struct | String.t() | nil, atom, struct, list(struct)) :: boolean
+  def can?(user_or_id, operation, entity, grants) do
+    evaluate(user_or_id, operation, entity, grants)
+  end
+
+  # The grants the given user held before the given grant effects were written - what a resuming
+  # client's rules were answered against at the place it is coming back from: the grants it holds
+  # NOW, with everything the log says has happened to them since taken back off.
+  #
+  # Undone from the present BACKWARDS, which is what makes a grant given and taken back inside the
+  # run answer correctly - forwards, its creation would be undone before its deletion put it back,
+  # leaving a grant the user never held. Grant rows are only ever created and deleted, never
+  # patched, so undoing one is adding or removing a whole row and the order is the only subtlety.
+  #
+  # A deleted grant is rebuilt from what its effect recorded, which is why a delete carries the
+  # row it removed.
+  @doc false
+  @spec grants_before(String.t(), list(map)) :: list(struct)
+  def grants_before(user_id, grant_effects) do
+    current =
+      RoleGrant
+      |> Query.filter(user_id: user_id)
+      |> Query.normalize()
+      |> QueryRunner.run(DB.mapping())
+
+    grant_effects
+    |> Enum.reverse()
+    |> Enum.reduce(current, &undo_grant_effect/2)
   end
 
   @doc """
@@ -191,7 +223,12 @@ defmodule Hologram.Auth do
       actor_user_id ->
         role_names = Policy.manage_roles_qualifying_roles(entity_type)
 
-        if not grant_exists?(actor_user_id, {:instance, entity_type, resource_id}, role_names) do
+        if not grant_exists?(
+             actor_user_id,
+             {:instance, entity_type, resource_id},
+             role_names,
+             :stored
+           ) do
           raise Hologram.AccessDeniedError, unmanaged_resource_message(entity_type, resource_id)
         end
 
@@ -215,7 +252,12 @@ defmodule Hologram.Auth do
         role_names = Policy.manage_roles_qualifying_roles(entity_type)
 
         if actor_user_id != user_id and
-             not grant_exists?(actor_user_id, {:instance, entity_type, resource_id}, role_names) do
+             not grant_exists?(
+               actor_user_id,
+               {:instance, entity_type, resource_id},
+               role_names,
+               :stored
+             ) do
           raise Hologram.AccessDeniedError, unmanaged_resource_message(entity_type, resource_id)
         end
 
@@ -233,21 +275,33 @@ defmodule Hologram.Auth do
   end
 
   # Global roles are held without a resource - the grant shape leaving both resource columns nil.
-  defp check_requirement({:global, role_modules}, _entity, actor_user_id, _operation) do
-    grant_exists?(actor_user_id, :global, role_modules)
+  defp check_requirement({:global, role_modules}, _entity, actor_user_id, _operation, source) do
+    grant_exists?(actor_user_id, :global, role_modules, source)
   end
 
   # Own roles are held on the entity itself or on its whole type - the two grant shapes the
   # store keeps apart by whether its resource_id column is nil.
-  defp check_requirement({:own, role_names}, entity, actor_user_id, _operation) do
-    grant_exists?(actor_user_id, {:own, entity.__struct__, entity.id}, role_names)
+  defp check_requirement({:own, role_names}, entity, actor_user_id, _operation, source) do
+    grant_exists?(actor_user_id, {:own, entity.__struct__, entity.id}, role_names, source)
   end
 
-  defp check_requirement({:type, target_type, role_names}, _entity, actor_user_id, _operation) do
-    grant_exists?(actor_user_id, {:type, target_type}, role_names)
+  defp check_requirement(
+         {:type, target_type, role_names},
+         _entity,
+         actor_user_id,
+         _operation,
+         source
+       ) do
+    grant_exists?(actor_user_id, {:type, target_type}, role_names, source)
   end
 
-  defp check_requirement({:rel, relationship_name, role_names}, entity, actor_user_id, _operation) do
+  defp check_requirement(
+         {:rel, relationship_name, role_names},
+         entity,
+         actor_user_id,
+         _operation,
+         source
+       ) do
     case related_id(entity, relationship_name) do
       nil ->
         false
@@ -255,24 +309,30 @@ defmodule Hologram.Auth do
       target_id ->
         target_type = relationship_target(entity.__struct__, relationship_name)
 
-        grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names)
+        grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names, source)
     end
   end
 
   # The grant store's own policy: a role held on the resource this grant row names.
-  defp check_requirement({:resource, target_type, role_names}, entity, actor_user_id, _operation) do
+  defp check_requirement(
+         {:resource, target_type, role_names},
+         entity,
+         actor_user_id,
+         _operation,
+         source
+       ) do
     case entity.resource_id do
       nil ->
         false
 
       resource_id ->
-        grant_exists?(actor_user_id, {:instance, target_type, resource_id}, role_names)
+        grant_exists?(actor_user_id, {:instance, target_type, resource_id}, role_names, source)
     end
   end
 
   # Delegation asks the related entity's policy for the same operation. The related row is read
   # raw, because a policy that could not see its own delegation target would deny everything.
-  defp check_requirement({:via, relationship_name}, entity, actor_user_id, operation) do
+  defp check_requirement({:via, relationship_name}, entity, actor_user_id, operation, source) do
     case related_id(entity, relationship_name) do
       nil ->
         false
@@ -281,7 +341,7 @@ defmodule Hologram.Auth do
         entity.__struct__
         |> relationship_target(relationship_name)
         |> EntityOperations.get(target_id)
-        |> delegates?(actor_user_id, operation)
+        |> delegates?(actor_user_id, operation, source)
     end
   end
 
@@ -308,27 +368,31 @@ defmodule Hologram.Auth do
     length(rows)
   end
 
-  defp delegates?(nil, _actor_user_id, _operation), do: false
+  defp delegates?(nil, _actor_user_id, _operation, _source), do: false
 
-  defp delegates?(target, actor_user_id, operation), do: can?(actor_user_id, operation, target)
+  defp delegates?(target, actor_user_id, operation, source) do
+    evaluate(actor_user_id, operation, target, source)
+  end
 
-  # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
+  # Nils encode the type-wide and global grant shapes, so the lookup matches them as values -
   # the same comparison the store's unique index makes, which is what identifies ONE grant and
-  # why the row is not looked up by id first.
+  # why the row is not found by id. It is locked as it is found, so the delete that follows
+  # removes the row this statement read rather than whatever stands there by then.
   #
-  # The deletion is recorded the way every other one is, in the transaction that made it: a
-  # client watching its own grants is told a row is gone by the round an effect wakes, so a
-  # revocation nothing records is a revocation no client hears about until it renders afresh.
-  # Revoking a role the user does not hold returns no rows and records nothing.
+  # Removing it through the delete verb rather than with a DELETE of its own is what records it:
+  # one path records every deletion, and a grant row is spoken of on the stream exactly as any
+  # other row is. A client watching its own grants is told a row is gone by the round the effect
+  # wakes, so a revocation nothing records is a revocation no client hears about until it renders
+  # afresh. Revoking a role the user does not hold finds no rows and records nothing.
   # sobelow_skip ["SQL.Query"]
   defp delete_grant(user_id, resource_type, resource_id, role) do
     statement = """
-    DELETE FROM "hologram_data"."hologram_role_grant"
+    SELECT "id" FROM "hologram_data"."hologram_role_grant"
     WHERE "user_id" = $1
       AND "resource_type" IS NOT DISTINCT FROM $2::#{qualified_enum_type("resource_type")}
       AND "resource_id" IS NOT DISTINCT FROM $3
       AND "role" = $4::#{qualified_enum_type("role")}
-    RETURNING "id"
+    FOR UPDATE
     """
 
     params = [
@@ -342,9 +406,9 @@ defmodule Hologram.Auth do
       Connection.transaction(fn ->
         {:ok, %{rows: rows}} = Connection.query(statement, params)
 
-        rows
-        |> Enum.map(&revocation_effect/1)
-        |> Outbox.append()
+        Enum.each(rows, fn [id] ->
+          :ok = EntityOperations.delete(RoleGrant, Codec.decode(id, :uuid))
+        end)
       end)
 
     :ok
@@ -353,6 +417,13 @@ defmodule Hologram.Auth do
   # An own-scope check matches the row naming the resource AND the type-wide row, which is why
   # nil rides in the id list beside the ids - the store keeps the two apart by that column being
   # null, and a membership list holding nil compiles to "= ANY(...) OR IS NULL".
+  defp evaluate(user_or_id, operation, entity, source) do
+    policy = Policy.build(entity.__struct__)
+    checker = &check_requirement(&1, &2, &3, operation, source)
+
+    Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
+  end
+
   defp grant_group_key({user_id, {:own, entity_type, _resource_id}}), do: {user_id, entity_type}
 
   defp grant_group_key({user_id, {:instance, entity_type, _resource_id}}),
@@ -397,21 +468,37 @@ defmodule Hologram.Auth do
     |> Enum.sort_by(fn {{user_id, entity_type}, _scopes} -> {user_id, inspect(entity_type)} end)
   end
 
-  defp grant_exists?(_actor_user_id, _scope, []), do: false
+  defp grant_exists?(_actor_user_id, _scope, [], _source), do: false
 
   # No stored grant can name an id the framework never generated, so an id in any other
   # spelling holds nothing - checking access with one is a denial, not an error.
-  defp grant_exists?(actor_user_id, scope, role_names) do
+  defp grant_exists?(actor_user_id, scope, role_names, source) do
     if Validator.attribute_value_valid?(actor_user_id, :uuid) do
-      # Every rule kind funnels through here, so this is the one place a render's questions can
-      # be caught - and questions are all there is to catch: what runs below is an EXISTS, which
-      # answers with a boolean and materializes no row.
-      Carry.record_grant_scope(actor_user_id, scope)
-
-      query_grant_exists?(actor_user_id, scope, role_names)
+      grant_held?(actor_user_id, scope, role_names, source)
     else
       false
     end
+  end
+
+  # Every rule kind funnels through here, so this is the one place a render's questions can be
+  # caught - and questions are all there is to catch: what runs below is an EXISTS, which answers
+  # with a boolean and materializes no row.
+  defp grant_held?(actor_user_id, scope, role_names, :stored) do
+    Carry.record_grant_scope(actor_user_id, scope)
+
+    query_grant_exists?(actor_user_id, scope, role_names)
+  end
+
+  # A check against a list the caller supplied is nobody's question: the rows are already in
+  # hand, so there is nothing for a render to gather and nothing to record.
+  defp grant_held?(actor_user_id, scope, role_names, grants) do
+    Enum.any?(grants, &grant_matches?(&1, actor_user_id, scope, role_names))
+  end
+
+  # What the store's own statement asks, asked of a row already read: the same comparison per
+  # column, nil included, which is what keeps the two ways of answering one rule in step.
+  defp grant_matches?(grant, actor_user_id, scope, role_names) do
+    grant.user_id == actor_user_id and grant.role in role_names and scope_matches?(grant, scope)
   end
 
   defp run_carried_grants_query(query, session_user_id) do
@@ -497,8 +584,24 @@ defmodule Hologram.Auth do
     |> Atom.to_string()
   end
 
-  defp revocation_effect([id]) do
-    %{op: :del_entity, entity_type: RoleGrant, entity_id: Codec.decode(id, :uuid)}
+  defp scope_matches?(grant, :global) do
+    grant.resource_type == nil and grant.resource_id == nil
+  end
+
+  defp scope_matches?(grant, {:instance, entity_type, resource_id}) do
+    grant.resource_type == RoleGrant.resource_type(entity_type) and
+      grant.resource_id == resource_id
+  end
+
+  # An own-scope check matches the row naming the resource AND the type-wide row, which is the
+  # nil the store's condition admits beside the id.
+  defp scope_matches?(grant, {:own, entity_type, resource_id}) do
+    grant.resource_type == RoleGrant.resource_type(entity_type) and
+      grant.resource_id in [resource_id, nil]
+  end
+
+  defp scope_matches?(grant, {:type, entity_type}) do
+    grant.resource_type == RoleGrant.resource_type(entity_type) and grant.resource_id == nil
   end
 
   defp scope_condition({:own, entity_type, resource_id}) do
@@ -525,6 +628,14 @@ defmodule Hologram.Auth do
 
   defp scope_condition(:global) do
     {~s|"resource_type" IS NULL AND "resource_id" IS NULL|, []}
+  end
+
+  defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do
+    Enum.reject(grants, &(&1.id == id))
+  end
+
+  defp undo_grant_effect(%{op: :del_entity, data: data}, grants) do
+    [Outbox.entity_from_data(RoleGrant, data) | grants]
   end
 
   defp unknown_global_role_message(role) do

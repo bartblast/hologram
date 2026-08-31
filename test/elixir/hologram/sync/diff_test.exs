@@ -5,6 +5,7 @@ defmodule Hologram.Sync.DiffTest do
   import Hologram.Sync.Diff
 
   alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -498,6 +499,77 @@ defmodule Hologram.Sync.DiffTest do
       # nil means anonymous on the read side, never trusted: a visitor sees what is public and
       # nothing that a rule gates on who is asking.
       assert anonymous_deltas.appeared == [public_row]
+    end
+  end
+
+  describe "shift/3" do
+    setup do
+      user =
+        %{email: "shifted@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{user: user}
+    end
+
+    defp viewer_grant(user_id, row) do
+      %RoleGrant{
+        user_id: user_id,
+        resource_type: RoleGrant.resource_type(PolicyModule1),
+        resource_id: row.id,
+        role: :viewer
+      }
+    end
+
+    test "lists a row the old grants admitted and the current ones do not", %{user: user} do
+      revoked = DB.create!(PolicyModule1.new())
+
+      shift = shift(result([revoked]), user.id, [viewer_grant(user.id, revoked)])
+
+      assert shift.appeared == []
+      assert shift.vanished == [revoked]
+    end
+
+    test "lists a row the current grants admit and the old ones did not", %{user: user} do
+      granted = DB.create!(PolicyModule1.new())
+
+      Auth.grant_role(user, granted, :viewer)
+
+      shift = shift(result([granted]), user.id, [])
+
+      assert shift.appeared == [granted]
+      assert shift.vanished == []
+    end
+
+    test "lists nothing for a row visible under both", %{user: user} do
+      public_row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      assert shift(result([public_row]), user.id, []) == %{appeared: [], vanished: []}
+    end
+
+    test "lists nothing for a row visible under neither", %{user: user} do
+      hidden = DB.create!(PolicyModule1.new())
+
+      assert shift(result([hidden]), user.id, []) == %{appeared: [], vanished: []}
+    end
+
+    # A row reached only through an include is a member in its own right, so a grant that admits
+    # it lists it - while the parent, visible under both sets, is not spoken of at all.
+    test "lists an embedded row the current grants admit", %{user: user} do
+      gated_child = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyModule3.new())
+
+      Auth.grant_role(user, gated_child, :viewer)
+
+      round = result([%{parent | children: [gated_child]}])
+
+      shift = shift(round, user.id, [])
+
+      assert shift.appeared == [gated_child]
+      assert shift.vanished == []
     end
   end
 end

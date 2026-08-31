@@ -782,7 +782,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert count_edges(source_entity, target_entity) == 0
     end
 
-    test "records the deletion" do
+    # A delete says what the row WAS, so the row stays readable in the log after it is gone.
+    test "records the deletion, with the row it removed" do
       {:ok, created_entity} = create(Module1.new())
 
       delete(Module1, created_entity.id)
@@ -791,7 +792,12 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert effect.op == "del_entity"
       assert effect.type == "Hologram.Test.Fixtures.Entity.Module1"
       assert effect.entity_id == created_entity.id
-      assert effect.data == nil
+
+      assert effect.data == %{
+               "created_at" => DateTime.to_iso8601(created_entity.created_at),
+               "id" => created_entity.id,
+               "updated_at" => DateTime.to_iso8601(created_entity.updated_at)
+             }
     end
 
     test "records nothing when no entity has the given id" do

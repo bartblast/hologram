@@ -55,6 +55,11 @@ defmodule Hologram.Sync.Session do
   only about the rows the gap names. Whether a gap can be had at all is decided before the session
   starts, since it is a question about the log rather than about this client.
 
+  `:grants_then` is what that client's grants were at the place its gap starts from, given only
+  when they are not what they are now. The rows a grant change hid or revealed are named by no
+  effect, so they are worked out by judging the client's rows under both sets - absent for a
+  first arrival, and for a returning client whose own grants nobody touched.
+
   Windows that nothing downloads are skipped rather than refused, which is how a client naming a
   page this build does not have still gets the rest of the build's windows.
   """
@@ -78,6 +83,7 @@ defmodule Hologram.Sync.Session do
       client: Keyword.fetch!(opts, :client),
       fill_place: Keyword.get(opts, :fill_place),
       gap: gap,
+      grants_then: Keyword.get(opts, :grants_then),
       held: %{},
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
@@ -85,6 +91,7 @@ defmodule Hologram.Sync.Session do
       places: %{},
       replica_id: Keyword.get(opts, :replica_id),
       resuming: gap != nil,
+      shift: %{appeared: %{}, vanished: %{}},
       touched: %{}
     }
 
@@ -167,6 +174,7 @@ defmodule Hologram.Sync.Session do
         state
         |> send_deltas(window_id, deltas)
         |> remember(window_id, held, deltas)
+        |> remember_shift(result)
         |> mark_filled(window_id)
     end
   end
@@ -239,8 +247,63 @@ defmodule Hologram.Sync.Session do
       state.gap
       |> Enum.chunk_every(Catchup.rows_per_frame())
       |> Enum.reduce(state, &tell_batch(&2, &1))
+      |> tell_shift()
 
-    %{caught_up | gap: nil, touched: %{}}
+    %{caught_up | gap: nil, shift: %{appeared: %{}, vanished: %{}}, touched: %{}}
+  end
+
+  # What a grant change decided differently, told after the rows the gap named and before the
+  # client is told its store is answerable. A row the gap named is left out: the replay has
+  # already handed it over as it stands, or already taken it away, and saying so twice would
+  # have the client apply an answer to a question it was given the answer to.
+  defp tell_shift(state) do
+    named = MapSet.new(state.gap, & &1.entity_id)
+
+    puts =
+      state.shift.appeared
+      |> shift_rows(named)
+      |> Enum.map(&Frame.put_entity/1)
+
+    unsyncs =
+      state.shift.vanished
+      |> shift_rows(named)
+      |> Enum.map(&Frame.unsync_entity(&1.id, &1.__struct__))
+
+    puts
+    |> Enum.concat(unsyncs)
+    |> Enum.chunk_every(Catchup.rows_per_frame())
+    |> Enum.each(fn deltas ->
+      send(
+        state.client,
+        {:sync_deltas, batch_cursor(state, state.gap), deltas, state.applied_seq}
+      )
+    end)
+
+    state
+  end
+
+  defp shift_rows(rows, named) do
+    rows
+    |> Map.reject(fn {id, _row} -> MapSet.member?(named, id) end)
+    |> Map.values()
+  end
+
+  # Judged per window, merged by id: visibility is per ROW and per client rather than per window,
+  # so two windows holding the same row agree about it and the later one writes what the earlier
+  # one did. Only while replaying, and only when the gap came back with grants to judge against.
+  defp remember_shift(%{grants_then: nil} = state, _result), do: state
+
+  defp remember_shift(state, result) do
+    if replaying?(state) do
+      shift = Diff.shift(result, state.actor_user_id, state.grants_then)
+
+      appeared = Map.merge(state.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
+      vanished = Map.merge(state.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
+
+      %{state | shift: %{appeared: appeared, vanished: vanished}}
+    else
+      state
+    end
   end
 
   # Each batch claims ITS OWN last place rather than the whole gap's, which is what makes a replay

@@ -1,9 +1,10 @@
 defmodule Hologram.Sync.Cursor do
   @moduledoc false
 
-  # Where a client got to in the effect log, in a form it keeps and hands back without reading.
-  # Being opaque is the point: what it is made of is the reader's business, so the shape can
-  # change without the protocol changing.
+  # Where a client got to in the effect log, as a string it stores and hands back without reading.
+  # Opaque by convention, not by secrecy: what a place is made of can change without the protocol
+  # changing because the client never interprets one, not because it could not. Nothing here hides
+  # the place or depends on its being hidden.
   #
   # Decoding treats it as what it is - a string a client sends - so it is parsed rather than
   # trusted. A forged one costs nothing: replaying from the wrong place reads rows that are
@@ -26,7 +27,7 @@ defmodule Hologram.Sync.Cursor do
   """
   @spec encode(non_neg_integer, non_neg_integer) :: String.t()
   def encode(tx, seq) do
-    Base.url_encode64("#{tx}.#{seq}", padding: false)
+    "#{tx}.#{seq}"
   end
 
   @doc """
@@ -36,8 +37,7 @@ defmodule Hologram.Sync.Cursor do
   """
   @spec decode(term) :: {:ok, non_neg_integer, non_neg_integer} | :error
   def decode(cursor) when is_binary(cursor) do
-    with {:ok, decoded} <- Base.url_decode64(cursor, padding: false),
-         [tx, seq] <- String.split(decoded, "."),
+    with [tx, seq] <- String.split(cursor, "."),
          {tx, ""} <- Integer.parse(tx),
          {seq, ""} <- Integer.parse(seq),
          true <- in_range?(tx, @max_tx) and in_range?(seq, @max_seq) do

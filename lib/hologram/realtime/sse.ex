@@ -694,17 +694,17 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session keeps the session a reader
   # of rounds and nothing else, and puts the answer beside the reload notice it stands next to.
-  defp gap(nil), do: nil
+  defp gap(nil, _user_id), do: {nil, nil}
 
-  defp gap(cursor) do
-    case Catchup.gap(cursor) do
-      {:ok, effects} ->
-        effects
+  defp gap(cursor, user_id) do
+    case Catchup.gap(cursor, user_id) do
+      {:ok, effects, grants_then} ->
+        {effects, grants_then}
 
       {:full_resync, reason} ->
         send(self(), {:sync_resync, reason})
 
-        nil
+        {nil, nil}
     end
   end
 
@@ -759,10 +759,10 @@ defmodule Hologram.Realtime.SSE do
 
     case SyncHandshake.check(greeting) do
       {:sync, page, cursor} ->
-        # Named rather than written inline as `resume? && gap(cursor)`: that answers FALSE when it
-        # does not resume, and a session reads "no gap" from nil alone - anything else and it sets
-        # about replaying something it cannot walk.
-        gap = if resume?, do: gap(cursor)
+        # Named rather than written inline as `resume? && gap(cursor, user_id)`: that answers
+        # FALSE when it does not resume, and a session reads "no gap" from nil alone - anything
+        # else and it sets about replaying something it cannot walk.
+        {gap, grants_then} = if resume?, do: gap(cursor, user_id), else: {nil, nil}
 
         replica_id = verified_replica_id(greeting, conn, user_id)
 
@@ -778,6 +778,7 @@ defmodule Hologram.Realtime.SSE do
             client: self(),
             fill_place: {Outbox.current_xmin(), 0},
             gap: gap,
+            grants_then: grants_then,
             page: page,
             replica_id: replica_id
           )

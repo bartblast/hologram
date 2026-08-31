@@ -87,6 +87,54 @@ defmodule Hologram.Sync.Diff do
     }
   end
 
+  @doc """
+  Returns what a returning client's rows look like judged twice - under the grants it holds now,
+  and under the ones given as `grants_then` - as the rows that appeared between the two and the
+  rows that vanished.
+
+  A grant given or taken away while a client was gone moves one row and changes what it may see
+  of many, none of which the log names. So the rows are judged again rather than looked up: what
+  the old grants admitted and the current ones do not is no longer the client's to hold, and what
+  the current ones admit and the old ones did not was never sent.
+
+  Visibility is per row and per client here exactly as it is in `deltas/4`, embedded rows
+  included - a row reached only through an include appears and vanishes the way a root does.
+  What appears is scrubbed against what the client may see NOW, so no id list names a row it was
+  not given.
+  """
+  @spec shift(%{ids: MapSet.t(), rows: map}, String.t() | nil, list(struct)) ::
+          %{appeared: list(struct), vanished: list(struct)}
+  def shift(result, actor_user_id, grants_then) do
+    members = members(result.rows)
+
+    visible_now = Map.filter(members, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
+
+    visible_then =
+      Map.filter(members, fn {_id, row} ->
+        Auth.can?(actor_user_id, :read, row, grants_then)
+      end)
+
+    now_ids = member_ids(visible_now)
+    then_ids = member_ids(visible_then)
+
+    # Scrubbed on the same terms `deltas/4` scrubs an appearing row, and untestable here as long
+    # as no fixture gates a type that embeds a to-many: the only such parent is readable by
+    # everyone, so it is visible under both sets and never appears. Kept because the case is
+    # real - a client granted a parent while it was away receives it - not because a test binds it.
+    appeared =
+      now_ids
+      |> MapSet.difference(then_ids)
+      |> Enum.map(&Map.fetch!(visible_now, &1))
+      |> Enum.map(&scrub(&1, now_ids))
+
+    vanished =
+      then_ids
+      |> MapSet.difference(now_ids)
+      |> Enum.map(&Map.fetch!(visible_then, &1))
+
+    %{appeared: appeared, vanished: vanished}
+  end
+
   defp attribute_names(nil), do: MapSet.new()
 
   defp attribute_names(data) do
@@ -182,6 +230,12 @@ defmodule Hologram.Sync.Diff do
   # Every row a round carries, keyed by id: the roots and every row embedded under them, however
   # deep. One id can arrive in more than one place, and the first copy found keeps the spot - every
   # copy was read by the same query in the same round, so they hold the same values.
+  defp member_ids(members) do
+    members
+    |> Map.keys()
+    |> MapSet.new()
+  end
+
   defp members(rows) do
     Enum.reduce(rows, %{}, fn {_id, row}, members -> collect(row, members) end)
   end

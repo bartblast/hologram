@@ -28,7 +28,7 @@ defmodule Hologram.DB.Outbox do
     "mutation_ref"
   ]
 
-  @data_ops [:patch_entity, :put_entity]
+  @data_ops [:del_entity, :patch_entity, :put_entity]
 
   @relationship_ops [:add_relationship, :del_relationship]
 
@@ -37,8 +37,12 @@ defmodule Hologram.DB.Outbox do
   listening for them. Appending nothing does nothing.
 
   An effect names its `:op`, the `:entity_type` and `:entity_id` it happened to, and what the op
-  carries: `:data` for `:put_entity` (every attribute) and `:patch_entity` (the changed ones),
-  `:relationship` and `:target_id` for the relationship ops, nothing for `:del_entity`.
+  carries: `:data` for `:put_entity` (every attribute), `:patch_entity` (the changed ones) and
+  `:del_entity` (every attribute the row held when it was removed), `:relationship` and
+  `:target_id` for the relationship ops.
+
+  A put says what a row became and a delete says what it was, so a row that is gone stays
+  readable for as long as the log keeps its entry.
 
   An effect of a create or an update carries the `:revisions` it set - the stamp per column, keyed
   by field - which is stored beside it. An edge or a delete carries none.
@@ -163,6 +167,67 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
+  Returns the entity the given stored data describes - the inverse of what `append/1` writes, so a
+  row read back out of the log is the struct it was.
+
+  Every value is decoded against the type its declaration gives, which is what the encoding used
+  on the way in. A key the type does not declare raises: a payload is written by this build for
+  this build, and a gap spanning a change of model is refused before anything reads one.
+
+  The metadata is the type's own default - the stamps a row carried are recorded beside the data
+  rather than in it, and a row rebuilt from a delete has none to carry.
+  """
+  @spec entity_from_data(module, map) :: struct
+  def entity_from_data(entity_type, data) do
+    fields =
+      Enum.map(data, fn {name, value} ->
+        field = String.to_existing_atom(name)
+
+        {:ok, decoded} = Codec.decode_json(value, attribute_type(entity_type, field))
+
+        {field, decoded}
+      end)
+
+    struct!(entity_type, fields)
+  end
+
+  @doc """
+  Returns the effects written to rows of the given entity type since the given place, whose stored
+  data holds every pair of `data_match` - in place order, and carrying the data each was written
+  with. An empty match takes every effect of the type.
+
+  What one type's rows have been through since a place, where `read_after/3` answers WHICH rows
+  moved across every type. The payload is read here, which `read_after/3` deliberately does not
+  do: this exists for a caller reconstructing what a small, insert-and-delete-only type held, and
+  the values are the whole point of asking.
+
+  Deliberately unlimited. It is read for a gap whose size has already been decided, over the same
+  range - so it can answer no more rows than that gap holds, and a limit here would be a second
+  bound on a thing already bounded.
+
+  An op or entity type this node does not know stays the label it was written with, exactly as
+  `read_window/2` leaves it.
+  """
+  @spec read_type_after(module, non_neg_integer, non_neg_integer, map) :: list(map)
+  def read_type_after(entity_type, tx, seq, data_match) do
+    statement = """
+    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
+           "mutation_ref"
+    FROM "hologram_system"."outbox"
+    WHERE "type" = $1
+      AND ("tx" > $2 OR ("tx" = $2 AND "seq" > $3))
+      AND "data" @> $4::jsonb
+    ORDER BY "tx", "seq"
+    """
+
+    params = [Codec.encode_enum_value(entity_type), tx, seq, data_match]
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
+
+    Enum.map(rows, &event/1)
+  end
+
+  @doc """
   Returns the effects written by transactions from `last_xmin` up to but excluding `current_xmin`,
   grouped into `{transaction id, effects}` pairs and ordered by transaction and then by insert
   order, so a transaction's effects arrive together and in the order they happened.
@@ -216,8 +281,6 @@ defmodule Hologram.DB.Outbox do
        when op in @relationship_ops do
     %{relationship: relationship, target_id: target_id}
   end
-
-  defp data(%{op: :del_entity}), do: nil
 
   defp entity_type(label) do
     String.to_existing_atom("Elixir." <> label)

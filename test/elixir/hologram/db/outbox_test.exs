@@ -4,6 +4,7 @@ defmodule Hologram.DB.OutboxTest do
   import Hologram.DB.Outbox
 
   alias Hologram.Auth.Context
+  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
@@ -69,6 +70,50 @@ defmodule Hologram.DB.OutboxTest do
 
       # The window's own transaction is in flight, so the edge cannot have passed it.
       assert current_xmin() <= writing_tx
+    end
+  end
+
+  describe "entity_from_data/2" do
+    test "rebuilds the entity a put recorded" do
+      created =
+        %{a: true, b: 7, c: "almanac"}
+        |> Module2.new()
+        |> DB.create!()
+
+      assert [effect] = read_type_after(Module2, 0, 0, %{})
+
+      assert entity_from_data(Module2, effect.data) == %Module2{
+               a: created.a,
+               b: created.b,
+               c: created.c,
+               created_at: created.created_at,
+               id: created.id,
+               updated_at: created.updated_at
+             }
+    end
+
+    test "rebuilds the entity a delete recorded" do
+      created =
+        %{a: false, c: "gone"}
+        |> Module2.new()
+        |> DB.create!()
+
+      :ok = DB.delete(Module2, created.id)
+
+      assert [_put, delete] = read_type_after(Module2, 0, 0, %{})
+
+      assert entity_from_data(Module2, delete.data) == %Module2{
+               a: created.a,
+               b: created.b,
+               c: created.c,
+               created_at: created.created_at,
+               id: created.id,
+               updated_at: created.updated_at
+             }
+    end
+
+    test "refuses a key the type does not declare" do
+      assert_raise KeyError, fn -> entity_from_data(Module2, %{"email" => "x@example.com"}) end
     end
   end
 
@@ -177,6 +222,50 @@ defmodule Hologram.DB.OutboxTest do
       assert [first, second] = read_after(0, 0, 10)
       assert first.entity_id == @entity_id
       assert second.entity_id == @target_id
+    end
+  end
+
+  describe "read_type_after/4" do
+    test "returns nothing when the log holds no effects of the given type" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @entity_id, %{c: "other"})
+
+      assert read_type_after(Module2, 0, 0, %{}) == []
+    end
+
+    test "returns the effects of the given type since the given place, in place order" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
+
+      [{_tx, first_seq}] = places()
+
+      seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @target_id, %{c: "other"})
+      seed(202, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "after"})
+      seed(203, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
+
+      assert [put, delete] = read_type_after(Module2, 200, first_seq, %{})
+
+      assert put.entity_id == @target_id
+      assert put.op == :put_entity
+      assert put.data == %{"c" => "after"}
+
+      assert delete.entity_id == @entity_id
+      assert delete.op == :del_entity
+      assert delete.data == %{"c" => "gone"}
+    end
+
+    test "returns nothing written before the given place" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
+
+      [{tx, seq}] = places()
+
+      assert read_type_after(Module2, tx, seq, %{}) == []
+    end
+
+    test "returns only the effects whose data holds every pair of the given match" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "wanted"})
+      seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "other"})
+
+      assert [effect] = read_type_after(Module2, 0, 0, %{c: "wanted"})
+      assert effect.entity_id == @entity_id
     end
   end
 
@@ -314,12 +403,12 @@ defmodule Hologram.DB.OutboxTest do
       assert [%{data: %{"c" => "updated"}, op: "patch_entity"}] = rows()
     end
 
-    test "records a deletion without data" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+    test "records a deletion with the row it removed" do
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
-      assert [%{data: nil, op: "del_entity"}] = rows()
+      assert [%{data: %{"c" => "gone"}, op: "del_entity"}] = rows()
     end
 
     test "records a relationship op with the edge it moved" do
@@ -341,7 +430,7 @@ defmodule Hologram.DB.OutboxTest do
     test "records each effect of a transaction in the order given" do
       effects = [
         %{op: :patch_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "first"}},
-        %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+        %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
       ]
 
       assert append(effects) == :ok
@@ -350,7 +439,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "stamps the model the values were written under" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
@@ -362,7 +451,12 @@ defmodule Hologram.DB.OutboxTest do
       user_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
 
       Context.with_actor(user_id, fn ->
-        effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+        effect = %{
+          op: :del_entity,
+          entity_type: Module2,
+          entity_id: @entity_id,
+          data: %{c: "gone"}
+        }
 
         assert append([effect]) == :ok
       end)
@@ -371,7 +465,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "records no actor for a write the framework made itself" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
@@ -379,7 +473,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "records the batch an effect was written under" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert Ref.with_ref(%{replica_id: @replica_id, seq: 7}, fn -> append([effect]) end) == :ok
 
@@ -387,7 +481,7 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "records no batch for an effect written outside one" do
-      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "gone"}}
 
       assert append([effect]) == :ok
 
