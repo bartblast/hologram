@@ -42,7 +42,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                     :test_fixtures_policy_module1,
                     :test_fixtures_policy_module2,
                     :test_fixtures_policy_module3,
-                    :test_fixtures_policy_module4
+                    :test_fixtures_policy_module4,
+                    :test_fixtures_policy_module5
                   ],
                   optional: true
                 ]},
