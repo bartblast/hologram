@@ -167,6 +167,31 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
+  Returns the entity the given stored data describes - the inverse of what `append/1` writes, so a
+  row read back out of the log is the struct it was.
+
+  Every value is decoded against the type its declaration gives, which is what the encoding used
+  on the way in. A key the type does not declare raises: a payload is written by this build for
+  this build, and a gap spanning a change of model is refused before anything reads one.
+
+  The metadata is the type's own default - the stamps a row carried are recorded beside the data
+  rather than in it, and a row rebuilt from a delete has none to carry.
+  """
+  @spec entity_from_data(module, map) :: struct
+  def entity_from_data(entity_type, data) do
+    fields =
+      Enum.map(data, fn {name, value} ->
+        field = String.to_existing_atom(name)
+
+        {:ok, decoded} = Codec.decode_json(value, attribute_type(entity_type, field))
+
+        {field, decoded}
+      end)
+
+    struct!(entity_type, fields)
+  end
+
+  @doc """
   Returns the effects written to rows of the given entity type since the given place, whose stored
   data holds every pair of `data_match` - in place order, and carrying the data each was written
   with. An empty match takes every effect of the type.

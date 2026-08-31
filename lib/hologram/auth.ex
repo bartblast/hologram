@@ -8,6 +8,7 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Outbox
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Entity.Validator
@@ -79,6 +80,31 @@ defmodule Hologram.Auth do
   @spec can?(struct | String.t() | nil, atom, struct, list(struct)) :: boolean
   def can?(user_or_id, operation, entity, grants) do
     evaluate(user_or_id, operation, entity, grants)
+  end
+
+  # The grants the given user held before the given grant effects were written - what a resuming
+  # client's rules were answered against at the place it is coming back from: the grants it holds
+  # NOW, with everything the log says has happened to them since taken back off.
+  #
+  # Undone from the present BACKWARDS, which is what makes a grant given and taken back inside the
+  # run answer correctly - forwards, its creation would be undone before its deletion put it back,
+  # leaving a grant the user never held. Grant rows are only ever created and deleted, never
+  # patched, so undoing one is adding or removing a whole row and the order is the only subtlety.
+  #
+  # A deleted grant is rebuilt from what its effect recorded, which is why a delete carries the
+  # row it removed.
+  @doc false
+  @spec grants_before(String.t(), list(map)) :: list(struct)
+  def grants_before(user_id, grant_effects) do
+    current =
+      RoleGrant
+      |> Query.filter(user_id: user_id)
+      |> Query.normalize()
+      |> QueryRunner.run(DB.mapping())
+
+    grant_effects
+    |> Enum.reverse()
+    |> Enum.reduce(current, &undo_grant_effect/2)
   end
 
   @doc """
@@ -602,6 +628,14 @@ defmodule Hologram.Auth do
 
   defp scope_condition(:global) do
     {~s|"resource_type" IS NULL AND "resource_id" IS NULL|, []}
+  end
+
+  defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do
+    Enum.reject(grants, &(&1.id == id))
+  end
+
+  defp undo_grant_effect(%{op: :del_entity, data: data}, grants) do
+    [Outbox.entity_from_data(RoleGrant, data) | grants]
   end
 
   defp unknown_global_role_message(role) do

@@ -8,7 +8,9 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Query
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -560,6 +562,96 @@ defmodule Hologram.AuthTest do
                  {user.id, {:own, Module1, entity.id}},
                  {user.id, {:type, Module2}}
                ])
+    end
+  end
+
+  describe "grants_before/2" do
+    defp grant_effect(op, grant) do
+      data = %{
+        "id" => grant.id,
+        "resource_id" => grant.resource_id,
+        "resource_type" => grant.resource_type && Atom.to_string(grant.resource_type),
+        "role" => Codec.encode_enum_value(grant.role),
+        "user_id" => grant.user_id
+      }
+
+      %{op: op, type: RoleGrant, entity_id: grant.id, data: data}
+    end
+
+    defp stored_grant(user_id) do
+      RoleGrant
+      |> Query.filter(user_id: user_id)
+      |> Query.normalize()
+      |> QueryRunner.run(DB.mapping())
+      |> hd()
+    end
+
+    test "answers the stored grants when no effect touched them" do
+      user = create_user("user_90@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+
+      assert [grant] = grants_before(user.id, [])
+      assert grant.id == stored_grant(user.id).id
+    end
+
+    test "leaves out a grant created since" do
+      user = create_user("user_91@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+      grant = stored_grant(user.id)
+
+      assert grants_before(user.id, [grant_effect(:put_entity, grant)]) == []
+    end
+
+    test "puts back a grant revoked since" do
+      user = create_user("user_92@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+      revoked = stored_grant(user.id)
+      revoke_role(user, resource, :editor)
+
+      assert [grant] = grants_before(user.id, [grant_effect(:del_entity, revoked)])
+      assert grant.id == revoked.id
+      assert grant.resource_id == resource.id
+      assert grant.resource_type == RoleGrant.resource_type(Module1)
+      assert grant.role == :editor
+      assert grant.user_id == user.id
+    end
+
+    # Forwards, the creation would be undone before the deletion put it back - leaving a grant
+    # the user never held at the place being asked about.
+    test "answers nothing for a grant given and taken back since" do
+      user = create_user("user_93@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+      grant = stored_grant(user.id)
+      revoke_role(user, resource, :editor)
+
+      effects = [grant_effect(:put_entity, grant), grant_effect(:del_entity, grant)]
+
+      assert grants_before(user.id, effects) == []
+    end
+
+    test "answers the grant a revoke and re-grant replaced" do
+      user = create_user("user_94@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+      revoked = stored_grant(user.id)
+      revoke_role(user, resource, :editor)
+      grant_role(user, resource, :owner)
+      current = stored_grant(user.id)
+
+      effects = [grant_effect(:del_entity, revoked), grant_effect(:put_entity, current)]
+
+      assert [grant] = grants_before(user.id, effects)
+      assert grant.id == revoked.id
+      assert grant.role == :editor
     end
   end
 

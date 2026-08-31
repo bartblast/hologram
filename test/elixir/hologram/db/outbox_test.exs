@@ -4,6 +4,7 @@ defmodule Hologram.DB.OutboxTest do
   import Hologram.DB.Outbox
 
   alias Hologram.Auth.Context
+  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
@@ -69,6 +70,50 @@ defmodule Hologram.DB.OutboxTest do
 
       # The window's own transaction is in flight, so the edge cannot have passed it.
       assert current_xmin() <= writing_tx
+    end
+  end
+
+  describe "entity_from_data/2" do
+    test "rebuilds the entity a put recorded" do
+      created =
+        %{a: true, b: 7, c: "almanac"}
+        |> Module2.new()
+        |> DB.create!()
+
+      assert [effect] = read_type_after(Module2, 0, 0, %{})
+
+      assert entity_from_data(Module2, effect.data) == %Module2{
+               a: created.a,
+               b: created.b,
+               c: created.c,
+               created_at: created.created_at,
+               id: created.id,
+               updated_at: created.updated_at
+             }
+    end
+
+    test "rebuilds the entity a delete recorded" do
+      created =
+        %{a: false, c: "gone"}
+        |> Module2.new()
+        |> DB.create!()
+
+      :ok = DB.delete(Module2, created.id)
+
+      assert [_put, delete] = read_type_after(Module2, 0, 0, %{})
+
+      assert entity_from_data(Module2, delete.data) == %Module2{
+               a: created.a,
+               b: created.b,
+               c: created.c,
+               created_at: created.created_at,
+               id: created.id,
+               updated_at: created.updated_at
+             }
+    end
+
+    test "refuses a key the type does not declare" do
+      assert_raise KeyError, fn -> entity_from_data(Module2, %{"email" => "x@example.com"}) end
     end
   end
 
