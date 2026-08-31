@@ -123,6 +123,7 @@ describe("Elixir_Hologram_Query", () => {
             due_on: "date",
             id: "uuid",
             position: "integer",
+            starts_at: "time",
             status: "enum",
             title: "string",
           },
@@ -882,7 +883,7 @@ describe("Elixir_Hologram_Query", () => {
         () =>
           putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
         HologramBoxedError,
-        "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :status, :title",
+        "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :starts_at, :status, :title",
       );
     });
   });
@@ -1153,6 +1154,29 @@ describe("Elixir_Hologram_Query", () => {
       assert.deepStrictEqual(query.filter, [["title", ">", "a"]]);
     });
 
+    // A time of day is orderable like the other temporal types, and leaves in the one spelling
+    // the rows carry - six fractional digits whatever the value was written at.
+    it("builds an ordering triple for a time attribute", () => {
+      const time = Type.map([
+        [Type.atom("__struct__"), Type.alias("Time")],
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("hour"), Type.integer(11)],
+        [
+          Type.atom("microsecond"),
+          Type.tuple([Type.integer(0), Type.integer(0)]),
+        ],
+        [Type.atom("minute"), Type.integer(0)],
+        [Type.atom("second"), Type.integer(0)],
+      ]);
+
+      const value = Type.tuple([Type.atom(">"), time]);
+      const query = filter(task, predicates([["starts_at", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["starts_at", ">", "11:00:00.000000"],
+      ]);
+    });
+
     it("filters by the reference field of a to-one relationship", () => {
       const query = filter(
         Type.alias(PROJECT),
@@ -1218,7 +1242,7 @@ describe("Elixir_Hologram_Query", () => {
       assert.throw(
         () => filter(task, predicates([["x", Type.integer(1)]])),
         HologramBoxedError,
-        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :status, :title",
+        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
 
@@ -1952,7 +1976,7 @@ describe("Elixir_Hologram_Query", () => {
       assert.throw(
         () => orderBy(task, Type.atom("x")),
         HologramBoxedError,
-        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :status, :title",
+        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
   });
