@@ -133,7 +133,7 @@ defmodule Hologram.Sync.CatchupTest do
     test "sends everything again to a client whose place no row could carry" do
       seed(200)
 
-      forged = Base.url_encode64("99999999999999999999999.0", padding: false)
+      forged = "99999999999999999999999.0"
 
       assert gap(forged) == {:full_resync, :cursor}
     end
