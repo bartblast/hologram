@@ -5,7 +5,17 @@ defmodule Hologram.DB.DDL do
 
   # Types the mapper emits by name - anything else is a derived enum type, which lives
   # in the data schema and must be schema-qualified and quoted.
-  @builtin_types ["boolean", "date", "float8", "int8", "jsonb", "text", "timestamptz", "uuid"]
+  @builtin_types [
+    "boolean",
+    "date",
+    "float8",
+    "int8",
+    "jsonb",
+    "text",
+    "time",
+    "timestamptz",
+    "uuid"
+  ]
 
   # Casts that succeed exactly when the existing rows allow them - each has a pre-flight
   # check statement counting the rows that cannot follow.

@@ -26,6 +26,7 @@ const ORDERABLE_TYPES = [
   "float",
   "integer",
   "string",
+  "time",
 ];
 const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
 

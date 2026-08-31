@@ -6,16 +6,16 @@ import Model from "./model.mjs";
 import SortKey from "./sort_key.mjs";
 
 // The kernel the client answers its own queries with: the locked operator set evaluated over
-// the rows as the wire spells them - plain values, dates and datetimes and enums and uuids as
-// strings.
+// the rows as the wire spells them - plain values, dates and datetimes and times and enums and
+// uuids as strings.
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
 // and neither writing is trusted on its own.
 //
-// Temporal values compare as the strings they are: every datetime on the wire is UTC at one
-// fractional precision, so the order of the characters IS the order of the instants - which is
-// what lets a comparison here be a comparison rather than a parse.
+// Temporal values compare as the strings they are: every datetime on the wire is UTC and every
+// datetime and time is at one fractional precision, so the order of the characters IS the order
+// of the instants - which is what lets a comparison here be a comparison rather than a parse.
 //
 // What comes back is what the database holds, arranged - never boxed. A result row is a node
 // pairing the stored row with what the query included of it, which is the shape the boxing

@@ -68,6 +68,14 @@ defmodule Hologram.Entity.ValidatorTest do
       refute attribute_value_valid?(:abc, :string)
     end
 
+    test "validates :time values" do
+      assert attribute_value_valid?(~T[11:00:00], :time)
+      assert attribute_value_valid?(~T[11:00:00.123456], :time)
+      refute attribute_value_valid?("11:00:00", :time)
+      refute attribute_value_valid?(~N[2026-07-17 11:00:00], :time)
+      refute attribute_value_valid?(~U[2026-07-17 11:00:00Z], :time)
+    end
+
     test "validates :uuid values" do
       assert attribute_value_valid?("018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
       refute attribute_value_valid?("018f4571a1b27c3d8e4f5a6b7c8d9e0f", :uuid)
@@ -254,6 +262,30 @@ defmodule Hologram.Entity.ValidatorTest do
 
       assert validate(Module10, %{count: 5, released_on: ~D[2031-01-01]}) ==
                {:error, [{:released_on, {:max, ~D[2030-12-31]}}]}
+    end
+
+    # TODO: fold these into the Module10 cases beside them. Module10 carries every other type's
+    # bounded attribute, and it can declare a :time one once the mapper and the DDL know the type.
+    test "validates a :time attribute against its type and declared bounds" do
+      defmodule InlineEntityFixture94 do
+        use Hologram.Entity
+
+        attribute :opens_at, :time, min: ~T[08:00:00], max: ~T[20:00:00], optional: true
+      end
+
+      assert validate(InlineEntityFixture94, %{opens_at: ~T[11:00:00]}) == :ok
+      assert validate(InlineEntityFixture94, %{opens_at: ~T[08:00:00]}) == :ok
+      assert validate(InlineEntityFixture94, %{opens_at: ~T[20:00:00]}) == :ok
+      assert validate(InlineEntityFixture94, %{opens_at: nil}) == :ok
+
+      assert validate(InlineEntityFixture94, %{opens_at: "11:00:00"}) ==
+               {:error, [{:opens_at, {:type, :time}}]}
+
+      assert validate(InlineEntityFixture94, %{opens_at: ~T[07:59:59]}) ==
+               {:error, [{:opens_at, {:min, ~T[08:00:00]}}]}
+
+      assert validate(InlineEntityFixture94, %{opens_at: ~T[20:00:01]}) ==
+               {:error, [{:opens_at, {:max, ~T[20:00:00]}}]}
     end
 
     test "reports in violations with the declared range" do
@@ -517,7 +549,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute type" do
       expected_msg =
-        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid"
+        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture1 do
@@ -530,7 +562,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects module used as attribute type" do
       expected_msg =
-        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid"
+        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture2 do
@@ -600,6 +632,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
         attribute :count, :integer, min: 1, max: 10
         attribute :held_at, :datetime, min: ~U[2026-01-01 00:00:00Z]
+        attribute :opens_at, :time, min: ~T[08:00:00], max: ~T[20:00:00]
         attribute :rating, :float, min: 0, max: 5.0
         attribute :released_on, :date, max: ~D[2030-12-31]
       end
@@ -607,6 +640,7 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture28.__attributes__() == [
                {:count, :integer, [min: 1, max: 10]},
                {:held_at, :datetime, [min: ~U[2026-01-01 00:00:00Z]]},
+               {:opens_at, :time, [min: ~T[08:00:00], max: ~T[20:00:00]]},
                {:rating, :float, [min: 0, max: 5.0]},
                {:released_on, :date, [max: ~D[2030-12-31]]}
              ]
@@ -624,7 +658,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects min option on unbounded attribute type" do
       expected_msg =
-        "min option not allowed for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture30 - min and max options apply only to integer, float, date and datetime attributes"
+        "min option not allowed for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture30 - min and max options apply only to integer, float, date, datetime and time attributes"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture30 do
@@ -637,7 +671,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects max option on unbounded attribute type" do
       expected_msg =
-        "max option not allowed for attribute :archived in Hologram.Entity.ValidatorTest.InlineEntityFixture31 - min and max options apply only to integer, float, date and datetime attributes"
+        "max option not allowed for attribute :archived in Hologram.Entity.ValidatorTest.InlineEntityFixture31 - min and max options apply only to integer, float, date, datetime and time attributes"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture31 do
@@ -722,6 +756,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :released_on, :date, min: ~D[2030-01-01], max: ~D[2020-01-01]
+        end
+      end
+    end
+
+    test "rejects min greater than max on time attribute" do
+      expected_msg =
+        "conflicting min and max options for attribute :opens_at in Hologram.Entity.ValidatorTest.InlineEntityFixture95 - min ~T[20:00:00] must be less than or equal to max ~T[08:00:00]"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture95 do
+          use Hologram.Entity
+
+          attribute :opens_at, :time, min: ~T[20:00:00], max: ~T[08:00:00]
         end
       end
     end

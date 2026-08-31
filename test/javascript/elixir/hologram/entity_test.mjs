@@ -63,6 +63,18 @@ describe("Elixir_Hologram_Entity", () => {
       [Type.atom("zone_abbr"), Type.bitstring("UTC")],
     ]);
 
+  const boxedTime = (hour, minute = 0, microsecond = 0) =>
+    Type.struct("Time", [
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("hour"), Type.integer(hour)],
+      [
+        Type.atom("microsecond"),
+        Type.tuple([Type.integer(microsecond), Type.integer(6)]),
+      ],
+      [Type.atom("minute"), Type.integer(minute)],
+      [Type.atom("second"), Type.integer(0)],
+    ]);
+
   const validate = Elixir_Hologram_Entity["validate/1"];
   const validateChanges = Elixir_Hologram_Entity["validate/2"];
 
@@ -148,6 +160,7 @@ describe("Elixir_Hologram_Entity", () => {
             percent: "integer",
             priority: "integer",
             rating: "float",
+            opens_at: "time",
             released_on: "date",
             slug: "string",
             username: "string",
@@ -168,6 +181,11 @@ describe("Elixir_Hologram_Entity", () => {
             rating: {
               max: Type.float(5.0),
               min: Type.integer(0),
+              optional: true,
+            },
+            opens_at: {
+              max: boxedTime(20),
+              min: boxedTime(8),
               optional: true,
             },
             released_on: {max: boxedDate(2030, 12, 31), optional: true},
@@ -791,6 +809,9 @@ describe("Elixir_Hologram_Entity", () => {
         Type.atom("ok"),
       );
 
+      assert.deepEqual(item({opens_at: boxedTime(8)}), Type.atom("ok"));
+      assert.deepEqual(item({opens_at: boxedTime(20)}), Type.atom("ok"));
+
       assert.deepEqual(
         item({released_on: boxedDate(2030, 12, 31)}),
         Type.atom("ok"),
@@ -855,6 +876,28 @@ describe("Elixir_Hologram_Entity", () => {
           "released_on",
           Type.tuple([Type.atom("max"), boxedDate(2030, 12, 31)]),
         ),
+      );
+    });
+
+    // A time of day is compared by the clock it names and nothing else - there is no date to
+    // fold in and no zone to move it by, which is what separates it from the instant above.
+    it("reports a time outside the declared bounds", () => {
+      assert.deepEqual(
+        item({opens_at: boxedTime(7, 59)}),
+        violation("opens_at", Type.tuple([Type.atom("min"), boxedTime(8)])),
+      );
+
+      assert.deepEqual(
+        item({opens_at: boxedTime(21)}),
+        violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
+      );
+    });
+
+    // The microsecond is part of the clock, so a value one of them past the maximum is past it.
+    it("compares a time by its microsecond as well as by its second", () => {
+      assert.deepEqual(
+        item({opens_at: boxedTime(20, 0, 1)}),
+        violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
       );
     });
 

@@ -245,11 +245,16 @@ function boundErrors(name, value, attributeType, constraints, key) {
     : [errorTuple(name, Type.tuple([Type.atom(key), bound]))];
 }
 
-function compareValues(left, right, attributeType) {
-  if (attributeType === "date" || attributeType === "datetime") {
-    const key = attributeType === "date" ? dateKey : datetimeKey;
+// A temporal struct has no single number to put in order, so each answers a list of parts
+// compared left to right. A type missing from here is compared by its plain value, which for a
+// struct is undefined - every comparison would then answer equal and every bound would pass.
+const TEMPORAL_KEYS = {date: dateKey, datetime: datetimeKey, time: timeKey};
 
-    return compareKeys(key(left), key(right));
+function compareValues(left, right, attributeType) {
+  const temporalKey = TEMPORAL_KEYS[attributeType];
+
+  if (temporalKey) {
+    return compareKeys(temporalKey(left), temporalKey(right));
   }
 
   // Compared with the ordering operators alone, never with ===, so that a BigInt and a Number
@@ -295,6 +300,19 @@ function datetimeKey(value) {
   const microsecond = Number(structField(value, "microsecond").data[0].value);
 
   return [date.getTime() / 1000 - offset, microsecond];
+}
+
+// The clock the struct names, as Time.compare reads it: the second of the day and the microsecond
+// amount beside it. No date to fold in and no zone to move by, which is the whole difference
+// between a time of day and the instant above.
+function timeKey(value) {
+  const part = (name) => Number(structField(value, name).value);
+  const microsecond = Number(structField(value, "microsecond").data[0].value);
+
+  return [
+    part("hour") * 3600 + part("minute") * 60 + part("second"),
+    microsecond,
+  ];
 }
 
 function errorTuple(name, reason) {
@@ -607,6 +625,9 @@ function typeValid(value, attributeType) {
 
     case "string":
       return Type.isBinary(value) && Bitstring.isText(value);
+
+    case "time":
+      return Type.isStruct(value, "Time");
 
     default:
       return uuidValue(value);
