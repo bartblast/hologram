@@ -65,7 +65,7 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "cast_class/2" do
-    # Every ordered pair of the seven builtin types, as a literal table: 49 cells, so no
+    # Every ordered pair of the eight builtin types, as a literal table: 64 cells, so no
     # combination can be added to the type set and quietly land in :unsupported unnoticed.
     # Read down the FROM column, across the TO row.
     test "classifies every pair of builtin types" do
@@ -75,6 +75,7 @@ defmodule Hologram.DB.DDLTest do
         {"boolean", "float8"} => :unsupported,
         {"boolean", "int8"} => :unsupported,
         {"boolean", "text"} => :safe,
+        {"boolean", "time"} => :unsupported,
         {"boolean", "timestamptz"} => :unsupported,
         {"boolean", "uuid"} => :unsupported,
         {"date", "boolean"} => :unsupported,
@@ -82,6 +83,7 @@ defmodule Hologram.DB.DDLTest do
         {"date", "float8"} => :unsupported,
         {"date", "int8"} => :unsupported,
         {"date", "text"} => :safe,
+        {"date", "time"} => :unsupported,
         {"date", "timestamptz"} => :safe,
         {"date", "uuid"} => :unsupported,
         {"float8", "boolean"} => :unsupported,
@@ -89,6 +91,7 @@ defmodule Hologram.DB.DDLTest do
         {"float8", "float8"} => :safe,
         {"float8", "int8"} => :data_dependent,
         {"float8", "text"} => :safe,
+        {"float8", "time"} => :unsupported,
         {"float8", "timestamptz"} => :unsupported,
         {"float8", "uuid"} => :unsupported,
         {"int8", "boolean"} => :unsupported,
@@ -96,6 +99,7 @@ defmodule Hologram.DB.DDLTest do
         {"int8", "float8"} => :safe,
         {"int8", "int8"} => :safe,
         {"int8", "text"} => :safe,
+        {"int8", "time"} => :unsupported,
         {"int8", "timestamptz"} => :unsupported,
         {"int8", "uuid"} => :unsupported,
         {"text", "boolean"} => :unsupported,
@@ -103,13 +107,23 @@ defmodule Hologram.DB.DDLTest do
         {"text", "float8"} => :data_dependent,
         {"text", "int8"} => :data_dependent,
         {"text", "text"} => :safe,
+        {"text", "time"} => :unsupported,
         {"text", "timestamptz"} => :unsupported,
         {"text", "uuid"} => :unsupported,
+        {"time", "boolean"} => :unsupported,
+        {"time", "date"} => :unsupported,
+        {"time", "float8"} => :unsupported,
+        {"time", "int8"} => :unsupported,
+        {"time", "text"} => :safe,
+        {"time", "time"} => :safe,
+        {"time", "timestamptz"} => :unsupported,
+        {"time", "uuid"} => :unsupported,
         {"timestamptz", "boolean"} => :unsupported,
         {"timestamptz", "date"} => :data_dependent,
         {"timestamptz", "float8"} => :unsupported,
         {"timestamptz", "int8"} => :unsupported,
         {"timestamptz", "text"} => :safe,
+        {"timestamptz", "time"} => :unsupported,
         {"timestamptz", "timestamptz"} => :safe,
         {"timestamptz", "uuid"} => :unsupported,
         {"uuid", "boolean"} => :unsupported,
@@ -117,6 +131,7 @@ defmodule Hologram.DB.DDLTest do
         {"uuid", "float8"} => :unsupported,
         {"uuid", "int8"} => :unsupported,
         {"uuid", "text"} => :safe,
+        {"uuid", "time"} => :unsupported,
         {"uuid", "timestamptz"} => :unsupported,
         {"uuid", "uuid"} => :safe
       }
@@ -142,7 +157,7 @@ defmodule Hologram.DB.DDLTest do
     # pair does - the two are one fact. A pair in only one of them would raise at apply time
     # for want of a clause, or refuse rows that nothing ever checks.
     test "gives every data-dependent pair a check statement, and only those" do
-      builtin_types = ["boolean", "date", "float8", "int8", "text", "timestamptz", "uuid"]
+      builtin_types = ["boolean", "date", "float8", "int8", "text", "time", "timestamptz", "uuid"]
       pairs = for from_type <- builtin_types, to_type <- builtin_types, do: {from_type, to_type}
 
       {data_dependent, others} =
@@ -241,6 +256,19 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "statements/1 for add_column" do
+    test "renders a time column type without schema-qualifying it" do
+      op = %{
+        op: :add_column,
+        table: "task",
+        column: "opens_at",
+        definition: %{type: "time", collation: nil, null: true}
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."task" ADD COLUMN "opens_at" time)
+             ]
+    end
+
     test "renders the column definition with collation and nullability" do
       op = %{
         op: :add_column,
