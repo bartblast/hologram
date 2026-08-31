@@ -55,6 +55,12 @@ defmodule Hologram.Sync.Session do
   only about the rows the gap names. Whether a gap can be had at all is decided before the session
   starts, since it is a question about the log rather than about this client.
 
+  `:edges` is the policy dependency index, given to a returning client alone - what each rule
+  reads besides the row it judges, so a row the gap never names can be judged again when the row
+  DECIDING it moved. A rule saying `via:` reads a related row, and that row going private hides
+  everything leaning on it without any of them moving. Absent for a first arrival, which is sent
+  every row it may see.
+
   `:grants_then` is what that client's grants were at the place its gap starts from, given only
   when they are not what they are now. The rows a grant change hid or revealed are named by no
   effect, so they are worked out by judging the client's rows under both sets - absent for a
@@ -81,6 +87,7 @@ defmodule Hologram.Sync.Session do
       announced: MapSet.new(),
       applied_seq: Keyword.get(opts, :applied_seq),
       client: Keyword.fetch!(opts, :client),
+      edges: Keyword.get(opts, :edges),
       fill_place: Keyword.get(opts, :fill_place),
       gap: gap,
       grants_then: Keyword.get(opts, :grants_then),
@@ -175,6 +182,7 @@ defmodule Hologram.Sync.Session do
         |> send_deltas(window_id, deltas)
         |> remember(window_id, held, deltas)
         |> remember_shift(result)
+        |> remember_reach(result)
         |> mark_filled(window_id)
     end
   end
@@ -290,17 +298,36 @@ defmodule Hologram.Sync.Session do
 
   # Judged per window, merged by id: visibility is per ROW and per client rather than per window,
   # so two windows holding the same row agree about it and the later one writes what the earlier
-  # one did. Only while replaying, and only when the gap came back with grants to judge against.
+  # one did.
+  #
+  # Two sources feed the one accumulator, and they answer different questions about the same
+  # rows: what the client's GRANTS moving decided differently, and what a row the gap names now
+  # decides about the rows leaning on it. Both end up in the batch `tell_shift/1` sends.
+  defp merge_shift(state, shift) do
+    appeared = Map.merge(state.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
+    vanished = Map.merge(state.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
+
+    %{state | shift: %{appeared: appeared, vanished: vanished}}
+  end
+
+  # Only while replaying, and only for a client that was handed a dependency index - a first
+  # arrival has nothing to reach back for.
+  defp remember_reach(%{edges: nil} = state, _result), do: state
+
+  defp remember_reach(state, result) do
+    if replaying?(state) do
+      merge_shift(state, Diff.reach(result, state.actor_user_id, state.gap, state.edges))
+    else
+      state
+    end
+  end
+
+  # Only while replaying, and only when the gap came back with grants to judge against.
   defp remember_shift(%{grants_then: nil} = state, _result), do: state
 
   defp remember_shift(state, result) do
     if replaying?(state) do
-      shift = Diff.shift(result, state.actor_user_id, state.grants_then)
-
-      appeared = Map.merge(state.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
-      vanished = Map.merge(state.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
-
-      %{state | shift: %{appeared: appeared, vanished: vanished}}
+      merge_shift(state, Diff.shift(result, state.actor_user_id, state.grants_then))
     else
       state
     end
