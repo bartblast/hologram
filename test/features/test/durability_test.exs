@@ -14,6 +14,7 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
+  alias HologramFeatureTests.Entities.Shop
   alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
   alias HologramFeatureTests.Entities.User
@@ -55,6 +56,7 @@ defmodule HologramFeatureTests.DurabilityTest do
           RestockItem,
           Review,
           RoleGrant,
+          Shop,
           Ticket,
           Todo,
           User
