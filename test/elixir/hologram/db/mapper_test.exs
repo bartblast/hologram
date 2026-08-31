@@ -179,6 +179,16 @@ defmodule Hologram.DB.MapperTest do
       assert column(Module2, "c").collation == "C"
     end
 
+    test "maps :time to time" do
+      defmodule InlineEntityFixture22 do
+        use Hologram.Entity
+
+        attribute :opens_at, :time, optional: true
+      end
+
+      assert column(InlineEntityFixture22, "opens_at").sql_type == "time"
+    end
+
     test "maps :uuid to uuid" do
       defmodule InlineEntityFixture19 do
         use Hologram.Entity

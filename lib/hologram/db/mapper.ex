@@ -605,6 +605,8 @@ defmodule Hologram.DB.Mapper do
 
   defp sql_type(:string, _table_name, _name), do: "text"
 
+  defp sql_type(:time, _table_name, _name), do: "time"
+
   defp sql_type(:uuid, _table_name, _name), do: "uuid"
 
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
