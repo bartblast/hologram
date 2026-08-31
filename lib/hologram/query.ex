@@ -9,7 +9,7 @@ defmodule Hologram.Query do
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]
-  @orderable_types [:date, :datetime, :enum, :float, :integer, :string]
+  @orderable_types [:date, :datetime, :enum, :float, :integer, :string, :time]
   @ordering_operators [:<, :<=, :>, :>=]
 
   # A query term - what the stages build and the executors run. Each field is named for the stage

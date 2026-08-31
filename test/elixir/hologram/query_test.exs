@@ -11,6 +11,7 @@ defmodule Hologram.QueryTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -525,6 +526,12 @@ defmodule Hologram.QueryTest do
       query = filter(Module2, c: {:>=, "x"})
 
       assert query.filter == [{:c, :>=, "x"}]
+    end
+
+    test "builds an ordering triple for a time attribute" do
+      query = filter(Module22, opens_at: {:>, ~T[11:00:00]})
+
+      assert query.filter == [{:opens_at, :>, ~T[11:00:00]}]
     end
 
     test "builds conjunction triples from a list of operator tuples" do
