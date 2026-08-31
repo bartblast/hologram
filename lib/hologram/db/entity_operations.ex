@@ -107,6 +107,34 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The values a statement returned for one row, in the order `persisted_columns/1` gives - which
+  # is the order every statement selecting a whole row builds its column list in.
+  @doc false
+  @spec decode_row(module, list) :: struct
+  def decode_row(entity_type, values) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    # Exactly one revisions column per table, by construction - it is framework state rather
+    # than a value the entity declares, so it lands in the metadata and never as a field.
+    {[{revisions_column, revisions_value}], field_pairs} =
+      entity_type
+      |> persisted_columns()
+      |> Enum.zip(values)
+      |> Enum.split_with(fn {column, _value} -> column.source == :revisions end)
+
+    fields =
+      Enum.map(field_pairs, fn {column, value} ->
+        {field_name(column), Codec.decode(value, column.type)}
+      end)
+
+    revisions =
+      revisions_value
+      |> Codec.decode(revisions_column.type)
+      |> revisions_from_row(columns)
+
+    struct!(entity_type, [{:__meta__, %Metadata{revisions: revisions}} | fields])
+  end
+
   @doc false
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
@@ -170,11 +198,13 @@ defmodule Hologram.DB.EntityOperations do
   def get(entity_type, id, opts \\ []) do
     validate_id!(id)
 
-    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+    %{table: table} = Map.fetch!(DB.mapping(), entity_type)
 
-    persisted_columns = Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
+    column_list =
+      entity_type
+      |> persisted_columns()
+      |> Enum.map_join(", ", &Mapper.quote_identifier(&1.name))
 
-    column_list = Enum.map_join(persisted_columns, ", ", &Mapper.quote_identifier(&1.name))
     lock_clause = if opts[:lock] == true, do: " FOR UPDATE", else: ""
 
     statement =
@@ -187,24 +217,7 @@ defmodule Hologram.DB.EntityOperations do
         nil
 
       {:ok, %Postgrex.Result{rows: [row]}} ->
-        # Exactly one revisions column per table, by construction - it is framework state rather
-        # than a value the entity declares, so it lands in the metadata and never as a field.
-        {[{revisions_column, revisions_value}], field_pairs} =
-          persisted_columns
-          |> Enum.zip(row)
-          |> Enum.split_with(fn {column, _value} -> column.source == :revisions end)
-
-        fields =
-          Enum.map(field_pairs, fn {column, value} ->
-            {field_name(column), Codec.decode(value, column.type)}
-          end)
-
-        revisions =
-          revisions_value
-          |> Codec.decode(revisions_column.type)
-          |> revisions_from_row(columns)
-
-        struct!(entity_type, [{:__meta__, %Metadata{revisions: revisions}} | fields])
+        decode_row(entity_type, row)
 
       {:error, error} ->
         raise error
@@ -216,6 +229,17 @@ defmodule Hologram.DB.EntityOperations do
   # The :deltas option gives the counters to move by an amount rather than set - `%{name => amount}`
   # over required integer attributes, applied in the statement as `column + amount` and judged
   # against the declarations on the value the statement leaves.
+  # A sort-key companion is derived from the value beside it rather than stored as a field, so it
+  # is not part of a row as an entity holds one - which makes this the column list of every
+  # statement that reads or returns a whole row.
+  @doc false
+  @spec persisted_columns(module) :: list(map)
+  def persisted_columns(entity_type) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
+  end
+
   @doc false
   @spec update(module, String.t(), map | keyword, keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
