@@ -82,6 +82,32 @@ defmodule Hologram.Auth do
     evaluate(user_or_id, operation, entity, grants)
   end
 
+  # The id of the row a chain of to-one relationships ends at, or nil when any hop along the way
+  # is empty. The intermediate rows are read raw, the way `check_requirement({:via, _}, ...)`
+  # reads a delegation target: what is being asked is where the chain LEADS, and a read that
+  # applied the intermediate row's own rules would answer nil for a chain the policy follows.
+  #
+  # A hop naming a row that is gone answers nil the same way an empty reference does - a chain
+  # that leads nowhere leads nowhere, however it got there.
+  @doc false
+  @spec chain_target_id(struct, list(atom)) :: Entity.id() | nil
+  def chain_target_id(entity, [relationship_name]) do
+    related_id(entity, relationship_name)
+  end
+
+  def chain_target_id(entity, [relationship_name | rest]) do
+    case related_id(entity, relationship_name) do
+      nil ->
+        nil
+
+      target_id ->
+        entity.__struct__
+        |> relationship_target(relationship_name)
+        |> EntityOperations.get(target_id)
+        |> chain_target_id_or_nil(rest)
+    end
+  end
+
   # The grants the given user held before the given grant effects were written - what a resuming
   # client's rules were answered against at the place it is coming back from: the grants it holds
   # NOW, with everything the log says has happened to them since taken back off.
@@ -344,6 +370,10 @@ defmodule Hologram.Auth do
         |> delegates?(actor_user_id, operation, source)
     end
   end
+
+  defp chain_target_id_or_nil(nil, _chain), do: nil
+
+  defp chain_target_id_or_nil(entity, chain), do: chain_target_id(entity, chain)
 
   # The rows are selected rather than counted in SQL because Postgres rejects FOR UPDATE with
   # aggregates - the lock is the point, and a resource's managing grants are few.
