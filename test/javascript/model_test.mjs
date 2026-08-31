@@ -347,6 +347,27 @@ describe("Model", () => {
       );
     });
 
+    // Well-formed digits naming no time of day, which Elixir reading the same string refuses as
+    // :invalid_time - so this side refuses them too rather than building a struct saying 24:00.
+    it("raises for a time whose clock fields are out of range", () => {
+      for (const spelling of ["24:00:00", "11:60:00", "11:00:60"]) {
+        assert.throw(
+          () => Model.box(TASK, row({starts_at: spelling})),
+          HologramRuntimeError,
+          `invalid time on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    it("boxes the last time of day the clock reaches", () => {
+      const boxed = Model.box(TASK, row({starts_at: "23:59:59"}));
+
+      assert.deepEqual(
+        field(field(boxed, "starts_at"), "hour"),
+        Type.integer(23),
+      );
+    });
+
     it("boxes an unset attribute as nil", () => {
       const boxed = Model.box(TASK, row({title: null}));
 

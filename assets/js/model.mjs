@@ -423,7 +423,9 @@ export default class Model {
   // A time of day carries no date and no zone, so there is nothing to read but the clock - and
   // the fraction, which is what the struct's own precision counts.
   static #boxTime(value) {
-    const match = value.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/);
+    const match = value.match(
+      /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.(\d+))?$/,
+    );
 
     if (!match) {
       throw new HologramRuntimeError(`invalid time on the wire: ${value}`);
