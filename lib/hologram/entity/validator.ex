@@ -5,7 +5,7 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.DB.Codec
   alias Hologram.Reflection
 
-  @bounded_attribute_types [:date, :datetime, :float, :integer]
+  @bounded_attribute_types [:date, :datetime, :float, :integer, :time]
 
   # Postgres enum label limit
   @max_enum_label_bytes 63
@@ -40,7 +40,17 @@ defmodule Hologram.Entity.Validator do
     :values
   ]
 
-  @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid]
+  @valid_attribute_types [
+    :boolean,
+    :date,
+    :datetime,
+    :enum,
+    :float,
+    :integer,
+    :string,
+    :time,
+    :uuid
+  ]
 
   @valid_relationship_opts [:optional]
 
@@ -75,6 +85,8 @@ defmodule Hologram.Entity.Validator do
   end
 
   def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
+
+  def attribute_value_valid?(value, :time, _opts), do: is_struct(value, Time)
 
   # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
   # generates and stores ids in that spelling, and the client tier compares ids
@@ -423,6 +435,8 @@ defmodule Hologram.Entity.Validator do
   defp bounds_ordered?(min, max, :date), do: Date.compare(min, max) != :gt
 
   defp bounds_ordered?(min, max, :datetime), do: DateTime.compare(min, max) != :gt
+
+  defp bounds_ordered?(min, max, :time), do: Time.compare(min, max) != :gt
 
   defp bounds_ordered?(min, max, _type), do: min <= max
 
@@ -790,7 +804,7 @@ defmodule Hologram.Entity.Validator do
       {:ok, _value} when type not in @bounded_attribute_types ->
         raise Hologram.CompileError,
           message:
-            "#{key} option not allowed for attribute #{inspect(name)} in #{inspect(module)} - min and max options apply only to integer, float, date and datetime attributes"
+            "#{key} option not allowed for attribute #{inspect(name)} in #{inspect(module)} - min and max options apply only to integer, float, date, datetime and time attributes"
 
       {:ok, value} ->
         if not bound_value_valid?(value, type) do

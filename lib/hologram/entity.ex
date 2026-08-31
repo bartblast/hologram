@@ -559,6 +559,7 @@ defmodule Hologram.Entity do
   defp attribute_type_asts(:float, _opts), do: [quote(do: float())]
   defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
   defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
+  defp attribute_type_asts(:time, _opts), do: [remote_type_ast(Time)]
   defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(Entity, :id)]
 
   # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
