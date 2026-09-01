@@ -293,6 +293,36 @@ function grants(entityType, row, rule, actorUserId) {
   );
 }
 
+// The key a policy operation is baked under: an atom as its name, a per-role grant lifecycle
+// operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
+// (rendered by Compiler.render_policy/2), and the two must agree.
+//
+// A tuple naming a LIST of roles is refused: the DSL takes one as sugar for a line per role, so
+// no rule is keyed by it - and can? asks about one role at a time.
+function operationKey(operation) {
+  if (Type.isAtom(operation)) {
+    return operation.value;
+  }
+
+  if (Type.isTuple(operation) && operation.data.length === 2) {
+    const [name, role] = operation.data;
+
+    if (Type.isAtom(name) && Type.isAtom(role)) {
+      return `${name.value}:${role.value}`;
+    }
+
+    if (Type.isAtom(name) && Type.isList(role)) {
+      Interpreter.raiseArgumentError(
+        `can? asks about one role - ${Interpreter.inspect(operation)} names several`,
+      );
+    }
+  }
+
+  Interpreter.raiseArgumentError(
+    "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+  );
+}
+
 const Elixir_Hologram_Auth = {
   "can?/3": (userOrId, operation, entity) => {
     const entityType = Interpreter.moduleExName(
@@ -300,7 +330,7 @@ const Elixir_Hologram_Auth = {
     );
 
     const actorUserId = unboxActorUserId(userOrId);
-    const operationName = operation.value;
+    const operationName = operationKey(operation);
 
     // An entry absent from a permission-checking build is a type that declares NO policy - the
     // build ships an entry for every policied type, checked or not, precisely so this read can
