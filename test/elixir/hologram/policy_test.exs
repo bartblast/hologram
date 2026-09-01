@@ -494,7 +494,7 @@ defmodule Hologram.PolicyTest do
                  },
                  %{
                    predicates: [{:resource_type, :==, :test_fixtures_policy_module2}],
-                   to: [{:resource, Policy.Module2, [:member]}],
+                   to: [{:resource, Policy.Module2, [:admin, :member]}],
                    via: nil
                  }
                ]
@@ -525,7 +525,7 @@ defmodule Hologram.PolicyTest do
     end
 
     test "returns empty list when the entity type declares no grant_role rule" do
-      assert grant_role_qualifying_roles(Policy.Module2) == []
+      assert grant_role_qualifying_roles(Policy.Module3) == []
     end
   end
 
@@ -550,26 +550,12 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "read_roles_qualifying_roles/1" do
-    test "returns the expanded own roles of the read_roles rules" do
-      assert read_roles_qualifying_roles(Policy.Module2) == [:member]
+    test "adds the declared readers to the roles qualifying to grant or revoke" do
+      assert read_roles_qualifying_roles(Policy.Module2) == [:admin, :member]
     end
 
     test "defaults to the roles qualifying to grant or revoke" do
       assert read_roles_qualifying_roles(Policy.Module1) == [:owner]
-    end
-
-    test "adds the declared readers to the roles qualifying to grant or revoke" do
-      defmodule DeclaredReadersFixture do
-        use Hologram.Entity
-
-        role :owner
-        role :viewer
-
-        allow :grant_role, to: :owner
-        allow :read_roles, to: :viewer
-      end
-
-      assert read_roles_qualifying_roles(DeclaredReadersFixture) == [:owner, :viewer]
     end
   end
 
@@ -579,7 +565,7 @@ defmodule Hologram.PolicyTest do
     end
 
     test "returns empty list when the entity type declares no revoke_role rule" do
-      assert revoke_role_qualifying_roles(Policy.Module2) == []
+      assert revoke_role_qualifying_roles(Policy.Module3) == []
     end
   end
 

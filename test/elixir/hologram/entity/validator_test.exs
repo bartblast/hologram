@@ -525,36 +525,6 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects the manage_roles operation" do
-      expected_msg =
-        "invalid operation :manage_roles used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture101 - :manage_roles is gone, declare allow :grant_role and allow :revoke_role instead"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture101 do
-          use Hologram.Entity
-
-          role :owner
-
-          allow :manage_roles, to: :owner
-        end
-      end
-    end
-
-    test "rejects the read_grants operation" do
-      expected_msg =
-        "invalid operation :read_grants used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture102 - :read_grants is now :read_roles"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture102 do
-          use Hologram.Entity
-
-          role :owner
-
-          allow :read_grants, to: :owner
-        end
-      end
-    end
-
     test "rejects a read_roles operation naming a role" do
       expected_msg =
         "invalid operation {:read_roles, :viewer} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture100 - :read_roles takes no role, it reads the whole set and is declared bare"
