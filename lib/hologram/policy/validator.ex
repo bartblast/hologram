@@ -72,7 +72,7 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp gate_operation_reason(operation) do
-    "#{inspect(operation)} is checked without loading the row, so it takes own role names only"
+    "#{inspect(operation)} is checked without loading the row, so it takes own role names and global role modules only"
   end
 
   defp declared_role_names(entity_type) do
@@ -391,8 +391,10 @@ defmodule Hologram.Policy.Validator do
   defp validate_gate_line!(operation, to, via, predicates, location) do
     references = List.wrap(to)
 
+    # A global role is held app-wide, so it is checked without the row as well - what the gate
+    # cannot honor is a reference through the row's data: a relationship or a typed reference.
     Enum.each(references, fn reference ->
-      if not is_atom(reference) or Reflection.alias?(reference) do
+      if not is_atom(reference) do
         raise Hologram.CompileError,
           message:
             "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"

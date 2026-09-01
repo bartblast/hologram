@@ -774,23 +774,25 @@ defmodule Hologram.Policy.ValidatorTest do
     end
 
     test "rejects a gate reference the gate cannot honor" do
-      defmodule TakenGlobalGatePolicy do
+      defmodule TakenRelationshipGatePolicy do
         use Hologram.Policy
 
-        allow :grant_role, to: Hologram.Test.Fixtures.Role.Module1
+        allow :grant_role, to: {:parent, :admin}
       end
 
-      defmodule TakenGlobalGateEntity do
+      defmodule TakenRelationshipGateEntity do
         use Hologram.Entity
 
-        policy TakenGlobalGatePolicy
+        relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
+
+        policy TakenRelationshipGatePolicy
       end
 
       expected_msg =
-        "invalid to option Hologram.Test.Fixtures.Role.Module1 for allow :grant_role in Hologram.Policy.ValidatorTest.TakenGlobalGateEntity, taken from Hologram.Policy.ValidatorTest.TakenGlobalGatePolicy - :grant_role is checked without loading the row, so it takes own role names only"
+        "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.TakenRelationshipGateEntity, taken from Hologram.Policy.ValidatorTest.TakenRelationshipGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenGlobalGateEntity])
+        validate_model!([Module14, TakenRelationshipGateEntity])
       end
     end
 
@@ -812,7 +814,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :archived for allow :grant_role in Hologram.Policy.ValidatorTest.TakenPredicateGateEntity, taken from Hologram.Policy.ValidatorTest.TakenPredicateGatePolicy - :grant_role is checked without loading the row, so it takes own role names only"
+        "invalid predicate :archived for allow :grant_role in Hologram.Policy.ValidatorTest.TakenPredicateGateEntity, taken from Hologram.Policy.ValidatorTest.TakenPredicateGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenPredicateGateEntity])
@@ -835,7 +837,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option :parent for allow :read_roles in Hologram.Policy.ValidatorTest.TakenDelegatedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenDelegatedGatePolicy - :read_roles is checked without loading the row, so it takes own role names only"
+        "invalid via option :parent for allow :read_roles in Hologram.Policy.ValidatorTest.TakenDelegatedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenDelegatedGatePolicy - :read_roles is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenDelegatedGateEntity])
@@ -926,7 +928,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "missing to option for allow :grant_role in Hologram.Policy.ValidatorTest.TakenUnqualifiedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnqualifiedGatePolicy - :grant_role is checked without loading the row, so it takes own role names only"
+        "missing to option for allow :grant_role in Hologram.Policy.ValidatorTest.TakenUnqualifiedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnqualifiedGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenUnqualifiedGateEntity])
@@ -976,18 +978,44 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([Module14, OwnGateFixture]) == :ok
     end
 
-    test "rejects a reference the gate cannot honor" do
-      defmodule GlobalGateFixture do
+    test "accepts a global role module as a holder" do
+      defmodule GlobalHolderGateFixture do
         use Hologram.Entity
 
-        allow :grant_role, to: Hologram.Test.Fixtures.Role.Module1
+        role :owner
+
+        allow :grant_role, to: [:owner, Hologram.Test.Fixtures.Role.Module1]
+      end
+
+      assert validate_model!([Module14, GlobalHolderGateFixture]) == :ok
+    end
+
+    test "accepts a global role module as the holder of a per-role line" do
+      defmodule GlobalHolderRoleTupleGateFixture do
+        use Hologram.Entity
+
+        role :viewer
+
+        allow {:grant_role, :viewer}, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      assert validate_model!([Module14, GlobalHolderRoleTupleGateFixture]) == :ok
+    end
+
+    test "rejects a reference the gate cannot honor" do
+      defmodule RelationshipGateFixture do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
+
+        allow :grant_role, to: {:parent, :admin}
       end
 
       expected_msg =
-        "invalid to option Hologram.Test.Fixtures.Role.Module1 for allow :grant_role in Hologram.Policy.ValidatorTest.GlobalGateFixture - :grant_role is checked without loading the row, so it takes own role names only"
+        "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.RelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, GlobalGateFixture])
+        validate_model!([Module14, RelationshipGateFixture])
       end
     end
 
@@ -1003,7 +1031,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :archived for allow :revoke_role in Hologram.Policy.ValidatorTest.PredicateGateFixture - :revoke_role is checked without loading the row, so it takes own role names only"
+        "invalid predicate :archived for allow :revoke_role in Hologram.Policy.ValidatorTest.PredicateGateFixture - :revoke_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, PredicateGateFixture])
@@ -1020,7 +1048,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "missing to option for allow :grant_role in Hologram.Policy.ValidatorTest.UnqualifiedGateFixture - :grant_role is checked without loading the row, so it takes own role names only"
+        "missing to option for allow :grant_role in Hologram.Policy.ValidatorTest.UnqualifiedGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, UnqualifiedGateFixture])
@@ -1037,7 +1065,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option :parent for allow :read_roles in Hologram.Policy.ValidatorTest.DelegatedGateFixture - :read_roles is checked without loading the row, so it takes own role names only"
+        "invalid via option :parent for allow :read_roles in Hologram.Policy.ValidatorTest.DelegatedGateFixture - :read_roles is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, DelegatedGateFixture])
@@ -1075,7 +1103,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :archived for allow {:grant_role, :viewer} in Hologram.Policy.ValidatorTest.PredicateRoleTupleGateFixture - {:grant_role, :viewer} is checked without loading the row, so it takes own role names only"
+        "invalid predicate :archived for allow {:grant_role, :viewer} in Hologram.Policy.ValidatorTest.PredicateRoleTupleGateFixture - {:grant_role, :viewer} is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, PredicateRoleTupleGateFixture])
