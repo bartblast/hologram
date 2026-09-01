@@ -903,6 +903,46 @@ defmodule Hologram.AuthTest do
       assert [%{role: "member"}] = grant_rows(user.id)
     end
 
+    test "grants under a global role the line names" do
+      granter = create_user("user_77@example.com")
+      user = create_user("user_78@example.com")
+
+      resource = create_parent()
+
+      grant_role(granter, Role.Module1)
+
+      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :admin) end) == :ok
+
+      assert [%{role: "admin"}] = grant_rows(user.id)
+    end
+
+    test "grants under a global role extending the one the line names" do
+      granter = create_user("user_79@example.com")
+      user = create_user("user_80@example.com")
+
+      resource = create_parent()
+
+      grant_role(granter, Role.Module2)
+
+      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :member) end) ==
+               :ok
+
+      assert [%{role: "member"}] = grant_rows(user.id)
+    end
+
+    test "grants under a type-wide role" do
+      granter = create_user("user_81@example.com")
+      user = create_user("user_82@example.com")
+
+      resource = create_resource()
+
+      grant_role(granter, Module1, :owner)
+
+      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end) == :ok
+
+      assert [%{role: "editor"}] = grant_rows(user.id)
+    end
+
     test "raises when the acting user holds no role on the resource" do
       granter = create_user("user_18@example.com")
       user = create_user("user_19@example.com")
@@ -1104,6 +1144,23 @@ defmodule Hologram.AuthTest do
       assert grant_rows(other_member.id) == []
     end
 
+    test "removes another user's role under a global role the line names" do
+      admin = create_user("user_83@example.com")
+      member = create_user("user_84@example.com")
+      global_holder = create_user("user_85@example.com")
+      resource = create_parent()
+
+      grant_role(admin, resource, :admin)
+      grant_role(member, resource, :member)
+      grant_role(global_holder, Role.Module1)
+
+      assert Context.with_actor(global_holder.id, fn ->
+               revoke_role(member, resource, :member)
+             end) == :ok
+
+      assert grant_rows(member.id) == []
+    end
+
     test "raises when the acting user holds no role on the resource" do
       member = create_user("user_73@example.com")
       other_user = create_user("user_74@example.com")
@@ -1167,6 +1224,23 @@ defmodule Hologram.AuthTest do
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(owner.id, fn -> revoke_role(owner, resource, :owner) end)
+      end
+    end
+
+    test "refuses to revoke the last own managing role though a global holder remains" do
+      member = create_user("user_86@example.com")
+      global_holder = create_user("user_87@example.com")
+      resource = create_parent()
+
+      grant_role(member, resource, :member)
+      grant_role(global_holder, Role.Module1)
+
+      expected_msg =
+        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module2 " <>
+          "#{inspect(resource.id)} - transfer ownership first"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(member.id, fn -> revoke_role(member, resource, :member) end)
       end
     end
 
