@@ -8,7 +8,10 @@ defmodule Hologram.Policy.Validator do
   # The operations gating the grant lifecycle. Their checks run without the row in hand -
   # grant_role/revoke_role know the entity type and the resource id, not the row's data - so
   # only own role references can be honored, and anything else would be silently ignored.
-  @gate_operations [:manage_roles, :read_grants]
+  @gate_operations [:grant_role, :read_roles, :revoke_role]
+
+  # The two gate operations that may name the role (or roles) they cover
+  @role_operations [:grant_role, :revoke_role]
 
   @doc """
   Validates the policy declarations of the given entity type modules as a whole.
@@ -197,7 +200,7 @@ defmodule Hologram.Policy.Validator do
     validate_to!(entity_type, operation, to, location)
     validate_via!(entity_type, operation, via, location)
     validate_predicates!(entity_type, operation, predicates, location)
-    validate_gate_operation!(operation, to, via, predicates, location)
+    validate_gate_operation!(entity_type, operation, to, via, predicates, location)
   end
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
@@ -349,8 +352,43 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  defp validate_gate_operation!(operation, to, via, predicates, location)
+  defp validate_gate_operation!(
+         entity_type,
+         {name, roles} = operation,
+         to,
+         via,
+         predicates,
+         location
+       )
+       when name in @role_operations do
+    roles
+    |> List.wrap()
+    |> Enum.each(&validate_gate_role!(entity_type, operation, &1, location))
+
+    validate_gate_line!(operation, to, via, predicates, location)
+  end
+
+  defp validate_gate_operation!(_entity_type, operation, to, via, predicates, location)
        when operation in @gate_operations do
+    validate_gate_line!(operation, to, via, predicates, location)
+  end
+
+  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates, _location),
+    do: :ok
+
+  defp validate_gate_role!(entity_type, operation, role_name, location) do
+    declared_names = declared_role_names(entity_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
+    end
+  end
+
+  defp validate_gate_line!(operation, to, via, predicates, location) do
     references = List.wrap(to)
 
     Enum.each(references, fn reference ->
@@ -388,8 +426,6 @@ defmodule Hologram.Policy.Validator do
 
     :ok
   end
-
-  defp validate_gate_operation!(_operation, _to, _via, _predicates, _location), do: :ok
 
   defp validate_global_reference!(operation, role_module, location) do
     if not Reflection.role?(role_module) do
