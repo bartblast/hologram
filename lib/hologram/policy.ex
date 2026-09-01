@@ -375,9 +375,12 @@ defmodule Hologram.Policy do
 
   # A bare grant lifecycle line covers, for each declared role, the holders it names whose own
   # role is that role or extends it - so the rule for a role above what a holder holds names
-  # nobody, and is not emitted. A line naming a list of roles is one rule per role, and one
-  # naming a single role stands as written.
+  # nobody. A global role module it names sits in no own extends chain and outranks every own
+  # role, so it covers every declared role. A role nobody covers gets no rule. A line naming a
+  # list of roles is one rule per role, and one naming a single role stands as written.
   defp expand_role_operation(entity_type, {operation, rule}) when operation in @role_operations do
+    global_references = global_references(rule)
+
     entity_type.__roles__()
     |> Enum.map(fn {role_name, _opts} ->
       holders =
@@ -385,11 +388,11 @@ defmodule Hologram.Policy do
         |> own_reference_names()
         |> Enum.filter(&(&1 in Entity.expand_role(entity_type, role_name)))
 
-      {role_name, holders}
+      {role_name, own_references(holders) ++ global_references}
     end)
-    |> Enum.reject(fn {_role_name, holders} -> holders == [] end)
-    |> Enum.map(fn {role_name, holders} ->
-      {{operation, role_name}, %{rule | to: [{:own, holders}]}}
+    |> Enum.reject(fn {_role_name, references} -> references == [] end)
+    |> Enum.map(fn {role_name, references} ->
+      {{operation, role_name}, %{rule | to: references}}
     end)
   end
 
@@ -446,6 +449,15 @@ defmodule Hologram.Policy do
     end
   end
 
+  defp global_references(%{to: nil}), do: []
+
+  defp global_references(%{to: references}) do
+    Enum.filter(references, fn
+      {:global, _role_modules} -> true
+      _other_reference -> false
+    end)
+  end
+
   defp own_reference_names(%{to: nil}), do: []
 
   defp own_reference_names(%{to: references}) do
@@ -454,6 +466,10 @@ defmodule Hologram.Policy do
       _other_reference -> []
     end)
   end
+
+  defp own_references([]), do: []
+
+  defp own_references(role_names), do: [{:own, role_names}]
 
   defp own_role_names(entity_type, operation) do
     entity_type

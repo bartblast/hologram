@@ -39,6 +39,22 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
+    test "derives a global-grant edge for a per-role gate rule with a global holder" do
+      defmodule GlobalHolderGateFixture do
+        use Hologram.Entity
+
+        role :viewer
+
+        allow :grant_role, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      edges = derive([GlobalHolderGateFixture])
+
+      assert edges[{GlobalHolderGateFixture, {:grant_role, :viewer}}] == [
+               {:global_grants, [Role.Module1, Role.Module2]}
+             ]
+    end
+
     test "derives a global-grant edge for a referenced role module" do
       edges = derive([Policy.Module2])
 

@@ -408,6 +408,32 @@ defmodule Hologram.PolicyTest do
              }
     end
 
+    test "covers every declared role with a global holder" do
+      defmodule GlobalHolderFixture do
+        use Hologram.Entity
+
+        role :owner
+        role :viewer
+
+        allow :grant_role, to: [:owner, Hologram.Test.Fixtures.Role.Module1]
+      end
+
+      global_reference = {:global, [Role.Module1, Role.Module2]}
+
+      assert build(GlobalHolderFixture) == %{
+               :grant_role => [
+                 %{predicates: [], to: [{:own, [:owner]}, global_reference], via: nil},
+                 %{predicates: [], to: [global_reference], via: nil}
+               ],
+               {:grant_role, :owner} => [
+                 %{predicates: [], to: [{:own, [:owner]}, global_reference], via: nil}
+               ],
+               {:grant_role, :viewer} => [
+                 %{predicates: [], to: [global_reference], via: nil}
+               ]
+             }
+    end
+
     test "expands a line naming several roles into one key per role" do
       defmodule RoleListLineFixture do
         use Hologram.Entity
