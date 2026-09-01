@@ -414,6 +414,36 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
     end
 
+    test "accepts a grant lifecycle operation naming a role" do
+      defmodule InlineEntityFixture96 do
+        use Hologram.Entity
+
+        role :editor
+        role :viewer
+
+        allow {:grant_role, :viewer}, to: :editor
+      end
+
+      assert InlineEntityFixture96.__policies__() == [
+               {{:grant_role, :viewer}, :editor, nil, []}
+             ]
+    end
+
+    test "accepts a grant lifecycle operation naming several roles" do
+      defmodule InlineEntityFixture97 do
+        use Hologram.Entity
+
+        role :editor
+        role :viewer
+
+        allow {:revoke_role, [:viewer, :editor]}, to: :editor
+      end
+
+      assert InlineEntityFixture97.__policies__() == [
+               {{:revoke_role, [:viewer, :editor]}, :editor, nil, []}
+             ]
+    end
+
     test "accepts an unknown option as a predicate" do
       defmodule InlineEntityFixture72 do
         use Hologram.Entity
@@ -428,13 +458,43 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects non-atom operation" do
       expected_msg =
-        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - policy operations must be atoms"
+        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture73 do
           use Hologram.Entity
 
           allow "read"
+        end
+      end
+    end
+
+    test "rejects a grant lifecycle operation naming an empty role list" do
+      expected_msg =
+        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture98 do
+          use Hologram.Entity
+
+          role :editor
+
+          allow {:grant_role, []}, to: :editor
+        end
+      end
+    end
+
+    test "rejects a grant lifecycle operation naming a non-atom role" do
+      expected_msg =
+        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture99 do
+          use Hologram.Entity
+
+          role :editor
+
+          allow {:grant_role, "viewer"}, to: :editor
         end
       end
     end
@@ -461,6 +521,21 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           allow :read, via: nil
+        end
+      end
+    end
+
+    test "rejects a read_roles operation naming a role" do
+      expected_msg =
+        "invalid operation {:read_roles, :viewer} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture100 - :read_roles takes no role, it reads the whole set and is declared bare"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture100 do
+          use Hologram.Entity
+
+          role :viewer
+
+          allow {:read_roles, :viewer}, to: :viewer
         end
       end
     end
