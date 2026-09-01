@@ -30,6 +30,39 @@ defmodule HologramClusterTests.MigrationTest do
     end)
   end
 
+  # pg_type, not pg_enum: a type with no values has no labels to find, so asking for
+  # its labels answers [] whether or not it exists.
+  defp enum_type_exists?(name) do
+    statement = """
+    SELECT 1
+    FROM pg_catalog.pg_type t
+    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'hologram_data' AND t.typname = $1 AND t.typtype = 'e'
+    """
+
+    with_migrations_db(fn ->
+      {:ok, %{rows: rows}} = Connection.query(statement, [name])
+
+      rows != []
+    end)
+  end
+
+  defp enum_values(type_name) do
+    statement = """
+    SELECT e.enumlabel
+    FROM pg_catalog.pg_enum e
+    JOIN pg_catalog.pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = $1
+    ORDER BY e.enumsortorder
+    """
+
+    with_migrations_db(fn ->
+      {:ok, %{rows: rows}} = Connection.query(statement, [type_name])
+
+      Enum.map(rows, fn [value] -> value end)
+    end)
+  end
+
   defp index_validity(index) do
     statement = """
     SELECT i."indisvalid"
@@ -201,6 +234,23 @@ defmodule HologramClusterTests.MigrationTest do
                Enum.map(migrations(), & &1.version)
     end
 
+    test "a production node boots on a history that designates a user entity before any role" do
+      peer = start_migration_peer(1)
+
+      assert serving?(peer)
+
+      # The store's role enum takes its values from the app's roles, and this app declares
+      # none - so the model derives a type with NO values and the node boots on one. An
+      # introspection query starting from the labels cannot see such a type at all, which
+      # made every boot after the first refuse itself on drift it had created.
+      assert enum_type_exists?("hologram_role_grant_role_$enum")
+
+      # The premise, asserted rather than assumed: declaring a role anywhere in this app
+      # puts a value on the type and fails this line, instead of leaving the test passing
+      # with nothing left to prove. Whoever adds the first role moves this case.
+      assert enum_values("hologram_role_grant_role_$enum") == []
+    end
+
     test "a production node refuses a database managed by schema reconciliation" do
       # The database dev's mechanism would leave behind: converged from the model and
       # carrying a reconciliation marker, with no migration history at all.
@@ -301,7 +351,7 @@ defmodule HologramClusterTests.MigrationTest do
       # Identical rows, timestamps included: the nodes found the chain applied and
       # recorded nothing of their own.
       assert applied_version_rows() == applied_by_release_step
-      assert length(applied_by_release_step) == 4
+      assert length(applied_by_release_step) == 5
     end
   end
 end

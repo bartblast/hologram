@@ -495,6 +495,22 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
     end
 
+    test "converges a role type with no values and finds it converged on the next run" do
+      context =
+        Reflection.list_entities()
+        |> reconcile_context_with_grant_store()
+        |> update_mapping_column(RoleGrant, "role", &%{&1 | enum_values: []})
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      result = reconcile(context)
+
+      assert result.ops == []
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
     test "converges additive model changes" do
       reconcile(reconcile_context([Module1]))
       context = reconcile_context([Module1, Module4])

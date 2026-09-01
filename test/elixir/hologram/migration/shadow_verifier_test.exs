@@ -80,6 +80,18 @@ defmodule Hologram.Migration.ShadowVerifierTest do
       assert verify!(@migrations, model) == :ok
     end
 
+    test "passes a chain that designates a user entity before any role" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.User, line: 3},
+        %{op: :designate_user_entity, entity: MyApp.User, line: 4}
+      ]
+
+      migrations = [%{version: "20260813091522", path: "20260813091522.exs", ops: ops}]
+      model = Model.fold(Model.empty(), ops)
+
+      assert verify!(migrations, model) == :ok
+    end
+
     test "drops the scratch database after a pass" do
       model = Model.fold(Model.empty(), @ops)
       verify!(@migrations, model)
