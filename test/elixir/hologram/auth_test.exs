@@ -426,6 +426,22 @@ defmodule Hologram.AuthTest do
       assert can?(admin, :read, grant)
     end
 
+    test "shows another user's grants to a holder of a global role that may grant on the resource" do
+      global_holder = create_user("user_88@example.com")
+      other_user = create_user("user_89@example.com")
+      resource = create_parent()
+
+      grant_role(global_holder, Role.Module1)
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        resource_id: resource.id
+      }
+
+      assert can?(global_holder, :read, grant)
+    end
+
     test "defaults to the roles that may grant or revoke when read_roles is undeclared" do
       owner = create_user("user_55@example.com")
       editor = create_user("user_56@example.com")

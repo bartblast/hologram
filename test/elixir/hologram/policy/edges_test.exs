@@ -71,6 +71,7 @@ defmodule Hologram.Policy.EdgesTest do
       assert derive([RoleGrant]) == %{
                {RoleGrant, :read} => [
                  {:attributes, [:resource_type, :user_id]},
+                 {:global_grants, [Role.Module1, Role.Module2]},
                  {:resource_grants, Policy.Module1, [:owner]},
                  {:resource_grants, Policy.Module2, [:admin, :member]}
                ]

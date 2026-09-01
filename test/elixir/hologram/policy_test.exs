@@ -8,6 +8,7 @@ defmodule Hologram.PolicyTest do
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
       operation_key: 1,
+      read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2
@@ -520,7 +521,10 @@ defmodule Hologram.PolicyTest do
                  },
                  %{
                    predicates: [{:resource_type, :==, :test_fixtures_policy_module2}],
-                   to: [{:resource, Policy.Module2, [:admin, :member]}],
+                   to: [
+                     {:resource, Policy.Module2, [:admin, :member]},
+                     {:global, [Role.Module1, Role.Module2]}
+                   ],
                    via: nil
                  }
                ]
@@ -572,6 +576,16 @@ defmodule Hologram.PolicyTest do
 
     test "joins a per-role operation with a colon" do
       assert operation_key({:grant_role, :viewer}) == "grant_role:viewer"
+    end
+  end
+
+  describe "read_roles_qualifying_role_modules/1" do
+    test "returns the expanded role modules holding a grant lifecycle gate" do
+      assert read_roles_qualifying_role_modules(Policy.Module2) == [Role.Module1, Role.Module2]
+    end
+
+    test "returns empty list when no gate names a role module" do
+      assert read_roles_qualifying_role_modules(Policy.Module1) == []
     end
   end
 

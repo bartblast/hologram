@@ -63,6 +63,9 @@ defmodule Hologram.Policy do
 
   @model_facts_key {__MODULE__, :model_facts}
 
+  # The three operations gating the grant lifecycle
+  @gate_operations [:grant_role, :read_roles, :revoke_role]
+
   # The two gate operations whose rules are compiled per role
   @role_operations [:grant_role, :revoke_role]
 
@@ -294,6 +297,21 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
+  @doc """
+  Returns the global role modules whose holders see the grants others hold on the given entity type, sorted.
+
+  These are the extends-expanded role modules named as holders by its allow :read_roles rules and
+  by its allow :grant_role and :revoke_role rules - the same rule as for own roles: whoever can
+  change the list can see it.
+  """
+  @spec read_roles_qualifying_role_modules(module) :: list(module)
+  def read_roles_qualifying_role_modules(entity_type) do
+    @gate_operations
+    |> Enum.flat_map(&global_role_modules(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
@@ -449,6 +467,15 @@ defmodule Hologram.Policy do
     end
   end
 
+  defp global_reference_modules(%{to: nil}), do: []
+
+  defp global_reference_modules(%{to: references}) do
+    Enum.flat_map(references, fn
+      {:global, role_modules} -> role_modules
+      _other_reference -> []
+    end)
+  end
+
   defp global_references(%{to: nil}), do: []
 
   defp global_references(%{to: references}) do
@@ -456,6 +483,15 @@ defmodule Hologram.Policy do
       {:global, _role_modules} -> true
       _other_reference -> false
     end)
+  end
+
+  defp global_role_modules(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Map.get(operation, [])
+    |> Enum.flat_map(&global_reference_modules/1)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp own_reference_names(%{to: nil}), do: []
@@ -528,18 +564,27 @@ defmodule Hologram.Policy do
     resource_rules =
       model_facts().entity_types
       |> Enum.reject(&(&1 == RoleGrant))
-      |> Enum.map(&{&1, read_roles_qualifying_roles(&1)})
-      |> Enum.reject(fn {_entity_type, role_names} -> role_names == [] end)
-      |> Enum.sort_by(fn {entity_type, _role_names} -> RoleGrant.resource_type(entity_type) end)
+      |> Enum.map(&{&1, read_roles_qualifying_roles(&1), read_roles_qualifying_role_modules(&1)})
+      |> Enum.reject(fn {_entity_type, role_names, role_modules} ->
+        role_names == [] and role_modules == []
+      end)
+      |> Enum.sort_by(fn {entity_type, _role_names, _role_modules} ->
+        RoleGrant.resource_type(entity_type)
+      end)
       |> Enum.map(&role_grant_resource_rule/1)
 
     [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | resource_rules]
   end
 
-  defp role_grant_resource_rule({entity_type, role_names}) do
+  # Own readers hold their role on the very resource the grant row names, global readers hold
+  # theirs app-wide - one rule, since either reference satisfies it.
+  defp role_grant_resource_rule({entity_type, role_names, role_modules}) do
+    resource_reference = if role_names == [], do: [], else: [{:resource, entity_type, role_names}]
+    global_reference = build_global_reference(role_modules)
+
     %{
       predicates: [{:resource_type, :==, RoleGrant.resource_type(entity_type)}],
-      to: [{:resource, entity_type, role_names}],
+      to: resource_reference ++ global_reference,
       via: nil
     }
   end
