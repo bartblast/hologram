@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.PoliciesTest do
   use HologramFeatureTests.TestCase, async: false
 
+  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
@@ -22,6 +23,12 @@ defmodule HologramFeatureTests.PoliciesTest do
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
     :ok
+  end
+
+  defp session_user do
+    User
+    |> DB.read()
+    |> Enum.find(&(&1.email == "session@example.com"))
   end
 
   feature "renders only unconditionally readable rows for an anonymous session", %{
@@ -91,6 +98,27 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#result"), "logged_in")
     |> click(button("Grant editor"))
     |> assert_text(css("#result"), "grant_editor_true")
+  end
+
+  # The document is created from the test process so nobody is its creator, and the session
+  # user is then made its editor - a role that may not hand out the one above it.
+  feature "refuses a role above the acting user's own", %{session: session} do
+    session =
+      session
+      |> visit(PoliciesPage)
+      |> click(button("Log in"))
+      |> assert_text(css("#result"), "logged_in")
+
+    document =
+      %{title: "escalation_document"}
+      |> Document.new()
+      |> DB.create!()
+
+    Auth.grant_role(session_user(), document, :editor)
+
+    session
+    |> click(button("Grant owner as editor"))
+    |> assert_text(css("#result"), "grant_owner_as_editor_refused")
   end
 
   feature "reads every row on the server's authority", %{session: session} do
