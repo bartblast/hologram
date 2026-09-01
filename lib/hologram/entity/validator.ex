@@ -3,6 +3,7 @@ defmodule Hologram.Entity.Validator do
 
   alias Hologram.Commons.Types, as: T
   alias Hologram.DB.Codec
+  alias Hologram.Entity
   alias Hologram.Reflection
 
   @bounded_attribute_types [:date, :datetime, :float, :integer, :time]
@@ -17,6 +18,9 @@ defmodule Hologram.Entity.Validator do
   @policy_option_names [:to, :via]
 
   @reserved_names [:created_at, :id, :updated_at]
+
+  # The two operations that may name the role they cover
+  @role_operations [:grant_role, :revoke_role]
 
   # The most bytes a unique string may hold. Its unique index is a btree over the raw column, and
   # PostgreSQL caps a btree entry at 2704 bytes on its default 8 KB page - minus the 8-byte item
@@ -147,14 +151,9 @@ defmodule Hologram.Entity.Validator do
   Returns :ok, or raises Hologram.CompileError on the first violated rule (operation, spec shape).
   Predicates and the to and via options are validated separately, at the whole-model point - they reference attributes, roles and relationships of entity types that may not be compiled yet.
   """
-  @spec validate_allow!(module, atom, T.opts()) :: :ok
+  @spec validate_allow!(module, Entity.operation(), T.opts()) :: :ok
   def validate_allow!(module, operation, spec) do
-    if not is_atom(operation) do
-      raise Hologram.CompileError,
-        message:
-          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - policy operations must be atoms"
-    end
-
+    validate_operation_shape!(module, operation)
     validate_opts_shape!(module, "allow", operation, spec)
 
     Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
@@ -1125,6 +1124,26 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # The shape is structural, so it is checked where it is written - whether the named roles are
+  # declared is checked at the whole-model point, since roles are compiled after the policy lines.
+  defp validate_operation_shape!(_module, operation) when is_atom(operation), do: :ok
+
+  defp validate_operation_shape!(module, {:read_roles, _roles} = operation) do
+    raise Hologram.CompileError,
+      message:
+        "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - :read_roles takes no role, it reads the whole set and is declared bare"
+  end
+
+  defp validate_operation_shape!(module, operation) do
+    if not role_operation_valid?(operation) do
+      raise Hologram.CompileError,
+        message:
+          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+    end
+
+    :ok
+  end
+
   defp validate_opts_shape!(module, kind, name, opts) do
     if not Keyword.keyword?(opts) do
       raise Hologram.CompileError,
@@ -1173,6 +1192,15 @@ defmodule Hologram.Entity.Validator do
         :ok
     end
   end
+
+  defp role_operation_valid?({name, role}) when name in @role_operations and is_atom(role),
+    do: true
+
+  defp role_operation_valid?({name, [_first_role | _later_roles] = roles})
+       when name in @role_operations,
+       do: Enum.all?(roles, &is_atom/1)
+
+  defp role_operation_valid?(_operation), do: false
 
   defp to_reference_valid?(value) when is_atom(value), do: true
 

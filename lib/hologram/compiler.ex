@@ -1769,11 +1769,14 @@ defmodule Hologram.Compiler do
     render_json_object([])
   end
 
+  # A per-role grant lifecycle operation is keyed the way the client spells it when asking -
+  # Policy.operation_key/1 here and operationKey in assets/js/elixir/hologram/auth.mjs are a
+  # hand-ported pair, so the two must agree.
   defp render_policy(entity_type, _permission_checking?) do
     entity_type
     |> Policy.build()
     |> Enum.map(fn {operation, rules} ->
-      {Atom.to_string(operation), render_policy_rules(entity_type, rules)}
+      {Policy.operation_key(operation), render_policy_rules(entity_type, rules)}
     end)
     |> render_json_object()
   end

@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.PoliciesTest do
   use HologramFeatureTests.TestCase, async: false
 
+  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
@@ -10,6 +11,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
+  alias HologramFeatureTests.Roles.Admin
 
   # All four tables truncate in one statement: the role grant table's foreign keys to the
   # user table make Postgres reject truncating the referenced table alone.
@@ -22,6 +24,12 @@ defmodule HologramFeatureTests.PoliciesTest do
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
     :ok
+  end
+
+  defp session_user do
+    User
+    |> DB.read()
+    |> Enum.find(&(&1.email == "session@example.com"))
   end
 
   feature "renders only unconditionally readable rows for an anonymous session", %{
@@ -91,6 +99,47 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#result"), "logged_in")
     |> click(button("Grant editor"))
     |> assert_text(css("#result"), "grant_editor_true")
+  end
+
+  # The document is created from the test process so nobody is its creator, and the session
+  # user is then made its editor - a role that may not hand out the one above it.
+  feature "refuses a role above the acting user's own", %{session: session} do
+    session =
+      session
+      |> visit(PoliciesPage)
+      |> click(button("Log in"))
+      |> assert_text(css("#result"), "logged_in")
+
+    document =
+      %{title: "escalation_document"}
+      |> Document.new()
+      |> DB.create!()
+
+    Auth.grant_role(session_user(), document, :editor)
+
+    session
+    |> click(button("Grant owner as editor"))
+    |> assert_text(css("#result"), "grant_owner_as_editor_refused")
+  end
+
+  # The global role is granted from the test process (trusted), and the document is created
+  # there too, so the session user holds nothing on it - what qualifies them is app-wide.
+  feature "grants as a global admin on a document it holds no role on", %{session: session} do
+    session =
+      session
+      |> visit(PoliciesPage)
+      |> click(button("Log in"))
+      |> assert_text(css("#result"), "logged_in")
+
+    %{title: "admin_document"}
+    |> Document.new()
+    |> DB.create!()
+
+    Auth.grant_role(session_user(), Admin)
+
+    session
+    |> click(button("Admin grants editor"))
+    |> assert_text(css("#result"), "admin_grants_editor_granted_1")
   end
 
   feature "reads every row on the server's authority", %{session: session} do

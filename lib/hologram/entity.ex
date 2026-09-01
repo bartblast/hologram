@@ -20,6 +20,11 @@ defmodule Hologram.Entity do
   @type id :: String.t()
 
   @typedoc """
+  A policy operation - an atom, or a grant lifecycle operation naming the role (or roles) it covers.
+  """
+  @type operation :: atom | {atom, atom | list(atom)}
+
+  @typedoc """
   An entity struct - a struct of a module that uses Hologram.Entity.
   The entity types cannot be named here, since the framework is compiled before any of them exist.
   """
@@ -117,7 +122,7 @@ defmodule Hologram.Entity do
       Returns the list of policy definitions for the compiled entity type, in declaration order.
       Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
       """
-      @spec __policies__() :: list({atom, term, atom | nil, keyword})
+      @spec __policies__() :: list({Hologram.Entity.operation(), term, atom | nil, keyword})
       def __policies__, do: Enum.reverse(@__policies__)
 
       @doc false
@@ -153,7 +158,7 @@ defmodule Hologram.Entity do
   A policy line grants the given operation when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the operation unconditionally.
   A `user_id()` call in a predicate value position stands for the acting user's entity id and is stored as the actor sentinel.
   """
-  @spec allow(atom, T.opts()) :: Macro.t()
+  @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
     spec = replace_actor_leaves!(spec, __CALLER__.module)
 
@@ -255,7 +260,7 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec __put_policy__(module, atom, T.opts(), module) :: :ok
+  @spec __put_policy__(module, operation, T.opts(), module) :: :ok
   def __put_policy__(module, operation, spec, source) do
     Validator.validate_allow!(module, operation, spec)
 

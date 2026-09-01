@@ -24,6 +24,6 @@ defmodule HologramFeatureTests.Components.Policies.Component2 do
   end
 
   defp managed(user, documents) do
-    Enum.filter(documents, &can?(user, :manage_roles, &1))
+    Enum.filter(documents, &can?(user, :grant_role, &1))
   end
 end

@@ -533,8 +533,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                {:value, ["owner"]},
                {:value, "test_fixtures_policy_module1"},
                {:value, "test_fixtures_policy_module2"},
-               {:value, ["member"]},
-               {:value, "test_fixtures_policy_module2"}
+               {:value, ["admin", "member"]},
+               {:value, "test_fixtures_policy_module2"},
+               {:value,
+                ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]}
              ]
 
       assert String.contains?(sql, ~s|WHERE (("user_id" = $1)|)

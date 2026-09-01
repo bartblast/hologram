@@ -38,7 +38,7 @@ defmodule Hologram.Policy.Edges do
   `Hologram.Policy.Validator.validate_model!/1` before anything reads the model - the same
   guarantee SQL composition relies on to keep the table names of a chain distinct.
   """
-  @spec derive(list(module)) :: %{{module, atom} => list(tuple)}
+  @spec derive(list(module)) :: %{{module, Entity.operation()} => list(tuple)}
   def derive(entity_types) do
     for entity_type <- entity_types,
         {operation, rules} <- Policy.build(entity_type),

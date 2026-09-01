@@ -1,6 +1,10 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
+import {
+  assert,
+  assertBoxedError,
+  defineRuntimeGlobals,
+} from "../../support/helpers.mjs";
 
 import Elixir_Hologram_Auth from "../../../../assets/js/elixir/hologram/auth.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
@@ -166,6 +170,32 @@ describe("Elixir_Hologram_Auth", () => {
 
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("delete"), document({public: true})),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a per-role operation keyed by a tuple", () => {
+      defineModel({"grant_role:viewer": [rule({to: [["own", ["editor"]]]})]});
+
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({
+          resource_id: DOC,
+          resource_type: "documents",
+          role: "editor",
+        }),
+      );
+
+      const operation = (role) =>
+        Type.tuple([Type.atom("grant_role"), Type.atom(role)]);
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), operation("viewer"), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), operation("editor"), document()),
         Type.boolean(false),
       );
     });
@@ -832,6 +862,54 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), unmodelled),
         Type.boolean(false),
+      );
+    });
+  });
+
+  // Cases this side alone has - the reference takes the operation as a term and keys the policy
+  // map by it, while this side has to spell the key the build baked it under.
+  describe("the operation's key", () => {
+    it("asks by the bare key for the bare grant lifecycle operation", () => {
+      defineModel({grant_role: [rule({to: [["own", ["editor"]]]})]});
+
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({
+          resource_id: DOC,
+          resource_type: "documents",
+          role: "editor",
+        }),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("grant_role"), document()),
+        Type.boolean(true),
+      );
+    });
+
+    it("raises on a tuple naming several roles", () => {
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.list([Type.atom("editor"), Type.atom("viewer")]),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "ArgumentError",
+        "can? asks about one role - {:grant_role, [:editor, :viewer]} names several",
+      );
+    });
+
+    it("raises on an operation that is neither an atom nor a role tuple", () => {
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.bitstring("viewer"),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "ArgumentError",
+        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
       );
     });
   });

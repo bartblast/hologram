@@ -17,7 +17,9 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:parent_id]},
                  {:relationship_grants, [:parent], Policy.Module2, [:admin]}
                ],
-               {Policy.Module1, :manage_roles} => [{:own_grants, [:owner]}],
+               {Policy.Module1, :grant_role} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:grant_role, :editor}} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:grant_role, :owner}} => [{:own_grants, [:owner]}],
                {Policy.Module1, :publish} => [
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module2, [:public]}
@@ -27,11 +29,30 @@ defmodule Hologram.Policy.EdgesTest do
                  {:own_grants, [:viewer]},
                  {:type_grants, Policy.Module2, [:admin]}
                ],
+               {Policy.Module1, :revoke_role} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:revoke_role, :editor}} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:revoke_role, :owner}} => [{:own_grants, [:owner]}],
                {Policy.Module1, :update} => [
                  {:attributes, [:priority]},
                  {:own_grants, [:editor, :owner]}
                ]
              }
+    end
+
+    test "derives a global-grant edge for a per-role gate rule with a global holder" do
+      defmodule GlobalHolderGateFixture do
+        use Hologram.Entity
+
+        role :viewer
+
+        allow :grant_role, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      edges = derive([GlobalHolderGateFixture])
+
+      assert edges[{GlobalHolderGateFixture, {:grant_role, :viewer}}] == [
+               {:global_grants, [Role.Module1, Role.Module2]}
+             ]
     end
 
     test "derives a global-grant edge for a referenced role module" do
@@ -50,8 +71,9 @@ defmodule Hologram.Policy.EdgesTest do
       assert derive([RoleGrant]) == %{
                {RoleGrant, :read} => [
                  {:attributes, [:resource_type, :user_id]},
+                 {:global_grants, [Role.Module1, Role.Module2]},
                  {:resource_grants, Policy.Module1, [:owner]},
-                 {:resource_grants, Policy.Module2, [:member]}
+                 {:resource_grants, Policy.Module2, [:admin, :member]}
                ]
              }
     end

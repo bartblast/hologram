@@ -7,6 +7,7 @@ defmodule Hologram.Policy.Evaluator do
   # this module deliberately knows nothing about.
 
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
 
   @ordering_operators [:<, :<=, :>, :>=]
 
@@ -15,7 +16,14 @@ defmodule Hologram.Policy.Evaluator do
 
   An operation with no rules grants nothing, which is what makes the default deny.
   """
-  @spec grants?(%{atom => list(map)}, atom, struct, String.t() | nil, fun) :: boolean
+  @spec grants?(
+          %{Entity.operation() => list(map)},
+          Entity.operation(),
+          struct,
+          String.t() | nil,
+          fun
+        ) ::
+          boolean
   def grants?(policy, operation, entity, actor_user_id, checker) do
     policy
     |> Map.get(operation, [])

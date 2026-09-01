@@ -5,8 +5,13 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
-      manage_roles_qualifying_roles: 1,
-      read_grants_roles: 1
+      grant_role_qualifying_roles: 1,
+      grant_role_qualifying_roles: 2,
+      operation_key: 1,
+      read_roles_qualifying_role_modules: 1,
+      read_roles_qualifying_roles: 1,
+      revoke_role_qualifying_roles: 1,
+      revoke_role_qualifying_roles: 2
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -193,7 +198,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises at the policy module's own compile for an invalid declaration" do
       expected_msg =
-        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - policy operations must be atoms"
+        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InvalidAllowPolicyFixture do
@@ -345,20 +350,20 @@ defmodule Hologram.PolicyTest do
     end
 
     test "builds rules per operation, keeping declaration order" do
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+
       assert build(Policy.Module1) == %{
-               archive: [
+               :archive => [
                  %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
                ],
-               delete: [
+               :delete => [
                  %{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}
                ],
-               manage_roles: [
-                 %{predicates: [], to: [{:own, [:owner]}], via: nil}
-               ],
-               publish: [
+               :grant_role => [owner_rule, owner_rule],
+               :publish => [
                  %{predicates: [], to: nil, via: :parent}
                ],
-               read: [
+               :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},
                  %{
                    predicates: [],
@@ -366,9 +371,104 @@ defmodule Hologram.PolicyTest do
                    via: nil
                  }
                ],
-               update: [
+               :revoke_role => [owner_rule, owner_rule],
+               :update => [
                  %{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor, :owner]}], via: nil}
+               ],
+               {:grant_role, :editor} => [owner_rule],
+               {:grant_role, :owner} => [owner_rule],
+               {:revoke_role, :editor} => [owner_rule],
+               {:revoke_role, :owner} => [owner_rule]
+             }
+    end
+  end
+
+  describe "build/1 for the grant lifecycle operations" do
+    test "derives which roles a bare line covers from what its holders hold and extend" do
+      defmodule BareGrantLineFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner, extends: :editor
+        role :viewer
+
+        allow :grant_role, to: :editor
+      end
+
+      assert build(BareGrantLineFixture) == %{
+               :grant_role => [
+                 %{predicates: [], to: [{:own, [:editor, :owner]}], via: nil},
+                 %{predicates: [], to: [{:own, [:owner]}], via: nil}
+               ],
+               {:grant_role, :editor} => [
+                 %{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}
+               ],
+               {:grant_role, :owner} => [
+                 %{predicates: [], to: [{:own, [:owner]}], via: nil}
                ]
+             }
+    end
+
+    test "covers every declared role with a global holder" do
+      defmodule GlobalHolderFixture do
+        use Hologram.Entity
+
+        role :owner
+        role :viewer
+
+        allow :grant_role, to: [:owner, Hologram.Test.Fixtures.Role.Module1]
+      end
+
+      global_reference = {:global, [Role.Module1, Role.Module2]}
+
+      assert build(GlobalHolderFixture) == %{
+               :grant_role => [
+                 %{predicates: [], to: [{:own, [:owner]}, global_reference], via: nil},
+                 %{predicates: [], to: [global_reference], via: nil}
+               ],
+               {:grant_role, :owner} => [
+                 %{predicates: [], to: [{:own, [:owner]}, global_reference], via: nil}
+               ],
+               {:grant_role, :viewer} => [
+                 %{predicates: [], to: [global_reference], via: nil}
+               ]
+             }
+    end
+
+    test "expands a line naming several roles into one key per role" do
+      defmodule RoleListLineFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :viewer
+
+        allow {:revoke_role, [:viewer, :editor]}, to: :editor
+      end
+
+      editor_rule = %{predicates: [], to: [{:own, [:editor]}], via: nil}
+
+      assert build(RoleListLineFixture) == %{
+               :revoke_role => [editor_rule, editor_rule],
+               {:revoke_role, :editor} => [editor_rule],
+               {:revoke_role, :viewer} => [editor_rule]
+             }
+    end
+
+    test "keeps a line naming one role as written, under the bare key as well" do
+      defmodule SingleRoleLineFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :viewer
+
+        allow {:grant_role, :viewer}, to: :editor
+      end
+
+      viewer_rule = %{predicates: [], to: [{:own, [:editor]}], via: nil}
+
+      assert build(SingleRoleLineFixture) == %{
+               :grant_role => [viewer_rule],
+               {:grant_role, :viewer} => [viewer_rule]
              }
     end
   end
@@ -421,7 +521,10 @@ defmodule Hologram.PolicyTest do
                  },
                  %{
                    predicates: [{:resource_type, :==, :test_fixtures_policy_module2}],
-                   to: [{:resource, Policy.Module2, [:member]}],
+                   to: [
+                     {:resource, Policy.Module2, [:admin, :member]},
+                     {:global, [Role.Module1, Role.Module2]}
+                   ],
                    via: nil
                  }
                ]
@@ -446,23 +549,73 @@ defmodule Hologram.PolicyTest do
     end
   end
 
-  describe "manage_roles_qualifying_roles/1" do
-    test "returns the expanded own roles of the manage_roles rules" do
-      assert manage_roles_qualifying_roles(Policy.Module1) == [:owner]
+  describe "grant_role_qualifying_roles/1" do
+    test "returns the expanded own roles across the grant_role rules" do
+      assert grant_role_qualifying_roles(Policy.Module1) == [:owner]
     end
 
-    test "returns empty list when the entity type declares no manage_roles rule" do
-      assert manage_roles_qualifying_roles(Policy.Module2) == []
+    test "returns empty list when the entity type declares no grant_role rule" do
+      assert grant_role_qualifying_roles(Policy.Module3) == []
     end
   end
 
-  describe "read_grants_roles/1" do
-    test "returns the expanded own roles of the read_grants rules" do
-      assert read_grants_roles(Policy.Module2) == [:member]
+  describe "grant_role_qualifying_roles/2" do
+    test "returns the expanded own roles of the rules covering the given role" do
+      assert grant_role_qualifying_roles(Policy.Module1, :editor) == [:owner]
     end
 
-    test "defaults to the roles qualifying to manage grants" do
-      assert read_grants_roles(Policy.Module1) == [:owner]
+    test "returns empty list when no rule covers the given role" do
+      assert grant_role_qualifying_roles(Policy.Module1, :viewer) == []
+    end
+  end
+
+  describe "operation_key/1" do
+    test "spells an atom operation as its name" do
+      assert operation_key(:read) == "read"
+    end
+
+    test "joins a per-role operation with a colon" do
+      assert operation_key({:grant_role, :viewer}) == "grant_role:viewer"
+    end
+  end
+
+  describe "read_roles_qualifying_role_modules/1" do
+    test "returns the expanded role modules holding a grant lifecycle gate" do
+      assert read_roles_qualifying_role_modules(Policy.Module2) == [Role.Module1, Role.Module2]
+    end
+
+    test "returns empty list when no gate names a role module" do
+      assert read_roles_qualifying_role_modules(Policy.Module1) == []
+    end
+  end
+
+  describe "read_roles_qualifying_roles/1" do
+    test "adds the declared readers to the roles qualifying to grant or revoke" do
+      assert read_roles_qualifying_roles(Policy.Module2) == [:admin, :member]
+    end
+
+    test "defaults to the roles qualifying to grant or revoke" do
+      assert read_roles_qualifying_roles(Policy.Module1) == [:owner]
+    end
+  end
+
+  describe "revoke_role_qualifying_roles/1" do
+    test "returns the expanded own roles across the revoke_role rules" do
+      assert revoke_role_qualifying_roles(Policy.Module1) == [:owner]
+    end
+
+    test "returns empty list when the entity type declares no revoke_role rule" do
+      assert revoke_role_qualifying_roles(Policy.Module3) == []
+    end
+  end
+
+  describe "revoke_role_qualifying_roles/2" do
+    test "returns the expanded own roles of the rules covering the given role" do
+      assert revoke_role_qualifying_roles(Policy.Module1, :editor) == [:owner]
+    end
+
+    test "returns empty list when no rule covers the given role" do
+      assert revoke_role_qualifying_roles(Policy.Module1, :viewer) == []
     end
   end
 end

@@ -1327,6 +1327,28 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"publish":[{"predicates":[],"to":null,"via":"parent"}]/)
     end
 
+    # A member and its trailing comma, never a member plus whichever key follows it.
+    test "bakes a grant lifecycle rule under its per-role key beside the bare one", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      owner_rule = ~s/{"predicates":[],"to":[["own",["owner"]]],"via":null}/
+
+      assert String.contains?(js, ~s/"grant_role":[#{owner_rule},#{owner_rule}],/)
+      assert String.contains?(js, ~s/"grant_role:editor":[#{owner_rule}],/)
+      assert String.contains?(js, ~s/"grant_role:owner":[#{owner_rule}],/)
+    end
+
     # The acting user is named rather than carried: the client binds its own id at evaluation,
     # the way the query kernel binds an actor leaf.
     test "names the acting user in a rule that references them", %{
