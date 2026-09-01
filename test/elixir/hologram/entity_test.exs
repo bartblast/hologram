@@ -766,7 +766,7 @@ defmodule Hologram.EntityTest do
              }
     end
 
-    test "types the framework's own names for an entity struct and an entity id" do
+    test "types the framework's own names for an entity struct, an entity id and a policy operation" do
       {:ok, types} = Code.Typespec.fetch_types(Hologram.Entity)
 
       sources =
@@ -774,7 +774,11 @@ defmodule Hologram.EntityTest do
           Macro.to_string(Code.Typespec.type_to_quoted(type))
         end)
 
-      assert Enum.sort(sources) == ["id() :: String.t()", "t() :: struct()"]
+      assert Enum.sort(sources) == [
+               "id() :: String.t()",
+               "operation() :: atom() | {atom(), atom() | [atom()]}",
+               "t() :: struct()"
+             ]
     end
 
     test "types the metadata and system attribute fields on an entity type declaring nothing" do

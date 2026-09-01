@@ -533,7 +533,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                {:value, ["owner"]},
                {:value, "test_fixtures_policy_module1"},
                {:value, "test_fixtures_policy_module2"},
-               {:value, ["member"]},
+               {:value, ["admin", "member"]},
                {:value, "test_fixtures_policy_module2"}
              ]
 
