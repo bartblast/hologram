@@ -247,7 +247,7 @@ defmodule Hologram.Auth do
         :ok
 
       actor_user_id ->
-        role_names = Policy.manage_roles_qualifying_roles(entity_type)
+        role_names = Policy.grant_role_qualifying_roles(entity_type)
 
         if not grant_exists?(
              actor_user_id,
@@ -275,7 +275,7 @@ defmodule Hologram.Auth do
         :ok
 
       actor_user_id ->
-        role_names = Policy.manage_roles_qualifying_roles(entity_type)
+        role_names = Policy.grant_role_qualifying_roles(entity_type)
 
         if actor_user_id != user_id and
              not grant_exists?(

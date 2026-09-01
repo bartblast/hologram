@@ -1773,7 +1773,7 @@ defmodule Hologram.Compiler do
     entity_type
     |> Policy.build()
     |> Enum.map(fn {operation, rules} ->
-      {Atom.to_string(operation), render_policy_rules(entity_type, rules)}
+      {Policy.operation_key(operation), render_policy_rules(entity_type, rules)}
     end)
     |> render_json_object()
   end

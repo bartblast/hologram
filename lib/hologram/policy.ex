@@ -25,7 +25,8 @@ defmodule Hologram.Policy do
         policy MyApp.Policies.AdminManaged
 
         role :admin
-        allow :manage_roles, to: :admin
+        allow :grant_role, to: :admin
+        allow :revoke_role, to: :admin
       end
 
   The canonical order inside an entity type is attributes, relationships, `policy` lines, roles,
@@ -61,6 +62,9 @@ defmodule Hologram.Policy do
   alias Hologram.Reflection
 
   @model_facts_key {__MODULE__, :model_facts}
+
+  # The two gate operations whose rules are compiled per role
+  @role_operations [:grant_role, :revoke_role]
 
   defmacro __using__(_opts) do
     quote do
@@ -197,9 +201,15 @@ defmodule Hologram.Policy do
   the resource a grant row names.
   A rule grants its operation when its predicates hold, one of its grant references is held, and its
   delegation grants the same operation - and a policy grants its operation when any of its rules does.
+  The grant lifecycle operations grant_role and revoke_role are compiled per role: a line naming a
+  role, or a list of them, yields one {operation, role} key per role, and a bare line yields one per
+  declared role its holders may cover - a holder's own role and every role it extends, so nobody is
+  qualified above what they hold. The bare key is then the union of the per-role rules, answering
+  whether the acting user may grant (or revoke) some role at all.
   """
   @spec build(module) :: %{
-          atom => list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
+          Entity.operation() =>
+            list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
         }
   def build(RoleGrant), do: %{read: role_grant_read_rules()}
 
@@ -214,7 +224,9 @@ defmodule Hologram.Policy do
 
       {operation, rule}
     end)
+    |> Enum.flat_map(&expand_role_operation(entity_type, &1))
     |> Enum.group_by(fn {operation, _rule} -> operation end, fn {_operation, rule} -> rule end)
+    |> put_role_operation_unions()
   end
 
   @doc """
@@ -232,14 +244,54 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the own roles qualifying their holders to manage the grants of the given entity type, sorted.
+  Returns the own roles qualifying their holders to grant some role on the given entity type, sorted.
 
-  These are the extends-expanded own roles of its allow :manage_roles rules - empty when the entity
+  These are the extends-expanded own roles across its allow :grant_role rules - empty when the entity
   type declares none, which leaves granting on it to the trusted tier.
   """
-  @spec manage_roles_qualifying_roles(module) :: list(atom)
-  def manage_roles_qualifying_roles(entity_type) do
-    own_role_names(entity_type, :manage_roles)
+  @spec grant_role_qualifying_roles(module) :: list(atom)
+  def grant_role_qualifying_roles(entity_type) do
+    own_role_names(entity_type, :grant_role)
+  end
+
+  @doc """
+  Returns the own roles qualifying their holders to grant the given role on the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :grant_role rules covering that role - empty
+  when no rule covers it.
+  """
+  @spec grant_role_qualifying_roles(module, atom) :: list(atom)
+  def grant_role_qualifying_roles(entity_type, role_name) do
+    own_role_names(entity_type, {:grant_role, role_name})
+  end
+
+  @doc """
+  Returns the key the given policy operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
+
+  The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
+  """
+  @spec operation_key(Entity.operation()) :: String.t()
+  def operation_key(operation) when is_atom(operation), do: Atom.to_string(operation)
+
+  def operation_key({name, role_name}), do: "#{name}:#{role_name}"
+
+  @doc """
+  Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :read_roles rules together with every role
+  qualifying to grant or revoke on it - a declared line adds readers, so nobody can change a list
+  they cannot see.
+  """
+  @spec read_roles_qualifying_roles(module) :: list(atom)
+  def read_roles_qualifying_roles(entity_type) do
+    [
+      own_role_names(entity_type, :read_roles),
+      grant_role_qualifying_roles(entity_type),
+      revoke_role_qualifying_roles(entity_type)
+    ]
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   @doc false
@@ -251,17 +303,25 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
+  Returns the own roles qualifying their holders to revoke some role on the given entity type, sorted.
 
-  These are the extends-expanded own roles of its allow :read_grants rules, defaulting to the roles
-  qualifying to manage grants when the entity type declares no read_grants rule.
+  These are the extends-expanded own roles across its allow :revoke_role rules - empty when the
+  entity type declares none, which leaves revoking on it to the trusted tier.
   """
-  @spec read_grants_roles(module) :: list(atom)
-  def read_grants_roles(entity_type) do
-    case own_role_names(entity_type, :read_grants) do
-      [] -> manage_roles_qualifying_roles(entity_type)
-      role_names -> role_names
-    end
+  @spec revoke_role_qualifying_roles(module) :: list(atom)
+  def revoke_role_qualifying_roles(entity_type) do
+    own_role_names(entity_type, :revoke_role)
+  end
+
+  @doc """
+  Returns the own roles qualifying their holders to revoke the given role on the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :revoke_role rules covering that role - empty
+  when no rule covers it.
+  """
+  @spec revoke_role_qualifying_roles(module, atom) :: list(atom)
+  def revoke_role_qualifying_roles(entity_type, role_name) do
+    own_role_names(entity_type, {:revoke_role, role_name})
   end
 
   defp build_global_reference([]), do: []
@@ -312,6 +372,33 @@ defmodule Hologram.Policy do
       {:rel, reference, Entity.expand_role(target_type, role_name)}
     end
   end
+
+  # A bare grant lifecycle line covers, for each declared role, the holders it names whose own
+  # role is that role or extends it - so the rule for a role above what a holder holds names
+  # nobody, and is not emitted. A line naming a list of roles is one rule per role, and one
+  # naming a single role stands as written.
+  defp expand_role_operation(entity_type, {operation, rule}) when operation in @role_operations do
+    entity_type.__roles__()
+    |> Enum.map(fn {role_name, _opts} ->
+      holders =
+        rule
+        |> own_reference_names()
+        |> Enum.filter(&(&1 in Entity.expand_role(entity_type, role_name)))
+
+      {role_name, holders}
+    end)
+    |> Enum.reject(fn {_role_name, holders} -> holders == [] end)
+    |> Enum.map(fn {role_name, holders} ->
+      {{operation, role_name}, %{rule | to: [{:own, holders}]}}
+    end)
+  end
+
+  defp expand_role_operation(_entity_type, {{operation, role_names}, rule})
+       when operation in @role_operations and is_list(role_names) do
+    Enum.map(role_names, &{{operation, &1}, rule})
+  end
+
+  defp expand_role_operation(_entity_type, {operation, rule}), do: [{operation, rule}]
 
   # A reference to a role module is satisfied by every role carrying it - the module itself and
   # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
@@ -377,6 +464,28 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
+  # The bare key answers whether the acting user may grant (or revoke) some role: every per-role
+  # rule, in role order. A bare line's own rule is not kept - the per-role rules it expanded to
+  # are its meaning, and their union says the same about "some role" as the line did.
+  defp put_role_operation_unions(rules_by_operation) do
+    Enum.reduce(@role_operations, rules_by_operation, fn operation, acc ->
+      union =
+        acc
+        |> Enum.filter(fn
+          {{^operation, _role_name}, _rules} -> true
+          _other -> false
+        end)
+        |> Enum.sort()
+        |> Enum.flat_map(fn {_key, rules} -> rules end)
+
+      if union == [] do
+        Map.delete(acc, operation)
+      else
+        Map.put(acc, operation, union)
+      end
+    end)
+  end
+
   # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
   # that resource type's read-grants roles, held on the very resource the grant row names - so
   # the check reads grant rows through grant rows, never through this policy again.
@@ -403,7 +512,7 @@ defmodule Hologram.Policy do
     resource_rules =
       model_facts().entity_types
       |> Enum.reject(&(&1 == RoleGrant))
-      |> Enum.map(&{&1, read_grants_roles(&1)})
+      |> Enum.map(&{&1, read_roles_qualifying_roles(&1)})
       |> Enum.reject(fn {_entity_type, role_names} -> role_names == [] end)
       |> Enum.sort_by(fn {entity_type, _role_names} -> RoleGrant.resource_type(entity_type) end)
       |> Enum.map(&role_grant_resource_rule/1)

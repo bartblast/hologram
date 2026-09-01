@@ -54,6 +54,14 @@ defmodule Hologram.Policy.EvaluatorTest do
 
       refute grants?(policy, :delete, entity, nil, &deny/3)
     end
+
+    test "answers a per-role operation keyed by a tuple" do
+      entity = %Module1{}
+      policy = %{{:grant_role, :viewer} => [rule(to: [{:own, [:editor]}])]}
+
+      assert grants?(policy, {:grant_role, :viewer}, entity, "user_id_1", &grant/3)
+      refute grants?(policy, {:grant_role, :editor}, entity, "user_id_1", &grant/3)
+    end
   end
 
   describe "rule_matches?/4" do

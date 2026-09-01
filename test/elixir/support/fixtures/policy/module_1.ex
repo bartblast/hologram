@@ -21,6 +21,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module1 do
   allow :update, to: :editor, priority: {:>=, 3}
   allow :delete, to: {:parent, :admin}
   allow :publish, via: :parent
-  allow :manage_roles, to: :owner
+  allow :grant_role, to: :owner
+  allow :revoke_role, to: :owner
   allow :archive, author_id: user_id()
 end

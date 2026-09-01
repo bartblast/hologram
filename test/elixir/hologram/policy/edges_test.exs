@@ -17,7 +17,9 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:parent_id]},
                  {:relationship_grants, [:parent], Policy.Module2, [:admin]}
                ],
-               {Policy.Module1, :manage_roles} => [{:own_grants, [:owner]}],
+               {Policy.Module1, :grant_role} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:grant_role, :editor}} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:grant_role, :owner}} => [{:own_grants, [:owner]}],
                {Policy.Module1, :publish} => [
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module2, [:public]}
@@ -27,6 +29,9 @@ defmodule Hologram.Policy.EdgesTest do
                  {:own_grants, [:viewer]},
                  {:type_grants, Policy.Module2, [:admin]}
                ],
+               {Policy.Module1, :revoke_role} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:revoke_role, :editor}} => [{:own_grants, [:owner]}],
+               {Policy.Module1, {:revoke_role, :owner}} => [{:own_grants, [:owner]}],
                {Policy.Module1, :update} => [
                  {:attributes, [:priority]},
                  {:own_grants, [:editor, :owner]}

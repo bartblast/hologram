@@ -1126,6 +1126,18 @@ defmodule Hologram.Entity.Validator do
 
   # The shape is structural, so it is checked where it is written - whether the named roles are
   # declared is checked at the whole-model point, since roles are compiled after the policy lines.
+  defp validate_operation_shape!(module, :manage_roles) do
+    raise Hologram.CompileError,
+      message:
+        "invalid operation :manage_roles used for allow in #{inspect(module)} - :manage_roles is gone, declare allow :grant_role and allow :revoke_role instead"
+  end
+
+  defp validate_operation_shape!(module, :read_grants) do
+    raise Hologram.CompileError,
+      message:
+        "invalid operation :read_grants used for allow in #{inspect(module)} - :read_grants is now :read_roles"
+  end
+
   defp validate_operation_shape!(_module, operation) when is_atom(operation), do: :ok
 
   defp validate_operation_shape!(module, {:read_roles, _roles} = operation) do
