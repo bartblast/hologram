@@ -5,5 +5,6 @@ defmodule HologramFeatureTests.Policies.Editable do
   role :owner, extends: :editor
 
   allow :read, to: [:editor, :owner]
-  allow :manage_roles, to: [:editor, :owner]
+  allow :grant_role, to: [:editor, :owner]
+  allow :revoke_role, to: [:editor, :owner]
 end

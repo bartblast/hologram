@@ -14,6 +14,7 @@ defmodule HologramFeatureTests.Entities.Note do
   allow :read, to: :editor
   allow :create, author_id: user_id()
   allow :delete, to: :owner
-  allow :manage_roles, to: :owner
+  allow :grant_role, to: :owner
+  allow :revoke_role, to: :owner
   allow :pin, to: :editor, pinned: false
 end
