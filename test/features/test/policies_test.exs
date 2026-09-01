@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
+  alias HologramFeatureTests.Roles.Admin
 
   # All four tables truncate in one statement: the role grant table's foreign keys to the
   # user table make Postgres reject truncating the referenced table alone.
@@ -119,6 +120,26 @@ defmodule HologramFeatureTests.PoliciesTest do
     session
     |> click(button("Grant owner as editor"))
     |> assert_text(css("#result"), "grant_owner_as_editor_refused")
+  end
+
+  # The global role is granted from the test process (trusted), and the document is created
+  # there too, so the session user holds nothing on it - what qualifies them is app-wide.
+  feature "grants as a global admin on a document it holds no role on", %{session: session} do
+    session =
+      session
+      |> visit(PoliciesPage)
+      |> click(button("Log in"))
+      |> assert_text(css("#result"), "logged_in")
+
+    %{title: "admin_document"}
+    |> Document.new()
+    |> DB.create!()
+
+    Auth.grant_role(session_user(), Admin)
+
+    session
+    |> click(button("Admin grants editor"))
+    |> assert_text(css("#result"), "admin_grants_editor_granted_1")
   end
 
   feature "reads every row on the server's authority", %{session: session} do

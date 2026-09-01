@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.PoliciesPage do
   use Hologram.DB
 
   alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias HologramFeatureTests.Components.Policies.Component1
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.User
@@ -18,6 +19,7 @@ defmodule HologramFeatureTests.PoliciesPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click={command: :admin_grants_editor}> Admin grants editor </button>
       <button $click={command: :create_own_document}> Create own document </button>
       <button $click={command: :grant_editor}> Grant editor </button>
       <button $click={command: :grant_owner_as_editor}> Grant owner as editor </button>
@@ -37,6 +39,36 @@ defmodule HologramFeatureTests.PoliciesPage do
 
   def action(:show_result, params, component) do
     put_state(component, :result, params.result)
+  end
+
+  # The session user holds the global admin role and no role on the document, both seeded by
+  # the test. The count is the other user's grants on the document as the session user reads
+  # them - an admin who may change the list sees it.
+  def command(:admin_grants_editor, _params, server) do
+    [document] =
+      Document
+      |> filter(title: "admin_document")
+      |> trust()
+      |> DB.read()
+
+    other_user = create_user("admitted@example.com")
+
+    outcome =
+      try do
+        Auth.grant_role(other_user, document, :editor)
+        "granted"
+      rescue
+        Hologram.AccessDeniedError -> "refused"
+      end
+
+    visible_grants =
+      RoleGrant
+      |> filter(resource_id: document.id, user_id: other_user.id)
+      |> DB.read()
+
+    put_action(server, :show_result,
+      result: "admin_grants_editor_#{outcome}_#{length(visible_grants)}"
+    )
   end
 
   def command(:create_own_document, _params, server) do
