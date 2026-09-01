@@ -354,6 +354,14 @@ defmodule Hologram.DB.IntrospectionTest do
       assert schema().enum_types["test_fixtures_entity_module4_c_$enum"] == ["w", "x", "y"]
     end
 
+    test "introspects an enum type that has no values yet" do
+      create_statement = ~s{CREATE TYPE "hologram_data"."empty_$enum" AS ENUM ()}
+
+      {:ok, _result} = Connection.query(create_statement)
+
+      assert schema().enum_types["empty_$enum"] == []
+    end
+
     test "excludes enum types outside the hologram_data schema" do
       create_statement = ~s{CREATE TYPE "public"."alien_$enum" AS ENUM ('a')}
 

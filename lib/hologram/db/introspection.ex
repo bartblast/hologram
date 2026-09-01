@@ -28,7 +28,8 @@ defmodule Hologram.DB.Introspection do
   name to %{references:, on_delete:, constraint:}), and :indexes (index name to
   %{columns:, nulls_distinct:, unique:} in index column order, primary-key-backing
   indexes excluded - they are implied by the constraint). :enum_types maps each enum
-  type name to its values in enum sort order.
+  type name to its values in enum sort order - a type declared with no values yet
+  maps to an empty list.
 
   Reading the null-distinctness of indexes requires PostgreSQL 15 or newer - the
   framework's documented floor.
@@ -105,13 +106,18 @@ defmodule Hologram.DB.Introspection do
     Enum.reduce(rows, {%{}, %{}}, &constraint_entry/2)
   end
 
+  # Driven by pg_type rather than pg_enum: a type declared with no values yet has no
+  # pg_enum rows at all, so a query starting from the labels never lists it - the
+  # reconciler then re-created it on every boot and the drift check reported it missing
+  # while it stood. The role grant store's role type is exactly that for as long as the
+  # app has a user entity and no role.
   defp enum_types do
     statement = """
     SELECT t.typname, e.enumlabel
-    FROM pg_catalog.pg_enum e
-    JOIN pg_catalog.pg_type t ON t.oid = e.enumtypid
+    FROM pg_catalog.pg_type t
     JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-    WHERE n.nspname = $1
+    LEFT JOIN pg_catalog.pg_enum e ON e.enumtypid = t.oid
+    WHERE n.nspname = $1 AND t.typtype = 'e'
     ORDER BY t.typname, e.enumsortorder
     """
 
@@ -120,7 +126,7 @@ defmodule Hologram.DB.Introspection do
     rows
     |> Enum.group_by(fn [typname, _label] -> typname end)
     |> Map.new(fn {typname, type_rows} ->
-      {typname, Enum.map(type_rows, fn [_typname, label] -> label end)}
+      {typname, for([_typname, label] <- type_rows, label != nil, do: label)}
     end)
   end
 
