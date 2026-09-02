@@ -269,6 +269,16 @@ defmodule Hologram.Mutation.Envelope do
 
   defp grant_op(_op), do: {:error, "a role grant is created or deleted whole"}
 
+  # A grant names its resource one of three ways - a type and an id, a type alone, or neither -
+  # and an id with no type is none of them. Refused here rather than in the applier, which
+  # resolves the type first and would raise on nothing to resolve.
+  defp grant_scope(%Write{op: :create, data: %{resource_type: nil, resource_id: resource_id}})
+       when resource_id != nil do
+    {:error, "a role grant naming a resource id names its resource type too"}
+  end
+
+  defp grant_scope(_write), do: :ok
+
   defp id(entry) do
     value = Map.get(entry, "id")
 
@@ -598,6 +608,7 @@ defmodule Hologram.Mutation.Envelope do
   defp validate_grant_write(%Write{entity_type: RoleGrant} = write) do
     with :ok <- grant_op(write.op),
          :ok <- grant_claim(write.claim),
+         :ok <- grant_scope(write),
          :ok <- declared_role(write),
          :ok <- derived_id(write) do
       {:ok, write}

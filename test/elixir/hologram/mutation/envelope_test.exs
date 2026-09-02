@@ -719,6 +719,16 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, ~s(write 0: resource_type "map" is not an entity type of this build)}
     end
 
+    # The id derives for this shape too, and nothing downstream can resolve a nil type - so the
+    # parser is the one place that can say no.
+    test "refuses a role grant naming a resource id but no resource type" do
+      grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
+      entry = create(RoleGrant, grant_data(%{"resource_type" => nil}), id: grant_id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant naming a resource id names its resource type too"}
+    end
+
     # @id is a well-formed entity id that no derivation produces - the shape a client minting
     # its own v7 for the store would send.
     test "refuses a role grant whose id is not derived from it" do
