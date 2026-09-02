@@ -550,6 +550,13 @@ defmodule Hologram.CompilerTest do
 
   # The gate reads the graph the bundles come from, so what registers the window is what actually
   # ships - not every mention of the check in the project.
+  # can?/3 and the grant verbs read grant rows in the browser, which is what makes a page a
+  # permission checker - and every one of them is hand-ported, or a page reaching it would have the
+  # verb's server call tree transpiled into its bundle. Two lists in two modules; this ties them.
+  test "every permission MFA is a manually ported one" do
+    assert permission_mfas() -- CallGraph.manually_ported_elixir_mfas() == []
+  end
+
   describe "pages_checking_permissions/2" do
     test "names a page whose template checks permissions", %{call_graph: call_graph} do
       pages = pages_checking_permissions(Reflection.list_pages(), call_graph)

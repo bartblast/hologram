@@ -216,6 +216,14 @@ defmodule Hologram.Compiler do
     end
   end
 
+  @doc false
+  @spec permission_mfas() :: list(mfa)
+  # Read by the test that pins every permission MFA as a manually ported one: a page reaching one
+  # of these in client code would otherwise have the verb's server call tree transpiled into its
+  # bundle, down to a NIF. The two lists live in two modules for two reasons, and this is the
+  # invariant that ties them.
+  def permission_mfas, do: @permission_mfas
+
   @doc """
   Builds the call graph of all modules in the project.
   """

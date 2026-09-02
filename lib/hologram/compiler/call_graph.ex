@@ -362,6 +362,14 @@ defmodule Hologram.Compiler.CallGraph do
     {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
     {Hologram.Auth, :can?, 3},
+    # The grant verbs, hand-written for the client the way the data verbs below are: one spelling
+    # on both tiers. What differs is the end - the server writes the store, the browser appends a
+    # create or a delete of the grant row to the running batch, and the server replays the gate
+    # when the batch lands. The /2 forms are ported only to refuse: a global grant is trusted-only.
+    {Hologram.Auth, :grant_role, 2},
+    {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :revoke_role, 2},
+    {Hologram.Auth, :revoke_role, 3},
     # The data verbs, hand-written for the client the way the query stages are: one spelling on
     # both tiers, so a domain helper reading and writing through them moves between an action, a
     # command and a job untouched. What differs underneath is only where the rows are.

@@ -727,6 +727,34 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "grant_role/2",
+      "public",
+      ManuallyPortedElixirHologramAuth["grant_role/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "grant_role/3",
+      "public",
+      ManuallyPortedElixirHologramAuth["grant_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "revoke_role/2",
+      "public",
+      ManuallyPortedElixirHologramAuth["revoke_role/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "revoke_role/3",
+      "public",
+      ManuallyPortedElixirHologramAuth["revoke_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Hologram.DB",
       "create!/1",
       "public",
