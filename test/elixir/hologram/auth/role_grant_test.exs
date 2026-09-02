@@ -2,11 +2,18 @@ defmodule Hologram.Auth.RoleGrantTest do
   use Hologram.Test.BasicCase, async: true
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Entity.Validator
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Role
+
+  @other_user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
+  @resource_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @resource_type :test_fixtures_policy_module2
+  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
 
   describe "__attributes__/0" do
     test "computes the enum value sets from the compiled data model" do
@@ -154,6 +161,73 @@ defmodule Hologram.Auth.RoleGrantTest do
            ]
   end
 
+  describe "derive_id/4" do
+    test "answers the same id for the same grant" do
+      first = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      second = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+
+      assert first == second
+    end
+
+    test "answers a different id for a different role on the same resource" do
+      member_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      admin_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :admin)
+
+      assert member_id != admin_id
+    end
+
+    test "answers a different id for the same role held by a different user" do
+      first = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      second = RoleGrant.derive_id(@other_user_id, @resource_type, @resource_id, :member)
+
+      assert first != second
+    end
+
+    # Asked of the validator rather than of a regex written here, so the two cannot drift: the
+    # derivation has to answer something every other entity id would be accepted as.
+    test "answers an id the entity id validator accepts" do
+      id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+
+      assert Validator.attribute_value_valid?(id, :uuid)
+    end
+
+    test "answers a version 5 id under the RFC variant" do
+      id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+
+      <<_time_low_and_mid::binary-size(14), version::binary-size(1), _rest::binary-size(4),
+        variant::binary-size(1), _tail::binary>> = id
+
+      assert version == "5"
+      assert variant in ["8", "9", "a", "b"]
+    end
+
+    test "derives a type-wide grant, which names no resource id" do
+      type_wide_id = RoleGrant.derive_id(@user_id, @resource_type, nil, :member)
+      instance_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+
+      assert Validator.attribute_value_valid?(type_wide_id, :uuid)
+      assert type_wide_id != instance_id
+    end
+
+    test "derives a global grant, which names neither and whose role is a module" do
+      global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
+
+      assert Validator.attribute_value_valid?(global_id, :uuid)
+    end
+
+    # The vector the client's hand-written twin asserts against - deriveGrantId in
+    # assets/js/elixir/hologram/auth.mjs answers these same two strings from these same inputs,
+    # which is what keeps the pair from drifting. Both were cross-checked against a reference
+    # UUIDv5 implementation, so either side can be rewritten against the standard alone.
+    test "answers the pinned vector the client twin is held to" do
+      instance_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
+
+      assert instance_id == "8cd330ce-decd-5e5b-bff7-1cd078a0ec62"
+      assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
+    end
+  end
+
   describe "entity_type/1" do
     # Stated as a round trip rather than against a literal label, so the pair cannot drift apart
     # without this failing - resource_type/1 derives the label and this derives the type back.
@@ -165,6 +239,18 @@ defmodule Hologram.Auth.RoleGrantTest do
 
     test "answers nil for a label naming no table of this build" do
       assert RoleGrant.entity_type(:no_such_table_in_this_build) == nil
+    end
+  end
+
+  describe "identity_columns/0" do
+    # Read from the derived mapping rather than from the mapper's source, so this binds what the
+    # database is actually given: the store's unique index is over the identity and nothing else.
+    # The applier reads a present grant back by the id these columns derive, which is right only
+    # while a conflict on the index IS a conflict on the derived primary key.
+    test "names exactly the columns the grant store's unique index is over" do
+      %{columns: index_columns} = DB.mapping()[RoleGrant].indexes["hologram_role_grant_$uidx"]
+
+      assert index_columns == RoleGrant.identity_columns()
     end
   end
 
