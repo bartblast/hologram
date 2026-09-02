@@ -208,6 +208,7 @@ defmodule Hologram.Compiler do
           module,
           CallGraph.t(),
           PLT.t(),
+          PLT.t(),
           MapSet.t(mfa),
           %{module => CallGraph.server_callback_analysis()},
           MapSet.t(module),
@@ -217,6 +218,7 @@ defmodule Hologram.Compiler do
         page_module,
         call_graph,
         ir_plt,
+        encode_plt,
         async_mfas,
         server_callback_analysis_by_templatable,
         runtime_js_binding_modules,
@@ -247,7 +249,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       mfas
-      |> render_elixir_function_defs(ir_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
       |> render_block()
 
     module_metadata_registration =
@@ -285,9 +287,15 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
-          String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
+  @spec build_runtime_js(
+          list(mfa),
+          PLT.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          T.file_path()
+        ) :: String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, js_dir) do
     %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas)
 
     import_statements =
@@ -310,7 +318,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       runtime_mfas
-      |> render_elixir_function_defs(ir_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
       |> render_block()
 
     module_metadata_registration =
@@ -461,6 +469,7 @@ defmodule Hologram.Compiler do
           list(module),
           CallGraph.t(),
           PLT.t(),
+          PLT.t(),
           MapSet.t(mfa),
           MapSet.t(module),
           T.opts()
@@ -469,6 +478,7 @@ defmodule Hologram.Compiler do
         page_modules,
         call_graph,
         ir_plt,
+        encode_plt,
         async_mfas,
         runtime_js_binding_modules,
         opts
@@ -488,6 +498,7 @@ defmodule Hologram.Compiler do
         |> build_page_js(
           call_graph,
           ir_plt,
+          encode_plt,
           async_mfas,
           server_callback_analysis_by_templatable,
           runtime_js_binding_modules,
@@ -508,13 +519,14 @@ defmodule Hologram.Compiler do
   @spec create_runtime_entry_file(
           list(mfa),
           PLT.t(),
+          PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
           T.opts()
         ) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
+  def create_runtime_entry_file(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
+    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -1153,7 +1165,7 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
-  defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
+  defp render_elixir_function_defs(mfas, ir_plt, _encode_plt, async_mfas) do
     mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
