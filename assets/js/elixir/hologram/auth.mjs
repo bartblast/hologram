@@ -402,4 +402,125 @@ export function deriveGrantId(userId, resourceType, resourceId, role) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// IMPORTANT!
+// The three builders below are hand ports of Hologram.Auth's refusal sentences -
+// unqualified_role_message/5, signed_in_write_message/1 and trusted_write_message/2 - and the
+// tests in test/javascript/elixir/hologram/auth_test.mjs mirror test/elixir/hologram/auth_test.exs
+// string for string. Always update both together: a grant refused in the browser reads the same
+// as one refused by the server, so a developer sees one sentence wherever the gate fires.
+//
+// One sentence the browser cannot say: "<role> extends <held>, so it holds more." The model entry
+// carries a type's role NAMES and not their extends chains, so for a type whose roles extend, the
+// browser's message is that one sentence shorter than the server's.
+
+// The refusal that teaches: which roles the acting user holds that reach the resource, what those
+// may grant (or revoke) there, and the line that would cover it if the omission was not intended.
+export function unqualifiedRoleMessage(
+  entityType,
+  resourceId,
+  actorUserId,
+  role,
+  operation,
+) {
+  const verb = operation === "grant_role" ? "grant" : "revoke";
+  const resource = `${entityType} "${resourceId}"`;
+  const held = heldRoleNames(actorUserId, entityType, resourceId);
+
+  if (held.length === 0) {
+    return `the acting user holds no role on ${resource} that may ${verb} ${inspectRole(role)}`;
+  }
+
+  const covered = coveredRoleNames(
+    entityType,
+    resourceId,
+    actorUserId,
+    operation,
+  );
+  const holder = held.length === 1 ? inspectRole(held[0]) : inspectRoles(held);
+
+  return (
+    `the acting user holds ${joinRoleNames(held)} on ${resource}, ` +
+    `which may ${verb} ${coveredDescription(covered, role)}. ` +
+    `Declare \`allow {:${operation}, ${inspectRole(role)}}, to: ${holder}\` on ${entityType} if that is intended.`
+  );
+}
+
+// A role is granted (or revoked) only by a signed-in user: what the server's verb reads as trusted
+// code, a batch reads as an anonymous session, and so does the browser.
+export function signedInWriteMessage(verb) {
+  return `a role is ${verb} only by a signed-in user - nobody is signed in`;
+}
+
+// The two grant shapes trusted code writes - type-wide and global - which a browser never may.
+export function trustedWriteMessage(scope, verb) {
+  return `${scope} roles are ${verb} only by trusted code running without an acting user`;
+}
+
+function coveredDescription(covered, role) {
+  if (covered.length === 0) {
+    return `no role there, ${inspectRole(role)} included`;
+  }
+
+  return `${joinRoleNames(covered)} but not ${inspectRole(role)}`;
+}
+
+// The declared roles the acting user may grant (or revoke) on the resource - the same question
+// the gate asked, once per role.
+function coveredRoleNames(entityType, resourceId, actorUserId, operation) {
+  const entry = globalThis.Hologram.sync?.model?.[entityType];
+  const resource = Type.struct(entityType, [
+    [Type.atom("id"), Type.bitstring(resourceId)],
+  ]);
+
+  return (entry?.roles ?? []).filter((name) =>
+    Type.isTrue(
+      Elixir_Hologram_Auth["can?/3"](
+        Type.bitstring(actorUserId),
+        Type.tuple([Type.atom(operation), Type.atom(name)]),
+        resource,
+      ),
+    ),
+  );
+}
+
+// The roles the acting user holds that reach the resource, as the gate reads them: on the row
+// itself or on its whole type, and the global roles held app-wide. Own names first, then role
+// modules, each alphabetical - the order the server sorts them in.
+function heldRoleNames(actorUserId, entityType, resourceId) {
+  const resourceType =
+    globalThis.Hologram.sync?.model?.[entityType]?.resourceType;
+
+  return grantRows()
+    .filter(
+      (row) =>
+        row.user_id === actorUserId &&
+        ((row.resource_type === resourceType &&
+          (row.resource_id === resourceId || row.resource_id === null)) ||
+          (row.resource_type === null && row.resource_id === null)),
+    )
+    .map((row) => row.role)
+    .sort(
+      (left, right) =>
+        Number(isRoleModule(left)) - Number(isRoleModule(right)) ||
+        left.localeCompare(right),
+    );
+}
+
+// A role as inspect/1 spells it: an own role is an atom, a global role is a module.
+function inspectRole(name) {
+  return isRoleModule(name) ? name : `:${name}`;
+}
+
+function inspectRoles(names) {
+  return `[${names.map(inspectRole).join(", ")}]`;
+}
+
+function isRoleModule(name) {
+  return /^[A-Z]/.test(name);
+}
+
+function joinRoleNames(names) {
+  return names.map(inspectRole).join(" and ");
+}
+
 export default Elixir_Hologram_Auth;

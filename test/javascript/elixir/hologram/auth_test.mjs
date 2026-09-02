@@ -8,6 +8,9 @@ import {
 
 import Elixir_Hologram_Auth, {
   deriveGrantId,
+  signedInWriteMessage,
+  trustedWriteMessage,
+  unqualifiedRoleMessage,
 } from "../../../../assets/js/elixir/hologram/auth.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
@@ -84,6 +87,7 @@ describe("Elixir_Hologram_Auth", () => {
           policy: policy,
           relationships: {folder: {toMany: false, type: FOLDER}},
           resourceType: "documents",
+          roles: ["editor", "owner", "viewer"],
           serverOnly: [],
         },
         [FOLDER]: {
@@ -91,6 +95,7 @@ describe("Elixir_Hologram_Auth", () => {
           policy: folderPolicy,
           relationships: {},
           resourceType: "folders",
+          roles: [],
           serverOnly: [],
         },
         // USER has no entry of its own, and that is what a real build looks like: the model
@@ -107,6 +112,7 @@ describe("Elixir_Hologram_Auth", () => {
           policy: {},
           relationships: {user: {toMany: false, type: USER}},
           resourceType: "hologram_role_grant",
+          roles: [],
           serverOnly: [],
         },
       },
@@ -979,6 +985,185 @@ describe("deriveGrantId()", () => {
     assert.equal(
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "café"),
       "2ba31948-266d-5bb1-8452-451bca95d31c",
+    );
+  });
+});
+
+// IMPORTANT!
+// Each test here mirrors a message test in test/elixir/hologram/auth_test.exs (the grant_role/3
+// and revoke_role/3 describes) string for string, with the fixtures' names swapped for this
+// file's model. Always update both together. What the browser cannot mirror is the "extends"
+// sentence - the model entry carries role names and not their chains - which is why no test here
+// holds a role that extends another.
+describe("unqualifiedRoleMessage()", () => {
+  const DOCUMENT = "MyApp.Document";
+  const GRANT = "Hologram.Auth.RoleGrant";
+  const ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
+  const DOC = "018f4571-a1b2-7c3d-8e4f-0000000000d1";
+
+  const rule = (to) => ({predicates: [], to: to, via: null});
+
+  const grantRow = (overrides) => ({
+    id: `grant-${Object.values(overrides).join("-")}`,
+    resource_id: null,
+    resource_type: null,
+    role: "viewer",
+    user_id: ALICE,
+    ...overrides,
+  });
+
+  const defineGates = (policy) => {
+    globalThis.Hologram.sync = {
+      model: {
+        [DOCUMENT]: {
+          attributes: {id: "uuid"},
+          policy: policy,
+          relationships: {},
+          resourceType: "documents",
+          roles: ["editor", "owner", "viewer"],
+          serverOnly: [],
+        },
+        [GRANT]: {
+          attributes: {
+            id: "uuid",
+            resource_id: "uuid",
+            resource_type: "enum",
+            role: "enum",
+          },
+          policy: {},
+          relationships: {},
+          resourceType: "hologram_role_grant",
+          roles: [],
+          serverOnly: [],
+        },
+      },
+    };
+
+    Model.reset();
+  };
+
+  beforeEach(() => {
+    defineGates({});
+    LocalDatabase.reset();
+  });
+
+  it("names the resource when the acting user holds no role there", () => {
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "editor", "grant_role"),
+      `the acting user holds no role on MyApp.Document "${DOC}" that may grant :editor`,
+    );
+  });
+
+  it("names what the held role may grant instead", () => {
+    defineGates({"grant_role:viewer": [rule([["own", ["editor"]]])]});
+
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({resource_id: DOC, resource_type: "documents", role: "editor"}),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "owner", "grant_role"),
+      `the acting user holds :editor on MyApp.Document "${DOC}", ` +
+        "which may grant :viewer but not :owner. " +
+        "Declare `allow {:grant_role, :owner}, to: :editor` on MyApp.Document if that is intended.",
+    );
+  });
+
+  it("says the held role may grant no role there", () => {
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({resource_id: DOC, resource_type: "documents", role: "viewer"}),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "editor", "grant_role"),
+      `the acting user holds :viewer on MyApp.Document "${DOC}", ` +
+        "which may grant no role there, :editor included. " +
+        "Declare `allow {:grant_role, :editor}, to: :viewer` on MyApp.Document if that is intended.",
+    );
+  });
+
+  it("joins several held roles and lists them in the declaration", () => {
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({resource_id: DOC, resource_type: "documents", role: "viewer"}),
+    );
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({resource_id: DOC, resource_type: "documents", role: "editor"}),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "owner", "grant_role"),
+      `the acting user holds :editor and :viewer on MyApp.Document "${DOC}", ` +
+        "which may grant no role there, :owner included. " +
+        "Declare `allow {:grant_role, :owner}, to: [:editor, :viewer]` on MyApp.Document if that is intended.",
+    );
+  });
+
+  it("counts a type-wide grant and a global role, modules after own names", () => {
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({resource_id: null, resource_type: "documents", role: "editor"}),
+    );
+    LocalDatabase.putRow(GRANT, grantRow({role: "MyApp.Roles.Admin"}));
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "owner", "grant_role"),
+      `the acting user holds :editor and MyApp.Roles.Admin on MyApp.Document "${DOC}", ` +
+        "which may grant no role there, :owner included. " +
+        "Declare `allow {:grant_role, :owner}, to: [:editor, MyApp.Roles.Admin]` on MyApp.Document if that is intended.",
+    );
+  });
+
+  it("leaves out a role held on another resource", () => {
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({
+        resource_id: "018f4571-a1b2-7c3d-8e4f-0000000000d2",
+        resource_type: "documents",
+        role: "editor",
+      }),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "editor", "grant_role"),
+      `the acting user holds no role on MyApp.Document "${DOC}" that may grant :editor`,
+    );
+  });
+
+  it("speaks of revoking for the revoke gate", () => {
+    defineGates({"revoke_role:viewer": [rule([["own", ["editor"]]])]});
+
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({resource_id: DOC, resource_type: "documents", role: "editor"}),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "owner", "revoke_role"),
+      `the acting user holds :editor on MyApp.Document "${DOC}", ` +
+        "which may revoke :viewer but not :owner. " +
+        "Declare `allow {:revoke_role, :owner}, to: :editor` on MyApp.Document if that is intended.",
+    );
+  });
+});
+
+describe("signedInWriteMessage()", () => {
+  it("spells the verb into the sentence", () => {
+    assert.equal(
+      signedInWriteMessage("granted"),
+      "a role is granted only by a signed-in user - nobody is signed in",
+    );
+  });
+});
+
+describe("trustedWriteMessage()", () => {
+  it("spells the scope and the verb into the sentence", () => {
+    assert.equal(
+      trustedWriteMessage("type-wide", "revoked"),
+      "type-wide roles are revoked only by trusted code running without an acting user",
     );
   });
 });
