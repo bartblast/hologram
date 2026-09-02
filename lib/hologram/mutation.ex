@@ -204,6 +204,7 @@ defmodule Hologram.Mutation do
 
   # Each clause answers what the write LOST - nothing, or the values a newer edit kept it from
   # setting. A refusal never returns from here: it rolls the whole batch back.
+  #
   # A grant is not the writer's to evaluate: it goes to the grant verb's own rules, under the
   # session's actor, and a denial there is the same rejection any denied write answers with. A
   # grant the store already holds is not an error - the verb is idempotent - so the write is

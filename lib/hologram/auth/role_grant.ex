@@ -251,10 +251,6 @@ defmodule Hologram.Auth.RoleGrant do
     }
   end
 
-  # The resolution sweeps the app's modules, and definition reads happen per write and per
-  # query build - so the computed facts are cached for the lifetime of the runtime, like
-  # the physical name mapping. The compiler and the application boot reset the cache, so a
-  # recompiled data model is picked up.
   # The canonical lowercase 8-4-4-4-12 spelling, which is the only one
   # `Entity.Validator.attribute_value_valid?/2` admits for a :uuid - it checks the shape and not
   # the version, so a v5 is as much an entity id as the v7 every other table carries.
@@ -265,6 +261,10 @@ defmodule Hologram.Auth.RoleGrant do
     "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
   end
 
+  # The resolution sweeps the app's modules, and definition reads happen per write and per
+  # query build - so the computed facts are cached for the lifetime of the runtime, like
+  # the physical name mapping. The compiler and the application boot reset the cache, so a
+  # recompiled data model is picked up.
   defp resolved(key) do
     case :persistent_term.get(@resolution_key, nil) do
       nil ->
