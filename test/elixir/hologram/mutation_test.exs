@@ -677,6 +677,45 @@ defmodule Hologram.MutationTest do
       assert ref["replica_id"] == replica_id
     end
 
+    # The browser writes the creator's grants beside its own create, under the ids the server
+    # derives for the same grants - so what it holds at once and what create/1 writes are one row,
+    # answered here as a grant already held. Module1 lets only an owner grant and this user holds
+    # nothing there, so the batch lands only because a creator's grant asks no gate.
+    test "lands a creator's grant beside the create that earned it" do
+      user = create_user("creator-grant@example.com")
+      resource_id = Entity.generate_id()
+
+      writes = [
+        create_write(PolicyModule1, resource_id, %{"author_id" => user.id},
+          claim: ["authorize", "archive"]
+        ),
+        grant_write(user.id, %PolicyModule1{id: resource_id}, :maintainer)
+      ]
+
+      assert {:ok, %{"status" => "confirmed", "dropped" => dropped, "kept" => kept}} =
+               run(envelope(writes), server(user.id))
+
+      assert Map.keys(dropped["1"]) == [
+               "granted_by_id",
+               "resource_id",
+               "resource_type",
+               "role",
+               "user_id"
+             ]
+
+      grant_id =
+        RoleGrant.derive_id(user.id, :test_fixtures_policy_module1, resource_id, :maintainer)
+
+      assert kept["1"]["id"] == grant_id
+
+      row = EntityOperations.get(RoleGrant, grant_id)
+
+      assert row.granted_by_id == user.id
+      assert row.resource_id == resource_id
+      assert row.role == :maintainer
+      assert row.user_id == user.id
+    end
+
     # The id is derived from the grant, so the row found by the write's id IS the stored grant -
     # and kept says who really made it, not who asked again.
     test "answers a grant already held with the stored row" do

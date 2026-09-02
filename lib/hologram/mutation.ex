@@ -137,10 +137,10 @@ defmodule Hologram.Mutation do
   # race twice over; it is a row that conflicts on the fact but does not carry the fact's derived
   # id, which no writer of the store produces - an invariant broken, raised as one rather than
   # retried forever.
-  defp apply_grant(write, index, retries_left) do
+  defp apply_grant(write, index, created_rows, retries_left) do
     grant = Write.to_entity(write)
 
-    case Auth.apply_grant_write(grant, Context.actor_user_id()) do
+    case Auth.apply_grant_write(grant, Context.actor_user_id(), created_rows) do
       :created ->
         {%{}, nil}
 
@@ -150,7 +150,7 @@ defmodule Hologram.Mutation do
       :present ->
         case EntityOperations.get(RoleGrant, write.id, lock: true) do
           nil when retries_left > 0 ->
-            apply_grant(write, index, retries_left - 1)
+            apply_grant(write, index, created_rows, retries_left - 1)
 
           nil ->
             raise ArgumentError,
@@ -211,11 +211,11 @@ defmodule Hologram.Mutation do
   # confirmed with every column dropped and the stored row as what was kept, read back by the SAME
   # id: the id is derived from the grant, which is what makes the row found the row the write
   # named. Before the generic clause, which would otherwise match.
-  defp apply_write(%Write{op: :create, entity_type: RoleGrant} = write, index) do
-    apply_grant(write, index, 1)
+  defp apply_write(%Write{op: :create, entity_type: RoleGrant} = write, index, created_rows) do
+    apply_grant(write, index, created_rows, 1)
   end
 
-  defp apply_write(%Write{op: :create} = write, index) do
+  defp apply_write(%Write{op: :create} = write, index, _created_rows) do
     result =
       write
       |> Write.to_entity()
@@ -230,7 +230,7 @@ defmodule Hologram.Mutation do
   # Only the VALUES go through the merge. A delta is not a claim about what the column should
   # hold, so there is nothing to compare it against and nothing for it to lose: it is applied
   # whatever the row's revision is, which is what makes two writers' +1s land as +2.
-  defp apply_write(%Write{op: :update} = write, index) do
+  defp apply_write(%Write{op: :update} = write, index, _created_rows) do
     row = lock_row(write, index)
 
     {changes, lost} =
@@ -246,7 +246,7 @@ defmodule Hologram.Mutation do
   # the delete merge first, like any delete - a grant can be deleted and re-made under one id,
   # so a revocation based on an earlier grant's revisions loses to a newer one and answers the
   # way any stale delete does. A row already gone is what the verb itself answers: nothing.
-  defp apply_write(%Write{op: :delete, entity_type: RoleGrant} = write, _index) do
+  defp apply_write(%Write{op: :delete, entity_type: RoleGrant} = write, _index, _created_rows) do
     # The gate runs before the lookup, asked about the grant the write states rather than about
     # the row: a grant's id is derived from its grant, so a delete of any grant is something every
     # client can send, and whether the row is there is an answer for whoever may revoke it. Asked
@@ -261,7 +261,7 @@ defmodule Hologram.Mutation do
     end
   end
 
-  defp apply_write(%Write{op: :delete} = write, index) do
+  defp apply_write(%Write{op: :delete} = write, index, _created_rows) do
     case EntityOperations.get(write.entity_type, write.id, lock: true) do
       # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
       nil -> {%{}, nil}
@@ -269,7 +269,7 @@ defmodule Hologram.Mutation do
     end
   end
 
-  defp apply_write(%Write{op: op} = write, index)
+  defp apply_write(%Write{op: op} = write, index, _created_rows)
        when op in [:add_relationship, :delete_relationship] do
     lock_row(write, index)
 
@@ -288,7 +288,7 @@ defmodule Hologram.Mutation do
     verdicts =
       writes
       |> Enum.with_index()
-      |> Enum.reduce(%{dropped: %{}, kept: %{}}, &collect_verdicts/2)
+      |> Enum.reduce(%{created: MapSet.new(), dropped: %{}, kept: %{}}, &collect_verdicts/2)
 
     %{"status" => "confirmed", "dropped" => verdicts.dropped, "kept" => verdicts.kept}
   end
@@ -320,10 +320,11 @@ defmodule Hologram.Mutation do
   # The index is a string because the answer is stored as jsonb and sent as JSON, where an object's
   # keys are strings whatever they started as.
   defp collect_verdicts({write, index}, verdicts) do
-    {lost, kept} = apply_write(write, index)
+    {lost, kept} = apply_write(write, index, verdicts.created)
     key = Integer.to_string(index)
 
     verdicts
+    |> put_created(write)
     |> put_verdict(:dropped, key, lost)
     |> put_verdict(:kept, key, kept)
   rescue
@@ -442,6 +443,15 @@ defmodule Hologram.Mutation do
       {:rejected, index, reason} -> {:ok, rejection(index, reason)}
     end
   end
+
+  # The rows this batch has made, which is what tells a creator's own grant from any other: a
+  # creator grant names a row an earlier write of the same batch created, and nothing else can.
+  # Recorded after the write lands, so a grant can only name a row already made when it arrives.
+  defp put_created(verdicts, %Write{op: :create, entity_type: entity_type, id: id}) do
+    Map.update!(verdicts, :created, &MapSet.put(&1, {entity_type, id}))
+  end
+
+  defp put_created(verdicts, _write), do: verdicts
 
   # A write that lost nothing and a row that kept nothing are both spoken of by saying nothing -
   # an entry per write would make every answer carry a key for each of them.
