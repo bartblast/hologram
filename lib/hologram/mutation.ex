@@ -177,17 +177,22 @@ defmodule Hologram.Mutation do
   # confirmed with every column dropped and the stored row as what was kept, read back by the SAME
   # id: the id is derived from the grant, which is what makes the row found the row the write
   # named. Before the generic clause, which would otherwise match.
-  defp apply_write(%Write{op: :create, entity_type: RoleGrant} = write, _index) do
+  defp apply_write(%Write{op: :create, entity_type: RoleGrant} = write, index) do
     grant = Write.to_entity(write)
 
     case Auth.apply_grant_write(grant, Context.actor_user_id()) do
       :created ->
         {%{}, nil}
 
+      # ON CONFLICT DO NOTHING holds no lock on the row it conflicted with, and the batch runs at
+      # read committed - so the row is read back LOCKED, which keeps it until the batch commits,
+      # and a row already gone by then (a revocation committed in between) is not an error: the
+      # grant the write asked for does not exist after all, so the write runs again and inserts.
       :present ->
-        row = EntityOperations.get(RoleGrant, write.id)
-
-        {lost_values(write, Map.keys(write.data)), stringify(WireData.row(row))}
+        case EntityOperations.get(RoleGrant, write.id, lock: true) do
+          nil -> apply_write(write, index)
+          row -> {lost_values(write, Map.keys(write.data)), stringify(WireData.row(row))}
+        end
     end
   end
 
