@@ -1691,6 +1691,7 @@ defmodule Hologram.Compiler do
     render_json_object([
       {"attributes", attributes},
       {"constraints", render_constraints(entity_type)},
+      {"creatorRoles", render_creator_roles(entity_type)},
       {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
@@ -1919,6 +1920,16 @@ defmodule Hologram.Compiler do
       |> Jason.encode!()
     end)
     |> then(&"[#{&1}]")
+  end
+
+  # The client writes a creator's grants itself when it creates a row, so it has to be told which
+  # of the type's roles those are.
+  defp render_creator_roles(entity_type) do
+    entity_type.__roles__()
+    |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :granted_to) == :creator end)
+    |> Enum.map(fn {name, _opts} -> Atom.to_string(name) end)
+    |> Enum.sort()
+    |> Jason.encode!()
   end
 
   # The name a grant row spells this type by - what its resource_type column holds. A reference
