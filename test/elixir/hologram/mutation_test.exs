@@ -873,6 +873,53 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(RoleGrant, first_row.id) != nil
     end
 
+    # A grant's id is derivable from its grant, so a delete of it is something anyone can send -
+    # and a stale one would otherwise answer with the stored row as what was kept. The gate runs
+    # first: nobody signed in gets the refusal and not the row.
+    test "refuses a stale revocation from an anonymous session without answering the row" do
+      member = create_user("probed-member@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
+      write = delete_write(RoleGrant, row.id, stamp: 1)
+
+      message = "a role is revoked only by a signed-in user - nobody is signed in"
+
+      assert run(envelope([write]), server()) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+    end
+
+    test "refuses a stale revocation the acting user may not make without answering the row" do
+      member = create_user("probed-again-member@example.com")
+      stranger = create_user("stranger@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
+      write = delete_write(RoleGrant, row.id, stamp: 1)
+
+      message =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module2 #{inspect(resource.id)} that may revoke :member"
+
+      assert run(envelope([write]), server(stranger.id)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+    end
+
+    test "refuses an anonymous revocation of a row already gone" do
+      user = create_user("gone-anonymous-user@example.com")
+      resource = create_shared()
+
+      write = delete_write(RoleGrant, grant_id(user.id, resource, :member))
+
+      message = "a role is revoked only by a signed-in user - nobody is signed in"
+
+      assert run(envelope([write]), server()) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+    end
+
     test "confirms a revocation of a row already gone" do
       member = create_user("gone-revoker@example.com")
       user = create_user("never-granted-user@example.com")

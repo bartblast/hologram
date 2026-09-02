@@ -275,21 +275,34 @@ defmodule Hologram.Auth do
   # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
   # nobody signed in revokes nothing. The row comes from the store rather than from the write, so
   # its columns are the ones the grant was made with, whatever the client believed it was deleting.
-  def apply_revocation_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
-    raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "revoked")
+  def apply_revocation_write(%RoleGrant{} = grant, actor_user_id) do
+    authorize_revocation_write!(grant, actor_user_id)
+
+    EntityOperations.delete(RoleGrant, grant.id)
   end
 
-  def apply_revocation_write(%RoleGrant{}, nil) do
+  @doc false
+  @spec authorize_revocation_write!(RoleGrant.t() | nil, String.t() | nil) :: :ok
+  # The gate of apply_revocation_write/2 on its own, for the applier to ask BEFORE it resolves the
+  # delete against the stored revisions: a stale revocation answers with the row it was stale
+  # against, and that answer is for whoever may revoke, not for whoever knows the id - which every
+  # client does, since a grant's id is derived from its grant. Nobody signed in is refused whether
+  # or not the row exists, so an anonymous client learns nothing of it either way.
+  def authorize_revocation_write!(_grant, nil) do
     raise Hologram.AccessDeniedError, signed_in_write_message("revoked")
   end
 
-  def apply_revocation_write(%RoleGrant{} = grant, actor_user_id) do
+  def authorize_revocation_write!(nil, _actor_user_id), do: :ok
+
+  def authorize_revocation_write!(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
+    raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "revoked")
+  end
+
+  def authorize_revocation_write!(%RoleGrant{} = grant, actor_user_id) do
     entity_type = RoleGrant.entity_type(grant.resource_type)
     resource = gate_resource(entity_type, grant.resource_id)
 
     check_revocation!(resource, grant.user_id, grant.role, actor_user_id)
-
-    EntityOperations.delete(RoleGrant, grant.id)
   end
 
   @doc """
