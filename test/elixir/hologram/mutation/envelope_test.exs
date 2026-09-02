@@ -719,6 +719,15 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, ~s(write 0: resource_type "map" is not an entity type of this build)}
     end
 
+    test "refuses a role grant naming no user" do
+      grant_id = RoleGrant.derive_id(nil, :test_fixtures_policy_module2, @target_id, :member)
+      data = Map.delete(grant_data(), "user_id")
+      entry = create(RoleGrant, data, id: grant_id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant names the user it is granted to"}
+    end
+
     # The id derives for this shape too, and nothing downstream can resolve a nil type - so the
     # parser is the one place that can say no.
     test "refuses a role grant naming a resource id but no resource type" do

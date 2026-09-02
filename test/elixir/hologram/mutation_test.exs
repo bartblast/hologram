@@ -726,6 +726,17 @@ defmodule Hologram.MutationTest do
                rejected(0, %Hologram.AccessDeniedError{message: message})
     end
 
+    test "rejects a grant to a user that does not exist" do
+      member = create_user("granting-to-nobody@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      write = grant_write(Entity.generate_id(), resource, :member)
+
+      assert run(envelope([write]), server(member.id)) == rejected(0, %{user_id: [:not_found]})
+    end
+
     test "rejects a type-wide grant" do
       admin = create_user("type-wide-admin@example.com")
       user = create_user("type-wide-user@example.com")

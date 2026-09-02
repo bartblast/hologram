@@ -183,7 +183,8 @@ defmodule Hologram.Auth do
   end
 
   @doc false
-  @spec apply_grant_write(RoleGrant.t(), String.t() | nil) :: :created | :present
+  @spec apply_grant_write(RoleGrant.t(), String.t() | nil) ::
+          :created | :present | {:error, %{user_id: [:not_found]}}
   # grant_role/3's twin for a grant made in a browser: the same gate, asked about the actor the
   # request authenticated rather than about anything the batch carried.
   #
@@ -205,6 +206,21 @@ defmodule Hologram.Auth do
     check_grant!(gate_resource(entity_type, grant.resource_id), grant.role, actor_user_id)
 
     EntityOperations.create_if_absent(grant)
+  rescue
+    error in Postgrex.Error ->
+      # A grantee that does not exist is the write's own mistake, answered the way any create
+      # naming no row is - the verb raises for it, a batch is refused with the reference named.
+      # The granter's reference cannot fail this way: the actor is authorized by a grant of their
+      # own, which keeps their row undeletable.
+      grantee_constraint = grantee_fk_constraint()
+
+      case error.postgres do
+        %{code: :foreign_key_violation, constraint: ^grantee_constraint} ->
+          {:error, %{user_id: [:not_found]}}
+
+        _other_violation ->
+          reraise error, __STACKTRACE__
+      end
   end
 
   @doc """

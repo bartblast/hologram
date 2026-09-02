@@ -1189,6 +1189,26 @@ defmodule Hologram.AuthTest do
       end
     end
 
+    # The verb raises an ArgumentError for this; a batch cannot be answered with a raise, so the
+    # same violation comes back the way a create naming no row does.
+    test "answers the grantee as not found for a user that does not exist" do
+      granter = create_user("user_118@example.com")
+      resource = create_resource()
+
+      grant_role(granter, resource, :owner)
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: granter.id,
+          resource_id: resource.id,
+          role: :editor,
+          user_id: Entity.generate_id()
+        )
+
+      assert apply_grant_write(grant, granter.id) == {:error, %{user_id: [:not_found]}}
+    end
+
     test "refuses a role the acting user's own roles do not cover" do
       granter = create_user("user_104@example.com")
       user = create_user("user_105@example.com")

@@ -279,6 +279,18 @@ defmodule Hologram.Mutation.Envelope do
 
   defp grant_scope(_write), do: :ok
 
+  # A grant is granted TO someone: the reference is required on the store, and the grant path
+  # validates by raising rather than answering, so an absent user is refused here where a client
+  # can be told - the id derives for the shape either way.
+  defp grant_user(%Write{op: :create, data: data}) do
+    case Map.get(data, :user_id) do
+      nil -> {:error, "a role grant names the user it is granted to"}
+      _user_id -> :ok
+    end
+  end
+
+  defp grant_user(_write), do: :ok
+
   defp id(entry) do
     value = Map.get(entry, "id")
 
@@ -609,6 +621,7 @@ defmodule Hologram.Mutation.Envelope do
     with :ok <- grant_op(write.op),
          :ok <- grant_claim(write.claim),
          :ok <- grant_scope(write),
+         :ok <- grant_user(write),
          :ok <- declared_role(write),
          :ok <- derived_id(write) do
       {:ok, write}

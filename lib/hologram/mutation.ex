@@ -184,6 +184,9 @@ defmodule Hologram.Mutation do
       :created ->
         {%{}, nil}
 
+      {:error, violations} ->
+        Connection.rollback({:rejected, index, violations})
+
       # ON CONFLICT DO NOTHING holds no lock on the row it conflicted with, and the batch runs at
       # read committed - so the row is read back LOCKED, which keeps it until the batch commits,
       # and a row already gone by then (a revocation committed in between) is not an error: the
