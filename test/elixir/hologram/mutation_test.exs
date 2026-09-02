@@ -726,6 +726,35 @@ defmodule Hologram.MutationTest do
                rejected(0, %Hologram.AccessDeniedError{message: message})
     end
 
+    # No writer of the store produces such a row now - every one derives the id - so a row that
+    # conflicts on the fact yet is not found by the derived id is an invariant broken, and the
+    # applier says so rather than retrying the insert forever.
+    test "raises on a grant held under an id that is not its derivation" do
+      member = create_user("legacy-member@example.com")
+      user = create_user("legacy-user@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      EntityOperations.create_if_absent(%RoleGrant{
+        id: Entity.generate_id(),
+        resource_id: resource.id,
+        resource_type: RoleGrant.resource_type(PolicyModule2),
+        role: :member,
+        user_id: user.id
+      })
+
+      write = grant_write(user.id, resource, :member)
+
+      expected_msg =
+        "a role grant for this user, resource and role exists under an id that is not its " <>
+          "derivation - every grant row's id is derived from the grant it states"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(envelope([write]), server(member.id))
+      end
+    end
+
     test "rejects a grant to a user that does not exist" do
       member = create_user("granting-to-nobody@example.com")
       resource = create_shared()
