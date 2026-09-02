@@ -589,6 +589,74 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    test "encodes a function once and serves later calls from the encode PLT", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js_1 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      assert {:ok, into_js} = PLT.get(encode_plt, {Enum, :into, 2})
+
+      assert String.starts_with?(
+               into_js,
+               ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
+             )
+
+      js_2 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      assert js_2 == js_1
+    end
+
+    test "a warm encode PLT is used instead of the module IR", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js_1 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      # A clone, so the PLT shared by the whole test module keeps its Enum entry.
+      ir_plt_without_enum =
+        ir_plt
+        |> PLT.clone()
+        |> PLT.delete(Enum)
+
+      js_2 =
+        build_runtime_js(runtime_mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], @js_dir)
+
+      assert js_2 == js_1
+    end
+
+    test "protocol functions are rendered per entry file and not cached", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+             )
+
+      assert PLT.get(encode_plt, {String.Chars, :impl_for!, 1}) == :error
+    end
+
+    test "renders a module's functions ordered by name and arity", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      {into_pos, _length} = :binary.match(js, ~s/defineElixirFunction("Enum", "into", 2/)
+
+      {into_protocol_pos, _length} =
+        :binary.match(js, ~s/defineElixirFunction("Enum", "into_protocol", 2/)
+
+      assert into_pos < into_protocol_pos
+    end
+
     test "renders the clause heads of manually ported functions", %{
       encode_plt: encode_plt,
       ir_plt: ir_plt,
