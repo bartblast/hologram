@@ -902,8 +902,10 @@ defmodule Hologram.Auth do
   # The grant goes through the internal entity write path, so it is validated, stamped and
   # encoded like any row - the public write surface is closed to role grants on purpose.
   defp write_grant(user_id, resource_type, resource_id, role) do
+    # One identity scheme for the store, whoever writes it: a grant made here and the same grant
+    # made in a browser are one row, because both derive the id from the grant itself.
     grant = %RoleGrant{
-      id: Entity.generate_id(),
+      id: RoleGrant.derive_id(user_id, resource_type, resource_id, role),
       granted_by_id: Context.actor_user_id(),
       resource_id: resource_id,
       resource_type: resource_type,

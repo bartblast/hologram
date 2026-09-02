@@ -582,12 +582,16 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The id is derived from the grant, as every writer of the store derives it - a creator's grant
+  # and the same grant made later from a browser are one row.
   defp creator_grant({role_name, _opts}, entity, entity_type, actor_user_id) do
+    resource_type = RoleGrant.resource_type(entity_type)
+
     %RoleGrant{
-      id: Entity.generate_id(),
+      id: RoleGrant.derive_id(actor_user_id, resource_type, entity.id, role_name),
       granted_by_id: actor_user_id,
       resource_id: entity.id,
-      resource_type: RoleGrant.resource_type(entity_type),
+      resource_type: resource_type,
       role: role_name,
       user_id: actor_user_id
     }

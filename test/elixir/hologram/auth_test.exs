@@ -66,14 +66,18 @@ defmodule Hologram.AuthTest do
   # applier, with the granter already taken from the acting user.
   defp grant_struct(opts) do
     entity_type = Keyword.get(opts, :entity_type)
+    resource_id = Keyword.get(opts, :resource_id)
+    resource_type = entity_type && RoleGrant.resource_type(entity_type)
+    role = Keyword.fetch!(opts, :role)
+    user_id = Keyword.fetch!(opts, :user_id)
 
     %RoleGrant{
       granted_by_id: Keyword.get(opts, :granted_by_id),
-      id: Entity.generate_id(),
-      resource_id: Keyword.get(opts, :resource_id),
-      resource_type: entity_type && RoleGrant.resource_type(entity_type),
-      role: Keyword.fetch!(opts, :role),
-      user_id: Keyword.fetch!(opts, :user_id)
+      id: RoleGrant.derive_id(user_id, resource_type, resource_id, role),
+      resource_id: resource_id,
+      resource_type: resource_type,
+      role: role,
+      user_id: user_id
     }
   end
 
@@ -782,6 +786,14 @@ defmodule Hologram.AuthTest do
   end
 
   describe "grant_role/2" do
+    test "mints the row's id from the grant" do
+      user = create_user("user_117@example.com")
+
+      grant_role(user, Role.Module1)
+
+      assert grant_id(user.id) == RoleGrant.derive_id(user.id, nil, nil, Role.Module1)
+    end
+
     test "writes a global grant with no resource" do
       user = create_user("user_4@example.com")
 
@@ -856,6 +868,20 @@ defmodule Hologram.AuthTest do
   end
 
   describe "grant_role/3" do
+    # The store has one identity scheme whoever writes it - a grant made here and the same grant
+    # made from a browser are one row, and this is the half a command makes.
+    test "mints the row's id from the grant" do
+      user = create_user("user_116@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+
+      resource_type = RoleGrant.resource_type(Module1)
+
+      assert grant_id(user.id) ==
+               RoleGrant.derive_id(user.id, resource_type, resource.id, :editor)
+    end
+
     test "writes an instance grant naming the resource type and id" do
       user = create_user("user_7@example.com")
 

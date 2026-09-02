@@ -608,6 +608,36 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert granted_roles(user.id, resource.id) == ["maintainer", "owner"]
     end
 
+    # The creator's grants are the one place the store is written outside the grant verbs, so
+    # they derive their ids the same way - or a later grant of the same role from a browser
+    # would carry a second id for one fact.
+    test "mints each creator grant's id from the grant" do
+      {:ok, user} =
+        %{email: "user_5@example.com"}
+        |> Module14.new()
+        |> create()
+
+      {:ok, resource} =
+        Context.with_actor(user.id, fn ->
+          create(PolicyModule1.new())
+        end)
+
+      select_sql =
+        ~s|SELECT "role", "id" FROM "hologram_data"."hologram_role_grant" | <>
+          ~s|WHERE "user_id" = $1 ORDER BY "role"|
+
+      {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
+      granted = Enum.map(rows, fn [role, id] -> {role, Codec.decode(id, :uuid)} end)
+
+      resource_type = RoleGrant.resource_type(PolicyModule1)
+
+      assert granted == [
+               {"maintainer",
+                RoleGrant.derive_id(user.id, resource_type, resource.id, :maintainer)},
+               {"owner", RoleGrant.derive_id(user.id, resource_type, resource.id, :owner)}
+             ]
+    end
+
     test "grants nothing outside an actor context" do
       {:ok, resource} = create(PolicyModule1.new())
 
