@@ -35,6 +35,22 @@ defmodule Hologram.Mutation.WriteTest do
     }
   end
 
+  defp revocation_write do
+    %Write{
+      based_on: %{role: 3},
+      data: %{
+        resource_id: @target_id,
+        resource_type: :test_fixtures_policy_module2,
+        role: :member,
+        user_id: @user_id
+      },
+      entity_type: RoleGrant,
+      id: @id,
+      op: :delete,
+      stamp: 5
+    }
+  end
+
   describe "to_entity/1" do
     test "builds a create as a new struct with its declared defaults filled" do
       write = %Write{
@@ -224,6 +240,26 @@ defmodule Hologram.Mutation.WriteTest do
       entity = Context.with_actor(nil, fn -> to_entity(grant_write()) end)
 
       assert entity.granted_by_id == nil
+    end
+
+    # The struct the revocation gate is asked about: the grant the write states, under the write's
+    # id, with the revisions it was based on - a granter is nothing a revocation says.
+    test "builds a role grant from the grant a revocation carries" do
+      entity = Context.with_actor(@actor_id, fn -> to_entity(revocation_write()) end)
+
+      assert entity == %RoleGrant{
+               __meta__: %Metadata{revisions: %{role: 3}, stamp: 5},
+               created_at: nil,
+               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by_id: nil,
+               id: @id,
+               resource_id: @target_id,
+               resource_type: :test_fixtures_policy_module2,
+               role: :member,
+               updated_at: nil,
+               user: %NotIncluded{relationship: :user},
+               user_id: @user_id
+             }
     end
   end
 end
