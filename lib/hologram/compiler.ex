@@ -187,10 +187,11 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the given pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches `Hologram.Auth.can?/3`.
+  reaches one of `permission_mfas/0`: `Hologram.Auth.can?/3`, or the grant verbs `grant_role/3`
+  and `revoke_role/3`, each of which asks the same gate locally before it writes.
 
-  Takes the call graph BEFORE manually ported MFAs are removed: `can?/3` is one of them, so the
-  graph the bundles are derived from no longer holds the vertex to ask about. Reachability is
+  Takes the call graph BEFORE manually ported MFAs are removed: every one of those MFAs is ported,
+  so the graph the bundles are derived from no longer holds the vertex to ask about. Reachability is
   read through the same page walk the bundles use, so what registers the grants window is what
   actually ships - a `can?` reached only from command handlers, which run on the server, does
   not.
