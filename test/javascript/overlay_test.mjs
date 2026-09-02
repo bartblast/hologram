@@ -633,6 +633,72 @@ describe("Overlay", () => {
       assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 7);
     });
 
+    // The answer to a create the server did not perform - a role grant already held - carries
+    // the stored row whole. Nothing is in the base under the id, and the write's own values are
+    // this client's guess: the answer's row is what lands, not the guess.
+    it("lands a create's kept row when the base holds none", () => {
+      const batch = pushed(createWrite());
+
+      Overlay.promote(batch, {
+        0: {
+          created_at: "2026-02-02T00:00:00.000000Z",
+          done: true,
+          id: "t1",
+          project_id: "p9",
+          title: "Theirs",
+          updated_at: "2026-02-02T00:00:00.000000Z",
+          votes: 9,
+          $revisions: {done: 4, project_id: 4, title: 4, votes: 4},
+        },
+      });
+
+      const row = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(row.title, "Theirs");
+      assert.equal(row.title_sort, "theirs");
+      assert.equal(row.votes, 9);
+      assert.equal(row.created_at, "2026-02-02T00:00:00.000000Z");
+      assert.deepStrictEqual(row.$revisions, {
+        done: 4,
+        project_id: 4,
+        title: 4,
+        votes: 4,
+      });
+    });
+
+    // The frame-first order: the row is already in the base, and the answer's whole row goes
+    // through the same per-column absorb any kept does.
+    it("still absorbs a create's kept columns into a base row that exists", () => {
+      LocalDatabase.putRow(TODO, base({title: "Frame"}));
+
+      const batch = pushed(createWrite());
+
+      Overlay.promote(batch, {
+        0: Object.assign(base({title: "Theirs"}), {
+          $revisions: {done: 10, project_id: 10, title: 11, votes: 10},
+        }),
+      });
+
+      const row = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(row.title, "Theirs");
+      assert.equal(row.$revisions.title, 11);
+    });
+
+    // An update's kept names columns, never a row - with nothing in the base to put them on,
+    // there is nothing to do, and no row appears.
+    it("leaves an update's kept alone when the base holds no row", () => {
+      const batch = pushed(updateWrite({data: {title: "Mine"}}));
+
+      Overlay.promote(batch, {
+        0: {title: "Theirs", $revisions: {title: stamp + 1}},
+      });
+
+      // The whole table, not the one id: a kept with no id that was wrongly filed lands under
+      // the key "undefined", where a read of "t1" would never see it.
+      assert.deepStrictEqual(Object.keys(LocalDatabase.baseTable(TODO)), []);
+    });
+
     it("files the value a lost column kept, with its revision", () => {
       LocalDatabase.putRow(TODO, base());
 
