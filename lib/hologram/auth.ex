@@ -169,7 +169,8 @@ defmodule Hologram.Auth do
   the same answer can?/3 gives for {:grant_role, role} - by default their own role and every role
   it extends, so nobody hands out more than they hold, or a global role the line names. Trusted
   code running without an acting user grants whatever it needs, and a type-wide grant is
-  trusted-only.
+  trusted-only. The gate's answer holds until the grant lands: a revocation of the role it rests
+  on waits for the grant to commit rather than slipping in between the two.
   """
   @spec grant_role(struct | String.t(), struct | module, atom) :: :ok
   def grant_role(user_or_id, resource, role) do
@@ -177,9 +178,16 @@ defmodule Hologram.Auth do
     {entity_type, resource_id} = resource_reference(resource)
 
     validate_declared_role!(entity_type, role)
-    authorize_grant!(entity_type, resource_id, role)
 
-    write_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+    # Gate and write in one transaction, so the authority the gate read is still there when the
+    # write lands - the gate holds the acting user's grant rows until the transaction ends.
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        authorize_grant!(entity_type, resource_id, role)
+        write_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+      end)
+
+    :ok
   end
 
   @doc false
@@ -253,7 +261,9 @@ defmodule Hologram.Auth do
   Whether a resource may lose its last manager is the app's rule, not the framework's: a global
   role the gate names, or trusted code, can always grant on a resource nobody administers.
   Trusted code running without an acting user is subject to neither gate, and is how a resource's
-  roles are set up and torn down. A type-wide revocation is trusted-only.
+  roles are set up and torn down. A type-wide revocation is trusted-only. The gate's answer holds
+  until the revocation lands: a revocation of the role it rests on waits for this one to commit
+  rather than slipping in between the two.
   """
   @spec revoke_role(struct | String.t(), struct | module, atom) :: :ok
   def revoke_role(user_or_id, resource, role) do
@@ -261,9 +271,16 @@ defmodule Hologram.Auth do
     {entity_type, resource_id} = resource_reference(resource)
 
     validate_declared_role!(entity_type, role)
-    authorize_revoke!(entity_type, resource_id, user_id, role)
 
-    delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+    # Gate and write in one transaction, so the authority the gate read is still there when the
+    # write lands - the gate holds the acting user's grant rows until the transaction ends.
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        authorize_revoke!(entity_type, resource_id, user_id, role)
+        delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+      end)
+
+    :ok
   end
 
   @doc false
@@ -356,18 +373,22 @@ defmodule Hologram.Auth do
     :ok
   end
 
-  # The gate a revocation passes, asked the same way by the verb and by a batch's revocation write
-  # so the two cannot drift: dropping one's own role needs no permission, taking someone else's is
-  # the per-role question. Whether a resource may lose its last manager is the app's rule.
-  defp check_revocation!(resource, user_id, role, actor_user_id) do
-    if actor_user_id != user_id and not can?(actor_user_id, {:revoke_role, role}, resource) do
+  # The per-role question both gates ask, with the answer held until the transaction ends: the
+  # acting user's grant rows that reach the resource are share-locked BEFORE they are read, so a
+  # revocation of one of them - a row lock of its own - waits for this transaction to commit
+  # rather than landing between the read and the write it authorizes. A gate line reads nothing
+  # of the row but its id, so an id-only struct is the whole resource it needs.
+  defp check_authority!(resource, operation, role, actor_user_id) do
+    hold_actor_grants(actor_user_id, resource.__struct__, resource.id)
+
+    if not can?(actor_user_id, {operation, role}, resource) do
       raise Hologram.AccessDeniedError,
             unqualified_role_message(
               resource.__struct__,
               resource.id,
               actor_user_id,
               role,
-              :revoke_role
+              operation
             )
     end
 
@@ -375,21 +396,9 @@ defmodule Hologram.Auth do
   end
 
   # The gate a grant passes, asked the same way by the verb and by a batch's grant write so the two
-  # cannot drift: whoever is acting must be allowed to grant this role on this row. A gate line
-  # reads nothing of the row but its id, so an id-only struct is the whole resource it needs.
+  # cannot drift: whoever is acting must be allowed to grant this role on this row.
   defp check_grant!(resource, role, actor_user_id) do
-    if not can?(actor_user_id, {:grant_role, role}, resource) do
-      raise Hologram.AccessDeniedError,
-            unqualified_role_message(
-              resource.__struct__,
-              resource.id,
-              actor_user_id,
-              role,
-              :grant_role
-            )
-    end
-
-    :ok
+    check_authority!(resource, :grant_role, role, actor_user_id)
   end
 
   # Global roles are held without a resource - the grant shape leaving both resource columns nil.
@@ -461,6 +470,15 @@ defmodule Hologram.Auth do
         |> EntityOperations.get(target_id)
         |> delegates?(actor_user_id, operation, source)
     end
+  end
+
+  # The gate a revocation passes, asked the same way by the verb and by a batch's revocation write
+  # so the two cannot drift: dropping one's own role needs no permission, taking someone else's is
+  # the per-role question. Whether a resource may lose its last manager is the app's rule.
+  defp check_revocation!(_resource, user_id, _role, user_id), do: :ok
+
+  defp check_revocation!(resource, _user_id, role, actor_user_id) do
+    check_authority!(resource, :revoke_role, role, actor_user_id)
   end
 
   defp chain_target_id_or_nil(nil, _chain), do: nil
@@ -821,6 +839,32 @@ defmodule Hologram.Auth do
     end)
     |> Enum.map(& &1.role)
     |> Enum.sort_by(&{Reflection.alias?(&1), &1})
+  end
+
+  # Share-locks the acting user's grant rows a gate reads - the rows on the resource, on its whole
+  # type and the global ones, the same set the own-scope and global conditions match - for the
+  # rest of the transaction. Not the read itself: can?/3 reads through query_grant_exists?/3,
+  # which sync shares, and a lock there would make every sync round a lock holder.
+  # sobelow_skip ["SQL.Query"]
+  defp hold_actor_grants(actor_user_id, entity_type, resource_id) do
+    statement = """
+    SELECT 1 FROM "hologram_data"."hologram_role_grant"
+    WHERE "user_id" = $1
+      AND (("resource_type" = $2::#{qualified_enum_type("resource_type")}
+            AND ("resource_id" = $3 OR "resource_id" IS NULL))
+        OR ("resource_type" IS NULL AND "resource_id" IS NULL))
+    FOR SHARE
+    """
+
+    params = [
+      Codec.encode(actor_user_id, :uuid),
+      resource_type_value(entity_type),
+      Codec.encode(resource_id, :uuid)
+    ]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
   end
 
   defp join_role_names(role_names), do: Enum.map_join(role_names, " and ", &inspect/1)
