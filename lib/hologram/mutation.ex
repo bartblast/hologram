@@ -10,7 +10,9 @@ defmodule Hologram.Mutation do
   # rolls the whole batch back and names the write it refused - and a refusal the EVALUATOR made
   # is then kept, the batch as it arrived beside its answer, for the session that sent it.
 
+  alias Hologram.Auth
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Compiler.Encoder
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
@@ -157,6 +159,26 @@ defmodule Hologram.Mutation do
 
   # Each clause answers what the write LOST - nothing, or the values a newer edit kept it from
   # setting. A refusal never returns from here: it rolls the whole batch back.
+  # A grant is not the writer's to evaluate: it goes to the grant verb's own rules, under the
+  # session's actor, and a denial there is the same rejection any denied write answers with. A
+  # grant the store already holds is not an error - the verb is idempotent - so the write is
+  # confirmed with every column dropped and the stored row as what was kept, read back by the SAME
+  # id: the id is derived from the grant, which is what makes the row found the row the write
+  # named. Before the generic clause, which would otherwise match.
+  defp apply_write(%Write{op: :create, entity_type: RoleGrant} = write, _index) do
+    grant = Write.to_entity(write)
+
+    case Auth.apply_grant_write(grant, Context.actor_user_id()) do
+      :created ->
+        {%{}, nil}
+
+      :present ->
+        row = EntityOperations.get(RoleGrant, write.id)
+
+        {lost_values(write, Map.keys(write.data)), stringify(WireData.row(row))}
+    end
+  end
+
   defp apply_write(%Write{op: :create} = write, index) do
     result =
       write

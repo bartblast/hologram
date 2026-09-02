@@ -3,6 +3,9 @@ defmodule Hologram.MutationTest do
 
   import Hologram.Mutation
 
+  alias Hologram.Auth
+  alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Compiler.Encoder
   alias Hologram.DB
   alias Hologram.DB.Codec
@@ -51,6 +54,10 @@ defmodule Hologram.MutationTest do
       ])
 
     count
+  end
+
+  defp create_shared do
+    DB.create!(PolicyModule2.new())
   end
 
   defp create_source do
@@ -135,6 +142,24 @@ defmodule Hologram.MutationTest do
         type: type
       }
     end)
+  end
+
+  # A grant as a browser sends it: the id derived from the grant, no claim (the parser refuses
+  # one), and a granter of the client's own choosing - which the server overwrites.
+  defp grant_write(user_id, resource, role, opts \\ []) do
+    resource_type = RoleGrant.resource_type(resource.__struct__)
+
+    data = %{
+      "granted_by_id" => Keyword.get(opts, :granted_by_id, user_id),
+      "resource_id" => resource.id,
+      "resource_type" => Atom.to_string(resource_type),
+      "role" => Atom.to_string(role),
+      "user_id" => user_id
+    }
+
+    id = RoleGrant.derive_id(user_id, resource_type, resource.id, role)
+
+    create_write(RoleGrant, id, data, Keyword.delete(opts, :granted_by_id))
   end
 
   defp publish_write(id, opts \\ []) do
@@ -599,6 +624,136 @@ defmodule Hologram.MutationTest do
 
       # The whole batch rolled back, including the write that had already landed.
       assert EntityOperations.get(PolicyModule2, landing_id) == nil
+    end
+
+    # Module2's roles extend nothing, so under a bare grant_role line each role may grant only
+    # itself - a member brings in a member.
+    test "lands a role grant under a holder who may grant it" do
+      member = create_user("grant-member@example.com")
+      user = create_user("grant-user@example.com")
+      resource = create_shared()
+      replica_id = Entity.generate_id()
+
+      Auth.grant_role(member, resource, :member)
+
+      write = grant_write(user.id, resource, :member)
+
+      assert run(envelope([write], replica_id: replica_id), server(member.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+      # The granter is the acting user, whatever the client put in the write.
+      row = EntityOperations.get(RoleGrant, write["id"])
+
+      assert row.granted_by_id == member.id
+      assert row.role == :member
+      assert row.user_id == user.id
+
+      # The effect carries the batch's own reference, like any row's.
+      assert [%{type: "Hologram.Auth.RoleGrant", entity_id: entity_id, mutation_ref: ref}] =
+               outbox_rows(replica_id)
+
+      assert entity_id == write["id"]
+      assert ref["replica_id"] == replica_id
+    end
+
+    # The id is derived from the grant, so the row found by the write's id IS the stored grant -
+    # and kept says who really made it, not who asked again.
+    test "answers a grant already held with the stored row" do
+      first_member = create_user("first-member@example.com")
+      second_member = create_user("second-member@example.com")
+      user = create_user("held-user@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(first_member, resource, :member)
+      Auth.grant_role(second_member, resource, :member)
+
+      Context.with_actor(first_member.id, fn ->
+        Auth.grant_role(user, resource, :member)
+      end)
+
+      write = grant_write(user.id, resource, :member)
+
+      assert {:ok, %{"status" => "confirmed", "dropped" => dropped, "kept" => kept}} =
+               run(envelope([write]), server(second_member.id))
+
+      assert Map.keys(dropped["0"]) == [
+               "granted_by_id",
+               "resource_id",
+               "resource_type",
+               "role",
+               "user_id"
+             ]
+
+      assert kept["0"]["id"] == write["id"]
+      assert kept["0"]["granted_by_id"] == first_member.id
+    end
+
+    test "rolls the batch back on a refused grant" do
+      member = create_user("rollback-member@example.com")
+      user = create_user("rollback-user@example.com")
+      resource = create_shared()
+      landing_id = Entity.generate_id()
+
+      Auth.grant_role(member, resource, :member)
+
+      writes = [publish_write(landing_id), grant_write(user.id, resource, :admin)]
+
+      assert {:ok, %{"status" => "rejected", "write" => 1}} =
+               run(envelope(writes), server(member.id))
+
+      assert EntityOperations.get(PolicyModule2, landing_id) == nil
+    end
+
+    test "rejects a grant of a role above the holder's own" do
+      member = create_user("escalating-member@example.com")
+      user = create_user("escalation-user@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      write = grant_write(user.id, resource, :admin)
+
+      message =
+        "the acting user holds :member on Hologram.Test.Fixtures.Policy.Module2 #{inspect(resource.id)}, " <>
+          "which may grant :member but not :admin. " <>
+          "Declare `allow {:grant_role, :admin}, to: :member` on Hologram.Test.Fixtures.Policy.Module2 if that is intended."
+
+      assert run(envelope([write]), server(member.id)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+    end
+
+    test "rejects a type-wide grant" do
+      admin = create_user("type-wide-admin@example.com")
+      user = create_user("type-wide-user@example.com")
+      resource_type = RoleGrant.resource_type(PolicyModule2)
+
+      data = %{
+        "granted_by_id" => admin.id,
+        "resource_id" => nil,
+        "resource_type" => Atom.to_string(resource_type),
+        "role" => "member",
+        "user_id" => user.id
+      }
+
+      id = RoleGrant.derive_id(user.id, resource_type, nil, :member)
+      write = create_write(RoleGrant, id, data)
+
+      message = "type-wide roles are granted only by trusted code running without an acting user"
+
+      assert run(envelope([write]), server(admin.id)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+    end
+
+    test "rejects a grant from an anonymous session" do
+      user = create_user("anonymous-grant-user@example.com")
+      resource = create_shared()
+
+      write = grant_write(user.id, resource, :member)
+
+      message = "a role is granted only by a signed-in user - nobody is signed in"
+
+      assert run(envelope([write]), server()) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
     end
 
     test "lands a job queued, with the session's user as its actor" do
