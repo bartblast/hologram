@@ -738,6 +738,17 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, "write 0: a role grant naming a resource id names its resource type too"}
     end
 
+    # The same shape with the type left out rather than sent as nil - a key a pattern on the data
+    # would not see, and the applier would raise on the same nothing.
+    test "refuses a role grant naming a resource id and no resource type at all" do
+      grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
+      data = Map.delete(grant_data(), "resource_type")
+      entry = create(RoleGrant, data, id: grant_id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant naming a resource id names its resource type too"}
+    end
+
     # @id is a well-formed entity id that no derivation produces - the shape a client minting
     # its own v7 for the store would send.
     test "refuses a role grant whose id is not derived from it" do

@@ -270,11 +270,15 @@ defmodule Hologram.Mutation.Envelope do
   defp grant_op(_op), do: {:error, "a role grant is created or deleted whole"}
 
   # A grant names its resource one of three ways - a type and an id, a type alone, or neither -
-  # and an id with no type is none of them. Refused here rather than in the applier, which
-  # resolves the type first and would raise on nothing to resolve.
-  defp grant_scope(%Write{op: :create, data: %{resource_type: nil, resource_id: resource_id}})
-       when resource_id != nil do
-    {:error, "a role grant naming a resource id names its resource type too"}
+  # and an id with no type is none of them, whether the type is sent as nil or not sent at all.
+  # Refused here rather than in the applier, which resolves the type first and would raise on
+  # nothing to resolve.
+  defp grant_scope(%Write{op: :create, data: data}) do
+    if Map.get(data, :resource_type) == nil and Map.get(data, :resource_id) != nil do
+      {:error, "a role grant naming a resource id names its resource type too"}
+    else
+      :ok
+    end
   end
 
   defp grant_scope(_write), do: :ok
