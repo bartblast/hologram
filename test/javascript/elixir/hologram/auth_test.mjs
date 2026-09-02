@@ -17,6 +17,7 @@ import Elixir_Hologram_Auth, {
 } from "../../../../assets/js/elixir/hologram/auth.mjs";
 import Batches from "../../../../assets/js/batches.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
+import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -1653,5 +1654,88 @@ describe("revoke_role/2", () => {
       "Hologram.AccessDeniedError",
       "global roles are revoked only by trusted code running without an acting user",
     );
+  });
+});
+
+// What db_test.mjs's batch entries only imply, asserted as the answer a page would get: a row the
+// browser has just made carries its creator's roles, so a check gated on one passes from the local
+// database alone, before anything is sent. The unit twin of the feature that grants on a row the
+// same action created.
+describe("a creator's own grant", () => {
+  const NOTE = "MyApp.Note";
+
+  const NOTE_ID = "018f4571-a1b2-7c3d-8e4f-0000000000c1";
+  const OWNER = "018f4571-a1b2-7c3d-8e4f-0000000000c2";
+
+  const can = Elixir_Hologram_Auth["can?/3"];
+  const create = Elixir_Hologram_DB["create/1"];
+
+  const mayGrantMember = (entity) =>
+    can(
+      Type.bitstring(OWNER),
+      Type.tuple([Type.atom("grant_role"), Type.atom("member")]),
+      entity,
+    );
+
+  const note = () => Model.box(NOTE, {id: NOTE_ID, title: "alpha"});
+
+  beforeEach(() => {
+    globalThis.Hologram.sync = {
+      model: {
+        [NOTE]: {
+          attributes: {id: "uuid", title: "string"},
+          constraints: {},
+          creatorRoles: ["owner"],
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          policy: {"grant_role:member": [gateRule([["own", ["owner"]]])]},
+          relationships: {},
+          resourceType: "notes",
+          roles: ["member", "owner"],
+          serverOnly: [],
+        },
+        [GATED_GRANT]: {
+          attributes: {
+            id: "uuid",
+            resource_id: "uuid",
+            resource_type: "enum",
+            role: "enum",
+          },
+          policy: {},
+          relationships: {},
+          resourceType: "hologram_role_grant",
+          roles: [],
+          serverOnly: [],
+        },
+      },
+    };
+
+    Model.reset();
+    Batches.reset();
+    Clock.reset();
+    LocalDatabase.reset();
+    LocalDatabase.actorUserId = null;
+    Batches.open("notes");
+  });
+
+  afterEach(() => {
+    Batches.reset();
+    LocalDatabase.actorUserId = null;
+  });
+
+  it("lets the creator do what the role it takes gates", () => {
+    LocalDatabase.actorUserId = OWNER;
+
+    const created = create(note()).data[1];
+
+    assert.deepStrictEqual(mayGrantMember(created), Type.boolean(true));
+  });
+
+  // No acting user, no grants - so the same row made by nobody gates the same check shut.
+  it("leaves a row made with nobody signed in ungated", () => {
+    const created = create(note()).data[1];
+
+    assert.deepStrictEqual(mayGrantMember(created), Type.boolean(false));
   });
 });
