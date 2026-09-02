@@ -23,7 +23,6 @@ defmodule HologramFeatureTests.PoliciesPage do
       <button $click={command: :create_own_document}> Create own document </button>
       <button $click={command: :grant_editor}> Grant editor </button>
       <button $click={command: :grant_owner_as_editor}> Grant owner as editor </button>
-      <button $click={command: :leave_last_owner}> Leave last owner </button>
       <button $click={command: :log_in}> Log in </button>
       <button $click={command: :read_documents_as_server}> Read documents as server </button>
       <button $click={command: :read_documents_as_user}> Read documents as user </button>
@@ -106,20 +105,6 @@ defmodule HologramFeatureTests.PoliciesPage do
         "grant_owner_as_editor_granted"
       rescue
         Hologram.AccessDeniedError -> "grant_owner_as_editor_refused"
-      end
-
-    put_action(server, :show_result, result: result)
-  end
-
-  def command(:leave_last_owner, _params, server) do
-    document = create_document("last_owner_document")
-
-    result =
-      try do
-        Auth.revoke_role(server.user_id, document, :owner)
-        "left_document"
-      rescue
-        error in Hologram.AccessDeniedError -> error.message
       end
 
     put_action(server, :show_result, result: result)

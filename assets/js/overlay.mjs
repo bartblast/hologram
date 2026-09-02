@@ -165,6 +165,19 @@ export default class Overlay {
 
     const base = LocalDatabase.baseRow(write.type, write.id);
 
+    // A create the server answered with a whole row - it carries an id, which the per-column
+    // kept of an update never does - is a create the server did not perform because the row was
+    // already there: a role grant made twice. The base holds nothing under the id yet (the row's
+    // own frame went out when it was first made, to whoever could see it then), and promoting
+    // would file this client's guess of it with no frame ever coming to correct it, since the
+    // server wrote nothing. So the answer's row is filed as the row, whole - its sort keys are
+    // computed by #promoteWrite, which re-files whatever the base holds under the id next.
+    if (base === null && write.op === "create" && "id" in kept) {
+      LocalDatabase.putRow(write.type, kept);
+
+      return;
+    }
+
     if (base === null) {
       return;
     }

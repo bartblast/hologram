@@ -10,7 +10,9 @@ defmodule Hologram.Mutation do
   # rolls the whole batch back and names the write it refused - and a refusal the EVALUATOR made
   # is then kept, the batch as it arrived beside its answer, for the session that sent it.
 
+  alias Hologram.Auth
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Compiler.Encoder
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
@@ -116,6 +118,51 @@ defmodule Hologram.Mutation do
     end
   end
 
+  defp apply_revocation(write, row) do
+    case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
+      :delete ->
+        Auth.apply_revocation_write(row, Context.actor_user_id())
+
+        {%{}, nil}
+
+      :drop ->
+        {lost_values(write, stored_columns(row)), stringify(WireData.row(row))}
+    end
+  end
+
+  # ON CONFLICT DO NOTHING holds no lock on the row it conflicted with, and the batch runs at read
+  # committed - so a present row is read back LOCKED, which keeps it until the batch commits. A
+  # row already gone by then is a revocation committed in between: the grant the write asked for
+  # does not exist after all, so the write runs ONCE more and inserts. A second miss cannot be that
+  # race twice over; it is a row that conflicts on the fact but does not carry the fact's derived
+  # id, which no writer of the store produces - an invariant broken, raised as one rather than
+  # retried forever.
+  defp apply_grant(write, index, retries_left) do
+    grant = Write.to_entity(write)
+
+    case Auth.apply_grant_write(grant, Context.actor_user_id()) do
+      :created ->
+        {%{}, nil}
+
+      {:error, violations} ->
+        Connection.rollback({:rejected, index, violations})
+
+      :present ->
+        case EntityOperations.get(RoleGrant, write.id, lock: true) do
+          nil when retries_left > 0 ->
+            apply_grant(write, index, retries_left - 1)
+
+          nil ->
+            raise ArgumentError,
+                  "a role grant for this user, resource and role exists under an id that is not " <>
+                    "its derivation - every grant row's id is derived from the grant it states"
+
+          row ->
+            {lost_values(write, Map.keys(write.data)), stringify(WireData.row(row))}
+        end
+    end
+  end
+
   defp apply_in_transaction(envelope, server_struct) do
     Connection.transaction(fn ->
       Record.claim!(
@@ -157,6 +204,17 @@ defmodule Hologram.Mutation do
 
   # Each clause answers what the write LOST - nothing, or the values a newer edit kept it from
   # setting. A refusal never returns from here: it rolls the whole batch back.
+  #
+  # A grant is not the writer's to evaluate: it goes to the grant verb's own rules, under the
+  # session's actor, and a denial there is the same rejection any denied write answers with. A
+  # grant the store already holds is not an error - the verb is idempotent - so the write is
+  # confirmed with every column dropped and the stored row as what was kept, read back by the SAME
+  # id: the id is derived from the grant, which is what makes the row found the row the write
+  # named. Before the generic clause, which would otherwise match.
+  defp apply_write(%Write{op: :create, entity_type: RoleGrant} = write, index) do
+    apply_grant(write, index, 1)
+  end
+
   defp apply_write(%Write{op: :create} = write, index) do
     result =
       write
@@ -181,6 +239,26 @@ defmodule Hologram.Mutation do
     apply_changes(write, changes, index)
 
     {lost_values(write, lost), kept_values(row, lost)}
+  end
+
+  # A revocation is judged against the grant as the store holds it, locked for the batch: the
+  # verb's own two gates, under the session's actor. It goes through
+  # the delete merge first, like any delete - a grant can be deleted and re-made under one id,
+  # so a revocation based on an earlier grant's revisions loses to a newer one and answers the
+  # way any stale delete does. A row already gone is what the verb itself answers: nothing.
+  defp apply_write(%Write{op: :delete, entity_type: RoleGrant} = write, _index) do
+    # The gate runs before the lookup, asked about the grant the write states rather than about
+    # the row: a grant's id is derived from its grant, so a delete of any grant is something every
+    # client can send, and whether the row is there is an answer for whoever may revoke it. Asked
+    # this way, an actor who may not gets the same refusal either way, and a stale revocation's
+    # answer - the row it was stale against - stays behind the same gate.
+    grant = Write.to_entity(write)
+    Auth.authorize_revocation_write!(grant, Context.actor_user_id())
+
+    case EntityOperations.get(RoleGrant, write.id, lock: true) do
+      nil -> {%{}, nil}
+      row -> apply_revocation(write, row)
+    end
   end
 
   defp apply_write(%Write{op: :delete} = write, index) do

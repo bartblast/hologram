@@ -42,6 +42,20 @@ defmodule Hologram.Compiler do
     :unique
   ]
 
+  # The MFAs whose presence in a page's client code makes the page a permission checker - one
+  # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
+  # locally before it writes.
+  #
+  # TODO: what being a checker buys a page is decided by the modularization work - today it is the
+  # grants window in the page's own list (first-render completeness) and, build-wide, that policy
+  # rules are baked at all. Prune whatever that work makes unconditional; the list itself stays
+  # for as long as either consequence does.
+  @permission_mfas [
+    {Hologram.Auth, :can?, 3},
+    {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :revoke_role, 3}
+  ]
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers.
@@ -155,6 +169,9 @@ defmodule Hologram.Compiler do
       # is an entity type like any other, so a page listing grants and checking permissions reaches
       # one window by two routes - and a list naming it twice is subscribed to twice, monitored
       # twice, and rounded twice for one set of rows.
+      # TODO: whether a checking page carries the grants window in its OWN list - complete
+      # before its :page marker, rather than arriving with the background set - is one of the
+      # two things the modularization work revisits. The other is the policy-baking gate.
       window_ids =
         if page_module in permission_checking_pages do
           [grants_window_id() | window_ids]
@@ -170,10 +187,11 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the given pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches `Hologram.Auth.can?/3`.
+  reaches one of `permission_mfas/0`: `Hologram.Auth.can?/3`, or the grant verbs `grant_role/3`
+  and `revoke_role/3`, each of which asks the same gate locally before it writes.
 
-  Takes the call graph BEFORE manually ported MFAs are removed: `can?/3` is one of them, so the
-  graph the bundles are derived from no longer holds the vertex to ask about. Reachability is
+  Takes the call graph BEFORE manually ported MFAs are removed: every one of those MFAs is ported,
+  so the graph the bundles are derived from no longer holds the vertex to ask about. Reachability is
   read through the same page walk the bundles use, so what registers the grants window is what
   actually ships - a `can?` reached only from command handlers, which run on the server, does
   not.
@@ -192,12 +210,20 @@ defmodule Hologram.Compiler do
       Enum.filter(page_modules, fn page_module ->
         call_graph
         |> CallGraph.list_page_mfas(page_module, analysis)
-        |> Enum.member?({Hologram.Auth, :can?, 3})
+        |> Enum.any?(&(&1 in @permission_mfas))
       end)
     else
       []
     end
   end
+
+  @doc false
+  @spec permission_mfas() :: list(mfa)
+  # Read by the test that pins every permission MFA as a manually ported one: a page reaching one
+  # of these in client code would otherwise have the verb's server call tree transpiled into its
+  # bundle, down to a NIF. The two lists live in two modules for two reasons, and this is the
+  # invariant that ties them.
+  def permission_mfas, do: @permission_mfas
 
   @doc """
   Builds the call graph of all modules in the project.
@@ -1671,6 +1697,7 @@ defmodule Hologram.Compiler do
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"resourceType", render_resource_type(entity_type)},
+      {"roles", render_roles(entity_type)},
       {"serverOnly", server_only}
     ])
   end
@@ -1765,6 +1792,10 @@ defmodule Hologram.Compiler do
   # A build whose clients check nothing carries an empty policy per type - not the rules with
   # nobody to read them. An empty policy grants nothing, which is what a client that cannot check
   # should answer.
+  #
+  # TODO: this clause exists only for the gate the compile task computes from
+  # pages_checking_permissions/2. The modularization work decides whether that gate stays; if
+  # every build with a user entity bakes its rules, this clause and the flag are pruned together.
   defp render_policy(_entity_type, false = _permission_checking?) do
     render_json_object([])
   end
@@ -1898,6 +1929,15 @@ defmodule Hologram.Compiler do
     entity_type
     |> RoleGrant.resource_type()
     |> Codec.encode_enum_value()
+    |> Jason.encode!()
+  end
+
+  # The names a grant on this type may carry, so the browser can refuse an undeclared role with
+  # the server's own sentence before anything is sent.
+  defp render_roles(entity_type) do
+    entity_type.__roles__()
+    |> Enum.map(fn {name, _opts} -> Atom.to_string(name) end)
+    |> Enum.sort()
     |> Jason.encode!()
   end
 

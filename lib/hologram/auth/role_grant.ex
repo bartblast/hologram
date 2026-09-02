@@ -20,12 +20,18 @@ defmodule Hologram.Auth.RoleGrant do
   # exists so that a module can redefine what the macro injected into it, and nothing is
   # injected into this one.
 
+  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Reflection
+
+  # Sixteen bytes drawn once, on 2026-09-02, and fixed forever after: every grant id ever derived
+  # hangs off them, so changing them would rename every row in the store.
+  @namespace <<0x8B, 0x2F, 0x65, 0x0D, 0xD0, 0xCF, 0x15, 0x26, 0xDF, 0xEC, 0x20, 0x9A, 0x31, 0xD9,
+               0xF6, 0x6C>>
 
   @resolution_key {__MODULE__, :resolution}
 
@@ -121,6 +127,68 @@ defmodule Hologram.Auth.RoleGrant do
     [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
   end
 
+  @doc false
+  @spec derive_id(String.t(), atom | nil, String.t() | nil, atom) :: String.t()
+  # A grant's identity is the FACT it states - this user, this resource, this role - which is what
+  # the store's own unique index says. So the id is a function of that fact rather than of the
+  # moment it was minted: a UUIDv5 (RFC 9562 name-based, SHA-1) over the four parts under the
+  # namespace below. The browser derives the same id from the same grant, so a grant made in two
+  # places at once is ONE row on every tier and there is nothing to reconcile afterwards - see
+  # `deriveGrantId` in `assets/js/elixir/hologram/auth.mjs`, its hand-written twin, and the parser,
+  # which recomputes this from a write's columns and refuses an id that disagrees. The four
+  # parameters are identity_columns/0, in that order.
+  #
+  # The cost, which is deliberate: these ids are not time-ordered, so this table's primary key
+  # gives up the insert locality UUIDv7 buys every other table. Recorded in `02a-database.md`
+  # beside the id-format lock - it is confined to the least-inserted table in an app, on the one
+  # index of its four that the framework only ever point-looks-up.
+  def derive_id(user_id, resource_type, resource_id, role) do
+    name =
+      Enum.join(
+        [
+          user_id,
+          resource_type && Codec.encode_enum_value(resource_type),
+          resource_id,
+          Codec.encode_enum_value(role)
+        ],
+        "\n"
+      )
+
+    # A nil part joins as the empty string, and no part can contain a newline - a uuid, an enum
+    # label and a module name are all spelled without one - so the four are unambiguous.
+    <<time_low_and_mid::48, _version::4, time_high::12, _variant::2, rest::62, _tail::binary>> =
+      :crypto.hash(:sha, @namespace <> name)
+
+    format_id(<<time_low_and_mid::48, 5::4, time_high::12, 2::2, rest::62>>)
+  end
+
+  @doc false
+  @spec entity_type(atom) :: module | nil
+  # The inverse of resource_type/1, over the mapping rather than over a module sweep - a stored
+  # label is a table name, and the mapping is the build's own table-name-per-entity-type. Answers
+  # nil for a label naming no table, which a stored row's column cannot be but a client's write
+  # can: an enum decodes to whatever atom it spells rather than to a declared value.
+  def entity_type(resource_type) do
+    table = Atom.to_string(resource_type)
+
+    case Enum.find(DB.mapping(), fn {_entity_type, entry} -> entry.table == table end) do
+      {entity_type, _entry} -> entity_type
+      nil -> nil
+    end
+  end
+
+  @doc false
+  @spec identity_columns() :: list(String.t())
+  # The one list of what a grant IS: the columns whose values make one grant different from
+  # another, in the order the store's unique index holds them. derive_id/4 takes exactly these
+  # four, in this order, and the mapper's unique index is over exactly these - and they must stay
+  # the same set, because the applier reads a present grant back by the id the columns derive.
+  # An index wider than the derivation lets two distinct grants derive one id, and the second is
+  # swallowed by the primary key; one narrower lets one fact carry two ids, and the read-back
+  # after the conflict finds nothing. A column outside this list is free to add - granted_by_id
+  # already is one - and a column inside it renames every row in the store.
+  def identity_columns, do: ["user_id", "resource_type", "resource_id", "role"]
+
   @doc """
   Raises - a role grant is written through grant_role/revoke_role and constructed nowhere.
   Present so that this type answers the constructor every entity type answers, with the refusal the engine already gives it.
@@ -181,6 +249,16 @@ defmodule Hologram.Auth.RoleGrant do
       role_values: role_values,
       user_entity: Reflection.user_entity()
     }
+  end
+
+  # The canonical lowercase 8-4-4-4-12 spelling, which is the only one
+  # `Entity.Validator.attribute_value_valid?/2` admits for a :uuid - it checks the shape and not
+  # the version, so a v5 is as much an entity id as the v7 every other table carries.
+  defp format_id(uuid) do
+    <<part_1::binary-size(8), part_2::binary-size(4), part_3::binary-size(4),
+      part_4::binary-size(4), part_5::binary-size(12)>> = Base.encode16(uuid, case: :lower)
+
+    "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
   end
 
   # The resolution sweeps the app's modules, and definition reads happen per write and per

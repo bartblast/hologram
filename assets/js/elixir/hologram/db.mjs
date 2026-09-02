@@ -371,7 +371,7 @@ export function writeRefusal(entityType, violations, values) {
   return refusalLines(entityType, violations, values);
 }
 
-export {raiseWriteError, structValues};
+export {currentBatch, raiseWriteError, structValues};
 
 function raiseWriteError(message, reason) {
   Erlang["error/1"](

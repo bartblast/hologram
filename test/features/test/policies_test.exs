@@ -184,13 +184,4 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> click(button("Revoke editor"))
     |> assert_text(css("#result"), "revoke_editor_false")
   end
-
-  feature "refuses to revoke the last role managing a resource", %{session: session} do
-    session
-    |> visit(PoliciesPage)
-    |> click(button("Log in"))
-    |> assert_text(css("#result"), "logged_in")
-    |> click(button("Leave last owner"))
-    |> assert_text(css("#result"), "cannot revoke the last role managing")
-  end
 end

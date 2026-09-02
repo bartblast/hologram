@@ -97,12 +97,16 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec create_if_absent(struct) :: :ok
+  @spec create_if_absent(struct) :: :created | :present
   def create_if_absent(entity) do
+    # Answers which of the two happened, because a caller writing on somebody's behalf has
+    # something to say about it: a batch reports a grant the server already held as a write that
+    # took no effect, where the framework's own grant writing has no use for the distinction.
+    #
     # The framework writes its own grants through here, so a database refusal is a broken
     # invariant rather than something a caller can answer - it raises where create/1 explains.
     case Connection.transaction(fn -> insert_if_absent(entity) end) do
-      {:ok, :ok} -> :ok
+      {:ok, outcome} -> outcome
       {:error, %Postgrex.Error{} = error} -> raise error
     end
   end
@@ -578,12 +582,16 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The id is derived from the grant, as every writer of the store derives it - a creator's grant
+  # and the same grant made later from a browser are one row.
   defp creator_grant({role_name, _opts}, entity, entity_type, actor_user_id) do
+    resource_type = RoleGrant.resource_type(entity_type)
+
     %RoleGrant{
-      id: Entity.generate_id(),
+      id: RoleGrant.derive_id(actor_user_id, resource_type, entity.id, role_name),
       granted_by_id: actor_user_id,
       resource_id: entity.id,
-      resource_type: RoleGrant.resource_type(entity_type),
+      resource_type: resource_type,
       role: role_name,
       user_id: actor_user_id
     }
@@ -680,9 +688,11 @@ defmodule Hologram.DB.EntityOperations do
     # nothing - an effect recorded for it would be a change clients never saw happen.
     if result.num_rows == 1 do
       Outbox.append([put_effect(stamped_entity)])
-    end
 
-    :ok
+      :created
+    else
+      :present
+    end
   end
 
   # A delete says what the row WAS, the way a put says what it became - so a row that is gone

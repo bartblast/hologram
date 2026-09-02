@@ -1,8 +1,12 @@
 "use strict";
 
+import Bitstring from "../../bitstring.mjs";
+import Clock from "../../clock.mjs";
+import {currentBatch} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
 import Type from "../../type.mjs";
 
@@ -18,6 +22,13 @@ import Type from "../../type.mjs";
 // synced rows, and a page that checks permissions hands over the ones its own checks asked
 // about, so the first render answers what the server answered.
 const GRANT_TYPE = "Hologram.Auth.RoleGrant";
+
+// The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
+// 2026-09-02, and fixed: change them and every grant in every store is renamed.
+const GRANT_ID_NAMESPACE = Uint8Array.from([
+  0x8b, 0x2f, 0x65, 0x0d, 0xd0, 0xcf, 0x15, 0x26, 0xdf, 0xec, 0x20, 0x9a, 0x31,
+  0xd9, 0xf6, 0x6c,
+]);
 
 // A rule that references the acting user is skipped for a visitor rather than evaluated with
 // nobody - evaluating it would let a row whose reference is missing match everyone. A delegating
@@ -324,6 +335,158 @@ function operationKey(operation) {
 }
 
 const Elixir_Hologram_Auth = {
+  // A global grant is trusted-only on the server, and a client is never the trusted tier - so the
+  // server's sentence for an acting user is the browser's sentence unconditionally.
+  "grant_role/2": (_userOrId, _role) => {
+    raiseAccessDenied(trustedWriteMessage("global", "granted"));
+  },
+
+  // Hologram.Auth.grant_role/3 as a browser runs it: the same arguments, the same checks in the
+  // same order, and the same gate - can?/3, over the rules and grant rows this client holds. What
+  // differs is the end: the server inserts, the browser appends a create of the grant row to the
+  // running batch, and the row is readable at once through the overlay. The id is derived from
+  // the grant, so this row and the server's are one row; a grant the client already holds under
+  // that id answers :ok and writes nothing, which is the server's idempotency mirrored where the
+  // client can see it. The server replays every check when the batch lands and a refusal rolls
+  // the row back.
+  "grant_role/3": (userOrId, resource, role) => {
+    const userId = validateUserId(userOrId);
+    const {entityType, resourceId} = resourceReference(resource, "granted");
+    const roleName = validateDeclaredRole(entityType, role);
+    const actorUserId = LocalDatabase.actorUserId;
+
+    if (actorUserId === null) {
+      raiseAccessDenied(signedInWriteMessage("granted"));
+    }
+
+    const gateResource = Type.struct(entityType, [
+      [Type.atom("id"), Type.bitstring(resourceId)],
+    ]);
+
+    const allowed = Elixir_Hologram_Auth["can?/3"](
+      Type.bitstring(actorUserId),
+      Type.tuple([Type.atom("grant_role"), role]),
+      gateResource,
+    );
+
+    if (!Type.isTrue(allowed)) {
+      raiseAccessDenied(
+        unqualifiedRoleMessage(
+          entityType,
+          resourceId,
+          actorUserId,
+          roleName,
+          "grant_role",
+        ),
+      );
+    }
+
+    const resourceType =
+      globalThis.Hologram.sync.model[entityType].resourceType;
+    const id = deriveGrantId(userId, resourceType, resourceId, roleName);
+
+    if (LocalDatabase.getRow(GRANT_TYPE, id) !== null) {
+      return Type.atom("ok");
+    }
+
+    const batch = currentBatch("grant_role");
+
+    batch.append({
+      claim: null,
+      data: {
+        granted_by_id: actorUserId,
+        resource_id: resourceId,
+        resource_type: resourceType,
+        role: roleName,
+        user_id: userId,
+      },
+      id: id,
+      op: "create",
+      stamp: Clock.stamp(),
+      type: GRANT_TYPE,
+    });
+
+    return Type.atom("ok");
+  },
+
+  "revoke_role/2": (_userOrId, _role) => {
+    raiseAccessDenied(trustedWriteMessage("global", "revoked"));
+  },
+
+  // Hologram.Auth.revoke_role/3 as a browser runs it: the same arguments, the same gate in the
+  // same place - one's own row needs no permission, anyone else's is the per-role question - and
+  // then, where the server deletes whatever it finds, the browser appends a delete of the row it
+  // holds, carrying the row's revisions as what it was based on. The fold hides the row at once.
+  // A row the client does not hold answers :ok and writes nothing, as the server's own no-op does:
+  // whoever may revoke a grant may read it, and everyone reads their own, so "not held" is "not
+  // there" for anyone the gate lets through. The server replays the gate when the batch lands.
+  "revoke_role/3": (userOrId, resource, role) => {
+    const userId = validateUserId(userOrId);
+    const {entityType, resourceId} = resourceReference(resource, "revoked");
+    const roleName = validateDeclaredRole(entityType, role);
+    const actorUserId = LocalDatabase.actorUserId;
+
+    if (actorUserId === null) {
+      raiseAccessDenied(signedInWriteMessage("revoked"));
+    }
+
+    if (actorUserId !== userId) {
+      const gateResource = Type.struct(entityType, [
+        [Type.atom("id"), Type.bitstring(resourceId)],
+      ]);
+
+      const allowed = Elixir_Hologram_Auth["can?/3"](
+        Type.bitstring(actorUserId),
+        Type.tuple([Type.atom("revoke_role"), role]),
+        gateResource,
+      );
+
+      if (!Type.isTrue(allowed)) {
+        raiseAccessDenied(
+          unqualifiedRoleMessage(
+            entityType,
+            resourceId,
+            actorUserId,
+            roleName,
+            "revoke_role",
+          ),
+        );
+      }
+    }
+
+    const resourceType =
+      globalThis.Hologram.sync.model[entityType].resourceType;
+    const held = LocalDatabase.getRow(
+      GRANT_TYPE,
+      deriveGrantId(userId, resourceType, resourceId, roleName),
+    );
+
+    if (held === null) {
+      return Type.atom("ok");
+    }
+
+    const batch = currentBatch("revoke_role");
+
+    // The delete carries the grant it revokes: the server's gate is asked about the grant the
+    // write states, so a row it no longer holds is refused or confirmed the same as one it does.
+    batch.append({
+      based_on: {...(held["$revisions"] ?? {})},
+      claim: null,
+      data: {
+        resource_id: resourceId,
+        resource_type: resourceType,
+        role: roleName,
+        user_id: userId,
+      },
+      id: held.id,
+      op: "delete",
+      stamp: Clock.stamp(),
+      type: GRANT_TYPE,
+    });
+
+    return Type.atom("ok");
+  },
+
   "can?/3": (userOrId, operation, entity) => {
     const entityType = Interpreter.moduleExName(
       entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
@@ -357,5 +520,224 @@ const Elixir_Hologram_Auth = {
     );
   },
 };
+
+// IMPORTANT!
+// The twin of Hologram.Auth.RoleGrant.derive_id/4, and the two are held to the same vectors -
+// test/elixir/hologram/auth/role_grant_test.exs (describe "derive_id/4") and the deriveGrantId()
+// describe in test/javascript/elixir/hologram/auth_test.mjs. Always update both together: the
+// server recomputes this from a grant write's columns and refuses an id that disagrees, so a
+// drift here is a refused grant, never a silent one.
+//
+// A grant's id is a function of the grant - this user, this resource, this role - so a grant made
+// here and the same grant made anywhere else are one row, and nothing about it is reconciled
+// after the fact. UUIDv5 (RFC 9562): SHA-1 over the namespace and the name, the name being the
+// four parts joined with a newline, each spelled as the store spells it - ids as they are, the
+// resource type's label, a role name or a global role module without its "Elixir." prefix, and
+// "" for a part that is null. Hashed as UTF-8, which is what the server hashes.
+export function deriveGrantId(userId, resourceType, resourceId, role) {
+  const name = [userId, resourceType, resourceId, role]
+    .map((part) => part ?? "")
+    .join("\n");
+
+  const nameBytes = new TextEncoder().encode(name);
+  const input = new Uint8Array(GRANT_ID_NAMESPACE.length + nameBytes.length);
+
+  input.set(GRANT_ID_NAMESPACE);
+  input.set(nameBytes, GRANT_ID_NAMESPACE.length);
+
+  const bytes = Sha1.digest(input).slice(0, 16);
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// IMPORTANT!
+// The three builders below are hand ports of Hologram.Auth's refusal sentences -
+// unqualified_role_message/5, signed_in_write_message/1 and trusted_write_message/2 - and the
+// tests in test/javascript/elixir/hologram/auth_test.mjs mirror test/elixir/hologram/auth_test.exs
+// string for string. Always update both together: a grant refused in the browser reads the same
+// as one refused by the server, so a developer sees one sentence wherever the gate fires.
+//
+// One sentence the browser cannot say: "<role> extends <held>, so it holds more." The model entry
+// carries a type's role NAMES and not their extends chains, so for a type whose roles extend, the
+// browser's message is that one sentence shorter than the server's.
+
+// The refusal that teaches: which roles the acting user holds that reach the resource, what those
+// may grant (or revoke) there, and the line that would cover it if the omission was not intended.
+export function unqualifiedRoleMessage(
+  entityType,
+  resourceId,
+  actorUserId,
+  role,
+  operation,
+) {
+  const verb = operation === "grant_role" ? "grant" : "revoke";
+  const resource = `${entityType} "${resourceId}"`;
+  const held = heldRoleNames(actorUserId, entityType, resourceId);
+
+  if (held.length === 0) {
+    return `the acting user holds no role on ${resource} that may ${verb} ${inspectRole(role)}`;
+  }
+
+  const covered = coveredRoleNames(
+    entityType,
+    resourceId,
+    actorUserId,
+    operation,
+  );
+  const holder = held.length === 1 ? inspectRole(held[0]) : inspectRoles(held);
+
+  return (
+    `the acting user holds ${joinRoleNames(held)} on ${resource}, ` +
+    `which may ${verb} ${coveredDescription(covered, role)}. ` +
+    `Declare \`allow {:${operation}, ${inspectRole(role)}}, to: ${holder}\` on ${entityType} if that is intended.`
+  );
+}
+
+// A role is granted (or revoked) only by a signed-in user: what the server's verb reads as trusted
+// code, a batch reads as an anonymous session, and so does the browser.
+export function signedInWriteMessage(verb) {
+  return `a role is ${verb} only by a signed-in user - nobody is signed in`;
+}
+
+// The two grant shapes trusted code writes - type-wide and global - which a browser never may.
+export function trustedWriteMessage(scope, verb) {
+  return `${scope} roles are ${verb} only by trusted code running without an acting user`;
+}
+
+function raiseAccessDenied(message) {
+  Interpreter.raiseError("Hologram.AccessDeniedError", message);
+}
+
+// The struct or entity type module a grant names as its resource, taken apart the way the server
+// takes it apart: a struct gives the type and a validated id, a module is a type-wide grant -
+// trusted-only, so refused here outright.
+function resourceReference(resource, verb) {
+  if (Type.isAlias(resource)) {
+    raiseAccessDenied(trustedWriteMessage("type-wide", verb));
+  }
+
+  const entityType = Interpreter.moduleExName(
+    resource.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+  );
+
+  const idEntry = resource.data[Type.encodeMapKey(Type.atom("id"))];
+  const resourceId = validateId(idEntry ? idEntry[1] : Type.nil(), "resource");
+
+  return {entityType, resourceId};
+}
+
+function validateDeclaredRole(entityType, role) {
+  const declared = globalThis.Hologram.sync?.model?.[entityType]?.roles ?? [];
+  const roleName = Type.isAtom(role) ? role.value : null;
+
+  if (roleName === null || !declared.includes(roleName)) {
+    Interpreter.raiseArgumentError(
+      `unknown role ${Interpreter.inspect(role)} for ${entityType} - declared roles are: ${declared.map((name) => `:${name}`).join(", ")}`,
+    );
+  }
+
+  return roleName;
+}
+
+// An id the server would accept: the canonical lowercase spelling, and nothing else - the
+// validator's own regex, since the two tiers compare ids as strings.
+function validateId(term, subject) {
+  const value = Type.isBitstring(term) ? Bitstring.toText(term) : null;
+
+  if (
+    value === null ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      value,
+    )
+  ) {
+    Interpreter.raiseArgumentError(
+      `invalid ${subject} id ${Interpreter.inspect(term)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+    );
+  }
+
+  return value;
+}
+
+function validateUserId(userOrId) {
+  const term = Type.isMap(userOrId)
+    ? (userOrId.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil())
+    : userOrId;
+
+  return validateId(term, "user");
+}
+
+function coveredDescription(covered, role) {
+  if (covered.length === 0) {
+    return `no role there, ${inspectRole(role)} included`;
+  }
+
+  return `${joinRoleNames(covered)} but not ${inspectRole(role)}`;
+}
+
+// The declared roles the acting user may grant (or revoke) on the resource - the same question
+// the gate asked, once per role.
+function coveredRoleNames(entityType, resourceId, actorUserId, operation) {
+  const entry = globalThis.Hologram.sync?.model?.[entityType];
+  const resource = Type.struct(entityType, [
+    [Type.atom("id"), Type.bitstring(resourceId)],
+  ]);
+
+  return (entry?.roles ?? []).filter((name) =>
+    Type.isTrue(
+      Elixir_Hologram_Auth["can?/3"](
+        Type.bitstring(actorUserId),
+        Type.tuple([Type.atom(operation), Type.atom(name)]),
+        resource,
+      ),
+    ),
+  );
+}
+
+// The roles the acting user holds that reach the resource, as the gate reads them: on the row
+// itself or on its whole type, and the global roles held app-wide. Own names first, then role
+// modules, each alphabetical - the order the server sorts them in.
+function heldRoleNames(actorUserId, entityType, resourceId) {
+  const resourceType =
+    globalThis.Hologram.sync?.model?.[entityType]?.resourceType;
+
+  return grantRows()
+    .filter(
+      (row) =>
+        row.user_id === actorUserId &&
+        ((row.resource_type === resourceType &&
+          (row.resource_id === resourceId || row.resource_id === null)) ||
+          (row.resource_type === null && row.resource_id === null)),
+    )
+    .map((row) => row.role)
+    .sort(
+      (left, right) =>
+        Number(isRoleModule(left)) - Number(isRoleModule(right)) ||
+        left.localeCompare(right),
+    );
+}
+
+// A role as inspect/1 spells it: an own role is an atom, a global role is a module.
+function inspectRole(name) {
+  return isRoleModule(name) ? name : `:${name}`;
+}
+
+function inspectRoles(names) {
+  return `[${names.map(inspectRole).join(", ")}]`;
+}
+
+function isRoleModule(name) {
+  return /^[A-Z]/.test(name);
+}
+
+function joinRoleNames(names) {
+  return names.map(inspectRole).join(" and ");
+}
 
 export default Elixir_Hologram_Auth;

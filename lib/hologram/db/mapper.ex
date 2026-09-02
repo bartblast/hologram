@@ -430,11 +430,13 @@ defmodule Hologram.DB.Mapper do
 
   # The role grant store carries the one index no declaration derives: unique over the grant
   # fact, with nulls compared as values - resource_type and resource_id nils encode the
-  # type-wide and global grant shapes, so identical rows with nils must still collide.
+  # type-wide and global grant shapes, so identical rows with nils must still collide. The
+  # columns are the store's own identity list, which its id derivation reads too - one list, so
+  # the two cannot disagree on what a grant is.
   defp framework_indexes(Hologram.Auth.RoleGrant) do
     %{
       "hologram_role_grant_$uidx" => %{
-        columns: ["user_id", "resource_type", "resource_id", "role"],
+        columns: RoleGrant.identity_columns(),
         nulls_distinct: false,
         unique: true
       }
