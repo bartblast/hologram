@@ -6,6 +6,9 @@ import Clock from "../../clock.mjs";
 import Elixir_Hologram_Entity from "./entity.mjs";
 import Erlang from "../../erlang/erlang.mjs";
 import Elixir_Hologram_Query from "./query.mjs";
+// A cycle - auth.mjs takes currentBatch from here - and a safe one: neither module calls the
+// other while it is being evaluated, so both bindings are in place by the time a verb runs.
+import {grantEntry, grantId} from "./auth.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
@@ -360,10 +363,44 @@ export function createEntity(entity, entityType) {
   }
 
   const stamp = Clock.stamp();
+  const entry = writeEntry(entity, entityType, stamp);
 
-  batch.append(writeEntry(entity, entityType, stamp));
+  batch.append(entry);
+  appendCreatorGrants(batch, entityType, entry.id);
 
   return Type.tuple([Type.atom("ok"), storedEntity(entity, entityType, stamp)]);
+}
+
+// The grants a creator takes, written beside the create that earns them. The server writes the
+// same rows inside the create's own transaction (entity_operations.ex), and both tiers derive a
+// grant's id from the grant itself - so these and the server's are one row, which is what lets the
+// browser hold its roles from the moment it makes the row rather than from when the write lands.
+//
+// Nothing is asked of the rules: granted_to: :creator is a declaration being copied, not a
+// permission being judged, and the applier admits such a grant without a gate for the same reason.
+//
+// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles,
+// which is creator_grants/1's nil clause, and a grant the client already holds is not written
+// twice, which is grant_role/3's idempotency read off the same derived id.
+function appendCreatorGrants(batch, entityType, entityId) {
+  const actorUserId = LocalDatabase.actorUserId;
+
+  if (actorUserId === null) {
+    return;
+  }
+
+  const roleNames =
+    globalThis.Hologram.sync?.model?.[entityType]?.creatorRoles ?? [];
+
+  for (const roleName of roleNames) {
+    const id = grantId(actorUserId, entityType, entityId, roleName);
+
+    if (LocalDatabase.getRow(ROLE_GRANT, id) === null) {
+      batch.append(
+        grantEntry(actorUserId, entityType, entityId, roleName, actorUserId),
+      );
+    }
+  }
 }
 
 // The lines a refused write is described by, shared with Job.create!.
