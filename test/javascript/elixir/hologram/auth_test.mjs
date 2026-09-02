@@ -6,7 +6,9 @@ import {
   defineRuntimeGlobals,
 } from "../../support/helpers.mjs";
 
-import Elixir_Hologram_Auth from "../../../../assets/js/elixir/hologram/auth.mjs";
+import Elixir_Hologram_Auth, {
+  deriveGrantId,
+} from "../../../../assets/js/elixir/hologram/auth.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -912,5 +914,71 @@ describe("Elixir_Hologram_Auth", () => {
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
       );
     });
+  });
+});
+
+// IMPORTANT!
+// Each test here has a related Elixir test in test/elixir/hologram/auth/role_grant_test.exs
+// (describe "derive_id/4"), and the three pinned vectors are the same strings on both sides.
+// Always update both together.
+describe("deriveGrantId()", () => {
+  const USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12";
+  const OTHER_USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13";
+  const RESOURCE_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10";
+  const RESOURCE_TYPE = "test_fixtures_policy_module2";
+
+  it("answers the same id for the same grant", () => {
+    assert.equal(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+    );
+  });
+
+  it("answers a different id for a different role on the same resource", () => {
+    assert.notEqual(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "admin"),
+    );
+  });
+
+  it("answers a different id for the same role held by a different user", () => {
+    assert.notEqual(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+      deriveGrantId(OTHER_USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+    );
+  });
+
+  it("answers a version 5 id under the RFC variant, in the canonical spelling", () => {
+    assert.match(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it("derives a type-wide grant, which names no resource id", () => {
+    assert.notEqual(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, null, "member"),
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+    );
+  });
+
+  // The vectors the server pins, from the same inputs. The third carries a role name outside
+  // ASCII: the name is hashed as UTF-8, and a twin reading UTF-16 code units would pass the first
+  // two and diverge on this one.
+  it("answers the vectors the server twin is held to", () => {
+    assert.equal(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+      "8cd330ce-decd-5e5b-bff7-1cd078a0ec62",
+    );
+
+    assert.equal(
+      deriveGrantId(USER_ID, null, null, "Hologram.Test.Fixtures.Role.Module1"),
+      "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040",
+    );
+
+    assert.equal(
+      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "café"),
+      "2ba31948-266d-5bb1-8452-451bca95d31c",
+    );
   });
 });

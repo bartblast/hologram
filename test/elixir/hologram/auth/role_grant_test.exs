@@ -219,12 +219,16 @@ defmodule Hologram.Auth.RoleGrantTest do
     # assets/js/elixir/hologram/auth.mjs answers these same two strings from these same inputs,
     # which is what keeps the pair from drifting. Both were cross-checked against a reference
     # UUIDv5 implementation, so either side can be rewritten against the standard alone.
-    test "answers the pinned vector the client twin is held to" do
+    test "answers the pinned vectors the client twin is held to" do
       instance_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
       global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
+      # A role name outside ASCII: the name is hashed as UTF-8 bytes, which a twin reading
+      # UTF-16 code units would get wrong while passing the two vectors above.
+      accented_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :café)
 
       assert instance_id == "8cd330ce-decd-5e5b-bff7-1cd078a0ec62"
       assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
+      assert accented_id == "2ba31948-266d-5bb1-8452-451bca95d31c"
     end
   end
 

@@ -3,6 +3,7 @@
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
 import Type from "../../type.mjs";
 
@@ -18,6 +19,13 @@ import Type from "../../type.mjs";
 // synced rows, and a page that checks permissions hands over the ones its own checks asked
 // about, so the first render answers what the server answered.
 const GRANT_TYPE = "Hologram.Auth.RoleGrant";
+
+// The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
+// 2026-09-02, and fixed: change them and every grant in every store is renamed.
+const GRANT_ID_NAMESPACE = Uint8Array.from([
+  0x8b, 0x2f, 0x65, 0x0d, 0xd0, 0xcf, 0x15, 0x26, 0xdf, 0xec, 0x20, 0x9a, 0x31,
+  0xd9, 0xf6, 0x6c,
+]);
 
 // A rule that references the acting user is skipped for a visitor rather than evaluated with
 // nobody - evaluating it would let a row whose reference is missing match everyone. A delegating
@@ -357,5 +365,41 @@ const Elixir_Hologram_Auth = {
     );
   },
 };
+
+// IMPORTANT!
+// The twin of Hologram.Auth.RoleGrant.derive_id/4, and the two are held to the same vectors -
+// test/elixir/hologram/auth/role_grant_test.exs (describe "derive_id/4") and the deriveGrantId()
+// describe in test/javascript/elixir/hologram/auth_test.mjs. Always update both together: the
+// server recomputes this from a grant write's columns and refuses an id that disagrees, so a
+// drift here is a refused grant, never a silent one.
+//
+// A grant's id is a function of the grant - this user, this resource, this role - so a grant made
+// here and the same grant made anywhere else are one row, and nothing about it is reconciled
+// after the fact. UUIDv5 (RFC 9562): SHA-1 over the namespace and the name, the name being the
+// four parts joined with a newline, each spelled as the store spells it - ids as they are, the
+// resource type's label, a role name or a global role module without its "Elixir." prefix, and
+// "" for a part that is null. Hashed as UTF-8, which is what the server hashes.
+export function deriveGrantId(userId, resourceType, resourceId, role) {
+  const name = [userId, resourceType, resourceId, role]
+    .map((part) => part ?? "")
+    .join("\n");
+
+  const nameBytes = new TextEncoder().encode(name);
+  const input = new Uint8Array(GRANT_ID_NAMESPACE.length + nameBytes.length);
+
+  input.set(GRANT_ID_NAMESPACE);
+  input.set(nameBytes, GRANT_ID_NAMESPACE.length);
+
+  const bytes = Sha1.digest(input).slice(0, 16);
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export default Elixir_Hologram_Auth;
