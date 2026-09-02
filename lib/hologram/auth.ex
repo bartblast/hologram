@@ -305,17 +305,16 @@ defmodule Hologram.Auth do
   end
 
   @doc false
-  @spec authorize_revocation_write!(RoleGrant.t() | nil, String.t() | nil) :: :ok
-  # The gate of apply_revocation_write/2 on its own, for the applier to ask BEFORE it resolves the
-  # delete against the stored revisions: a stale revocation answers with the row it was stale
-  # against, and that answer is for whoever may revoke, not for whoever knows the id - which every
-  # client does, since a grant's id is derived from its grant. Nobody signed in is refused whether
-  # or not the row exists, so an anonymous client learns nothing of it either way.
+  @spec authorize_revocation_write!(RoleGrant.t(), String.t() | nil) :: :ok
+  # The gate of apply_revocation_write/2 on its own, for the applier to ask about the grant a
+  # revocation states BEFORE it reads the store: a stale revocation answers with the row it was
+  # stale against, and whether there is a row at all is an answer too - both for whoever may
+  # revoke, not for whoever knows the id, which every client does since a grant's id is derived
+  # from its grant. Asked about the grant rather than the row, the gate answers the same whether
+  # or not the row exists.
   def authorize_revocation_write!(_grant, nil) do
     raise Hologram.AccessDeniedError, signed_in_write_message("revoked")
   end
-
-  def authorize_revocation_write!(nil, _actor_user_id), do: :ok
 
   def authorize_revocation_write!(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
     raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "revoked")

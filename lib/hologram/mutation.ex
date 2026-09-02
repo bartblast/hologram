@@ -246,15 +246,15 @@ defmodule Hologram.Mutation do
   # so a revocation based on an earlier grant's revisions loses to a newer one and answers the
   # way any stale delete does. A row already gone is what the verb itself answers: nothing.
   defp apply_write(%Write{op: :delete, entity_type: RoleGrant} = write, _index) do
-    row = EntityOperations.get(RoleGrant, write.id, lock: true)
+    # The gate runs before the lookup, asked about the grant the write states rather than about
+    # the row: a grant's id is derived from its grant, so a delete of any grant is something every
+    # client can send, and whether the row is there is an answer for whoever may revoke it. Asked
+    # this way, an actor who may not gets the same refusal either way, and a stale revocation's
+    # answer - the row it was stale against - stays behind the same gate.
+    grant = Write.to_entity(write)
+    Auth.authorize_revocation_write!(grant, Context.actor_user_id())
 
-    # The gate runs before the merge, not after it: a stale revocation answers with the row it was
-    # stale against, and that is an answer for whoever may revoke - a grant's id is derived from its
-    # grant, so knowing the id is knowing nothing the gate did not already require. A nil row is
-    # gated too, which is what keeps an anonymous client from learning even that.
-    Auth.authorize_revocation_write!(row, Context.actor_user_id())
-
-    case row do
+    case EntityOperations.get(RoleGrant, write.id, lock: true) do
       nil -> {%{}, nil}
       row -> apply_revocation(write, row)
     end

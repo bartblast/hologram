@@ -49,6 +49,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
       "op" => "delete",
       "type" => inspect(entity_type),
       "id" => Keyword.get(opts, :id, @id),
+      "data" => Keyword.get(opts, :data),
       "based_on" => Keyword.get(opts, :based_on),
       "claim" => Keyword.get(opts, :claim),
       "stamp" => Keyword.get(opts, :stamp, 5)
@@ -290,22 +291,51 @@ defmodule Hologram.Mutation.EnvelopeTest do
              }
     end
 
-    test "accepts a delete of a role grant" do
-      entry = delete(RoleGrant, based_on: %{"role" => 3})
+    # A revocation carries the grant it revokes, as the browser sends it: the identity columns
+    # and nothing else, under the id they derive.
+    test "accepts a delete of a role grant carrying the grant it revokes" do
+      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      data = Map.delete(grant_data(), "granted_by_id")
+      entry = delete(RoleGrant, based_on: %{"role" => 3}, data: data, id: grant_id)
 
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
 
       assert write == %Write{
                based_on: %{role: 3},
                claim: nil,
-               data: %{},
+               data: %{
+                 resource_id: @target_id,
+                 resource_type: :test_fixtures_policy_module2,
+                 role: :member,
+                 user_id: @user_id
+               },
                entity_type: RoleGrant,
-               id: @id,
+               id: grant_id,
                op: :delete,
                relationship: nil,
                stamp: 5,
                target_id: nil
              }
+    end
+
+    # The gate is asked about the grant the delete states, so a delete stating none has nothing
+    # to be gated on - an id alone, which anyone can derive, is not a revocation.
+    test "refuses a delete of a role grant carrying no grant" do
+      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      entry = delete(RoleGrant, id: grant_id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant is revoked by the grant it states"}
+    end
+
+    # What binds the grant the gate is asked about to the row the delete takes: a client cannot
+    # state one grant and delete another.
+    test "refuses a delete of a role grant whose id is not derived from it" do
+      data = Map.delete(grant_data(), "granted_by_id")
+      entry = delete(RoleGrant, data: data, id: @id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant's id is derived from the grant it names"}
     end
 
     test "refuses an instance id that is not a string" do

@@ -92,6 +92,7 @@ defmodule Hologram.MutationTest do
       "op" => "delete",
       "type" => inspect(entity_type),
       "id" => id,
+      "data" => Keyword.get(opts, :data),
       "based_on" => Keyword.get(opts, :based_on),
       "claim" => Keyword.get(opts, :claim),
       "stamp" => Keyword.get(opts, :stamp, stamp())
@@ -175,6 +176,22 @@ defmodule Hologram.MutationTest do
   # The fixtures declaring constraints, unique values and references grant no WRITE operation, so
   # these writes claim :read - a bare `allow :read` grants it to anyone, and what is under test is
   # the value the write carries rather than the claim it makes.
+  # A revocation as a browser sends it: the grant it revokes, under the id derived from it.
+  defp revocation_write(user_id, resource, role, opts \\ []) do
+    resource_type = RoleGrant.resource_type(resource.__struct__)
+
+    data = %{
+      "resource_id" => resource.id,
+      "resource_type" => Atom.to_string(resource_type),
+      "role" => Atom.to_string(role),
+      "user_id" => user_id
+    }
+
+    id = RoleGrant.derive_id(user_id, resource_type, resource.id, role)
+
+    delete_write(RoleGrant, id, Keyword.put(opts, :data, data))
+  end
+
   defp readable_write(entity_type, id, data) do
     create_write(entity_type, id, data, claim: ["authorize", "read"])
   end
@@ -809,7 +826,12 @@ defmodule Hologram.MutationTest do
       Auth.grant_role(target, resource, :member)
 
       row = EntityOperations.get(RoleGrant, grant_id(target.id, resource, :member))
-      write = delete_write(RoleGrant, row.id, based_on: based_on(row), stamp: stamp_above(row))
+
+      write =
+        revocation_write(target.id, resource, :member,
+          based_on: based_on(row),
+          stamp: stamp_above(row)
+        )
 
       assert run(envelope([write]), server(member.id)) ==
                {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
@@ -826,7 +848,12 @@ defmodule Hologram.MutationTest do
       Auth.grant_role(leaver, resource, :member)
 
       row = EntityOperations.get(RoleGrant, grant_id(leaver.id, resource, :member))
-      write = delete_write(RoleGrant, row.id, based_on: based_on(row), stamp: stamp_above(row))
+
+      write =
+        revocation_write(leaver.id, resource, :member,
+          based_on: based_on(row),
+          stamp: stamp_above(row)
+        )
 
       assert run(envelope([write]), server(leaver.id)) ==
                {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
@@ -853,7 +880,7 @@ defmodule Hologram.MutationTest do
       Auth.grant_role(user, resource, :member)
 
       write =
-        delete_write(RoleGrant, first_row.id,
+        revocation_write(user.id, resource, :member,
           based_on: based_on(first_row),
           stamp: first_stamp + 1
         )
@@ -882,8 +909,7 @@ defmodule Hologram.MutationTest do
 
       Auth.grant_role(member, resource, :member)
 
-      row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
-      write = delete_write(RoleGrant, row.id, stamp: 1)
+      write = revocation_write(member.id, resource, :member, stamp: 1)
 
       message = "a role is revoked only by a signed-in user - nobody is signed in"
 
@@ -898,8 +924,7 @@ defmodule Hologram.MutationTest do
 
       Auth.grant_role(member, resource, :member)
 
-      row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
-      write = delete_write(RoleGrant, row.id, stamp: 1)
+      write = revocation_write(member.id, resource, :member, stamp: 1)
 
       message =
         "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module2 #{inspect(resource.id)} that may revoke :member"
@@ -912,7 +937,7 @@ defmodule Hologram.MutationTest do
       user = create_user("gone-anonymous-user@example.com")
       resource = create_shared()
 
-      write = delete_write(RoleGrant, grant_id(user.id, resource, :member))
+      write = revocation_write(user.id, resource, :member)
 
       message = "a role is revoked only by a signed-in user - nobody is signed in"
 
@@ -927,10 +952,37 @@ defmodule Hologram.MutationTest do
 
       Auth.grant_role(member, resource, :member)
 
-      write = delete_write(RoleGrant, grant_id(user.id, resource, :member))
+      write = revocation_write(user.id, resource, :member)
 
       assert run(envelope([write]), server(member.id)) ==
                {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+    end
+
+    test "confirms a user's own revocation of a row already gone" do
+      leaver = create_user("gone-leaver@example.com")
+      resource = create_shared()
+
+      write = revocation_write(leaver.id, resource, :member)
+
+      assert run(envelope([write]), server(leaver.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+    end
+
+    # The gate is asked about the grant the write states, not about the row - so an actor who may
+    # not revoke it is refused the same way whether or not the row is there, and a delete of a
+    # derived id says nothing about whether the grant exists.
+    test "refuses a revocation of a row already gone the acting user may not make" do
+      stranger = create_user("gone-stranger@example.com")
+      user = create_user("never-granted-again-user@example.com")
+      resource = create_shared()
+
+      write = revocation_write(user.id, resource, :member)
+
+      message =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module2 #{inspect(resource.id)} that may revoke :member"
+
+      assert run(envelope([write]), server(stranger.id)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
     end
 
     test "lands a job queued, with the session's user as its actor" do

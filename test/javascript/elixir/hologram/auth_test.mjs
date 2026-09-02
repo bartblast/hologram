@@ -1442,7 +1442,7 @@ describe("revoke_role/3", () => {
     LocalDatabase.actorUserId = null;
   });
 
-  it("appends a delete of the held row carrying its revisions", () => {
+  it("appends a delete of the held row carrying its revisions and its grant", () => {
     const result = revoke(
       Type.bitstring(GATED_BOB),
       document(),
@@ -1455,6 +1455,12 @@ describe("revoke_role/3", () => {
       {
         based_on: REVISIONS,
         claim: null,
+        data: {
+          resource_id: GATED_DOC,
+          resource_type: "documents",
+          role: "viewer",
+          user_id: GATED_BOB,
+        },
         id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
         op: "delete",
         stamp: STAMP,

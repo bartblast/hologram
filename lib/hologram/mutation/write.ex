@@ -58,7 +58,8 @@ defmodule Hologram.Mutation.Write do
   takes its granter from the acting user rather than from what the client sent - a browser says
   which role it is handing to whom, never who is handing it. It carries no claim either: the
   applier routes a grant to `Auth.grant_role/3`'s own rules, so there is no operation here for the
-  writer to evaluate.
+  writer to evaluate. A revocation is built the same way from the grant it carries, so the gate
+  can be asked about it whether or not the row is there.
   """
   @spec to_entity(t) :: struct
   def to_entity(%__MODULE__{op: :create, entity_type: RoleGrant} = write) do
@@ -70,6 +71,12 @@ defmodule Hologram.Mutation.Write do
       })
 
     struct!(RoleGrant, values)
+  end
+
+  def to_entity(%__MODULE__{op: :delete, entity_type: RoleGrant} = write) do
+    metadata = %Metadata{revisions: write.based_on, stamp: write.stamp}
+
+    struct!(RoleGrant, Map.merge(write.data, %{__meta__: metadata, id: write.id}))
   end
 
   def to_entity(%__MODULE__{op: :create} = write) do

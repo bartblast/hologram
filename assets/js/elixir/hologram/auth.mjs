@@ -467,9 +467,17 @@ const Elixir_Hologram_Auth = {
 
     const batch = currentBatch("revoke_role");
 
+    // The delete carries the grant it revokes: the server's gate is asked about the grant the
+    // write states, so a row it no longer holds is refused or confirmed the same as one it does.
     batch.append({
       based_on: {...(held["$revisions"] ?? {})},
       claim: null,
+      data: {
+        resource_id: resourceId,
+        resource_type: resourceType,
+        role: roleName,
+        user_id: userId,
+      },
       id: held.id,
       op: "delete",
       stamp: Clock.stamp(),

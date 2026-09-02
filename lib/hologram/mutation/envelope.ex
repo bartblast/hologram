@@ -100,8 +100,7 @@ defmodule Hologram.Mutation.Envelope do
   # The role a grant carries has to be one the resource's own type declares, which is the check
   # grant_role/3 runs before it writes. A row naming no resource type is a type-wide or a global
   # grant: there is no type here to read declarations from, and the applier refuses both outright.
-  defp declared_role(%Write{op: :create, data: %{resource_type: label} = data})
-       when label != nil do
+  defp declared_role(%Write{data: %{resource_type: label} = data}) when label != nil do
     with {:ok, entity_type} <- resource_entity_type(label) do
       role = Map.get(data, :role)
       declared = Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
@@ -222,7 +221,22 @@ defmodule Hologram.Mutation.Envelope do
   # forged one would name a row that is not the grant the columns describe. A column that is
   # absent derives to a different id and lands here too, which is a bad request where the
   # writer's own validation would be a raise.
-  defp derived_id(%Write{op: :create, data: data} = write) do
+  # A delete takes the whole row, so there is nothing for it to carry values for - except a
+  # revocation, which carries the grant it revokes: the gate is asked about the grant the write
+  # states, whether or not the row is there to read it from, so a row that is not there answers
+  # nothing a row that is would not.
+  defp delete_data(entry, RoleGrant) do
+    case Map.get(entry, "data") do
+      values when is_map(values) and values != %{} -> decode_data(values, RoleGrant)
+      _other -> {:error, "a role grant is revoked by the grant it states"}
+    end
+  end
+
+  defp delete_data(entry, _entity_type) do
+    with :ok <- no_data(entry), do: {:ok, %{}}
+  end
+
+  defp derived_id(%Write{data: data} = write) do
     user_id = Map.get(data, :user_id)
     resource_type = Map.get(data, :resource_type)
     resource_id = Map.get(data, :resource_id)
@@ -236,8 +250,6 @@ defmodule Hologram.Mutation.Envelope do
       {:error, "a role grant's id is derived from the grant it names"}
     end
   end
-
-  defp derived_id(_write), do: :ok
 
   defp entity_type(entry) do
     case Map.get(entry, "type") do
@@ -273,7 +285,7 @@ defmodule Hologram.Mutation.Envelope do
   # and an id with no type is none of them, whether the type is sent as nil or not sent at all.
   # Refused here rather than in the applier, which resolves the type first and would raise on
   # nothing to resolve.
-  defp grant_scope(%Write{op: :create, data: data}) do
+  defp grant_scope(%Write{data: data}) do
     if Map.get(data, :resource_type) == nil and Map.get(data, :resource_id) != nil do
       {:error, "a role grant naming a resource id names its resource type too"}
     else
@@ -281,19 +293,15 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
-  defp grant_scope(_write), do: :ok
-
   # A grant is granted TO someone: the reference is required on the store, and the grant path
   # validates by raising rather than answering, so an absent user is refused here where a client
   # can be told - the id derives for the shape either way.
-  defp grant_user(%Write{op: :create, data: data}) do
+  defp grant_user(%Write{data: data}) do
     case Map.get(data, :user_id) do
       nil -> {:error, "a role grant names the user it is granted to"}
       _user_id -> :ok
     end
   end
-
-  defp grant_user(_write), do: :ok
 
   defp id(entry) do
     value = Map.get(entry, "id")
@@ -394,7 +402,7 @@ defmodule Hologram.Mutation.Envelope do
   defp parse_delete(entry) do
     with {:ok, entity_type} <- entity_type(entry),
          {:ok, id} <- id(entry),
-         :ok <- no_data(entry),
+         {:ok, data} <- delete_data(entry, entity_type),
          :ok <- no_deltas(entry),
          {:ok, based_on} <- based_on(entry, entity_type),
          {:ok, claim} <- claim(entry),
@@ -403,6 +411,7 @@ defmodule Hologram.Mutation.Envelope do
        %Write{
          based_on: based_on,
          claim: claim,
+         data: data,
          entity_type: entity_type,
          id: id,
          op: :delete,
@@ -620,7 +629,9 @@ defmodule Hologram.Mutation.Envelope do
   # The grant store is written through Auth.grant_role and Auth.revoke_role, never through the
   # writer, so a batch naming it is putting one grant in or taking one out. What it cannot be is
   # refused here, where whoever is building a client is told what they built - leaving the applier
-  # the two shapes it routes, and its own refusals about authority rather than about shape.
+  # the two shapes it routes, and its own refusals about authority rather than about shape. Both
+  # shapes state the grant - a revocation carries the grant it revokes - so every step reads the
+  # data, and the id has to derive from it either way.
   defp validate_grant_write(%Write{entity_type: RoleGrant} = write) do
     with :ok <- grant_op(write.op),
          :ok <- grant_claim(write.claim),
