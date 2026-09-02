@@ -295,7 +295,13 @@ defmodule Hologram.Auth do
   def apply_revocation_write(%RoleGrant{} = grant, actor_user_id) do
     authorize_revocation_write!(grant, actor_user_id)
 
-    EntityOperations.delete(RoleGrant, grant.id)
+    # delete/2 refuses a row something else references, naming the referrer. Nothing references a
+    # grant row - its relationships point at the user table, and no entity points at the store -
+    # so the refusal has nothing to answer here, and the match says so rather than passing one on
+    # as the :ok this function promises.
+    :ok = EntityOperations.delete(RoleGrant, grant.id)
+
+    :ok
   end
 
   @doc false
