@@ -570,6 +570,28 @@ defmodule Hologram.CompilerTest do
 
       refute PageModule7 in pages
     end
+
+    # No fixture page calls the grant verbs in its client code, deliberately: until the verbs are
+    # registered as ported, a page reaching one would have its server call tree transpiled into
+    # its bundle. The edge is added to a clone instead - a page's template is client code - and
+    # can?/3 is taken OUT of that clone first: the verbs call it, so in the real graph a page
+    # reaching a verb reaches can? too and would qualify under the old rule alone. Once the verbs
+    # are ported their subtree is pruned from every build, which is the state this pins.
+    test "names a page whose client code grants a role", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 3})
+
+      assert PageModule7 in pages_checking_permissions(Reflection.list_pages(), graph)
+    end
+
+    test "names a page whose client code revokes a role", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 3})
+
+      assert PageModule7 in pages_checking_permissions(Reflection.list_pages(), graph)
+    end
   end
 
   describe "build_queries/2" do
@@ -1100,8 +1122,17 @@ defmodule Hologram.CompilerTest do
                  ~s/"updated_at":"datetime"},"constraints":{},"defaults":{"c":Type.atom("x")},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
                  ~s/"relationships":{},/ <>
-                 ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[]}}/
+                 ~s/"resourceType":"test_fixtures_entity_module4","roles":[],"serverOnly":[]}}/
              )
+    end
+
+    # The client refuses an undeclared role with the server's own sentence, from this list.
+    test "names a type's declared roles, sorted", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
     end
 
     # The client judges a written value by these, so the name a violation is reported under is the

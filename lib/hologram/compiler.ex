@@ -42,6 +42,15 @@ defmodule Hologram.Compiler do
     :unique
   ]
 
+  # The MFAs whose presence in a page's client code makes the page a permission checker - one
+  # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
+  # locally before it writes.
+  @permission_mfas [
+    {Hologram.Auth, :can?, 3},
+    {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :revoke_role, 3}
+  ]
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers.
@@ -192,7 +201,7 @@ defmodule Hologram.Compiler do
       Enum.filter(page_modules, fn page_module ->
         call_graph
         |> CallGraph.list_page_mfas(page_module, analysis)
-        |> Enum.member?({Hologram.Auth, :can?, 3})
+        |> Enum.any?(&(&1 in @permission_mfas))
       end)
     else
       []
@@ -1671,6 +1680,7 @@ defmodule Hologram.Compiler do
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"resourceType", render_resource_type(entity_type)},
+      {"roles", render_roles(entity_type)},
       {"serverOnly", server_only}
     ])
   end
@@ -1898,6 +1908,15 @@ defmodule Hologram.Compiler do
     entity_type
     |> RoleGrant.resource_type()
     |> Codec.encode_enum_value()
+    |> Jason.encode!()
+  end
+
+  # The names a grant on this type may carry, so the browser can refuse an undeclared role with
+  # the server's own sentence before anything is sent.
+  defp render_roles(entity_type) do
+    entity_type.__roles__()
+    |> Enum.map(fn {name, _opts} -> Atom.to_string(name) end)
+    |> Enum.sort()
     |> Jason.encode!()
   end
 
