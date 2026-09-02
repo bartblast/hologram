@@ -3,15 +3,37 @@ defmodule Hologram.Mutation.WriteTest do
 
   import Hologram.Mutation.Write
 
+  alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Metadata
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Mutation.Write
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
 
+  @actor_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
+  @granter_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
   @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
+
+  defp grant_write do
+    %Write{
+      data: %{
+        granted_by_id: @granter_id,
+        resource_id: @target_id,
+        resource_type: :test_fixtures_policy_module2,
+        role: :member,
+        user_id: @user_id
+      },
+      entity_type: RoleGrant,
+      id: @id,
+      op: :create,
+      stamp: 5
+    }
+  end
 
   describe "to_entity/1" do
     test "builds a create as a new struct with its declared defaults filled" do
@@ -176,6 +198,32 @@ defmodule Hologram.Mutation.WriteTest do
                {:authorize, :update},
                {:authorize, :update}
              ]
+    end
+
+    # The write carries a granter of its own and it is overwritten: a browser says which role it
+    # is handing to whom, never who is handing it.
+    test "builds a role grant with the acting user as its granter" do
+      entity = Context.with_actor(@actor_id, fn -> to_entity(grant_write()) end)
+
+      assert entity == %RoleGrant{
+               __meta__: %Metadata{stamp: 5},
+               created_at: nil,
+               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by_id: @actor_id,
+               id: @id,
+               resource_id: @target_id,
+               resource_type: :test_fixtures_policy_module2,
+               role: :member,
+               updated_at: nil,
+               user: %NotIncluded{relationship: :user},
+               user_id: @user_id
+             }
+    end
+
+    test "leaves the granter unset with no acting user" do
+      entity = Context.with_actor(nil, fn -> to_entity(grant_write()) end)
+
+      assert entity.granted_by_id == nil
     end
   end
 end

@@ -10,6 +10,8 @@ defmodule Hologram.Mutation.Write do
   # Every field is already checked against THIS build's model by the time one of these exists, so
   # what reads it does not check again.
 
+  alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
 
@@ -51,8 +53,25 @@ defmodule Hologram.Mutation.Write do
   A write claiming nothing takes the operation of the verb it is: a client is never the trusted
   tier, so what a server-side verb leaves to the actor's presence - evaluate, or write raw - a
   batch always evaluates, with the anonymous semantics when nobody is signed in.
+
+  A grant of the role store is built without `Entity.new/2`, which refuses that type by name, and
+  takes its granter from the acting user rather than from what the client sent - a browser says
+  which role it is handing to whom, never who is handing it. It carries no claim either: the
+  applier routes a grant to `Auth.grant_role/3`'s own rules, so there is no operation here for the
+  writer to evaluate.
   """
   @spec to_entity(t) :: struct
+  def to_entity(%__MODULE__{op: :create, entity_type: RoleGrant} = write) do
+    values =
+      Map.merge(write.data, %{
+        __meta__: %Metadata{stamp: write.stamp},
+        granted_by_id: Context.actor_user_id(),
+        id: write.id
+      })
+
+    struct!(RoleGrant, values)
+  end
+
   def to_entity(%__MODULE__{op: :create} = write) do
     values = Map.put(write.data, :id, write.id)
     entity = Entity.new(write.entity_type, values)
