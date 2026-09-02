@@ -144,6 +144,10 @@ defmodule Hologram.MutationTest do
     end)
   end
 
+  defp grant_id(user_id, resource, role) do
+    RoleGrant.derive_id(user_id, RoleGrant.resource_type(resource.__struct__), resource.id, role)
+  end
+
   # A grant as a browser sends it: the id derived from the grant, no claim (the parser refuses
   # one), and a granter of the client's own choosing - which the server overwrites.
   defp grant_write(user_id, resource, role, opts \\ []) do
@@ -754,6 +758,111 @@ defmodule Hologram.MutationTest do
 
       assert run(envelope([write]), server()) ==
                rejected(0, %Hologram.AccessDeniedError{message: message})
+    end
+
+    test "lands a revocation of another user's role" do
+      member = create_user("revoking-member@example.com")
+      target = create_user("revoked-member@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(target, resource, :member)
+
+      row = EntityOperations.get(RoleGrant, grant_id(target.id, resource, :member))
+      write = delete_write(RoleGrant, row.id, based_on: based_on(row), stamp: stamp_above(row))
+
+      assert run(envelope([write]), server(member.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+      assert EntityOperations.get(RoleGrant, row.id) == nil
+    end
+
+    test "lands a user's own revocation" do
+      member = create_user("staying-member@example.com")
+      leaver = create_user("leaving-member@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(leaver, resource, :member)
+
+      row = EntityOperations.get(RoleGrant, grant_id(leaver.id, resource, :member))
+      write = delete_write(RoleGrant, row.id, based_on: based_on(row), stamp: stamp_above(row))
+
+      assert run(envelope([write]), server(leaver.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+      assert EntityOperations.get(RoleGrant, row.id) == nil
+    end
+
+    # The id is derived from the grant, so a grant revoked and made again is the SAME row with
+    # newer revisions - and a revocation still based on the earlier grant loses to it, the way
+    # any delete loses to a column that moved past it. The stamp sits above the first grant's
+    # revisions (the clock check needs that) and not above the second's.
+    test "drops a revocation based on revisions a newer grant has moved past" do
+      member = create_user("stale-revoker@example.com")
+      user = create_user("regranted-user@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(user, resource, :member)
+
+      first_row = EntityOperations.get(RoleGrant, grant_id(user.id, resource, :member))
+      first_stamp = first_row.__meta__.revisions.role
+
+      Auth.revoke_role(user, resource, :member)
+      Auth.grant_role(user, resource, :member)
+
+      write =
+        delete_write(RoleGrant, first_row.id,
+          based_on: based_on(first_row),
+          stamp: first_stamp + 1
+        )
+
+      assert {:ok, %{"status" => "confirmed", "dropped" => dropped, "kept" => kept}} =
+               run(envelope([write]), server(member.id))
+
+      assert Map.keys(dropped["0"]) == [
+               "granted_by_id",
+               "resource_id",
+               "resource_type",
+               "role",
+               "user_id"
+             ]
+
+      assert kept["0"]["id"] == first_row.id
+      assert EntityOperations.get(RoleGrant, first_row.id) != nil
+    end
+
+    test "rejects revoking the last managing role" do
+      member = create_user("last-member@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
+      write = delete_write(RoleGrant, row.id, based_on: based_on(row), stamp: stamp_above(row))
+
+      message =
+        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module2 " <>
+          "#{inspect(resource.id)} - transfer ownership first"
+
+      assert run(envelope([write]), server(member.id)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+
+      assert EntityOperations.get(RoleGrant, row.id) != nil
+    end
+
+    test "confirms a revocation of a row already gone" do
+      member = create_user("gone-revoker@example.com")
+      user = create_user("never-granted-user@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, resource, :member)
+
+      write = delete_write(RoleGrant, grant_id(user.id, resource, :member))
+
+      assert run(envelope([write]), server(member.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
     end
 
     test "lands a job queued, with the session's user as its actor" do

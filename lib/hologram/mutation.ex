@@ -118,6 +118,18 @@ defmodule Hologram.Mutation do
     end
   end
 
+  defp apply_revocation(write, row) do
+    case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
+      :delete ->
+        Auth.apply_revocation_write(row, Context.actor_user_id())
+
+        {%{}, nil}
+
+      :drop ->
+        {lost_values(write, stored_columns(row)), stringify(WireData.row(row))}
+    end
+  end
+
   defp apply_in_transaction(envelope, server_struct) do
     Connection.transaction(fn ->
       Record.claim!(
@@ -203,6 +215,18 @@ defmodule Hologram.Mutation do
     apply_changes(write, changes, index)
 
     {lost_values(write, lost), kept_values(row, lost)}
+  end
+
+  # A revocation is judged against the grant as the store holds it, locked for the batch: the
+  # verb's own two gates and its last-manager guard, under the session's actor. It goes through
+  # the delete merge first, like any delete - a grant can be deleted and re-made under one id,
+  # so a revocation based on an earlier grant's revisions loses to a newer one and answers the
+  # way any stale delete does. A row already gone is what the verb itself answers: nothing.
+  defp apply_write(%Write{op: :delete, entity_type: RoleGrant} = write, _index) do
+    case EntityOperations.get(RoleGrant, write.id, lock: true) do
+      nil -> {%{}, nil}
+      row -> apply_revocation(write, row)
+    end
   end
 
   defp apply_write(%Write{op: :delete} = write, index) do
