@@ -833,25 +833,6 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(RoleGrant, first_row.id) != nil
     end
 
-    test "rejects revoking the last managing role" do
-      member = create_user("last-member@example.com")
-      resource = create_shared()
-
-      Auth.grant_role(member, resource, :member)
-
-      row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
-      write = delete_write(RoleGrant, row.id, based_on: based_on(row), stamp: stamp_above(row))
-
-      message =
-        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module2 " <>
-          "#{inspect(resource.id)} - transfer ownership first"
-
-      assert run(envelope([write]), server(member.id)) ==
-               rejected(0, %Hologram.AccessDeniedError{message: message})
-
-      assert EntityOperations.get(RoleGrant, row.id) != nil
-    end
-
     test "confirms a revocation of a row already gone" do
       member = create_user("gone-revoker@example.com")
       user = create_user("never-granted-user@example.com")

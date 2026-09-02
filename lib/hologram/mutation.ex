@@ -218,7 +218,7 @@ defmodule Hologram.Mutation do
   end
 
   # A revocation is judged against the grant as the store holds it, locked for the batch: the
-  # verb's own two gates and its last-manager guard, under the session's actor. It goes through
+  # verb's own two gates, under the session's actor. It goes through
   # the delete merge first, like any delete - a grant can be deleted and re-made under one id,
   # so a revocation based on an earlier grant's revisions loses to a newer one and answers the
   # way any stale delete does. A row already gone is what the verb itself answers: nothing.

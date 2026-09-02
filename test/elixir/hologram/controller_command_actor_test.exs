@@ -3,7 +3,6 @@ defmodule Hologram.ControllerCommandActorTest do
 
   import Hologram.Controller
 
-  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -12,7 +11,6 @@ defmodule Hologram.ControllerCommandActorTest do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Controller.Module33
   alias Hologram.Test.Fixtures.Entity.Module14
-  alias Hologram.Test.Fixtures.Policy.Module1
 
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
@@ -155,24 +153,6 @@ defmodule Hologram.ControllerCommandActorTest do
         %{user_id: user.id},
         session_of(granter.id)
       )
-    end
-  end
-
-  test "raises when a command handler revokes the last role managing a resource" do
-    owner = create_user("user_4@example.com")
-
-    resource = DB.create!(Module1.new())
-
-    Auth.grant_role(owner, resource, :owner)
-
-    expected_msg =
-      "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module1 " <>
-        "#{inspect(resource.id)} - transfer ownership first"
-
-    params = %{resource_id: resource.id, user_id: owner.id}
-
-    assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-      execute_command(:my_command_revoking_role, params, session_of(owner.id))
     end
   end
 end

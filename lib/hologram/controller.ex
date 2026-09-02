@@ -372,8 +372,7 @@ defmodule Hologram.Controller do
     else
       # The handler reads the session user from its server struct - the actor context is set
       # for the framework's sake, so that writes made during the command carry the acting user
-      # into machinery whose signatures cannot: creator role grants, grant gating, the guard
-      # against removing a resource's last manager.
+      # into machinery whose signatures cannot: creator role grants and grant gating.
       command_result =
         Context.with_actor(middleware_server_struct.user_id, fn ->
           module.command(name, params, middleware_server_struct)

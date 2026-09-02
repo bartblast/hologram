@@ -1402,63 +1402,6 @@ defmodule Hologram.AuthTest do
       end
     end
 
-    test "refuses to revoke the last role managing the resource" do
-      owner = create_user("user_35@example.com")
-      resource = create_resource()
-
-      grant_role(owner, resource, :owner)
-
-      expected_msg =
-        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module1 " <>
-          "#{inspect(resource.id)} - transfer ownership first"
-
-      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(owner.id, fn -> revoke_role(owner, resource, :owner) end)
-      end
-    end
-
-    test "refuses to revoke the last own managing role though a global holder remains" do
-      member = create_user("user_86@example.com")
-      global_holder = create_user("user_87@example.com")
-      resource = create_parent()
-
-      grant_role(member, resource, :member)
-      grant_role(global_holder, Role.Module1)
-
-      expected_msg =
-        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module2 " <>
-          "#{inspect(resource.id)} - transfer ownership first"
-
-      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(member.id, fn -> revoke_role(member, resource, :member) end)
-      end
-    end
-
-    test "revokes a managing role while another one remains" do
-      first_owner = create_user("user_36@example.com")
-      second_owner = create_user("user_37@example.com")
-      resource = create_resource()
-
-      grant_role(first_owner, resource, :owner)
-      grant_role(second_owner, resource, :owner)
-
-      assert Context.with_actor(first_owner.id, fn ->
-               revoke_role(first_owner, resource, :owner)
-             end) == :ok
-
-      assert grant_rows(first_owner.id) == []
-    end
-
-    test "revokes the last managing role for trusted code" do
-      owner = create_user("user_38@example.com")
-      resource = create_resource()
-
-      grant_role(owner, resource, :owner)
-
-      assert revoke_role(owner, resource, :owner) == :ok
-      assert grant_rows(owner.id) == []
-    end
-
     test "raises on a type-wide revocation issued by an acting user" do
       granter = create_user("user_39@example.com")
       user = create_user("user_40@example.com")
@@ -1520,25 +1463,6 @@ defmodule Hologram.AuthTest do
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         apply_revocation_write(grant, first_editor.id)
-      end
-    end
-
-    # The guard fires on the actor's OWN row, which the gate above would have let through - a
-    # resource is never left with nobody able to add anyone.
-    test "refuses to revoke the last role managing the resource" do
-      owner = create_user("user_112@example.com")
-      resource = create_resource()
-
-      grant_role(owner, resource, :owner)
-
-      grant = held_grant(owner.id)
-
-      expected_msg =
-        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module1 " <>
-          "#{inspect(resource.id)} - transfer ownership first"
-
-      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        apply_revocation_write(grant, owner.id)
       end
     end
 

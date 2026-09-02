@@ -233,10 +233,10 @@ defmodule Hologram.Auth do
 
   Under an acting user: revoking one's own role is always allowed, which is how a member leaves
   a resource - revoking someone else's requires being allowed to revoke that role by the resource
-  type's allow :revoke_role rules, the same answer can?/3 gives for {:revoke_role, role} - and the
-  last own role qualifying to grant on a resource can't be revoked, so a resource never loses its
-  last manager while its members administer it.
-  Trusted code running without an acting user is subject to neither, and is how a resource's
+  type's allow :revoke_role rules, the same answer can?/3 gives for {:revoke_role, role}.
+  Whether a resource may lose its last manager is the app's rule, not the framework's: a global
+  role the gate names, or trusted code, can always grant on a resource nobody administers.
+  Trusted code running without an acting user is subject to neither gate, and is how a resource's
   roles are set up and torn down. A type-wide revocation is trusted-only.
   """
   @spec revoke_role(struct | String.t(), struct | module, atom) :: :ok
@@ -245,18 +245,9 @@ defmodule Hologram.Auth do
     {entity_type, resource_id} = resource_reference(resource)
 
     validate_declared_role!(entity_type, role)
+    authorize_revoke!(entity_type, resource_id, user_id, role)
 
-    # The last-manager guard counts the managing grants and then deletes one, so the two
-    # statements run in a transaction with the counted rows locked - concurrent revokes of a
-    # resource's final managing roles would otherwise both see a survivor and both delete.
-    {:ok, :ok} =
-      Connection.transaction(fn ->
-        authorize_revoke!(entity_type, resource_id, user_id, role)
-
-        delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
-      end)
-
-    :ok
+    delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
   end
 
   @doc false
@@ -268,8 +259,6 @@ defmodule Hologram.Auth do
   # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
   # nobody signed in revokes nothing. The row comes from the store rather than from the write, so
   # its columns are the ones the grant was made with, whatever the client believed it was deleting.
-  #
-  # Runs in the caller's transaction, which the last-manager guard needs - see check_revocation!/4.
   def apply_revocation_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
     raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "revoked")
   end
@@ -315,9 +304,7 @@ defmodule Hologram.Auth do
   end
 
   # Users may always revoke their own roles - leaving a resource needs no permission. Taking
-  # a role from someone else is the per-role question can?/3 answers, and the last own role
-  # qualifying to grant never goes, so a resource can never be left with nobody able to add
-  # anyone - a global holder is not counted, since one leaving orphans nothing.
+  # a role from someone else is the per-role question can?/3 answers.
   defp authorize_revoke!(_entity_type, nil, _user_id, _role) do
     authorize_trusted_write!("type-wide", "revoked")
   end
@@ -340,24 +327,22 @@ defmodule Hologram.Auth do
     :ok
   end
 
-  # The two gates a revocation passes, asked the same way by the verb and by a batch's revocation
-  # write so the two cannot drift: dropping one's own role needs no permission, taking someone
-  # else's is the per-role question, and the last role able to manage the resource never goes.
-  #
-  # Must run inside the caller's transaction - count_managing_grants/3 takes its rows FOR UPDATE,
-  # which is what stops two concurrent revocations of a resource's final managing roles from each
-  # seeing a survivor.
+  # The gate a revocation passes, asked the same way by the verb and by a batch's revocation write
+  # so the two cannot drift: dropping one's own role needs no permission, taking someone else's is
+  # the per-role question. Whether a resource may lose its last manager is the app's rule.
   defp check_revocation!(resource, user_id, role, actor_user_id) do
-    entity_type = resource.__struct__
-
     if actor_user_id != user_id and not can?(actor_user_id, {:revoke_role, role}, resource) do
       raise Hologram.AccessDeniedError,
-            unqualified_role_message(entity_type, resource.id, actor_user_id, role, :revoke_role)
+            unqualified_role_message(
+              resource.__struct__,
+              resource.id,
+              actor_user_id,
+              role,
+              :revoke_role
+            )
     end
 
-    granting_role_names = Policy.grant_role_qualifying_roles(entity_type)
-
-    guard_last_managing_role!(entity_type, resource.id, role, granting_role_names)
+    :ok
   end
 
   # The gate a grant passes, asked the same way by the verb and by a batch's grant write so the two
@@ -452,29 +437,6 @@ defmodule Hologram.Auth do
   defp chain_target_id_or_nil(nil, _chain), do: nil
 
   defp chain_target_id_or_nil(entity, chain), do: chain_target_id(entity, chain)
-
-  # The rows are selected rather than counted in SQL because Postgres rejects FOR UPDATE with
-  # aggregates - the lock is the point, and a resource's managing grants are few.
-  # sobelow_skip ["SQL.Query"]
-  defp count_managing_grants(entity_type, resource_id, role_names) do
-    statement = """
-    SELECT "id" FROM "hologram_data"."hologram_role_grant"
-    WHERE "resource_type" = $1::#{qualified_enum_type("resource_type")}
-      AND "resource_id" = $2
-      AND "role" = ANY($3::#{qualified_enum_type("role")}[])
-    FOR UPDATE
-    """
-
-    params = [
-      resource_type_value(entity_type),
-      Codec.encode(resource_id, :uuid),
-      Enum.map(role_names, &Codec.encode(&1, :enum))
-    ]
-
-    {:ok, %{rows: rows}} = Connection.query(statement, params)
-
-    length(rows)
-  end
 
   defp delegates?(nil, _actor_user_id, _operation, _source), do: false
 
@@ -629,15 +591,6 @@ defmodule Hologram.Auth do
     columns
     |> Enum.find(&(&1.name == "user_id"))
     |> Map.fetch!(:fk_constraint)
-  end
-
-  defp guard_last_managing_role!(entity_type, resource_id, role, role_names) do
-    if role in role_names and count_managing_grants(entity_type, resource_id, role_names) <= 1 do
-      raise Hologram.AccessDeniedError,
-            "cannot revoke the last role managing #{inspect(entity_type)} #{inspect(resource_id)} - transfer ownership first"
-    end
-
-    :ok
   end
 
   # Enum params are cast to their column's type in SQL rather than the columns to text, so
