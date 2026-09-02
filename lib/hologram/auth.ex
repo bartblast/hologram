@@ -259,6 +259,34 @@ defmodule Hologram.Auth do
     :ok
   end
 
+  @doc false
+  @spec apply_revocation_write(RoleGrant.t(), String.t() | nil) :: :ok
+  # revoke_role/3's twin for a revocation made in a browser: the same two gates, asked about the
+  # actor the request authenticated rather than about anything the batch carried.
+  #
+  # Where the verb reads an absent actor as trusted code, this reads it as an anonymous session -
+  # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
+  # nobody signed in revokes nothing. The row comes from the store rather than from the write, so
+  # its columns are the ones the grant was made with, whatever the client believed it was deleting.
+  #
+  # Runs in the caller's transaction, which the last-manager guard needs - see check_revocation!/4.
+  def apply_revocation_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
+    raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "revoked")
+  end
+
+  def apply_revocation_write(%RoleGrant{}, nil) do
+    raise Hologram.AccessDeniedError, signed_in_write_message("revoked")
+  end
+
+  def apply_revocation_write(%RoleGrant{} = grant, actor_user_id) do
+    entity_type = RoleGrant.entity_type(grant.resource_type)
+    resource = gate_resource(entity_type, grant.resource_id)
+
+    check_revocation!(resource, grant.user_id, grant.role, actor_user_id)
+
+    EntityOperations.delete(RoleGrant, grant.id)
+  end
+
   @doc """
   Returns the entity id of the user the running work is authorized as, or nil when the
   session is anonymous. Framework wrappers set the actor around the work they run, so the
@@ -300,21 +328,7 @@ defmodule Hologram.Auth do
         :ok
 
       actor_user_id ->
-        resource = gate_resource(entity_type, resource_id)
-
-        if actor_user_id != user_id and not can?(actor_user_id, {:revoke_role, role}, resource) do
-          raise Hologram.AccessDeniedError,
-                unqualified_role_message(
-                  entity_type,
-                  resource_id,
-                  actor_user_id,
-                  role,
-                  :revoke_role
-                )
-        end
-
-        granting_role_names = Policy.grant_role_qualifying_roles(entity_type)
-        guard_last_managing_role!(entity_type, resource_id, role, granting_role_names)
+        check_revocation!(gate_resource(entity_type, resource_id), user_id, role, actor_user_id)
     end
   end
 
@@ -324,6 +338,26 @@ defmodule Hologram.Auth do
     end
 
     :ok
+  end
+
+  # The two gates a revocation passes, asked the same way by the verb and by a batch's revocation
+  # write so the two cannot drift: dropping one's own role needs no permission, taking someone
+  # else's is the per-role question, and the last role able to manage the resource never goes.
+  #
+  # Must run inside the caller's transaction - count_managing_grants/3 takes its rows FOR UPDATE,
+  # which is what stops two concurrent revocations of a resource's final managing roles from each
+  # seeing a survivor.
+  defp check_revocation!(resource, user_id, role, actor_user_id) do
+    entity_type = resource.__struct__
+
+    if actor_user_id != user_id and not can?(actor_user_id, {:revoke_role, role}, resource) do
+      raise Hologram.AccessDeniedError,
+            unqualified_role_message(entity_type, resource.id, actor_user_id, role, :revoke_role)
+    end
+
+    granting_role_names = Policy.grant_role_qualifying_roles(entity_type)
+
+    guard_last_managing_role!(entity_type, resource.id, role, granting_role_names)
   end
 
   # The gate a grant passes, asked the same way by the verb and by a batch's grant write so the two

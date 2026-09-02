@@ -8,6 +8,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.EntityOperations
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Query
@@ -87,6 +88,13 @@ defmodule Hologram.AuthTest do
     {:ok, %{rows: rows}} = Connection.query(select_sql)
 
     Enum.map(rows, fn [type, entity_id] -> {type, Codec.decode(entity_id, :uuid)} end)
+  end
+
+  # The row apply_revocation_write/2 is handed - read back from the store by id, the way the applier
+  # reads it, rather than built: a revocation is judged against the grant as it was made. Read raw,
+  # because the store's own read policy would withhold it from a test running with no actor.
+  defp held_grant(user_id) do
+    EntityOperations.get(RoleGrant, grant_id(user_id))
   end
 
   # What a check asks is whether a grant EXISTS, so nothing it reads can be gathered - the
@@ -719,7 +727,7 @@ defmodule Hologram.AuthTest do
       resource = create_resource()
 
       grant_role(user, resource, :editor)
-      grant = stored_grant(user.id)
+      grant = held_grant(user.id)
 
       assert grants_before(user.id, [grant_effect(:put_entity, grant)]) == []
     end
@@ -747,7 +755,7 @@ defmodule Hologram.AuthTest do
       resource = create_resource()
 
       grant_role(user, resource, :editor)
-      grant = stored_grant(user.id)
+      grant = held_grant(user.id)
       revoke_role(user, resource, :editor)
 
       effects = [grant_effect(:put_entity, grant), grant_effect(:del_entity, grant)]
@@ -1434,6 +1442,108 @@ defmodule Hologram.AuthTest do
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> revoke_role(user, Module1, :owner) end)
+      end
+    end
+  end
+
+  describe "apply_revocation_write/2" do
+    # An editor may not revoke on Module1 - the rule names :owner - so this passes only because the
+    # row is the actor's own, which is how a member leaves a resource.
+    test "revokes the acting user's own row without asking the gate" do
+      owner = create_user("user_106@example.com")
+      editor = create_user("user_107@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+      grant_role(editor, resource, :editor)
+
+      grant = held_grant(editor.id)
+
+      assert apply_revocation_write(grant, editor.id) == :ok
+      assert grant_rows(editor.id) == []
+    end
+
+    test "revokes another user's row under a role that may" do
+      owner = create_user("user_108@example.com")
+      editor = create_user("user_109@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+      grant_role(editor, resource, :editor)
+
+      grant = held_grant(editor.id)
+
+      assert apply_revocation_write(grant, owner.id) == :ok
+      assert grant_rows(editor.id) == []
+    end
+
+    test "refuses another user's row under a role that may not" do
+      first_editor = create_user("user_110@example.com")
+      second_editor = create_user("user_111@example.com")
+      resource = create_resource()
+
+      grant_role(first_editor, resource, :editor)
+      grant_role(second_editor, resource, :editor)
+
+      grant = held_grant(second_editor.id)
+
+      expected_msg =
+        "the acting user holds :editor on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}, " <>
+          "which may revoke no role there, :editor included. " <>
+          "Declare `allow {:revoke_role, :editor}, to: :editor` on Hologram.Test.Fixtures.Policy.Module1 if that is intended."
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_revocation_write(grant, first_editor.id)
+      end
+    end
+
+    # The guard fires on the actor's OWN row, which the gate above would have let through - a
+    # resource is never left with nobody able to add anyone.
+    test "refuses to revoke the last role managing the resource" do
+      owner = create_user("user_112@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+
+      grant = held_grant(owner.id)
+
+      expected_msg =
+        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(resource.id)} - transfer ownership first"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_revocation_write(grant, owner.id)
+      end
+    end
+
+    test "refuses a type-wide revocation" do
+      actor = create_user("user_113@example.com")
+      user = create_user("user_114@example.com")
+
+      grant_role(user, Module1, :owner)
+
+      grant = held_grant(user.id)
+
+      expected_msg =
+        "type-wide roles are revoked only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_revocation_write(grant, actor.id)
+      end
+    end
+
+    test "refuses a revocation with nobody signed in" do
+      user = create_user("user_115@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :owner)
+
+      grant = held_grant(user.id)
+
+      expected_msg = "a role is revoked only by a signed-in user - nobody is signed in"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_revocation_write(grant, nil)
       end
     end
   end
