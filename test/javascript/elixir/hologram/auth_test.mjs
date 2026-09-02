@@ -9,6 +9,8 @@ import {
 
 import Elixir_Hologram_Auth, {
   deriveGrantId,
+  grantEntry,
+  grantId,
   signedInWriteMessage,
   trustedWriteMessage,
   unqualifiedRoleMessage,
@@ -989,6 +991,79 @@ describe("deriveGrantId()", () => {
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "café"),
       "2ba31948-266d-5bb1-8452-451bca95d31c",
     );
+  });
+});
+
+// The pair every grant the browser writes goes through: what the row is, and what it is called.
+// Both are taken over the grant the deriveGrantId() vectors above pin, so the id asserted here is
+// the one the server derives for the same four parts.
+describe("a grant written into a batch", () => {
+  const ENTITY_TYPE = "MyApp.Document";
+  const GRANT_ID = "8cd330ce-decd-5e5b-bff7-1cd078a0ec62";
+  const NOW_MS = 1_756_100_000_123;
+  const RESOURCE_TYPE = "test_fixtures_policy_module2";
+  const STAMP = NOW_MS * 1024;
+
+  const ACTOR_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11";
+  const RESOURCE_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10";
+  const USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12";
+
+  let timers;
+
+  beforeEach(() => {
+    globalThis.Hologram.sync = {
+      model: {
+        [ENTITY_TYPE]: {
+          attributes: {id: "uuid"},
+          policy: {},
+          relationships: {},
+          resourceType: RESOURCE_TYPE,
+          roles: ["member"],
+          serverOnly: [],
+        },
+      },
+    };
+
+    Model.reset();
+    Clock.reset();
+    timers = sinon.useFakeTimers(NOW_MS);
+  });
+
+  afterEach(() => {
+    timers.restore();
+  });
+
+  describe("grantEntry()", () => {
+    // The granter and the holder are apart here on purpose: a grant is written for somebody as
+    // often as for oneself, and only one of the two is part of the id.
+    it("builds the create the grant store's row is written as", () => {
+      assert.deepStrictEqual(
+        grantEntry(USER_ID, ENTITY_TYPE, RESOURCE_ID, "member", ACTOR_ID),
+        {
+          claim: null,
+          data: {
+            granted_by_id: ACTOR_ID,
+            resource_id: RESOURCE_ID,
+            resource_type: RESOURCE_TYPE,
+            role: "member",
+            user_id: USER_ID,
+          },
+          id: GRANT_ID,
+          op: "create",
+          stamp: STAMP,
+          type: "Hologram.Auth.RoleGrant",
+        },
+      );
+    });
+  });
+
+  describe("grantId()", () => {
+    it("names the row from the type's own resource type", () => {
+      assert.equal(
+        grantId(USER_ID, ENTITY_TYPE, RESOURCE_ID, "member"),
+        GRANT_ID,
+      );
+    });
   });
 });
 
