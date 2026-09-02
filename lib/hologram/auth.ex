@@ -182,6 +182,31 @@ defmodule Hologram.Auth do
     write_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
   end
 
+  @doc false
+  @spec apply_grant_write(RoleGrant.t(), String.t() | nil) :: :created | :present
+  # grant_role/3's twin for a grant made in a browser: the same gate, asked about the actor the
+  # request authenticated rather than about anything the batch carried.
+  #
+  # Where the verb reads an absent actor as trusted code, this reads it as an anonymous session -
+  # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
+  # nobody signed in grants nothing. The row is already built and its granter already overwritten
+  # by Hologram.Mutation.Write.to_entity/1, so what is left is the gate and the insert.
+  def apply_grant_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
+    raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "granted")
+  end
+
+  def apply_grant_write(%RoleGrant{}, nil) do
+    raise Hologram.AccessDeniedError, signed_in_write_message("granted")
+  end
+
+  def apply_grant_write(%RoleGrant{} = grant, actor_user_id) do
+    entity_type = RoleGrant.entity_type(grant.resource_type)
+
+    check_grant!(gate_resource(entity_type, grant.resource_id), grant.role, actor_user_id)
+
+    EntityOperations.create_if_absent(grant)
+  end
+
   @doc """
   Revokes the given global role from the given user and returns :ok.
 
@@ -256,22 +281,8 @@ defmodule Hologram.Auth do
 
   defp authorize_grant!(entity_type, resource_id, role) do
     case Context.actor_user_id() do
-      nil ->
-        :ok
-
-      actor_user_id ->
-        if not can?(actor_user_id, {:grant_role, role}, gate_resource(entity_type, resource_id)) do
-          raise Hologram.AccessDeniedError,
-                unqualified_role_message(
-                  entity_type,
-                  resource_id,
-                  actor_user_id,
-                  role,
-                  :grant_role
-                )
-        end
-
-        :ok
+      nil -> :ok
+      actor_user_id -> check_grant!(gate_resource(entity_type, resource_id), role, actor_user_id)
     end
   end
 
@@ -309,8 +320,25 @@ defmodule Hologram.Auth do
 
   defp authorize_trusted_write!(scope, verb) do
     if Context.actor_user_id() do
+      raise Hologram.AccessDeniedError, trusted_write_message(scope, verb)
+    end
+
+    :ok
+  end
+
+  # The gate a grant passes, asked the same way by the verb and by a batch's grant write so the two
+  # cannot drift: whoever is acting must be allowed to grant this role on this row. A gate line
+  # reads nothing of the row but its id, so an id-only struct is the whole resource it needs.
+  defp check_grant!(resource, role, actor_user_id) do
+    if not can?(actor_user_id, {:grant_role, role}, resource) do
       raise Hologram.AccessDeniedError,
-            "#{scope} roles are #{verb} only by trusted code running without an acting user"
+            unqualified_role_message(
+              resource.__struct__,
+              resource.id,
+              actor_user_id,
+              role,
+              :grant_role
+            )
     end
 
     :ok
@@ -785,9 +813,23 @@ defmodule Hologram.Auth do
 
   defp operation_verb(:revoke_role), do: "revoke"
 
+  defp signed_in_write_message(verb) do
+    "a role is #{verb} only by a signed-in user - nobody is signed in"
+  end
+
   defp single_or_list([role_name]), do: role_name
 
   defp single_or_list(role_names), do: role_names
+
+  # A grant row carrying no resource id is one of the two trusted-only shapes, told apart by
+  # whether it names a type at all.
+  defp trusted_scope(%RoleGrant{resource_type: nil}), do: "global"
+
+  defp trusted_scope(%RoleGrant{}), do: "type-wide"
+
+  defp trusted_write_message(scope, verb) do
+    "#{scope} roles are #{verb} only by trusted code running without an acting user"
+  end
 
   defp validate_declared_role!(entity_type, role) do
     declared_names = Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)

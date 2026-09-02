@@ -61,6 +61,21 @@ defmodule Hologram.AuthTest do
     end)
   end
 
+  # The row a batch's grant write arrives as - what Hologram.Mutation.Write.to_entity/1 hands the
+  # applier, with the granter already taken from the acting user.
+  defp grant_struct(opts) do
+    entity_type = Keyword.get(opts, :entity_type)
+
+    %RoleGrant{
+      granted_by_id: Keyword.get(opts, :granted_by_id),
+      id: Entity.generate_id(),
+      resource_id: Keyword.get(opts, :resource_id),
+      resource_type: entity_type && RoleGrant.resource_type(entity_type),
+      role: Keyword.fetch!(opts, :role),
+      user_id: Keyword.fetch!(opts, :user_id)
+    }
+  end
+
   defp revocation_effects do
     select_sql = """
     SELECT "type", "entity_id"
@@ -1038,6 +1053,131 @@ defmodule Hologram.AuthTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         grant_role(user, %Module1{id: "nope"}, :owner)
+      end
+    end
+  end
+
+  describe "apply_grant_write/2" do
+    test "answers :created and writes the grant under a holder who may grant the role" do
+      granter = create_user("user_95@example.com")
+      user = create_user("user_96@example.com")
+      resource = create_resource()
+
+      grant_role(granter, resource, :owner)
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: granter.id,
+          resource_id: resource.id,
+          role: :editor,
+          user_id: user.id
+        )
+
+      assert apply_grant_write(grant, granter.id) == :created
+
+      assert [row] = grant_rows(user.id)
+      assert row.granted_by_id == granter.id
+      assert row.resource_id == resource.id
+      assert row.role == "editor"
+    end
+
+    test "answers :present for a grant the store already holds" do
+      granter = create_user("user_97@example.com")
+      user = create_user("user_98@example.com")
+      resource = create_resource()
+
+      grant_role(granter, resource, :owner)
+      grant_role(user, resource, :editor)
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: granter.id,
+          resource_id: resource.id,
+          role: :editor,
+          user_id: user.id
+        )
+
+      assert apply_grant_write(grant, granter.id) == :present
+
+      assert [%{role: "editor"}] = grant_rows(user.id)
+    end
+
+    # A client is never the trusted tier, so the sentence the verb keeps for an acting user is
+    # unconditional here - there is no batch without a session to run it.
+    test "refuses a type-wide grant" do
+      granter = create_user("user_99@example.com")
+      user = create_user("user_100@example.com")
+
+      grant = grant_struct(entity_type: Module1, role: :owner, user_id: user.id)
+
+      expected_msg =
+        "type-wide roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, granter.id)
+      end
+    end
+
+    test "refuses a global grant" do
+      granter = create_user("user_101@example.com")
+      user = create_user("user_102@example.com")
+
+      grant = grant_struct(role: Role.Module1, user_id: user.id)
+
+      expected_msg =
+        "global roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, granter.id)
+      end
+    end
+
+    # Where the verb reads an absent actor as trusted code running a script, a batch has a session
+    # behind it either way - so an absent one is an anonymous visitor, who grants nothing.
+    test "refuses a grant with nobody signed in" do
+      user = create_user("user_103@example.com")
+      resource = create_resource()
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          resource_id: resource.id,
+          role: :editor,
+          user_id: user.id
+        )
+
+      expected_msg = "a role is granted only by a signed-in user - nobody is signed in"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, nil)
+      end
+    end
+
+    test "refuses a role the acting user's own roles do not cover" do
+      granter = create_user("user_104@example.com")
+      user = create_user("user_105@example.com")
+      resource = create_parent()
+
+      grant_role(granter, resource, :member)
+
+      grant =
+        grant_struct(
+          entity_type: Module2,
+          granted_by_id: granter.id,
+          resource_id: resource.id,
+          role: :admin,
+          user_id: user.id
+        )
+
+      expected_msg =
+        "the acting user holds :member on Hologram.Test.Fixtures.Policy.Module2 #{inspect(resource.id)}, " <>
+          "which may grant :member but not :admin. " <>
+          "Declare `allow {:grant_role, :admin}, to: :member` on Hologram.Test.Fixtures.Policy.Module2 if that is intended."
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, granter.id)
       end
     end
   end
