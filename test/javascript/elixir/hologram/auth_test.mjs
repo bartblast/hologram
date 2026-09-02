@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   defineRuntimeGlobals,
+  sinon,
 } from "../../support/helpers.mjs";
 
 import Elixir_Hologram_Auth, {
@@ -12,6 +13,8 @@ import Elixir_Hologram_Auth, {
   trustedWriteMessage,
   unqualifiedRoleMessage,
 } from "../../../../assets/js/elixir/hologram/auth.mjs";
+import Batches from "../../../../assets/js/batches.mjs";
+import Clock from "../../../../assets/js/clock.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -995,52 +998,62 @@ describe("deriveGrantId()", () => {
 // file's model. Always update both together. What the browser cannot mirror is the "extends"
 // sentence - the model entry carries role names and not their chains - which is why no test here
 // holds a role that extends another.
-describe("unqualifiedRoleMessage()", () => {
-  const DOCUMENT = "MyApp.Document";
-  const GRANT = "Hologram.Auth.RoleGrant";
-  const ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
-  const DOC = "018f4571-a1b2-7c3d-8e4f-0000000000d1";
+// Shared by the describes below: a model with one resource type declaring three roles, its gate
+// rules given per test, and the grant store.
+const GATED_DOCUMENT = "MyApp.Document";
+const GATED_GRANT = "Hologram.Auth.RoleGrant";
+const GATED_ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
+const GATED_BOB = "018f4571-a1b2-7c3d-8e4f-000000000002";
+const GATED_DOC = "018f4571-a1b2-7c3d-8e4f-0000000000d1";
 
-  const rule = (to) => ({predicates: [], to: to, via: null});
+const gateRule = (to) => ({predicates: [], to: to, via: null});
 
-  const grantRow = (overrides) => ({
-    id: `grant-${Object.values(overrides).join("-")}`,
-    resource_id: null,
-    resource_type: null,
-    role: "viewer",
-    user_id: ALICE,
-    ...overrides,
-  });
+const gatedGrantRow = (overrides) => ({
+  id: `grant-${Object.values(overrides).join("-")}`,
+  resource_id: null,
+  resource_type: null,
+  role: "viewer",
+  user_id: GATED_ALICE,
+  ...overrides,
+});
 
-  const defineGates = (policy) => {
-    globalThis.Hologram.sync = {
-      model: {
-        [DOCUMENT]: {
-          attributes: {id: "uuid"},
-          policy: policy,
-          relationships: {},
-          resourceType: "documents",
-          roles: ["editor", "owner", "viewer"],
-          serverOnly: [],
-        },
-        [GRANT]: {
-          attributes: {
-            id: "uuid",
-            resource_id: "uuid",
-            resource_type: "enum",
-            role: "enum",
-          },
-          policy: {},
-          relationships: {},
-          resourceType: "hologram_role_grant",
-          roles: [],
-          serverOnly: [],
-        },
+const defineGates = (policy) => {
+  globalThis.Hologram.sync = {
+    model: {
+      [GATED_DOCUMENT]: {
+        attributes: {id: "uuid"},
+        policy: policy,
+        relationships: {},
+        resourceType: "documents",
+        roles: ["editor", "owner", "viewer"],
+        serverOnly: [],
       },
-    };
-
-    Model.reset();
+      [GATED_GRANT]: {
+        attributes: {
+          id: "uuid",
+          resource_id: "uuid",
+          resource_type: "enum",
+          role: "enum",
+        },
+        policy: {},
+        relationships: {},
+        resourceType: "hologram_role_grant",
+        roles: [],
+        serverOnly: [],
+      },
+    },
   };
+
+  Model.reset();
+};
+
+describe("unqualifiedRoleMessage()", () => {
+  const DOCUMENT = GATED_DOCUMENT;
+  const GRANT = GATED_GRANT;
+  const ALICE = GATED_ALICE;
+  const DOC = GATED_DOC;
+  const rule = gateRule;
+  const grantRow = gatedGrantRow;
 
   beforeEach(() => {
     defineGates({});
@@ -1164,6 +1177,219 @@ describe("trustedWriteMessage()", () => {
     assert.equal(
       trustedWriteMessage("type-wide", "revoked"),
       "type-wide roles are revoked only by trusted code running without an acting user",
+    );
+  });
+});
+
+// IMPORTANT!
+// Mirrors test/elixir/hologram/auth_test.exs (describe "grant_role/3") where the browser can -
+// the argument refusals and the gate are the same sentences - and adds what only this side has:
+// the row in the batch, its visibility before anything is sent, and the action it must run in.
+// Always update both together.
+describe("grant_role/3", () => {
+  const grant = Elixir_Hologram_Auth["grant_role/3"];
+  const can = Elixir_Hologram_Auth["can?/3"];
+
+  const NOW_MS = 1_756_100_000_123;
+  const STAMP = NOW_MS * 1024;
+
+  const document = () =>
+    Type.struct(GATED_DOCUMENT, [[Type.atom("id"), Type.bitstring(GATED_DOC)]]);
+
+  let timers;
+
+  beforeEach(() => {
+    defineGates({"grant_role:viewer": [gateRule([["own", ["editor"]]])]});
+    Batches.reset();
+    Clock.reset();
+    LocalDatabase.reset();
+    LocalDatabase.actorUserId = GATED_ALICE;
+    LocalDatabase.putRow(
+      GATED_GRANT,
+      gatedGrantRow({
+        resource_id: GATED_DOC,
+        resource_type: "documents",
+        role: "editor",
+      }),
+    );
+    timers = sinon.useFakeTimers(NOW_MS);
+    Batches.open("grants");
+  });
+
+  afterEach(() => {
+    timers.restore();
+    Batches.reset();
+    LocalDatabase.actorUserId = null;
+  });
+
+  it("appends a create of the grant row with the acting user as its granter", () => {
+    const result = grant(
+      Type.bitstring(GATED_BOB),
+      document(),
+      Type.atom("viewer"),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+
+    assert.deepStrictEqual(Batches.current().writes, [
+      {
+        claim: null,
+        data: {
+          granted_by_id: GATED_ALICE,
+          resource_id: GATED_DOC,
+          resource_type: "documents",
+          role: "viewer",
+          user_id: GATED_BOB,
+        },
+        id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
+        op: "create",
+        stamp: STAMP,
+        type: GATED_GRANT,
+      },
+    ]);
+  });
+
+  it("takes the user as a struct as well as a bare id", () => {
+    const user = Type.struct("MyApp.User", [
+      [Type.atom("id"), Type.bitstring(GATED_BOB)],
+    ]);
+
+    grant(user, document(), Type.atom("viewer"));
+
+    assert.equal(Batches.current().writes[0].data.user_id, GATED_BOB);
+  });
+
+  // The pending row is readable through the overlay, so a check that reads grants sees it the
+  // moment the verb returns - before anything is sent.
+  it("makes the grant visible to can?/3 before anything is sent", () => {
+    defineGates({
+      "grant_role:viewer": [gateRule([["own", ["editor"]]])],
+      read: [gateRule([["own", ["viewer"]]])],
+    });
+
+    assert.deepStrictEqual(
+      can(Type.bitstring(GATED_BOB), Type.atom("read"), document()),
+      Type.boolean(false),
+    );
+
+    grant(Type.bitstring(GATED_BOB), document(), Type.atom("viewer"));
+
+    assert.deepStrictEqual(
+      can(Type.bitstring(GATED_BOB), Type.atom("read"), document()),
+      Type.boolean(true),
+    );
+  });
+
+  it("answers :ok and appends nothing for a grant the client already holds", () => {
+    LocalDatabase.putRow(GATED_GRANT, {
+      id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
+      resource_id: GATED_DOC,
+      resource_type: "documents",
+      role: "viewer",
+      user_id: GATED_BOB,
+    });
+
+    const result = grant(
+      Type.bitstring(GATED_BOB),
+      document(),
+      Type.atom("viewer"),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+    assert.deepStrictEqual(Batches.current().writes, []);
+  });
+
+  it("raises on a role the resource type does not declare", () => {
+    assertBoxedError(
+      () =>
+        grant(Type.bitstring(GATED_BOB), document(), Type.atom("publisher")),
+      "ArgumentError",
+      "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
+    );
+  });
+
+  it("raises the teaching message for a role the acting user may not grant", () => {
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      "Hologram.AccessDeniedError",
+      `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
+        "which may grant :viewer but not :owner. " +
+        "Declare `allow {:grant_role, :owner}, to: :editor` on MyApp.Document if that is intended.",
+    );
+  });
+
+  // The server asks the gate before it writes, and answers a held grant with :ok only after the
+  // gate passed - so a browser holding the row still refuses an actor who may not grant it.
+  it("asks the gate before it looks for a grant already held", () => {
+    LocalDatabase.putRow(GATED_GRANT, {
+      id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "owner"),
+      resource_id: GATED_DOC,
+      resource_type: "documents",
+      role: "owner",
+      user_id: GATED_BOB,
+    });
+
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      "Hologram.AccessDeniedError",
+      `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
+        "which may grant :viewer but not :owner. " +
+        "Declare `allow {:grant_role, :owner}, to: :editor` on MyApp.Document if that is intended.",
+    );
+  });
+
+  it("raises on a type-wide grant", () => {
+    assertBoxedError(
+      () =>
+        grant(
+          Type.bitstring(GATED_BOB),
+          Type.alias(GATED_DOCUMENT),
+          Type.atom("viewer"),
+        ),
+      "Hologram.AccessDeniedError",
+      "type-wide roles are granted only by trusted code running without an acting user",
+    );
+  });
+
+  it("raises when nobody is signed in", () => {
+    LocalDatabase.actorUserId = null;
+
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      "Hologram.AccessDeniedError",
+      "a role is granted only by a signed-in user - nobody is signed in",
+    );
+  });
+
+  it("raises on a user id that is not an entity id", () => {
+    assertBoxedError(
+      () => grant(Type.bitstring("nope"), document(), Type.atom("viewer")),
+      "ArgumentError",
+      'invalid user id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+    );
+  });
+
+  it("raises outside an action", () => {
+    Batches.reset();
+
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      "ArgumentError",
+      "grant_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
+    );
+  });
+});
+
+describe("grant_role/2", () => {
+  it("raises - a global grant is trusted-only", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/2"](
+          Type.bitstring(GATED_BOB),
+          Type.alias("MyApp.Roles.Admin"),
+        ),
+      "Hologram.AccessDeniedError",
+      "global roles are granted only by trusted code running without an acting user",
     );
   });
 });

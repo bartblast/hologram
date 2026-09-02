@@ -1,5 +1,8 @@
 "use strict";
 
+import Bitstring from "../../bitstring.mjs";
+import Clock from "../../clock.mjs";
+import {currentBatch} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
@@ -332,6 +335,80 @@ function operationKey(operation) {
 }
 
 const Elixir_Hologram_Auth = {
+  // A global grant is trusted-only on the server, and a client is never the trusted tier - so the
+  // server's sentence for an acting user is the browser's sentence unconditionally.
+  "grant_role/2": (_userOrId, _role) => {
+    raiseAccessDenied(trustedWriteMessage("global", "granted"));
+  },
+
+  // Hologram.Auth.grant_role/3 as a browser runs it: the same arguments, the same checks in the
+  // same order, and the same gate - can?/3, over the rules and grant rows this client holds. What
+  // differs is the end: the server inserts, the browser appends a create of the grant row to the
+  // running batch, and the row is readable at once through the overlay. The id is derived from
+  // the grant, so this row and the server's are one row; a grant the client already holds under
+  // that id answers :ok and writes nothing, which is the server's idempotency mirrored where the
+  // client can see it. The server replays every check when the batch lands and a refusal rolls
+  // the row back.
+  "grant_role/3": (userOrId, resource, role) => {
+    const userId = validateUserId(userOrId);
+    const {entityType, resourceId} = resourceReference(resource, "granted");
+    const roleName = validateDeclaredRole(entityType, role);
+    const actorUserId = LocalDatabase.actorUserId;
+
+    if (actorUserId === null) {
+      raiseAccessDenied(signedInWriteMessage("granted"));
+    }
+
+    const gateResource = Type.struct(entityType, [
+      [Type.atom("id"), Type.bitstring(resourceId)],
+    ]);
+
+    const allowed = Elixir_Hologram_Auth["can?/3"](
+      Type.bitstring(actorUserId),
+      Type.tuple([Type.atom("grant_role"), role]),
+      gateResource,
+    );
+
+    if (!Type.isTrue(allowed)) {
+      raiseAccessDenied(
+        unqualifiedRoleMessage(
+          entityType,
+          resourceId,
+          actorUserId,
+          roleName,
+          "grant_role",
+        ),
+      );
+    }
+
+    const resourceType =
+      globalThis.Hologram.sync.model[entityType].resourceType;
+    const id = deriveGrantId(userId, resourceType, resourceId, roleName);
+
+    if (LocalDatabase.getRow(GRANT_TYPE, id) !== null) {
+      return Type.atom("ok");
+    }
+
+    const batch = currentBatch("grant_role");
+
+    batch.append({
+      claim: null,
+      data: {
+        granted_by_id: actorUserId,
+        resource_id: resourceId,
+        resource_type: resourceType,
+        role: roleName,
+        user_id: userId,
+      },
+      id: id,
+      op: "create",
+      stamp: Clock.stamp(),
+      type: GRANT_TYPE,
+    });
+
+    return Type.atom("ok");
+  },
+
   "can?/3": (userOrId, operation, entity) => {
     const entityType = Interpreter.moduleExName(
       entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
@@ -454,6 +531,68 @@ export function signedInWriteMessage(verb) {
 // The two grant shapes trusted code writes - type-wide and global - which a browser never may.
 export function trustedWriteMessage(scope, verb) {
   return `${scope} roles are ${verb} only by trusted code running without an acting user`;
+}
+
+function raiseAccessDenied(message) {
+  Interpreter.raiseError("Hologram.AccessDeniedError", message);
+}
+
+// The struct or entity type module a grant names as its resource, taken apart the way the server
+// takes it apart: a struct gives the type and a validated id, a module is a type-wide grant -
+// trusted-only, so refused here outright.
+function resourceReference(resource, verb) {
+  if (Type.isAlias(resource)) {
+    raiseAccessDenied(trustedWriteMessage("type-wide", verb));
+  }
+
+  const entityType = Interpreter.moduleExName(
+    resource.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+  );
+
+  const idEntry = resource.data[Type.encodeMapKey(Type.atom("id"))];
+  const resourceId = validateId(idEntry ? idEntry[1] : Type.nil(), "resource");
+
+  return {entityType, resourceId};
+}
+
+function validateDeclaredRole(entityType, role) {
+  const declared = globalThis.Hologram.sync?.model?.[entityType]?.roles ?? [];
+  const roleName = Type.isAtom(role) ? role.value : null;
+
+  if (roleName === null || !declared.includes(roleName)) {
+    Interpreter.raiseArgumentError(
+      `unknown role ${Interpreter.inspect(role)} for ${entityType} - declared roles are: ${declared.map((name) => `:${name}`).join(", ")}`,
+    );
+  }
+
+  return roleName;
+}
+
+// An id the server would accept: the canonical lowercase spelling, and nothing else - the
+// validator's own regex, since the two tiers compare ids as strings.
+function validateId(term, subject) {
+  const value = Type.isBitstring(term) ? Bitstring.toText(term) : null;
+
+  if (
+    value === null ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      value,
+    )
+  ) {
+    Interpreter.raiseArgumentError(
+      `invalid ${subject} id ${Interpreter.inspect(term)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+    );
+  }
+
+  return value;
+}
+
+function validateUserId(userOrId) {
+  const term = Type.isMap(userOrId)
+    ? (userOrId.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil())
+    : userOrId;
+
+  return validateId(term, "user");
 }
 
 function coveredDescription(covered, role) {
