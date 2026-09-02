@@ -665,17 +665,17 @@ defmodule Hologram.DB.EntityOperationsTest do
       %RoleGrant{id: Entity.generate_id(), role: role, user_id: user.id}
     end
 
-    test "inserts the entity when no conflicting row exists" do
+    test "answers :created and inserts the entity when no conflicting row exists" do
       {:ok, user} =
         %{email: "user_1@example.com"}
         |> Module14.new()
         |> create()
 
-      assert create_if_absent(role_grant(user, :owner)) == :ok
+      assert create_if_absent(role_grant(user, :owner)) == :created
       assert count_role_grants(user.id) == 1
     end
 
-    test "keeps the existing row when a unique index conflicts" do
+    test "answers :present and keeps the existing row when a unique index conflicts" do
       {:ok, user} =
         %{email: "user_2@example.com"}
         |> Module14.new()
@@ -685,7 +685,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       create_if_absent(first_grant)
 
-      assert create_if_absent(role_grant(user, :owner)) == :ok
+      assert create_if_absent(role_grant(user, :owner)) == :present
       assert count_role_grants(user.id) == 1
 
       select_sql = ~s|SELECT "id" FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|

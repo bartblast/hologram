@@ -836,6 +836,10 @@ defmodule Hologram.Auth do
     }
 
     EntityOperations.create_if_absent(grant)
+
+    # Both verbs are documented idempotent - granting a role the user already holds keeps the
+    # original grant - so whether a row went in is nothing a caller of theirs asked about.
+    :ok
   rescue
     error in Postgrex.Error ->
       # A grant row references the user table twice - the grantee and whoever granted it - so the
