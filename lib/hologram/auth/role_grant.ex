@@ -20,6 +20,7 @@ defmodule Hologram.Auth.RoleGrant do
   # exists so that a module can redefine what the macro injected into it, and nothing is
   # injected into this one.
 
+  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -119,6 +120,21 @@ defmodule Hologram.Auth.RoleGrant do
   @spec __system_attributes__() :: list({atom, atom, keyword})
   def __system_attributes__ do
     [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+  end
+
+  @doc false
+  @spec entity_type(atom) :: module | nil
+  # The inverse of resource_type/1, over the mapping rather than over a module sweep - a stored
+  # label is a table name, and the mapping is the build's own table-name-per-entity-type. Answers
+  # nil for a label naming no table, which a stored row's column cannot be but a client's write
+  # can: an enum decodes to whatever atom it spells rather than to a declared value.
+  def entity_type(resource_type) do
+    table = Atom.to_string(resource_type)
+
+    case Enum.find(DB.mapping(), fn {_entity_type, entry} -> entry.table == table end) do
+      {entity_type, _entry} -> entity_type
+      nil -> nil
+    end
   end
 
   @doc """

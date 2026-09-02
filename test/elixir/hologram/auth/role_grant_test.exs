@@ -154,6 +154,20 @@ defmodule Hologram.Auth.RoleGrantTest do
            ]
   end
 
+  describe "entity_type/1" do
+    # Stated as a round trip rather than against a literal label, so the pair cannot drift apart
+    # without this failing - resource_type/1 derives the label and this derives the type back.
+    test "answers the entity type whose resource type label it is given" do
+      label = RoleGrant.resource_type(Module14)
+
+      assert RoleGrant.entity_type(label) == Module14
+    end
+
+    test "answers nil for a label naming no table of this build" do
+      assert RoleGrant.entity_type(:no_such_table_in_this_build) == nil
+    end
+  end
+
   describe "new/1" do
     test "refuses construction the way the engine does" do
       expected_msg = "role grants are written only through grant_role/revoke_role"

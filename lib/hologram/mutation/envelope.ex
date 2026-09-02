@@ -465,20 +465,16 @@ defmodule Hologram.Mutation.Envelope do
     ArgumentError -> {:error, unknown_type_message(label)}
   end
 
-  # The entity type a grant's resource_type names. An enum decodes to whatever atom it spells
-  # rather than to a declared value - membership is the write's to judge, as the label of any
-  # other enum is - but a grant's label has to resolve to a module HERE, because the declared-role
-  # check below reads that module's declarations. A label naming no table is therefore answered
-  # the way an unknown write type is, rather than left to a layer that raises instead of
-  # answering: the grant path validates through insert_if_absent, whose refusal is a broken
-  # invariant rather than something a client can be told.
+  # An enum decodes to whatever atom it spells rather than to a declared value - membership is the
+  # write's to judge, as the label of any other enum is - but a grant's label has to resolve to a
+  # module HERE, because the declared-role check reads that module's declarations. A label naming
+  # no table is therefore answered the way an unknown write type is, rather than left to a layer
+  # that raises instead of answering: the grant path validates through insert_if_absent, whose
+  # refusal is a broken invariant rather than something a client can be told.
   defp resource_entity_type(label) do
-    table = Atom.to_string(label)
-    found = Enum.find(DB.mapping(), fn {_entity_type, entry} -> entry.table == table end)
-
-    case found do
-      {entity_type, _entry} -> {:ok, entity_type}
+    case RoleGrant.entity_type(label) do
       nil -> {:error, ~s(resource_type "#{label}" is not an entity type of this build)}
+      entity_type -> {:ok, entity_type}
     end
   end
 
