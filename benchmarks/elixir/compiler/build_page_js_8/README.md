@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.create_page_entry_files/6
+Hologram.Compiler.build_page_js/8
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">create_page_entry_files/6</td>
-    <td style="white-space: nowrap; text-align: right">0.74</td>
-    <td style="white-space: nowrap; text-align: right">1.34 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;15.32%</td>
-    <td style="white-space: nowrap; text-align: right">1.27 s</td>
-    <td style="white-space: nowrap; text-align: right">1.79 s</td>
+    <td style="white-space: nowrap">build_page_js/8</td>
+    <td style="white-space: nowrap; text-align: right">48.66</td>
+    <td style="white-space: nowrap; text-align: right">20.55 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;17.56%</td>
+    <td style="white-space: nowrap; text-align: right">20.89 ms</td>
+    <td style="white-space: nowrap; text-align: right">34.39 ms</td>
   </tr>
 
 </table>
