@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   alias Hologram.Auth
   alias HologramFeatureTests.Components.OptimisticGrants.GrantList
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
 
   route "/optimistic-grants"
@@ -37,6 +38,7 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click="create_and_share"> Create and share </button>
       <button $click="grant_editor"> Grant editor </button>
       <button $click="grant_owner"> Grant owner </button>
       <button $click="leave"> Leave </button>
@@ -53,6 +55,19 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   # Every verb runs in the browser: the row appears or disappears at once, the write joins the
   # action's batch, and the server replays the gate when it lands. A refusal the browser can make
   # itself is raised here; one only the server can make comes back as a rejected batch.
+  #
+  # The first of them needs the roles a row hands its creator: the note is made and shared in one
+  # action, so the grant is judged against a row this browser made a line earlier and has been
+  # told nothing about yet.
+  def action(:create_and_share, _params, component) do
+    {:ok, note} =
+      %{author_id: component.state.session_user_id, body: "shared_note"}
+      |> Note.new()
+      |> DB.create()
+
+    grant(component, :create_and_share, component.state.other_user_id, :editor, note)
+  end
+
   def action(:grant_editor, _params, component) do
     grant(component, :grant_editor, component.state.other_user_id, :editor)
   end
@@ -84,9 +99,13 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   end
 
   defp grant(component, name, user_id, role) do
+    grant(component, name, user_id, role, component.state.document)
+  end
+
+  defp grant(component, name, user_id, role, resource) do
     result =
       try do
-        Auth.grant_role(user_id, component.state.document, role)
+        Auth.grant_role(user_id, resource, role)
         "#{name}_ok"
       rescue
         Hologram.AccessDeniedError -> "#{name}_refused"

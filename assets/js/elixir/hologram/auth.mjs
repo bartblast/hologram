@@ -381,9 +381,7 @@ const Elixir_Hologram_Auth = {
       );
     }
 
-    const resourceType =
-      globalThis.Hologram.sync.model[entityType].resourceType;
-    const id = deriveGrantId(userId, resourceType, resourceId, roleName);
+    const id = grantId(userId, entityType, resourceId, roleName);
 
     if (LocalDatabase.getRow(GRANT_TYPE, id) !== null) {
       return Type.atom("ok");
@@ -391,20 +389,9 @@ const Elixir_Hologram_Auth = {
 
     const batch = currentBatch("grant_role");
 
-    batch.append({
-      claim: null,
-      data: {
-        granted_by_id: actorUserId,
-        resource_id: resourceId,
-        resource_type: resourceType,
-        role: roleName,
-        user_id: userId,
-      },
-      id: id,
-      op: "create",
-      stamp: Clock.stamp(),
-      type: GRANT_TYPE,
-    });
+    batch.append(
+      grantEntry(userId, entityType, resourceId, roleName, actorUserId),
+    );
 
     return Type.atom("ok");
   },
@@ -555,6 +542,44 @@ export function deriveGrantId(userId, resourceType, resourceId, role) {
   ).join("");
 
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// The batch entry a grant is written as: the store's five columns, and the id derived from four
+// of them, which is what makes this row and the server's insert of the same grant one row. The
+// granter and the holder are apart, because a grant is written for somebody as often as for
+// oneself.
+export function grantEntry(
+  userId,
+  entityType,
+  resourceId,
+  roleName,
+  actorUserId,
+) {
+  return {
+    claim: null,
+    data: {
+      granted_by_id: actorUserId,
+      resource_id: resourceId,
+      resource_type: globalThis.Hologram.sync.model[entityType].resourceType,
+      role: roleName,
+      user_id: userId,
+    },
+    id: grantId(userId, entityType, resourceId, roleName),
+    op: "create",
+    stamp: Clock.stamp(),
+    type: GRANT_TYPE,
+  };
+}
+
+// The id the store files a grant under, named from the type's own model entry - a fact about the
+// grant rather than a value minted for it, so it can be asked for before anything is built.
+export function grantId(userId, entityType, resourceId, roleName) {
+  return deriveGrantId(
+    userId,
+    globalThis.Hologram.sync.model[entityType].resourceType,
+    resourceId,
+    roleName,
+  );
 }
 
 // IMPORTANT!

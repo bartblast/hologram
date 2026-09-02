@@ -50,14 +50,20 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     |> Enum.sort()
   end
 
-  # Signs the session in and gives its user the given role on the document as trusted code, then
-  # reloads: a command changes the session and not the page already mounted, and the reload is
-  # also what fills the page with the grants it now holds.
-  defp sign_in_as(session, document, role) do
+  # A command changes the session and not the page already mounted, so a page mounted before this
+  # holds no user id - every caller reloads.
+  defp sign_in(session) do
     session
     |> visit(OptimisticGrantsPage)
     |> click(button("Log in"))
     |> assert_text(css("#result"), "logged_in")
+  end
+
+  # Signs the session in and gives its user the given role on the document as trusted code, then
+  # reloads: the reload is what makes the page hold the session user, and what fills it with the
+  # grants that user now has.
+  defp sign_in_as(session, document, role) do
+    sign_in(session)
 
     Auth.grant_role(session_user(), document, role)
 
@@ -107,6 +113,34 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     |> await_pending_writes(0)
 
     assert grants(other_user.id) == [:editor]
+  end
+
+  # The session user holds nothing anywhere before the click: the note the action makes is what
+  # hands them its :owner role, and the share on the next line is what needs it. Both grants ride
+  # the create's own batch, and the server writes the creator's one itself when that batch lands -
+  # under the id this browser derived, which is why the store ends with one owner row and not two.
+  feature "puts someone on a row it just made", %{
+    session: session,
+    other_user: other_user
+  } do
+    session
+    |> sign_in()
+    |> reload()
+    |> assert_page(OptimisticGrantsPage)
+    |> hold_mutation_requests()
+    |> click(button("Create and share"))
+    |> assert_text(css("#result"), "create_and_share_ok")
+    |> assert_text(css("#grants"), "editor:#{other_user.id}")
+
+    # Nothing has reached the server while the request is held.
+    assert grants(other_user.id) == []
+
+    session
+    |> release_mutations()
+    |> await_pending_writes(0)
+
+    assert grants(other_user.id) == [:editor]
+    assert grants(session_user().id) == [:owner]
   end
 
   # The browser's gate reads the same rules the server does, so an escalation is refused before

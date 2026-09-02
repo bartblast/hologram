@@ -1126,7 +1126,8 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"constraints":{},"defaults":{"c":Type.atom("x")},/ <>
+                 ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
+                 ~s/"defaults":{"c":Type.atom("x")},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
                  ~s/"relationships":{},/ <>
                  ~s/"resourceType":"test_fixtures_entity_module4","roles":[],"serverOnly":[]}}/
@@ -1140,6 +1141,17 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
+    end
+
+    # The client writes a creator's grants itself as it creates the row, so the build names which
+    # roles those are - a type declaring none renders an empty list, asserted with the whole entry
+    # in "injects the attribute types the client reads rows by".
+    test "names the roles a creator takes, sorted", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"creatorRoles":["maintainer","owner"],/)
     end
 
     # The client judges a written value by these, so the name a violation is reported under is the

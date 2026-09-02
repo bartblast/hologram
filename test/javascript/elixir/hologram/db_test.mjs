@@ -13,6 +13,7 @@ import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import Elixir_Hologram_Query from "../../../../assets/js/elixir/hologram/query.mjs";
+import {deriveGrantId} from "../../../../assets/js/elixir/hologram/auth.mjs";
 import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
@@ -25,6 +26,7 @@ defineRuntimeGlobals();
 describe("Elixir_Hologram_DB", () => {
   const DOC = "MyApp.Doc";
   const ITEM = "MyApp.Item";
+  const NOTE = "MyApp.Note";
   const NOTIFY = "MyApp.Jobs.Notify";
   const ROLE_GRANT = "Hologram.Auth.RoleGrant";
   const TASK = "MyApp.Task";
@@ -102,6 +104,19 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: [],
         },
+        // A type handing its creator a role, which a create writes into its own batch. The
+        // resource type is what a grant row spells it by, and part of every grant's derived id.
+        [NOTE]: {
+          attributes: {id: "uuid", title: "string"},
+          constraints: {},
+          creatorRoles: ["owner"],
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          relationships: {},
+          resourceType: "notes",
+          serverOnly: [],
+        },
         // A job type - the three attributes its framework fills are what tells one apart here.
         [NOTIFY]: {
           attributes: {
@@ -171,6 +186,7 @@ describe("Elixir_Hologram_DB", () => {
   });
 
   describe("create/1", () => {
+    const ACTOR = "018f0000-0000-7000-8000-00000000000a";
     const NOW_MS = 1_756_100_000_123;
     const STAMP = NOW_MS * 1024;
     const TIMESTAMP = "2025-08-25T05:33:20.123000Z";
@@ -216,6 +232,82 @@ describe("Elixir_Hologram_DB", () => {
         "authorize",
         "publish",
       ]);
+    });
+
+    // The server writes these inside the create's own transaction, and both tiers derive a
+    // grant's id from the grant itself - so the row appended here and the one the server inserts
+    // are one row. They ride the create's batch, so they land together with it or not at all.
+    it("appends the grants a creator takes beside the create", () => {
+      LocalDatabase.actorUserId = ACTOR;
+
+      create(struct(NOTE, {title: "alpha"}));
+
+      assert.deepStrictEqual(Batches.current().writes, [
+        {
+          claim: null,
+          data: {title: "alpha"},
+          id: ID_1,
+          op: "create",
+          stamp: STAMP,
+          type: NOTE,
+        },
+        {
+          claim: null,
+          data: {
+            granted_by_id: ACTOR,
+            resource_id: ID_1,
+            resource_type: "notes",
+            role: "owner",
+            user_id: ACTOR,
+          },
+          id: deriveGrantId(ACTOR, "notes", ID_1, "owner"),
+          op: "create",
+          stamp: STAMP + 1,
+          type: ROLE_GRANT,
+        },
+      ]);
+    });
+
+    // creator_grants/1's nil clause, mirrored: a row made by nobody grants nobody anything.
+    it("appends no grant with nobody signed in", () => {
+      create(struct(NOTE, {title: "alpha"}));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.type),
+        [NOTE],
+      );
+    });
+
+    it("appends no grant for a type whose creator takes none", () => {
+      LocalDatabase.actorUserId = ACTOR;
+
+      create(struct(TASK, {done: false, title: "alpha"}));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.type),
+        [TASK],
+      );
+    });
+
+    // grant_role/3's own idempotency, read off the same derived id: a grant the client holds is
+    // not written a second time.
+    it("appends no grant the client already holds", () => {
+      LocalDatabase.actorUserId = ACTOR;
+
+      LocalDatabase.putRow(ROLE_GRANT, {
+        id: deriveGrantId(ACTOR, "notes", ID_1, "owner"),
+        resource_id: ID_1,
+        resource_type: "notes",
+        role: "owner",
+        user_id: ACTOR,
+      });
+
+      create(struct(NOTE, {title: "alpha"}));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.type),
+        [NOTE],
+      );
     });
 
     it("answers the row as it now stands", () => {

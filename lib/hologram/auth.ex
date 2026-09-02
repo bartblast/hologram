@@ -191,7 +191,7 @@ defmodule Hologram.Auth do
   end
 
   @doc false
-  @spec apply_grant_write(RoleGrant.t(), String.t() | nil) ::
+  @spec apply_grant_write(RoleGrant.t(), String.t() | nil, MapSet.t({module, String.t()})) ::
           :created | :present | {:error, %{user_id: [:not_found]}}
   # grant_role/3's twin for a grant made in a browser: the same gate, asked about the actor the
   # request authenticated rather than about anything the batch carried.
@@ -200,18 +200,24 @@ defmodule Hologram.Auth do
   # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
   # nobody signed in grants nothing. The row is already built and its granter already overwritten
   # by Hologram.Mutation.Write.to_entity/1, so what is left is the gate and the insert.
-  def apply_grant_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
+  #
+  # The creator's own grant is the one shape that passes no gate, for the reason
+  # EntityOperations.create/1 asks none: granted_to: :creator is a declaration, not a permission
+  # somebody holds. The rows the batch has created so far are what tell one from any other grant.
+  def apply_grant_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id, _created_rows) do
     raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "granted")
   end
 
-  def apply_grant_write(%RoleGrant{}, nil) do
+  def apply_grant_write(%RoleGrant{}, nil, _created_rows) do
     raise Hologram.AccessDeniedError, signed_in_write_message("granted")
   end
 
-  def apply_grant_write(%RoleGrant{} = grant, actor_user_id) do
+  def apply_grant_write(%RoleGrant{} = grant, actor_user_id, created_rows) do
     entity_type = RoleGrant.entity_type(grant.resource_type)
 
-    check_grant!(gate_resource(entity_type, grant.resource_id), grant.role, actor_user_id)
+    if not creator_grant?(grant, entity_type, actor_user_id, created_rows) do
+      check_grant!(gate_resource(entity_type, grant.resource_id), grant.role, actor_user_id)
+    end
 
     EntityOperations.create_if_absent(grant)
   rescue
@@ -219,7 +225,8 @@ defmodule Hologram.Auth do
       # A grantee that does not exist is the write's own mistake, answered the way any create
       # naming no row is - the verb raises for it, a batch is refused with the reference named.
       # The granter's reference cannot fail this way: the actor is authorized by a grant of their
-      # own, which keeps their row undeletable.
+      # own, which keeps their row undeletable - except for a creator's grant, whose granter and
+      # grantee are the same acting user, and which the database may report under either name.
       grantee_constraint = grantee_fk_constraint()
 
       case error.postgres do
@@ -489,6 +496,28 @@ defmodule Hologram.Auth do
   defp chain_target_id_or_nil(nil, _chain), do: nil
 
   defp chain_target_id_or_nil(entity, chain), do: chain_target_id(entity, chain)
+
+  # The creator's own grant, arriving beside the create that earned it: the acting user taking a
+  # role the type declares granted_to: :creator, on a row an earlier write of this same batch made.
+  # The server writes that grant itself inside the create's transaction, so what the browser sends
+  # can only be the same row - it sends it to hold the role before the write lands, and asking the
+  # rules about it would refuse every type that declares a creator role without also declaring who
+  # may grant it.
+  #
+  # All three parts are read here rather than taken from the write. The batch's own creates are
+  # what make the third checkable, and it is the one carrying the weight: a grant on a row this
+  # batch did not make is an ordinary grant, whoever sent it and whatever it names.
+  defp creator_grant?(grant, entity_type, actor_user_id, created_rows) do
+    grant.user_id == actor_user_id and
+      MapSet.member?(created_rows, {entity_type, grant.resource_id}) and
+      creator_role?(entity_type, grant.role)
+  end
+
+  defp creator_role?(entity_type, role) do
+    Enum.any?(entity_type.__roles__(), fn {name, opts} ->
+      name == role and Keyword.get(opts, :granted_to) == :creator
+    end)
+  end
 
   defp delegates?(nil, _actor_user_id, _operation, _source), do: false
 

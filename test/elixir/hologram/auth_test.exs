@@ -1091,7 +1091,7 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "apply_grant_write/2" do
+  describe "apply_grant_write/3" do
     test "answers :created and writes the grant under a holder who may grant the role" do
       granter = create_user("user_95@example.com")
       user = create_user("user_96@example.com")
@@ -1108,7 +1108,7 @@ defmodule Hologram.AuthTest do
           user_id: user.id
         )
 
-      assert apply_grant_write(grant, granter.id) == :created
+      assert apply_grant_write(grant, granter.id, MapSet.new()) == :created
 
       assert [row] = grant_rows(user.id)
       assert row.granted_by_id == granter.id
@@ -1133,9 +1133,33 @@ defmodule Hologram.AuthTest do
           user_id: user.id
         )
 
-      assert apply_grant_write(grant, granter.id) == :present
+      assert apply_grant_write(grant, granter.id, MapSet.new()) == :present
 
       assert [%{role: "editor"}] = grant_rows(user.id)
+    end
+
+    # granted_to: :creator is a declaration rather than a permission somebody holds, so the grant
+    # a browser sends beside its create passes no gate - which is what lets a type declare a
+    # creator role without also declaring who may grant it. Module1 lets only an owner grant, and
+    # this actor holds nothing there.
+    test "writes a creator's grant on a row the batch created, asking no gate" do
+      creator = create_user("user_119@example.com")
+      resource = create_resource()
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: creator.id,
+          resource_id: resource.id,
+          role: :maintainer,
+          user_id: creator.id
+        )
+
+      created = MapSet.new([{Module1, resource.id}])
+
+      assert apply_grant_write(grant, creator.id, created) == :created
+
+      assert [%{role: "maintainer"}] = grant_rows(creator.id)
     end
 
     # A client is never the trusted tier, so the sentence the verb keeps for an acting user is
@@ -1150,7 +1174,7 @@ defmodule Hologram.AuthTest do
         "type-wide roles are granted only by trusted code running without an acting user"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        apply_grant_write(grant, granter.id)
+        apply_grant_write(grant, granter.id, MapSet.new())
       end
     end
 
@@ -1164,7 +1188,7 @@ defmodule Hologram.AuthTest do
         "global roles are granted only by trusted code running without an acting user"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        apply_grant_write(grant, granter.id)
+        apply_grant_write(grant, granter.id, MapSet.new())
       end
     end
 
@@ -1185,7 +1209,7 @@ defmodule Hologram.AuthTest do
       expected_msg = "a role is granted only by a signed-in user - nobody is signed in"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        apply_grant_write(grant, nil)
+        apply_grant_write(grant, nil, MapSet.new())
       end
     end
 
@@ -1206,7 +1230,8 @@ defmodule Hologram.AuthTest do
           user_id: Entity.generate_id()
         )
 
-      assert apply_grant_write(grant, granter.id) == {:error, %{user_id: [:not_found]}}
+      assert apply_grant_write(grant, granter.id, MapSet.new()) ==
+               {:error, %{user_id: [:not_found]}}
     end
 
     test "refuses a role the acting user's own roles do not cover" do
@@ -1231,7 +1256,81 @@ defmodule Hologram.AuthTest do
           "Declare `allow {:grant_role, :admin}, to: :member` on Hologram.Test.Fixtures.Policy.Module2 if that is intended."
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        apply_grant_write(grant, granter.id)
+        apply_grant_write(grant, granter.id, MapSet.new())
+      end
+    end
+
+    # The three parts of a creator's grant, refused one at a time. Each falls back to the gate,
+    # which is what an ordinary grant meets - so a browser can send any of these and gets the
+    # answer its rules give.
+    test "refuses a creator role on a row the batch did not create" do
+      creator = create_user("user_120@example.com")
+      resource = create_resource()
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: creator.id,
+          resource_id: resource.id,
+          role: :maintainer,
+          user_id: creator.id
+        )
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(resource.id)} that may grant :maintainer"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, creator.id, MapSet.new())
+      end
+    end
+
+    test "refuses a creator role granted to anybody but the acting user" do
+      creator = create_user("user_121@example.com")
+      user = create_user("user_122@example.com")
+      resource = create_resource()
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: creator.id,
+          resource_id: resource.id,
+          role: :maintainer,
+          user_id: user.id
+        )
+
+      created = MapSet.new([{Module1, resource.id}])
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(resource.id)} that may grant :maintainer"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, creator.id, created)
+      end
+    end
+
+    test "refuses a role the type does not hand its creator" do
+      creator = create_user("user_123@example.com")
+      resource = create_resource()
+
+      grant =
+        grant_struct(
+          entity_type: Module1,
+          granted_by_id: creator.id,
+          resource_id: resource.id,
+          role: :editor,
+          user_id: creator.id
+        )
+
+      created = MapSet.new([{Module1, resource.id}])
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(resource.id)} that may grant :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        apply_grant_write(grant, creator.id, created)
       end
     end
   end
