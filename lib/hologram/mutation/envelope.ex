@@ -12,6 +12,7 @@ defmodule Hologram.Mutation.Envelope do
   # A refusal names the first thing wrong and stops. It is written for whoever is building a
   # client, so it says which write and which field rather than which guard.
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.Entity
@@ -95,6 +96,25 @@ defmodule Hologram.Mutation.Envelope do
       _other -> {:error, "data must be an object"}
     end
   end
+
+  # The role a grant carries has to be one the resource's own type declares, which is the check
+  # grant_role/3 runs before it writes. A row naming no resource type is a type-wide or a global
+  # grant: there is no type here to read declarations from, and the applier refuses both outright.
+  defp declared_role(%Write{op: :create, data: %{resource_type: label} = data})
+       when label != nil do
+    with {:ok, entity_type} <- resource_entity_type(label) do
+      role = Map.get(data, :role)
+      declared = Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
+
+      if role in declared do
+        :ok
+      else
+        {:error, "role #{inspect(role)} is not declared on #{inspect(entity_type)}"}
+      end
+    end
+  end
+
+  defp declared_role(_write), do: :ok
 
   defp decode_based_on(revisions, entity_type) do
     fields = settable_fields(entity_type)
@@ -209,6 +229,22 @@ defmodule Hologram.Mutation.Envelope do
   defp framework_owned(entity_type) do
     if Reflection.job?(entity_type), do: Job.framework_attribute_names(), else: []
   end
+
+  # Every other write may name the operation it wants evaluated. A grant's gate is fixed - the
+  # grant_role and revoke_role rules of the resource's own type - so a claim here would name an
+  # operation nothing consults.
+  defp grant_claim(nil), do: :ok
+
+  defp grant_claim(_claim) do
+    {:error, "a role grant claims nothing - the grant_role and revoke_role rules are its gate"}
+  end
+
+  # A grant row is put in whole by grant_role and taken out whole by revoke_role, so those are the
+  # two things a client naming the store has to say. An update or an edge is refused rather than
+  # evaluated, because neither verb has a rule for one to be judged by.
+  defp grant_op(op) when op in [:create, :delete], do: :ok
+
+  defp grant_op(_op), do: {:error, "a role grant is created or deleted whole"}
 
   defp id(entry) do
     value = Map.get(entry, "id")
@@ -371,13 +407,18 @@ defmodule Hologram.Mutation.Envelope do
   end
 
   defp parse_write(entry) when is_map(entry) do
-    case Map.get(entry, "op") do
-      "add_relationship" -> parse_edge(entry, :add_relationship)
-      "create" -> parse_create(entry)
-      "delete" -> parse_delete(entry)
-      "delete_relationship" -> parse_edge(entry, :delete_relationship)
-      "update" -> parse_update(entry)
-      _other -> {:error, "op must be one of #{@ops}"}
+    parsed =
+      case Map.get(entry, "op") do
+        "add_relationship" -> parse_edge(entry, :add_relationship)
+        "create" -> parse_create(entry)
+        "delete" -> parse_delete(entry)
+        "delete_relationship" -> parse_edge(entry, :delete_relationship)
+        "update" -> parse_update(entry)
+        _other -> {:error, "op must be one of #{@ops}"}
+      end
+
+    with {:ok, write} <- parsed do
+      validate_grant_write(write)
     end
   end
 
@@ -422,6 +463,23 @@ defmodule Hologram.Mutation.Envelope do
     # that is not an entity type: a client is told what this build does not have, not how it
     # failed to look it up.
     ArgumentError -> {:error, unknown_type_message(label)}
+  end
+
+  # The entity type a grant's resource_type names. An enum decodes to whatever atom it spells
+  # rather than to a declared value - membership is the write's to judge, as the label of any
+  # other enum is - but a grant's label has to resolve to a module HERE, because the declared-role
+  # check below reads that module's declarations. A label naming no table is therefore answered
+  # the way an unknown write type is, rather than left to a layer that raises instead of
+  # answering: the grant path validates through insert_if_absent, whose refusal is a broken
+  # invariant rather than something a client can be told.
+  defp resource_entity_type(label) do
+    table = Atom.to_string(label)
+    found = Enum.find(DB.mapping(), fn {_entity_type, entry} -> entry.table == table end)
+
+    case found do
+      {entity_type, _entry} -> {:ok, entity_type}
+      nil -> {:error, ~s(resource_type "#{label}" is not an entity type of this build)}
+    end
   end
 
   defp some_change(data, deltas) when data == %{} and deltas == %{} do
@@ -513,6 +571,20 @@ defmodule Hologram.Mutation.Envelope do
       _values -> data(entry, entity_type)
     end
   end
+
+  # The grant store is written through Auth.grant_role and Auth.revoke_role, never through the
+  # writer, so a batch naming it is putting one grant in or taking one out. What it cannot be is
+  # refused here, where whoever is building a client is told what they built - leaving the applier
+  # the two shapes it routes, and its own refusals about authority rather than about shape.
+  defp validate_grant_write(%Write{entity_type: RoleGrant} = write) do
+    with :ok <- grant_op(write.op),
+         :ok <- grant_claim(write.claim),
+         :ok <- declared_role(write) do
+      {:ok, write}
+    end
+  end
+
+  defp validate_grant_write(write), do: {:ok, write}
 
   defp writes(raw) do
     case Map.get(raw, "writes") do

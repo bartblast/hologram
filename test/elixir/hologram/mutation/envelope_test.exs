@@ -3,6 +3,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
   import Hologram.Mutation.Envelope
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Write
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -16,8 +17,10 @@ defmodule Hologram.Mutation.EnvelopeTest do
   alias Hologram.Test.Fixtures.Job.Module3, as: JobModule3
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
+  @granter_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
   @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
 
   defp edge(op, entity_type, relationship, opts \\ []) do
     %{
@@ -50,6 +53,19 @@ defmodule Hologram.Mutation.EnvelopeTest do
       "claim" => Keyword.get(opts, :claim),
       "stamp" => Keyword.get(opts, :stamp, 5)
     }
+  end
+
+  defp grant_data(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "granted_by_id" => @granter_id,
+        "resource_id" => @target_id,
+        "resource_type" => "test_fixtures_policy_module2",
+        "role" => "member",
+        "user_id" => @user_id
+      },
+      overrides
+    )
   end
 
   defp raw(writes) do
@@ -247,6 +263,48 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
 
       assert write.claim == {:authorize, :publish}
+    end
+
+    test "accepts a create of a role grant" do
+      entry = create(RoleGrant, grant_data())
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write == %Write{
+               based_on: %{},
+               claim: nil,
+               data: %{
+                 granted_by_id: @granter_id,
+                 resource_id: @target_id,
+                 resource_type: :test_fixtures_policy_module2,
+                 role: :member,
+                 user_id: @user_id
+               },
+               entity_type: RoleGrant,
+               id: @id,
+               op: :create,
+               relationship: nil,
+               stamp: 5,
+               target_id: nil
+             }
+    end
+
+    test "accepts a delete of a role grant" do
+      entry = delete(RoleGrant, based_on: %{"role" => 3})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write == %Write{
+               based_on: %{role: 3},
+               claim: nil,
+               data: %{},
+               entity_type: RoleGrant,
+               id: @id,
+               op: :delete,
+               relationship: nil,
+               stamp: 5,
+               target_id: nil
+             }
     end
 
     test "refuses an instance id that is not a string" do
@@ -616,6 +674,48 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert parse(raw([create(Module2, %{"c" => "x"}, stamp: nil)])) ==
                {:error, "write 0: stamp must be a positive integer"}
+    end
+
+    test "refuses an update of a role grant" do
+      entry = update(RoleGrant, grant_data(), based_on: %{"role" => 3})
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant is created or deleted whole"}
+    end
+
+    # The store declares no to-many relationship, so an edge naming it is refused one step earlier
+    # than the grant guard - by the relationship it has to name and cannot. The guard stands behind
+    # that rather than instead of it, for a store that ever gains one.
+    test "refuses an edge on a role grant" do
+      entry = edge("add_relationship", RoleGrant, "user")
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s(write 0: "user" is not a to-many relationship of Hologram.Auth.RoleGrant)}
+    end
+
+    test "refuses a role grant carrying a claim" do
+      entry = create(RoleGrant, grant_data(), claim: ["authorize", "publish"])
+
+      assert parse(raw([entry])) ==
+               {:error,
+                "write 0: a role grant claims nothing - the grant_role and revoke_role rules " <>
+                  "are its gate"}
+    end
+
+    test "refuses a role grant naming a role its resource type does not declare" do
+      entry = create(RoleGrant, grant_data(%{"role" => "owner"}))
+
+      assert parse(raw([entry])) ==
+               {:error,
+                "write 0: role :owner is not declared on Hologram.Test.Fixtures.Policy.Module2"}
+    end
+
+    test "refuses a role grant naming a resource type this build does not store" do
+      entry = create(RoleGrant, grant_data(%{"resource_type" => "map"}))
+
+      assert parse(raw([entry])) ==
+               {:error, ~s(write 0: resource_type "map" is not an entity type of this build)}
     end
   end
 end
