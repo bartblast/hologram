@@ -409,6 +409,76 @@ const Elixir_Hologram_Auth = {
     return Type.atom("ok");
   },
 
+  "revoke_role/2": (_userOrId, _role) => {
+    raiseAccessDenied(trustedWriteMessage("global", "revoked"));
+  },
+
+  // Hologram.Auth.revoke_role/3 as a browser runs it: the same arguments, the same gate in the
+  // same place - one's own row needs no permission, anyone else's is the per-role question - and
+  // then, where the server deletes whatever it finds, the browser appends a delete of the row it
+  // holds, carrying the row's revisions as what it was based on. The fold hides the row at once.
+  // A row the client does not hold answers :ok and writes nothing, as the server's own no-op does:
+  // whoever may revoke a grant may read it, and everyone reads their own, so "not held" is "not
+  // there" for anyone the gate lets through. The server replays the gate when the batch lands.
+  "revoke_role/3": (userOrId, resource, role) => {
+    const userId = validateUserId(userOrId);
+    const {entityType, resourceId} = resourceReference(resource, "revoked");
+    const roleName = validateDeclaredRole(entityType, role);
+    const actorUserId = LocalDatabase.actorUserId;
+
+    if (actorUserId === null) {
+      raiseAccessDenied(signedInWriteMessage("revoked"));
+    }
+
+    if (actorUserId !== userId) {
+      const gateResource = Type.struct(entityType, [
+        [Type.atom("id"), Type.bitstring(resourceId)],
+      ]);
+
+      const allowed = Elixir_Hologram_Auth["can?/3"](
+        Type.bitstring(actorUserId),
+        Type.tuple([Type.atom("revoke_role"), role]),
+        gateResource,
+      );
+
+      if (!Type.isTrue(allowed)) {
+        raiseAccessDenied(
+          unqualifiedRoleMessage(
+            entityType,
+            resourceId,
+            actorUserId,
+            roleName,
+            "revoke_role",
+          ),
+        );
+      }
+    }
+
+    const resourceType =
+      globalThis.Hologram.sync.model[entityType].resourceType;
+    const held = LocalDatabase.getRow(
+      GRANT_TYPE,
+      deriveGrantId(userId, resourceType, resourceId, roleName),
+    );
+
+    if (held === null) {
+      return Type.atom("ok");
+    }
+
+    const batch = currentBatch("revoke_role");
+
+    batch.append({
+      based_on: {...(held["$revisions"] ?? {})},
+      claim: null,
+      id: held.id,
+      op: "delete",
+      stamp: Clock.stamp(),
+      type: GRANT_TYPE,
+    });
+
+    return Type.atom("ok");
+  },
+
   "can?/3": (userOrId, operation, entity) => {
     const entityType = Interpreter.moduleExName(
       entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],

@@ -1393,3 +1393,184 @@ describe("grant_role/2", () => {
     );
   });
 });
+
+// IMPORTANT!
+// Mirrors test/elixir/hologram/auth_test.exs (describe "revoke_role/3") where the browser can -
+// the argument refusals and the gate are the same sentences - and adds what only this side has:
+// the delete in the batch carrying the row's revisions, the row gone from can?/3's view before
+// anything is sent, and a row the client does not hold. Always update both together.
+describe("revoke_role/3", () => {
+  const revoke = Elixir_Hologram_Auth["revoke_role/3"];
+  const can = Elixir_Hologram_Auth["can?/3"];
+
+  const NOW_MS = 1_756_100_000_123;
+  const STAMP = NOW_MS * 1024;
+  const REVISIONS = {resource_id: 7, resource_type: 7, role: 7, user_id: 7};
+
+  const document = () =>
+    Type.struct(GATED_DOCUMENT, [[Type.atom("id"), Type.bitstring(GATED_DOC)]]);
+
+  const heldRow = (userId, role) => ({
+    $revisions: REVISIONS,
+    id: deriveGrantId(userId, "documents", GATED_DOC, role),
+    resource_id: GATED_DOC,
+    resource_type: "documents",
+    role: role,
+    user_id: userId,
+  });
+
+  let timers;
+
+  beforeEach(() => {
+    defineGates({
+      read: [gateRule([["own", ["viewer"]]])],
+      "revoke_role:viewer": [gateRule([["own", ["editor"]]])],
+    });
+    Batches.reset();
+    Clock.reset();
+    LocalDatabase.reset();
+    LocalDatabase.actorUserId = GATED_ALICE;
+    LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_ALICE, "editor"));
+    LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_BOB, "viewer"));
+    timers = sinon.useFakeTimers(NOW_MS);
+    Batches.open("grants");
+  });
+
+  afterEach(() => {
+    timers.restore();
+    Batches.reset();
+    LocalDatabase.actorUserId = null;
+  });
+
+  it("appends a delete of the held row carrying its revisions", () => {
+    const result = revoke(
+      Type.bitstring(GATED_BOB),
+      document(),
+      Type.atom("viewer"),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+
+    assert.deepStrictEqual(Batches.current().writes, [
+      {
+        based_on: REVISIONS,
+        claim: null,
+        id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
+        op: "delete",
+        stamp: STAMP,
+        type: GATED_GRANT,
+      },
+    ]);
+  });
+
+  it("hides the grant from can?/3 before anything is sent", () => {
+    assert.deepStrictEqual(
+      can(Type.bitstring(GATED_BOB), Type.atom("read"), document()),
+      Type.boolean(true),
+    );
+
+    revoke(Type.bitstring(GATED_BOB), document(), Type.atom("viewer"));
+
+    assert.deepStrictEqual(
+      can(Type.bitstring(GATED_BOB), Type.atom("read"), document()),
+      Type.boolean(false),
+    );
+  });
+
+  // Carol holds nothing. The gate passes (the actor may revoke viewer), and then there is no row.
+  it("answers :ok and appends nothing for a role the user does not hold", () => {
+    const CAROL = "018f4571-a1b2-7c3d-8e4f-000000000003";
+
+    const result = revoke(
+      Type.bitstring(CAROL),
+      document(),
+      Type.atom("viewer"),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+    assert.deepStrictEqual(Batches.current().writes, []);
+  });
+
+  // No rule lets an editor revoke editor - the row is the acting user's own, which is how a
+  // member leaves.
+  it("revokes the acting user's own row without asking the gate", () => {
+    revoke(Type.bitstring(GATED_ALICE), document(), Type.atom("editor"));
+
+    assert.equal(Batches.current().writes.length, 1);
+    assert.equal(
+      Batches.current().writes[0].id,
+      deriveGrantId(GATED_ALICE, "documents", GATED_DOC, "editor"),
+    );
+  });
+
+  it("raises the teaching message for another user's row the acting user may not revoke", () => {
+    LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_BOB, "owner"));
+
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      "Hologram.AccessDeniedError",
+      `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
+        "which may revoke :viewer but not :owner. " +
+        "Declare `allow {:revoke_role, :owner}, to: :editor` on MyApp.Document if that is intended.",
+    );
+  });
+
+  // The server authorizes before it looks for the row, so a row the client does not hold is still
+  // refused to an actor who may not revoke it - never a silent :ok.
+  it("asks the gate before it looks for the row", () => {
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      "Hologram.AccessDeniedError",
+      `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
+        "which may revoke :viewer but not :owner. " +
+        "Declare `allow {:revoke_role, :owner}, to: :editor` on MyApp.Document if that is intended.",
+    );
+  });
+
+  it("raises on a type-wide revocation", () => {
+    assertBoxedError(
+      () =>
+        revoke(
+          Type.bitstring(GATED_BOB),
+          Type.alias(GATED_DOCUMENT),
+          Type.atom("viewer"),
+        ),
+      "Hologram.AccessDeniedError",
+      "type-wide roles are revoked only by trusted code running without an acting user",
+    );
+  });
+
+  it("raises when nobody is signed in", () => {
+    LocalDatabase.actorUserId = null;
+
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      "Hologram.AccessDeniedError",
+      "a role is revoked only by a signed-in user - nobody is signed in",
+    );
+  });
+
+  it("raises outside an action", () => {
+    Batches.reset();
+
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      "ArgumentError",
+      "revoke_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
+    );
+  });
+});
+
+describe("revoke_role/2", () => {
+  it("raises - a global revocation is trusted-only", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/2"](
+          Type.bitstring(GATED_BOB),
+          Type.alias("MyApp.Roles.Admin"),
+        ),
+      "Hologram.AccessDeniedError",
+      "global roles are revoked only by trusted code running without an acting user",
+    );
+  });
+});
