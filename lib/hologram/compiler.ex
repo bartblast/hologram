@@ -45,6 +45,11 @@ defmodule Hologram.Compiler do
   # The MFAs whose presence in a page's client code makes the page a permission checker - one
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
   # locally before it writes.
+  #
+  # TODO: what being a checker buys a page is decided by the modularization work - today it is the
+  # grants window in the page's own list (first-render completeness) and, build-wide, that policy
+  # rules are baked at all. Prune whatever that work makes unconditional; the list itself stays
+  # for as long as either consequence does.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
@@ -164,6 +169,9 @@ defmodule Hologram.Compiler do
       # is an entity type like any other, so a page listing grants and checking permissions reaches
       # one window by two routes - and a list naming it twice is subscribed to twice, monitored
       # twice, and rounded twice for one set of rows.
+      # TODO: whether a checking page carries the grants window in its OWN list - complete
+      # before its :page marker, rather than arriving with the background set - is one of the
+      # two things the modularization work revisits. The other is the policy-baking gate.
       window_ids =
         if page_module in permission_checking_pages do
           [grants_window_id() | window_ids]
@@ -1775,6 +1783,10 @@ defmodule Hologram.Compiler do
   # A build whose clients check nothing carries an empty policy per type - not the rules with
   # nobody to read them. An empty policy grants nothing, which is what a client that cannot check
   # should answer.
+  #
+  # TODO: this clause exists only for the gate the compile task computes from
+  # pages_checking_permissions/2. The modularization work decides whether that gate stays; if
+  # every build with a user entity bakes its rules, this clause and the flag are pruned together.
   defp render_policy(_entity_type, false = _permission_checking?) do
     render_json_object([])
   end

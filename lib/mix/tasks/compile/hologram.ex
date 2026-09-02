@@ -195,6 +195,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # Derived before the split for the same reason the windows are: a query reached through a
       # runtime MFA still names types the client holds and orders rows it sorts.
+      #
+      # TODO: the modularization work decides whether a build bakes policy rules only when some
+      # page checks permissions. If every build with a user entity bakes them, this flag goes,
+      # along with the empty-policy clause of Compiler's render_policy/2 that reads it.
       sync_constants =
         Compiler.build_sync_constants(
           page_modules,
