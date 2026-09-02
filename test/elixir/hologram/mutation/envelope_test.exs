@@ -266,7 +266,8 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "accepts a create of a role grant" do
-      entry = create(RoleGrant, grant_data())
+      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      entry = create(RoleGrant, grant_data(), id: grant_id)
 
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
 
@@ -281,7 +282,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                  user_id: @user_id
                },
                entity_type: RoleGrant,
-               id: @id,
+               id: grant_id,
                op: :create,
                relationship: nil,
                stamp: 5,
@@ -716,6 +717,15 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert parse(raw([entry])) ==
                {:error, ~s(write 0: resource_type "map" is not an entity type of this build)}
+    end
+
+    # @id is a well-formed entity id that no derivation produces - the shape a client minting
+    # its own v7 for the store would send.
+    test "refuses a role grant whose id is not derived from it" do
+      entry = create(RoleGrant, grant_data(), id: @id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant's id is derived from the grant it names"}
     end
   end
 end

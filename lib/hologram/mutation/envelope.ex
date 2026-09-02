@@ -216,6 +216,29 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  # A grant's id is a function of the grant - the browser derives it from the same four columns
+  # the server does - so an id that is not that derivation was not minted by an honest client.
+  # Refused here rather than trusted: the applier reads a present grant back by this id, and a
+  # forged one would name a row that is not the grant the columns describe. A column that is
+  # absent derives to a different id and lands here too, which is a bad request where the
+  # writer's own validation would be a raise.
+  defp derived_id(%Write{op: :create, data: data} = write) do
+    user_id = Map.get(data, :user_id)
+    resource_type = Map.get(data, :resource_type)
+    resource_id = Map.get(data, :resource_id)
+    role = Map.get(data, :role)
+
+    derived = RoleGrant.derive_id(user_id, resource_type, resource_id, role)
+
+    if write.id == derived do
+      :ok
+    else
+      {:error, "a role grant's id is derived from the grant it names"}
+    end
+  end
+
+  defp derived_id(_write), do: :ok
+
   defp entity_type(entry) do
     case Map.get(entry, "type") do
       label when is_binary(label) -> resolve_entity_type(label)
@@ -575,7 +598,8 @@ defmodule Hologram.Mutation.Envelope do
   defp validate_grant_write(%Write{entity_type: RoleGrant} = write) do
     with :ok <- grant_op(write.op),
          :ok <- grant_claim(write.claim),
-         :ok <- declared_role(write) do
+         :ok <- declared_role(write),
+         :ok <- derived_id(write) do
       {:ok, write}
     end
   end
