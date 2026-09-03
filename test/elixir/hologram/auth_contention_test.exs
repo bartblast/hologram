@@ -57,7 +57,7 @@ defmodule Hologram.AuthContentionTest do
   defp owner_ids(scratch, resource) do
     statement = """
     SELECT "user_id" FROM "hologram_data"."hologram_role_grant"
-    WHERE "resource_id" = $1 AND "role" = 'owner'
+    WHERE "entity_id" = $1 AND "role" = 'owner'
     """
 
     {:ok, %Postgrex.Result{rows: rows}} =

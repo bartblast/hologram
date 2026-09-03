@@ -173,12 +173,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     session = sign_in_as(session, document, :owner)
 
     owner_grant_id =
-      RoleGrant.derive_id(
-        session_user().id,
-        RoleGrant.resource_type(Document),
-        document.id,
-        :owner
-      )
+      RoleGrant.derive_id(session_user().id, Document, document.id, :owner)
 
     {:ok, _result} =
       Connection.query(

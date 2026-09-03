@@ -12,6 +12,7 @@ defmodule Hologram.Mutation.WriteTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
   @actor_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
   @granter_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
@@ -23,8 +24,8 @@ defmodule Hologram.Mutation.WriteTest do
     %Write{
       data: %{
         granted_by_id: @granter_id,
-        resource_id: @target_id,
-        resource_type: :test_fixtures_policy_module2,
+        entity_id: @target_id,
+        entity_type: PolicyModule2,
         role: :member,
         user_id: @user_id
       },
@@ -39,8 +40,8 @@ defmodule Hologram.Mutation.WriteTest do
     %Write{
       based_on: %{role: 3},
       data: %{
-        resource_id: @target_id,
-        resource_type: :test_fixtures_policy_module2,
+        entity_id: @target_id,
+        entity_type: PolicyModule2,
         role: :member,
         user_id: @user_id
       },
@@ -227,8 +228,8 @@ defmodule Hologram.Mutation.WriteTest do
                granted_by: %NotIncluded{relationship: :granted_by},
                granted_by_id: @actor_id,
                id: @id,
-               resource_id: @target_id,
-               resource_type: :test_fixtures_policy_module2,
+               entity_id: @target_id,
+               entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
@@ -253,8 +254,8 @@ defmodule Hologram.Mutation.WriteTest do
                granted_by: %NotIncluded{relationship: :granted_by},
                granted_by_id: nil,
                id: @id,
-               resource_id: @target_id,
-               resource_type: :test_fixtures_policy_module2,
+               entity_id: @target_id,
+               entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},

@@ -25,8 +25,8 @@ defmodule Hologram.Policy.Edges do
       relationships.
     * `{:relationship_attributes, chain, entity_type, names}` - attributes of the related
       row reached by following the chain, read by delegated predicates.
-    * `{:resource_grants, entity_type, role_names}` - grants of these roles held on the
-      resource a grant-store row names, deciding that row's visibility.
+    * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
+      entity a grant-store row names, deciding that row's visibility.
 
   Delegations expand transitively: a via chain contributes the target policy's edges with
   the chain prefixed, so every pair's list is complete on its own. Edges may over-approximate
@@ -58,7 +58,7 @@ defmodule Hologram.Policy.Edges do
   # A delegated edge names the same data one relationship hop further away: the target's
   # own-row dependencies become related-row dependencies through the chain, its own grants
   # become related-row grants, and edges naming absolute targets (global, type-wide,
-  # resource) pass through unchanged - a global grant event affects the delegating type
+  # named) pass through unchanged - a global grant event affects the delegating type
   # exactly as it affects the target.
   defp lift_edge({:attributes, names}, relationship_name, target_type) do
     {:relationship_attributes, [relationship_name], target_type, names}
@@ -143,8 +143,8 @@ defmodule Hologram.Policy.Edges do
     ]
   end
 
-  defp reference_edges_for(_entity_type, {:resource, target_type, role_names}) do
-    [{:resource_grants, target_type, role_names}]
+  defp reference_edges_for(_entity_type, {:named, target_type, role_names}) do
+    [{:named_grants, target_type, role_names}]
   end
 
   # The `<name>_id` atoms exist wherever entity structs do - they are the structs' reference

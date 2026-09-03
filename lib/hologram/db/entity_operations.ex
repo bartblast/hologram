@@ -566,7 +566,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   # The creating user takes the entity type's creator roles as the row is inserted, in the
-  # same transaction - so a resource never exists without whoever made it holding its roles.
+  # same transaction - so a row never exists without whoever made it holding its roles.
   # Creating without an acting user grants nothing, which is what the trusted tier wants.
   defp creator_grants(entity) do
     entity_type = entity.__struct__
@@ -585,13 +585,11 @@ defmodule Hologram.DB.EntityOperations do
   # The id is derived from the grant, as every writer of the store derives it - a creator's grant
   # and the same grant made later from a browser are one row.
   defp creator_grant({role_name, _opts}, entity, entity_type, actor_user_id) do
-    resource_type = RoleGrant.resource_type(entity_type)
-
     %RoleGrant{
-      id: RoleGrant.derive_id(actor_user_id, resource_type, entity.id, role_name),
+      id: RoleGrant.derive_id(actor_user_id, entity_type, entity.id, role_name),
+      entity_id: entity.id,
+      entity_type: entity_type,
       granted_by_id: actor_user_id,
-      resource_id: entity.id,
-      resource_type: resource_type,
       role: role_name,
       user_id: actor_user_id
     }

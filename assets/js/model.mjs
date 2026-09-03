@@ -172,7 +172,6 @@ export default class Model {
       frameworkAttributes: baked.frameworkAttributes ?? [],
       policy: baked.policy,
       relationships: baked.relationships,
-      resourceType: baked.resourceType,
       serverOnly: new Set(baked.serverOnly),
     };
 

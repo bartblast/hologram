@@ -191,7 +191,7 @@ defmodule Hologram.Policy do
   Builds the compiled policy of the given entity type: a map of operation to the list of rules granting it, in declaration order.
 
   The grant store's own policy is framework-supplied rather than declared: a user always sees
-  the grants they hold, and sees others' grants on a resource when they hold one of that entity
+  the grants they hold, and sees others' grants on an entity when they hold one of that entity
   type's read-grants roles.
 
   A rule holds the predicate triples of its allow line, its grant references, and its delegation.
@@ -200,8 +200,8 @@ defmodule Hologram.Policy do
   own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
   a related instance's roles as {:rel, relationship name, role names}, and global role modules as
   {:global, role modules} - nil when the line has none. The grant store's framework-supplied rules
-  carry a fifth kind no declaration can spell, {:resource, entity type, role names}: roles held on
-  the resource a grant row names.
+  carry a fifth kind no declaration can spell, {:named, entity type, role names}: roles held on
+  the entity a grant row names.
   A rule grants its operation when its predicates hold, one of its grant references is held, and its
   delegation grants the same operation - and a policy grants its operation when any of its rules does.
   The grant lifecycle operations grant_role and revoke_role are compiled per role: a line naming a
@@ -538,8 +538,8 @@ defmodule Hologram.Policy do
     end)
   end
 
-  # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
-  # that resource type's read-grants roles, held on the very resource the grant row names - so
+  # Everyone sees the grants they hold. Seeing someone else's grants on an entity takes one of
+  # that entity type's read-grants roles, held on the very entity the grant row names - so
   # the check reads grant rows through grant rows, never through this policy again.
   # The source travels with the declaration rather than being recomputed here: a line taken
   # through several policies names the module whose BODY wrote it, not the last hop it came by.
@@ -561,30 +561,28 @@ defmodule Hologram.Policy do
   end
 
   defp role_grant_read_rules do
-    resource_rules =
+    named_rules =
       model_facts().entity_types
       |> Enum.reject(&(&1 == RoleGrant))
       |> Enum.map(&{&1, read_roles_qualifying_roles(&1), read_roles_qualifying_role_modules(&1)})
       |> Enum.reject(fn {_entity_type, role_names, role_modules} ->
         role_names == [] and role_modules == []
       end)
-      |> Enum.sort_by(fn {entity_type, _role_names, _role_modules} ->
-        RoleGrant.resource_type(entity_type)
-      end)
-      |> Enum.map(&role_grant_resource_rule/1)
+      |> Enum.sort_by(fn {entity_type, _role_names, _role_modules} -> entity_type end)
+      |> Enum.map(&role_grant_named_rule/1)
 
-    [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | resource_rules]
+    [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | named_rules]
   end
 
-  # Own readers hold their role on the very resource the grant row names, global readers hold
+  # Own readers hold their role on the very entity the grant row names, global readers hold
   # theirs app-wide - one rule, since either reference satisfies it.
-  defp role_grant_resource_rule({entity_type, role_names, role_modules}) do
-    resource_reference = if role_names == [], do: [], else: [{:resource, entity_type, role_names}]
+  defp role_grant_named_rule({entity_type, role_names, role_modules}) do
+    named_reference = if role_names == [], do: [], else: [{:named, entity_type, role_names}]
     global_reference = build_global_reference(role_modules)
 
     %{
-      predicates: [{:resource_type, :==, RoleGrant.resource_type(entity_type)}],
-      to: resource_reference ++ global_reference,
+      predicates: [{:entity_type, :==, entity_type}],
+      to: named_reference ++ global_reference,
       via: nil
     }
   end

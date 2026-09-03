@@ -70,10 +70,10 @@ defmodule Hologram.Policy.EdgesTest do
     test "derives resource-grant edges for the grant store" do
       assert derive([RoleGrant]) == %{
                {RoleGrant, :read} => [
-                 {:attributes, [:resource_type, :user_id]},
+                 {:attributes, [:entity_type, :user_id]},
                  {:global_grants, [Role.Module1, Role.Module2]},
-                 {:resource_grants, Policy.Module1, [:owner]},
-                 {:resource_grants, Policy.Module2, [:admin, :member]}
+                 {:named_grants, Policy.Module1, [:owner]},
+                 {:named_grants, Policy.Module2, [:admin, :member]}
                ]
              }
     end

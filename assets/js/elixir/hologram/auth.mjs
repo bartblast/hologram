@@ -79,13 +79,13 @@ function equal(left, right) {
 
 // The role a grant row holds, and where it holds it, are what a reference names - so a match is
 // a comparison against the row's own columns.
-function grantExists(rows, userId, roles, resourceType, resourceIds) {
+function grantExists(rows, userId, roles, entityType, entityIds) {
   return rows.some(
     (row) =>
       row.user_id === userId &&
       roles.includes(row.role) &&
-      row.resource_type === resourceType &&
-      resourceIds.includes(row.resource_id),
+      row.entity_type === entityType &&
+      entityIds.includes(row.entity_id),
   );
 }
 
@@ -175,8 +175,8 @@ function predicatesHold(entityType, entity, predicates, actorUserId) {
 }
 
 // Where a role must be held for a reference to be satisfied. Each shape names a scope the grant
-// store keeps apart by its resource columns - an own-scope role is held on the entity itself OR
-// on its whole type, which the store spells as a null resource id.
+// store keeps apart by its scope columns - an own-scope role is held on the entity itself OR
+// on its whole type, which the store spells as a null entity id.
 function referenceHolds(reference, entityType, entity, actorUserId) {
   const rows = grantRows();
   const [kind] = reference;
@@ -190,14 +190,13 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 
     case "own": {
       const [_kind, roles] = reference;
-      const resourceType = Model.entry(entityType).resourceType;
       const id = entityValue(entityType, entity, "id");
 
-      return grantExists(rows, actorUserId, roles, resourceType, [id, null]);
+      return grantExists(rows, actorUserId, roles, entityType, [id, null]);
     }
 
     case "rel": {
-      const [_kind, relationshipName, resourceType, roles] = reference;
+      const [_kind, relationshipName, targetType, roles] = reference;
       const targetId = entityValue(
         entityType,
         entity,
@@ -206,25 +205,25 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 
       return (
         targetId !== null &&
-        grantExists(rows, actorUserId, roles, resourceType, [targetId])
+        grantExists(rows, actorUserId, roles, targetType, [targetId])
       );
     }
 
-    // The grant store's own rule: a role held on the resource the grant row names.
-    case "resource": {
-      const [_kind, resourceType, roles] = reference;
-      const rowResourceId = entityValue(entityType, entity, "resource_id");
+    // The grant store's own rule: a role held on the entity the grant row names.
+    case "named": {
+      const [_kind, targetType, roles] = reference;
+      const rowEntityId = entityValue(entityType, entity, "entity_id");
 
       return (
-        rowResourceId !== null &&
-        grantExists(rows, actorUserId, roles, resourceType, [rowResourceId])
+        rowEntityId !== null &&
+        grantExists(rows, actorUserId, roles, targetType, [rowEntityId])
       );
     }
 
     default: {
-      const [_kind, resourceType, roles] = reference;
+      const [_kind, targetType, roles] = reference;
 
-      return grantExists(rows, actorUserId, roles, resourceType, [null]);
+      return grantExists(rows, actorUserId, roles, targetType, [null]);
     }
   }
 }
@@ -349,9 +348,9 @@ const Elixir_Hologram_Auth = {
   // that id answers :ok and writes nothing, which is the server's idempotency mirrored where the
   // client can see it. The server replays every check when the batch lands and a refusal rolls
   // the row back.
-  "grant_role/3": (userOrId, resource, role) => {
+  "grant_role/3": (userOrId, entity, role) => {
     const userId = validateUserId(userOrId);
-    const {entityType, resourceId} = resourceReference(resource, "granted");
+    const {entityType, entityId} = entityReference(entity, "granted");
     const roleName = validateDeclaredRole(entityType, role);
     const actorUserId = LocalDatabase.actorUserId;
 
@@ -360,7 +359,7 @@ const Elixir_Hologram_Auth = {
     }
 
     const gateResource = Type.struct(entityType, [
-      [Type.atom("id"), Type.bitstring(resourceId)],
+      [Type.atom("id"), Type.bitstring(entityId)],
     ]);
 
     const allowed = Elixir_Hologram_Auth["can?/3"](
@@ -373,7 +372,7 @@ const Elixir_Hologram_Auth = {
       raiseAccessDenied(
         unqualifiedRoleMessage(
           entityType,
-          resourceId,
+          entityId,
           actorUserId,
           roleName,
           "grant_role",
@@ -381,7 +380,7 @@ const Elixir_Hologram_Auth = {
       );
     }
 
-    const id = grantId(userId, entityType, resourceId, roleName);
+    const id = grantId(userId, entityType, entityId, roleName);
 
     if (LocalDatabase.getRow(GRANT_TYPE, id) !== null) {
       return Type.atom("ok");
@@ -390,7 +389,7 @@ const Elixir_Hologram_Auth = {
     const batch = currentBatch("grant_role");
 
     batch.append(
-      grantEntry(userId, entityType, resourceId, roleName, actorUserId),
+      grantEntry(userId, entityType, entityId, roleName, actorUserId),
     );
 
     return Type.atom("ok");
@@ -407,9 +406,9 @@ const Elixir_Hologram_Auth = {
   // A row the client does not hold answers :ok and writes nothing, as the server's own no-op does:
   // whoever may revoke a grant may read it, and everyone reads their own, so "not held" is "not
   // there" for anyone the gate lets through. The server replays the gate when the batch lands.
-  "revoke_role/3": (userOrId, resource, role) => {
+  "revoke_role/3": (userOrId, entity, role) => {
     const userId = validateUserId(userOrId);
-    const {entityType, resourceId} = resourceReference(resource, "revoked");
+    const {entityType, entityId} = entityReference(entity, "revoked");
     const roleName = validateDeclaredRole(entityType, role);
     const actorUserId = LocalDatabase.actorUserId;
 
@@ -419,7 +418,7 @@ const Elixir_Hologram_Auth = {
 
     if (actorUserId !== userId) {
       const gateResource = Type.struct(entityType, [
-        [Type.atom("id"), Type.bitstring(resourceId)],
+        [Type.atom("id"), Type.bitstring(entityId)],
       ]);
 
       const allowed = Elixir_Hologram_Auth["can?/3"](
@@ -432,7 +431,7 @@ const Elixir_Hologram_Auth = {
         raiseAccessDenied(
           unqualifiedRoleMessage(
             entityType,
-            resourceId,
+            entityId,
             actorUserId,
             roleName,
             "revoke_role",
@@ -441,11 +440,9 @@ const Elixir_Hologram_Auth = {
       }
     }
 
-    const resourceType =
-      globalThis.Hologram.sync.model[entityType].resourceType;
     const held = LocalDatabase.getRow(
       GRANT_TYPE,
-      deriveGrantId(userId, resourceType, resourceId, roleName),
+      deriveGrantId(userId, entityType, entityId, roleName),
     );
 
     if (held === null) {
@@ -460,8 +457,8 @@ const Elixir_Hologram_Auth = {
       based_on: {...(held["$revisions"] ?? {})},
       claim: null,
       data: {
-        resource_id: resourceId,
-        resource_type: resourceType,
+        entity_id: entityId,
+        entity_type: entityType,
         role: roleName,
         user_id: userId,
       },
@@ -515,14 +512,14 @@ const Elixir_Hologram_Auth = {
 // server recomputes this from a grant write's columns and refuses an id that disagrees, so a
 // drift here is a refused grant, never a silent one.
 //
-// A grant's id is a function of the grant - this user, this resource, this role - so a grant made
+// A grant's id is a function of the grant - this user, this entity, this role - so a grant made
 // here and the same grant made anywhere else are one row, and nothing about it is reconciled
 // after the fact. UUIDv5 (RFC 9562): SHA-1 over the namespace and the name, the name being the
 // four parts joined with a newline, each spelled as the store spells it - ids as they are, the
-// resource type's label, a role name or a global role module without its "Elixir." prefix, and
+// entity type's label, a role name or a global role module without its "Elixir." prefix, and
 // "" for a part that is null. Hashed as UTF-8, which is what the server hashes.
-export function deriveGrantId(userId, resourceType, resourceId, role) {
-  const name = [userId, resourceType, resourceId, role]
+export function deriveGrantId(userId, entityType, entityId, role) {
+  const name = [userId, entityType, entityId, role]
     .map((part) => part ?? "")
     .join("\n");
 
@@ -551,35 +548,30 @@ export function deriveGrantId(userId, resourceType, resourceId, role) {
 export function grantEntry(
   userId,
   entityType,
-  resourceId,
+  entityId,
   roleName,
   actorUserId,
 ) {
   return {
     claim: null,
     data: {
+      entity_id: entityId,
+      entity_type: entityType,
       granted_by_id: actorUserId,
-      resource_id: resourceId,
-      resource_type: globalThis.Hologram.sync.model[entityType].resourceType,
       role: roleName,
       user_id: userId,
     },
-    id: grantId(userId, entityType, resourceId, roleName),
+    id: grantId(userId, entityType, entityId, roleName),
     op: "create",
     stamp: Clock.stamp(),
     type: GRANT_TYPE,
   };
 }
 
-// The id the store files a grant under, named from the type's own model entry - a fact about the
-// grant rather than a value minted for it, so it can be asked for before anything is built.
-export function grantId(userId, entityType, resourceId, roleName) {
-  return deriveGrantId(
-    userId,
-    globalThis.Hologram.sync.model[entityType].resourceType,
-    resourceId,
-    roleName,
-  );
+// The id the store files a grant under, named from the type itself - a fact about the grant
+// rather than a value minted for it, so it can be asked for before anything is built.
+export function grantId(userId, entityType, entityId, roleName) {
+  return deriveGrantId(userId, entityType, entityId, roleName);
 }
 
 // IMPORTANT!
@@ -593,33 +585,33 @@ export function grantId(userId, entityType, resourceId, roleName) {
 // carries a type's role NAMES and not their extends chains, so for a type whose roles extend, the
 // browser's message is that one sentence shorter than the server's.
 
-// The refusal that teaches: which roles the acting user holds that reach the resource, what those
+// The refusal that teaches: which roles the acting user holds that reach the entity, what those
 // may grant (or revoke) there, and the line that would cover it if the omission was not intended.
 export function unqualifiedRoleMessage(
   entityType,
-  resourceId,
+  entityId,
   actorUserId,
   role,
   operation,
 ) {
   const verb = operation === "grant_role" ? "grant" : "revoke";
-  const resource = `${entityType} "${resourceId}"`;
-  const held = heldRoleNames(actorUserId, entityType, resourceId);
+  const entity = `${entityType} "${entityId}"`;
+  const held = heldRoleNames(actorUserId, entityType, entityId);
 
   if (held.length === 0) {
-    return `the acting user holds no role on ${resource} that may ${verb} ${inspectRole(role)}`;
+    return `the acting user holds no role on ${entity} that may ${verb} ${inspectRole(role)}`;
   }
 
   const covered = coveredRoleNames(
     entityType,
-    resourceId,
+    entityId,
     actorUserId,
     operation,
   );
   const holder = held.length === 1 ? inspectRole(held[0]) : inspectRoles(held);
 
   return (
-    `the acting user holds ${joinRoleNames(held)} on ${resource}, ` +
+    `the acting user holds ${joinRoleNames(held)} on ${entity}, ` +
     `which may ${verb} ${coveredDescription(covered, role)}. ` +
     `Declare \`allow {:${operation}, ${inspectRole(role)}}, to: ${holder}\` on ${entityType} if that is intended.`
   );
@@ -640,22 +632,22 @@ function raiseAccessDenied(message) {
   Interpreter.raiseError("Hologram.AccessDeniedError", message);
 }
 
-// The struct or entity type module a grant names as its resource, taken apart the way the server
+// The struct or entity type module a grant names as its scope, taken apart the way the server
 // takes it apart: a struct gives the type and a validated id, a module is a type-wide grant -
 // trusted-only, so refused here outright.
-function resourceReference(resource, verb) {
-  if (Type.isAlias(resource)) {
+function entityReference(entity, verb) {
+  if (Type.isAlias(entity)) {
     raiseAccessDenied(trustedWriteMessage("type-wide", verb));
   }
 
   const entityType = Interpreter.moduleExName(
-    resource.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+    entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
   );
 
-  const idEntry = resource.data[Type.encodeMapKey(Type.atom("id"))];
-  const resourceId = validateId(idEntry ? idEntry[1] : Type.nil(), "resource");
+  const idEntry = entity.data[Type.encodeMapKey(Type.atom("id"))];
+  const entityId = validateId(idEntry ? idEntry[1] : Type.nil(), "entity");
 
-  return {entityType, resourceId};
+  return {entityType, entityId};
 }
 
 function validateDeclaredRole(entityType, role) {
@@ -706,12 +698,12 @@ function coveredDescription(covered, role) {
   return `${joinRoleNames(covered)} but not ${inspectRole(role)}`;
 }
 
-// The declared roles the acting user may grant (or revoke) on the resource - the same question
+// The declared roles the acting user may grant (or revoke) on the entity - the same question
 // the gate asked, once per role.
-function coveredRoleNames(entityType, resourceId, actorUserId, operation) {
+function coveredRoleNames(entityType, entityId, actorUserId, operation) {
   const entry = globalThis.Hologram.sync?.model?.[entityType];
-  const resource = Type.struct(entityType, [
-    [Type.atom("id"), Type.bitstring(resourceId)],
+  const entity = Type.struct(entityType, [
+    [Type.atom("id"), Type.bitstring(entityId)],
   ]);
 
   return (entry?.roles ?? []).filter((name) =>
@@ -719,26 +711,23 @@ function coveredRoleNames(entityType, resourceId, actorUserId, operation) {
       Elixir_Hologram_Auth["can?/3"](
         Type.bitstring(actorUserId),
         Type.tuple([Type.atom(operation), Type.atom(name)]),
-        resource,
+        entity,
       ),
     ),
   );
 }
 
-// The roles the acting user holds that reach the resource, as the gate reads them: on the row
+// The roles the acting user holds that reach the entity, as the gate reads them: on the row
 // itself or on its whole type, and the global roles held app-wide. Own names first, then role
 // modules, each alphabetical - the order the server sorts them in.
-function heldRoleNames(actorUserId, entityType, resourceId) {
-  const resourceType =
-    globalThis.Hologram.sync?.model?.[entityType]?.resourceType;
-
+function heldRoleNames(actorUserId, entityType, entityId) {
   return grantRows()
     .filter(
       (row) =>
         row.user_id === actorUserId &&
-        ((row.resource_type === resourceType &&
-          (row.resource_id === resourceId || row.resource_id === null)) ||
-          (row.resource_type === null && row.resource_id === null)),
+        ((row.entity_type === entityType &&
+          (row.entity_id === entityId || row.entity_id === null)) ||
+          (row.entity_type === null && row.entity_id === null)),
     )
     .map((row) => row.role)
     .sort(

@@ -46,17 +46,17 @@ defmodule Hologram.AuthTest do
 
   defp grant_rows(user_id) do
     select_sql =
-      ~s|SELECT "resource_type", "resource_id", "role", "granted_by_id", "created_at" | <>
+      ~s|SELECT "entity_type", "entity_id", "role", "granted_by_id", "created_at" | <>
         ~s|FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
 
     {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user_id, :uuid)])
 
-    Enum.map(rows, fn [resource_type, resource_id, role, granted_by_id, created_at] ->
+    Enum.map(rows, fn [entity_type, entity_id, role, granted_by_id, created_at] ->
       %{
         created_at: created_at,
         granted_by_id: granted_by_id && Codec.decode(granted_by_id, :uuid),
-        resource_id: resource_id && Codec.decode(resource_id, :uuid),
-        resource_type: resource_type,
+        entity_id: entity_id && Codec.decode(entity_id, :uuid),
+        entity_type: entity_type,
         role: role
       }
     end)
@@ -65,17 +65,16 @@ defmodule Hologram.AuthTest do
   # The row a batch's grant write arrives as - what Hologram.Mutation.Write.to_entity/1 hands the
   # applier, with the granter already taken from the acting user.
   defp grant_struct(opts) do
+    entity_id = Keyword.get(opts, :entity_id)
     entity_type = Keyword.get(opts, :entity_type)
-    resource_id = Keyword.get(opts, :resource_id)
-    resource_type = entity_type && RoleGrant.resource_type(entity_type)
     role = Keyword.fetch!(opts, :role)
     user_id = Keyword.fetch!(opts, :user_id)
 
     %RoleGrant{
+      entity_id: entity_id,
+      entity_type: entity_type,
       granted_by_id: Keyword.get(opts, :granted_by_id),
-      id: RoleGrant.derive_id(user_id, resource_type, resource_id, role),
-      resource_id: resource_id,
-      resource_type: resource_type,
+      id: RoleGrant.derive_id(user_id, entity_type, entity_id, role),
       role: role,
       user_id: user_id
     }
@@ -115,9 +114,9 @@ defmodule Hologram.AuthTest do
 
       rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
 
-      assert [%RoleGrant{user_id: grantee_id, resource_id: resource_id}] = rows
+      assert [%RoleGrant{user_id: grantee_id, entity_id: entity_id}] = rows
       assert grantee_id == user.id
-      assert resource_id == resource.id
+      assert entity_id == resource.id
     end
 
     test "answers questions about several resources of one type at once" do
@@ -140,7 +139,7 @@ defmodule Hologram.AuthTest do
     end
 
     # An own-scope check matches the type-wide row too, which the store keeps apart by a null
-    # resource id - so the row answering it has to travel with the rest.
+    # entity id - so the row answering it has to travel with the rest.
     test "returns the type-wide row an own-scope question also asks about" do
       user = create_user("user_82@example.com")
       resource = create_resource()
@@ -151,7 +150,7 @@ defmodule Hologram.AuthTest do
 
       rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
 
-      assert [%RoleGrant{resource_id: nil}] = rows
+      assert [%RoleGrant{entity_id: nil}] = rows
     end
 
     test "returns the row answering a global question" do
@@ -163,7 +162,7 @@ defmodule Hologram.AuthTest do
 
       rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
 
-      assert [%RoleGrant{resource_type: nil, resource_id: nil}] = rows
+      assert [%RoleGrant{entity_type: nil, entity_id: nil}] = rows
     end
 
     test "returns nothing for a question no grant answers" do
@@ -223,9 +222,9 @@ defmodule Hologram.AuthTest do
 
       # The asker holds a grant on the same resource, so "their row came back" is not the same
       # answer as "only their row did" - the scope named one user and the reply carries one.
-      assert [%RoleGrant{user_id: grantee_id, resource_id: resource_id}] = rows
+      assert [%RoleGrant{user_id: grantee_id, entity_id: entity_id}] = rows
       assert grantee_id == other_user.id
-      assert resource_id == resource.id
+      assert entity_id == resource.id
     end
   end
 
@@ -414,8 +413,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: resource.id
+        entity_type: Module2,
+        entity_id: resource.id
       }
 
       refute can?(user, :read, grant)
@@ -430,8 +429,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: resource.id
+        entity_type: Module2,
+        entity_id: resource.id
       }
 
       assert can?(user, :read, grant)
@@ -446,8 +445,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: resource.id
+        entity_type: Module2,
+        entity_id: resource.id
       }
 
       assert can?(admin, :read, grant)
@@ -462,8 +461,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: resource.id
+        entity_type: Module2,
+        entity_id: resource.id
       }
 
       assert can?(global_holder, :read, grant)
@@ -480,8 +479,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module1),
-        resource_id: resource.id
+        entity_type: Module1,
+        entity_id: resource.id
       }
 
       assert can?(owner, :read, grant)
@@ -496,8 +495,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module1),
-        resource_id: entity.id,
+        entity_type: Module1,
+        entity_id: entity.id,
         role: :viewer
       }
 
@@ -530,7 +529,7 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module2),
+        entity_type: Module2,
         role: :admin
       }
 
@@ -538,14 +537,14 @@ defmodule Hologram.AuthTest do
     end
 
     # An own-scope check admits the row's grant AND the type-wide one, which the store's own
-    # condition spells as "resource_id = $3 OR resource_id IS NULL".
+    # condition spells as "entity_id = $3 OR entity_id IS NULL".
     test "matches a type-wide grant of the row's own type" do
       user = create_user("user_72@example.com")
       entity = %Module1{id: Entity.generate_id()}
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module1),
+        entity_type: Module1,
         role: :viewer
       }
 
@@ -558,8 +557,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module1),
-        resource_id: entity.id,
+        entity_type: Module1,
+        entity_id: entity.id,
         role: :editor
       }
 
@@ -573,8 +572,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: parent.id,
+        entity_type: Module2,
+        entity_id: parent.id,
         role: :admin
       }
 
@@ -601,14 +600,14 @@ defmodule Hologram.AuthTest do
 
       row = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: resource.id
+        entity_type: Module2,
+        entity_id: resource.id
       }
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module2),
-        resource_id: resource.id,
+        entity_type: Module2,
+        entity_id: resource.id,
         role: :member
       }
 
@@ -623,8 +622,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: other_user.id,
-        resource_type: RoleGrant.resource_type(Module1),
-        resource_id: entity.id,
+        entity_type: Module1,
+        entity_id: entity.id,
         role: :viewer
       }
 
@@ -639,8 +638,8 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{
         user_id: user.id,
-        resource_type: RoleGrant.resource_type(Module1),
-        resource_id: entity.id,
+        entity_type: Module1,
+        entity_id: entity.id,
         role: :viewer
       }
 
@@ -699,8 +698,8 @@ defmodule Hologram.AuthTest do
     defp grant_effect(op, grant) do
       data = %{
         "id" => grant.id,
-        "resource_id" => grant.resource_id,
-        "resource_type" => grant.resource_type && Atom.to_string(grant.resource_type),
+        "entity_id" => grant.entity_id,
+        "entity_type" => grant.entity_type && Codec.encode_enum_value(grant.entity_type),
         "role" => Codec.encode_enum_value(grant.role),
         "user_id" => grant.user_id
       }
@@ -746,8 +745,8 @@ defmodule Hologram.AuthTest do
 
       assert [grant] = grants_before(user.id, [grant_effect(:del_entity, revoked)])
       assert grant.id == revoked.id
-      assert grant.resource_id == resource.id
-      assert grant.resource_type == RoleGrant.resource_type(Module1)
+      assert grant.entity_id == resource.id
+      assert grant.entity_type == Module1
       assert grant.role == :editor
       assert grant.user_id == user.id
     end
@@ -801,8 +800,8 @@ defmodule Hologram.AuthTest do
 
       assert [
                %{
-                 resource_type: nil,
-                 resource_id: nil,
+                 entity_type: nil,
+                 entity_id: nil,
                  role: "Hologram.Test.Fixtures.Role.Module1"
                }
              ] = grant_rows(user.id)
@@ -876,10 +875,10 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, resource, :editor)
 
-      resource_type = RoleGrant.resource_type(Module1)
+      entity_type = Module1
 
       assert grant_id(user.id) ==
-               RoleGrant.derive_id(user.id, resource_type, resource.id, :editor)
+               RoleGrant.derive_id(user.id, entity_type, resource.id, :editor)
     end
 
     test "writes an instance grant naming the resource type and id" do
@@ -889,19 +888,24 @@ defmodule Hologram.AuthTest do
 
       assert grant_role(user, resource, :owner) == :ok
 
-      assert [%{resource_type: "test_fixtures_policy_module1", role: "owner"} = grant] =
+      assert [%{entity_type: "Hologram.Test.Fixtures.Policy.Module1", role: "owner"} = grant] =
                grant_rows(user.id)
 
-      assert grant.resource_id == resource.id
+      assert grant.entity_id == resource.id
     end
 
-    test "writes a type-wide grant with no resource id" do
+    test "writes a type-wide grant with no entity id" do
       user = create_user("user_8@example.com")
 
       assert grant_role(user, Module1, :owner) == :ok
 
-      assert [%{resource_type: "test_fixtures_policy_module1", resource_id: nil, role: "owner"}] =
-               grant_rows(user.id)
+      assert [
+               %{
+                 entity_type: "Hologram.Test.Fixtures.Policy.Module1",
+                 entity_id: nil,
+                 role: "owner"
+               }
+             ] = grant_rows(user.id)
     end
 
     test "stamps the acting user as the granter" do
@@ -1079,11 +1083,11 @@ defmodule Hologram.AuthTest do
       assert_error ArgumentError, expected_msg, fn -> grant_role(user, Module1, :publisher) end
     end
 
-    test "raises on a resource id that is not a canonical entity id" do
+    test "raises on an entity id that is not a canonical entity id" do
       user = create_user("user_15@example.com")
 
       expected_msg =
-        "invalid resource id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid entity id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
       assert_error ArgumentError, expected_msg, fn ->
         grant_role(user, %Module1{id: "nope"}, :owner)
@@ -1103,7 +1107,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: granter.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :editor,
           user_id: user.id
         )
@@ -1112,7 +1116,7 @@ defmodule Hologram.AuthTest do
 
       assert [row] = grant_rows(user.id)
       assert row.granted_by_id == granter.id
-      assert row.resource_id == resource.id
+      assert row.entity_id == resource.id
       assert row.role == "editor"
     end
 
@@ -1128,7 +1132,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: granter.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :editor,
           user_id: user.id
         )
@@ -1150,7 +1154,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: creator.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :maintainer,
           user_id: creator.id
         )
@@ -1201,7 +1205,7 @@ defmodule Hologram.AuthTest do
       grant =
         grant_struct(
           entity_type: Module1,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :editor,
           user_id: user.id
         )
@@ -1225,7 +1229,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: granter.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :editor,
           user_id: Entity.generate_id()
         )
@@ -1245,7 +1249,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module2,
           granted_by_id: granter.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :admin,
           user_id: user.id
         )
@@ -1271,7 +1275,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: creator.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :maintainer,
           user_id: creator.id
         )
@@ -1294,7 +1298,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: creator.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :maintainer,
           user_id: user.id
         )
@@ -1318,7 +1322,7 @@ defmodule Hologram.AuthTest do
         grant_struct(
           entity_type: Module1,
           granted_by_id: creator.id,
-          resource_id: resource.id,
+          entity_id: resource.id,
           role: :editor,
           user_id: creator.id
         )

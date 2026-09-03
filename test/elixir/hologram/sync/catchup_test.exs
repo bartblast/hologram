@@ -71,8 +71,8 @@ defmodule Hologram.Sync.CatchupTest do
 
     data = %{
       "id" => grant.id,
-      "resource_id" => grant.resource_id,
-      "resource_type" => grant.resource_type && Atom.to_string(grant.resource_type),
+      "entity_id" => grant.entity_id,
+      "entity_type" => grant.entity_type && Codec.encode_enum_value(grant.entity_type),
       "role" => Codec.encode_enum_value(grant.role),
       "user_id" => grant.user_id
     }

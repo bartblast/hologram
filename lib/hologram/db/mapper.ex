@@ -6,6 +6,10 @@ defmodule Hologram.DB.Mapper do
   alias Hologram.Entity.Model
   alias Hologram.Reflection
 
+  # PostgreSQL truncates an enum label past 63 bytes silently, and a truncated label no longer
+  # decodes to the value it was stored for.
+  @max_enum_label_bytes 63
+
   @hash_bytes 8
 
   # PostgreSQL truncates identifiers to 63 bytes - derived identifiers must never rely on that.
@@ -429,7 +433,7 @@ defmodule Hologram.DB.Mapper do
   end
 
   # The role grant store carries the one index no declaration derives: unique over the grant
-  # fact, with nulls compared as values - resource_type and resource_id nils encode the
+  # fact, with nulls compared as values - entity_type and entity_id nils encode the
   # type-wide and global grant shapes, so identical rows with nils must still collide. The
   # columns are the store's own identity list, which its id derivation reads too - one list, so
   # the two cannot disagree on what a grant is.
@@ -502,15 +506,17 @@ defmodule Hologram.DB.Mapper do
     end
   end
 
-  # The grant store is derived, never declared: its enum values are the model's table names
-  # and role names, and its relationships point at the designated user entity type - so a
+  # The grant store is derived, never declared: its enum values are the model's entity type
+  # modules and role names, and its relationships point at the designated user entity type - so a
   # replayed history derives the store as it stood at that point, with no op declaring it.
   defp role_grant_entry(model, user_entity) do
-    resource_type_values =
-      model.entities
-      |> Map.keys()
-      |> Enum.map(&RoleGrant.resource_type/1)
-      |> Enum.sort()
+    entity_types = Map.keys(model.entities)
+    global_role_modules = Map.keys(model.roles)
+
+    validate_grant_labels!(entity_types, "entity type")
+    validate_grant_labels!(global_role_modules, "global role")
+
+    entity_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
 
     entity_role_names =
       Enum.flat_map(model.entities, fn {_entity_type, entry} ->
@@ -519,14 +525,14 @@ defmodule Hologram.DB.Mapper do
 
     role_values =
       entity_role_names
-      |> Enum.concat(Map.keys(model.roles))
+      |> Enum.concat(global_role_modules)
       |> Enum.uniq()
       |> Enum.sort_by(&Codec.encode(&1, :enum))
 
     %{
       attributes: [
-        {:resource_id, :uuid, [optional: true]},
-        {:resource_type, :enum, [optional: true, values: resource_type_values]},
+        {:entity_id, :uuid, [optional: true]},
+        {:entity_type, :enum, [optional: true, values: entity_type_values]},
         {:role, :enum, [values: role_values]}
       ],
       relationships: [{:granted_by, user_entity, [optional: true]}, {:user, user_entity, []}],
@@ -704,6 +710,24 @@ defmodule Hologram.DB.Mapper do
     end
 
     :ok
+  end
+
+  # The grant store's two enums take their values from the MODEL rather than from a declaration,
+  # so Hologram.Entity.Validator never meets them: it checks the labels an entity declares - its
+  # enum values and its role names - and these two sets are derived from the app's entity type
+  # modules and its global role modules. Nothing else asks whether either fits.
+  defp validate_grant_labels!(values, description) do
+    Enum.each(values, fn value ->
+      label = Codec.encode(value, :enum)
+      label_size = byte_size(label)
+
+      if label_size > @max_enum_label_bytes do
+        raise Hologram.CompileError,
+          message:
+            "#{description} #{inspect(value)} is too long to store in the role grant store " <>
+              "(#{label_size} bytes, limit #{@max_enum_label_bytes}) - shorten the module name"
+      end
+    end)
   end
 
   defp validate_model_cycles!(model) do

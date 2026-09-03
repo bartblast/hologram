@@ -15,7 +15,7 @@ defmodule Hologram.Migration.GrantStoreTest do
   # a rename for exactly the reason above. So the destructive cases are always authored,
   # never inferred - and the one that keeps data needs no ceremony.
   #
-  # The store's two enums are the other half. Their values are the entity table names and the
+  # The store's two enums are the other half. Their values are the entity type modules and the
   # role names, derived SORTED, and PostgreSQL orders an enum type by a value's POSITION - so a
   # rename whose new label sorts elsewhere has to rebuild the type rather than relabel a value
   # in place, or the database ends up holding the right values in the wrong order. Both renames
@@ -64,14 +64,14 @@ defmodule Hologram.Migration.GrantStoreTest do
 
   defp grant_rows do
     statement = """
-    SELECT "role"::text, "resource_type"::text
+    SELECT "role"::text, "entity_type"::text
     FROM "hologram_data"."hologram_role_grant"
-    ORDER BY "resource_type"::text NULLS FIRST
+    ORDER BY "entity_type"::text NULLS FIRST
     """
 
     {:ok, %{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [role, resource_type] -> {role, resource_type} end)
+    Enum.map(rows, fn [role, entity_type] -> {role, entity_type} end)
   end
 
   defp enum_values(type_name) do
@@ -121,14 +121,14 @@ defmodule Hologram.Migration.GrantStoreTest do
       Connection.query(statement, [Ecto.UUID.dump!(@user_id), Atom.to_string(role)])
   end
 
-  defp insert_scoped_grant(resource_type) do
+  defp insert_scoped_grant(entity_type) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
+      ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
     VALUES (gen_random_uuid(), $1, 'editor', $2, $1, now(), now(), '{}')
     """
 
-    {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id), resource_type])
+    {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id), entity_type])
   end
 
   defp insert_user(table) do
@@ -169,7 +169,7 @@ defmodule Hologram.Migration.GrantStoreTest do
 
       insert_user("my_app_user")
       insert_grant()
-      insert_scoped_grant("my_app_user")
+      insert_scoped_grant("MyApp.User")
     end)
 
     [create: create, first_model: first_model]
@@ -194,14 +194,14 @@ defmodule Hologram.Migration.GrantStoreTest do
         assert run([create, renamed], full_model, @context) == :ok
 
         # Both grants stand, and the one naming the renamed type now names it by its new
-        # table - the rows were carried across the rebuild rather than left behind.
-        assert grant_rows() == [{"editor", nil}, {"editor", "my_app_account"}]
+        # module - the rows were carried across the rebuild rather than left behind.
+        assert grant_rows() == [{"editor", nil}, {"editor", "MyApp.Account"}]
 
-        # "my_app_account" sorts before "my_app_task", where the old name sorted after it -
+        # "MyApp.Account" sorts before "MyApp.Task", where the old name sorted after it -
         # so the type had to be rebuilt in the model's order, not relabelled in place.
-        assert enum_values("hologram_role_grant_resource_type_$enum") == [
-                 "my_app_account",
-                 "my_app_task"
+        assert enum_values("hologram_role_grant_entity_type_$enum") == [
+                 "MyApp.Account",
+                 "MyApp.Task"
                ]
 
         assert fk_target("hologram_role_grant_user_id_$fk") == "my_app_account"
@@ -305,7 +305,7 @@ defmodule Hologram.Migration.GrantStoreTest do
         end
 
         # Nothing ran: the file never became a model, so it never reached the database.
-        assert grant_rows() == [{"editor", nil}, {"editor", "my_app_user"}]
+        assert grant_rows() == [{"editor", nil}, {"editor", "MyApp.User"}]
         assert fk_target("hologram_role_grant_user_id_$fk") == "my_app_user"
         assert applied_versions() == MapSet.new([create.version])
       end)

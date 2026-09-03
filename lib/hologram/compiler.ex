@@ -1697,7 +1697,6 @@ defmodule Hologram.Compiler do
       {"frameworkAttributes", render_framework_attributes(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
-      {"resourceType", render_resource_type(entity_type)},
       {"roles", render_roles(entity_type)},
       {"serverOnly", server_only}
     ])
@@ -1866,7 +1865,7 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the resource a grant row names, or nowhere at all (a global role).
+  # on a related entity, on the entity a grant row names, or nowhere at all (a global role).
   defp render_policy_references(_entity_type, nil), do: "null"
 
   defp render_policy_references(entity_type, references) do
@@ -1894,14 +1893,14 @@ defmodule Hologram.Compiler do
 
     render_policy_reference_entry("rel", [
       name_js,
-      render_resource_type(target_type),
+      render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
   end
 
   defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
     render_policy_reference_entry(Atom.to_string(kind), [
-      render_resource_type(target_type),
+      render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
   end
@@ -1932,13 +1931,12 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
-  # The name a grant row spells this type by - what its resource_type column holds. A reference
-  # carries it rather than the module name so that matching a row is a comparison rather than a
-  # lookup, and so that a reference may name a type the client never syncs: a role held on an
-  # admin-only type can gate a synced type's rules, and the model would have nothing to look up.
-  defp render_resource_type(entity_type) do
+  # The name a grant row spells this type by - what its entity_type column holds, which is the
+  # type's own name. A reference carries it spelled out rather than as a lookup into the model, so
+  # that it may name a type the client never syncs: a role held on an admin-only type can gate a
+  # synced type's rules, and the model would have nothing to look up.
+  defp render_entity_type_label(entity_type) do
     entity_type
-    |> RoleGrant.resource_type()
     |> Codec.encode_enum_value()
     |> Jason.encode!()
   end

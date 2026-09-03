@@ -301,13 +301,15 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp reference_role_names({:rel, _relationship_name, role_names}), do: role_names
 
-  defp reference_role_names({:resource, _target_type, role_names}), do: role_names
+  defp reference_role_names({:named, _target_type, role_names}), do: role_names
 
-  # The resource type enum's values ARE the entity table names, so a table name is already the
-  # encoded value - it binds directly rather than through the enum codec.
-  defp resource_type_slot(table, context, reversed_params) do
-    column = grant_column(context, "resource_type")
-    {placeholder, new_params} = bind_slot_value(table, reversed_params)
+  # The entity type enum's values ARE the entity type modules, so a type binds as its own enum
+  # label - the same string the client compares a grant row against.
+  defp entity_type_slot(entity_type, context, reversed_params) do
+    column = grant_column(context, "entity_type")
+
+    {placeholder, new_params} =
+      bind_slot_value(Codec.encode_enum_value(entity_type), reversed_params)
 
     {"#{placeholder}::#{enum_type(column)}", new_params}
   end
@@ -386,63 +388,57 @@ defmodule Hologram.DB.QueryCompiler do
     {condition, new_params}
   end
 
-  # A global role is held without a resource, so the row shape has both resource columns nil -
+  # A global role is held without an entity, so the row shape has both scope columns nil -
   # the lookup needs no correlation with the queried row.
   defp grant_scope_sql({:global, _role_modules}, _context, reversed_params) do
-    {~s|"rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL|, reversed_params}
+    {~s|"rg"."entity_type" IS NULL AND "rg"."entity_id" IS NULL|, reversed_params}
   end
 
   # A rule's own roles are held on the row itself or on its whole type - the lookup matches
-  # both shapes, which the store keeps apart by whether its resource_id column is nil.
+  # both shapes, which the store keeps apart by whether its entity_id column is nil.
   defp grant_scope_sql({:own, _role_names}, context, reversed_params) do
     {placeholder, new_params} =
-      resource_type_slot(context.entity_mapping.table, context, reversed_params)
+      entity_type_slot(context.entity_type, context, reversed_params)
 
-    resource_sql =
-      ~s|("rg"."resource_id" = #{context.row_prefix}."id" OR "rg"."resource_id" IS NULL)|
+    entity_sql =
+      ~s|("rg"."entity_id" = #{context.row_prefix}."id" OR "rg"."entity_id" IS NULL)|
 
-    {~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|, new_params}
+    {~s|"rg"."entity_type" = #{placeholder} AND #{entity_sql}|, new_params}
   end
 
-  # The grant store's own policy checks a role held on the resource a grant row names, so the
-  # lookup keys on the outer row's resource_id column rather than on a relationship reference.
-  defp grant_scope_sql({:resource, target_type, _role_names}, context, reversed_params) do
-    target_table =
-      context.mapping
-      |> Map.fetch!(target_type)
-      |> Map.fetch!(:table)
-
-    {placeholder, new_params} = resource_type_slot(target_table, context, reversed_params)
+  # The grant store's own policy checks a role held on the entity a grant row names, so the
+  # lookup keys on the outer row's entity_id column rather than on a relationship reference.
+  defp grant_scope_sql({:named, target_type, _role_names}, context, reversed_params) do
+    {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
     scope_sql =
-      ~s|"rg"."resource_type" = #{placeholder} | <>
-        ~s|AND "rg"."resource_id" = #{context.row_prefix}."resource_id"|
+      ~s|"rg"."entity_type" = #{placeholder} | <>
+        ~s|AND "rg"."entity_id" = #{context.row_prefix}."entity_id"|
 
     {scope_sql, new_params}
   end
 
   defp grant_scope_sql({:type, target_type, _role_names}, context, reversed_params) do
-    target_table =
-      context.mapping
-      |> Map.fetch!(target_type)
-      |> Map.fetch!(:table)
+    {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
-    {placeholder, new_params} = resource_type_slot(target_table, context, reversed_params)
-
-    {~s|"rg"."resource_type" = #{placeholder} AND "rg"."resource_id" IS NULL|, new_params}
+    {~s|"rg"."entity_type" = #{placeholder} AND "rg"."entity_id" IS NULL|, new_params}
   end
 
   defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
     column = reference_column(context.entity_mapping, relationship_name)
 
     {placeholder, new_params} =
-      resource_type_slot(column.references, context, reversed_params)
+      entity_type_slot(
+        relationship_target(context.entity_type, relationship_name),
+        context,
+        reversed_params
+      )
 
     quoted_column = Mapper.quote_identifier(column.name)
 
     scope_sql =
-      ~s|"rg"."resource_type" = #{placeholder} | <>
-        ~s|AND "rg"."resource_id" = #{context.row_prefix}.#{quoted_column}|
+      ~s|"rg"."entity_type" = #{placeholder} | <>
+        ~s|AND "rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
 
     {scope_sql, new_params}
   end

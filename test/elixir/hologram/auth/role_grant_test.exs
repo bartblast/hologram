@@ -6,53 +6,56 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
+  alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Job
+  alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
   @other_user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
-  @resource_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-  @resource_type :test_fixtures_policy_module2
+  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @entity_type Policy.Module2
   @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
 
   describe "__attributes__/0" do
     test "computes the enum value sets from the compiled data model" do
       assert RoleGrant.__attributes__() == [
-               {:resource_id, :uuid, [optional: true]},
-               {:resource_type, :enum,
+               {:entity_id, :uuid, [optional: true]},
+               {:entity_type, :enum,
                 [
                   values: [
-                    :test_fixtures_entity_module1,
-                    :test_fixtures_entity_module10,
-                    :test_fixtures_entity_module11,
-                    :test_fixtures_entity_module12,
-                    :test_fixtures_entity_module13,
-                    :test_fixtures_entity_module14,
-                    :test_fixtures_entity_module15,
-                    :test_fixtures_entity_module16,
-                    :test_fixtures_entity_module17,
-                    :test_fixtures_entity_module18,
-                    :test_fixtures_entity_module19,
-                    :test_fixtures_entity_module2,
-                    :test_fixtures_entity_module20,
-                    :test_fixtures_entity_module21,
-                    :test_fixtures_entity_module22,
-                    :test_fixtures_entity_module23,
-                    :test_fixtures_entity_module3,
-                    :test_fixtures_entity_module4,
-                    :test_fixtures_entity_module5,
-                    :test_fixtures_entity_module6,
-                    :test_fixtures_entity_module7,
-                    :test_fixtures_entity_module8,
-                    :test_fixtures_entity_module9,
-                    :test_fixtures_job_module1,
-                    :test_fixtures_job_module2,
-                    :test_fixtures_job_module3,
-                    :test_fixtures_policy_module1,
-                    :test_fixtures_policy_module2,
-                    :test_fixtures_policy_module3,
-                    :test_fixtures_policy_module4,
-                    :test_fixtures_policy_module5
+                    Entity.Module1,
+                    Entity.Module10,
+                    Entity.Module11,
+                    Entity.Module12,
+                    Entity.Module13,
+                    Entity.Module14,
+                    Entity.Module15,
+                    Entity.Module16,
+                    Entity.Module17,
+                    Entity.Module18,
+                    Entity.Module19,
+                    Entity.Module2,
+                    Entity.Module20,
+                    Entity.Module21,
+                    Entity.Module22,
+                    Entity.Module23,
+                    Entity.Module3,
+                    Entity.Module4,
+                    Entity.Module5,
+                    Entity.Module6,
+                    Entity.Module7,
+                    Entity.Module8,
+                    Entity.Module9,
+                    Job.Module1,
+                    Job.Module2,
+                    Job.Module3,
+                    Policy.Module1,
+                    Policy.Module2,
+                    Policy.Module3,
+                    Policy.Module4,
+                    Policy.Module5
                   ],
                   optional: true
                 ]},
@@ -112,8 +115,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                granted_by: %NotIncluded{relationship: :granted_by},
                granted_by_id: nil,
                id: nil,
-               resource_id: nil,
-               resource_type: nil,
+               entity_id: nil,
+               entity_type: nil,
                role: nil,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
@@ -163,22 +166,22 @@ defmodule Hologram.Auth.RoleGrantTest do
 
   describe "derive_id/4" do
     test "answers the same id for the same grant" do
-      first = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
-      second = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      first = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+      second = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       assert first == second
     end
 
     test "answers a different id for a different role on the same resource" do
-      member_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
-      admin_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :admin)
+      member_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+      admin_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :admin)
 
       assert member_id != admin_id
     end
 
     test "answers a different id for the same role held by a different user" do
-      first = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
-      second = RoleGrant.derive_id(@other_user_id, @resource_type, @resource_id, :member)
+      first = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+      second = RoleGrant.derive_id(@other_user_id, @entity_type, @entity_id, :member)
 
       assert first != second
     end
@@ -186,13 +189,13 @@ defmodule Hologram.Auth.RoleGrantTest do
     # Asked of the validator rather than of a regex written here, so the two cannot drift: the
     # derivation has to answer something every other entity id would be accepted as.
     test "answers an id the entity id validator accepts" do
-      id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       assert Validator.attribute_value_valid?(id, :uuid)
     end
 
     test "answers a version 5 id under the RFC variant" do
-      id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       <<_time_low_and_mid::binary-size(14), version::binary-size(1), _rest::binary-size(4),
         variant::binary-size(1), _tail::binary>> = id
@@ -201,9 +204,9 @@ defmodule Hologram.Auth.RoleGrantTest do
       assert variant in ["8", "9", "a", "b"]
     end
 
-    test "derives a type-wide grant, which names no resource id" do
-      type_wide_id = RoleGrant.derive_id(@user_id, @resource_type, nil, :member)
-      instance_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+    test "derives a type-wide grant, which names no entity id" do
+      type_wide_id = RoleGrant.derive_id(@user_id, @entity_type, nil, :member)
+      instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       assert Validator.attribute_value_valid?(type_wide_id, :uuid)
       assert type_wide_id != instance_id
@@ -220,29 +223,30 @@ defmodule Hologram.Auth.RoleGrantTest do
     # which is what keeps the pair from drifting. Both were cross-checked against a reference
     # UUIDv5 implementation, so either side can be rewritten against the standard alone.
     test "answers the pinned vectors the client twin is held to" do
-      instance_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :member)
+      instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
       global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
       # A role name outside ASCII: the name is hashed as UTF-8 bytes, which a twin reading
       # UTF-16 code units would get wrong while passing the two vectors above.
-      accented_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :café)
+      accented_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :café)
 
-      assert instance_id == "8cd330ce-decd-5e5b-bff7-1cd078a0ec62"
+      assert instance_id == "2c56252b-0c90-5cd9-b15d-91c5e5bf968e"
       assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
-      assert accented_id == "2ba31948-266d-5bb1-8452-451bca95d31c"
+      assert accented_id == "84121d8c-09a3-57fa-96e3-bd966906ce20"
     end
   end
 
   describe "entity_type/1" do
-    # Stated as a round trip rather than against a literal label, so the pair cannot drift apart
-    # without this failing - resource_type/1 derives the label and this derives the type back.
     test "answers the entity type whose resource type label it is given" do
-      label = RoleGrant.resource_type(Module14)
-
-      assert RoleGrant.entity_type(label) == Module14
+      assert RoleGrant.entity_type(Module14) == Module14
     end
 
-    test "answers nil for a label naming no table of this build" do
-      assert RoleGrant.entity_type(:no_such_table_in_this_build) == nil
+    test "answers nil for a label naming no entity type of this build" do
+      assert RoleGrant.entity_type(NoSuchEntityTypeInThisBuild) == nil
+    end
+
+    # The store's own type is left out of its scope enum: a grant is never held on a grant row.
+    test "answers nil for the role grant entity type itself" do
+      assert RoleGrant.entity_type(RoleGrant) == nil
     end
   end
 

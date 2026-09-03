@@ -1,6 +1,6 @@
 defmodule Hologram.Role do
   @moduledoc """
-  The construct for global roles - roles held app-wide rather than on a resource.
+  The construct for global roles - roles held app-wide rather than on an entity.
 
   A global role is defined as a module:
 
@@ -15,7 +15,7 @@ defmodule Hologram.Role do
 
       Hologram.Auth.grant_role(user, MyApp.Roles.Admin)
 
-  A role held on a particular resource is declared inside the entity type instead, with
+  A role held on a particular entity is declared inside the entity type instead, with
   `Hologram.Entity.role/2` - those role names are plain atoms, scoped to their entity type.
 
   ## Options

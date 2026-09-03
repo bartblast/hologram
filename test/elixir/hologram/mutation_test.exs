@@ -146,23 +146,23 @@ defmodule Hologram.MutationTest do
   end
 
   defp grant_id(user_id, resource, role) do
-    RoleGrant.derive_id(user_id, RoleGrant.resource_type(resource.__struct__), resource.id, role)
+    RoleGrant.derive_id(user_id, resource.__struct__, resource.id, role)
   end
 
   # A grant as a browser sends it: the id derived from the grant, no claim (the parser refuses
   # one), and a granter of the client's own choosing - which the server overwrites.
   defp grant_write(user_id, resource, role, opts \\ []) do
-    resource_type = RoleGrant.resource_type(resource.__struct__)
+    entity_type = resource.__struct__
 
     data = %{
       "granted_by_id" => Keyword.get(opts, :granted_by_id, user_id),
-      "resource_id" => resource.id,
-      "resource_type" => Atom.to_string(resource_type),
+      "entity_id" => resource.id,
+      "entity_type" => Codec.encode_enum_value(entity_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
     }
 
-    id = RoleGrant.derive_id(user_id, resource_type, resource.id, role)
+    id = RoleGrant.derive_id(user_id, entity_type, resource.id, role)
 
     create_write(RoleGrant, id, data, Keyword.delete(opts, :granted_by_id))
   end
@@ -178,16 +178,16 @@ defmodule Hologram.MutationTest do
   # the value the write carries rather than the claim it makes.
   # A revocation as a browser sends it: the grant it revokes, under the id derived from it.
   defp revocation_write(user_id, resource, role, opts \\ []) do
-    resource_type = RoleGrant.resource_type(resource.__struct__)
+    entity_type = resource.__struct__
 
     data = %{
-      "resource_id" => resource.id,
-      "resource_type" => Atom.to_string(resource_type),
+      "entity_id" => resource.id,
+      "entity_type" => Codec.encode_enum_value(entity_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
     }
 
-    id = RoleGrant.derive_id(user_id, resource_type, resource.id, role)
+    id = RoleGrant.derive_id(user_id, entity_type, resource.id, role)
 
     delete_write(RoleGrant, id, Keyword.put(opts, :data, data))
   end
@@ -683,35 +683,35 @@ defmodule Hologram.MutationTest do
     # nothing there, so the batch lands only because a creator's grant asks no gate.
     test "lands a creator's grant beside the create that earned it" do
       user = create_user("creator-grant@example.com")
-      resource_id = Entity.generate_id()
+      entity_id = Entity.generate_id()
 
       writes = [
-        create_write(PolicyModule1, resource_id, %{"author_id" => user.id},
+        create_write(PolicyModule1, entity_id, %{"author_id" => user.id},
           claim: ["authorize", "archive"]
         ),
-        grant_write(user.id, %PolicyModule1{id: resource_id}, :maintainer)
+        grant_write(user.id, %PolicyModule1{id: entity_id}, :maintainer)
       ]
 
       assert {:ok, %{"status" => "confirmed", "dropped" => dropped, "kept" => kept}} =
                run(envelope(writes), server(user.id))
 
       assert Map.keys(dropped["1"]) == [
+               "entity_id",
+               "entity_type",
                "granted_by_id",
-               "resource_id",
-               "resource_type",
                "role",
                "user_id"
              ]
 
       grant_id =
-        RoleGrant.derive_id(user.id, :test_fixtures_policy_module1, resource_id, :maintainer)
+        RoleGrant.derive_id(user.id, PolicyModule1, entity_id, :maintainer)
 
       assert kept["1"]["id"] == grant_id
 
       row = EntityOperations.get(RoleGrant, grant_id)
 
       assert row.granted_by_id == user.id
-      assert row.resource_id == resource_id
+      assert row.entity_id == entity_id
       assert row.role == :maintainer
       assert row.user_id == user.id
     end
@@ -737,9 +737,9 @@ defmodule Hologram.MutationTest do
                run(envelope([write]), server(second_member.id))
 
       assert Map.keys(dropped["0"]) == [
+               "entity_id",
+               "entity_type",
                "granted_by_id",
-               "resource_id",
-               "resource_type",
                "role",
                "user_id"
              ]
@@ -794,8 +794,8 @@ defmodule Hologram.MutationTest do
 
       EntityOperations.create_if_absent(%RoleGrant{
         id: Entity.generate_id(),
-        resource_id: resource.id,
-        resource_type: RoleGrant.resource_type(PolicyModule2),
+        entity_id: resource.id,
+        entity_type: PolicyModule2,
         role: :member,
         user_id: user.id
       })
@@ -803,7 +803,7 @@ defmodule Hologram.MutationTest do
       write = grant_write(user.id, resource, :member)
 
       expected_msg =
-        "a role grant for this user, resource and role exists under an id that is not its " <>
+        "a role grant for this user, entity and role exists under an id that is not its " <>
           "derivation - every grant row's id is derived from the grant it states"
 
       assert_error ArgumentError, expected_msg, fn ->
@@ -825,17 +825,17 @@ defmodule Hologram.MutationTest do
     test "rejects a type-wide grant" do
       admin = create_user("type-wide-admin@example.com")
       user = create_user("type-wide-user@example.com")
-      resource_type = RoleGrant.resource_type(PolicyModule2)
+      entity_type = PolicyModule2
 
       data = %{
         "granted_by_id" => admin.id,
-        "resource_id" => nil,
-        "resource_type" => Atom.to_string(resource_type),
+        "entity_id" => nil,
+        "entity_type" => Codec.encode_enum_value(entity_type),
         "role" => "member",
         "user_id" => user.id
       }
 
-      id = RoleGrant.derive_id(user.id, resource_type, nil, :member)
+      id = RoleGrant.derive_id(user.id, entity_type, nil, :member)
       write = create_write(RoleGrant, id, data)
 
       message = "type-wide roles are granted only by trusted code running without an acting user"
@@ -928,9 +928,9 @@ defmodule Hologram.MutationTest do
                run(envelope([write]), server(member.id))
 
       assert Map.keys(dropped["0"]) == [
+               "entity_id",
+               "entity_type",
                "granted_by_id",
-               "resource_id",
-               "resource_type",
                "role",
                "user_id"
              ]

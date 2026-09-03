@@ -583,12 +583,12 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "create/1 creator grants" do
-    defp granted_roles(user_id, resource_id) do
+    defp granted_roles(user_id, entity_id) do
       select_sql =
         ~s|SELECT "role" FROM "hologram_data"."hologram_role_grant" | <>
-          ~s|WHERE "user_id" = $1 AND "resource_id" = $2 ORDER BY "role"|
+          ~s|WHERE "user_id" = $1 AND "entity_id" = $2 ORDER BY "role"|
 
-      params = [Codec.encode(user_id, :uuid), Codec.encode(resource_id, :uuid)]
+      params = [Codec.encode(user_id, :uuid), Codec.encode(entity_id, :uuid)]
       {:ok, %{rows: rows}} = Connection.query(select_sql, params)
 
       Enum.map(rows, fn [role] -> role end)
@@ -629,12 +629,12 @@ defmodule Hologram.DB.EntityOperationsTest do
       {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
       granted = Enum.map(rows, fn [role, id] -> {role, Codec.decode(id, :uuid)} end)
 
-      resource_type = RoleGrant.resource_type(PolicyModule1)
+      entity_type = PolicyModule1
 
       assert granted == [
                {"maintainer",
-                RoleGrant.derive_id(user.id, resource_type, resource.id, :maintainer)},
-               {"owner", RoleGrant.derive_id(user.id, resource_type, resource.id, :owner)}
+                RoleGrant.derive_id(user.id, entity_type, resource.id, :maintainer)},
+               {"owner", RoleGrant.derive_id(user.id, entity_type, resource.id, :owner)}
              ]
     end
 
@@ -642,7 +642,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       {:ok, resource} = create(PolicyModule1.new())
 
       select_sql =
-        ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "resource_id" = $1|
+        ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "entity_id" = $1|
 
       {:ok, %{rows: [[count]]}} =
         Connection.query(select_sql, [Codec.encode(resource.id, :uuid)])

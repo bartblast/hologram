@@ -243,9 +243,9 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
                  ~s|WHERE "rg"."user_id" = $1 | <>
                  ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."resource_type" = | <>
-                 ~s|$3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                 ~s|AND ("rg"."resource_id" = "i1"."id" OR "rg"."resource_id" IS NULL))|
+                 ~s|AND "rg"."entity_type" = | <>
+                 ~s|$3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND ("rg"."entity_id" = "i1"."id" OR "rg"."entity_id" IS NULL))|
              )
     end
 
@@ -331,7 +331,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                params: [
                  :actor,
                  {:value, ["editor", "owner"]},
-                 {:value, "test_fixtures_policy_module1"}
+                 {:value, "Hologram.Test.Fixtures.Policy.Module1"}
                ],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
@@ -340,10 +340,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
                    ~s|WHERE "rg"."user_id" = $1 | <>
                    ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."resource_type" = | <>
-                   ~s|$3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                   ~s|AND ("rg"."resource_id" = "test_fixtures_policy_module1"."id" | <>
-                   ~s|OR "rg"."resource_id" IS NULL)) ORDER BY "id" ASC|
+                   ~s|AND "rg"."entity_type" = | <>
+                   ~s|$3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                   ~s|AND ("rg"."entity_id" = "test_fixtures_policy_module1"."id" | <>
+                   ~s|OR "rg"."entity_id" IS NULL)) ORDER BY "id" ASC|
              }
     end
 
@@ -365,7 +365,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
                    ~s|WHERE "rg"."user_id" = $1 | <>
                    ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL) | <>
+                   ~s|AND "rg"."entity_type" IS NULL AND "rg"."entity_id" IS NULL) | <>
                    ~s|ORDER BY "id" ASC|
              }
     end
@@ -395,13 +395,13 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert placeholders == [
                :actor,
                {:value, ["admin"]},
-               {:value, "test_fixtures_policy_module2"}
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"}
              ]
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."resource_type" = $3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                 ~s|AND "rg"."resource_id" IS NULL)|
+               ~s|AND "rg"."entity_type" = $3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND "rg"."entity_id" IS NULL)|
              )
     end
 
@@ -417,12 +417,12 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert placeholders == [
                :actor,
                {:value, ["admin"]},
-               {:value, "test_fixtures_policy_module2"}
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"}
              ]
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."resource_id" = "test_fixtures_policy_module1"."parent_id")|
+               ~s|AND "rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
              )
     end
 
@@ -529,12 +529,12 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert placeholders == [
                :actor,
-               {:value, "test_fixtures_policy_module1"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"},
                {:value, ["owner"]},
-               {:value, "test_fixtures_policy_module1"},
-               {:value, "test_fixtures_policy_module2"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"},
                {:value, ["admin", "member"]},
-               {:value, "test_fixtures_policy_module2"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"},
                {:value,
                 ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]}
              ]
@@ -543,12 +543,12 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|("resource_type" = $2 AND EXISTS (SELECT 1 FROM | <>
+               ~s|("entity_type" = $2 AND EXISTS (SELECT 1 FROM | <>
                  ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1 | <>
                  ~s|AND "rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."resource_type" = | <>
-                 ~s|$4::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                 ~s|AND "rg"."resource_id" = "hologram_role_grant"."resource_id"))|
+                 ~s|AND "rg"."entity_type" = | <>
+                 ~s|$4::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND "rg"."entity_id" = "hologram_role_grant"."entity_id"))|
              )
     end
 

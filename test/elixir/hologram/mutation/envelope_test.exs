@@ -60,8 +60,8 @@ defmodule Hologram.Mutation.EnvelopeTest do
     Map.merge(
       %{
         "granted_by_id" => @granter_id,
-        "resource_id" => @target_id,
-        "resource_type" => "test_fixtures_policy_module2",
+        "entity_id" => @target_id,
+        "entity_type" => "Hologram.Test.Fixtures.Policy.Module2",
         "role" => "member",
         "user_id" => @user_id
       },
@@ -267,7 +267,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "accepts a create of a role grant" do
-      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       entry = create(RoleGrant, grant_data(), id: grant_id)
 
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
@@ -277,8 +277,8 @@ defmodule Hologram.Mutation.EnvelopeTest do
                claim: nil,
                data: %{
                  granted_by_id: @granter_id,
-                 resource_id: @target_id,
-                 resource_type: :test_fixtures_policy_module2,
+                 entity_id: @target_id,
+                 entity_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
                },
@@ -294,7 +294,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # A revocation carries the grant it revokes, as the browser sends it: the identity columns
     # and nothing else, under the id they derive.
     test "accepts a delete of a role grant carrying the grant it revokes" do
-      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       data = Map.delete(grant_data(), "granted_by_id")
       entry = delete(RoleGrant, based_on: %{"role" => 3}, data: data, id: grant_id)
 
@@ -304,8 +304,8 @@ defmodule Hologram.Mutation.EnvelopeTest do
                based_on: %{role: 3},
                claim: nil,
                data: %{
-                 resource_id: @target_id,
-                 resource_type: :test_fixtures_policy_module2,
+                 entity_id: @target_id,
+                 entity_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
                },
@@ -321,7 +321,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # The gate is asked about the grant the delete states, so a delete stating none has nothing
     # to be gated on - an id alone, which anyone can derive, is not a revocation.
     test "refuses a delete of a role grant carrying no grant" do
-      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       entry = delete(RoleGrant, id: grant_id)
 
       assert parse(raw([entry])) ==
@@ -743,14 +743,14 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "refuses a role grant naming a resource type this build does not store" do
-      entry = create(RoleGrant, grant_data(%{"resource_type" => "map"}))
+      entry = create(RoleGrant, grant_data(%{"entity_type" => "map"}))
 
       assert parse(raw([entry])) ==
-               {:error, ~s(write 0: resource_type "map" is not an entity type of this build)}
+               {:error, ~s(write 0: entity_type "map" is not an entity type of this build)}
     end
 
     test "refuses a role grant naming no user" do
-      grant_id = RoleGrant.derive_id(nil, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(nil, PolicyModule2, @target_id, :member)
       data = Map.delete(grant_data(), "user_id")
       entry = create(RoleGrant, data, id: grant_id)
 
@@ -760,23 +760,23 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
     # The id derives for this shape too, and nothing downstream can resolve a nil type - so the
     # parser is the one place that can say no.
-    test "refuses a role grant naming a resource id but no resource type" do
+    test "refuses a role grant naming an entity id but no entity type" do
       grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
-      entry = create(RoleGrant, grant_data(%{"resource_type" => nil}), id: grant_id)
+      entry = create(RoleGrant, grant_data(%{"entity_type" => nil}), id: grant_id)
 
       assert parse(raw([entry])) ==
-               {:error, "write 0: a role grant naming a resource id names its resource type too"}
+               {:error, "write 0: a role grant naming an entity id names its entity type too"}
     end
 
     # The same shape with the type left out rather than sent as nil - a key a pattern on the data
     # would not see, and the applier would raise on the same nothing.
-    test "refuses a role grant naming a resource id and no resource type at all" do
+    test "refuses a role grant naming an entity id and no entity type at all" do
       grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
-      data = Map.delete(grant_data(), "resource_type")
+      data = Map.delete(grant_data(), "entity_type")
       entry = create(RoleGrant, data, id: grant_id)
 
       assert parse(raw([entry])) ==
-               {:error, "write 0: a role grant naming a resource id names its resource type too"}
+               {:error, "write 0: a role grant naming an entity id names its entity type too"}
     end
 
     # @id is a well-formed entity id that no derivation produces - the shape a client minting

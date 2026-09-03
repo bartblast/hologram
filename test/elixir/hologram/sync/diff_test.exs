@@ -517,8 +517,8 @@ defmodule Hologram.Sync.DiffTest do
     defp viewer_grant(user_id, row) do
       %RoleGrant{
         user_id: user_id,
-        resource_type: RoleGrant.resource_type(PolicyModule1),
-        resource_id: row.id,
+        entity_type: PolicyModule1,
+        entity_id: row.id,
         role: :viewer
       }
     end

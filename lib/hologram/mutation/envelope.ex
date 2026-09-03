@@ -97,11 +97,11 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
-  # The role a grant carries has to be one the resource's own type declares, which is the check
-  # grant_role/3 runs before it writes. A row naming no resource type is a type-wide or a global
+  # The role a grant carries has to be one the entity's own type declares, which is the check
+  # grant_role/3 runs before it writes. A row naming no entity type is a type-wide or a global
   # grant: there is no type here to read declarations from, and the applier refuses both outright.
-  defp declared_role(%Write{data: %{resource_type: label} = data}) when label != nil do
-    with {:ok, entity_type} <- resource_entity_type(label) do
+  defp declared_role(%Write{data: %{entity_type: label} = data}) when label != nil do
+    with {:ok, entity_type} <- grant_entity_type(label) do
       role = Map.get(data, :role)
       declared = Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
 
@@ -238,11 +238,11 @@ defmodule Hologram.Mutation.Envelope do
 
   defp derived_id(%Write{data: data} = write) do
     user_id = Map.get(data, :user_id)
-    resource_type = Map.get(data, :resource_type)
-    resource_id = Map.get(data, :resource_id)
+    entity_type = Map.get(data, :entity_type)
+    entity_id = Map.get(data, :entity_id)
     role = Map.get(data, :role)
 
-    derived = RoleGrant.derive_id(user_id, resource_type, resource_id, role)
+    derived = RoleGrant.derive_id(user_id, entity_type, entity_id, role)
 
     if write.id == derived do
       :ok
@@ -266,7 +266,7 @@ defmodule Hologram.Mutation.Envelope do
   end
 
   # Every other write may name the operation it wants evaluated. A grant's gate is fixed - the
-  # grant_role and revoke_role rules of the resource's own type - so a claim here would name an
+  # grant_role and revoke_role rules of the entity's own type - so a claim here would name an
   # operation nothing consults.
   defp grant_claim(nil), do: :ok
 
@@ -277,17 +277,30 @@ defmodule Hologram.Mutation.Envelope do
   # A grant row is put in whole by grant_role and taken out whole by revoke_role, so those are the
   # two things a client naming the store has to say. An update or an edge is refused rather than
   # evaluated, because neither verb has a rule for one to be judged by.
+  # An enum decodes to whatever atom it spells rather than to a declared value - membership is the
+  # write's to judge, as the label of any other enum is - but a grant's label has to resolve to a
+  # module HERE, because the declared-role check reads that module's declarations. A label naming
+  # no entity type is therefore answered the way an unknown write type is, rather than left to a
+  # layer that raises instead of answering: the grant path validates through insert_if_absent,
+  # whose refusal is a broken invariant rather than something a client can be told.
+  defp grant_entity_type(label) do
+    case RoleGrant.entity_type(label) do
+      nil -> {:error, ~s(entity_type "#{label}" is not an entity type of this build)}
+      entity_type -> {:ok, entity_type}
+    end
+  end
+
   defp grant_op(op) when op in [:create, :delete], do: :ok
 
   defp grant_op(_op), do: {:error, "a role grant is created or deleted whole"}
 
-  # A grant names its resource one of three ways - a type and an id, a type alone, or neither -
+  # A grant names its scope one of three ways - a type and an id, a type alone, or neither -
   # and an id with no type is none of them, whether the type is sent as nil or not sent at all.
   # Refused here rather than in the applier, which resolves the type first and would raise on
   # nothing to resolve.
   defp grant_scope(%Write{data: data}) do
-    if Map.get(data, :resource_type) == nil and Map.get(data, :resource_id) != nil do
-      {:error, "a role grant naming a resource id names its resource type too"}
+    if Map.get(data, :entity_type) == nil and Map.get(data, :entity_id) != nil do
+      {:error, "a role grant naming an entity id names its entity type too"}
     else
       :ok
     end
@@ -521,19 +534,6 @@ defmodule Hologram.Mutation.Envelope do
     # that is not an entity type: a client is told what this build does not have, not how it
     # failed to look it up.
     ArgumentError -> {:error, unknown_type_message(label)}
-  end
-
-  # An enum decodes to whatever atom it spells rather than to a declared value - membership is the
-  # write's to judge, as the label of any other enum is - but a grant's label has to resolve to a
-  # module HERE, because the declared-role check reads that module's declarations. A label naming
-  # no table is therefore answered the way an unknown write type is, rather than left to a layer
-  # that raises instead of answering: the grant path validates through insert_if_absent, whose
-  # refusal is a broken invariant rather than something a client can be told.
-  defp resource_entity_type(label) do
-    case RoleGrant.entity_type(label) do
-      nil -> {:error, ~s(resource_type "#{label}" is not an entity type of this build)}
-      entity_type -> {:ok, entity_type}
-    end
   end
 
   defp some_change(data, deltas) when data == %{} and deltas == %{} do
