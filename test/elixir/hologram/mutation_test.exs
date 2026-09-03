@@ -146,23 +146,23 @@ defmodule Hologram.MutationTest do
   end
 
   defp grant_id(user_id, resource, role) do
-    RoleGrant.derive_id(user_id, RoleGrant.resource_type(resource.__struct__), resource.id, role)
+    RoleGrant.derive_id(user_id, resource.__struct__, resource.id, role)
   end
 
   # A grant as a browser sends it: the id derived from the grant, no claim (the parser refuses
   # one), and a granter of the client's own choosing - which the server overwrites.
   defp grant_write(user_id, resource, role, opts \\ []) do
-    resource_type = RoleGrant.resource_type(resource.__struct__)
+    entity_type = resource.__struct__
 
     data = %{
       "granted_by_id" => Keyword.get(opts, :granted_by_id, user_id),
       "entity_id" => resource.id,
-      "resource_type" => Codec.encode_enum_value(resource_type),
+      "entity_type" => Codec.encode_enum_value(entity_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
     }
 
-    id = RoleGrant.derive_id(user_id, resource_type, resource.id, role)
+    id = RoleGrant.derive_id(user_id, entity_type, resource.id, role)
 
     create_write(RoleGrant, id, data, Keyword.delete(opts, :granted_by_id))
   end
@@ -178,16 +178,16 @@ defmodule Hologram.MutationTest do
   # the value the write carries rather than the claim it makes.
   # A revocation as a browser sends it: the grant it revokes, under the id derived from it.
   defp revocation_write(user_id, resource, role, opts \\ []) do
-    resource_type = RoleGrant.resource_type(resource.__struct__)
+    entity_type = resource.__struct__
 
     data = %{
       "entity_id" => resource.id,
-      "resource_type" => Codec.encode_enum_value(resource_type),
+      "entity_type" => Codec.encode_enum_value(entity_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
     }
 
-    id = RoleGrant.derive_id(user_id, resource_type, resource.id, role)
+    id = RoleGrant.derive_id(user_id, entity_type, resource.id, role)
 
     delete_write(RoleGrant, id, Keyword.put(opts, :data, data))
   end
@@ -697,8 +697,8 @@ defmodule Hologram.MutationTest do
 
       assert Map.keys(dropped["1"]) == [
                "entity_id",
+               "entity_type",
                "granted_by_id",
-               "resource_type",
                "role",
                "user_id"
              ]
@@ -738,8 +738,8 @@ defmodule Hologram.MutationTest do
 
       assert Map.keys(dropped["0"]) == [
                "entity_id",
+               "entity_type",
                "granted_by_id",
-               "resource_type",
                "role",
                "user_id"
              ]
@@ -795,7 +795,7 @@ defmodule Hologram.MutationTest do
       EntityOperations.create_if_absent(%RoleGrant{
         id: Entity.generate_id(),
         entity_id: resource.id,
-        resource_type: RoleGrant.resource_type(PolicyModule2),
+        entity_type: PolicyModule2,
         role: :member,
         user_id: user.id
       })
@@ -825,17 +825,17 @@ defmodule Hologram.MutationTest do
     test "rejects a type-wide grant" do
       admin = create_user("type-wide-admin@example.com")
       user = create_user("type-wide-user@example.com")
-      resource_type = RoleGrant.resource_type(PolicyModule2)
+      entity_type = PolicyModule2
 
       data = %{
         "granted_by_id" => admin.id,
         "entity_id" => nil,
-        "resource_type" => Codec.encode_enum_value(resource_type),
+        "entity_type" => Codec.encode_enum_value(entity_type),
         "role" => "member",
         "user_id" => user.id
       }
 
-      id = RoleGrant.derive_id(user.id, resource_type, nil, :member)
+      id = RoleGrant.derive_id(user.id, entity_type, nil, :member)
       write = create_write(RoleGrant, id, data)
 
       message = "type-wide roles are granted only by trusted code running without an acting user"
@@ -929,8 +929,8 @@ defmodule Hologram.MutationTest do
 
       assert Map.keys(dropped["0"]) == [
                "entity_id",
+               "entity_type",
                "granted_by_id",
-               "resource_type",
                "role",
                "user_id"
              ]

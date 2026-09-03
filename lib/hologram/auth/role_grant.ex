@@ -2,7 +2,7 @@ defmodule Hologram.Auth.RoleGrant do
   @moduledoc false
 
   # The role store: one row per granted role. Grant shapes by nil pattern: an instance
-  # grant names a resource type and id, a type-wide grant leaves entity_id nil, and a
+  # grant names an entity type and id, a type-wide grant leaves entity_id nil, and a
   # global grant leaves both nil. A row's role is an entity role name (:admin) or a global
   # role module (MyApp.Roles.Admin).
   #
@@ -10,7 +10,7 @@ defmodule Hologram.Auth.RoleGrant do
   # Hologram.Entity, because three parts of its definition are facts of the app, unknown
   # when the dep compiles: the role enum values (the app's declared role names and global
   # role modules), the
-  # resource_type enum values (the app's entity type names), and the relationship targets
+  # entity_type enum values (the app's entity type modules), and the relationship targets
   # (the app's designated user entity type). The reflection functions below compute those
   # facts when called - by then the app is compiled - so every consumer reading entity
   # definitions through the standard reflection interface sees an ordinary, fully
@@ -36,10 +36,10 @@ defmodule Hologram.Auth.RoleGrant do
   defstruct __meta__: %Metadata{},
             created_at: nil,
             entity_id: nil,
+            entity_type: nil,
             granted_by: %NotIncluded{relationship: :granted_by},
             granted_by_id: nil,
             id: nil,
-            resource_type: nil,
             role: nil,
             updated_at: nil,
             user: %NotIncluded{relationship: :user},
@@ -49,10 +49,10 @@ defmodule Hologram.Auth.RoleGrant do
           __meta__: Metadata.t(),
           created_at: DateTime.t() | nil,
           entity_id: Entity.id() | nil,
+          entity_type: atom | nil,
           granted_by: struct | NotIncluded.t() | nil,
           granted_by_id: Entity.id() | nil,
           id: Entity.id() | nil,
-          resource_type: atom | nil,
           role: atom | module | nil,
           updated_at: DateTime.t() | nil,
           user: struct | NotIncluded.t() | nil,
@@ -61,13 +61,13 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc """
   Returns the list of attribute definitions for the role grant entity type, sorted by attribute name.
-  The enum value sets are computed from the compiled data model: resource_type values are the entity type modules, and role values are the union of the entity types' declared role names and the global role modules.
+  The enum value sets are computed from the compiled data model: entity_type values are the entity type modules, and role values are the union of the entity types' declared role names and the global role modules.
   """
   @spec __attributes__() :: list({atom, atom, keyword})
   def __attributes__ do
     [
       {:entity_id, :uuid, [optional: true]},
-      {:resource_type, :enum, [values: resolved(:resource_type_values), optional: true]},
+      {:entity_type, :enum, [values: resolved(:entity_type_values), optional: true]},
       {:role, :enum, [values: resolved(:role_values)]}
     ]
   end
@@ -140,12 +140,12 @@ defmodule Hologram.Auth.RoleGrant do
   # gives up the insert locality UUIDv7 buys every other table. Recorded in `02a-database.md`
   # beside the id-format lock - it is confined to the least-inserted table in an app, on the one
   # index of its four that the framework only ever point-looks-up.
-  def derive_id(user_id, resource_type, entity_id, role) do
+  def derive_id(user_id, entity_type, entity_id, role) do
     name =
       Enum.join(
         [
           user_id,
-          resource_type && Codec.encode_enum_value(resource_type),
+          entity_type && Codec.encode_enum_value(entity_type),
           entity_id,
           Codec.encode_enum_value(role)
         ],
@@ -166,8 +166,8 @@ defmodule Hologram.Auth.RoleGrant do
   # set is this build's entity types, and a value outside it names no type here. Answers nil for
   # such a label, which a stored row's column cannot hold but a client's write can - an enum
   # decodes to whatever atom it spells rather than to a declared value.
-  def entity_type(resource_type) do
-    if resource_type in resolved(:resource_type_values), do: resource_type
+  def entity_type(label) do
+    if label in resolved(:entity_type_values), do: label
   end
 
   @doc false
@@ -180,7 +180,7 @@ defmodule Hologram.Auth.RoleGrant do
   # swallowed by the primary key; one narrower lets one fact carry two ids, and the read-back
   # after the conflict finds nothing. A column outside this list is free to add - granted_by_id
   # already is one - and a column inside it renames every row in the store.
-  def identity_columns, do: ["user_id", "resource_type", "entity_id", "role"]
+  def identity_columns, do: ["user_id", "entity_type", "entity_id", "role"]
 
   @doc """
   Raises - a role grant is written through grant_role/revoke_role and constructed nowhere.
@@ -188,13 +188,6 @@ defmodule Hologram.Auth.RoleGrant do
   """
   @spec new(%{optional(atom) => any} | keyword) :: t
   def new(values \\ []), do: Entity.new(__MODULE__, values)
-
-  @doc false
-  @spec resource_type(module) :: atom
-  # The stored value of a scope IS the entity type module. Kept as a function for the callers
-  # still spelling the column's name, and removed once they name the entity type instead.
-  # TODO: delete with the resource_type -> entity_type column rename.
-  def resource_type(entity_type), do: entity_type
 
   @doc false
   @spec reset_resolution_cache() :: :ok
@@ -216,7 +209,7 @@ defmodule Hologram.Auth.RoleGrant do
   defp build_resolution do
     entity_types = Enum.reject(Reflection.list_entities(), &(&1 == __MODULE__))
 
-    resource_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
+    entity_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
 
     entity_role_names =
       Enum.flat_map(entity_types, fn entity_type ->
@@ -230,7 +223,7 @@ defmodule Hologram.Auth.RoleGrant do
       |> Enum.sort_by(&Codec.encode(&1, :enum))
 
     %{
-      resource_type_values: resource_type_values,
+      entity_type_values: entity_type_values,
       role_values: role_values,
       user_entity: Reflection.user_entity()
     }

@@ -513,7 +513,7 @@ defmodule Hologram.DB.DDLTest do
         op: :create_index,
         table: "hologram_role_grant",
         index: "hologram_role_grant_$uidx",
-        columns: ["user_id", "resource_type", "entity_id", "role"],
+        columns: ["user_id", "entity_type", "entity_id", "role"],
         nulls_distinct: false,
         unique: true
       }
@@ -521,7 +521,7 @@ defmodule Hologram.DB.DDLTest do
       assert statements(op) == [
                ~s(CREATE UNIQUE INDEX "hologram_role_grant_$uidx" ) <>
                  ~s{ON "hologram_data"."hologram_role_grant" } <>
-                 ~s{("user_id", "resource_type", "entity_id", "role") NULLS NOT DISTINCT}
+                 ~s{("user_id", "entity_type", "entity_id", "role") NULLS NOT DISTINCT}
              ]
     end
   end
@@ -718,7 +718,7 @@ defmodule Hologram.DB.DDLTest do
         enum_type: "hologram_role_grant_role_$enum",
         values: ["editor", "reviewer"],
         columns: [{"hologram_role_grant", "role"}],
-        remap: [%{from: "editor", to: "reviewer", scope: {"resource_type", "MyApp.Task"}}]
+        remap: [%{from: "editor", to: "reviewer", scope: {"entity_type", "MyApp.Task"}}]
       }
 
       cast_statement =
@@ -728,7 +728,7 @@ defmodule Hologram.DB.DDLTest do
 
       assert cast_statement =~
                ~s{USING (CASE WHEN "role"::text = 'editor' } <>
-                 ~s{AND "resource_type" = 'MyApp.Task' THEN 'reviewer' } <>
+                 ~s{AND "entity_type" = 'MyApp.Task' THEN 'reviewer' } <>
                  ~s{ELSE "role"::text END)}
     end
 
@@ -740,7 +740,7 @@ defmodule Hologram.DB.DDLTest do
         columns: [{"hologram_role_grant", "role"}],
         remap: [
           %{from: "editor", to: "viewer", scope: nil},
-          %{from: "editor", to: "reviewer", scope: {"resource_type", "MyApp.Task"}}
+          %{from: "editor", to: "reviewer", scope: {"entity_type", "MyApp.Task"}}
         ]
       }
 

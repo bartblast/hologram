@@ -112,14 +112,14 @@ defmodule Hologram.Migration.Renderer do
   end
 
   # The value ops the grant store and the enum attributes take: a role rename moves a
-  # value of the grant store's role type, an entity rename moves one of its resource_type
+  # value of the grant store's role type, an entity rename moves one of its entity_type
   # (the value IS the entity type module), and an enum value rename moves one of the
   # attribute's own type. Rows follow the label in every case - no rewrite.
   defp enum_value_ops(%{op: :rename_entity} = op, pre_mapping, post_mapping) do
     relabel_ops(
       pre_mapping,
       post_mapping,
-      :resource_type,
+      :entity_type,
       Codec.encode(op.from, :enum),
       Codec.encode(op.to, :enum)
     )
@@ -137,9 +137,9 @@ defmodule Hologram.Migration.Renderer do
   end
 
   # An entity role name is shared: the store tells :editor on one type from :editor on
-  # another by resource_type, not by the enum value, which is deduplicated across the
+  # another by entity_type, not by the enum value, which is deduplicated across the
   # model. So renaming one entity's role relabels every type's grants unless the rows are
-  # remapped within that resource_type - and the value has to survive for the others.
+  # remapped within that entity_type - and the value has to survive for the others.
   defp enum_value_ops(%{op: :rename_role, entity: entity_type} = op, pre_mapping, post_mapping) do
     from = Codec.encode(op.from, :enum)
     to = Codec.encode(op.to, :enum)
@@ -316,7 +316,7 @@ defmodule Hologram.Migration.Renderer do
   defp scoped_role_rebuild_ops(mapping, entity_type, from, to) do
     grant_entry = Map.fetch!(mapping, RoleGrant)
     role_column = role_grant_column(grant_entry, :role)
-    resource_type_column = role_grant_column(grant_entry, :resource_type)
+    entity_type_column = role_grant_column(grant_entry, :entity_type)
 
     [
       %{
@@ -328,7 +328,7 @@ defmodule Hologram.Migration.Renderer do
           %{
             from: from,
             to: to,
-            scope: {resource_type_column.name, Codec.encode(entity_type, :enum)}
+            scope: {entity_type_column.name, Codec.encode(entity_type, :enum)}
           }
         ]
       }

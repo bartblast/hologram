@@ -1893,14 +1893,14 @@ defmodule Hologram.Compiler do
 
     render_policy_reference_entry("rel", [
       name_js,
-      render_resource_type(target_type),
+      render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
   end
 
   defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
     render_policy_reference_entry(Atom.to_string(kind), [
-      render_resource_type(target_type),
+      render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
   end
@@ -1931,11 +1931,11 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
-  # The name a grant row spells this type by - what its resource_type column holds, which is the
+  # The name a grant row spells this type by - what its entity_type column holds, which is the
   # type's own name. A reference carries it spelled out rather than as a lookup into the model, so
   # that it may name a type the client never syncs: a role held on an admin-only type can gate a
   # synced type's rules, and the model would have nothing to look up.
-  defp render_resource_type(entity_type) do
+  defp render_entity_type_label(entity_type) do
     entity_type
     |> Codec.encode_enum_value()
     |> Jason.encode!()

@@ -277,7 +277,7 @@ defmodule Hologram.MigratorTest do
     end
 
     test "keeps another entity type's grants when a shared role name is renamed" do
-      # The store tells :editor on one type from :editor on another by resource_type - the
+      # The store tells :editor on one type from :editor on another by entity_type - the
       # enum value is shared - so renaming one type's role must move only its own grants.
       create =
         migration("20260813091522", [
@@ -303,7 +303,7 @@ defmodule Hologram.MigratorTest do
 
       insert_grants = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "resource_type", "entity_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
       VALUES
         ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
         ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
@@ -325,9 +325,9 @@ defmodule Hologram.MigratorTest do
       apply_pending([rename], model, @context)
 
       select = """
-      SELECT "resource_type"::text, "role"::text
+      SELECT "entity_type"::text, "role"::text
       FROM "hologram_data"."hologram_role_grant"
-      ORDER BY "resource_type"::text
+      ORDER BY "entity_type"::text
       """
 
       {:ok, %{rows: rows}} = Connection.query(select)
@@ -392,7 +392,7 @@ defmodule Hologram.MigratorTest do
 
       insert_grant = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "resource_type", "entity_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
       VALUES ($1, $2, 'editor', 'MyApp.Other', $3,
               '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """

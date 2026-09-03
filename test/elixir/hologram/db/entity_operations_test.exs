@@ -629,12 +629,12 @@ defmodule Hologram.DB.EntityOperationsTest do
       {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
       granted = Enum.map(rows, fn [role, id] -> {role, Codec.decode(id, :uuid)} end)
 
-      resource_type = RoleGrant.resource_type(PolicyModule1)
+      entity_type = PolicyModule1
 
       assert granted == [
                {"maintainer",
-                RoleGrant.derive_id(user.id, resource_type, resource.id, :maintainer)},
-               {"owner", RoleGrant.derive_id(user.id, resource_type, resource.id, :owner)}
+                RoleGrant.derive_id(user.id, entity_type, resource.id, :maintainer)},
+               {"owner", RoleGrant.derive_id(user.id, entity_type, resource.id, :owner)}
              ]
     end
 

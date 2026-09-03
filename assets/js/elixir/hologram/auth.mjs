@@ -79,12 +79,12 @@ function equal(left, right) {
 
 // The role a grant row holds, and where it holds it, are what a reference names - so a match is
 // a comparison against the row's own columns.
-function grantExists(rows, userId, roles, resourceType, entityIds) {
+function grantExists(rows, userId, roles, entityType, entityIds) {
   return rows.some(
     (row) =>
       row.user_id === userId &&
       roles.includes(row.role) &&
-      row.resource_type === resourceType &&
+      row.entity_type === entityType &&
       entityIds.includes(row.entity_id),
   );
 }
@@ -196,7 +196,7 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
     }
 
     case "rel": {
-      const [_kind, relationshipName, resourceType, roles] = reference;
+      const [_kind, relationshipName, targetType, roles] = reference;
       const targetId = entityValue(
         entityType,
         entity,
@@ -205,25 +205,25 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 
       return (
         targetId !== null &&
-        grantExists(rows, actorUserId, roles, resourceType, [targetId])
+        grantExists(rows, actorUserId, roles, targetType, [targetId])
       );
     }
 
     // The grant store's own rule: a role held on the resource the grant row names.
     case "resource": {
-      const [_kind, resourceType, roles] = reference;
+      const [_kind, targetType, roles] = reference;
       const rowEntityId = entityValue(entityType, entity, "entity_id");
 
       return (
         rowEntityId !== null &&
-        grantExists(rows, actorUserId, roles, resourceType, [rowEntityId])
+        grantExists(rows, actorUserId, roles, targetType, [rowEntityId])
       );
     }
 
     default: {
-      const [_kind, resourceType, roles] = reference;
+      const [_kind, targetType, roles] = reference;
 
-      return grantExists(rows, actorUserId, roles, resourceType, [null]);
+      return grantExists(rows, actorUserId, roles, targetType, [null]);
     }
   }
 }
@@ -458,7 +458,7 @@ const Elixir_Hologram_Auth = {
       claim: null,
       data: {
         entity_id: entityId,
-        resource_type: entityType,
+        entity_type: entityType,
         role: roleName,
         user_id: userId,
       },
@@ -518,8 +518,8 @@ const Elixir_Hologram_Auth = {
 // four parts joined with a newline, each spelled as the store spells it - ids as they are, the
 // resource type's label, a role name or a global role module without its "Elixir." prefix, and
 // "" for a part that is null. Hashed as UTF-8, which is what the server hashes.
-export function deriveGrantId(userId, resourceType, entityId, role) {
-  const name = [userId, resourceType, entityId, role]
+export function deriveGrantId(userId, entityType, entityId, role) {
+  const name = [userId, entityType, entityId, role]
     .map((part) => part ?? "")
     .join("\n");
 
@@ -555,9 +555,9 @@ export function grantEntry(
   return {
     claim: null,
     data: {
-      granted_by_id: actorUserId,
       entity_id: entityId,
-      resource_type: entityType,
+      entity_type: entityType,
+      granted_by_id: actorUserId,
       role: roleName,
       user_id: userId,
     },
@@ -725,9 +725,9 @@ function heldRoleNames(actorUserId, entityType, entityId) {
     .filter(
       (row) =>
         row.user_id === actorUserId &&
-        ((row.resource_type === entityType &&
+        ((row.entity_type === entityType &&
           (row.entity_id === entityId || row.entity_id === null)) ||
-          (row.resource_type === null && row.entity_id === null)),
+          (row.entity_type === null && row.entity_id === null)),
     )
     .map((row) => row.role)
     .sort(

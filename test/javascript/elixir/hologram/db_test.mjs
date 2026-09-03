@@ -255,7 +255,7 @@ describe("Elixir_Hologram_DB", () => {
           data: {
             granted_by_id: ACTOR,
             entity_id: ID_1,
-            resource_type: NOTE,
+            entity_type: NOTE,
             role: "owner",
             user_id: ACTOR,
           },
@@ -296,7 +296,7 @@ describe("Elixir_Hologram_DB", () => {
       LocalDatabase.putRow(ROLE_GRANT, {
         id: deriveGrantId(ACTOR, NOTE, ID_1, "owner"),
         entity_id: ID_1,
-        resource_type: NOTE,
+        entity_type: NOTE,
         role: "owner",
         user_id: ACTOR,
       });

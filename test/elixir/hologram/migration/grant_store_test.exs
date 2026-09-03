@@ -64,14 +64,14 @@ defmodule Hologram.Migration.GrantStoreTest do
 
   defp grant_rows do
     statement = """
-    SELECT "role"::text, "resource_type"::text
+    SELECT "role"::text, "entity_type"::text
     FROM "hologram_data"."hologram_role_grant"
-    ORDER BY "resource_type"::text NULLS FIRST
+    ORDER BY "entity_type"::text NULLS FIRST
     """
 
     {:ok, %{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [role, resource_type] -> {role, resource_type} end)
+    Enum.map(rows, fn [role, entity_type] -> {role, entity_type} end)
   end
 
   defp enum_values(type_name) do
@@ -121,14 +121,14 @@ defmodule Hologram.Migration.GrantStoreTest do
       Connection.query(statement, [Ecto.UUID.dump!(@user_id), Atom.to_string(role)])
   end
 
-  defp insert_scoped_grant(resource_type) do
+  defp insert_scoped_grant(entity_type) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "resource_type", "entity_id", "created_at", "updated_at", "$revisions")
+      ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
     VALUES (gen_random_uuid(), $1, 'editor', $2, $1, now(), now(), '{}')
     """
 
-    {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id), resource_type])
+    {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id), entity_type])
   end
 
   defp insert_user(table) do
@@ -199,7 +199,7 @@ defmodule Hologram.Migration.GrantStoreTest do
 
         # "MyApp.Account" sorts before "MyApp.Task", where the old name sorted after it -
         # so the type had to be rebuilt in the model's order, not relabelled in place.
-        assert enum_values("hologram_role_grant_resource_type_$enum") == [
+        assert enum_values("hologram_role_grant_entity_type_$enum") == [
                  "MyApp.Account",
                  "MyApp.Task"
                ]

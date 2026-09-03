@@ -568,9 +568,7 @@ defmodule Hologram.Policy do
       |> Enum.reject(fn {_entity_type, role_names, role_modules} ->
         role_names == [] and role_modules == []
       end)
-      |> Enum.sort_by(fn {entity_type, _role_names, _role_modules} ->
-        RoleGrant.resource_type(entity_type)
-      end)
+      |> Enum.sort_by(fn {entity_type, _role_names, _role_modules} -> entity_type end)
       |> Enum.map(&role_grant_resource_rule/1)
 
     [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | resource_rules]
@@ -583,7 +581,7 @@ defmodule Hologram.Policy do
     global_reference = build_global_reference(role_modules)
 
     %{
-      predicates: [{:resource_type, :==, RoleGrant.resource_type(entity_type)}],
+      predicates: [{:entity_type, :==, entity_type}],
       to: resource_reference ++ global_reference,
       via: nil
     }

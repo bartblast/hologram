@@ -61,7 +61,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
       %{
         "granted_by_id" => @granter_id,
         "entity_id" => @target_id,
-        "resource_type" => "Hologram.Test.Fixtures.Policy.Module2",
+        "entity_type" => "Hologram.Test.Fixtures.Policy.Module2",
         "role" => "member",
         "user_id" => @user_id
       },
@@ -278,7 +278,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                data: %{
                  granted_by_id: @granter_id,
                  entity_id: @target_id,
-                 resource_type: PolicyModule2,
+                 entity_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
                },
@@ -305,7 +305,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                claim: nil,
                data: %{
                  entity_id: @target_id,
-                 resource_type: PolicyModule2,
+                 entity_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
                },
@@ -743,10 +743,10 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "refuses a role grant naming a resource type this build does not store" do
-      entry = create(RoleGrant, grant_data(%{"resource_type" => "map"}))
+      entry = create(RoleGrant, grant_data(%{"entity_type" => "map"}))
 
       assert parse(raw([entry])) ==
-               {:error, ~s(write 0: resource_type "map" is not an entity type of this build)}
+               {:error, ~s(write 0: entity_type "map" is not an entity type of this build)}
     end
 
     test "refuses a role grant naming no user" do
@@ -762,7 +762,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # parser is the one place that can say no.
     test "refuses a role grant naming an entity id but no entity type" do
       grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
-      entry = create(RoleGrant, grant_data(%{"resource_type" => nil}), id: grant_id)
+      entry = create(RoleGrant, grant_data(%{"entity_type" => nil}), id: grant_id)
 
       assert parse(raw([entry])) ==
                {:error, "write 0: a role grant naming an entity id names its entity type too"}
@@ -772,7 +772,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # would not see, and the applier would raise on the same nothing.
     test "refuses a role grant naming an entity id and no entity type at all" do
       grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
-      data = Map.delete(grant_data(), "resource_type")
+      data = Map.delete(grant_data(), "entity_type")
       entry = create(RoleGrant, data, id: grant_id)
 
       assert parse(raw([entry])) ==

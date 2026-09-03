@@ -383,7 +383,7 @@ defmodule Hologram.DB.MapperTest do
 
       assert mapping[Hologram.Auth.RoleGrant].indexes == %{
                "hologram_role_grant_$uidx" => %{
-                 columns: ["user_id", "resource_type", "entity_id", "role"],
+                 columns: ["user_id", "entity_type", "entity_id", "role"],
                  nulls_distinct: false,
                  unique: true
                }
@@ -651,12 +651,12 @@ defmodule Hologram.DB.MapperTest do
 
       mapping = derive_from_model!(model)
 
-      resource_type_column =
-        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :resource_type}))
+      entity_type_column =
+        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :entity_type}))
 
       role_column = Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :role}))
 
-      assert resource_type_column.enum_values == ["Hologram.Test.Fixtures.Entity.Module14"]
+      assert entity_type_column.enum_values == ["Hologram.Test.Fixtures.Entity.Module14"]
       assert role_column.enum_values == ["Nonexistent.Roles.Admin", "editor"]
     end
 
@@ -707,10 +707,10 @@ defmodule Hologram.DB.MapperTest do
 
       mapping = derive_from_model!(model)
 
-      resource_type_column =
-        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :resource_type}))
+      entity_type_column =
+        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :entity_type}))
 
-      assert resource_type_column.enum_values == [
+      assert entity_type_column.enum_values == [
                "Nonexistent.Entities.NameFillingTheEnumLabelToItsVeryLastByteAb"
              ]
     end

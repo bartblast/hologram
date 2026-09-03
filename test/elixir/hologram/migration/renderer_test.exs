@@ -127,7 +127,7 @@ defmodule Hologram.Migration.RendererTest do
 
       result = render(ops, pre)
 
-      # The grant store follows the model: its resource_type value goes with the entity
+      # The grant store follows the model: its entity_type value goes with the entity
       # type, and PostgreSQL removes an enum value only by rebuilding the type.
       assert op_kinds(result.transactional) == [:drop_table, :rebuild_enum_type]
 
@@ -349,7 +349,7 @@ defmodule Hologram.Migration.RendererTest do
                },
                %{
                  op: :rename_enum_value,
-                 enum_type: "hologram_role_grant_resource_type_$enum",
+                 enum_type: "hologram_role_grant_entity_type_$enum",
                  from: "MyApp.Draft",
                  to: "MyApp.Sketch"
                }
@@ -445,7 +445,7 @@ defmodule Hologram.Migration.RendererTest do
     # Both of the store's enums derive SORTED, and a value rename moves a label without moving
     # its position - so a new label that sorts elsewhere leaves the database in an order the
     # model does not derive, which the drift check refuses on the next boot.
-    test "renders an entity rename that moves its resource_type position as a rebuild" do
+    test "renders an entity rename that moves its entity_type position as a rebuild" do
       pre = model(%{MyApp.Task => %{}, UserEntity => %{}})
 
       ops = [%{op: :rename_entity, from: UserEntity, to: MyApp.Zebra, line: 3}]
@@ -454,9 +454,9 @@ defmodule Hologram.Migration.RendererTest do
 
       assert Enum.find(result.transactional, &(&1.op == :rebuild_enum_type)) == %{
                op: :rebuild_enum_type,
-               enum_type: "hologram_role_grant_resource_type_$enum",
+               enum_type: "hologram_role_grant_entity_type_$enum",
                values: ["MyApp.Task", "MyApp.Zebra"],
-               columns: [{"hologram_role_grant", "resource_type"}],
+               columns: [{"hologram_role_grant", "entity_type"}],
                remap: [
                  %{
                    from: "Hologram.Test.Fixtures.Entity.Module14",
@@ -469,7 +469,7 @@ defmodule Hologram.Migration.RendererTest do
       refute Enum.any?(result.transactional, &(&1.op == :rename_enum_value))
     end
 
-    test "renders an entity rename that keeps its resource_type position as a value rename" do
+    test "renders an entity rename that keeps its entity_type position as a value rename" do
       pre = model(%{MyApp.Task => %{}, UserEntity => %{}})
 
       ops = [%{op: :rename_entity, from: UserEntity, to: MyApp.Account, line: 3}]
@@ -478,7 +478,7 @@ defmodule Hologram.Migration.RendererTest do
 
       assert Enum.find(result.transactional, &(&1.op == :rename_enum_value)) == %{
                op: :rename_enum_value,
-               enum_type: "hologram_role_grant_resource_type_$enum",
+               enum_type: "hologram_role_grant_entity_type_$enum",
                from: "Hologram.Test.Fixtures.Entity.Module14",
                to: "MyApp.Account"
              }
@@ -541,7 +541,7 @@ defmodule Hologram.Migration.RendererTest do
 
       # A value rename would relabel MyApp.Other's grants too, and drop a value the model
       # still requires. The rebuild keeps "editor" for MyApp.Other and moves only the rows
-      # whose resource_type is MyApp.Task.
+      # whose entity_type is MyApp.Task.
       assert result.transactional == [
                %{
                  op: :rebuild_enum_type,
@@ -552,7 +552,7 @@ defmodule Hologram.Migration.RendererTest do
                    %{
                      from: "editor",
                      to: "reviewer",
-                     scope: {"resource_type", "MyApp.Task"}
+                     scope: {"entity_type", "MyApp.Task"}
                    }
                  ]
                }

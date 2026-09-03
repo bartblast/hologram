@@ -15,14 +15,14 @@ defmodule Hologram.Auth.RoleGrantTest do
 
   @other_user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-  @resource_type Policy.Module2
+  @entity_type Policy.Module2
   @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
 
   describe "__attributes__/0" do
     test "computes the enum value sets from the compiled data model" do
       assert RoleGrant.__attributes__() == [
                {:entity_id, :uuid, [optional: true]},
-               {:resource_type, :enum,
+               {:entity_type, :enum,
                 [
                   values: [
                     Entity.Module1,
@@ -116,7 +116,7 @@ defmodule Hologram.Auth.RoleGrantTest do
                granted_by_id: nil,
                id: nil,
                entity_id: nil,
-               resource_type: nil,
+               entity_type: nil,
                role: nil,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
@@ -166,22 +166,22 @@ defmodule Hologram.Auth.RoleGrantTest do
 
   describe "derive_id/4" do
     test "answers the same id for the same grant" do
-      first = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
-      second = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
+      first = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+      second = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       assert first == second
     end
 
     test "answers a different id for a different role on the same resource" do
-      member_id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
-      admin_id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :admin)
+      member_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+      admin_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :admin)
 
       assert member_id != admin_id
     end
 
     test "answers a different id for the same role held by a different user" do
-      first = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
-      second = RoleGrant.derive_id(@other_user_id, @resource_type, @entity_id, :member)
+      first = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+      second = RoleGrant.derive_id(@other_user_id, @entity_type, @entity_id, :member)
 
       assert first != second
     end
@@ -189,13 +189,13 @@ defmodule Hologram.Auth.RoleGrantTest do
     # Asked of the validator rather than of a regex written here, so the two cannot drift: the
     # derivation has to answer something every other entity id would be accepted as.
     test "answers an id the entity id validator accepts" do
-      id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
+      id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       assert Validator.attribute_value_valid?(id, :uuid)
     end
 
     test "answers a version 5 id under the RFC variant" do
-      id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
+      id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       <<_time_low_and_mid::binary-size(14), version::binary-size(1), _rest::binary-size(4),
         variant::binary-size(1), _tail::binary>> = id
@@ -205,8 +205,8 @@ defmodule Hologram.Auth.RoleGrantTest do
     end
 
     test "derives a type-wide grant, which names no resource id" do
-      type_wide_id = RoleGrant.derive_id(@user_id, @resource_type, nil, :member)
-      instance_id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
+      type_wide_id = RoleGrant.derive_id(@user_id, @entity_type, nil, :member)
+      instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       assert Validator.attribute_value_valid?(type_wide_id, :uuid)
       assert type_wide_id != instance_id
@@ -223,11 +223,11 @@ defmodule Hologram.Auth.RoleGrantTest do
     # which is what keeps the pair from drifting. Both were cross-checked against a reference
     # UUIDv5 implementation, so either side can be rewritten against the standard alone.
     test "answers the pinned vectors the client twin is held to" do
-      instance_id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :member)
+      instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
       global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
       # A role name outside ASCII: the name is hashed as UTF-8 bytes, which a twin reading
       # UTF-16 code units would get wrong while passing the two vectors above.
-      accented_id = RoleGrant.derive_id(@user_id, @resource_type, @entity_id, :café)
+      accented_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :café)
 
       assert instance_id == "2c56252b-0c90-5cd9-b15d-91c5e5bf968e"
       assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"

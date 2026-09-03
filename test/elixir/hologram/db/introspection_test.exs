@@ -230,7 +230,7 @@ defmodule Hologram.DB.IntrospectionTest do
 
     test "introspects the role grant unique index comparing nulls as values" do
       assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_$uidx"] == %{
-               columns: ["user_id", "resource_type", "entity_id", "role"],
+               columns: ["user_id", "entity_type", "entity_id", "role"],
                nulls_distinct: false,
                unique: true
              }
@@ -265,7 +265,7 @@ defmodule Hologram.DB.IntrospectionTest do
 
     test "introspects enum types with their values" do
       assert schema().enum_types == %{
-               "hologram_role_grant_resource_type_$enum" => [
+               "hologram_role_grant_entity_type_$enum" => [
                  "Hologram.Test.Fixtures.Entity.Module1",
                  "Hologram.Test.Fixtures.Entity.Module10",
                  "Hologram.Test.Fixtures.Entity.Module11",

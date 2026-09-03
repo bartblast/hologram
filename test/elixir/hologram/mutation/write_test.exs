@@ -25,7 +25,7 @@ defmodule Hologram.Mutation.WriteTest do
       data: %{
         granted_by_id: @granter_id,
         entity_id: @target_id,
-        resource_type: PolicyModule2,
+        entity_type: PolicyModule2,
         role: :member,
         user_id: @user_id
       },
@@ -41,7 +41,7 @@ defmodule Hologram.Mutation.WriteTest do
       based_on: %{role: 3},
       data: %{
         entity_id: @target_id,
-        resource_type: PolicyModule2,
+        entity_type: PolicyModule2,
         role: :member,
         user_id: @user_id
       },
@@ -229,7 +229,7 @@ defmodule Hologram.Mutation.WriteTest do
                granted_by_id: @actor_id,
                id: @id,
                entity_id: @target_id,
-               resource_type: PolicyModule2,
+               entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
@@ -255,7 +255,7 @@ defmodule Hologram.Mutation.WriteTest do
                granted_by_id: nil,
                id: @id,
                entity_id: @target_id,
-               resource_type: PolicyModule2,
+               entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},

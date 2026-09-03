@@ -433,7 +433,7 @@ defmodule Hologram.DB.Mapper do
   end
 
   # The role grant store carries the one index no declaration derives: unique over the grant
-  # fact, with nulls compared as values - resource_type and entity_id nils encode the
+  # fact, with nulls compared as values - entity_type and entity_id nils encode the
   # type-wide and global grant shapes, so identical rows with nils must still collide. The
   # columns are the store's own identity list, which its id derivation reads too - one list, so
   # the two cannot disagree on what a grant is.
@@ -516,7 +516,7 @@ defmodule Hologram.DB.Mapper do
     validate_grant_labels!(entity_types, "entity type")
     validate_grant_labels!(global_role_modules, "global role")
 
-    resource_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
+    entity_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
 
     entity_role_names =
       Enum.flat_map(model.entities, fn {_entity_type, entry} ->
@@ -532,7 +532,7 @@ defmodule Hologram.DB.Mapper do
     %{
       attributes: [
         {:entity_id, :uuid, [optional: true]},
-        {:resource_type, :enum, [optional: true, values: resource_type_values]},
+        {:entity_type, :enum, [optional: true, values: entity_type_values]},
         {:role, :enum, [values: role_values]}
       ],
       relationships: [{:granted_by, user_entity, [optional: true]}, {:user, user_entity, []}],
