@@ -62,7 +62,7 @@ defmodule HologramFeatureTests.PoliciesPage do
 
     visible_grants =
       RoleGrant
-      |> filter(resource_id: document.id, user_id: other_user.id)
+      |> filter(entity_id: document.id, user_id: other_user.id)
       |> DB.read()
 
     put_action(server, :show_result,
