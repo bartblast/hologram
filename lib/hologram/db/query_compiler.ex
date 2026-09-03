@@ -391,29 +391,29 @@ defmodule Hologram.DB.QueryCompiler do
   # A global role is held without a resource, so the row shape has both resource columns nil -
   # the lookup needs no correlation with the queried row.
   defp grant_scope_sql({:global, _role_modules}, _context, reversed_params) do
-    {~s|"rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL|, reversed_params}
+    {~s|"rg"."resource_type" IS NULL AND "rg"."entity_id" IS NULL|, reversed_params}
   end
 
   # A rule's own roles are held on the row itself or on its whole type - the lookup matches
-  # both shapes, which the store keeps apart by whether its resource_id column is nil.
+  # both shapes, which the store keeps apart by whether its entity_id column is nil.
   defp grant_scope_sql({:own, _role_names}, context, reversed_params) do
     {placeholder, new_params} =
       resource_type_slot(context.entity_type, context, reversed_params)
 
     resource_sql =
-      ~s|("rg"."resource_id" = #{context.row_prefix}."id" OR "rg"."resource_id" IS NULL)|
+      ~s|("rg"."entity_id" = #{context.row_prefix}."id" OR "rg"."entity_id" IS NULL)|
 
     {~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|, new_params}
   end
 
   # The grant store's own policy checks a role held on the resource a grant row names, so the
-  # lookup keys on the outer row's resource_id column rather than on a relationship reference.
+  # lookup keys on the outer row's entity_id column rather than on a relationship reference.
   defp grant_scope_sql({:resource, target_type, _role_names}, context, reversed_params) do
     {placeholder, new_params} = resource_type_slot(target_type, context, reversed_params)
 
     scope_sql =
       ~s|"rg"."resource_type" = #{placeholder} | <>
-        ~s|AND "rg"."resource_id" = #{context.row_prefix}."resource_id"|
+        ~s|AND "rg"."entity_id" = #{context.row_prefix}."entity_id"|
 
     {scope_sql, new_params}
   end
@@ -421,7 +421,7 @@ defmodule Hologram.DB.QueryCompiler do
   defp grant_scope_sql({:type, target_type, _role_names}, context, reversed_params) do
     {placeholder, new_params} = resource_type_slot(target_type, context, reversed_params)
 
-    {~s|"rg"."resource_type" = #{placeholder} AND "rg"."resource_id" IS NULL|, new_params}
+    {~s|"rg"."resource_type" = #{placeholder} AND "rg"."entity_id" IS NULL|, new_params}
   end
 
   defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
@@ -438,7 +438,7 @@ defmodule Hologram.DB.QueryCompiler do
 
     scope_sql =
       ~s|"rg"."resource_type" = #{placeholder} | <>
-        ~s|AND "rg"."resource_id" = #{context.row_prefix}.#{quoted_column}|
+        ~s|AND "rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
 
     {scope_sql, new_params}
   end

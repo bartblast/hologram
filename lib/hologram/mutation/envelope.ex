@@ -239,10 +239,10 @@ defmodule Hologram.Mutation.Envelope do
   defp derived_id(%Write{data: data} = write) do
     user_id = Map.get(data, :user_id)
     resource_type = Map.get(data, :resource_type)
-    resource_id = Map.get(data, :resource_id)
+    entity_id = Map.get(data, :entity_id)
     role = Map.get(data, :role)
 
-    derived = RoleGrant.derive_id(user_id, resource_type, resource_id, role)
+    derived = RoleGrant.derive_id(user_id, resource_type, entity_id, role)
 
     if write.id == derived do
       :ok
@@ -286,8 +286,8 @@ defmodule Hologram.Mutation.Envelope do
   # Refused here rather than in the applier, which resolves the type first and would raise on
   # nothing to resolve.
   defp grant_scope(%Write{data: data}) do
-    if Map.get(data, :resource_type) == nil and Map.get(data, :resource_id) != nil do
-      {:error, "a role grant naming a resource id names its resource type too"}
+    if Map.get(data, :resource_type) == nil and Map.get(data, :entity_id) != nil do
+      {:error, "a role grant naming an entity id names its entity type too"}
     else
       :ok
     end

@@ -175,7 +175,7 @@ defmodule Hologram.Auth do
   @spec grant_role(struct | String.t(), struct | module, atom) :: :ok
   def grant_role(user_or_id, resource, role) do
     user_id = validate_user_id!(user_or_id)
-    {entity_type, resource_id} = resource_reference(resource)
+    {entity_type, entity_id} = resource_reference(resource)
 
     validate_declared_role!(entity_type, role)
 
@@ -183,8 +183,8 @@ defmodule Hologram.Auth do
     # write lands - the gate holds the acting user's grant rows until the transaction ends.
     {:ok, :ok} =
       Connection.transaction(fn ->
-        authorize_grant!(entity_type, resource_id, role)
-        write_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+        authorize_grant!(entity_type, entity_id, role)
+        write_grant(user_id, RoleGrant.resource_type(entity_type), entity_id, role)
       end)
 
     :ok
@@ -204,7 +204,7 @@ defmodule Hologram.Auth do
   # The creator's own grant is the one shape that passes no gate, for the reason
   # EntityOperations.create/1 asks none: granted_to: :creator is a declaration, not a permission
   # somebody holds. The rows the batch has created so far are what tell one from any other grant.
-  def apply_grant_write(%RoleGrant{resource_id: nil} = grant, _actor_user_id, _created_rows) do
+  def apply_grant_write(%RoleGrant{entity_id: nil} = grant, _actor_user_id, _created_rows) do
     raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "granted")
   end
 
@@ -216,7 +216,7 @@ defmodule Hologram.Auth do
     entity_type = RoleGrant.entity_type(grant.resource_type)
 
     if not creator_grant?(grant, entity_type, actor_user_id, created_rows) do
-      check_grant!(gate_resource(entity_type, grant.resource_id), grant.role, actor_user_id)
+      check_grant!(gate_resource(entity_type, grant.entity_id), grant.role, actor_user_id)
     end
 
     EntityOperations.create_if_absent(grant)
@@ -275,7 +275,7 @@ defmodule Hologram.Auth do
   @spec revoke_role(struct | String.t(), struct | module, atom) :: :ok
   def revoke_role(user_or_id, resource, role) do
     user_id = validate_user_id!(user_or_id)
-    {entity_type, resource_id} = resource_reference(resource)
+    {entity_type, entity_id} = resource_reference(resource)
 
     validate_declared_role!(entity_type, role)
 
@@ -283,8 +283,8 @@ defmodule Hologram.Auth do
     # write lands - the gate holds the acting user's grant rows until the transaction ends.
     {:ok, :ok} =
       Connection.transaction(fn ->
-        authorize_revoke!(entity_type, resource_id, user_id, role)
-        delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+        authorize_revoke!(entity_type, entity_id, user_id, role)
+        delete_grant(user_id, RoleGrant.resource_type(entity_type), entity_id, role)
       end)
 
     :ok
@@ -323,13 +323,13 @@ defmodule Hologram.Auth do
     raise Hologram.AccessDeniedError, signed_in_write_message("revoked")
   end
 
-  def authorize_revocation_write!(%RoleGrant{resource_id: nil} = grant, _actor_user_id) do
+  def authorize_revocation_write!(%RoleGrant{entity_id: nil} = grant, _actor_user_id) do
     raise Hologram.AccessDeniedError, trusted_write_message(trusted_scope(grant), "revoked")
   end
 
   def authorize_revocation_write!(%RoleGrant{} = grant, actor_user_id) do
     entity_type = RoleGrant.entity_type(grant.resource_type)
-    resource = gate_resource(entity_type, grant.resource_id)
+    resource = gate_resource(entity_type, grant.entity_id)
 
     check_revocation!(resource, grant.user_id, grant.role, actor_user_id)
   end
@@ -354,10 +354,10 @@ defmodule Hologram.Auth do
   defp authorize_grant!(_entity_type, nil, _role),
     do: authorize_trusted_write!("type-wide", "granted")
 
-  defp authorize_grant!(entity_type, resource_id, role) do
+  defp authorize_grant!(entity_type, entity_id, role) do
     case Context.actor_user_id() do
       nil -> :ok
-      actor_user_id -> check_grant!(gate_resource(entity_type, resource_id), role, actor_user_id)
+      actor_user_id -> check_grant!(gate_resource(entity_type, entity_id), role, actor_user_id)
     end
   end
 
@@ -367,13 +367,13 @@ defmodule Hologram.Auth do
     authorize_trusted_write!("type-wide", "revoked")
   end
 
-  defp authorize_revoke!(entity_type, resource_id, user_id, role) do
+  defp authorize_revoke!(entity_type, entity_id, user_id, role) do
     case Context.actor_user_id() do
       nil ->
         :ok
 
       actor_user_id ->
-        check_revocation!(gate_resource(entity_type, resource_id), user_id, role, actor_user_id)
+        check_revocation!(gate_resource(entity_type, entity_id), user_id, role, actor_user_id)
     end
   end
 
@@ -419,7 +419,7 @@ defmodule Hologram.Auth do
   end
 
   # Own roles are held on the entity itself or on its whole type - the two grant shapes the
-  # store keeps apart by whether its resource_id column is nil.
+  # store keeps apart by whether its entity_id column is nil.
   defp check_requirement({:own, role_names}, entity, actor_user_id, _operation, source) do
     grant_exists?(actor_user_id, {:own, entity.__struct__, entity.id}, role_names, source)
   end
@@ -460,12 +460,12 @@ defmodule Hologram.Auth do
          _operation,
          source
        ) do
-    case entity.resource_id do
+    case entity.entity_id do
       nil ->
         false
 
-      resource_id ->
-        grant_exists?(actor_user_id, {:instance, target_type, resource_id}, role_names, source)
+      entity_id ->
+        grant_exists?(actor_user_id, {:instance, target_type, entity_id}, role_names, source)
     end
   end
 
@@ -509,7 +509,7 @@ defmodule Hologram.Auth do
   # batch did not make is an ordinary grant, whoever sent it and whatever it names.
   defp creator_grant?(grant, entity_type, actor_user_id, created_rows) do
     grant.user_id == actor_user_id and
-      MapSet.member?(created_rows, {entity_type, grant.resource_id}) and
+      MapSet.member?(created_rows, {entity_type, grant.entity_id}) and
       creator_role?(entity_type, grant.role)
   end
 
@@ -536,12 +536,12 @@ defmodule Hologram.Auth do
   # wakes, so a revocation nothing records is a revocation no client hears about until it renders
   # afresh. Revoking a role the user does not hold finds no rows and records nothing.
   # sobelow_skip ["SQL.Query"]
-  defp delete_grant(user_id, resource_type, resource_id, role) do
+  defp delete_grant(user_id, resource_type, entity_id, role) do
     statement = """
     SELECT "id" FROM "hologram_data"."hologram_role_grant"
     WHERE "user_id" = $1
       AND "resource_type" IS NOT DISTINCT FROM $2::#{qualified_enum_type("resource_type")}
-      AND "resource_id" IS NOT DISTINCT FROM $3
+      AND "entity_id" IS NOT DISTINCT FROM $3
       AND "role" = $4::#{qualified_enum_type("role")}
     FOR UPDATE
     """
@@ -549,7 +549,7 @@ defmodule Hologram.Auth do
     params = [
       Codec.encode(user_id, :uuid),
       resource_type && Codec.encode_enum_value(resource_type),
-      Codec.encode(resource_id, :uuid),
+      Codec.encode(entity_id, :uuid),
       Codec.encode(role, :enum)
     ]
 
@@ -583,40 +583,40 @@ defmodule Hologram.Auth do
     Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
   end
 
-  defp grant_group_key({user_id, {:own, entity_type, _resource_id}}), do: {user_id, entity_type}
+  defp grant_group_key({user_id, {:own, entity_type, _entity_id}}), do: {user_id, entity_type}
 
-  defp grant_group_key({user_id, {:instance, entity_type, _resource_id}}),
+  defp grant_group_key({user_id, {:instance, entity_type, _entity_id}}),
     do: {user_id, entity_type}
 
   defp grant_group_key({user_id, {:type, entity_type}}), do: {user_id, entity_type}
 
   defp grant_group_key({user_id, :global}), do: {user_id, nil}
 
-  defp grant_group_resource_ids({:own, _entity_type, resource_id}), do: [resource_id, nil]
+  defp grant_group_entity_ids({:own, _entity_type, entity_id}), do: [entity_id, nil]
 
-  defp grant_group_resource_ids({:instance, _entity_type, resource_id}), do: [resource_id]
+  defp grant_group_entity_ids({:instance, _entity_type, entity_id}), do: [entity_id]
 
-  defp grant_group_resource_ids({:type, _entity_type}), do: [nil]
+  defp grant_group_entity_ids({:type, _entity_type}), do: [nil]
 
-  defp grant_group_resource_ids(:global), do: [nil]
+  defp grant_group_entity_ids(:global), do: [nil]
 
   defp grant_group_rows({{user_id, nil}, _scopes}, session_user_id) do
     RoleGrant
-    |> Query.filter(user_id: user_id, resource_type: nil, resource_id: nil)
+    |> Query.filter(user_id: user_id, resource_type: nil, entity_id: nil)
     |> run_carried_grants_query(session_user_id)
   end
 
   defp grant_group_rows({{user_id, entity_type}, scopes}, session_user_id) do
-    resource_ids =
+    entity_ids =
       scopes
-      |> Enum.flat_map(&grant_group_resource_ids/1)
+      |> Enum.flat_map(&grant_group_entity_ids/1)
       |> Enum.uniq()
 
     RoleGrant
     |> Query.filter(
       user_id: user_id,
       resource_type: RoleGrant.resource_type(entity_type),
-      resource_id: resource_ids
+      entity_id: entity_ids
     )
     |> run_carried_grants_query(session_user_id)
   end
@@ -731,49 +731,49 @@ defmodule Hologram.Auth do
   defp resource_type_value(entity_type), do: Codec.encode_enum_value(entity_type)
 
   defp scope_matches?(grant, :global) do
-    grant.resource_type == nil and grant.resource_id == nil
+    grant.resource_type == nil and grant.entity_id == nil
   end
 
-  defp scope_matches?(grant, {:instance, entity_type, resource_id}) do
+  defp scope_matches?(grant, {:instance, entity_type, entity_id}) do
     grant.resource_type == RoleGrant.resource_type(entity_type) and
-      grant.resource_id == resource_id
+      grant.entity_id == entity_id
   end
 
   # An own-scope check matches the row naming the resource AND the type-wide row, which is the
   # nil the store's condition admits beside the id.
-  defp scope_matches?(grant, {:own, entity_type, resource_id}) do
+  defp scope_matches?(grant, {:own, entity_type, entity_id}) do
     grant.resource_type == RoleGrant.resource_type(entity_type) and
-      grant.resource_id in [resource_id, nil]
+      grant.entity_id in [entity_id, nil]
   end
 
   defp scope_matches?(grant, {:type, entity_type}) do
-    grant.resource_type == RoleGrant.resource_type(entity_type) and grant.resource_id == nil
+    grant.resource_type == RoleGrant.resource_type(entity_type) and grant.entity_id == nil
   end
 
-  defp scope_condition({:own, entity_type, resource_id}) do
+  defp scope_condition({:own, entity_type, entity_id}) do
     condition =
       ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} | <>
-        ~s|AND ("resource_id" = $3 OR "resource_id" IS NULL)|
+        ~s|AND ("entity_id" = $3 OR "entity_id" IS NULL)|
 
-    {condition, [resource_type_value(entity_type), Codec.encode(resource_id, :uuid)]}
+    {condition, [resource_type_value(entity_type), Codec.encode(entity_id, :uuid)]}
   end
 
-  defp scope_condition({:instance, entity_type, resource_id}) do
+  defp scope_condition({:instance, entity_type, entity_id}) do
     condition =
-      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} AND "resource_id" = $3|
+      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} AND "entity_id" = $3|
 
-    {condition, [resource_type_value(entity_type), Codec.encode(resource_id, :uuid)]}
+    {condition, [resource_type_value(entity_type), Codec.encode(entity_id, :uuid)]}
   end
 
   defp scope_condition({:type, entity_type}) do
     condition =
-      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} AND "resource_id" IS NULL|
+      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} AND "entity_id" IS NULL|
 
     {condition, [resource_type_value(entity_type)]}
   end
 
   defp scope_condition(:global) do
-    {~s|"resource_type" IS NULL AND "resource_id" IS NULL|, []}
+    {~s|"resource_type" IS NULL AND "entity_id" IS NULL|, []}
   end
 
   defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do
@@ -802,16 +802,16 @@ defmodule Hologram.Auth do
   # The refusal teaches: which roles the acting user holds that reach the resource, what those
   # may grant (or revoke) there, whether the role asked for extends one of them, and the line
   # that would cover it if the omission was not intended.
-  defp unqualified_role_message(entity_type, resource_id, actor_user_id, role, operation) do
+  defp unqualified_role_message(entity_type, entity_id, actor_user_id, role, operation) do
     verb = operation_verb(operation)
-    resource = "#{inspect(entity_type)} #{inspect(resource_id)}"
+    resource = "#{inspect(entity_type)} #{inspect(entity_id)}"
 
-    case held_role_names(actor_user_id, entity_type, resource_id) do
+    case held_role_names(actor_user_id, entity_type, entity_id) do
       [] ->
         "the acting user holds no role on #{resource} that may #{verb} #{inspect(role)}"
 
       held_names ->
-        covered = covered_role_names(entity_type, resource_id, actor_user_id, operation)
+        covered = covered_role_names(entity_type, entity_id, actor_user_id, operation)
 
         "the acting user holds #{join_role_names(held_names)} on #{resource}, which may #{verb} #{covered_description(covered, role)}. " <>
           extends_sentence(entity_type, held_names, role) <>
@@ -826,8 +826,8 @@ defmodule Hologram.Auth do
 
   # The declared roles the acting user may grant (or revoke) on the resource - the same question
   # the gate asked, once per role.
-  defp covered_role_names(entity_type, resource_id, actor_user_id, operation) do
-    resource = gate_resource(entity_type, resource_id)
+  defp covered_role_names(entity_type, entity_id, actor_user_id, operation) do
+    resource = gate_resource(entity_type, entity_id)
 
     entity_type.__roles__()
     |> Enum.map(fn {name, _opts} -> name end)
@@ -852,11 +852,11 @@ defmodule Hologram.Auth do
 
   # A gate line reads nothing of the row but its id - the policy validator refuses predicates and
   # delegations on one - so the evaluator is asked about an id-only struct.
-  defp gate_resource(entity_type, resource_id), do: struct(entity_type, id: resource_id)
+  defp gate_resource(entity_type, entity_id), do: struct(entity_type, id: entity_id)
 
   # The roles the acting user holds that reach the resource, as the gate reads them: on the row
   # itself or on its whole type, and the global roles held app-wide. Sorted, own names first.
-  defp held_role_names(actor_user_id, entity_type, resource_id) do
+  defp held_role_names(actor_user_id, entity_type, entity_id) do
     resource_type = RoleGrant.resource_type(entity_type)
 
     RoleGrant
@@ -864,8 +864,8 @@ defmodule Hologram.Auth do
     |> Query.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->
-      (grant.resource_type == resource_type and grant.resource_id in [resource_id, nil]) or
-        (grant.resource_type == nil and grant.resource_id == nil)
+      (grant.resource_type == resource_type and grant.entity_id in [entity_id, nil]) or
+        (grant.resource_type == nil and grant.entity_id == nil)
     end)
     |> Enum.map(& &1.role)
     |> Enum.sort_by(&{Reflection.alias?(&1), &1})
@@ -876,20 +876,20 @@ defmodule Hologram.Auth do
   # rest of the transaction. Not the read itself: can?/3 reads through query_grant_exists?/3,
   # which sync shares, and a lock there would make every sync round a lock holder.
   # sobelow_skip ["SQL.Query"]
-  defp hold_actor_grants(actor_user_id, entity_type, resource_id) do
+  defp hold_actor_grants(actor_user_id, entity_type, entity_id) do
     statement = """
     SELECT 1 FROM "hologram_data"."hologram_role_grant"
     WHERE "user_id" = $1
       AND (("resource_type" = $2::#{qualified_enum_type("resource_type")}
-            AND ("resource_id" = $3 OR "resource_id" IS NULL))
-        OR ("resource_type" IS NULL AND "resource_id" IS NULL))
+            AND ("entity_id" = $3 OR "entity_id" IS NULL))
+        OR ("resource_type" IS NULL AND "entity_id" IS NULL))
     FOR SHARE
     """
 
     params = [
       Codec.encode(actor_user_id, :uuid),
       resource_type_value(entity_type),
-      Codec.encode(resource_id, :uuid)
+      Codec.encode(entity_id, :uuid)
     ]
 
     {:ok, _result} = Connection.query(statement, params)
@@ -957,13 +957,13 @@ defmodule Hologram.Auth do
 
   # The grant goes through the internal entity write path, so it is validated, stamped and
   # encoded like any row - the public write surface is closed to role grants on purpose.
-  defp write_grant(user_id, resource_type, resource_id, role) do
+  defp write_grant(user_id, resource_type, entity_id, role) do
     # One identity scheme for the store, whoever writes it: a grant made here and the same grant
     # made in a browser are one row, because both derive the id from the grant itself.
     grant = %RoleGrant{
-      id: RoleGrant.derive_id(user_id, resource_type, resource_id, role),
+      id: RoleGrant.derive_id(user_id, resource_type, entity_id, role),
+      entity_id: entity_id,
       granted_by_id: Context.actor_user_id(),
-      resource_id: resource_id,
       resource_type: resource_type,
       role: role,
       user_id: user_id

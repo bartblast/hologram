@@ -2,7 +2,7 @@ defmodule Hologram.Auth.RoleGrant do
   @moduledoc false
 
   # The role store: one row per granted role. Grant shapes by nil pattern: an instance
-  # grant names a resource type and id, a type-wide grant leaves resource_id nil, and a
+  # grant names a resource type and id, a type-wide grant leaves entity_id nil, and a
   # global grant leaves both nil. A row's role is an entity role name (:admin) or a global
   # role module (MyApp.Roles.Admin).
   #
@@ -35,10 +35,10 @@ defmodule Hologram.Auth.RoleGrant do
 
   defstruct __meta__: %Metadata{},
             created_at: nil,
+            entity_id: nil,
             granted_by: %NotIncluded{relationship: :granted_by},
             granted_by_id: nil,
             id: nil,
-            resource_id: nil,
             resource_type: nil,
             role: nil,
             updated_at: nil,
@@ -48,10 +48,10 @@ defmodule Hologram.Auth.RoleGrant do
   @type t :: %__MODULE__{
           __meta__: Metadata.t(),
           created_at: DateTime.t() | nil,
+          entity_id: Entity.id() | nil,
           granted_by: struct | NotIncluded.t() | nil,
           granted_by_id: Entity.id() | nil,
           id: Entity.id() | nil,
-          resource_id: Entity.id() | nil,
           resource_type: atom | nil,
           role: atom | module | nil,
           updated_at: DateTime.t() | nil,
@@ -66,7 +66,7 @@ defmodule Hologram.Auth.RoleGrant do
   @spec __attributes__() :: list({atom, atom, keyword})
   def __attributes__ do
     [
-      {:resource_id, :uuid, [optional: true]},
+      {:entity_id, :uuid, [optional: true]},
       {:resource_type, :enum, [values: resolved(:resource_type_values), optional: true]},
       {:role, :enum, [values: resolved(:role_values)]}
     ]
@@ -140,13 +140,13 @@ defmodule Hologram.Auth.RoleGrant do
   # gives up the insert locality UUIDv7 buys every other table. Recorded in `02a-database.md`
   # beside the id-format lock - it is confined to the least-inserted table in an app, on the one
   # index of its four that the framework only ever point-looks-up.
-  def derive_id(user_id, resource_type, resource_id, role) do
+  def derive_id(user_id, resource_type, entity_id, role) do
     name =
       Enum.join(
         [
           user_id,
           resource_type && Codec.encode_enum_value(resource_type),
-          resource_id,
+          entity_id,
           Codec.encode_enum_value(role)
         ],
         "\n"
@@ -180,7 +180,7 @@ defmodule Hologram.Auth.RoleGrant do
   # swallowed by the primary key; one narrower lets one fact carry two ids, and the read-back
   # after the conflict finds nothing. A column outside this list is free to add - granted_by_id
   # already is one - and a column inside it renames every row in the store.
-  def identity_columns, do: ["user_id", "resource_type", "resource_id", "role"]
+  def identity_columns, do: ["user_id", "resource_type", "entity_id", "role"]
 
   @doc """
   Raises - a role grant is written through grant_role/revoke_role and constructed nowhere.

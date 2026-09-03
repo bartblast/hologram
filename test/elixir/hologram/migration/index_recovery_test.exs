@@ -41,7 +41,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     op: :create_index,
     table: "hologram_role_grant",
     index: @index,
-    columns: ["user_id", "resource_type", "resource_id", "role"],
+    columns: ["user_id", "resource_type", "entity_id", "role"],
     nulls_distinct: false,
     unique: true
   }

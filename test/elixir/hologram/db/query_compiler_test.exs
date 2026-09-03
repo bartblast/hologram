@@ -245,7 +245,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
                  ~s|AND "rg"."resource_type" = | <>
                  ~s|$3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                 ~s|AND ("rg"."resource_id" = "i1"."id" OR "rg"."resource_id" IS NULL))|
+                 ~s|AND ("rg"."entity_id" = "i1"."id" OR "rg"."entity_id" IS NULL))|
              )
     end
 
@@ -342,8 +342,8 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
                    ~s|AND "rg"."resource_type" = | <>
                    ~s|$3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                   ~s|AND ("rg"."resource_id" = "test_fixtures_policy_module1"."id" | <>
-                   ~s|OR "rg"."resource_id" IS NULL)) ORDER BY "id" ASC|
+                   ~s|AND ("rg"."entity_id" = "test_fixtures_policy_module1"."id" | <>
+                   ~s|OR "rg"."entity_id" IS NULL)) ORDER BY "id" ASC|
              }
     end
 
@@ -365,7 +365,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
                    ~s|WHERE "rg"."user_id" = $1 | <>
                    ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL) | <>
+                   ~s|AND "rg"."resource_type" IS NULL AND "rg"."entity_id" IS NULL) | <>
                    ~s|ORDER BY "id" ASC|
              }
     end
@@ -401,7 +401,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(
                sql,
                ~s|AND "rg"."resource_type" = $3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                 ~s|AND "rg"."resource_id" IS NULL)|
+                 ~s|AND "rg"."entity_id" IS NULL)|
              )
     end
 
@@ -422,7 +422,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."resource_id" = "test_fixtures_policy_module1"."parent_id")|
+               ~s|AND "rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
              )
     end
 
@@ -548,7 +548,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|AND "rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
                  ~s|AND "rg"."resource_type" = | <>
                  ~s|$4::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
-                 ~s|AND "rg"."resource_id" = "hologram_role_grant"."resource_id"))|
+                 ~s|AND "rg"."entity_id" = "hologram_role_grant"."entity_id"))|
              )
     end
 

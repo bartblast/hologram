@@ -383,7 +383,7 @@ defmodule Hologram.DB.MapperTest do
 
       assert mapping[Hologram.Auth.RoleGrant].indexes == %{
                "hologram_role_grant_$uidx" => %{
-                 columns: ["user_id", "resource_type", "resource_id", "role"],
+                 columns: ["user_id", "resource_type", "entity_id", "role"],
                  nulls_distinct: false,
                  unique: true
                }

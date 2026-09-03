@@ -373,7 +373,7 @@ defmodule Hologram.Sync.SessionTest do
       %RoleGrant{
         user_id: user_id,
         resource_type: RoleGrant.resource_type(PolicyModule1),
-        resource_id: row.id,
+        entity_id: row.id,
         role: :viewer
       }
     end

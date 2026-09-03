@@ -33,9 +33,9 @@ defmodule Hologram.Test.Fixtures.Controller.Module33 do
   end
 
   def command(:my_command_revoking_role, params, server) do
-    %{resource_id: resource_id, user_id: user_id} = params
+    %{entity_id: entity_id, user_id: user_id} = params
 
-    Auth.revoke_role(user_id, %Module1{id: resource_id}, :owner)
+    Auth.revoke_role(user_id, %Module1{id: entity_id}, :owner)
 
     %{server | next_action: nil}
   end

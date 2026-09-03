@@ -52,15 +52,15 @@ defmodule Hologram.DB.WriterTest do
     count
   end
 
-  defp granted_roles(user_id, resource_id) do
+  defp granted_roles(user_id, entity_id) do
     select_sql =
       ~s|SELECT "role" FROM "hologram_data"."hologram_role_grant" | <>
-        ~s|WHERE "user_id" = $1 AND "resource_id" = $2 ORDER BY "role"|
+        ~s|WHERE "user_id" = $1 AND "entity_id" = $2 ORDER BY "role"|
 
     {:ok, %{rows: rows}} =
       Connection.query(select_sql, [
         Codec.encode(user_id, :uuid),
-        Codec.encode(resource_id, :uuid)
+        Codec.encode(entity_id, :uuid)
       ])
 
     Enum.map(rows, fn [role] -> role end)

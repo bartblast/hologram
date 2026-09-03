@@ -156,7 +156,7 @@ defmodule Hologram.MutationTest do
 
     data = %{
       "granted_by_id" => Keyword.get(opts, :granted_by_id, user_id),
-      "resource_id" => resource.id,
+      "entity_id" => resource.id,
       "resource_type" => Codec.encode_enum_value(resource_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
@@ -181,7 +181,7 @@ defmodule Hologram.MutationTest do
     resource_type = RoleGrant.resource_type(resource.__struct__)
 
     data = %{
-      "resource_id" => resource.id,
+      "entity_id" => resource.id,
       "resource_type" => Codec.encode_enum_value(resource_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
@@ -683,35 +683,35 @@ defmodule Hologram.MutationTest do
     # nothing there, so the batch lands only because a creator's grant asks no gate.
     test "lands a creator's grant beside the create that earned it" do
       user = create_user("creator-grant@example.com")
-      resource_id = Entity.generate_id()
+      entity_id = Entity.generate_id()
 
       writes = [
-        create_write(PolicyModule1, resource_id, %{"author_id" => user.id},
+        create_write(PolicyModule1, entity_id, %{"author_id" => user.id},
           claim: ["authorize", "archive"]
         ),
-        grant_write(user.id, %PolicyModule1{id: resource_id}, :maintainer)
+        grant_write(user.id, %PolicyModule1{id: entity_id}, :maintainer)
       ]
 
       assert {:ok, %{"status" => "confirmed", "dropped" => dropped, "kept" => kept}} =
                run(envelope(writes), server(user.id))
 
       assert Map.keys(dropped["1"]) == [
+               "entity_id",
                "granted_by_id",
-               "resource_id",
                "resource_type",
                "role",
                "user_id"
              ]
 
       grant_id =
-        RoleGrant.derive_id(user.id, PolicyModule1, resource_id, :maintainer)
+        RoleGrant.derive_id(user.id, PolicyModule1, entity_id, :maintainer)
 
       assert kept["1"]["id"] == grant_id
 
       row = EntityOperations.get(RoleGrant, grant_id)
 
       assert row.granted_by_id == user.id
-      assert row.resource_id == resource_id
+      assert row.entity_id == entity_id
       assert row.role == :maintainer
       assert row.user_id == user.id
     end
@@ -737,8 +737,8 @@ defmodule Hologram.MutationTest do
                run(envelope([write]), server(second_member.id))
 
       assert Map.keys(dropped["0"]) == [
+               "entity_id",
                "granted_by_id",
-               "resource_id",
                "resource_type",
                "role",
                "user_id"
@@ -794,7 +794,7 @@ defmodule Hologram.MutationTest do
 
       EntityOperations.create_if_absent(%RoleGrant{
         id: Entity.generate_id(),
-        resource_id: resource.id,
+        entity_id: resource.id,
         resource_type: RoleGrant.resource_type(PolicyModule2),
         role: :member,
         user_id: user.id
@@ -829,7 +829,7 @@ defmodule Hologram.MutationTest do
 
       data = %{
         "granted_by_id" => admin.id,
-        "resource_id" => nil,
+        "entity_id" => nil,
         "resource_type" => Codec.encode_enum_value(resource_type),
         "role" => "member",
         "user_id" => user.id
@@ -928,8 +928,8 @@ defmodule Hologram.MutationTest do
                run(envelope([write]), server(member.id))
 
       assert Map.keys(dropped["0"]) == [
+               "entity_id",
                "granted_by_id",
-               "resource_id",
                "resource_type",
                "role",
                "user_id"

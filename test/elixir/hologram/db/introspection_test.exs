@@ -230,7 +230,7 @@ defmodule Hologram.DB.IntrospectionTest do
 
     test "introspects the role grant unique index comparing nulls as values" do
       assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_$uidx"] == %{
-               columns: ["user_id", "resource_type", "resource_id", "role"],
+               columns: ["user_id", "resource_type", "entity_id", "role"],
                nulls_distinct: false,
                unique: true
              }

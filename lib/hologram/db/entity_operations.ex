@@ -589,8 +589,8 @@ defmodule Hologram.DB.EntityOperations do
 
     %RoleGrant{
       id: RoleGrant.derive_id(actor_user_id, resource_type, entity.id, role_name),
+      entity_id: entity.id,
       granted_by_id: actor_user_id,
-      resource_id: entity.id,
       resource_type: resource_type,
       role: role_name,
       user_id: actor_user_id

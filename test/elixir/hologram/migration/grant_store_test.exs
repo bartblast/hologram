@@ -124,7 +124,7 @@ defmodule Hologram.Migration.GrantStoreTest do
   defp insert_scoped_grant(resource_type) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
+      ("id", "user_id", "role", "resource_type", "entity_id", "created_at", "updated_at", "$revisions")
     VALUES (gen_random_uuid(), $1, 'editor', $2, $1, now(), now(), '{}')
     """
 

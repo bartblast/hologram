@@ -303,7 +303,7 @@ defmodule Hologram.MigratorTest do
 
       insert_grants = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "resource_type", "entity_id", "created_at", "updated_at", "$revisions")
       VALUES
         ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
         ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
@@ -392,7 +392,7 @@ defmodule Hologram.MigratorTest do
 
       insert_grant = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "resource_type", "entity_id", "created_at", "updated_at", "$revisions")
       VALUES ($1, $2, 'editor', 'MyApp.Other', $3,
               '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """

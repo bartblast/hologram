@@ -60,7 +60,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     Map.merge(
       %{
         "granted_by_id" => @granter_id,
-        "resource_id" => @target_id,
+        "entity_id" => @target_id,
         "resource_type" => "Hologram.Test.Fixtures.Policy.Module2",
         "role" => "member",
         "user_id" => @user_id
@@ -277,7 +277,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                claim: nil,
                data: %{
                  granted_by_id: @granter_id,
-                 resource_id: @target_id,
+                 entity_id: @target_id,
                  resource_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
@@ -304,7 +304,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                based_on: %{role: 3},
                claim: nil,
                data: %{
-                 resource_id: @target_id,
+                 entity_id: @target_id,
                  resource_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
@@ -760,23 +760,23 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
     # The id derives for this shape too, and nothing downstream can resolve a nil type - so the
     # parser is the one place that can say no.
-    test "refuses a role grant naming a resource id but no resource type" do
+    test "refuses a role grant naming an entity id but no entity type" do
       grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
       entry = create(RoleGrant, grant_data(%{"resource_type" => nil}), id: grant_id)
 
       assert parse(raw([entry])) ==
-               {:error, "write 0: a role grant naming a resource id names its resource type too"}
+               {:error, "write 0: a role grant naming an entity id names its entity type too"}
     end
 
     # The same shape with the type left out rather than sent as nil - a key a pattern on the data
     # would not see, and the applier would raise on the same nothing.
-    test "refuses a role grant naming a resource id and no resource type at all" do
+    test "refuses a role grant naming an entity id and no entity type at all" do
       grant_id = RoleGrant.derive_id(@user_id, nil, @target_id, :member)
       data = Map.delete(grant_data(), "resource_type")
       entry = create(RoleGrant, data, id: grant_id)
 
       assert parse(raw([entry])) ==
-               {:error, "write 0: a role grant naming a resource id names its resource type too"}
+               {:error, "write 0: a role grant naming an entity id names its entity type too"}
     end
 
     # @id is a well-formed entity id that no derivation produces - the shape a client minting
