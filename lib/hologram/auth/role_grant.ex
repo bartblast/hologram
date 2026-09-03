@@ -1,11 +1,59 @@
 defmodule Hologram.Auth.RoleGrant do
-  @moduledoc false
+  @moduledoc """
+  The role store: one row per granted role.
 
-  # The role store: one row per granted role. Grant shapes by nil pattern: an instance
-  # grant names an entity type and id, a type-wide grant leaves entity_id nil, and a
-  # global grant leaves both nil. A row's role is an entity role name (:admin) or a global
-  # role module (MyApp.Roles.Admin).
-  #
+  A grant states a fact - this user holds this role here - and the row IS that fact. Rows are
+  written by `Hologram.Auth.grant_role/2,3` and removed by `Hologram.Auth.revoke_role/2,3`, and
+  never constructed: `new/1` raises, the way it does for any entity the framework owns.
+
+  ## What a row says
+
+    * `user_id` - who holds the role.
+    * `entity_type` - the entity type module the role is held on, or nil for a global role.
+    * `entity_id` - the id of the row it is held on, or nil for a type-wide or global grant.
+    * `role` - an entity role name (`:organizer`) or a global role module (`MyApp.Roles.Admin`).
+    * `granted_by_id` - the acting user who granted it, or nil when trusted code did.
+
+  The two scope columns tell the three kinds of grant apart by which of them are set:
+
+      # on one trip
+      %RoleGrant{user_id: alice, entity_type: MyApp.Trip, entity_id: trip_id, role: :organizer}
+
+      # on every trip
+      %RoleGrant{user_id: alice, entity_type: MyApp.Trip, entity_id: nil, role: :organizer}
+
+      # app-wide
+      %RoleGrant{user_id: alice, entity_type: nil, entity_id: nil, role: MyApp.Roles.Admin}
+
+  One person can hold several roles on one entity, and the store keeps a row per grant rather
+  than merging them - somebody invited to a trip and then made its organizer has two rows.
+
+  ## Reading the store
+
+  Grants are read with an ordinary query, filtered by the read rules the framework supplies -
+  a user always sees the grants they hold, and sees other people's on an entity when they hold
+  one of that type's `allow :read_roles` roles.
+
+      RoleGrant
+      |> filter(entity_id: [trip_id, nil], entity_type: MyApp.Trip)
+      |> include(:user)
+      |> order_by(:created_at)
+
+  The `nil` beside the id is load-bearing. A type-wide grant is held on every row of its type,
+  so `Hologram.Auth.can?/3` answers true for it on this trip while its own `entity_id` is nil -
+  a filter naming the id alone leaves those holders out, and the list then disagrees with the
+  permission checks around it. A membership list containing nil matches missing values too,
+  which is what puts the two back in step. Naming `entity_type` beside it is what keeps global
+  grants, whose `entity_type` is nil as well, out of the answer.
+
+  ## The enum values are the app's own
+
+  Both enums are computed from the compiled data model rather than declared here: `entity_type`
+  takes the app's entity type modules, and `role` the union of every entity's declared role
+  names and the app's global role modules. So the store's shape changes with the model, and a
+  role renamed in a declaration is a value renamed in this table.
+  """
+
   # This module implements the entity contract by hand instead of through use
   # Hologram.Entity, because three parts of its definition are facts of the app, unknown
   # when the dep compiles: the role enum values (the app's declared role names and global
