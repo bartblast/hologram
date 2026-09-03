@@ -114,7 +114,6 @@ describe("Elixir_Hologram_DB", () => {
           enumValues: {},
           frameworkAttributes: [],
           relationships: {},
-          resourceType: "notes",
           serverOnly: [],
         },
         // A job type - the three attributes its framework fills are what tells one apart here.
@@ -256,11 +255,11 @@ describe("Elixir_Hologram_DB", () => {
           data: {
             granted_by_id: ACTOR,
             resource_id: ID_1,
-            resource_type: "notes",
+            resource_type: NOTE,
             role: "owner",
             user_id: ACTOR,
           },
-          id: deriveGrantId(ACTOR, "notes", ID_1, "owner"),
+          id: deriveGrantId(ACTOR, NOTE, ID_1, "owner"),
           op: "create",
           stamp: STAMP + 1,
           type: ROLE_GRANT,
@@ -295,9 +294,9 @@ describe("Elixir_Hologram_DB", () => {
       LocalDatabase.actorUserId = ACTOR;
 
       LocalDatabase.putRow(ROLE_GRANT, {
-        id: deriveGrantId(ACTOR, "notes", ID_1, "owner"),
+        id: deriveGrantId(ACTOR, NOTE, ID_1, "owner"),
         resource_id: ID_1,
-        resource_type: "notes",
+        resource_type: NOTE,
         role: "owner",
         user_id: ACTOR,
       });

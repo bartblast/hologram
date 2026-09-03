@@ -1129,8 +1129,7 @@ defmodule Hologram.CompilerTest do
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
-                 ~s/"relationships":{},/ <>
-                 ~s/"resourceType":"Hologram.Test.Fixtures.Entity.Module4","roles":[],"serverOnly":[]}}/
+                 ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
              )
     end
 

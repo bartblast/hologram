@@ -190,10 +190,9 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 
     case "own": {
       const [_kind, roles] = reference;
-      const resourceType = Model.entry(entityType).resourceType;
       const id = entityValue(entityType, entity, "id");
 
-      return grantExists(rows, actorUserId, roles, resourceType, [id, null]);
+      return grantExists(rows, actorUserId, roles, entityType, [id, null]);
     }
 
     case "rel": {
@@ -441,11 +440,9 @@ const Elixir_Hologram_Auth = {
       }
     }
 
-    const resourceType =
-      globalThis.Hologram.sync.model[entityType].resourceType;
     const held = LocalDatabase.getRow(
       GRANT_TYPE,
-      deriveGrantId(userId, resourceType, resourceId, roleName),
+      deriveGrantId(userId, entityType, resourceId, roleName),
     );
 
     if (held === null) {
@@ -461,7 +458,7 @@ const Elixir_Hologram_Auth = {
       claim: null,
       data: {
         resource_id: resourceId,
-        resource_type: resourceType,
+        resource_type: entityType,
         role: roleName,
         user_id: userId,
       },
@@ -560,7 +557,7 @@ export function grantEntry(
     data: {
       granted_by_id: actorUserId,
       resource_id: resourceId,
-      resource_type: globalThis.Hologram.sync.model[entityType].resourceType,
+      resource_type: entityType,
       role: roleName,
       user_id: userId,
     },
@@ -571,15 +568,10 @@ export function grantEntry(
   };
 }
 
-// The id the store files a grant under, named from the type's own model entry - a fact about the
-// grant rather than a value minted for it, so it can be asked for before anything is built.
+// The id the store files a grant under, named from the type itself - a fact about the grant
+// rather than a value minted for it, so it can be asked for before anything is built.
 export function grantId(userId, entityType, resourceId, roleName) {
-  return deriveGrantId(
-    userId,
-    globalThis.Hologram.sync.model[entityType].resourceType,
-    resourceId,
-    roleName,
-  );
+  return deriveGrantId(userId, entityType, resourceId, roleName);
 }
 
 // IMPORTANT!
@@ -729,14 +721,11 @@ function coveredRoleNames(entityType, resourceId, actorUserId, operation) {
 // itself or on its whole type, and the global roles held app-wide. Own names first, then role
 // modules, each alphabetical - the order the server sorts them in.
 function heldRoleNames(actorUserId, entityType, resourceId) {
-  const resourceType =
-    globalThis.Hologram.sync?.model?.[entityType]?.resourceType;
-
   return grantRows()
     .filter(
       (row) =>
         row.user_id === actorUserId &&
-        ((row.resource_type === resourceType &&
+        ((row.resource_type === entityType &&
           (row.resource_id === resourceId || row.resource_id === null)) ||
           (row.resource_type === null && row.resource_id === null)),
     )

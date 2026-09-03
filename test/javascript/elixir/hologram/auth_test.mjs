@@ -92,7 +92,6 @@ describe("Elixir_Hologram_Auth", () => {
           enumValues: {status: ["draft", "review", "published"]},
           policy: policy,
           relationships: {folder: {toMany: false, type: FOLDER}},
-          resourceType: "documents",
           roles: ["editor", "owner", "viewer"],
           serverOnly: [],
         },
@@ -100,7 +99,6 @@ describe("Elixir_Hologram_Auth", () => {
           attributes: {id: "uuid", archived: "boolean"},
           policy: folderPolicy,
           relationships: {},
-          resourceType: "folders",
           roles: [],
           serverOnly: [],
         },
@@ -117,7 +115,6 @@ describe("Elixir_Hologram_Auth", () => {
           },
           policy: {},
           relationships: {user: {toMany: false, type: USER}},
-          resourceType: "hologram_role_grant",
           roles: [],
           serverOnly: [],
         },
@@ -195,7 +192,7 @@ describe("Elixir_Hologram_Auth", () => {
         GRANT,
         grantRow({
           resource_id: DOC,
-          resource_type: "documents",
+          resource_type: DOCUMENT,
           role: "editor",
         }),
       );
@@ -483,7 +480,7 @@ describe("Elixir_Hologram_Auth", () => {
     it("skips a rule with grant references for an anonymous session", () => {
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: DOC, resource_type: "documents", role: "owner"}),
+        grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "owner"}),
       );
 
       assert.deepStrictEqual(
@@ -497,7 +494,7 @@ describe("Elixir_Hologram_Auth", () => {
         rule({
           to: [
             ["own", ["owner"]],
-            ["type", "documents", ["admin"]],
+            ["type", DOCUMENT, ["admin"]],
           ],
         }),
       ];
@@ -511,7 +508,7 @@ describe("Elixir_Hologram_Auth", () => {
         GRANT,
         grantRow({
           resource_id: null,
-          resource_type: "documents",
+          resource_type: DOCUMENT,
           role: "admin",
         }),
       );
@@ -529,7 +526,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: DOC, resource_type: "documents", role: "owner"}),
+        grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "owner"}),
       );
 
       assert.deepStrictEqual(
@@ -594,7 +591,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: DOC, resource_type: "documents"}),
+        grantRow({resource_id: DOC, resource_type: DOCUMENT}),
       );
 
       assert.deepStrictEqual(
@@ -610,7 +607,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: null, resource_type: "documents"}),
+        grantRow({resource_id: null, resource_type: DOCUMENT}),
       );
 
       assert.deepStrictEqual(
@@ -624,7 +621,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: DOC, resource_type: "documents", user_id: BOB}),
+        grantRow({resource_id: DOC, resource_type: DOCUMENT, user_id: BOB}),
       );
 
       assert.deepStrictEqual(
@@ -638,7 +635,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: FOLDER_ID, resource_type: "documents"}),
+        grantRow({resource_id: FOLDER_ID, resource_type: DOCUMENT}),
       );
 
       assert.deepStrictEqual(
@@ -654,7 +651,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: DOC, resource_type: "folders"}),
+        grantRow({resource_id: DOC, resource_type: FOLDER}),
       );
 
       assert.deepStrictEqual(
@@ -670,7 +667,7 @@ describe("Elixir_Hologram_Auth", () => {
         GRANT,
         grantRow({
           resource_id: DOC,
-          resource_type: "documents",
+          resource_type: DOCUMENT,
           role: "viewer",
         }),
       );
@@ -682,11 +679,11 @@ describe("Elixir_Hologram_Auth", () => {
     });
 
     it("grants through a role held on a whole other type", () => {
-      defineModel({read: [rule({to: [["type", "folders", ["admin"]]]})]});
+      defineModel({read: [rule({to: [["type", FOLDER, ["admin"]]]})]});
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: null, resource_type: "folders", role: "admin"}),
+        grantRow({resource_id: null, resource_type: FOLDER, role: "admin"}),
       );
 
       assert.deepStrictEqual(
@@ -708,14 +705,14 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("grants through a role held on a related entity", () => {
       defineModel({
-        read: [rule({to: [["rel", "folder", "folders", ["admin"]]]})],
+        read: [rule({to: [["rel", "folder", FOLDER, ["admin"]]]})],
       });
 
       LocalDatabase.putRow(
         GRANT,
         grantRow({
           resource_id: FOLDER_ID,
-          resource_type: "folders",
+          resource_type: FOLDER,
           role: "admin",
         }),
       );
@@ -732,14 +729,14 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("denies a related-entity role when the relationship is unset", () => {
       defineModel({
-        read: [rule({to: [["rel", "folder", "folders", ["admin"]]]})],
+        read: [rule({to: [["rel", "folder", FOLDER, ["admin"]]]})],
       });
 
       LocalDatabase.putRow(
         GRANT,
         grantRow({
           resource_id: FOLDER_ID,
-          resource_type: "folders",
+          resource_type: FOLDER,
           role: "admin",
         }),
       );
@@ -760,7 +757,7 @@ describe("Elixir_Hologram_Auth", () => {
           rule({
             to: [
               ["own", ["owner"]],
-              ["type", "folders", ["admin"]],
+              ["type", FOLDER, ["admin"]],
             ],
           }),
         ],
@@ -768,7 +765,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: null, resource_type: "folders", role: "admin"}),
+        grantRow({resource_id: null, resource_type: FOLDER, role: "admin"}),
       );
 
       assert.deepStrictEqual(
@@ -791,7 +788,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       LocalDatabase.putRow(
         GRANT,
-        grantRow({resource_id: DOC, resource_type: "documents"}),
+        grantRow({resource_id: DOC, resource_type: DOCUMENT}),
       );
 
       assert.deepStrictEqual(
@@ -890,7 +887,7 @@ describe("Elixir_Hologram_Auth", () => {
         GRANT,
         grantRow({
           resource_id: DOC,
-          resource_type: "documents",
+          resource_type: DOCUMENT,
           role: "editor",
         }),
       );
@@ -999,10 +996,11 @@ describe("deriveGrantId()", () => {
 // Both are taken over the grant the deriveGrantId() vectors above pin, so the id asserted here is
 // the one the server derives for the same four parts.
 describe("a grant written into a batch", () => {
-  const ENTITY_TYPE = "MyApp.Document";
+  // The type is spelled as the vectors above spell it: a grant row names its scope by the entity
+  // type's own name, so the pinned id derives from the same four parts the server hashes.
+  const ENTITY_TYPE = "Hologram.Test.Fixtures.Policy.Module2";
   const GRANT_ID = "2c56252b-0c90-5cd9-b15d-91c5e5bf968e";
   const NOW_MS = 1_756_100_000_123;
-  const RESOURCE_TYPE = "Hologram.Test.Fixtures.Policy.Module2";
   const STAMP = NOW_MS * 1024;
 
   const ACTOR_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11";
@@ -1018,7 +1016,6 @@ describe("a grant written into a batch", () => {
           attributes: {id: "uuid"},
           policy: {},
           relationships: {},
-          resourceType: RESOURCE_TYPE,
           roles: ["member"],
           serverOnly: [],
         },
@@ -1045,7 +1042,7 @@ describe("a grant written into a batch", () => {
           data: {
             granted_by_id: ACTOR_ID,
             resource_id: RESOURCE_ID,
-            resource_type: RESOURCE_TYPE,
+            resource_type: ENTITY_TYPE,
             role: "member",
             user_id: USER_ID,
           },
@@ -1059,7 +1056,7 @@ describe("a grant written into a batch", () => {
   });
 
   describe("grantId()", () => {
-    it("names the row from the type's own resource type", () => {
+    it("names the row from the type's own name", () => {
       assert.equal(
         grantId(USER_ID, ENTITY_TYPE, RESOURCE_ID, "member"),
         GRANT_ID,
@@ -1100,7 +1097,6 @@ const defineGates = (policy) => {
         attributes: {id: "uuid"},
         policy: policy,
         relationships: {},
-        resourceType: "documents",
         roles: ["editor", "owner", "viewer"],
         serverOnly: [],
       },
@@ -1113,7 +1109,6 @@ const defineGates = (policy) => {
         },
         policy: {},
         relationships: {},
-        resourceType: "hologram_role_grant",
         roles: [],
         serverOnly: [],
       },
@@ -1148,7 +1143,7 @@ describe("unqualifiedRoleMessage()", () => {
 
     LocalDatabase.putRow(
       GRANT,
-      grantRow({resource_id: DOC, resource_type: "documents", role: "editor"}),
+      grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "editor"}),
     );
 
     assert.equal(
@@ -1162,7 +1157,7 @@ describe("unqualifiedRoleMessage()", () => {
   it("says the held role may grant no role there", () => {
     LocalDatabase.putRow(
       GRANT,
-      grantRow({resource_id: DOC, resource_type: "documents", role: "viewer"}),
+      grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "viewer"}),
     );
 
     assert.equal(
@@ -1176,11 +1171,11 @@ describe("unqualifiedRoleMessage()", () => {
   it("joins several held roles and lists them in the declaration", () => {
     LocalDatabase.putRow(
       GRANT,
-      grantRow({resource_id: DOC, resource_type: "documents", role: "viewer"}),
+      grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "viewer"}),
     );
     LocalDatabase.putRow(
       GRANT,
-      grantRow({resource_id: DOC, resource_type: "documents", role: "editor"}),
+      grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "editor"}),
     );
 
     assert.equal(
@@ -1194,7 +1189,7 @@ describe("unqualifiedRoleMessage()", () => {
   it("counts a type-wide grant and a global role, modules after own names", () => {
     LocalDatabase.putRow(
       GRANT,
-      grantRow({resource_id: null, resource_type: "documents", role: "editor"}),
+      grantRow({resource_id: null, resource_type: DOCUMENT, role: "editor"}),
     );
     LocalDatabase.putRow(GRANT, grantRow({role: "MyApp.Roles.Admin"}));
 
@@ -1211,7 +1206,7 @@ describe("unqualifiedRoleMessage()", () => {
       GRANT,
       grantRow({
         resource_id: "018f4571-a1b2-7c3d-8e4f-0000000000d2",
-        resource_type: "documents",
+        resource_type: DOCUMENT,
         role: "editor",
       }),
     );
@@ -1227,7 +1222,7 @@ describe("unqualifiedRoleMessage()", () => {
 
     LocalDatabase.putRow(
       GRANT,
-      grantRow({resource_id: DOC, resource_type: "documents", role: "editor"}),
+      grantRow({resource_id: DOC, resource_type: DOCUMENT, role: "editor"}),
     );
 
     assert.equal(
@@ -1284,7 +1279,7 @@ describe("grant_role/3", () => {
       GATED_GRANT,
       gatedGrantRow({
         resource_id: GATED_DOC,
-        resource_type: "documents",
+        resource_type: GATED_DOCUMENT,
         role: "editor",
       }),
     );
@@ -1313,11 +1308,11 @@ describe("grant_role/3", () => {
         data: {
           granted_by_id: GATED_ALICE,
           resource_id: GATED_DOC,
-          resource_type: "documents",
+          resource_type: GATED_DOCUMENT,
           role: "viewer",
           user_id: GATED_BOB,
         },
-        id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
+        id: deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
         op: "create",
         stamp: STAMP,
         type: GATED_GRANT,
@@ -1358,9 +1353,9 @@ describe("grant_role/3", () => {
 
   it("answers :ok and appends nothing for a grant the client already holds", () => {
     LocalDatabase.putRow(GATED_GRANT, {
-      id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
+      id: deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
       resource_id: GATED_DOC,
-      resource_type: "documents",
+      resource_type: GATED_DOCUMENT,
       role: "viewer",
       user_id: GATED_BOB,
     });
@@ -1398,9 +1393,9 @@ describe("grant_role/3", () => {
   // gate passed - so a browser holding the row still refuses an actor who may not grant it.
   it("asks the gate before it looks for a grant already held", () => {
     LocalDatabase.putRow(GATED_GRANT, {
-      id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "owner"),
+      id: deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "owner"),
       resource_id: GATED_DOC,
-      resource_type: "documents",
+      resource_type: GATED_DOCUMENT,
       role: "owner",
       user_id: GATED_BOB,
     });
@@ -1488,9 +1483,9 @@ describe("revoke_role/3", () => {
 
   const heldRow = (userId, role) => ({
     $revisions: REVISIONS,
-    id: deriveGrantId(userId, "documents", GATED_DOC, role),
+    id: deriveGrantId(userId, GATED_DOCUMENT, GATED_DOC, role),
     resource_id: GATED_DOC,
-    resource_type: "documents",
+    resource_type: GATED_DOCUMENT,
     role: role,
     user_id: userId,
   });
@@ -1533,11 +1528,11 @@ describe("revoke_role/3", () => {
         claim: null,
         data: {
           resource_id: GATED_DOC,
-          resource_type: "documents",
+          resource_type: GATED_DOCUMENT,
           role: "viewer",
           user_id: GATED_BOB,
         },
-        id: deriveGrantId(GATED_BOB, "documents", GATED_DOC, "viewer"),
+        id: deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
         op: "delete",
         stamp: STAMP,
         type: GATED_GRANT,
@@ -1581,7 +1576,7 @@ describe("revoke_role/3", () => {
     assert.equal(Batches.current().writes.length, 1);
     assert.equal(
       Batches.current().writes[0].id,
-      deriveGrantId(GATED_ALICE, "documents", GATED_DOC, "editor"),
+      deriveGrantId(GATED_ALICE, GATED_DOCUMENT, GATED_DOC, "editor"),
     );
   });
 
@@ -1691,7 +1686,6 @@ describe("a creator's own grant", () => {
           frameworkAttributes: [],
           policy: {"grant_role:member": [gateRule([["own", ["owner"]]])]},
           relationships: {},
-          resourceType: "notes",
           roles: ["member", "owner"],
           serverOnly: [],
         },
@@ -1704,7 +1698,6 @@ describe("a creator's own grant", () => {
           },
           policy: {},
           relationships: {},
-          resourceType: "hologram_role_grant",
           roles: [],
           serverOnly: [],
         },
