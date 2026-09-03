@@ -659,6 +659,61 @@ defmodule Hologram.DB.MapperTest do
       assert resource_type_column.enum_values == ["Hologram.Test.Fixtures.Entity.Module14"]
       assert role_column.enum_values == ["Nonexistent.Roles.Admin", "editor"]
     end
+
+    # The store's own check, and the only one either set gets: both are derived from the model
+    # rather than declared, so Hologram.Entity.Validator - which refuses a declared enum value or
+    # role name past the limit - never sees them. A label PostgreSQL truncates no longer decodes
+    # to the value it was stored for, so the grant it names is read back as somebody else's.
+    test "refuses an entity type whose name does not fit an enum label" do
+      entity_type = Nonexistent.Entities.NameOneByteLongerThanAnEnumLabelWillHoldXyz
+
+      model = %{
+        entities: %{entity_type => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: entity_type
+      }
+
+      expected_msg =
+        "entity type Nonexistent.Entities.NameOneByteLongerThanAnEnumLabelWillHoldXyz is too " <>
+          "long to store in the role grant store (64 bytes, limit 63) - shorten the module name"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
+    test "refuses a global role module whose name does not fit an enum label" do
+      role_module = Nonexistent.Roles.NameOneByteLongerThanAnEnumLabelWillHoldAbcdef
+
+      model = %{
+        entities: %{Module14 => %{attributes: [], relationships: [], roles: []}},
+        roles: %{role_module => %{extends: []}},
+        user_entity: Module14
+      }
+
+      expected_msg =
+        "global role Nonexistent.Roles.NameOneByteLongerThanAnEnumLabelWillHoldAbcdef is too " <>
+          "long to store in the role grant store (64 bytes, limit 63) - shorten the module name"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
+    test "accepts a name that fills an enum label to its last byte" do
+      entity_type = Nonexistent.Entities.NameFillingTheEnumLabelToItsVeryLastByteAb
+
+      model = %{
+        entities: %{entity_type => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: entity_type
+      }
+
+      mapping = derive_from_model!(model)
+
+      resource_type_column =
+        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :resource_type}))
+
+      assert resource_type_column.enum_values == [
+               "Nonexistent.Entities.NameFillingTheEnumLabelToItsVeryLastByteAb"
+             ]
+    end
   end
 
   describe "fit_identifier/1" do
