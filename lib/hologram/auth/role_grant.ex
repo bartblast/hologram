@@ -9,9 +9,8 @@ defmodule Hologram.Auth.RoleGrant do
   # This module implements the entity contract by hand instead of through use
   # Hologram.Entity, because three parts of its definition are facts of the app, unknown
   # when the dep compiles: the role enum values (the app's declared role names and global
-  # role modules), the
-  # entity_type enum values (the app's entity type modules), and the relationship targets
-  # (the app's designated user entity type). The reflection functions below compute those
+  # role modules), the entity_type enum values (the app's entity type modules), and the
+  # relationship targets (the app's designated user entity type). The reflection functions below compute those
   # facts when called - by then the app is compiled - so every consumer reading entity
   # definitions through the standard reflection interface sees an ordinary, fully
   # resolved definition. Keep the hand-written contract in sync with what use
@@ -105,14 +104,14 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc """
   Returns the role declarations of the role grant entity type as written, with the module each was declared in.
-  Empty - roles are granted on resources, and role grant rows are not resources.
+  Empty - roles are granted on entities, and a grant row is not one.
   """
   @spec __role_declarations__() :: list({atom, keyword, module})
   def __role_declarations__, do: []
 
   @doc """
   Returns the list of role definitions for the role grant entity type.
-  Empty - roles are granted on resources, and role grant rows are not resources.
+  Empty - roles are granted on entities, and a grant row is not one.
   """
   @spec __roles__() :: list({atom, keyword})
   def __roles__, do: []
@@ -127,7 +126,7 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc false
   @spec derive_id(String.t(), atom | nil, String.t() | nil, atom) :: String.t()
-  # A grant's identity is the FACT it states - this user, this resource, this role - which is what
+  # A grant's identity is the FACT it states - this user, this entity, this role - which is what
   # the store's own unique index says. So the id is a function of that fact rather than of the
   # moment it was minted: a UUIDv5 (RFC 9562 name-based, SHA-1) over the four parts under the
   # namespace below. The browser derives the same id from the same grant, so a grant made in two
