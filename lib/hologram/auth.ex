@@ -452,9 +452,9 @@ defmodule Hologram.Auth do
     end
   end
 
-  # The grant store's own policy: a role held on the resource this grant row names.
+  # The grant store's own policy: a role held on the entity this grant row names.
   defp check_requirement(
-         {:resource, target_type, role_names},
+         {:named, target_type, role_names},
          entity,
          actor_user_id,
          _operation,

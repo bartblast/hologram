@@ -72,8 +72,8 @@ defmodule Hologram.Policy.EdgesTest do
                {RoleGrant, :read} => [
                  {:attributes, [:entity_type, :user_id]},
                  {:global_grants, [Role.Module1, Role.Module2]},
-                 {:resource_grants, Policy.Module1, [:owner]},
-                 {:resource_grants, Policy.Module2, [:admin, :member]}
+                 {:named_grants, Policy.Module1, [:owner]},
+                 {:named_grants, Policy.Module2, [:admin, :member]}
                ]
              }
     end

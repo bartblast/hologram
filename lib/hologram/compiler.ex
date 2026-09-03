@@ -1865,7 +1865,7 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the resource a grant row names, or nowhere at all (a global role).
+  # on a related entity, on the entity a grant row names, or nowhere at all (a global role).
   defp render_policy_references(_entity_type, nil), do: "null"
 
   defp render_policy_references(entity_type, references) do

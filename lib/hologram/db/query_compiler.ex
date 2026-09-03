@@ -301,7 +301,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp reference_role_names({:rel, _relationship_name, role_names}), do: role_names
 
-  defp reference_role_names({:resource, _target_type, role_names}), do: role_names
+  defp reference_role_names({:named, _target_type, role_names}), do: role_names
 
   # The resource type enum's values ARE the entity type modules, so a type binds as its own enum
   # label - the same string the client compares a grant row against.
@@ -406,9 +406,9 @@ defmodule Hologram.DB.QueryCompiler do
     {~s|"rg"."entity_type" = #{placeholder} AND #{resource_sql}|, new_params}
   end
 
-  # The grant store's own policy checks a role held on the resource a grant row names, so the
+  # The grant store's own policy checks a role held on the entity a grant row names, so the
   # lookup keys on the outer row's entity_id column rather than on a relationship reference.
-  defp grant_scope_sql({:resource, target_type, _role_names}, context, reversed_params) do
+  defp grant_scope_sql({:named, target_type, _role_names}, context, reversed_params) do
     {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
     scope_sql =

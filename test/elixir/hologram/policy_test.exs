@@ -516,13 +516,13 @@ defmodule Hologram.PolicyTest do
                  %{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil},
                  %{
                    predicates: [{:entity_type, :==, Policy.Module1}],
-                   to: [{:resource, Policy.Module1, [:owner]}],
+                   to: [{:named, Policy.Module1, [:owner]}],
                    via: nil
                  },
                  %{
                    predicates: [{:entity_type, :==, Policy.Module2}],
                    to: [
-                     {:resource, Policy.Module2, [:admin, :member]},
+                     {:named, Policy.Module2, [:admin, :member]},
                      {:global, [Role.Module1, Role.Module2]}
                    ],
                    via: nil

@@ -209,8 +209,8 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
       );
     }
 
-    // The grant store's own rule: a role held on the resource the grant row names.
-    case "resource": {
+    // The grant store's own rule: a role held on the entity the grant row names.
+    case "named": {
       const [_kind, targetType, roles] = reference;
       const rowEntityId = entityValue(entityType, entity, "entity_id");
 

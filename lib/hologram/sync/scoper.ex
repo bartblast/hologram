@@ -10,7 +10,7 @@ defmodule Hologram.Sync.Scoper do
   alias Hologram.Query
   alias Hologram.Query.Registry
 
-  @grant_edges [:global_grants, :own_grants, :relationship_grants, :resource_grants, :type_grants]
+  @grant_edges [:global_grants, :named_grants, :own_grants, :relationship_grants, :type_grants]
 
   @doc """
   Returns the keys of the windows a batch of transactions can have changed.
