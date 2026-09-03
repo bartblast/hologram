@@ -97,8 +97,8 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
-  # The role a grant carries has to be one the resource's own type declares, which is the check
-  # grant_role/3 runs before it writes. A row naming no resource type is a type-wide or a global
+  # The role a grant carries has to be one the entity's own type declares, which is the check
+  # grant_role/3 runs before it writes. A row naming no entity type is a type-wide or a global
   # grant: there is no type here to read declarations from, and the applier refuses both outright.
   defp declared_role(%Write{data: %{entity_type: label} = data}) when label != nil do
     with {:ok, entity_type} <- grant_entity_type(label) do
@@ -266,7 +266,7 @@ defmodule Hologram.Mutation.Envelope do
   end
 
   # Every other write may name the operation it wants evaluated. A grant's gate is fixed - the
-  # grant_role and revoke_role rules of the resource's own type - so a claim here would name an
+  # grant_role and revoke_role rules of the entity's own type - so a claim here would name an
   # operation nothing consults.
   defp grant_claim(nil), do: :ok
 
@@ -294,7 +294,7 @@ defmodule Hologram.Mutation.Envelope do
 
   defp grant_op(_op), do: {:error, "a role grant is created or deleted whole"}
 
-  # A grant names its resource one of three ways - a type and an id, a type alone, or neither -
+  # A grant names its scope one of three ways - a type and an id, a type alone, or neither -
   # and an id with no type is none of them, whether the type is sent as nil or not sent at all.
   # Refused here rather than in the applier, which resolves the type first and would raise on
   # nothing to resolve.

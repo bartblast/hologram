@@ -115,7 +115,7 @@ defmodule Hologram.DB.Preflight do
   # A value the rebuild carries to a new label is not a value it removes: the rows holding it
   # follow it through the remap, so counting them would refuse the very rename doing the
   # carrying. Only an UNSCOPED entry says that of every row - a scoped one carries the rows of
-  # one resource type and leaves the rest, which is a removal for those.
+  # one entity type and leaves the rest, which is a removal for those.
   defp carried_values(op) do
     op
     |> Map.get(:remap, [])

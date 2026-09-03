@@ -6,7 +6,7 @@ defmodule Hologram.Policy.Validator do
   alias Hologram.Reflection
 
   # The operations gating the grant lifecycle. Their checks run without the row in hand -
-  # grant_role/revoke_role know the entity type and the resource id, not the row's data - so
+  # grant_role/revoke_role know the entity type and the entity id, not the row's data - so
   # only own role references can be honored, and anything else would be silently ignored.
   @gate_operations [:grant_role, :read_roles, :revoke_role]
 

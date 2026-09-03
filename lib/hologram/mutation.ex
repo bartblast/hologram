@@ -154,7 +154,7 @@ defmodule Hologram.Mutation do
 
           nil ->
             raise ArgumentError,
-                  "a role grant for this user, resource and role exists under an id that is not " <>
+                  "a role grant for this user, entity and role exists under an id that is not " <>
                     "its derivation - every grant row's id is derived from the grant it states"
 
           row ->

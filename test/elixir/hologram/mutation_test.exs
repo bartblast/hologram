@@ -803,7 +803,7 @@ defmodule Hologram.MutationTest do
       write = grant_write(user.id, resource, :member)
 
       expected_msg =
-        "a role grant for this user, resource and role exists under an id that is not its " <>
+        "a role grant for this user, entity and role exists under an id that is not its " <>
           "derivation - every grant row's id is derived from the grant it states"
 
       assert_error ArgumentError, expected_msg, fn ->

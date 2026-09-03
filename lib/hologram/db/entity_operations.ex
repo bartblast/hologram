@@ -566,7 +566,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   # The creating user takes the entity type's creator roles as the row is inserted, in the
-  # same transaction - so a resource never exists without whoever made it holding its roles.
+  # same transaction - so a row never exists without whoever made it holding its roles.
   # Creating without an acting user grants nothing, which is what the trusted tier wants.
   defp creator_grants(entity) do
     entity_type = entity.__struct__
