@@ -964,7 +964,7 @@ describe("deriveGrantId()", () => {
     );
   });
 
-  it("derives a type-wide grant, which names no resource id", () => {
+  it("derives a type-wide grant, which names no entity id", () => {
     assert.notEqual(
       deriveGrantId(USER_ID, RESOURCE_TYPE, null, "member"),
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),

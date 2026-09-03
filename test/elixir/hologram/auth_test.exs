@@ -139,7 +139,7 @@ defmodule Hologram.AuthTest do
     end
 
     # An own-scope check matches the type-wide row too, which the store keeps apart by a null
-    # resource id - so the row answering it has to travel with the rest.
+    # entity id - so the row answering it has to travel with the rest.
     test "returns the type-wide row an own-scope question also asks about" do
       user = create_user("user_82@example.com")
       resource = create_resource()
@@ -894,7 +894,7 @@ defmodule Hologram.AuthTest do
       assert grant.entity_id == resource.id
     end
 
-    test "writes a type-wide grant with no resource id" do
+    test "writes a type-wide grant with no entity id" do
       user = create_user("user_8@example.com")
 
       assert grant_role(user, Module1, :owner) == :ok
@@ -1083,11 +1083,11 @@ defmodule Hologram.AuthTest do
       assert_error ArgumentError, expected_msg, fn -> grant_role(user, Module1, :publisher) end
     end
 
-    test "raises on a resource id that is not a canonical entity id" do
+    test "raises on an entity id that is not a canonical entity id" do
       user = create_user("user_15@example.com")
 
       expected_msg =
-        "invalid resource id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid entity id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
       assert_error ArgumentError, expected_msg, fn ->
         grant_role(user, %Module1{id: "nope"}, :owner)

@@ -204,7 +204,7 @@ defmodule Hologram.Auth.RoleGrantTest do
       assert variant in ["8", "9", "a", "b"]
     end
 
-    test "derives a type-wide grant, which names no resource id" do
+    test "derives a type-wide grant, which names no entity id" do
       type_wide_id = RoleGrant.derive_id(@user_id, @entity_type, nil, :member)
       instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
