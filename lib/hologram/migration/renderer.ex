@@ -113,15 +113,15 @@ defmodule Hologram.Migration.Renderer do
 
   # The value ops the grant store and the enum attributes take: a role rename moves a
   # value of the grant store's role type, an entity rename moves one of its resource_type
-  # (the value IS the table name), and an enum value rename moves one of the attribute's
-  # own type. Rows follow the label in every case - no rewrite.
+  # (the value IS the entity type module), and an enum value rename moves one of the
+  # attribute's own type. Rows follow the label in every case - no rewrite.
   defp enum_value_ops(%{op: :rename_entity} = op, pre_mapping, post_mapping) do
     relabel_ops(
       pre_mapping,
       post_mapping,
       :resource_type,
-      Map.fetch!(pre_mapping, op.from).table,
-      Map.fetch!(post_mapping, op.to).table
+      Codec.encode(op.from, :enum),
+      Codec.encode(op.to, :enum)
     )
   end
 
@@ -310,8 +310,8 @@ defmodule Hologram.Migration.Renderer do
   end
 
   # The rebuild rather than a value rename: the old value stays for the entity types that
-  # still declare it, the new one arrives beside it, and only the rows of this type's
-  # resource follow. A fresh type also sidesteps PostgreSQL refusing to use a value added
+  # still declare it, the new one arrives beside it, and only the rows scoped to this
+  # entity type follow. A fresh type also sidesteps PostgreSQL refusing to use a value added
   # by ALTER TYPE in the transaction that added it.
   defp scoped_role_rebuild_ops(mapping, entity_type, from, to) do
     grant_entry = Map.fetch!(mapping, RoleGrant)
@@ -328,7 +328,7 @@ defmodule Hologram.Migration.Renderer do
           %{
             from: from,
             to: to,
-            scope: {resource_type_column.name, Map.fetch!(mapping, entity_type).table}
+            scope: {resource_type_column.name, Codec.encode(entity_type, :enum)}
           }
         ]
       }

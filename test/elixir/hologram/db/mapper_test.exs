@@ -656,7 +656,7 @@ defmodule Hologram.DB.MapperTest do
 
       role_column = Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :role}))
 
-      assert resource_type_column.enum_values == ["test_fixtures_entity_module14"]
+      assert resource_type_column.enum_values == ["Hologram.Test.Fixtures.Entity.Module14"]
       assert role_column.enum_values == ["Nonexistent.Roles.Admin", "editor"]
     end
   end

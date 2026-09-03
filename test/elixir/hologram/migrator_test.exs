@@ -305,8 +305,8 @@ defmodule Hologram.MigratorTest do
       INSERT INTO "hologram_data"."hologram_role_grant"
         ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
       VALUES
-        ($1, $3, 'editor', 'my_app_task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
-        ($2, $3, 'editor', 'my_app_other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+        ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
+        ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} =
@@ -332,7 +332,7 @@ defmodule Hologram.MigratorTest do
 
       {:ok, %{rows: rows}} = Connection.query(select)
 
-      assert rows == [["my_app_other", "editor"], ["my_app_task", "reviewer"]]
+      assert rows == [["MyApp.Other", "editor"], ["MyApp.Task", "reviewer"]]
     end
 
     test "drops two related entity types whatever their table names sort like" do
@@ -393,7 +393,7 @@ defmodule Hologram.MigratorTest do
       insert_grant = """
       INSERT INTO "hologram_data"."hologram_role_grant"
         ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
-      VALUES ($1, $2, 'editor', 'my_app_other', $3,
+      VALUES ($1, $2, 'editor', 'MyApp.Other', $3,
               '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 

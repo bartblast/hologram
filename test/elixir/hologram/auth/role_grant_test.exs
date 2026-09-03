@@ -6,13 +6,16 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
+  alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Job
+  alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
   @other_user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
   @resource_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-  @resource_type :test_fixtures_policy_module2
+  @resource_type Policy.Module2
   @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
 
   describe "__attributes__/0" do
@@ -22,37 +25,37 @@ defmodule Hologram.Auth.RoleGrantTest do
                {:resource_type, :enum,
                 [
                   values: [
-                    :test_fixtures_entity_module1,
-                    :test_fixtures_entity_module10,
-                    :test_fixtures_entity_module11,
-                    :test_fixtures_entity_module12,
-                    :test_fixtures_entity_module13,
-                    :test_fixtures_entity_module14,
-                    :test_fixtures_entity_module15,
-                    :test_fixtures_entity_module16,
-                    :test_fixtures_entity_module17,
-                    :test_fixtures_entity_module18,
-                    :test_fixtures_entity_module19,
-                    :test_fixtures_entity_module2,
-                    :test_fixtures_entity_module20,
-                    :test_fixtures_entity_module21,
-                    :test_fixtures_entity_module22,
-                    :test_fixtures_entity_module23,
-                    :test_fixtures_entity_module3,
-                    :test_fixtures_entity_module4,
-                    :test_fixtures_entity_module5,
-                    :test_fixtures_entity_module6,
-                    :test_fixtures_entity_module7,
-                    :test_fixtures_entity_module8,
-                    :test_fixtures_entity_module9,
-                    :test_fixtures_job_module1,
-                    :test_fixtures_job_module2,
-                    :test_fixtures_job_module3,
-                    :test_fixtures_policy_module1,
-                    :test_fixtures_policy_module2,
-                    :test_fixtures_policy_module3,
-                    :test_fixtures_policy_module4,
-                    :test_fixtures_policy_module5
+                    Entity.Module1,
+                    Entity.Module10,
+                    Entity.Module11,
+                    Entity.Module12,
+                    Entity.Module13,
+                    Entity.Module14,
+                    Entity.Module15,
+                    Entity.Module16,
+                    Entity.Module17,
+                    Entity.Module18,
+                    Entity.Module19,
+                    Entity.Module2,
+                    Entity.Module20,
+                    Entity.Module21,
+                    Entity.Module22,
+                    Entity.Module23,
+                    Entity.Module3,
+                    Entity.Module4,
+                    Entity.Module5,
+                    Entity.Module6,
+                    Entity.Module7,
+                    Entity.Module8,
+                    Entity.Module9,
+                    Job.Module1,
+                    Job.Module2,
+                    Job.Module3,
+                    Policy.Module1,
+                    Policy.Module2,
+                    Policy.Module3,
+                    Policy.Module4,
+                    Policy.Module5
                   ],
                   optional: true
                 ]},
@@ -226,23 +229,24 @@ defmodule Hologram.Auth.RoleGrantTest do
       # UTF-16 code units would get wrong while passing the two vectors above.
       accented_id = RoleGrant.derive_id(@user_id, @resource_type, @resource_id, :café)
 
-      assert instance_id == "8cd330ce-decd-5e5b-bff7-1cd078a0ec62"
+      assert instance_id == "2c56252b-0c90-5cd9-b15d-91c5e5bf968e"
       assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
-      assert accented_id == "2ba31948-266d-5bb1-8452-451bca95d31c"
+      assert accented_id == "84121d8c-09a3-57fa-96e3-bd966906ce20"
     end
   end
 
   describe "entity_type/1" do
-    # Stated as a round trip rather than against a literal label, so the pair cannot drift apart
-    # without this failing - resource_type/1 derives the label and this derives the type back.
     test "answers the entity type whose resource type label it is given" do
-      label = RoleGrant.resource_type(Module14)
-
-      assert RoleGrant.entity_type(label) == Module14
+      assert RoleGrant.entity_type(Module14) == Module14
     end
 
-    test "answers nil for a label naming no table of this build" do
-      assert RoleGrant.entity_type(:no_such_table_in_this_build) == nil
+    test "answers nil for a label naming no entity type of this build" do
+      assert RoleGrant.entity_type(NoSuchEntityTypeInThisBuild) == nil
+    end
+
+    # The store's own type is left out of its scope enum: a grant is never held on a grant row.
+    test "answers nil for the role grant entity type itself" do
+      assert RoleGrant.entity_type(RoleGrant) == nil
     end
   end
 

@@ -515,12 +515,12 @@ defmodule Hologram.PolicyTest do
                read: [
                  %{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil},
                  %{
-                   predicates: [{:resource_type, :==, :test_fixtures_policy_module1}],
+                   predicates: [{:resource_type, :==, Policy.Module1}],
                    to: [{:resource, Policy.Module1, [:owner]}],
                    via: nil
                  },
                  %{
-                   predicates: [{:resource_type, :==, :test_fixtures_policy_module2}],
+                   predicates: [{:resource_type, :==, Policy.Module2}],
                    to: [
                      {:resource, Policy.Module2, [:admin, :member]},
                      {:global, [Role.Module1, Role.Module2]}

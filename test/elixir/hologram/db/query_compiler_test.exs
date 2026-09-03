@@ -331,7 +331,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                params: [
                  :actor,
                  {:value, ["editor", "owner"]},
-                 {:value, "test_fixtures_policy_module1"}
+                 {:value, "Hologram.Test.Fixtures.Policy.Module1"}
                ],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
@@ -395,7 +395,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert placeholders == [
                :actor,
                {:value, ["admin"]},
-               {:value, "test_fixtures_policy_module2"}
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"}
              ]
 
       assert String.contains?(
@@ -417,7 +417,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert placeholders == [
                :actor,
                {:value, ["admin"]},
-               {:value, "test_fixtures_policy_module2"}
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"}
              ]
 
       assert String.contains?(
@@ -529,12 +529,12 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert placeholders == [
                :actor,
-               {:value, "test_fixtures_policy_module1"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"},
                {:value, ["owner"]},
-               {:value, "test_fixtures_policy_module1"},
-               {:value, "test_fixtures_policy_module2"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"},
                {:value, ["admin", "member"]},
-               {:value, "test_fixtures_policy_module2"},
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"},
                {:value,
                 ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]}
              ]

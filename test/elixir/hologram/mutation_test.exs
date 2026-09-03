@@ -157,7 +157,7 @@ defmodule Hologram.MutationTest do
     data = %{
       "granted_by_id" => Keyword.get(opts, :granted_by_id, user_id),
       "resource_id" => resource.id,
-      "resource_type" => Atom.to_string(resource_type),
+      "resource_type" => Codec.encode_enum_value(resource_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
     }
@@ -182,7 +182,7 @@ defmodule Hologram.MutationTest do
 
     data = %{
       "resource_id" => resource.id,
-      "resource_type" => Atom.to_string(resource_type),
+      "resource_type" => Codec.encode_enum_value(resource_type),
       "role" => Atom.to_string(role),
       "user_id" => user_id
     }
@@ -704,7 +704,7 @@ defmodule Hologram.MutationTest do
              ]
 
       grant_id =
-        RoleGrant.derive_id(user.id, :test_fixtures_policy_module1, resource_id, :maintainer)
+        RoleGrant.derive_id(user.id, PolicyModule1, resource_id, :maintainer)
 
       assert kept["1"]["id"] == grant_id
 
@@ -830,7 +830,7 @@ defmodule Hologram.MutationTest do
       data = %{
         "granted_by_id" => admin.id,
         "resource_id" => nil,
-        "resource_type" => Atom.to_string(resource_type),
+        "resource_type" => Codec.encode_enum_value(resource_type),
         "role" => "member",
         "user_id" => user.id
       }

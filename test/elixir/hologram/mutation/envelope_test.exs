@@ -61,7 +61,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
       %{
         "granted_by_id" => @granter_id,
         "resource_id" => @target_id,
-        "resource_type" => "test_fixtures_policy_module2",
+        "resource_type" => "Hologram.Test.Fixtures.Policy.Module2",
         "role" => "member",
         "user_id" => @user_id
       },
@@ -267,7 +267,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "accepts a create of a role grant" do
-      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       entry = create(RoleGrant, grant_data(), id: grant_id)
 
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
@@ -278,7 +278,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                data: %{
                  granted_by_id: @granter_id,
                  resource_id: @target_id,
-                 resource_type: :test_fixtures_policy_module2,
+                 resource_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
                },
@@ -294,7 +294,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # A revocation carries the grant it revokes, as the browser sends it: the identity columns
     # and nothing else, under the id they derive.
     test "accepts a delete of a role grant carrying the grant it revokes" do
-      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       data = Map.delete(grant_data(), "granted_by_id")
       entry = delete(RoleGrant, based_on: %{"role" => 3}, data: data, id: grant_id)
 
@@ -305,7 +305,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
                claim: nil,
                data: %{
                  resource_id: @target_id,
-                 resource_type: :test_fixtures_policy_module2,
+                 resource_type: PolicyModule2,
                  role: :member,
                  user_id: @user_id
                },
@@ -321,7 +321,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # The gate is asked about the grant the delete states, so a delete stating none has nothing
     # to be gated on - an id alone, which anyone can derive, is not a revocation.
     test "refuses a delete of a role grant carrying no grant" do
-      grant_id = RoleGrant.derive_id(@user_id, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       entry = delete(RoleGrant, id: grant_id)
 
       assert parse(raw([entry])) ==
@@ -750,7 +750,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "refuses a role grant naming no user" do
-      grant_id = RoleGrant.derive_id(nil, :test_fixtures_policy_module2, @target_id, :member)
+      grant_id = RoleGrant.derive_id(nil, PolicyModule2, @target_id, :member)
       data = Map.delete(grant_data(), "user_id")
       entry = create(RoleGrant, data, id: grant_id)
 

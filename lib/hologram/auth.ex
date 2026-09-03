@@ -548,7 +548,7 @@ defmodule Hologram.Auth do
 
     params = [
       Codec.encode(user_id, :uuid),
-      resource_type && Atom.to_string(resource_type),
+      resource_type && Codec.encode_enum_value(resource_type),
       Codec.encode(resource_id, :uuid),
       Codec.encode(role, :enum)
     ]
@@ -728,11 +728,7 @@ defmodule Hologram.Auth do
 
   defp resource_reference(resource), do: {resource, nil}
 
-  defp resource_type_value(entity_type) do
-    entity_type
-    |> RoleGrant.resource_type()
-    |> Atom.to_string()
-  end
+  defp resource_type_value(entity_type), do: Codec.encode_enum_value(entity_type)
 
   defp scope_matches?(grant, :global) do
     grant.resource_type == nil and grant.resource_id == nil

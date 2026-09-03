@@ -700,7 +700,7 @@ defmodule Hologram.AuthTest do
       data = %{
         "id" => grant.id,
         "resource_id" => grant.resource_id,
-        "resource_type" => grant.resource_type && Atom.to_string(grant.resource_type),
+        "resource_type" => grant.resource_type && Codec.encode_enum_value(grant.resource_type),
         "role" => Codec.encode_enum_value(grant.role),
         "user_id" => grant.user_id
       }
@@ -889,7 +889,7 @@ defmodule Hologram.AuthTest do
 
       assert grant_role(user, resource, :owner) == :ok
 
-      assert [%{resource_type: "test_fixtures_policy_module1", role: "owner"} = grant] =
+      assert [%{resource_type: "Hologram.Test.Fixtures.Policy.Module1", role: "owner"} = grant] =
                grant_rows(user.id)
 
       assert grant.resource_id == resource.id
@@ -900,8 +900,13 @@ defmodule Hologram.AuthTest do
 
       assert grant_role(user, Module1, :owner) == :ok
 
-      assert [%{resource_type: "test_fixtures_policy_module1", resource_id: nil, role: "owner"}] =
-               grant_rows(user.id)
+      assert [
+               %{
+                 resource_type: "Hologram.Test.Fixtures.Policy.Module1",
+                 resource_id: nil,
+                 role: "owner"
+               }
+             ] = grant_rows(user.id)
     end
 
     test "stamps the acting user as the granter" do

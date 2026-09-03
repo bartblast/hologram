@@ -937,7 +937,7 @@ describe("deriveGrantId()", () => {
   const USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12";
   const OTHER_USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13";
   const RESOURCE_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10";
-  const RESOURCE_TYPE = "test_fixtures_policy_module2";
+  const RESOURCE_TYPE = "Hologram.Test.Fixtures.Policy.Module2";
 
   it("answers the same id for the same grant", () => {
     assert.equal(
@@ -980,7 +980,7 @@ describe("deriveGrantId()", () => {
   it("answers the vectors the server twin is held to", () => {
     assert.equal(
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
-      "8cd330ce-decd-5e5b-bff7-1cd078a0ec62",
+      "2c56252b-0c90-5cd9-b15d-91c5e5bf968e",
     );
 
     assert.equal(
@@ -990,7 +990,7 @@ describe("deriveGrantId()", () => {
 
     assert.equal(
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "café"),
-      "2ba31948-266d-5bb1-8452-451bca95d31c",
+      "84121d8c-09a3-57fa-96e3-bd966906ce20",
     );
   });
 });
@@ -1000,9 +1000,9 @@ describe("deriveGrantId()", () => {
 // the one the server derives for the same four parts.
 describe("a grant written into a batch", () => {
   const ENTITY_TYPE = "MyApp.Document";
-  const GRANT_ID = "8cd330ce-decd-5e5b-bff7-1cd078a0ec62";
+  const GRANT_ID = "2c56252b-0c90-5cd9-b15d-91c5e5bf968e";
   const NOW_MS = 1_756_100_000_123;
-  const RESOURCE_TYPE = "test_fixtures_policy_module2";
+  const RESOURCE_TYPE = "Hologram.Test.Fixtures.Policy.Module2";
   const STAMP = NOW_MS * 1024;
 
   const ACTOR_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11";

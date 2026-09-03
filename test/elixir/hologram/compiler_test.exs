@@ -1130,7 +1130,7 @@ defmodule Hologram.CompilerTest do
                  ~s/"defaults":{"c":Type.atom("x")},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
                  ~s/"relationships":{},/ <>
-                 ~s/"resourceType":"test_fixtures_entity_module4","roles":[],"serverOnly":[]}}/
+                 ~s/"resourceType":"Hologram.Test.Fixtures.Entity.Module4","roles":[],"serverOnly":[]}}/
              )
     end
 
@@ -1371,7 +1371,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"to":[["own",["viewer"]],["type","test_fixtures_policy_module2",["admin"]]]/
+               ~s/"to":[["own",["viewer"]],["type","Hologram.Test.Fixtures.Policy.Module2",["admin"]]]/
              )
 
       assert String.contains?(js, ~s/"publish":[{"predicates":[],"to":null,"via":"parent"}]/)

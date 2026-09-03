@@ -718,7 +718,7 @@ defmodule Hologram.DB.DDLTest do
         enum_type: "hologram_role_grant_role_$enum",
         values: ["editor", "reviewer"],
         columns: [{"hologram_role_grant", "role"}],
-        remap: [%{from: "editor", to: "reviewer", scope: {"resource_type", "my_app_task"}}]
+        remap: [%{from: "editor", to: "reviewer", scope: {"resource_type", "MyApp.Task"}}]
       }
 
       cast_statement =
@@ -728,7 +728,7 @@ defmodule Hologram.DB.DDLTest do
 
       assert cast_statement =~
                ~s{USING (CASE WHEN "role"::text = 'editor' } <>
-                 ~s{AND "resource_type" = 'my_app_task' THEN 'reviewer' } <>
+                 ~s{AND "resource_type" = 'MyApp.Task' THEN 'reviewer' } <>
                  ~s{ELSE "role"::text END)}
     end
 
@@ -740,7 +740,7 @@ defmodule Hologram.DB.DDLTest do
         columns: [{"hologram_role_grant", "role"}],
         remap: [
           %{from: "editor", to: "viewer", scope: nil},
-          %{from: "editor", to: "reviewer", scope: {"resource_type", "my_app_task"}}
+          %{from: "editor", to: "reviewer", scope: {"resource_type", "MyApp.Task"}}
         ]
       }
 
@@ -751,7 +751,7 @@ defmodule Hologram.DB.DDLTest do
 
       # First match wins in a searched CASE, so an unscoped branch rendered first would
       # swallow every row the scoped one singles out.
-      {scoped_at, _length} = :binary.match(cast_statement, "'my_app_task'")
+      {scoped_at, _length} = :binary.match(cast_statement, "'MyApp.Task'")
       {unscoped_at, _length} = :binary.match(cast_statement, "THEN 'viewer'")
 
       assert scoped_at < unscoped_at

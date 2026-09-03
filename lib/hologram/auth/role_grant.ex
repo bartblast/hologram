@@ -20,9 +20,7 @@ defmodule Hologram.Auth.RoleGrant do
   # exists so that a module can redefine what the macro injected into it, and nothing is
   # injected into this one.
 
-  alias Hologram.DB
   alias Hologram.DB.Codec
-  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
@@ -63,7 +61,7 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc """
   Returns the list of attribute definitions for the role grant entity type, sorted by attribute name.
-  The enum value sets are computed from the compiled data model: resource_type values are the entity type table names, and role values are the union of the entity types' declared role names and the global role modules.
+  The enum value sets are computed from the compiled data model: resource_type values are the entity type modules, and role values are the union of the entity types' declared role names and the global role modules.
   """
   @spec __attributes__() :: list({atom, atom, keyword})
   def __attributes__ do
@@ -164,17 +162,12 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc false
   @spec entity_type(atom) :: module | nil
-  # The inverse of resource_type/1, over the mapping rather than over a module sweep - a stored
-  # label is a table name, and the mapping is the build's own table-name-per-entity-type. Answers
-  # nil for a label naming no table, which a stored row's column cannot be but a client's write
-  # can: an enum decodes to whatever atom it spells rather than to a declared value.
+  # A stored label IS the entity type module, so the only question left is membership: the value
+  # set is this build's entity types, and a value outside it names no type here. Answers nil for
+  # such a label, which a stored row's column cannot hold but a client's write can - an enum
+  # decodes to whatever atom it spells rather than to a declared value.
   def entity_type(resource_type) do
-    table = Atom.to_string(resource_type)
-
-    case Enum.find(DB.mapping(), fn {_entity_type, entry} -> entry.table == table end) do
-      {entity_type, _entry} -> entity_type
-      nil -> nil
-    end
+    if resource_type in resolved(:resource_type_values), do: resource_type
   end
 
   @doc false
@@ -198,15 +191,10 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc false
   @spec resource_type(module) :: atom
-  # The atom set is bounded by the app's entity types, all named at build time - the table
-  # names they derive can't be influenced at runtime.
-  # sobelow_skip ["DOS.StringToAtom"]
-  def resource_type(entity_type) do
-    entity_type
-    |> Mapper.table_name()
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    |> String.to_atom()
-  end
+  # The stored value of a scope IS the entity type module. Kept as a function for the callers
+  # still spelling the column's name, and removed once they name the entity type instead.
+  # TODO: delete with the resource_type -> entity_type column rename.
+  def resource_type(entity_type), do: entity_type
 
   @doc false
   @spec reset_resolution_cache() :: :ok
@@ -228,10 +216,7 @@ defmodule Hologram.Auth.RoleGrant do
   defp build_resolution do
     entity_types = Enum.reject(Reflection.list_entities(), &(&1 == __MODULE__))
 
-    resource_type_values =
-      entity_types
-      |> Enum.map(&resource_type/1)
-      |> Enum.sort()
+    resource_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
 
     entity_role_names =
       Enum.flat_map(entity_types, fn entity_type ->

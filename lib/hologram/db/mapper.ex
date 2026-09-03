@@ -502,15 +502,14 @@ defmodule Hologram.DB.Mapper do
     end
   end
 
-  # The grant store is derived, never declared: its enum values are the model's table names
-  # and role names, and its relationships point at the designated user entity type - so a
+  # The grant store is derived, never declared: its enum values are the model's entity type
+  # modules and role names, and its relationships point at the designated user entity type - so a
   # replayed history derives the store as it stood at that point, with no op declaring it.
   defp role_grant_entry(model, user_entity) do
     resource_type_values =
       model.entities
       |> Map.keys()
-      |> Enum.map(&RoleGrant.resource_type/1)
-      |> Enum.sort()
+      |> Enum.sort_by(&Codec.encode(&1, :enum))
 
     entity_role_names =
       Enum.flat_map(model.entities, fn {_entity_type, entry} ->
