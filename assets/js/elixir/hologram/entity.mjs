@@ -367,6 +367,25 @@ function fieldNumber(struct, name) {
   return Number(structField(struct, name).value);
 }
 
+// The two halves, each asked of whichever struct carries those field names - a Date and a DateTime
+// answer the first, a Time and a DateTime the second, which is what makes an instant both.
+function validDateFields(struct) {
+  return validDate(
+    fieldNumber(struct, "year"),
+    fieldNumber(struct, "month"),
+    fieldNumber(struct, "day"),
+  );
+}
+
+function validTimeFields(struct) {
+  return validTime(
+    fieldNumber(struct, "hour"),
+    fieldNumber(struct, "minute"),
+    fieldNumber(struct, "second"),
+    structField(struct, "microsecond").data,
+  );
+}
+
 function errorTuple(name, reason) {
   return Type.tuple([Type.atom(name), reason]);
 }
@@ -660,17 +679,16 @@ function typeValid(value, attributeType) {
       return Type.isBoolean(value);
 
     case "date":
-      return (
-        Type.isStruct(value, "Date") &&
-        validDate(
-          fieldNumber(value, "year"),
-          fieldNumber(value, "month"),
-          fieldNumber(value, "day"),
-        )
-      );
+      return Type.isStruct(value, "Date") && validDateFields(value);
 
+    // The zone fields are deliberately not read: the codec normalizes every instant to UTC through
+    // a unix round trip, so a zone question is not a calendar question.
     case "datetime":
-      return Type.isStruct(value, "DateTime");
+      return (
+        Type.isStruct(value, "DateTime") &&
+        validDateFields(value) &&
+        validTimeFields(value)
+      );
 
     case "float":
       return Type.isFloat(value);
@@ -686,15 +704,7 @@ function typeValid(value, attributeType) {
       return Type.isBinary(value) && Bitstring.isText(value);
 
     case "time":
-      return (
-        Type.isStruct(value, "Time") &&
-        validTime(
-          fieldNumber(value, "hour"),
-          fieldNumber(value, "minute"),
-          fieldNumber(value, "second"),
-          structField(value, "microsecond").data,
-        )
-      );
+      return Type.isStruct(value, "Time") && validTimeFields(value);
 
     default:
       return uuidValue(value);

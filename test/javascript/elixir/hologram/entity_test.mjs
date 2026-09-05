@@ -860,6 +860,41 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    // Both halves of an instant, each alone - a valid clock does not excuse an impossible date,
+    // and the other way round.
+    it("reports an instant the calendar never reaches as a type violation", () => {
+      const typeViolation = violation(
+        "held_at",
+        Type.tuple([Type.atom("type"), Type.atom("datetime")]),
+      );
+
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 13, 40)}),
+        typeViolation,
+      );
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 2, 30)}),
+        typeViolation,
+      );
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 1, 1, 25)}),
+        typeViolation,
+      );
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2028, 2, 29)}),
+        Type.atom("ok"),
+      );
+    });
+
+    // A zone is not a calendar question, so the four zone fields are never read - an instant an
+    // hour east of UTC is a real instant and reaches the constraint pass like any other.
+    it("accepts an instant carrying a time zone offset", () => {
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 6, 1, 12, 3600)}),
+        Type.atom("ok"),
+      );
+    });
+
     // The instant is what is compared, not the wall clock: 2026-01-01T00:00 at an offset of one
     // hour east is 2025-12-31T23:00 UTC, which is before the bound.
     it("compares a datetime by its instant rather than by its wall clock", () => {
