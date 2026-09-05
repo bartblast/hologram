@@ -64,7 +64,7 @@ defmodule Hologram.Job.WorkerTest do
 
       start_worker!(notifications: notifications)
 
-      assert_receive {:listening, "hologram_outbox"}, @timeout_ms
+      assert_receive {:listening, "hologram_oplog"}, @timeout_ms
     end
 
     test "listens for nothing when given no notifications process" do
@@ -112,7 +112,7 @@ defmodule Hologram.Job.WorkerTest do
     test "passes when a write is announced" do
       worker = start_worker!(pass: counting_pass(self(), []))
 
-      send(worker, {:notification, self(), make_ref(), "hologram_outbox", ""})
+      send(worker, {:notification, self(), make_ref(), "hologram_oplog", ""})
 
       assert_receive {:passed, _job_types}, @timeout_ms
     end

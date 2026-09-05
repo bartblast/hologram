@@ -15,7 +15,7 @@ defmodule Hologram.DB.Oplog do
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Ref
 
-  @channel "hologram_outbox"
+  @channel "hologram_oplog"
 
   @columns [
     "op",
