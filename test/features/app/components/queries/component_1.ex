@@ -6,13 +6,9 @@ defmodule HologramFeatureTests.Components.Queries.Component1 do
 
   prop :products, [Product], from_query: &products_query/0
 
-  # The query result arrives as a server-injected prop and hydrates the client
-  # through state - client-side from_query rendering runs on the local database,
-  # which is not built yet.
-  def init(props, component, _server) do
-    put_state(component, :products, props.products)
-  end
-
+  # No init/3, deliberately: the prop is rendered as it resolves. On the server that is the
+  # query against Postgres, and on the client the same query against the client's own database -
+  # which is what makes a change arriving on the stream reach this DOM without anyone asking.
   def template do
     ~HOLO"""
     <p>
