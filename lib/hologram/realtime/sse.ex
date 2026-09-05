@@ -3,7 +3,7 @@ defmodule Hologram.Realtime.SSE do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
-  alias Hologram.DB.Outbox
+  alias Hologram.DB.EntityChangelog
   alias Hologram.Mutation.Record
   alias Hologram.Policy.Edges
   alias Hologram.Realtime
@@ -789,7 +789,7 @@ defmodule Hologram.Realtime.SSE do
             applied_seq: applied_seq,
             client: self(),
             edges: edges,
-            fill_place: {Outbox.current_xmin(), 0},
+            fill_place: {EntityChangelog.current_xmin(), 0},
             gap: gap,
             grants_then: grants_then,
             page: page,

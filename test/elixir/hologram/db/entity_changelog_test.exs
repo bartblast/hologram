@@ -1,7 +1,7 @@
-defmodule Hologram.DB.OutboxTest do
+defmodule Hologram.DB.EntityChangelogTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.DB.Outbox
+  import Hologram.DB.EntityChangelog
 
   alias Hologram.Auth.Context
   alias Hologram.DB

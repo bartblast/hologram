@@ -14,8 +14,8 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.EntityChangelog
   alias Hologram.DB.Mapper
-  alias Hologram.DB.Outbox
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
@@ -66,7 +66,7 @@ defmodule Hologram.DB.EntityOperations do
           Connection.transaction(fn ->
             {stamped_entity, _result} = insert(entity, "")
 
-            Outbox.append([put_effect(stamped_entity)])
+            EntityChangelog.append([put_effect(stamped_entity)])
 
             # The grants ride in the create's own transaction rather than opening one each -
             # a row never exists without its creator's roles, and a nested transaction per
@@ -154,7 +154,7 @@ defmodule Hologram.DB.EntityOperations do
         # takes whatever hung off it, and a reader learning the entity is gone knows that.
         case delete_entity_row(entity_type, table, encoded_id) do
           nil -> :ok
-          entity -> Outbox.append([delete_effect(entity)])
+          entity -> EntityChangelog.append([delete_effect(entity)])
         end
 
         :ok
@@ -685,7 +685,7 @@ defmodule Hologram.DB.EntityOperations do
     # A row that was already there is not a change, and the conflicting insert wrote
     # nothing - an effect recorded for it would be a change clients never saw happen.
     if result.num_rows == 1 do
-      Outbox.append([put_effect(stamped_entity)])
+      EntityChangelog.append([put_effect(stamped_entity)])
 
       :created
     else
@@ -705,8 +705,8 @@ defmodule Hologram.DB.EntityOperations do
     }
   end
 
-  # What a row held, as the effect log records it: every column it carries except the sort-key
-  # companions, which are derived from the values beside them rather than written.
+  # What a row held, as the entity changelog records it: every column it carries except the
+  # sort-key companions, which are derived from the values beside them rather than written.
   defp effect_data(entity) do
     entity.__struct__
     |> persisted_columns()
@@ -718,7 +718,7 @@ defmodule Hologram.DB.EntityOperations do
     end)
   end
 
-  # What the entity now is, as the effect log records it, with the revisions the write set.
+  # What the entity now is, as the entity changelog records it, with the revisions the write set.
   defp put_effect(entity) do
     %{
       op: :put_entity,
@@ -734,7 +734,7 @@ defmodule Hologram.DB.EntityOperations do
   defp run_edge_change!(statement, params, effect) do
     case Connection.query(statement, params) do
       {:ok, %Postgrex.Result{num_rows: 1}} ->
-        Outbox.append([effect])
+        EntityChangelog.append([effect])
 
       {:ok, %Postgrex.Result{}} ->
         :ok
@@ -761,7 +761,7 @@ defmodule Hologram.DB.EntityOperations do
         # refused put gets, and nothing is recorded.
         case Entity.validate(entity_type, results) do
           :ok ->
-            Outbox.append([
+            EntityChangelog.append([
               %{
                 op: :patch_entity,
                 entity_type: entity_type,

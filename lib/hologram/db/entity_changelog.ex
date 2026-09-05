@@ -1,12 +1,13 @@
-defmodule Hologram.DB.Outbox do
+defmodule Hologram.DB.EntityChangelog do
   @moduledoc false
 
-  # The effect log: one row per entity-level effect, appended in the transaction that caused it,
-  # so a write and the record of it either both land or neither does. What the rows are read for
-  # is which entity types and attributes a transaction touched - the values a client is sent come
-  # from reading the rows themselves afresh, never from here. That is what lets the log store a
-  # write WHOLE, server-only values included: what may be shown is decided where a row meets the
-  # wire, against the model of the moment, rather than by what was stored years earlier.
+  # The entity changelog: one row per entity-level effect, appended in the transaction that
+  # caused it, so a write and the record of it either both land or neither does. What the
+  # rows are read for is which entity types and attributes a transaction touched - the values
+  # a client is sent come from reading the rows themselves afresh, never from here. That is
+  # what lets the log store a write WHOLE, server-only values included: what may be shown is
+  # decided where a row meets the wire, against the model of the moment, rather than by what
+  # was stored years earlier.
 
   alias Hologram.Auth.Context
   alias Hologram.DB.Codec
@@ -33,7 +34,7 @@ defmodule Hologram.DB.Outbox do
   @relationship_ops [:add_relationship, :del_relationship]
 
   @doc """
-  Appends the given effects to the outbox in the caller's transaction, and wakes the dispatchers
+  Appends the given effects to the log in the caller's transaction, and wakes the dispatchers
   listening for them. Appending nothing does nothing.
 
   An effect names its `:op`, the `:entity_type` and `:entity_id` it happened to, and what the op

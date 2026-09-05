@@ -57,7 +57,7 @@ defmodule Hologram.Sync.WireData do
 
   # System attributes are attributes here: a client is told the id and the stamps like anything
   # else. A name matching no definition is a to-one reference field, and every one of those
-  # carries an entity id - the same fallback the effect log makes.
+  # carries an entity id - the same fallback the entity changelog makes.
   defp attribute_types(entity_type) do
     entity_type.__attributes__()
     |> Enum.concat(entity_type.__system_attributes__())
