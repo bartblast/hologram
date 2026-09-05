@@ -93,8 +93,8 @@ defmodule HologramFeatureTests.ResyncTest do
     assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
   end
 
-  defp truncate_outbox do
-    {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_system"."outbox"), [])
+  defp truncate_oplog do
+    {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_system"."oplog"), [])
 
     :ok
   end
@@ -115,7 +115,7 @@ defmodule HologramFeatureTests.ResyncTest do
       |> mark_this_page_load()
       |> hold_sync_frames()
 
-    truncate_outbox()
+    truncate_oplog()
     simulate_sse_disconnect(current_instance_id(session))
 
     session
@@ -157,7 +157,7 @@ defmodule HologramFeatureTests.ResyncTest do
       |> await_place()
       |> mark_this_page_load()
 
-    truncate_outbox()
+    truncate_oplog()
     :ok = delete(Todo, beta.id)
 
     simulate_sse_disconnect(current_instance_id(session))
