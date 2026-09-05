@@ -30,9 +30,24 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "validates :datetime values" do
       assert attribute_value_valid?(~U[2026-07-17 12:00:00Z], :datetime)
+      assert attribute_value_valid?(~U[2024-02-29 23:59:59.999999Z], :datetime)
       refute attribute_value_valid?(~N[2026-07-17 12:00:00], :datetime)
       refute attribute_value_valid?(~D[2026-07-17], :datetime)
       refute attribute_value_valid?("2026-07-17T12:00:00Z", :datetime)
+
+      # Each half alone - a valid clock does not excuse an impossible date, and the other way round.
+      refute attribute_value_valid?(
+               %{~U[2026-07-17 12:00:00Z] | month: 13, day: 40},
+               :datetime
+             )
+
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | month: 2, day: 30}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | hour: 25}, :datetime)
+
+      refute attribute_value_valid?(
+               %{~U[2026-07-17 12:00:00Z] | microsecond: {0, 7}},
+               :datetime
+             )
     end
 
     test "accepts :datetime values in any time zone representation" do
@@ -261,6 +276,15 @@ defmodule Hologram.Entity.ValidatorTest do
       }
 
       assert validate(Module4, impossible_date_data) == {:error, [{:a, {:type, :date}}]}
+
+      impossible_datetime_data = %{
+        a: ~D[2026-07-17],
+        b: %{~U[2026-07-17 12:00:00Z] | hour: 25},
+        c: :x,
+        d: 1.5
+      }
+
+      assert validate(Module4, impossible_datetime_data) == {:error, [{:b, {:type, :datetime}}]}
     end
 
     test "reports values violations for enum attributes" do

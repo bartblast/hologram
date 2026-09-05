@@ -88,7 +88,28 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(_value, :date, _opts), do: false
 
-  def attribute_value_valid?(value, :datetime, _opts), do: is_struct(value, DateTime)
+  # Both halves, asked of the struct's own calendar for the reason the :date clause above gives.
+  # The zone fields are deliberately not read: the codec normalizes every instant to UTC through a
+  # unix round trip, and a zone question is not a calendar question.
+  def attribute_value_valid?(
+        %DateTime{
+          calendar: calendar,
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: microsecond
+        },
+        :datetime,
+        _opts
+      ) do
+    calendar.valid_date?(year, month, day) and
+      calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
+  def attribute_value_valid?(_value, :datetime, _opts), do: false
 
   def attribute_value_valid?(value, :enum, opts),
     do: is_atom(value) and value in Keyword.fetch!(opts, :values)
