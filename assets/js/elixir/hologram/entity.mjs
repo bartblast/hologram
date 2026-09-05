@@ -329,6 +329,27 @@ function validDate(year, month, day) {
   );
 }
 
+// valid_time?/4 is `is_hour and is_minute and is_second and is_microsecond(amount, precision)`,
+// and is_microsecond is `microsecond in 0..999_999 and precision in 0..6` - so the PRECISION is
+// judged beside the amount, which a check over the clock fields alone would miss. The microsecond
+// arrives as the boxed tuple's parts, read the way datetimeKey reads them.
+function validTime(hour, minute, second, microsecond) {
+  const [amount, precision] = microsecond.map((part) => Number(part.value));
+
+  return (
+    hour >= 0 &&
+    hour <= 23 &&
+    minute >= 0 &&
+    minute <= 59 &&
+    second >= 0 &&
+    second <= 59 &&
+    amount >= 0 &&
+    amount <= 999999 &&
+    precision >= 0 &&
+    precision <= 6
+  );
+}
+
 function daysInMonth(year, month) {
   if (month === 2) {
     return leapYear(year) ? 29 : 28;
@@ -665,7 +686,15 @@ function typeValid(value, attributeType) {
       return Type.isBinary(value) && Bitstring.isText(value);
 
     case "time":
-      return Type.isStruct(value, "Time");
+      return (
+        Type.isStruct(value, "Time") &&
+        validTime(
+          fieldNumber(value, "hour"),
+          fieldNumber(value, "minute"),
+          fieldNumber(value, "second"),
+          structField(value, "microsecond").data,
+        )
+      );
 
     default:
       return uuidValue(value);

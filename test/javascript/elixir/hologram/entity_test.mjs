@@ -917,6 +917,47 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    // Mirrors Calendar.ISO.valid_time?/4, whose is_microsecond guard judges the PRECISION beside
+    // the amount - a check over the clock fields alone would pass both of the last two cases.
+    it("reports a time the clock never reaches as a type violation", () => {
+      const typeViolation = violation(
+        "opens_at",
+        Type.tuple([Type.atom("type"), Type.atom("time")]),
+      );
+
+      const timeAtPrecision = (precision) =>
+        Type.struct("Time", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("hour"), Type.integer(11)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(0), Type.integer(precision)]),
+          ],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("second"), Type.integer(0)],
+        ]);
+
+      assert.deepEqual(item({opens_at: boxedTime(24)}), typeViolation);
+      assert.deepEqual(item({opens_at: boxedTime(11, 60)}), typeViolation);
+
+      assert.deepEqual(
+        item({opens_at: boxedTime(11, 0, 1000000)}),
+        typeViolation,
+      );
+
+      assert.deepEqual(item({opens_at: timeAtPrecision(7)}), typeViolation);
+      assert.deepEqual(item({opens_at: timeAtPrecision(6)}), Type.atom("ok"));
+    });
+
+    // The last microsecond of the day is a real time, so it reaches the CONSTRAINT pass and is
+    // refused by the declared maximum - which a type violation would have suppressed.
+    it("accepts the clock's last instant, which the declared maximum then refuses", () => {
+      assert.deepEqual(
+        item({opens_at: boxedTime(23, 59, 999999)}),
+        violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
+      );
+    });
+
     // A time of day is compared by the clock it names and nothing else - there is no date to
     // fold in and no zone to move it by, which is what separates it from the instant above.
     it("reports a time outside the declared bounds", () => {
