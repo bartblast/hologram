@@ -1,13 +1,12 @@
-defmodule Hologram.DB.EntityChangelog do
+defmodule Hologram.DB.Oplog do
   @moduledoc false
 
-  # The entity changelog: one row per entity-level effect, appended in the transaction that
-  # caused it, so a write and the record of it either both land or neither does. What the
-  # rows are read for is which entity types and attributes a transaction touched - the values
-  # a client is sent come from reading the rows themselves afresh, never from here. That is
-  # what lets the log store a write WHOLE, server-only values included: what may be shown is
-  # decided where a row meets the wire, against the model of the moment, rather than by what
-  # was stored years earlier.
+  # The oplog: one row per entity-level effect, appended in the transaction that caused it,
+  # so a write and the record of it either both land or neither does. What the rows are read for
+  # is which entity types and attributes a transaction touched - the values a client is sent come
+  # from reading the rows themselves afresh, never from here. That is what lets the log store a
+  # write WHOLE, server-only values included: what may be shown is decided where a row meets the
+  # wire, against the model of the moment, rather than by what was stored years earlier.
 
   alias Hologram.Auth.Context
   alias Hologram.DB.Codec

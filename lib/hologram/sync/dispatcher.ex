@@ -1,14 +1,13 @@
 defmodule Hologram.Sync.Dispatcher do
   @moduledoc false
 
-  # Reads the entity changelog forward, one window at a time, and hands each window's
-  # transactions to whoever routes them. One of these runs per node: the log is shared, the
-  # reading is not, and two nodes reading it need no agreement because each keeps its own
-  # place.
+  # Reads the oplog forward, one window at a time, and hands each window's transactions to
+  # whoever routes them. One of these runs per node: the log is shared, the reading is not, and
+  # two nodes reading it need no agreement because each keeps its own place.
 
   use GenServer
 
-  alias Hologram.DB.EntityChangelog
+  alias Hologram.DB.Oplog
   alias Hologram.Sync.ReadEdge
 
   # How long the log can go unread when the announcements stop arriving - a listener whose
@@ -105,9 +104,9 @@ defmodule Hologram.Sync.Dispatcher do
   end
 
   defp dispatch(state) do
-    edge = EntityChangelog.current_xmin()
+    edge = Oplog.current_xmin()
 
-    case EntityChangelog.read_window(state.cursor, edge) do
+    case Oplog.read_window(state.cursor, edge) do
       [] ->
         move_to(state, edge)
 
@@ -146,7 +145,7 @@ defmodule Hologram.Sync.Dispatcher do
   # accept that answer would make a database still coming up fail the process that is waiting for
   # it, which is the whole reason the connection is allowed to open late.
   defp listen_for_appends(notifications) do
-    case Postgrex.Notifications.listen(notifications, EntityChangelog.channel()) do
+    case Postgrex.Notifications.listen(notifications, Oplog.channel()) do
       {:ok, _ref} -> :ok
       {:eventually, _ref} -> :ok
     end
@@ -171,7 +170,7 @@ defmodule Hologram.Sync.Dispatcher do
   # has never read - and taking it HERE is what makes "now" the moment the node started rather
   # than the moment something first woke it, which is always after an append it should have seen.
   defp starting_place(state) do
-    state.cursor || remembered(state.read_edge) || EntityChangelog.current_xmin()
+    state.cursor || remembered(state.read_edge) || Oplog.current_xmin()
   end
 
   defp wake_up(state) do

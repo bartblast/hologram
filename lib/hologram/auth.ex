@@ -6,9 +6,9 @@ defmodule Hologram.Auth do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.DB.EntityChangelog
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Entity.Validator
@@ -779,7 +779,7 @@ defmodule Hologram.Auth do
   end
 
   defp undo_grant_effect(%{op: :del_entity, data: data}, grants) do
-    [EntityChangelog.entity_from_data(RoleGrant, data) | grants]
+    [Oplog.entity_from_data(RoleGrant, data) | grants]
   end
 
   defp unknown_global_role_message(role) do

@@ -14,7 +14,7 @@ defmodule Hologram.Mutation.Record do
   # rolled back with everything else the transaction did - and it keeps the batch as it arrived
   # beside the answer, since its rows reached no log and exist nowhere else on the server.
   #
-  # A landed batch's envelope is not kept: the rows it wrote are in the entity changelog under
+  # A landed batch's envelope is not kept: the rows it wrote are in the oplog under
   # mutation_ref, keyed by the same pair, so keeping it here would keep every write twice.
 
   alias Hologram.DB.Codec

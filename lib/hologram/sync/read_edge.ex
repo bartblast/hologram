@@ -1,8 +1,8 @@
 defmodule Hologram.Sync.ReadEdge do
   @moduledoc false
 
-  # How far this node has read the entity changelog - the edge it read up to, which is where
-  # the next window opens - kept outside the process doing the reading.
+  # How far this node has read the oplog - the edge it read up to, which is where the next
+  # window opens - kept outside the process doing the reading.
   #
   # A dispatcher moves its edge only once a round has been handed on, so that dying halfway means
   # reading the same window again rather than passing it silently. That holds for as long as the

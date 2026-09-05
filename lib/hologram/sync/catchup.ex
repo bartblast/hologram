@@ -20,7 +20,7 @@ defmodule Hologram.Sync.Catchup do
 
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
-  alias Hologram.DB.EntityChangelog
+  alias Hologram.DB.Oplog
   alias Hologram.Entity.Model
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Frame
@@ -116,7 +116,7 @@ defmodule Hologram.Sync.Catchup do
 
   defp read_gap(tx, seq) do
     tx
-    |> EntityChangelog.read_after(seq, gap_limit() + 1)
+    |> Oplog.read_after(seq, gap_limit() + 1)
     |> check_size()
   end
 
@@ -154,7 +154,7 @@ defmodule Hologram.Sync.Catchup do
 
   defp grants_then(effects, tx, seq, actor_user_id) do
     if Enum.any?(effects, &(&1.type == RoleGrant)) do
-      case EntityChangelog.read_type_after(RoleGrant, tx, seq, %{"user_id" => actor_user_id}) do
+      case Oplog.read_type_after(RoleGrant, tx, seq, %{"user_id" => actor_user_id}) do
         [] -> nil
         grant_effects -> Auth.grants_before(actor_user_id, grant_effects)
       end
@@ -167,7 +167,7 @@ defmodule Hologram.Sync.Catchup do
   #
   # A log holding nothing cannot say either way, so it says the honest thing.
   defp check_retention(tx, seq) do
-    case EntityChangelog.oldest_place() do
+    case Oplog.oldest_place() do
       nil -> {:full_resync, :retention}
       oldest when oldest <= {tx, seq} -> :ok
       _predates_log -> {:full_resync, :retention}

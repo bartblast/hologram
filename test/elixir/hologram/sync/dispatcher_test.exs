@@ -8,7 +8,7 @@ defmodule Hologram.Sync.DispatcherTest do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.DB.EntityChangelog
+  alias Hologram.DB.Oplog
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.ReadEdge
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -307,7 +307,7 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher = start_dispatcher!(notifications: notifications)
 
       assert_receive {:listening, channel}
-      assert channel == EntityChangelog.channel()
+      assert channel == Oplog.channel()
 
       settle(dispatcher)
     end
@@ -336,7 +336,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: 200)
 
-      send(dispatcher, {:notification, self(), make_ref(), EntityChangelog.channel(), ""})
+      send(dispatcher, {:notification, self(), make_ref(), Oplog.channel(), ""})
 
       assert_receive {:dispatched, [{200, _events}], _place}
 
