@@ -169,7 +169,10 @@ describe("Elixir_Hologram_Entity", () => {
             bio: {max_length: 10, optional: true},
             count: {max: Type.integer(10), min: Type.integer(1)},
             country_code: {length: 2, optional: true},
-            email: {format: {opts: Type.list([]), source: "@"}, optional: true},
+            email: {
+              format: {opts: Type.list([]), source: "@"},
+              optional: true,
+            },
             handle: {
               format: {opts: Type.list([]), source: "^[a-z_]+$"},
               min_length: 3,
@@ -865,6 +868,41 @@ describe("Elixir_Hologram_Entity", () => {
         violation(
           "held_at",
           Type.tuple([Type.atom("min"), boxedDateTime(2026, 1, 1)]),
+        ),
+      );
+    });
+
+    // Mirrors the Elixir refusal: an impossible date is not a date, so it carries {:type, :date}
+    // rather than a reason of its own.
+    it("reports a date the calendar never reaches as a type violation", () => {
+      assert.deepEqual(
+        item({released_on: boxedDate(2026, 13, 40)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("type"), Type.atom("date")]),
+        ),
+      );
+    });
+
+    it("accepts the last day of a leap February and refuses the day after", () => {
+      assert.deepEqual(
+        item({released_on: boxedDate(2024, 2, 29)}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({released_on: boxedDate(2024, 2, 30)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("type"), Type.atom("date")]),
+        ),
+      );
+
+      assert.deepEqual(
+        item({released_on: boxedDate(2026, 2, 29)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("type"), Type.atom("date")]),
         ),
       );
     });

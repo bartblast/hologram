@@ -315,6 +315,37 @@ function timeKey(value) {
   ];
 }
 
+// Calendar.ISO's rules, hand-written rather than called. entity.mjs is RUNTIME-bundle code, and
+// Calendar.ISO.valid_date?/3 is transpiled into a page bundle only where some page reaches it -
+// measured against a built features app: 1 of 207 page bundles, 0 runtime bundles, and
+// valid_time?/4 in none at all. A call would work on one page and throw everywhere else.
+//
+// valid_date?/3 is `is_month(month) and day in 1..days_in_month(year, month)`, and the year is
+// unconstrained - is_year/1 asks only that it is an integer. Split the way Elixir splits it, so a
+// later divergence shows up in the half that moved.
+function validDate(year, month, day) {
+  return (
+    month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
+  );
+}
+
+function daysInMonth(year, month) {
+  if (month === 2) {
+    return leapYear(year) ? 29 : 28;
+  }
+
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+function leapYear(year) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+// A struct's integer field as a plain number, the way the ordering keys above read one.
+function fieldNumber(struct, name) {
+  return Number(structField(struct, name).value);
+}
+
 function errorTuple(name, reason) {
   return Type.tuple([Type.atom(name), reason]);
 }
@@ -608,7 +639,14 @@ function typeValid(value, attributeType) {
       return Type.isBoolean(value);
 
     case "date":
-      return Type.isStruct(value, "Date");
+      return (
+        Type.isStruct(value, "Date") &&
+        validDate(
+          fieldNumber(value, "year"),
+          fieldNumber(value, "month"),
+          fieldNumber(value, "day"),
+        )
+      );
 
     case "datetime":
       return Type.isStruct(value, "DateTime");
