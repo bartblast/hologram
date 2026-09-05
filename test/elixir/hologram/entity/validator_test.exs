@@ -20,9 +20,12 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "validates :date values" do
       assert attribute_value_valid?(~D[2026-07-17], :date)
+      assert attribute_value_valid?(%Date{year: 2024, month: 2, day: 29}, :date)
       refute attribute_value_valid?("2026-07-17", :date)
       refute attribute_value_valid?(~N[2026-07-17 12:00:00], :date)
       refute attribute_value_valid?(~U[2026-07-17 12:00:00Z], :date)
+      refute attribute_value_valid?(%Date{year: 2026, month: 13, day: 40}, :date)
+      refute attribute_value_valid?(%Date{year: 2026, month: 2, day: 30}, :date)
     end
 
     test "validates :datetime values" do
@@ -222,6 +225,15 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "reports type violations with the expected type" do
       assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, {:type, :boolean}}]}
+
+      impossible_date_data = %{
+        a: %Date{year: 2026, month: 13, day: 40},
+        b: ~U[2026-07-17 12:00:00Z],
+        c: :x,
+        d: 1.5
+      }
+
+      assert validate(Module4, impossible_date_data) == {:error, [{:a, {:type, :date}}]}
     end
 
     test "reports values violations for enum attributes" do
@@ -779,6 +791,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :released_on, :date, max: "2030-12-31"
+        end
+      end
+    end
+
+    test "rejects max option holding a date the calendar never reaches" do
+      expected_msg =
+        "invalid max option ~D[2030-13-01] for attribute :released_on in Hologram.Entity.ValidatorTest.InlineEntityFixture101 - the max option must match the attribute type :date"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture101 do
+          use Hologram.Entity
+
+          attribute :released_on, :date, max: %Date{year: 2030, month: 13, day: 1}
         end
       end
     end

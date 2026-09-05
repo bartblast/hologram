@@ -75,7 +75,18 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :boolean, _opts), do: is_boolean(value)
 
-  def attribute_value_valid?(value, :date, _opts), do: is_struct(value, Date)
+  # Date.new/3 will not build an impossible date, but a struct literal will, and so will a map
+  # update - both are ordinary Elixir. So the fields are asked of the struct's own calendar, which
+  # is the question Date.new/3 itself asks.
+  def attribute_value_valid?(
+        %Date{calendar: calendar, year: year, month: month, day: day},
+        :date,
+        _opts
+      ) do
+    calendar.valid_date?(year, month, day)
+  end
+
+  def attribute_value_valid?(_value, :date, _opts), do: false
 
   def attribute_value_valid?(value, :datetime, _opts), do: is_struct(value, DateTime)
 
