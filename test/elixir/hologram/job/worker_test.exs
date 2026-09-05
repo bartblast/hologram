@@ -59,7 +59,7 @@ defmodule Hologram.Job.WorkerTest do
   end
 
   describe "start_link/1" do
-    test "listens for writes on the outbox channel" do
+    test "listens for writes on the oplog channel" do
       notifications = start_supervised!({NotificationsStub, reply_to: self()})
 
       start_worker!(notifications: notifications)

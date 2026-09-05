@@ -116,7 +116,7 @@ defmodule Hologram.DB.Oplog do
   def oldest_place do
     statement = """
     SELECT "tx", "seq"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     ORDER BY "tx", "seq"
     LIMIT 1
     """
@@ -155,7 +155,7 @@ defmodule Hologram.DB.Oplog do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id", "revisions",
            "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
     LIMIT $3
@@ -213,7 +213,7 @@ defmodule Hologram.DB.Oplog do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
            "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "type" = $1
       AND ("tx" > $2 OR ("tx" = $2 AND "seq" > $3))
       AND "data" @> $4::jsonb
@@ -247,7 +247,7 @@ defmodule Hologram.DB.Oplog do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
            "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "tx" >= $1 AND "tx" < $2
     ORDER BY "tx", "seq"
     """
@@ -338,7 +338,7 @@ defmodule Hologram.DB.Oplog do
   end
 
   defp qualified_table do
-    "#{Mapper.quote_identifier("hologram_system")}.#{Mapper.quote_identifier("outbox")}"
+    "#{Mapper.quote_identifier("hologram_system")}.#{Mapper.quote_identifier("oplog")}"
   end
 
   defp row(

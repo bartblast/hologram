@@ -240,7 +240,7 @@ defmodule Hologram.DB.Schema do
   end
 
   # The role grant store's user references never rewrite rows: a cascade or set-null fired
-  # by the database would change synced rows without an outbox event, stranding stale grants
+  # by the database would change synced rows without an oplog event, stranding stale grants
   # on clients - deleting a user revokes their grants through the framework path instead.
   defp delete_action(Hologram.Auth.RoleGrant), do: :no_action
 

@@ -87,12 +87,12 @@ defmodule Hologram.ControllerMutationTest do
     if replica_token, do: Map.put(raw, "replica_token", replica_token), else: raw
   end
 
-  # Scoped to the batch by its own mutation_ref rather than reading the whole table: the outbox is
+  # Scoped to the batch by its own mutation_ref rather than reading the whole table: the oplog is
   # shared, and what this file asks about is the effects of ONE batch.
-  defp outbox_actor_ids(replica_id) do
+  defp oplog_actor_ids(replica_id) do
     statement = """
     SELECT "actor_id"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "mutation_ref"->>'replica_id' = $1
     ORDER BY "seq"
     """
@@ -157,7 +157,7 @@ defmodule Hologram.ControllerMutationTest do
 
       assert conn.status == 200
 
-      assert outbox_actor_ids(replica_id) == [user.id]
+      assert oplog_actor_ids(replica_id) == [user.id]
     end
 
     test "applies a batch under an identity minted before the session signed in" do

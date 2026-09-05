@@ -38,7 +38,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
   defp seed(tx, entity_id) do
     statement = """
-    INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "tx", "model_hash")
+    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
     VALUES ('del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, 'seeded')
     """
 

@@ -87,7 +87,7 @@ defmodule Hologram.Mutation do
   end
 
   # The actor outside, the batch reference inside it, the transaction innermost - the same wrap a
-  # command runs under, with the reference added so the outbox knows whose effects these are.
+  # command runs under, with the reference added so the oplog knows whose effects these are.
   defp apply_batch(envelope, raw, server_struct) do
     case recorded_answer(envelope, server_struct.user_id) do
       nil -> apply_new_batch(envelope, raw, server_struct)
