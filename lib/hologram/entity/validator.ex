@@ -101,7 +101,24 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
-  def attribute_value_valid?(value, :time, _opts), do: is_struct(value, Time)
+  # Asked of the struct's own calendar for the reason the :date clause above gives. valid_time?/4
+  # judges the microsecond PRECISION beside the amount, so {0, 7} is refused as firmly as
+  # {1_000_000, 6}.
+  def attribute_value_valid?(
+        %Time{
+          calendar: calendar,
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: microsecond
+        },
+        :time,
+        _opts
+      ) do
+    calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
+  def attribute_value_valid?(_value, :time, _opts), do: false
 
   # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
   # generates and stores ids in that spelling, and the client tier compares ids

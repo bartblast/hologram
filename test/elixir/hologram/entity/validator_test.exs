@@ -74,9 +74,36 @@ defmodule Hologram.Entity.ValidatorTest do
     test "validates :time values" do
       assert attribute_value_valid?(~T[11:00:00], :time)
       assert attribute_value_valid?(~T[11:00:00.123456], :time)
+      assert attribute_value_valid?(~T[23:59:59.999999], :time)
       refute attribute_value_valid?("11:00:00", :time)
       refute attribute_value_valid?(~N[2026-07-17 11:00:00], :time)
       refute attribute_value_valid?(~U[2026-07-17 11:00:00Z], :time)
+
+      refute attribute_value_valid?(
+               %Time{hour: 25, minute: 0, second: 0, microsecond: {0, 0}, calendar: Calendar.ISO},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 0, minute: 60, second: 0, microsecond: {0, 0}, calendar: Calendar.ISO},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{
+                 hour: 0,
+                 minute: 0,
+                 second: 0,
+                 microsecond: {1_000_000, 6},
+                 calendar: Calendar.ISO
+               },
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 0, minute: 0, second: 0, microsecond: {0, 7}, calendar: Calendar.ISO},
+               :time
+             )
     end
 
     test "validates :uuid values" do
@@ -291,6 +318,17 @@ defmodule Hologram.Entity.ValidatorTest do
       assert validate(InlineEntityFixture94, %{opens_at: nil}) == :ok
 
       assert validate(InlineEntityFixture94, %{opens_at: "11:00:00"}) ==
+               {:error, [{:opens_at, {:type, :time}}]}
+
+      impossible_hour = %Time{
+        hour: 25,
+        minute: 0,
+        second: 0,
+        microsecond: {0, 0},
+        calendar: Calendar.ISO
+      }
+
+      assert validate(InlineEntityFixture94, %{opens_at: impossible_hour}) ==
                {:error, [{:opens_at, {:type, :time}}]}
 
       assert validate(InlineEntityFixture94, %{opens_at: ~T[07:59:59]}) ==
