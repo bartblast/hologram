@@ -5,6 +5,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PathUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.StringUtils
   alias Hologram.Commons.SystemUtils
   alias Hologram.Commons.TaskUtils
   alias Hologram.Commons.Types, as: T
@@ -208,6 +209,7 @@ defmodule Hologram.Compiler do
           module,
           CallGraph.t(),
           PLT.t(),
+          PLT.t(),
           MapSet.t(mfa),
           %{module => CallGraph.server_callback_analysis()},
           MapSet.t(module),
@@ -217,6 +219,7 @@ defmodule Hologram.Compiler do
         page_module,
         call_graph,
         ir_plt,
+        encode_plt,
         async_mfas,
         server_callback_analysis_by_templatable,
         runtime_js_binding_modules,
@@ -247,7 +250,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       mfas
-      |> render_elixir_function_defs(ir_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
       |> render_block()
 
     module_metadata_registration =
@@ -285,9 +288,15 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
-          String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
+  @spec build_runtime_js(
+          list(mfa),
+          PLT.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          T.file_path()
+        ) :: String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, js_dir) do
     %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas)
 
     import_statements =
@@ -310,7 +319,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       runtime_mfas
-      |> render_elixir_function_defs(ir_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
       |> render_block()
 
     module_metadata_registration =
@@ -461,6 +470,7 @@ defmodule Hologram.Compiler do
           list(module),
           CallGraph.t(),
           PLT.t(),
+          PLT.t(),
           MapSet.t(mfa),
           MapSet.t(module),
           T.opts()
@@ -469,6 +479,7 @@ defmodule Hologram.Compiler do
         page_modules,
         call_graph,
         ir_plt,
+        encode_plt,
         async_mfas,
         runtime_js_binding_modules,
         opts
@@ -488,6 +499,7 @@ defmodule Hologram.Compiler do
         |> build_page_js(
           call_graph,
           ir_plt,
+          encode_plt,
           async_mfas,
           server_callback_analysis_by_templatable,
           runtime_js_binding_modules,
@@ -508,13 +520,14 @@ defmodule Hologram.Compiler do
   @spec create_runtime_entry_file(
           list(mfa),
           PLT.t(),
+          PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
           T.opts()
         ) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
+  def create_runtime_entry_file(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
+    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -1153,19 +1166,105 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
-  defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
+  # Functions are listed by module, then function name, then arity. The module order is the
+  # sort below; the order within a module comes from IR.aggregate_module_funs/1 on the protocol
+  # path and from the sort in encode_module_function_defs/5 on the cached one.
+  defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas) do
     mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
     |> Enum.sort()
-    |> TaskUtils.async_many(fn {module, _module_mfas} ->
-      ir_plt
-      |> PLT.get!(module)
-      |> prune_module_def(mfas)
-      |> Encoder.encode_ir(%Context{module: module, async_mfas: async_mfas})
+    |> TaskUtils.async_many(fn {module, module_mfas} ->
+      render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas)
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  # A protocol's dispatcher functions are selected against the whole reachable set, in
+  # maybe_prune_protocol_dispatcher_function_defs/3, so their JavaScript depends on the entry
+  # file being built and cannot be keyed by MFA alone. Every other module's functions encode
+  # the same wherever they are reached from, so each is encoded once per compile.
+  defp render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas) do
+    context = %Context{module: module, async_mfas: async_mfas}
+
+    if Reflection.protocol?(module) do
+      ir_plt
+      |> PLT.get!(module)
+      |> prune_module_def(mfas)
+      |> Encoder.encode_ir(context)
+    else
+      module_mfas
+      |> Enum.map(fn {_module, function, arity} -> {function, arity} end)
+      |> Enum.sort()
+      |> encode_module_function_defs(module, ir_plt, encode_plt, context)
+      |> Enum.join("\n\n")
+    end
+  end
+
+  defp encode_module_function_defs(fun_arities, module, ir_plt, encode_plt, context) do
+    missing = Enum.reject(fun_arities, &function_encoded?(encode_plt, module, &1))
+
+    if missing != [] do
+      encode_missing_module_functions(missing, module, ir_plt, encode_plt, context)
+    end
+
+    Enum.flat_map(fun_arities, fn {function, arity} ->
+      case PLT.get(encode_plt, {module, function, arity}) do
+        {:ok, js} ->
+          [js]
+
+        # A reachable MFA with no definition in the module IR renders nothing, which is what
+        # prune_module_def/2 has always done with it.
+        :error ->
+          []
+      end
+    end)
+  end
+
+  defp function_encoded?(encode_plt, module, {function, arity}) do
+    PLT.get(encode_plt, {module, function, arity}) != :error
+  end
+
+  # The module IR is read once here however many functions are missing, so a module is copied
+  # out of the IR PLT at most once per compile rather than once per entry file that reaches it.
+  defp encode_missing_module_functions(fun_arities, module, ir_plt, encode_plt, context) do
+    module_name = Reflection.module_name(module)
+
+    funs =
+      ir_plt
+      |> PLT.get!(module)
+      |> IR.aggregate_module_funs()
+      |> Map.new()
+
+    Enum.each(fun_arities, fn {function, arity} = key ->
+      case funs do
+        %{^key => {visibility, clauses}} ->
+          js =
+            Encoder.encode_elixir_function(
+              module_name,
+              function,
+              arity,
+              visibility,
+              clauses,
+              context
+            )
+
+          PLT.put(encode_plt, {module, function, arity}, js)
+
+        _no_definition ->
+          :ok
+      end
+    end)
+  rescue
+    error ->
+      message =
+        StringUtils.normalize_newlines("""
+        can't encode #{Reflection.module_name(module)} module definition
+        #{Exception.message(error)}\
+        """)
+
+      reraise RuntimeError, [message: message], __STACKTRACE__
   end
 
   # A manually ported function's clauses aren't encoded, so its raise sites have

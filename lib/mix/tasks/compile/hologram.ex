@@ -159,10 +159,15 @@ defmodule Mix.Tasks.Compile.Hologram do
       # applications reached from pages are named as well.
       app_versions = Compiler.build_app_versions(call_graph_for_runtime)
 
+      # Filled by the entry file renderers as they go: each reachable function's JavaScript
+      # is produced once per compile and read back by every entry file that needs it.
+      encode_plt = PLT.start(supervisor: sup)
+
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(
           runtime_mfas,
           ir_plt,
+          encode_plt,
           async_mfas,
           app_versions,
           opts
@@ -183,6 +188,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Compiler.create_page_entry_files(
           call_graph_for_pages,
           ir_plt,
+          encode_plt,
           async_mfas,
           runtime_js_binding_modules,
           opts
