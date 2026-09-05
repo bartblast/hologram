@@ -146,7 +146,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   end
 
   describe "create_system_tables/0" do
-    test "creates the marker, registry, migration, and outbox tables" do
+    test "creates the marker, registry, migration, and oplog tables" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -169,12 +169,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["database"],
                ["migration"],
                ["mutation"],
-               ["outbox"],
+               ["oplog"],
                ["schema_object"]
              ]
     end
 
-    test "gives the outbox the indexes reading it forward and by time need" do
+    test "gives the oplog the indexes reading it forward and by time need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -186,7 +186,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_catalog.pg_am am ON am.oid = c.relam
       JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
-      WHERE n.nspname = 'hologram_system' AND c.relkind = 'i' AND c.relname LIKE 'outbox%'
+      WHERE n.nspname = 'hologram_system' AND c.relkind = 'i' AND c.relname LIKE 'oplog%'
       ORDER BY c.relname, a.attnum
       """
 
@@ -197,14 +197,14 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       # path of every write to serve a read nothing does yet. Built for the prune that has gone,
       # kept for the history-by-time read that comes next.
       assert rows == [
-               ["outbox_inserted_at_$idx", "brin", "inserted_at"],
-               ["outbox_pkey", "btree", "seq"],
-               ["outbox_tx_seq_$idx", "btree", "tx"],
-               ["outbox_tx_seq_$idx", "btree", "seq"]
+               ["oplog_inserted_at_$idx", "brin", "inserted_at"],
+               ["oplog_pkey", "btree", "seq"],
+               ["oplog_tx_seq_$idx", "btree", "tx"],
+               ["oplog_tx_seq_$idx", "btree", "seq"]
              ]
     end
 
-    test "gives the outbox the columns the dispatcher and its writers need" do
+    test "gives the oplog the columns the dispatcher and its writers need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -215,7 +215,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       FROM pg_catalog.pg_attribute a
       JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'hologram_system' AND c.relname = 'outbox' AND a.attnum > 0
+      WHERE n.nspname = 'hologram_system' AND c.relname = 'oplog' AND a.attnum > 0
       ORDER BY a.attname
       """
 
@@ -253,7 +253,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       {:ok, %{rows: rows}} = Connection.query(statement)
 
-      # The envelope is filled for a refused batch only: a landed batch's rows are in the outbox
+      # The envelope is filled for a refused batch only: a landed batch's rows are in the oplog
       # under mutation_ref, keyed by the same pair, and a refused batch's rows are nowhere else.
       assert rows == [
                ["actor_id", "uuid", false],
@@ -295,14 +295,14 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     # That two DIFFERENT transactions take different ids is not reachable here - the sandbox
     # runs every test inside one transaction, so these rows share it whatever the default does.
     # What this pins is that the default fires at all and that seq advances.
-    test "stamps an outbox row with the transaction that wrote it" do
+    test "stamps an oplog row with the transaction that wrote it" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
       assert create_system_tables() == :ok
 
       insert = """
-      INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "model_hash")
+      INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "model_hash")
       VALUES ('put_entity', 'MyApp.Task', '00000000-0000-4000-8000-000000000001', 'abc123'),
              ('del_entity', 'MyApp.Task', '00000000-0000-4000-8000-000000000002', 'abc123')
       """
@@ -311,7 +311,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       {:ok, %{rows: [[writing_tx]]}} = Connection.query("SELECT pg_current_xact_id()")
 
-      select = ~s(SELECT "seq", "tx" FROM "hologram_system"."outbox" ORDER BY "seq")
+      select = ~s(SELECT "seq", "tx" FROM "hologram_system"."oplog" ORDER BY "seq")
       {:ok, %{rows: [[first_seq, first_tx], [second_seq, second_tx]]}} = Connection.query(select)
 
       assert second_seq > first_seq

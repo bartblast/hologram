@@ -1,7 +1,7 @@
-defmodule Hologram.DB.Outbox do
+defmodule Hologram.DB.Oplog do
   @moduledoc false
 
-  # The effect log: one row per entity-level effect, appended in the transaction that caused it,
+  # The oplog: one row per entity-level effect, appended in the transaction that caused it,
   # so a write and the record of it either both land or neither does. What the rows are read for
   # is which entity types and attributes a transaction touched - the values a client is sent come
   # from reading the rows themselves afresh, never from here. That is what lets the log store a
@@ -15,7 +15,7 @@ defmodule Hologram.DB.Outbox do
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Ref
 
-  @channel "hologram_outbox"
+  @channel "hologram_oplog"
 
   @columns [
     "op",
@@ -33,7 +33,7 @@ defmodule Hologram.DB.Outbox do
   @relationship_ops [:add_relationship, :del_relationship]
 
   @doc """
-  Appends the given effects to the outbox in the caller's transaction, and wakes the dispatchers
+  Appends the given effects to the log in the caller's transaction, and wakes the dispatchers
   listening for them. Appending nothing does nothing.
 
   An effect names its `:op`, the `:entity_type` and `:entity_id` it happened to, and what the op
@@ -116,7 +116,7 @@ defmodule Hologram.DB.Outbox do
   def oldest_place do
     statement = """
     SELECT "tx", "seq"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     ORDER BY "tx", "seq"
     LIMIT 1
     """
@@ -155,7 +155,7 @@ defmodule Hologram.DB.Outbox do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id", "revisions",
            "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
     LIMIT $3
@@ -213,7 +213,7 @@ defmodule Hologram.DB.Outbox do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
            "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "type" = $1
       AND ("tx" > $2 OR ("tx" = $2 AND "seq" > $3))
       AND "data" @> $4::jsonb
@@ -247,7 +247,7 @@ defmodule Hologram.DB.Outbox do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
            "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "tx" >= $1 AND "tx" < $2
     ORDER BY "tx", "seq"
     """
@@ -338,7 +338,7 @@ defmodule Hologram.DB.Outbox do
   end
 
   defp qualified_table do
-    "#{Mapper.quote_identifier("hologram_system")}.#{Mapper.quote_identifier("outbox")}"
+    "#{Mapper.quote_identifier("hologram_system")}.#{Mapper.quote_identifier("oplog")}"
   end
 
   defp row(

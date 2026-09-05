@@ -1,7 +1,7 @@
 defmodule Hologram.Sync.Cursor do
   @moduledoc false
 
-  # Where a client got to in the effect log, as a string it stores and hands back without reading.
+  # Where a client got to in the oplog, as a string it stores and hands back without reading.
   # Opaque by convention, not by secrecy: what a place is made of can change without the protocol
   # changing because the client never interprets one, not because it could not. Nothing here hides
   # the place or depends on its being hidden.

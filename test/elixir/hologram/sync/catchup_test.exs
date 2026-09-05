@@ -25,7 +25,7 @@ defmodule Hologram.Sync.CatchupTest do
   end
 
   defp places do
-    statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."outbox" ORDER BY "tx", "seq"|
+    statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."oplog" ORDER BY "tx", "seq"|
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
@@ -36,7 +36,7 @@ defmodule Hologram.Sync.CatchupTest do
   # than the cap allows, and seeding those one at a time would dominate the suite.
   defp seed_many(count) do
     statement = """
-    INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "tx", "model_hash")
+    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
     SELECT 'del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, (200 + i)::text::xid8, $2
     FROM generate_series(1, $3) AS i
     """
@@ -50,7 +50,7 @@ defmodule Hologram.Sync.CatchupTest do
 
   defp seed(tx, model_hash \\ Model.hash()) do
     statement = """
-    INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "tx", "model_hash")
+    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
     VALUES ('del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, $3)
     """
 
@@ -64,7 +64,7 @@ defmodule Hologram.Sync.CatchupTest do
   # A grant effect carries the row it names, which is what a revoked grant is rebuilt from.
   defp seed_grant(tx, op, grant) do
     statement = """
-    INSERT INTO "hologram_system"."outbox"
+    INSERT INTO "hologram_system"."oplog"
       ("op", "type", "entity_id", "data", "tx", "model_hash")
     VALUES ($1, 'Hologram.Auth.RoleGrant', $2, $3::jsonb, $4, $5)
     """
@@ -88,7 +88,7 @@ defmodule Hologram.Sync.CatchupTest do
   # writes that set a test up (a resource, a grant) would sort AFTER them and land in the gap.
   # Emptying the log once the setup is done leaves the seeds as the whole of it.
   defp clear_log do
-    {:ok, _result} = Connection.query(~s|TRUNCATE "hologram_system"."outbox"|)
+    {:ok, _result} = Connection.query(~s|TRUNCATE "hologram_system"."oplog"|)
 
     :ok
   end

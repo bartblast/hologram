@@ -8,7 +8,7 @@ defmodule Hologram.Job.Worker do
   use GenServer
 
   alias Hologram.DB
-  alias Hologram.DB.Outbox
+  alias Hologram.DB.Oplog
   alias Hologram.Job.Runner
   alias Hologram.Reflection
 
@@ -112,11 +112,11 @@ defmodule Hologram.Job.Worker do
     |> Enum.sort()
   end
 
-  # Every write announces itself on the outbox channel, jobs included - and PostgreSQL delivers a
+  # Every write announces itself on the log's channel, jobs included - and PostgreSQL delivers a
   # notification only once the transaction that sent it commits, which is what makes "after the
   # batch commits" a property of the mechanism rather than something to check.
   defp listen_for_writes(notifications) do
-    case Postgrex.Notifications.listen(notifications, Outbox.channel()) do
+    case Postgrex.Notifications.listen(notifications, Oplog.channel()) do
       {:ok, _ref} -> :ok
       {:eventually, _ref} -> :ok
     end

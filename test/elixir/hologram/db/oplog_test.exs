@@ -1,7 +1,7 @@
-defmodule Hologram.DB.OutboxTest do
+defmodule Hologram.DB.OplogTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.DB.Outbox
+  import Hologram.DB.Oplog
 
   alias Hologram.Auth.Context
   alias Hologram.DB
@@ -18,7 +18,7 @@ defmodule Hologram.DB.OutboxTest do
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
   defp places do
-    statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."outbox" ORDER BY "tx", "seq"|
+    statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."oplog" ORDER BY "tx", "seq"|
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
@@ -29,7 +29,7 @@ defmodule Hologram.DB.OutboxTest do
     statement = """
     SELECT "op", "type", "entity_id", "data", "model_hash", "mutation_ref", "actor_id",
            "revisions"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     ORDER BY "seq"
     """
 
@@ -51,7 +51,7 @@ defmodule Hologram.DB.OutboxTest do
 
   defp seed(tx, op, type_label, entity_id, data \\ nil, revisions \\ nil, mutation_ref \\ nil) do
     statement = """
-    INSERT INTO "hologram_system"."outbox"
+    INSERT INTO "hologram_system"."oplog"
       ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions", "mutation_ref")
     VALUES ($1, $2, $3, $4, $5, 'seeded', $6, $7)
     """
@@ -336,7 +336,7 @@ defmodule Hologram.DB.OutboxTest do
     # indifferent: the diff matches ops against atoms, and the scoper reads only the type.
     test "keeps an op this build does not know as the label it was written with" do
       statement = """
-      INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "tx", "model_hash")
+      INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
       VALUES ('op_from_a_newer_build', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, 'seeded')
       """
 

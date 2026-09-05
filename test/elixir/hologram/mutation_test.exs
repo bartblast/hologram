@@ -123,12 +123,12 @@ defmodule Hologram.MutationTest do
     }
   end
 
-  # Scoped to one batch by its own mutation_ref: the outbox is shared, and what these ask about is
+  # Scoped to one batch by its own mutation_ref: the oplog is shared, and what these ask about is
   # the effects of the batch under test rather than everything the table happens to hold.
-  defp outbox_rows(replica_id) do
+  defp oplog_rows(replica_id) do
     statement = """
     SELECT "type", "entity_id", "actor_id", "mutation_ref"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "mutation_ref"->>'replica_id' = $1
     ORDER BY "seq"
     """
@@ -306,7 +306,7 @@ defmodule Hologram.MutationTest do
       run(envelope([publish_write(id)], replica_id: replica_id, seq: 7), server())
 
       assert [%{entity_id: ^id, mutation_ref: %{"replica_id" => ^replica_id, "seq" => 7}}] =
-               outbox_rows(replica_id)
+               oplog_rows(replica_id)
     end
 
     test "records the acting user on the effect" do
@@ -317,7 +317,7 @@ defmodule Hologram.MutationTest do
       assert {:ok, %{"status" => "confirmed"}} =
                run(envelope([publish_write(id)], replica_id: replica_id), server(user.id))
 
-      assert [%{actor_id: actor_id}] = outbox_rows(replica_id)
+      assert [%{actor_id: actor_id}] = oplog_rows(replica_id)
       assert actor_id == user.id
     end
 
@@ -339,7 +339,7 @@ defmodule Hologram.MutationTest do
       assert {:ok, %{"status" => "confirmed"} = answer} = run(batch, server())
       assert run(batch, server()) == {:ok, answer}
 
-      assert length(outbox_rows(batch["replica_id"])) == 1
+      assert length(oplog_rows(batch["replica_id"])) == 1
     end
 
     test "applies each sequence number of one replica on its own" do
@@ -671,7 +671,7 @@ defmodule Hologram.MutationTest do
 
       # The effect carries the batch's own reference, like any row's.
       assert [%{type: "Hologram.Auth.RoleGrant", entity_id: entity_id, mutation_ref: ref}] =
-               outbox_rows(replica_id)
+               oplog_rows(replica_id)
 
       assert entity_id == write["id"]
       assert ref["replica_id"] == replica_id
@@ -1182,7 +1182,7 @@ defmodule Hologram.MutationTest do
       # The record is not an effect: it says the batch was refused, and nothing the batch wrote
       # survived it.
       assert Record.find(replica_id, 1) != nil
-      assert outbox_rows(replica_id) == []
+      assert oplog_rows(replica_id) == []
       assert EntityOperations.get(Module19, id) == nil
     end
 

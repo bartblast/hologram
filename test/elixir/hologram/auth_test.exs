@@ -83,7 +83,7 @@ defmodule Hologram.AuthTest do
   defp revocation_effects do
     select_sql = """
     SELECT "type", "entity_id"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     WHERE "op" = 'del_entity'
     ORDER BY "seq"
     """

@@ -28,7 +28,7 @@ defmodule Hologram.DB.SchemaReconciler do
   # so the check is a monotonic comparison rather than version-string parsing, and a release
   # that changes nothing here leaves it alone.
   #
-  # STILL 1 while the data layer is unreleased, deliberately. The outbox table, its two
+  # STILL 1 while the data layer is unreleased, deliberately. The oplog table, its two
   # indexes, the migration table's model_hash column and the mutation table all arrived
   # after this number was first set, and none of them has shipped: `lib/hologram/db` exists on neither master nor
   # dev, and the published package has no data layer at all. A version names a layout
@@ -39,9 +39,9 @@ defmodule Hologram.DB.SchemaReconciler do
   # once for the whole arc, and add the upgrade that carries an already-claimed database to
   # it. `create_system_tables/0` runs only when claiming a virgin database, so a claimed one
   # never gains a later table or column on its own - the symptom is not subtle, and it has
-  # been seen: a database claimed before the outbox existed makes every dispatcher poll
-  # crash with `relation "hologram_system.outbox" does not exist`, and one claimed before this
-  # branch lacks the outbox's revisions column, the mutation table, or that table's envelope
+  # been seen: a database claimed before the oplog existed makes every dispatcher poll
+  # crash with `relation "hologram_system.oplog" does not exist`, and one claimed before this
+  # branch lacks the oplog's revisions column, the mutation table, or that table's envelope
   # column. Harmless only because no
   # such database exists outside this branch's local dev and test databases and CI's, which
   # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
@@ -51,25 +51,25 @@ defmodule Hologram.DB.SchemaReconciler do
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
   # The database table is the managed-database marker (single row, maintained by
   # write_marker/1) - the schema_object table is the managed-object registry - the
-  # migration table records the applied migration versions - the outbox table records the
+  # migration table records the applied migration versions - the oplog table records the
   # effect each write had, written in the writing transaction and read by the dispatcher -
   # the mutation table records each batch of client writes the server ANSWERED, by the
   # client that sent it and that client's sequence number, which is what answers a batch
   # arriving twice - and keeps a refused batch as it arrived, since its rows reached no log.
   #
   # The envelope column is filled for a refused batch only. A batch that LANDED has its rows
-  # in the outbox under mutation_ref, keyed by the same pair, so keeping them here would keep
+  # in the oplog under mutation_ref, keyed by the same pair, so keeping them here would keep
   # every write twice - a refused batch's rows are nowhere else, which is what this column is
   # for. A refused batch's claim rolls back with its transaction, and its row is written
   # afterwards, on its own statement.
   #
-  # The outbox is read by transaction id rather than by insert order, because a sequence
+  # The oplog is read by transaction id rather than by insert order, because a sequence
   # hands out its numbers before the transaction holding them commits: a reader trusting
   # seq order would pass a row whose transaction is still open and never come back for it.
   # Hence the tx column, defaulted to the writing transaction's own id, and the index the
   # windowed read walks.
   #
-  # The second outbox index is BRIN rather than btree, and pruning is what reads it. The
+  # The second oplog index is BRIN rather than btree, and pruning is what reads it. The
   # table is append-only, so inserted_at runs with the physical order of the pages, which
   # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
   # per-row tree descent on a table every entity write appends to. A btree here would put
@@ -100,7 +100,7 @@ defmodule Hologram.DB.SchemaReconciler do
     )
     """,
     """
-    CREATE TABLE "hologram_system"."outbox" (
+    CREATE TABLE "hologram_system"."oplog" (
       "seq" bigserial PRIMARY KEY,
       "op" text NOT NULL,
       "type" text NOT NULL,
@@ -115,10 +115,10 @@ defmodule Hologram.DB.SchemaReconciler do
     )
     """,
     """
-    CREATE INDEX "outbox_tx_seq_$idx" ON "hologram_system"."outbox" ("tx", "seq")
+    CREATE INDEX "oplog_tx_seq_$idx" ON "hologram_system"."oplog" ("tx", "seq")
     """,
     """
-    CREATE INDEX "outbox_inserted_at_$idx" ON "hologram_system"."outbox"
+    CREATE INDEX "oplog_inserted_at_$idx" ON "hologram_system"."oplog"
     USING brin ("inserted_at")
     """,
     """

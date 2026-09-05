@@ -2,7 +2,7 @@ defmodule Hologram.Mutation.Ref do
   @moduledoc false
 
   # The batch of client writes the calling process is applying, for the extent of its transaction.
-  # The outbox reads it and stamps every effect written meanwhile with it, so a client can tell
+  # The oplog reads it and stamps every effect written meanwhile with it, so a client can tell
   # the effects of its own writes apart from everyone else's when they arrive on the stream.
   #
   # Process-local and not inherited, exactly like the ambient actor beside it: work moved off the

@@ -1,7 +1,7 @@
 defmodule Hologram.Sync.ReadEdge do
   @moduledoc false
 
-  # How far this node has read the effect log - the edge it read up to, which is where the next
+  # How far this node has read the oplog - the edge it read up to, which is where the next
   # window opens - kept outside the process doing the reading.
   #
   # A dispatcher moves its edge only once a round has been handed on, so that dying halfway means

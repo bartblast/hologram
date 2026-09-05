@@ -36,10 +36,10 @@ defmodule Hologram.DB.EntityOperationsTest do
     count
   end
 
-  defp outbox_effects do
+  defp oplog_effects do
     statement = """
     SELECT "op", "type", "entity_id", "data", "revisions"
-    FROM "hologram_system"."outbox"
+    FROM "hologram_system"."oplog"
     ORDER BY "seq"
     """
 
@@ -139,7 +139,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
-      assert effect = List.last(outbox_effects())
+      assert effect = List.last(oplog_effects())
       assert effect.op == "add_relationship"
       assert effect.type == "Hologram.Test.Fixtures.Entity.Module3"
       assert effect.entity_id == source_entity.id
@@ -160,11 +160,11 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> create()
 
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
-      effects_after_first = outbox_effects()
+      effects_after_first = oplog_effects()
 
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
-      assert outbox_effects() == effects_after_first
+      assert oplog_effects() == effects_after_first
     end
 
     test "raises when the relationship is not a declared to-many relationship" do
@@ -251,7 +251,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       {:ok, created_entity} = create(entity)
 
-      assert [effect] = outbox_effects()
+      assert [effect] = oplog_effects()
       assert effect.op == "put_entity"
       assert effect.type == "Hologram.Test.Fixtures.Entity.Module2"
       assert effect.entity_id == created_entity.id
@@ -277,7 +277,7 @@ defmodule Hologram.DB.EntityOperationsTest do
           create(PolicyModule1.new())
         end)
 
-      effects = outbox_effects()
+      effects = oplog_effects()
 
       assert [_user, entity_effect | grant_effects] = effects
       assert entity_effect.entity_id == created_entity.id
@@ -393,7 +393,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       stamp = created_entity.__meta__.revisions.a
 
-      assert [effect] = outbox_effects()
+      assert [effect] = oplog_effects()
       assert effect.revisions == %{"a" => stamp, "b" => stamp, "c" => stamp}
     end
 
@@ -447,7 +447,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> create()
 
       assert result == {:error, %{slug: [:unique]}}
-      assert Enum.map(outbox_effects(), & &1.entity_id) == [entity.id]
+      assert Enum.map(oplog_effects(), & &1.entity_id) == [entity.id]
     end
 
     test "returns every value violation without writing a row" do
@@ -455,7 +455,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert create(entity) == {:error, %{b: [type: :integer], c: [:required]}}
       assert get(Module2, entity.id) == nil
-      assert outbox_effects() == []
+      assert oplog_effects() == []
     end
 
     test "returns declared constraint option violations" do
@@ -488,7 +488,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert create(entity) == {:error, %{c_id: [:not_found]}}
       assert get(Module3, entity.id) == nil
-      assert outbox_effects() == []
+      assert oplog_effects() == []
     end
 
     # PostgreSQL enforces foreign keys by triggers after the row goes in and abandons the
@@ -735,7 +735,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       create_if_absent(grant)
 
       assert %{op: "put_entity", type: "Hologram.Auth.RoleGrant", entity_id: entity_id} =
-               List.last(outbox_effects())
+               List.last(oplog_effects())
 
       assert entity_id == grant.id
     end
@@ -747,11 +747,11 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> create()
 
       create_if_absent(role_grant(user, :owner))
-      effects_after_first = outbox_effects()
+      effects_after_first = oplog_effects()
 
       create_if_absent(role_grant(user, :owner))
 
-      assert outbox_effects() == effects_after_first
+      assert oplog_effects() == effects_after_first
     end
 
     test "raises on an invalid entity" do
@@ -818,7 +818,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       delete(Module1, created_entity.id)
 
-      assert effect = List.last(outbox_effects())
+      assert effect = List.last(oplog_effects())
       assert effect.op == "del_entity"
       assert effect.type == "Hologram.Test.Fixtures.Entity.Module1"
       assert effect.entity_id == created_entity.id
@@ -831,11 +831,11 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records nothing when no entity has the given id" do
-      effects_before = outbox_effects()
+      effects_before = oplog_effects()
 
       assert delete(Module1, Entity.generate_id()) == :ok
 
-      assert outbox_effects() == effects_before
+      assert oplog_effects() == effects_before
     end
 
     # The write and the record of it share a transaction, so a refusal takes both back.
@@ -847,11 +847,11 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Module3.new()
         |> create()
 
-      effects_before = outbox_effects()
+      effects_before = oplog_effects()
 
       assert {:error, %{referenced_by: _entity_type}} = delete(Module1, target_entity.id)
 
-      assert outbox_effects() == effects_before
+      assert oplog_effects() == effects_before
     end
 
     test "restricts when another entity references the entity" do
@@ -964,7 +964,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       delete_relationship(Module3, source_entity.id, :a, target_entity.id)
 
-      assert effect = List.last(outbox_effects())
+      assert effect = List.last(oplog_effects())
       assert effect.op == "del_relationship"
       assert effect.entity_id == source_entity.id
       assert effect.data == %{"relationship" => "a", "target_id" => target_entity.id}
@@ -983,11 +983,11 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Module2.new()
         |> create()
 
-      effects_before = outbox_effects()
+      effects_before = oplog_effects()
 
       :ok = delete_relationship(Module3, source_entity.id, :a, target_entity.id)
 
-      assert outbox_effects() == effects_before
+      assert oplog_effects() == effects_before
     end
 
     test "raises when the relationship is not a declared to-many relationship" do
@@ -1110,7 +1110,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       reloaded_entity = get(Module2, created_entity.id)
 
       assert %{op: "patch_entity", type: "Hologram.Test.Fixtures.Entity.Module2"} =
-               effect = List.last(outbox_effects())
+               effect = List.last(oplog_effects())
 
       assert effect.entity_id == created_entity.id
 
@@ -1132,13 +1132,13 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       update(Module14, created_entity.id, %{password_hash: "hashed_secret_v2"})
 
-      assert effect = List.last(outbox_effects())
+      assert effect = List.last(oplog_effects())
       assert Map.keys(effect.data) == ["password_hash", "updated_at"]
       assert effect.data["password_hash"] == "hashed_secret_v2"
     end
 
     test "records nothing when no entity has the given id" do
-      effects_before = outbox_effects()
+      effects_before = oplog_effects()
       missing_id = Entity.generate_id()
 
       expected_msg =
@@ -1148,7 +1148,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         update(Module2, missing_id, %{c: "after"})
       end
 
-      assert outbox_effects() == effects_before
+      assert oplog_effects() == effects_before
     end
 
     test "sets, reassigns and clears to-one references" do
@@ -1200,7 +1200,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       revisions = get(Module2, created_entity.id).__meta__.revisions
 
-      assert %{revisions: effect_revisions} = List.last(outbox_effects())
+      assert %{revisions: effect_revisions} = List.last(oplog_effects())
       assert effect_revisions == %{"a" => revisions.a}
     end
 
@@ -1314,7 +1314,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       :ok = update(Module10, created_entity.id, %{}, deltas: %{count: 3})
 
-      assert [_put_effect, patch_effect] = outbox_effects()
+      assert [_put_effect, patch_effect] = oplog_effects()
 
       assert patch_effect.op == "patch_entity"
       assert patch_effect.data["count"] == 8
@@ -1371,7 +1371,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert updated_entity.bio == nil
       assert updated_entity.count == 1
-      assert [%{op: "put_entity"}] = outbox_effects()
+      assert [%{op: "put_entity"}] = oplog_effects()
     end
 
     test "refuses a move past what the column can hold" do
@@ -1480,7 +1480,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
 
-      assert Enum.map(outbox_effects(), & &1.op) == ["put_entity", "put_entity"]
+      assert Enum.map(oplog_effects(), & &1.op) == ["put_entity", "put_entity"]
     end
 
     test "reports a value violation and a taken unique value together" do
@@ -1580,13 +1580,13 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Module3.new()
         |> create()
 
-      effects_before = outbox_effects()
+      effects_before = oplog_effects()
 
       assert update(Module3, created_entity.id, %{c_id: Entity.generate_id()}) ==
                {:error, %{c_id: [:not_found]}}
 
       assert get(Module3, created_entity.id).c_id == target_entity.id
-      assert outbox_effects() == effects_before
+      assert oplog_effects() == effects_before
     end
 
     # The write names the first foreign key it refuses and abandons the rest, so the second
