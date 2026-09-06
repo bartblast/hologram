@@ -310,7 +310,7 @@ defmodule Hologram.DB.MapperTest do
       end
 
       assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
-               "db_mapper_test_inline_entity_fixture17_quite_long_rela_e26c80e5"
+               "db_mapper_test_inline_entity_fixture17_quite_long_rela_bbbac617"
     end
 
     test "shortens foreign key index names over the PostgreSQL identifier limit" do
@@ -321,7 +321,7 @@ defmodule Hologram.DB.MapperTest do
       end
 
       assert column(InlineEntityFixture18, "quite_long_relationship_name_id").index ==
-               "db_mapper_test_inline_entity_fixture18_quite_long_rela_90ec8e14"
+               "db_mapper_test_inline_entity_fixture18_quite_long_rela_f8dbb8ba"
     end
 
     test "rejects declarations deriving the same column name" do
@@ -731,7 +731,7 @@ defmodule Hologram.DB.MapperTest do
       identifier = String.duplicate("a", 60) <> "_$enum"
 
       assert fit_identifier(identifier) ==
-               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2f41a680"
+               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_e4fa9150"
     end
   end
 
@@ -837,7 +837,7 @@ defmodule Hologram.DB.MapperTest do
         Hologram.SomeDeeplyNested.EntityTypeModule.WithAnExtraordinarilyLong.MultiSegmentName
 
       assert table_name(entity_type) ==
-               "some_deeply_nested_entity_type_module_with_an_extraord_0889e0d6"
+               "some_deeply_nested_entity_type_module_with_an_extraord_e6841b3f"
     end
   end
 
