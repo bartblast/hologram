@@ -2,6 +2,7 @@ defmodule Hologram.Entity.Model do
   @moduledoc false
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Reflection
 
   # Flag options, whose false is neutral. The option-introduction rule: no option may
@@ -133,9 +134,7 @@ defmodule Hologram.Entity.Model do
   def hash(model) do
     model
     |> :erlang.term_to_binary([:deterministic])
-    |> then(&:crypto.hash(:sha256, &1))
-    |> binary_part(0, @hash_bytes)
-    |> Base.encode16(case: :lower)
+    |> CryptographicUtils.short_digest(@hash_bytes)
   end
 
   @doc """
