@@ -2717,6 +2717,14 @@ defmodule Hologram.CompilerTest do
       assert validate_operations!([Entity1], graph, single_ask_plt(":read")) == :ok
     end
 
+    # An app with no entity type at all - the umbrella test app's shape - still has the
+    # framework's own asks in its call graph, Diff.deltas/4 asking :read among them.
+    test "doesn't raise for a framework operation when the build has no entity type" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!([], graph, single_ask_plt(":read")) == :ok
+    end
+
     test "doesn't raise for an operation some entity type declares" do
       graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
 
