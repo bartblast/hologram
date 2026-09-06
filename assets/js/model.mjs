@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Calendar from "./calendar.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import SortKey from "./sort_key.mjs";
@@ -339,8 +340,22 @@ export default class Model {
     }
   }
 
+  // Refused the way #boxTime and #boxDateTime refuse: the shape first, then the fields against the
+  // calendar itself. Nothing healthy can put an impossible date here - the entity validator turns
+  // one down on both tiers, and a date column cannot hold one - so this is the third reader of one
+  // rule agreeing with the other two, rather than a gate anything is expected to reach.
   static #boxDate(value) {
-    const [year, month, day] = value.split("-");
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (!match) {
+      throw new HologramRuntimeError(`invalid date on the wire: ${value}`);
+    }
+
+    const [_full, year, month, day] = match;
+
+    if (!Calendar.validDate(Number(year), Number(month), Number(day))) {
+      throw new HologramRuntimeError(`invalid date on the wire: ${value}`);
+    }
 
     return Type.map([
       [Type.atom("__struct__"), Type.alias("Date")],

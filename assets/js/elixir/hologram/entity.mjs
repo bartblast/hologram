@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../../bitstring.mjs";
+import Calendar from "../../calendar.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Model from "../../model.mjs";
 import Type from "../../type.mjs";
@@ -315,62 +316,16 @@ function timeKey(value) {
   ];
 }
 
-// Calendar.ISO's rules, hand-written rather than called. entity.mjs is RUNTIME-bundle code, and
-// Calendar.ISO.valid_date?/3 is transpiled into a page bundle only where some page reaches it -
-// measured against a built features app: 1 of 207 page bundles, 0 runtime bundles, and
-// valid_time?/4 in none at all. A call would work on one page and throw everywhere else.
-//
-// valid_date?/3 is `is_month(month) and day in 1..days_in_month(year, month)`, and the year is
-// unconstrained - is_year/1 asks only that it is an integer. Split the way Elixir splits it, so a
-// later divergence shows up in the half that moved.
-function validDate(year, month, day) {
-  return (
-    month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
-  );
-}
-
-// valid_time?/4 is `is_hour and is_minute and is_second and is_microsecond(amount, precision)`,
-// and is_microsecond is `microsecond in 0..999_999 and precision in 0..6` - so the PRECISION is
-// judged beside the amount, which a check over the clock fields alone would miss. The microsecond
-// arrives as the boxed tuple's parts, read the way datetimeKey reads them.
-function validTime(hour, minute, second, microsecond) {
-  const [amount, precision] = microsecond.map((part) => Number(part.value));
-
-  return (
-    hour >= 0 &&
-    hour <= 23 &&
-    minute >= 0 &&
-    minute <= 59 &&
-    second >= 0 &&
-    second <= 59 &&
-    amount >= 0 &&
-    amount <= 999999 &&
-    precision >= 0 &&
-    precision <= 6
-  );
-}
-
-function daysInMonth(year, month) {
-  if (month === 2) {
-    return leapYear(year) ? 29 : 28;
-  }
-
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
-function leapYear(year) {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
 // A struct's integer field as a plain number, the way the ordering keys above read one.
 function fieldNumber(struct, name) {
   return Number(structField(struct, name).value);
 }
 
 // The two halves, each asked of whichever struct carries those field names - a Date and a DateTime
-// answer the first, a Time and a DateTime the second, which is what makes an instant both.
+// answer the first, a Time and a DateTime the second, which is what makes an instant both. The
+// rules themselves live in calendar.mjs, shared with Model's box helpers.
 function validDateFields(struct) {
-  return validDate(
+  return Calendar.validDate(
     fieldNumber(struct, "year"),
     fieldNumber(struct, "month"),
     fieldNumber(struct, "day"),
@@ -378,11 +333,14 @@ function validDateFields(struct) {
 }
 
 function validTimeFields(struct) {
-  return validTime(
+  const [amount, precision] = structField(struct, "microsecond").data;
+
+  return Calendar.validTime(
     fieldNumber(struct, "hour"),
     fieldNumber(struct, "minute"),
     fieldNumber(struct, "second"),
-    structField(struct, "microsecond").data,
+    Number(amount.value),
+    Number(precision.value),
   );
 }
 
