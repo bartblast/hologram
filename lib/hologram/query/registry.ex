@@ -1,6 +1,7 @@
 defmodule Hologram.Query.Registry do
   @moduledoc false
 
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Query
   alias Hologram.Query.Window
 
@@ -44,9 +45,7 @@ defmodule Hologram.Query.Registry do
   def id(term) do
     term
     |> :erlang.term_to_binary([:deterministic])
-    |> then(&:crypto.hash(:sha256, &1))
-    |> binary_part(0, @id_bytes)
-    |> Base.encode16(case: :lower)
+    |> CryptographicUtils.short_digest(@id_bytes)
   end
 
   @doc """
