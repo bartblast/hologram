@@ -65,6 +65,8 @@ defmodule Hologram.Policy do
 
   # The operations the framework itself asks about: the four verbs' own and the three gates.
   # Always askable on every entity type, declared or not - default deny answers false.
+  # IMPORTANT: Model.frameworkOperations in assets/js/model.mjs is the hand-ported twin, pinned on
+  # both tiers - always update both together.
   @framework_operations [:create, :delete, :grant_role, :read, :read_roles, :revoke_role, :update]
 
   # The three operations gating the grant lifecycle
