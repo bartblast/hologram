@@ -3,6 +3,7 @@ defmodule Hologram.Query do
 
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Policy
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
@@ -80,17 +81,23 @@ defmodule Hologram.Query do
   the acting user, instead of the operation the verb performs on its own.
 
   The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
-  operation is an atom naming a policy operation the entity type declares an allow line for -
+  operation is an atom naming an entity operation the entity type declares an allow line for -
   `:pin`, `:publish`, `:archive` - and is recorded in the struct's metadata as the claim the
   write carries. There is no user argument: the subject of a claim is always the acting user.
   A write carries exactly one claim - a struct already claiming an authority, through
   authorize/2 or trust/1, cannot claim another.
 
   Raises ArgumentError when the entity is not an entity struct, when the operation is not an
-  atom, or when the struct already carries a claim.
+  atom, when the operation is neither a framework operation nor one an allow line on the entity
+  type names (see Hologram.Policy.validate_operation!/2), or when the struct already carries a
+  claim.
   """
   @spec authorize(Entity.t(), atom) :: Entity.t()
   def authorize(entity, operation) when is_atom(operation) do
+    entity_type = entity_type!(entity, "authorize")
+
+    Policy.validate_operation!(entity_type, operation)
+
     put_claim(entity, {:authorize, operation}, "authorize")
   end
 

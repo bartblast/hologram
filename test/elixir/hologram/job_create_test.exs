@@ -57,10 +57,10 @@ defmodule Hologram.JobCreateTest do
     test "evaluates the write as create for the acting user" do
       user = create_user("claimer@example.com")
 
-      expected_msg = ~r/^not allowed to archive Hologram.Test.Fixtures.Job.Module1 "/
+      expected_msg = ~r/^not allowed to update Hologram.Test.Fixtures.Job.Module1 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create(Module1, %{}, authorize: :archive) end)
+        as_user(user, fn -> create(Module1, %{}, authorize: :update) end)
       end
 
       assert DB.read(Module1) == []
@@ -128,6 +128,15 @@ defmodule Hologram.JobCreateTest do
 
       assert DB.read(Module2) == []
     end
+
+    test "raises on an operation the job type never declared" do
+      expected_msg =
+        "unknown operation :no_such for Hologram.Test.Fixtures.Job.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        create(Module1, %{}, authorize: :no_such)
+      end
+    end
   end
 
   describe "create!/3" do
@@ -151,10 +160,10 @@ defmodule Hologram.JobCreateTest do
     test "raises on a denial" do
       user = create_user("banged@example.com")
 
-      expected_msg = ~r/^not allowed to archive Hologram.Test.Fixtures.Job.Module1 "/
+      expected_msg = ~r/^not allowed to update Hologram.Test.Fixtures.Job.Module1 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create!(Module1, %{}, authorize: :archive) end)
+        as_user(user, fn -> create!(Module1, %{}, authorize: :update) end)
       end
     end
   end

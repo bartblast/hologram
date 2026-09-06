@@ -175,6 +175,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       # the build here, every reachable consumer at once, rather than one render at a time.
       Compiler.validate_slot_bindings!(page_modules, call_graph_for_runtime)
 
+      # A check spells the entity operation it asks about, and a name no allow line on any
+      # entity type declares is a typo or a rename - refused here rather than answered no
+      # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/2 below: the ask
+      # functions are hand-ported, so the runtime graph no longer holds the vertices whose
+      # callers this reads.
+      Compiler.validate_operations!(Reflection.list_entities(), call_graph, ir_plt)
+
       # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
       # bundles are derived from no longer holds the vertex to ask about - while the question is
       # exactly whether the bundles reach it.

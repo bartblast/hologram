@@ -1200,7 +1200,7 @@ defmodule Hologram.Entity.Validator do
     if not role_operation_valid?(operation) do
       raise Hologram.CompileError,
         message:
-          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
     end
 
     :ok

@@ -90,6 +90,16 @@ describe("Elixir_Hologram_Auth", () => {
             title: "string",
           },
           enumValues: {status: ["draft", "review", "published"]},
+          operations: [
+            "archive",
+            "create",
+            "delete",
+            "grant_role",
+            "read",
+            "read_roles",
+            "revoke_role",
+            "update",
+          ],
           policy: policy,
           relationships: {folder: {toMany: false, type: FOLDER}},
           roles: ["editor", "owner", "viewer"],
@@ -911,6 +921,20 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("raises on a tuple that is not a pair", () => {
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editor"),
+        Type.atom("extra"),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "ArgumentError",
+        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+      );
+    });
+
     it("raises on an operation that is neither an atom nor a role tuple", () => {
       const operation = Type.tuple([
         Type.atom("grant_role"),
@@ -921,6 +945,70 @@ describe("Elixir_Hologram_Auth", () => {
         () => can(Type.bitstring(ALICE), operation, document()),
         "ArgumentError",
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+      );
+    });
+  });
+
+  // IMPORTANT!
+  // The messages here are the server's, pinned by the same-named cases in describe "can?/3" of
+  // test/elixir/hologram/auth_test.exs and in describe "validate_operation!/2" of
+  // test/elixir/hologram/policy_test.exs. Always update both together.
+  describe("an operation nothing declares", () => {
+    it("answers a declared operation from its rules", () => {
+      defineModel({archive: [rule()]});
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("archive"), document()),
+        Type.boolean(true),
+      );
+    });
+
+    it("denies a framework operation the type declares no rule for", () => {
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("update"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("raises on an operation the entity type declares no rule for", () => {
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), Type.atom("transfer"), document()),
+        "ArgumentError",
+        "unknown operation :transfer for MyApp.Document - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+      );
+    });
+
+    it("raises on a tuple whose name is not a grant lifecycle operation", () => {
+      const operation = Type.tuple([Type.atom("publish"), Type.atom("editor")]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "ArgumentError",
+        "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
+      );
+    });
+
+    it("raises on a grant lifecycle operation naming a role the entity type does not declare", () => {
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editr"),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "ArgumentError",
+        "unknown role :editr in {:grant_role, :editr} for MyApp.Document - declared roles are: :editor, :owner, :viewer",
+      );
+    });
+
+    it("answers no for a type this build did not bake before asking about the operation", () => {
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("transfer"),
+          Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
+        ),
+        Type.boolean(false),
       );
     });
   });

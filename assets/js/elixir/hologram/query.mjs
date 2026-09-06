@@ -1095,6 +1095,9 @@ const Elixir_Hologram_Query = {
       );
     }
 
+    // The entity refusal wins, then the operation's, then the double-claim's - the server's order.
+    Model.validateOperation(entityTypeOf(entity, "authorize"), operation);
+
     return putClaim(
       entity,
       Type.tuple([Type.atom("authorize"), operation]),

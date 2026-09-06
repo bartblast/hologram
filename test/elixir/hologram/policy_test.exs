@@ -5,13 +5,16 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
+      framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
       operation_key: 1,
+      operations: 1,
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
       revoke_role_qualifying_roles: 1,
-      revoke_role_qualifying_roles: 2
+      revoke_role_qualifying_roles: 2,
+      validate_operation!: 2
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -198,7 +201,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises at the policy module's own compile for an invalid declaration" do
       expected_msg =
-        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InvalidAllowPolicyFixture do
@@ -549,6 +552,20 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "framework_operations/0" do
+    test "returns the four verbs' operations and the three gates, sorted" do
+      assert framework_operations() == [
+               :create,
+               :delete,
+               :grant_role,
+               :read,
+               :read_roles,
+               :revoke_role,
+               :update
+             ]
+    end
+  end
+
   describe "grant_role_qualifying_roles/1" do
     test "returns the expanded own roles across the grant_role rules" do
       assert grant_role_qualifying_roles(Policy.Module1) == [:owner]
@@ -576,6 +593,62 @@ defmodule Hologram.PolicyTest do
 
     test "joins a per-role operation with a colon" do
       assert operation_key({:grant_role, :viewer}) == "grant_role:viewer"
+    end
+  end
+
+  describe "operations/1" do
+    test "returns the framework's operations and the ones the allow lines name, sorted" do
+      assert operations(Policy.Module1) == [
+               :archive,
+               :create,
+               :delete,
+               :grant_role,
+               :publish,
+               :read,
+               :read_roles,
+               :revoke_role,
+               :update
+             ]
+    end
+
+    test "returns the framework's operations alone for an entity type declaring nothing" do
+      assert operations(Module1) == framework_operations()
+    end
+
+    test "returns the framework's operations alone for the grant store" do
+      assert operations(RoleGrant) == framework_operations()
+    end
+
+    test "includes an operation named by a line taken from a policy module" do
+      defmodule TakenOperationPolicyFixture do
+        use Hologram.Policy
+
+        allow :publish, public: true
+      end
+
+      defmodule TakenOperationEntityFixture do
+        use Hologram.Entity
+
+        attribute :public, :boolean, default: false
+
+        policy TakenOperationPolicyFixture
+      end
+
+      assert :publish in operations(TakenOperationEntityFixture)
+    end
+
+    test "names a per-role line's operation once" do
+      defmodule PerRoleLineEntityFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow {:grant_role, :editor}, to: :owner
+        allow {:revoke_role, [:editor, :owner]}, to: :owner
+      end
+
+      assert operations(PerRoleLineEntityFixture) == framework_operations()
     end
   end
 
@@ -616,6 +689,95 @@ defmodule Hologram.PolicyTest do
 
     test "returns empty list when no rule covers the given role" do
       assert revoke_role_qualifying_roles(Policy.Module1, :viewer) == []
+    end
+  end
+
+  describe "validate_operation!/2" do
+    test "passes every framework operation on an entity type declaring nothing" do
+      Enum.each(framework_operations(), fn operation ->
+        assert validate_operation!(Module1, operation) == :ok
+      end)
+    end
+
+    test "passes an operation an allow line on the entity type names" do
+      assert validate_operation!(Policy.Module1, :archive) == :ok
+    end
+
+    test "passes a role tuple naming a role the entity type declares" do
+      assert validate_operation!(Policy.Module1, {:grant_role, :editor}) == :ok
+      assert validate_operation!(Policy.Module1, {:revoke_role, :viewer}) == :ok
+    end
+
+    test "raises on an operation no allow line on the entity type names" do
+      expected_msg =
+        "unknown operation :pin for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, :pin)
+      end
+    end
+
+    test "raises on an operation for an entity type whose allow lines name none of their own" do
+      expected_msg =
+        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Module1, :archive)
+      end
+    end
+
+    test "names a single declared operation without a conjunction" do
+      expected_msg =
+        "unknown operation :publish for Hologram.Test.Fixtures.Policy.Module4 - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module4, :publish)
+      end
+    end
+
+    test "raises on a role tuple naming a role the entity type does not declare" do
+      expected_msg =
+        "unknown role :editr in {:grant_role, :editr} for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:grant_role, :editr})
+      end
+    end
+
+    test "raises on a role tuple for an entity type declaring no role" do
+      expected_msg =
+        "unknown role :editor in {:revoke_role, :editor} for Hologram.Test.Fixtures.Entity.Module1 - it declares no role"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Module1, {:revoke_role, :editor})
+      end
+    end
+
+    test "raises on a tuple whose name is not a grant lifecycle operation" do
+      expected_msg =
+        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:publish, :editor})
+      end
+    end
+
+    test "raises on a tuple that is not a pair" do
+      expected_msg =
+        "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:grant_role, :editor, :extra})
+      end
+    end
+
+    test "raises on an operation that is neither an atom nor a tuple" do
+      expected_msg =
+        ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role})
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, wrap_term("read"))
+      end
     end
   end
 end

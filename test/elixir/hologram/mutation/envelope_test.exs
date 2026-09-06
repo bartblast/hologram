@@ -266,6 +266,14 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert write.claim == {:authorize, :publish}
     end
 
+    test "parses a claim naming a framework operation on an entity type declaring nothing" do
+      entry = create(Module2, %{"c" => "x"}, claim: ["authorize", "update"])
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write.claim == {:authorize, :update}
+    end
+
     test "accepts a create of a role grant" do
       grant_id = RoleGrant.derive_id(@user_id, PolicyModule2, @target_id, :member)
       entry = create(RoleGrant, grant_data(), id: grant_id)
@@ -685,11 +693,22 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, "write 0: trust is the server's authority - a client cannot claim it"}
     end
 
-    test "refuses an operation this build does not declare" do
+    test "refuses an operation no atom spells" do
       entry = create(Module2, %{"c" => "x"}, claim: ["authorize", "no_such_operation_declared"])
 
       assert parse(raw([entry])) ==
-               {:error, "write 0: claim names no operation this build declares"}
+               {:error,
+                "write 0: claim names no operation Hologram.Test.Fixtures.Entity.Module2 declares: " <>
+                  ~s("no_such_operation_declared")}
+    end
+
+    test "refuses an operation the entity type does not declare" do
+      entry = create(Module2, %{"c" => "x"}, claim: ["authorize", "archive"])
+
+      assert parse(raw([entry])) ==
+               {:error,
+                "write 0: claim names no operation Hologram.Test.Fixtures.Entity.Module2 declares: " <>
+                  ~s("archive")}
     end
 
     test "refuses a claim that is neither null nor an authorize pair" do
@@ -726,7 +745,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     end
 
     test "refuses a role grant carrying a claim" do
-      entry = create(RoleGrant, grant_data(), claim: ["authorize", "publish"])
+      entry = create(RoleGrant, grant_data(), claim: ["authorize", "update"])
 
       assert parse(raw([entry])) ==
                {:error,

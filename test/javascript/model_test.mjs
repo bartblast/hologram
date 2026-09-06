@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   assertBoxedStrictEqual,
   defineRuntimeGlobals,
 } from "./support/helpers.mjs";
@@ -41,7 +42,19 @@ describe("Model", () => {
           defaults: {},
           enumValues: {},
           frameworkAttributes: [],
+          operations: [
+            "archive",
+            "create",
+            "delete",
+            "grant_role",
+            "publish",
+            "read",
+            "read_roles",
+            "revoke_role",
+            "update",
+          ],
           relationships: {},
+          roles: ["editor", "owner"],
           serverOnly: [],
         },
         // A job type, whose three framework attributes are the worker's to fill and no client's
@@ -973,6 +986,93 @@ describe("Model", () => {
 
     it("leaves out the attributes a job's framework fills", () => {
       assert.deepStrictEqual(Model.settableFields(NOTIFY), ["reason"]);
+    });
+  });
+
+  // IMPORTANT!
+  // The messages here are the server's, pinned by the same-named cases in describe
+  // "validate_operation!/2" of test/elixir/hologram/policy_test.exs, and the list by its
+  // "framework_operations/0". Always update both together.
+  describe("validateOperation()", () => {
+    it("names the framework's seven operations, sorted", () => {
+      assert.deepEqual(Model.frameworkOperations, [
+        "create",
+        "delete",
+        "grant_role",
+        "read",
+        "read_roles",
+        "revoke_role",
+        "update",
+      ]);
+    });
+
+    it("passes every framework operation on a type whose entry lists none", () => {
+      for (const operation of Model.frameworkOperations) {
+        Model.validateOperation(TASK, Type.atom(operation));
+      }
+    });
+
+    it("passes an operation the type's allow lines name", () => {
+      Model.validateOperation(PROJECT, Type.atom("archive"));
+    });
+
+    it("passes a role tuple naming a role the type declares", () => {
+      Model.validateOperation(
+        PROJECT,
+        Type.tuple([Type.atom("grant_role"), Type.atom("editor")]),
+      );
+    });
+
+    it("raises on an operation no allow line on the type names", () => {
+      assertBoxedError(
+        () => Model.validateOperation(PROJECT, Type.atom("pin")),
+        "ArgumentError",
+        "unknown operation :pin for MyApp.Project - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+      );
+    });
+
+    it("raises on an operation for a type whose allow lines name none of their own", () => {
+      assertBoxedError(
+        () => Model.validateOperation(TASK, Type.atom("archive")),
+        "ArgumentError",
+        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+      );
+    });
+
+    it("raises on a role tuple naming a role the type does not declare", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            PROJECT,
+            Type.tuple([Type.atom("grant_role"), Type.atom("editr")]),
+          ),
+        "ArgumentError",
+        "unknown role :editr in {:grant_role, :editr} for MyApp.Project - declared roles are: :editor, :owner",
+      );
+    });
+
+    it("raises on a role tuple for a type declaring no role", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("revoke_role"), Type.atom("editor")]),
+          ),
+        "ArgumentError",
+        "unknown role :editor in {:revoke_role, :editor} for MyApp.Task - it declares no role",
+      );
+    });
+
+    it("raises on a tuple whose name is not a grant lifecycle operation", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            PROJECT,
+            Type.tuple([Type.atom("publish"), Type.atom("editor")]),
+          ),
+        "ArgumentError",
+        "unknown operation {:publish, :editor} for MyApp.Project - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
+      );
     });
   });
 

@@ -303,7 +303,7 @@ function grants(entityType, row, rule, actorUserId) {
   );
 }
 
-// The key a policy operation is baked under: an atom as its name, a per-role grant lifecycle
+// The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
 // operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
 // (rendered by Compiler.render_policy/2), and the two must agree.
 //
@@ -488,6 +488,11 @@ const Elixir_Hologram_Auth = {
     if (!entry) {
       return Type.boolean(false);
     }
+
+    // The server's own refusal for an operation nothing on the type declares - a typo or a renamed
+    // operation fails here, at the line that asks, rather than answering no as if the rules had
+    // been consulted.
+    Model.validateOperation(entityType, operation);
 
     const rules = entry.policy[operationName] ?? [];
 

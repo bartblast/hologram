@@ -19,6 +19,7 @@ defmodule Hologram.Mutation.Envelope do
   alias Hologram.Entity.Validator
   alias Hologram.Job
   alias Hologram.Mutation.Write
+  alias Hologram.Policy
   alias Hologram.Reflection
 
   @ops "create, update, delete, add_relationship, delete_relationship"
@@ -66,19 +67,27 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
-  defp authorize_claim(operation) do
-    {:ok, {:authorize, String.to_existing_atom(operation)}}
+  # An atom the VM has never seen cannot be anything's operation, and one it has seen is judged
+  # against the write's own entity type - the same refusal authorize/2 gives at the stage.
+  # The message spells the operation as the wire sent it: the rescue sees the parameter.
+  defp authorize_claim(operation, entity_type) do
+    operation = String.to_existing_atom(operation)
+
+    Policy.validate_operation!(entity_type, operation)
+
+    {:ok, {:authorize, operation}}
   rescue
-    ArgumentError -> {:error, "claim names no operation this build declares"}
+    ArgumentError ->
+      {:error, "claim names no operation #{inspect(entity_type)} declares: #{inspect(operation)}"}
   end
 
-  defp claim(entry) do
+  defp claim(entry, entity_type) do
     case Map.get(entry, "claim") do
       nil ->
         {:ok, nil}
 
       ["authorize", operation] when is_binary(operation) ->
-        authorize_claim(operation)
+        authorize_claim(operation, entity_type)
 
       # A claim is a request, never a grant, and the server's own authority is not a client's to
       # request - so this is refused by name rather than evaluated and denied.
@@ -398,7 +407,7 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, id} <- id(entry),
          {:ok, data} <- data(entry, entity_type),
          :ok <- no_deltas(entry),
-         {:ok, claim} <- claim(entry),
+         {:ok, claim} <- claim(entry, entity_type),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
        %Write{
@@ -418,7 +427,7 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, data} <- delete_data(entry, entity_type),
          :ok <- no_deltas(entry),
          {:ok, based_on} <- based_on(entry, entity_type),
-         {:ok, claim} <- claim(entry),
+         {:ok, claim} <- claim(entry, entity_type),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
        %Write{
@@ -441,7 +450,7 @@ defmodule Hologram.Mutation.Envelope do
          :ok <- some_change(data, deltas),
          :ok <- no_overlap(data, deltas),
          {:ok, based_on} <- based_on(entry, entity_type),
-         {:ok, claim} <- claim(entry),
+         {:ok, claim} <- claim(entry, entity_type),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
        %Write{
@@ -464,7 +473,7 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, target_id} <- target_id(entry),
          :ok <- no_stamp(entry),
          :ok <- no_deltas(entry),
-         {:ok, claim} <- claim(entry) do
+         {:ok, claim} <- claim(entry, entity_type) do
       {:ok,
        %Write{
          claim: claim,

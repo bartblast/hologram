@@ -63,6 +63,12 @@ defmodule Hologram.Policy do
 
   @model_facts_key {__MODULE__, :model_facts}
 
+  # The operations the framework itself asks about: the four verbs' own and the three gates.
+  # Always askable on every entity type, declared or not - default deny answers false.
+  # IMPORTANT: Model.frameworkOperations in assets/js/model.mjs is the hand-ported twin, pinned on
+  # both tiers - always update both together.
+  @framework_operations [:create, :delete, :grant_role, :read, :read_roles, :revoke_role, :update]
+
   # The three operations gating the grant lifecycle
   @gate_operations [:grant_role, :read_roles, :revoke_role]
 
@@ -247,6 +253,14 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the operations the framework itself asks about, sorted: the four verbs' own (create, delete, read, update) and the three grant lifecycle gates (grant_role, read_roles, revoke_role).
+
+  Every entity type can be asked about each of them, declared or not - an undeclared one is denied by default rather than refused as unknown.
+  """
+  @spec framework_operations() :: list(atom)
+  def framework_operations, do: @framework_operations
+
+  @doc """
   Returns the own roles qualifying their holders to grant some role on the given entity type, sorted.
 
   These are the extends-expanded own roles across its allow :grant_role rules - empty when the entity
@@ -269,7 +283,7 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the key the given policy operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
+  Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
 
   The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -277,6 +291,21 @@ defmodule Hologram.Policy do
   def operation_key(operation) when is_atom(operation), do: Atom.to_string(operation)
 
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
+
+  @doc """
+  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every operation an allow line on the type names - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
+
+  A per-role line (allow {:grant_role, role}) names the framework operation, which is already in the list.
+  """
+  @spec operations(module) :: list(atom)
+  def operations(entity_type) do
+    entity_type.__policies__()
+    |> Enum.map(fn {operation, _to, _via, _predicates} -> operation end)
+    |> Enum.filter(&is_atom/1)
+    |> Enum.concat(@framework_operations)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
 
   @doc """
   Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
@@ -342,6 +371,53 @@ defmodule Hologram.Policy do
     own_role_names(entity_type, {:revoke_role, role_name})
   end
 
+  @doc """
+  Refuses an operation the given entity type cannot be asked about, or returns :ok.
+
+  A framework operation always passes. An atom passes when an allow line on the entity type names it. A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises ArgumentError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
+
+  The client mirrors the same refusals in validateOperation in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
+  """
+  @spec validate_operation!(module, Entity.operation()) :: :ok
+  def validate_operation!(_entity_type, operation) when operation in @framework_operations,
+    do: :ok
+
+  def validate_operation!(entity_type, operation) when is_atom(operation) do
+    if operation in operations(entity_type) do
+      :ok
+    else
+      raise ArgumentError, message: unknown_operation_message(entity_type, operation)
+    end
+  end
+
+  def validate_operation!(entity_type, {name, role_name} = operation)
+      when name in @role_operations do
+    declared_names = Keyword.keys(entity_type.__roles__())
+
+    if role_name in declared_names do
+      :ok
+    else
+      raise ArgumentError,
+        message:
+          "unknown role #{inspect(role_name)} in #{inspect(operation)} for #{inspect(entity_type)} - #{declared_roles_description(declared_names)}"
+    end
+  end
+
+  def validate_operation!(entity_type, operation) when is_tuple(operation) do
+    raise ArgumentError,
+      message:
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+  end
+
+  # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and
+  # authorize/2 and the wire only ever pass an atom - but this function is public, and its
+  # docstring promises an ArgumentError for anything else.
+  def validate_operation!(entity_type, operation) do
+    raise ArgumentError,
+      message:
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
+  end
+
   defp build_global_reference([]), do: []
 
   defp build_global_reference(role_modules) do
@@ -389,6 +465,12 @@ defmodule Hologram.Policy do
 
       {:rel, reference, Entity.expand_role(target_type, role_name)}
     end
+  end
+
+  defp declared_roles_description([]), do: "it declares no role"
+
+  defp declared_roles_description(declared_names) do
+    "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
   end
 
   # A bare grant lifecycle line covers, for each declared role, the holders it names whose own
@@ -494,6 +576,15 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
+  # ":a", ":a and :b", ":a, :b and :c" - the spoken form, for a message listing a few names
+  defp join_names([name]), do: inspect(name)
+
+  defp join_names(names) do
+    {init, [last]} = Enum.split(names, -1)
+
+    "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
+  end
+
   defp own_reference_names(%{to: nil}), do: []
 
   defp own_reference_names(%{to: references}) do
@@ -585,6 +676,18 @@ defmodule Hologram.Policy do
       to: named_reference ++ global_reference,
       via: nil
     }
+  end
+
+  defp unknown_operation_message(entity_type, operation) do
+    own_operations = operations(entity_type) -- @framework_operations
+
+    declared =
+      case own_operations do
+        [] -> "no operation of their own"
+        names -> join_names(names)
+      end
+
+    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - its allow lines declare #{declared}, and the framework's own operations are #{join_names(@framework_operations)}"
   end
 
   defp validate_policy_module!(module, policy_module) do

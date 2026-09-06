@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   contextFixture,
   defineRuntimeGlobals,
 } from "../../support/helpers.mjs";
@@ -110,6 +111,17 @@ describe("Elixir_Hologram_Query", () => {
         },
         [PROJECT]: {
           attributes: {id: "uuid", name: "string"},
+          operations: [
+            "archive",
+            "create",
+            "delete",
+            "grant_role",
+            "publish",
+            "read",
+            "read_roles",
+            "revoke_role",
+            "update",
+          ],
           relationships: {
             owner: {toMany: false, type: "MyApp.User"},
             tasks: {toMany: true, type: TASK},
@@ -931,7 +943,16 @@ describe("Elixir_Hologram_Query", () => {
     });
 
     it("records the claim for the operation", () => {
-      const result = authorize(entity(TASK), Type.atom("archive"));
+      const result = authorize(entity(TASK), Type.atom("update"));
+
+      assert.deepStrictEqual(
+        claim(result),
+        Type.tuple([Type.atom("authorize"), Type.atom("update")]),
+      );
+    });
+
+    it("records an operation an allow line on the entity type names", () => {
+      const result = authorize(entity(PROJECT), Type.atom("archive"));
 
       assert.deepStrictEqual(
         claim(result),
@@ -959,11 +980,19 @@ describe("Elixir_Hologram_Query", () => {
       assert.throw(
         () =>
           authorize(
-            authorize(entity(TASK), Type.atom("archive")),
-            Type.atom("publish"),
+            authorize(entity(TASK), Type.atom("update")),
+            Type.atom("delete"),
           ),
         HologramBoxedError,
-        "MyApp.Task already carries a claim ({:authorize, :archive}) - a write claims exactly one authority",
+        "MyApp.Task already carries a claim ({:authorize, :update}) - a write claims exactly one authority",
+      );
+    });
+
+    it("raises when the operation is one the entity type never declared", () => {
+      assertBoxedError(
+        () => authorize(entity(TASK), Type.atom("archive")),
+        "ArgumentError",
+        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
   });

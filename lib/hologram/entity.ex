@@ -20,7 +20,7 @@ defmodule Hologram.Entity do
   @type id :: String.t()
 
   @typedoc """
-  A policy operation - an atom, or a grant lifecycle operation naming the role (or roles) it covers.
+  An entity operation - an atom, or a grant lifecycle operation naming the role (or roles) it covers.
   """
   @type operation :: atom | {atom, atom | list(atom)}
 

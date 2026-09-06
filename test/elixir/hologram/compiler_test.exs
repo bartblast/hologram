@@ -34,6 +34,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
+  alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -555,6 +556,140 @@ defmodule Hologram.CompilerTest do
   # verb's server call tree transpiled into its bundle. Two lists in two modules; this ties them.
   test "every permission MFA is a manually ported one" do
     assert permission_mfas() -- CallGraph.manually_ported_elixir_mfas() == []
+  end
+
+  describe "operation_asks/2" do
+    # The offending asks are built as IR rather than as file fixtures, because a file fixture
+    # would refuse the build in the compile.hologram Mix task tests, which compile the whole
+    # project. The module's name has to exist as an atom before IR.for_code/2 resolves it, which
+    # spelling it here as a literal guarantees.
+    @asker Hologram.Test.Fixtures.Compiler.OperationAsker
+
+    defp asker_plt(code) do
+      PLT.put(PLT.start(), @asker, IR.for_code(code, %Context{}))
+    end
+
+    defp asker_graph(edges) do
+      graph = CallGraph.start()
+
+      Enum.each(edges, fn {function, arity, target} ->
+        CallGraph.add_edge(graph, {@asker, function, arity}, target)
+      end)
+
+      graph
+    end
+
+    test "reads every ask of every caller, sorted by the calling function" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def h(user, operation, entity), do: Hologram.Auth.can?(user, operation, entity)
+          def f(user, entity), do: Hologram.Auth.can?(user, :nope, entity)
+          def g(user, entity), do: Hologram.Auth.can?(user, {:grant_role, :editr}, entity)
+        end
+        """)
+
+      graph =
+        asker_graph([
+          {:f, 2, {Hologram.Auth, :can?, 3}},
+          {:g, 2, {Hologram.Auth, :can?, 3}},
+          {:h, 3, {Hologram.Auth, :can?, 3}}
+        ])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 3, mfa: {@asker, :f, 2}, operation: :nope},
+               %{line: 4, mfa: {@asker, :g, 2}, operation: {:grant_role, :editr}},
+               %{line: 2, mfa: {@asker, :h, 3}, operation: :dynamic}
+             ]
+    end
+
+    test "reads the operation a claim stage names" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(entity), do: Hologram.Query.authorize(entity, :publsh)
+        end
+        """)
+
+      graph = asker_graph([{:f, 1, {Hologram.Query, :authorize, 2}}])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 2, mfa: {@asker, :f, 1}, operation: :publsh}
+             ]
+    end
+
+    test "reads the authorize option of a job enqueue" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(values), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, authorize: :genrate)
+          def g(values), do: Hologram.Job.create!(Hologram.Test.Fixtures.Job.Module1, values, authorize: :genrate)
+        end
+        """)
+
+      graph =
+        asker_graph([
+          {:f, 1, {Hologram.Job, :create, 3}},
+          {:g, 1, {Hologram.Job, :create!, 3}}
+        ])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 2, mfa: {@asker, :f, 1}, operation: :genrate},
+               %{line: 3, mfa: {@asker, :g, 1}, operation: :genrate}
+             ]
+    end
+
+    test "passes over an enqueue claiming the server's authority" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(values), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, trust: true)
+        end
+        """)
+
+      graph = asker_graph([{:f, 1, {Hologram.Job, :create, 3}}])
+
+      assert operation_asks(graph, plt) == []
+    end
+
+    test "marks an enqueue whose options are computed as dynamic" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(values, opts), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, opts)
+        end
+        """)
+
+      graph = asker_graph([{:f, 2, {Hologram.Job, :create, 3}}])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 2, mfa: {@asker, :f, 2}, operation: :dynamic}
+             ]
+    end
+
+    test "skips a caller absent from the IR PLT" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert operation_asks(graph, PLT.start()) == []
+    end
+
+    test "reads a fixture page's template through the project's own graph", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      asks = operation_asks(call_graph, ir_plt)
+
+      assert Enum.any?(asks, &match?(%{mfa: {PageModule10, :template, 0}, operation: :read}, &1))
+      assert Enum.any?(asks, &match?(%{mfa: {PageModule11, :command, 3}, operation: :read}, &1))
+
+      assert Enum.any?(
+               asks,
+               &match?(
+                 %{mfa: {Hologram.DB.Writer, :evaluate_operation!, 2}, operation: :dynamic},
+                 &1
+               )
+             )
+    end
   end
 
   describe "pages_checking_permissions/2" do
@@ -1128,7 +1263,9 @@ defmodule Hologram.CompilerTest do
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},/ <>
-                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],/ <>
+                 ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
+                 ~s/"revoke_role","update"],"policy":{},/ <>
                  ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
              )
     end
@@ -1140,6 +1277,25 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
+    end
+
+    # The client refuses an operation nothing declares with the server's own sentence, from this
+    # list - the framework's seven and the type's own, whether or not the build checks permissions
+    # (a type declaring nothing renders the seven alone, asserted with the whole entry in "injects
+    # the attribute types the client reads rows by").
+    test "names the operations a type can be asked about, sorted", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"operations":["archive","create","delete","grant_role","publish","read",/ <>
+                 ~s/"read_roles","revoke_role","update"],/
+             )
     end
 
     # The client writes a creator's grants itself as it creates the row, so the build names which
@@ -2539,6 +2695,120 @@ defmodule Hologram.CompilerTest do
 
     refute String.contains?(js, "Elixir.String.Chars.Version")
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+  end
+
+  describe "validate_operations!/3" do
+    # Entity13 declares :publish, :triage and :unlink with roles :editor and :owner; PolicyEntity
+    # declares :archive and :publish with :editor, :maintainer, :owner and :viewer - so the build's
+    # vocabulary is the framework's seven plus four, and its roles four.
+    @declaring_model [Entity13, PolicyEntity]
+
+    defp single_ask_plt(operation) do
+      asker_plt("""
+      defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+        def f(user, entity), do: Hologram.Auth.can?(user, #{operation}, entity)
+      end
+      """)
+    end
+
+    test "doesn't raise for a framework operation on a model declaring nothing" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!([Entity1], graph, single_ask_plt(":read")) == :ok
+    end
+
+    # An app with no entity type at all - the umbrella test app's shape - still has the
+    # framework's own asks in its call graph, Diff.deltas/4 asking :read among them.
+    test "doesn't raise for a framework operation when the build has no entity type" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!([], graph, single_ask_plt(":read")) == :ok
+    end
+
+    test "doesn't raise for an operation some entity type declares" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(@declaring_model, graph, single_ask_plt(":triage")) == :ok
+    end
+
+    test "doesn't raise for a role tuple naming a role some entity type declares" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(
+               @declaring_model,
+               graph,
+               single_ask_plt("{:grant_role, :viewer}")
+             ) ==
+               :ok
+    end
+
+    test "doesn't raise for a computed operation" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(user, operation, entity), do: Hologram.Auth.can?(user, operation, entity)
+        end
+        """)
+
+      graph = asker_graph([{:f, 3, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!([Entity1], graph, plt) == :ok
+    end
+
+    test "raises on an operation no entity type declares" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type declares an allow line for it; the operations this build declares are :archive, :publish, :triage and :unlink, beside the framework's own"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt(":publsh"))
+      end
+    end
+
+    test "raises on an operation when the model declares none beside the framework's" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type declares an allow line for it; this build declares no operation beside the framework's own"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!([Entity1], graph, single_ask_plt(":publsh"))
+      end
+    end
+
+    test "raises on a tuple whose name is not a grant lifecycle operation" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown operation {:publish, :editor} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt("{:publish, :editor}"))
+      end
+    end
+
+    test "raises on a role tuple naming a role no entity type declares" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown role :editr in {:grant_role, :editr} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - declared roles are: :editor, :maintainer, :owner, :viewer"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt("{:grant_role, :editr}"))
+      end
+    end
+
+    test "raises on a role tuple when no entity type declares a role" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown role :editor in {:revoke_role, :editor} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type declares a role"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!([Entity1], graph, single_ask_plt("{:revoke_role, :editor}"))
+      end
+    end
   end
 
   describe "validate_prop_usages/2" do

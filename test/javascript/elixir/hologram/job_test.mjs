@@ -1,6 +1,11 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals, sinon} from "../../support/helpers.mjs";
+import {
+  assert,
+  assertBoxedError,
+  defineRuntimeGlobals,
+  sinon,
+} from "../../support/helpers.mjs";
 
 import Batches from "../../../../assets/js/batches.mjs";
 import Bitstring from "../../../../assets/js/bitstring.mjs";
@@ -61,6 +66,16 @@ describe("Elixir_Hologram_Job", () => {
           defaults: {status: Type.atom("queued")},
           enumValues: {status: ["queued", "running", "done", "failed"]},
           frameworkAttributes: ["actor_id", "error", "status"],
+          operations: [
+            "create",
+            "delete",
+            "grant_role",
+            "notify",
+            "read",
+            "read_roles",
+            "revoke_role",
+            "update",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },
@@ -130,6 +145,19 @@ describe("Elixir_Hologram_Job", () => {
         "authorize",
         "notify",
       ]);
+    });
+
+    it("raises on an operation the job type never declared", () => {
+      assertBoxedError(
+        () =>
+          createWithOpts(
+            notify,
+            values([["reason", Type.bitstring("x")]]),
+            opts([["authorize", Type.atom("no_such")]]),
+          ),
+        "ArgumentError",
+        "unknown operation :no_such for MyApp.Jobs.Notify - its allow lines declare :notify, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+      );
     });
 
     it("answers the job as it now stands", () => {

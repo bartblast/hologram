@@ -766,7 +766,7 @@ defmodule Hologram.EntityTest do
              }
     end
 
-    test "types the framework's own names for an entity struct, an entity id and a policy operation" do
+    test "types the framework's own names for an entity struct, an entity id and an entity operation" do
       {:ok, types} = Code.Typespec.fetch_types(Hologram.Entity)
 
       sources =

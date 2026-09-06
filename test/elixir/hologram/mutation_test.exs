@@ -608,7 +608,8 @@ defmodule Hologram.MutationTest do
     end
 
     test "refuses an update naming a row that is not there" do
-      write = update_write(Module2, Entity.generate_id(), %{"c" => "x"})
+      write =
+        update_write(Module2, Entity.generate_id(), %{"c" => "x"}, claim: ["authorize", "update"])
 
       assert run(envelope([write]), server()) == rejected(0, :not_found)
     end

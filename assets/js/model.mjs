@@ -30,6 +30,22 @@ export default class Model {
   // is how the two drift.
   static systemAttributes = ["created_at", "id", "updated_at"];
 
+  // IMPORTANT!
+  // The twin of Hologram.Policy.framework_operations/0 - the seven operations the framework itself
+  // asks about, always askable on every type. Pinned on both tiers ("framework_operations/0" in
+  // test/elixir/hologram/policy_test.exs, "frameworkOperations" in test/javascript/model_test.mjs).
+  // Always update both together. A baked entry's operations list carries these too; this copy
+  // exists so a refusal can say which of a type's operations are its own.
+  static frameworkOperations = [
+    "create",
+    "delete",
+    "grant_role",
+    "read",
+    "read_roles",
+    "revoke_role",
+    "update",
+  ];
+
   static #entries = {};
 
   // Every relationship of a row is absent from the row itself: a to-many lives in the
@@ -223,6 +239,64 @@ export default class Model {
   // spells it, because that is what the rows it will be compared against hold. A date written as
   // a date compares with a date written as a string only if one of them stops being what it was,
   // and the rows cannot be the ones to change.
+  // The client's Hologram.Policy.validate_operation!/2: refuses an operation the given entity type
+  // cannot be asked about, with the server's own sentences (pinned as pairs in
+  // test/elixir/hologram/policy_test.exs and test/javascript/model_test.mjs). A framework
+  // operation always passes. An atom passes when the type's baked operations list names it. A
+  // {:grant_role, role} / {:revoke_role, role} tuple - a two-tuple of atoms, which is the caller's
+  // shape check to make - passes when the type's baked roles name the role.
+  //
+  // Read off the raw baked entry, as can?/3 and the role check read it: entry() normalizes the
+  // keys the write path indexes into and carries neither of these. A hand-built entry without them
+  // (which is how most of the suite states the little it reads) declares nothing of its own.
+  static validateOperation(type, operation) {
+    const baked = globalThis.Hologram.sync?.model?.[type];
+    const operations = baked?.operations ?? [];
+
+    if (Type.isAtom(operation)) {
+      const name = operation.value;
+
+      if (
+        Model.frameworkOperations.includes(name) ||
+        operations.includes(name)
+      ) {
+        return;
+      }
+
+      const own = operations.filter(
+        (candidate) => !Model.frameworkOperations.includes(candidate),
+      );
+
+      const declared =
+        own.length === 0 ? "no operation of their own" : Model.#joinNames(own);
+
+      Interpreter.raiseArgumentError(
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - its allow lines declare ${declared}, and the framework's own operations are ${Model.#joinNames(Model.frameworkOperations)}`,
+      );
+    }
+
+    const [name, role] = operation.data;
+
+    if (!["grant_role", "revoke_role"].includes(name.value)) {
+      Interpreter.raiseArgumentError(
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role} and {:revoke_role, role}`,
+      );
+    }
+
+    const roles = baked?.roles ?? [];
+
+    if (!roles.includes(role.value)) {
+      const declared =
+        roles.length === 0
+          ? "it declares no role"
+          : `declared roles are: ${roles.map((roleName) => `:${roleName}`).join(", ")}`;
+
+      Interpreter.raiseArgumentError(
+        `unknown role ${Interpreter.inspect(role)} in ${Interpreter.inspect(operation)} for ${type} - ${declared}`,
+      );
+    }
+  }
+
   static unbox(value, attributeType) {
     if (Type.isNil(value)) {
       return null;
@@ -547,6 +621,17 @@ export default class Model {
   // The framework's state on the struct, as the server would fill it for a row that was READ:
   // the revisions the wire carried, and the write-side fields empty - those record what a struct
   // is carrying toward a write, and a row arriving from the server is carrying none.
+  // ":a", ":a and :b", ":a, :b and :c" - the spoken form, for a message listing a few names
+  static #joinNames(names) {
+    const spelled = names.map((name) => `:${name}`);
+
+    if (spelled.length === 1) {
+      return spelled[0];
+    }
+
+    return `${spelled.slice(0, -1).join(", ")} and ${spelled.at(-1)}`;
+  }
+
   static #metadata(row) {
     const revisions = Object.entries(row["$revisions"] ?? {}).map(
       ([name, revision]) => [Type.atom(name), Type.integer(revision)],
