@@ -1796,25 +1796,25 @@ defmodule Hologram.CompilerTest do
     ]
 
     expected_static_bundle_path_1 =
-      Path.join(opts[:static_dir], "page-936cdd48d87d4ecd5720ad33b7fb4b7c.js")
+      Path.join(opts[:static_dir], "page-2f674261d3864654584c2d913411321b.js")
 
     expected_static_source_map_path_1 = "#{expected_static_bundle_path_1}.map"
 
     expected_static_bundle_path_2 =
-      Path.join(opts[:static_dir], "runtime-52169d07278b312ea39145c3b94c0203.js")
+      Path.join(opts[:static_dir], "runtime-94a7649c1aa1e27def4be6bbfa5230ac.js")
 
     expected_static_source_map_path_2 = "#{expected_static_bundle_path_2}.map"
 
     assert bundle(entry_files_info, opts) == [
              %{
-               digest: "936cdd48d87d4ecd5720ad33b7fb4b7c",
+               digest: "2f674261d3864654584c2d913411321b",
                entry_name: MyPage,
                bundle_name: "page",
                static_bundle_path: expected_static_bundle_path_1,
                static_source_map_path: expected_static_source_map_path_1
              },
              %{
-               digest: "52169d07278b312ea39145c3b94c0203",
+               digest: "94a7649c1aa1e27def4be6bbfa5230ac",
                entry_name: "runtime",
                bundle_name: "runtime",
                static_bundle_path: expected_static_bundle_path_2,
@@ -1825,7 +1825,7 @@ defmodule Hologram.CompilerTest do
     expected_bundle_js_1 =
       normalize_newlines("""
       (()=>{var o=111;})();
-      //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
+      //# sourceMappingURL=page-2f674261d3864654584c2d913411321b.js.map
       """)
 
     assert File.read!(expected_static_bundle_path_1) == expected_bundle_js_1
@@ -1833,7 +1833,7 @@ defmodule Hologram.CompilerTest do
     expected_bundle_js_2 =
       normalize_newlines("""
       (()=>{var o=222;})();
-      //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
+      //# sourceMappingURL=runtime-94a7649c1aa1e27def4be6bbfa5230ac.js.map
       """)
 
     assert File.read!(expected_static_bundle_path_2) == expected_bundle_js_2
@@ -1886,13 +1886,13 @@ defmodule Hologram.CompilerTest do
       File.write(entry_file_path, "export const myVar = 123;\n")
 
       expected_static_bundle_path =
-        Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
+        Path.join(opts[:static_dir], "my_bundle_name-5bdd67984ec597ca3b992f7ab00c6acc.js")
 
       expected_static_source_map_path = "#{expected_static_bundle_path}.map"
 
       assert bundle(MyPage, entry_file_path, "my_bundle_name", opts) == %{
                bundle_name: "my_bundle_name",
-               digest: "76f1f092f95a34da067e35caad5e3317",
+               digest: "5bdd67984ec597ca3b992f7ab00c6acc",
                entry_name: MyPage,
                static_bundle_path: expected_static_bundle_path,
                static_source_map_path: expected_static_source_map_path
@@ -1901,7 +1901,7 @@ defmodule Hologram.CompilerTest do
       expected_bundle_js =
         normalize_newlines("""
         (()=>{var o=123;})();
-        //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
+        //# sourceMappingURL=my_bundle_name-5bdd67984ec597ca3b992f7ab00c6acc.js.map
         """)
 
       assert File.read!(expected_static_bundle_path) == expected_bundle_js
