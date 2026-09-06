@@ -19,6 +19,10 @@ defmodule Hologram.Auth do
   alias Hologram.Reflection
   alias Hologram.Sync.Carry
 
+  # The shape refusal can?/3 shares with its client twin (operationKey in
+  # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
+  @operation_shape_message "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+
   @doc """
   Returns the window a client checking permissions locally downloads: every grant row, narrowed
   per client by the policy the read path applies - each client receives its own grants plus the
@@ -65,7 +69,9 @@ defmodule Hologram.Auth do
   Returns true when the given user may perform the given operation on the given entity, or false otherwise.
 
   Takes the user entity or a bare user id, and nil for an anonymous session - rules referencing
-  the acting user never match then. An operation the entity type declares no rule for is denied.
+  the acting user never match then. A framework operation the entity type declares no rule for is
+  denied; an operation nothing on the entity type declares is refused with ArgumentError - see
+  Hologram.Policy.validate_operation!/2.
 
   The operation is an atom, or `{:grant_role, role}` / `{:revoke_role, role}` asking about one role -
   the bare `:grant_role` or `:revoke_role` asks whether the user may grant or revoke some role at all.
@@ -584,7 +590,19 @@ defmodule Hologram.Auth do
     raise ArgumentError, "can? asks about one role - #{inspect(operation)} names several"
   end
 
+  defp evaluate(_user_or_id, {name, role_name}, _entity, _source)
+       when not is_atom(name) or not is_atom(role_name) do
+    raise ArgumentError, @operation_shape_message
+  end
+
+  defp evaluate(_user_or_id, operation, _entity, _source)
+       when not is_atom(operation) and not is_tuple(operation) do
+    raise ArgumentError, @operation_shape_message
+  end
+
   defp evaluate(user_or_id, operation, entity, source) do
+    Policy.validate_operation!(entity.__struct__, operation)
+
     policy = Policy.build(entity.__struct__)
     checker = &check_requirement(&1, &2, &3, operation, source)
 

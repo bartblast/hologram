@@ -237,8 +237,8 @@ defmodule Hologram.AuthTest do
       refute can?("user_id_1", :read, %Module1{public: false})
     end
 
-    test "denies an operation the entity type declares no rule for" do
-      refute can?("user_id_1", :transfer, %Module1{public: true})
+    test "denies a framework operation the entity type declares no rule for" do
+      refute can?("user_id_1", :create, %Module1{public: true})
     end
 
     test "matches a rule referencing the acting user" do
@@ -395,6 +395,54 @@ defmodule Hologram.AuthTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         can?(user, {:grant_role, [:editor, :viewer]}, resource)
+      end
+    end
+
+    # IMPORTANT!
+    # The shape message is the client's, pinned there by "raises on an operation that is neither an
+    # atom nor a role tuple" in test/javascript/elixir/hologram/auth_test.mjs. Always update both.
+    test "raises on a role tuple whose members are not atoms" do
+      expected_msg =
+        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        can?("user_id_1", {:grant_role, "viewer"}, %Module1{public: true})
+      end
+    end
+
+    test "raises on an operation that is neither an atom nor a tuple" do
+      expected_msg =
+        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        can?("user_id_1", "read", %Module1{public: true})
+      end
+    end
+
+    test "raises on an operation the entity type declares no rule for" do
+      expected_msg =
+        "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        can?("user_id_1", :transfer, %Module1{public: true})
+      end
+    end
+
+    test "raises on a tuple whose name is not a grant lifecycle operation" do
+      expected_msg =
+        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        can?("user_id_1", {:publish, :editor}, %Module1{public: true})
+      end
+    end
+
+    test "raises on a grant lifecycle operation naming a role the entity type does not declare" do
+      expected_msg =
+        "unknown role :editr in {:grant_role, :editr} for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        can?("user_id_1", {:grant_role, :editr}, %Module1{public: true})
       end
     end
   end
