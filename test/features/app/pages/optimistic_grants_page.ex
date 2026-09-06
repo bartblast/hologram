@@ -29,6 +29,7 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
       |> DB.read()
 
     component
+    |> put_state(:computed_operation, :no_such)
     |> put_state(:document, document)
     |> put_state(:other_user_id, other_user.id)
     |> put_state(:result, nil)
@@ -38,6 +39,7 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click="ask_computed"> Ask about a computed operation </button>
       <button $click="create_and_share"> Create and share </button>
       <button $click="grant_editor"> Grant editor </button>
       <button $click="grant_owner"> Grant owner </button>
@@ -59,6 +61,19 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   # The first of them needs the roles a row hands its creator: the note is made and shared in one
   # action, so the grant is judged against a row this browser made a line earlier and has been
   # told nothing about yet.
+  # The operation is read from state rather than spelled here, so the build passes it over and the
+  # browser's own check is what answers - the one tier where an operation nothing declares can
+  # still reach a call. It raises, and the error overlay is what the person sees.
+  def action(:ask_computed, _params, component) do
+    can?(
+      component.state.session_user_id,
+      component.state.computed_operation,
+      component.state.document
+    )
+
+    put_state(component, :result, "asked")
+  end
+
   def action(:create_and_share, _params, component) do
     {:ok, note} =
       %{author_id: component.state.session_user_id, body: "shared_note"}

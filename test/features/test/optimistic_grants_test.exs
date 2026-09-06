@@ -73,6 +73,25 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     |> assert_text(css("#grants"), "#{role}:#{session_user().id}")
   end
 
+  # The operation the action asks about is computed, so no build check can read it - this is the
+  # tier the runtime refusal exists for, and the assertion is that it reaches the browser rather
+  # than being answered false and passed over.
+  feature "refuses an operation the entity type never declared", %{
+    session: session,
+    document: document
+  } do
+    session = sign_in_as(session, document, :owner)
+
+    expected_msg =
+      "unknown operation :no_such for HologramFeatureTests.Entities.Document - its allow lines " <>
+        "declare no operation of their own, and the framework's own operations are :create, " <>
+        ":delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+    assert_client_error session, ArgumentError, expected_msg, fn ->
+      click(session, button("Ask about a computed operation"))
+    end
+  end
+
   feature "shows a granted role before the server answers", %{
     session: session,
     document: document,
