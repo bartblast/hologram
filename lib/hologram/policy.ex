@@ -269,7 +269,7 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the key the given policy operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
+  Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
 
   The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
   """

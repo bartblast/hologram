@@ -303,7 +303,7 @@ function grants(entityType, row, rule, actorUserId) {
   );
 }
 
-// The key a policy operation is baked under: an atom as its name, a per-role grant lifecycle
+// The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
 // operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
 // (rendered by Compiler.render_policy/2), and the two must agree.
 //

@@ -198,7 +198,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises at the policy module's own compile for an invalid declaration" do
       expected_msg =
-        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InvalidAllowPolicyFixture do

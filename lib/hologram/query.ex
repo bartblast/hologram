@@ -80,7 +80,7 @@ defmodule Hologram.Query do
   the acting user, instead of the operation the verb performs on its own.
 
   The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
-  operation is an atom naming a policy operation the entity type declares an allow line for -
+  operation is an atom naming an entity operation the entity type declares an allow line for -
   `:pin`, `:publish`, `:archive` - and is recorded in the struct's metadata as the claim the
   write carries. There is no user argument: the subject of a claim is always the acting user.
   A write carries exactly one claim - a struct already claiming an authority, through

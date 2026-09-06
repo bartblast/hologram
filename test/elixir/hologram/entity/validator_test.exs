@@ -590,7 +590,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects non-atom operation" do
       expected_msg =
-        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture73 do
@@ -603,7 +603,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a grant lifecycle operation naming an empty role list" do
       expected_msg =
-        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture98 do
@@ -618,7 +618,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a grant lifecycle operation naming a non-atom role" do
       expected_msg =
-        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - a policy operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture99 do
