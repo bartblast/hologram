@@ -765,7 +765,7 @@ defmodule Hologram.DB.DDLTest do
         columns: []
       }
 
-      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_statu_aa768be9"
+      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_statu_e6814778"
       [rename_statement, _create_statement, drop_statement] = statements(op)
 
       assert rename_statement =~ ~s(RENAME TO "#{fitted_old_type}")

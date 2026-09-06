@@ -2,15 +2,17 @@ defmodule Hologram.DB.Mapper do
   @moduledoc false
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
   alias Hologram.Reflection
 
+  # Bytes of the digest a shortened identifier carries - each spells as two hex characters.
+  @digest_bytes 4
+
   # PostgreSQL truncates an enum label past 63 bytes silently, and a truncated label no longer
   # decodes to the value it was stored for.
   @max_enum_label_bytes 63
-
-  @hash_bytes 8
 
   # PostgreSQL truncates identifiers to 63 bytes - derived identifiers must never rely on that.
   @max_identifier_bytes 63
@@ -127,13 +129,9 @@ defmodule Hologram.DB.Mapper do
   @spec fit_identifier(String.t()) :: String.t()
   def fit_identifier(identifier) do
     if byte_size(identifier) > @max_identifier_bytes do
-      hash =
-        :md5
-        |> :crypto.hash(identifier)
-        |> Base.encode16(case: :lower)
-        |> binary_part(0, @hash_bytes)
+      hash = CryptographicUtils.short_digest(identifier, @digest_bytes)
 
-      prefix_bytes = @max_identifier_bytes - @hash_bytes - 1
+      prefix_bytes = @max_identifier_bytes - 2 * @digest_bytes - 1
 
       binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
     else

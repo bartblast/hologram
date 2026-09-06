@@ -42,6 +42,10 @@ defmodule Hologram.Compiler do
     :unique
   ]
 
+  # A bundle is named <name>-<digest>.js. 16 bytes keep the 32-character digest the asset path
+  # registry matches on (Hologram.Assets.PathRegistry).
+  @bundle_digest_bytes 16
+
   # The MFAs whose presence in a page's client code makes the page a permission checker - one
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
   # locally before it writes.
@@ -682,7 +686,7 @@ defmodule Hologram.Compiler do
     digest =
       output_bundle_path
       |> File.read!()
-      |> CryptographicUtils.digest(:md5, :hex)
+      |> CryptographicUtils.short_digest(@bundle_digest_bytes)
 
     static_bundle_path_with_digest = Path.join(opts[:static_dir], "#{bundle_name}-#{digest}.js")
 

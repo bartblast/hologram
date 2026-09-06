@@ -86,11 +86,10 @@ defmodule Hologram.Query.RegistryTest do
       refute id(first_term) == id(second_term)
     end
 
-    test "computes a stable lowercase hex id" do
+    test "returns a lowercase hex string of the truncated SHA-256" do
       term = Query.normalize(Module2)
 
-      assert id(term) == id(term)
-      assert id(term) =~ ~r/^[0-9a-f]{32}$/
+      assert id(term) == "9317a68e9efcf026cad4c38995d6966c"
     end
   end
 
