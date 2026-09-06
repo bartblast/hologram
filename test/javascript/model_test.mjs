@@ -305,6 +305,44 @@ describe("Model", () => {
       );
     });
 
+    // The regex constrains digit COUNT only, so these reach the calendar rather than the shape
+    // check - the date half, the clock half, and the leap rule that only February exercises.
+    it("raises for a datetime whose fields the calendar never reaches", () => {
+      const spellings = [
+        "2026-13-40T25:00:00Z",
+        "2026-02-29T00:00:00Z",
+        "2026-04-31T00:00:00Z",
+        "2026-08-16T24:00:00Z",
+        "2026-08-16T00:60:00Z",
+        "2026-08-16T00:00:60Z",
+      ];
+
+      for (const spelling of spellings) {
+        assert.throw(
+          () => Model.box(TASK, row({updated_at: spelling})),
+          HologramRuntimeError,
+          `invalid datetime on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    it("boxes the last instant of a leap February", () => {
+      const boxed = Model.box(
+        TASK,
+        row({updated_at: "2024-02-29T23:59:59.999999Z"}),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "day"),
+        Type.integer(29),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "microsecond"),
+        Type.tuple([Type.integer(999999), Type.integer(6)]),
+      );
+    });
+
     it("boxes a datetime carrying no fractional seconds", () => {
       const boxed = Model.box(TASK, row({updated_at: "2026-08-16T15:18:13Z"}));
 

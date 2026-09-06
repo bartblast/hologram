@@ -386,10 +386,30 @@ export default class Model {
     // and make an amount that no longer means what its digits say.
     const fraction = rawFraction.slice(0, 6);
 
+    const amount = fraction === "" ? 0 : parseInt(fraction.padEnd(6, "0"), 10);
+
     const microsecond = Type.tuple([
-      Type.integer(fraction === "" ? 0 : parseInt(fraction.padEnd(6, "0"), 10)),
+      Type.integer(amount),
       Type.integer(fraction.length),
     ]);
+
+    // The regex above constrains digit COUNT only, so 2026-13-40T25:00:00Z gets this far - both
+    // halves are asked of the calendar, as #boxDate asks the date half and the entity validator
+    // asks both. The microsecond pair cannot fail here (the slice above caps the precision at 6,
+    // which caps the amount at 999999), and is passed rather than assumed so this reads as the
+    // same rule the other two readers apply.
+    if (
+      !Calendar.validDate(Number(year), Number(month), Number(day)) ||
+      !Calendar.validTime(
+        Number(hour),
+        Number(minute),
+        Number(second),
+        amount,
+        fraction.length,
+      )
+    ) {
+      throw new HologramRuntimeError(`invalid datetime on the wire: ${value}`);
+    }
 
     return Type.map([
       [Type.atom("__struct__"), Type.alias("DateTime")],
