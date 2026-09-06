@@ -56,6 +56,15 @@ defmodule Hologram.Compiler do
     {Hologram.Auth, :revoke_role, 3}
   ]
 
+  # The four calls an app spells an entity operation at, each with where the operation is read
+  # from: the argument's position, or the option an enqueue's keyword list names it under.
+  @operation_asks %{
+    {Hologram.Auth, :can?, 3} => 1,
+    {Hologram.Job, :create, 3} => {:option, 2, :authorize},
+    {Hologram.Job, :create!, 3} => {:option, 2, :authorize},
+    {Hologram.Query, :authorize, 2} => 1
+  }
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers.
@@ -183,6 +192,35 @@ defmodule Hologram.Compiler do
 
       {page_module, window_ids}
     end)
+  end
+
+  @doc """
+  Returns every place the build spells an entity operation at, sorted by the calling function:
+  each call of `Hologram.Auth.can?/3`, `Hologram.Query.authorize/2`, `Hologram.Job.create/3` or
+  `Hologram.Job.create!/3` found in the IR of the functions the call graph names as their
+  callers, with the line of the call and the operation it names - a literal atom, a literal
+  `{name, role}` tuple of atoms, or `:dynamic` when the operation is computed and the build cannot
+  read it. An enqueue claiming the server's authority (`trust: true`) names no operation and is
+  left out.
+
+  Takes the UNSPLIT call graph - every one of these functions is hand-ported, so the runtime graph
+  no longer holds the vertices whose callers this reads. A caller whose module is not in the IR
+  PLT is skipped, as `validate_prop_usages/2` skips one.
+  """
+  @spec operation_asks(CallGraph.t(), PLT.t()) ::
+          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | :dynamic})
+  def operation_asks(call_graph, ir_plt) do
+    @operation_asks
+    |> Map.keys()
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Enum.flat_map(&CallGraph.remote_incoming_edges(call_graph, &1))
+    |> Enum.filter(fn {_from, to} -> Map.has_key?(@operation_asks, to) end)
+    |> Enum.map(fn {from, _to} -> from end)
+    |> Enum.filter(&match?({_module, _function, _arity}, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.flat_map(&caller_operation_asks(&1, ir_plt))
   end
 
   @doc """
@@ -1162,6 +1200,102 @@ defmodule Hologram.Compiler do
         _fallback -> :ok
       end
     end)
+  end
+
+  defp caller_operation_asks({module, function, arity} = mfa, ir_plt) do
+    case PLT.get(ir_plt, module) do
+      {:ok, %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}}} ->
+        expressions
+        |> Enum.filter(&match?(%IR.FunctionDefinition{name: ^function, arity: ^arity}, &1))
+        |> Enum.flat_map(&collect_operation_asks(&1.clause.body, mfa, []))
+        |> Enum.reverse()
+
+      _fallback ->
+        []
+    end
+  end
+
+  # A call of one of the asks records the operation it names and is walked into as well - the
+  # args of one call can hold another. Everything else is walked the way collect_component_usages
+  # walks: lists, maps (structs included), tuples, and nothing else.
+  defp collect_operation_asks(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: function,
+           args: args,
+           line: line
+         } = call,
+         mfa,
+         acc
+       ) do
+    case Map.fetch(@operation_asks, {module, function, length(args)}) do
+      {:ok, source} ->
+        acc = record_operation_ask(read_operation_ask(args, source), mfa, line, acc)
+        collect_operation_asks(args, mfa, acc)
+
+      :error ->
+        collect_operation_asks(Map.from_struct(call), mfa, acc)
+    end
+  end
+
+  defp collect_operation_asks(list, mfa, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_operation_asks(&1, mfa, &2))
+  end
+
+  defp collect_operation_asks(map, mfa, acc) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> Enum.reduce(acc, fn {key, value}, key_acc ->
+      collect_operation_asks(value, mfa, collect_operation_asks(key, mfa, key_acc))
+    end)
+  end
+
+  defp collect_operation_asks(tuple, mfa, acc) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.reduce(acc, &collect_operation_asks(&1, mfa, &2))
+  end
+
+  defp collect_operation_asks(_ir, _mfa, acc), do: acc
+
+  # A literal atom or a literal {name, role} tuple of atoms is read; anything else is computed.
+  defp literal_operation(%IR.AtomType{value: operation}), do: operation
+
+  defp literal_operation(%IR.TupleType{
+         data: [%IR.AtomType{value: name}, %IR.AtomType{value: role_name}]
+       }),
+       do: {name, role_name}
+
+  defp literal_operation(_ir), do: :dynamic
+
+  # An operation read by position, or from a literal keyword list's entry - a list that is not a
+  # literal keyword list is computed, and one without the entry names no operation.
+  defp read_operation_ask(args, position) when is_integer(position) do
+    args
+    |> Enum.at(position)
+    |> literal_operation()
+  end
+
+  defp read_operation_ask(args, {:option, position, key}) do
+    case Enum.at(args, position) do
+      %IR.ListType{data: entries} ->
+        Enum.find_value(entries, :none, &keyword_operation(&1, key))
+
+      _ir ->
+        :dynamic
+    end
+  end
+
+  defp keyword_operation(%IR.TupleType{data: [%IR.AtomType{value: key}, value]}, key) do
+    literal_operation(value)
+  end
+
+  defp keyword_operation(_entry, _key), do: nil
+
+  defp record_operation_ask(:none, _mfa, _line, acc), do: acc
+
+  defp record_operation_ask(operation, mfa, line, acc) do
+    [%{line: line, mfa: mfa, operation: operation} | acc]
   end
 
   # A component node is a 4-element tuple whose first element is the :component atom and whose

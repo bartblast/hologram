@@ -557,6 +557,140 @@ defmodule Hologram.CompilerTest do
     assert permission_mfas() -- CallGraph.manually_ported_elixir_mfas() == []
   end
 
+  describe "operation_asks/2" do
+    # The offending asks are built as IR rather than as file fixtures, because a file fixture
+    # would refuse the build in the compile.hologram Mix task tests, which compile the whole
+    # project. The module's name has to exist as an atom before IR.for_code/2 resolves it, which
+    # spelling it here as a literal guarantees.
+    @asker Hologram.Test.Fixtures.Compiler.OperationAsker
+
+    defp asker_plt(code) do
+      PLT.put(PLT.start(), @asker, IR.for_code(code, %Context{}))
+    end
+
+    defp asker_graph(edges) do
+      graph = CallGraph.start()
+
+      Enum.each(edges, fn {function, arity, target} ->
+        CallGraph.add_edge(graph, {@asker, function, arity}, target)
+      end)
+
+      graph
+    end
+
+    test "reads every ask of every caller, sorted by the calling function" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def h(user, operation, entity), do: Hologram.Auth.can?(user, operation, entity)
+          def f(user, entity), do: Hologram.Auth.can?(user, :nope, entity)
+          def g(user, entity), do: Hologram.Auth.can?(user, {:grant_role, :editr}, entity)
+        end
+        """)
+
+      graph =
+        asker_graph([
+          {:f, 2, {Hologram.Auth, :can?, 3}},
+          {:g, 2, {Hologram.Auth, :can?, 3}},
+          {:h, 3, {Hologram.Auth, :can?, 3}}
+        ])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 3, mfa: {@asker, :f, 2}, operation: :nope},
+               %{line: 4, mfa: {@asker, :g, 2}, operation: {:grant_role, :editr}},
+               %{line: 2, mfa: {@asker, :h, 3}, operation: :dynamic}
+             ]
+    end
+
+    test "reads the operation a claim stage names" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(entity), do: Hologram.Query.authorize(entity, :publsh)
+        end
+        """)
+
+      graph = asker_graph([{:f, 1, {Hologram.Query, :authorize, 2}}])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 2, mfa: {@asker, :f, 1}, operation: :publsh}
+             ]
+    end
+
+    test "reads the authorize option of a job enqueue" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(values), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, authorize: :genrate)
+          def g(values), do: Hologram.Job.create!(Hologram.Test.Fixtures.Job.Module1, values, authorize: :genrate)
+        end
+        """)
+
+      graph =
+        asker_graph([
+          {:f, 1, {Hologram.Job, :create, 3}},
+          {:g, 1, {Hologram.Job, :create!, 3}}
+        ])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 2, mfa: {@asker, :f, 1}, operation: :genrate},
+               %{line: 3, mfa: {@asker, :g, 1}, operation: :genrate}
+             ]
+    end
+
+    test "passes over an enqueue claiming the server's authority" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(values), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, trust: true)
+        end
+        """)
+
+      graph = asker_graph([{:f, 1, {Hologram.Job, :create, 3}}])
+
+      assert operation_asks(graph, plt) == []
+    end
+
+    test "marks an enqueue whose options are computed as dynamic" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(values, opts), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, opts)
+        end
+        """)
+
+      graph = asker_graph([{:f, 2, {Hologram.Job, :create, 3}}])
+
+      assert operation_asks(graph, plt) == [
+               %{line: 2, mfa: {@asker, :f, 2}, operation: :dynamic}
+             ]
+    end
+
+    test "skips a caller absent from the IR PLT" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert operation_asks(graph, PLT.start()) == []
+    end
+
+    test "reads a fixture page's template through the project's own graph", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      asks = operation_asks(call_graph, ir_plt)
+
+      assert Enum.any?(asks, &match?(%{mfa: {PageModule10, :template, 0}, operation: :read}, &1))
+      assert Enum.any?(asks, &match?(%{mfa: {PageModule11, :command, 3}, operation: :read}, &1))
+
+      assert Enum.any?(
+               asks,
+               &match?(
+                 %{mfa: {Hologram.DB.Writer, :evaluate_operation!, 2}, operation: :dynamic},
+                 &1
+               )
+             )
+    end
+  end
+
   describe "pages_checking_permissions/2" do
     test "names a page whose template checks permissions", %{call_graph: call_graph} do
       pages = pages_checking_permissions(Reflection.list_pages(), call_graph)
