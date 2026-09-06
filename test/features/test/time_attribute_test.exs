@@ -95,6 +95,21 @@ defmodule HologramFeatureTests.TimeAttributeTest do
            ] = await_server_shops(3)
   end
 
+  # A struct literal builds a clock hour that does not exist, which Time.new/4 would refuse to
+  # build - so the browser can only turn this down by READING the fields, the struct itself being
+  # the right one. Nothing is sent, so no server tier is involved in the refusal at all.
+  feature "refuses an hour the clock lacks without sending anything", %{session: session} do
+    session = visit(session, TimeAttributePage)
+
+    session
+    |> click(button("Refuse a shop opening at an hour the clock lacks"))
+    |> assert_text(css("#result"), "refused_type_time")
+    |> refute_has(css("#shops li"))
+
+    assert DB.read(Shop) == []
+    assert mutation_record_rows(page_replica_id(session)) == []
+  end
+
   # The declarations are baked into the bundle, so the browser judges this one on its own - and it
   # can only do that by comparing two times, which nothing transpiled does. What compares them is
   # the hand-written half of Hologram.Entity, and this is the only thing that exercises it.
