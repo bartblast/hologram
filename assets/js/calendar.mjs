@@ -14,11 +14,18 @@
 // Split the way Elixir splits it - validDate against valid_date?/3, daysInMonth against
 // days_in_month/2, leapYear against leap_year?/1 - so a later divergence shows up in the half that
 // moved.
+//
+// Both Elixir functions are defined for integers only, and each helper refuses a fractional
+// component for the same reason. That is as far as a JavaScript number can carry the rule: 6.0 and
+// 6 are one value here, so a whole-valued float passes this half and is refused only where the
+// boxed term is still in hand, in the entity validator's Type.isInteger check. Both halves together
+// are the guard; neither alone is.
 export default class Calendar {
   // valid_date?/3 is `is_month(month) and day in 1..days_in_month(year, month)`. The year is
   // unconstrained: is_year/1 asks only that it is an integer.
   static validDate(year, month, day) {
     return (
+      Calendar.#integers(year, month, day) &&
       month >= 1 &&
       month <= 12 &&
       day >= 1 &&
@@ -31,6 +38,7 @@ export default class Calendar {
   // judged beside the amount, which a check over the clock fields alone would miss.
   static validTime(hour, minute, second, microsecond, precision) {
     return (
+      Calendar.#integers(hour, minute, second, microsecond, precision) &&
       hour >= 0 &&
       hour <= 23 &&
       minute >= 0 &&
@@ -42,6 +50,10 @@ export default class Calendar {
       precision >= 0 &&
       precision <= 6
     );
+  }
+
+  static #integers(...values) {
+    return values.every(Number.isInteger);
   }
 
   static #daysInMonth(year, month) {
