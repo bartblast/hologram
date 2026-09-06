@@ -5,9 +5,11 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
+      framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
       operation_key: 1,
+      operations: 1,
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
       revoke_role_qualifying_roles: 1,
@@ -549,6 +551,20 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "framework_operations/0" do
+    test "returns the four verbs' operations and the three gates, sorted" do
+      assert framework_operations() == [
+               :create,
+               :delete,
+               :grant_role,
+               :read,
+               :read_roles,
+               :revoke_role,
+               :update
+             ]
+    end
+  end
+
   describe "grant_role_qualifying_roles/1" do
     test "returns the expanded own roles across the grant_role rules" do
       assert grant_role_qualifying_roles(Policy.Module1) == [:owner]
@@ -576,6 +592,62 @@ defmodule Hologram.PolicyTest do
 
     test "joins a per-role operation with a colon" do
       assert operation_key({:grant_role, :viewer}) == "grant_role:viewer"
+    end
+  end
+
+  describe "operations/1" do
+    test "returns the framework's operations and the ones the allow lines name, sorted" do
+      assert operations(Policy.Module1) == [
+               :archive,
+               :create,
+               :delete,
+               :grant_role,
+               :publish,
+               :read,
+               :read_roles,
+               :revoke_role,
+               :update
+             ]
+    end
+
+    test "returns the framework's operations alone for an entity type declaring nothing" do
+      assert operations(Module1) == framework_operations()
+    end
+
+    test "returns the framework's operations alone for the grant store" do
+      assert operations(RoleGrant) == framework_operations()
+    end
+
+    test "includes an operation named by a line taken from a policy module" do
+      defmodule TakenOperationPolicyFixture do
+        use Hologram.Policy
+
+        allow :publish, public: true
+      end
+
+      defmodule TakenOperationEntityFixture do
+        use Hologram.Entity
+
+        attribute :public, :boolean, default: false
+
+        policy TakenOperationPolicyFixture
+      end
+
+      assert :publish in operations(TakenOperationEntityFixture)
+    end
+
+    test "names a per-role line's operation once" do
+      defmodule PerRoleLineEntityFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow {:grant_role, :editor}, to: :owner
+        allow {:revoke_role, [:editor, :owner]}, to: :owner
+      end
+
+      assert operations(PerRoleLineEntityFixture) == framework_operations()
     end
   end
 

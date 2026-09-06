@@ -63,6 +63,10 @@ defmodule Hologram.Policy do
 
   @model_facts_key {__MODULE__, :model_facts}
 
+  # The operations the framework itself asks about: the four verbs' own and the three gates.
+  # Always askable on every entity type, declared or not - default deny answers false.
+  @framework_operations [:create, :delete, :grant_role, :read, :read_roles, :revoke_role, :update]
+
   # The three operations gating the grant lifecycle
   @gate_operations [:grant_role, :read_roles, :revoke_role]
 
@@ -247,6 +251,14 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the operations the framework itself asks about, sorted: the four verbs' own (create, delete, read, update) and the three grant lifecycle gates (grant_role, read_roles, revoke_role).
+
+  Every entity type can be asked about each of them, declared or not - an undeclared one is denied by default rather than refused as unknown.
+  """
+  @spec framework_operations() :: list(atom)
+  def framework_operations, do: @framework_operations
+
+  @doc """
   Returns the own roles qualifying their holders to grant some role on the given entity type, sorted.
 
   These are the extends-expanded own roles across its allow :grant_role rules - empty when the entity
@@ -277,6 +289,21 @@ defmodule Hologram.Policy do
   def operation_key(operation) when is_atom(operation), do: Atom.to_string(operation)
 
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
+
+  @doc """
+  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every operation an allow line on the type names - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
+
+  A per-role line (allow {:grant_role, role}) names the framework operation, which is already in the list.
+  """
+  @spec operations(module) :: list(atom)
+  def operations(entity_type) do
+    entity_type.__policies__()
+    |> Enum.map(fn {operation, _to, _via, _predicates} -> operation end)
+    |> Enum.filter(&is_atom/1)
+    |> Enum.concat(@framework_operations)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
 
   @doc """
   Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
