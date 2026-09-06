@@ -3,6 +3,7 @@ defmodule Hologram.Query do
 
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Policy
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
@@ -87,10 +88,16 @@ defmodule Hologram.Query do
   authorize/2 or trust/1, cannot claim another.
 
   Raises ArgumentError when the entity is not an entity struct, when the operation is not an
-  atom, or when the struct already carries a claim.
+  atom, when the operation is neither a framework operation nor one an allow line on the entity
+  type names (see Hologram.Policy.validate_operation!/2), or when the struct already carries a
+  claim.
   """
   @spec authorize(Entity.t(), atom) :: Entity.t()
   def authorize(entity, operation) when is_atom(operation) do
+    entity_type = entity_type!(entity, "authorize")
+
+    Policy.validate_operation!(entity_type, operation)
+
     put_claim(entity, {:authorize, operation}, "authorize")
   end
 
