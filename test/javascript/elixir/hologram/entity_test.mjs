@@ -63,7 +63,10 @@ describe("Elixir_Hologram_Entity", () => {
       [Type.atom("zone_abbr"), Type.bitstring("UTC")],
     ]);
 
-  const boxedTime = (hour, minute = 0, microsecond = 0) =>
+  // Arguments in the order a clock reads them, so a call says what it looks like it says. The
+  // second was hardcoded to zero until 2026-09-06, which quietly made a three-argument call name
+  // a microsecond while reading as though it named a second.
+  const boxedTime = (hour, minute = 0, second = 0, microsecond = 0) =>
     Type.struct("Time", [
       [Type.atom("calendar"), Type.alias("Calendar.ISO")],
       [Type.atom("hour"), Type.integer(hour)],
@@ -72,7 +75,7 @@ describe("Elixir_Hologram_Entity", () => {
         Type.tuple([Type.integer(microsecond), Type.integer(6)]),
       ],
       [Type.atom("minute"), Type.integer(minute)],
-      [Type.atom("second"), Type.integer(0)],
+      [Type.atom("second"), Type.integer(second)],
     ]);
 
   const validate = Elixir_Hologram_Entity["validate/1"];
@@ -1125,9 +1128,10 @@ describe("Elixir_Hologram_Entity", () => {
 
       assert.deepEqual(item({opens_at: boxedTime(24)}), typeViolation);
       assert.deepEqual(item({opens_at: boxedTime(11, 60)}), typeViolation);
+      assert.deepEqual(item({opens_at: boxedTime(11, 0, 60)}), typeViolation);
 
       assert.deepEqual(
-        item({opens_at: boxedTime(11, 0, 1000000)}),
+        item({opens_at: boxedTime(11, 0, 0, 1000000)}),
         typeViolation,
       );
 
@@ -1139,7 +1143,7 @@ describe("Elixir_Hologram_Entity", () => {
     // refused by the declared maximum - which a type violation would have suppressed.
     it("accepts the clock's last instant, which the declared maximum then refuses", () => {
       assert.deepEqual(
-        item({opens_at: boxedTime(23, 59, 999999)}),
+        item({opens_at: boxedTime(23, 59, 59, 999999)}),
         violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
       );
     });
@@ -1161,7 +1165,7 @@ describe("Elixir_Hologram_Entity", () => {
     // The microsecond is part of the clock, so a value one of them past the maximum is past it.
     it("compares a time by its microsecond as well as by its second", () => {
       assert.deepEqual(
-        item({opens_at: boxedTime(20, 0, 1)}),
+        item({opens_at: boxedTime(20, 0, 0, 1)}),
         violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
       );
     });

@@ -53,6 +53,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
       refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | month: 2, day: 30}, :datetime)
       refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | hour: 25}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | second: 60}, :datetime)
 
       refute attribute_value_valid?(
                %{~U[2026-07-17 12:00:00Z] | microsecond: {0, 7}},
@@ -122,6 +123,11 @@ defmodule Hologram.Entity.ValidatorTest do
 
       refute attribute_value_valid?(
                %Time{hour: 0, minute: 60, second: 0, microsecond: {0, 0}, calendar: Calendar.ISO},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 0, minute: 0, second: 60, microsecond: {0, 0}, calendar: Calendar.ISO},
                :time
              )
 
