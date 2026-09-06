@@ -921,6 +921,20 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("raises on a tuple that is not a pair", () => {
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editor"),
+        Type.atom("extra"),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "ArgumentError",
+        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+      );
+    });
+
     it("raises on an operation that is neither an atom nor a role tuple", () => {
       const operation = Type.tuple([
         Type.atom("grant_role"),

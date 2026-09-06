@@ -410,6 +410,15 @@ defmodule Hologram.AuthTest do
       end
     end
 
+    test "raises on a tuple that is not a pair" do
+      expected_msg =
+        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        can?("user_id_1", {:grant_role, :editor, :extra}, %Module1{public: true})
+      end
+    end
+
     test "raises on an operation that is neither an atom nor a tuple" do
       expected_msg =
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"

@@ -596,6 +596,11 @@ defmodule Hologram.Auth do
   end
 
   defp evaluate(_user_or_id, operation, _entity, _source)
+       when is_tuple(operation) and tuple_size(operation) != 2 do
+    raise ArgumentError, @operation_shape_message
+  end
+
+  defp evaluate(_user_or_id, operation, _entity, _source)
        when not is_atom(operation) and not is_tuple(operation) do
     raise ArgumentError, @operation_shape_message
   end

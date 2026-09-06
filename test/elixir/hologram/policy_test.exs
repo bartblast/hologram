@@ -761,5 +761,23 @@ defmodule Hologram.PolicyTest do
         validate_operation!(Policy.Module1, {:publish, :editor})
       end
     end
+
+    test "raises on a tuple that is not a pair" do
+      expected_msg =
+        "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:grant_role, :editor, :extra})
+      end
+    end
+
+    test "raises on an operation that is neither an atom nor a tuple" do
+      expected_msg =
+        ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role})
+
+      assert_error ArgumentError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, wrap_term("read"))
+      end
+    end
   end
 end

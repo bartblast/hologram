@@ -403,10 +403,19 @@ defmodule Hologram.Policy do
     end
   end
 
-  def validate_operation!(entity_type, {_name, _role_name} = operation) do
+  def validate_operation!(entity_type, operation) when is_tuple(operation) do
     raise ArgumentError,
       message:
         "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+  end
+
+  # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and
+  # authorize/2 and the wire only ever pass an atom - but this function is public, and its
+  # docstring promises an ArgumentError for anything else.
+  def validate_operation!(entity_type, operation) do
+    raise ArgumentError,
+      message:
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
   end
 
   defp build_global_reference([]), do: []
