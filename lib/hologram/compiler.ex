@@ -1695,6 +1695,7 @@ defmodule Hologram.Compiler do
       {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
+      {"operations", render_operations(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"roles", render_roles(entity_type)},
@@ -1730,6 +1731,18 @@ defmodule Hologram.Compiler do
     names = if Reflection.job?(entity_type), do: Job.framework_attribute_names(), else: []
 
     names
+    |> Enum.map(&Atom.to_string/1)
+    |> Jason.encode!()
+  end
+
+  # The operations a type can be asked about, framework ones included - the client's copy of
+  # Policy.operations/1, so validateOperation in assets/js/elixir/hologram/auth.mjs refuses what
+  # Policy.validate_operation!/2 refuses without a second hand-ported list. Baked whether or not
+  # the build checks permissions: a build that checks nothing still runs authorize/2 in an action,
+  # and its policy key is empty by design.
+  defp render_operations(entity_type) do
+    entity_type
+    |> Policy.operations()
     |> Enum.map(&Atom.to_string/1)
     |> Jason.encode!()
   end

@@ -1128,7 +1128,9 @@ defmodule Hologram.CompilerTest do
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},/ <>
-                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],"policy":{},/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],/ <>
+                 ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
+                 ~s/"revoke_role","update"],"policy":{},/ <>
                  ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
              )
     end
@@ -1140,6 +1142,25 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
+    end
+
+    # The client refuses an operation nothing declares with the server's own sentence, from this
+    # list - the framework's seven and the type's own, whether or not the build checks permissions
+    # (a type declaring nothing renders the seven alone, asserted with the whole entry in "injects
+    # the attribute types the client reads rows by").
+    test "names the operations a type can be asked about, sorted", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"operations":["archive","create","delete","grant_role","publish","read",/ <>
+                 ~s/"read_roles","revoke_role","update"],/
+             )
     end
 
     # The client writes a creator's grants itself as it creates the row, so the build names which
