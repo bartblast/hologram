@@ -321,26 +321,52 @@ function fieldNumber(struct, name) {
   return Number(structField(struct, name).value);
 }
 
+// The is_integer half of Calendar.ISO's own guards, asked of the BOXED term rather than of the
+// number it converts to. Number() erases the difference: a %Date{month: 6.0} would satisfy
+// Number.isInteger while the server's is_integer/1 refuses it, and the two tiers would then
+// disagree about the very value this check exists for. A struct literal can hold any term, so a
+// float, a string or an atom all arrive here.
+function integerFields(struct, names) {
+  return names.every((name) => Type.isInteger(structField(struct, name)));
+}
+
 // The two halves, each asked of whichever struct carries those field names - a Date and a DateTime
 // answer the first, a Time and a DateTime the second, which is what makes an instant both. The
-// rules themselves live in calendar.mjs, shared with Model's box helpers.
+// range rules themselves live in calendar.mjs, shared with Model's box helpers; the type half stays
+// here, because only the boxed term knows whether it is an integer.
 function validDateFields(struct) {
-  return Calendar.validDate(
-    fieldNumber(struct, "year"),
-    fieldNumber(struct, "month"),
-    fieldNumber(struct, "day"),
+  return (
+    integerFields(struct, ["year", "month", "day"]) &&
+    Calendar.validDate(
+      fieldNumber(struct, "year"),
+      fieldNumber(struct, "month"),
+      fieldNumber(struct, "day"),
+    )
   );
 }
 
 function validTimeFields(struct) {
-  const [amount, precision] = structField(struct, "microsecond").data;
+  const microsecond = structField(struct, "microsecond");
 
-  return Calendar.validTime(
-    fieldNumber(struct, "hour"),
-    fieldNumber(struct, "minute"),
-    fieldNumber(struct, "second"),
-    Number(amount.value),
-    Number(precision.value),
+  // The server's clause head destructures this as {amount, precision}, so a microsecond that is
+  // not a pair falls through to its catch-all - the same answer this shortcut gives.
+  if (!Type.isTuple(microsecond) || microsecond.data.length !== 2) {
+    return false;
+  }
+
+  const [amount, precision] = microsecond.data;
+
+  return (
+    integerFields(struct, ["hour", "minute", "second"]) &&
+    Type.isInteger(amount) &&
+    Type.isInteger(precision) &&
+    Calendar.validTime(
+      fieldNumber(struct, "hour"),
+      fieldNumber(struct, "minute"),
+      fieldNumber(struct, "second"),
+      Number(amount.value),
+      Number(precision.value),
+    )
   );
 }
 
