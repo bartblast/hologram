@@ -1138,6 +1138,38 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Refuses an entity operation the build asks about that nothing declares, or returns :ok.
+
+  Every literal ask `operation_asks/2` reads is judged against the build's whole vocabulary - the
+  framework's operations and every operation an allow line on any of the given entity types
+  names - because the entity argument's type is not known at the ask. A role tuple's role has to
+  be one some entity type declares. A computed operation passes here and is judged at run time,
+  by `Hologram.Policy.validate_operation!/2` and its client twin, which know the type.
+
+  Raises Hologram.CompileError naming the ask's function and line, the operation, and what the
+  build does declare - so a typo or a renamed operation fails the build at the line that asks,
+  rather than answering no forever as if the rules had been consulted.
+  """
+  @spec validate_operations!(list(module), CallGraph.t(), PLT.t()) :: :ok
+  def validate_operations!(entity_types, call_graph, ir_plt) do
+    vocabulary =
+      entity_types
+      |> Enum.flat_map(&Policy.operations/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    role_names =
+      entity_types
+      |> Enum.flat_map(&Keyword.keys(&1.__roles__()))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    call_graph
+    |> operation_asks(ir_plt)
+    |> Enum.each(&validate_operation_ask!(&1, vocabulary, role_names))
+  end
+
+  @doc """
   Raises a compilation error if any page module lacks a specified route or layout.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_page_modules_1/README.md
@@ -1200,6 +1232,14 @@ defmodule Hologram.Compiler do
         _fallback -> :ok
       end
     end)
+  end
+
+  defp ask_location(%{mfa: {module, function, arity}, line: nil}) do
+    "#{inspect(module)}.#{function}/#{arity}"
+  end
+
+  defp ask_location(%{line: line} = ask) do
+    "#{ask_location(%{ask | line: nil})} (line #{line})"
   end
 
   defp caller_operation_asks({module, function, arity} = mfa, ir_plt) do
@@ -2295,6 +2335,22 @@ defmodule Hologram.Compiler do
     end
   end
 
+  defp declared_operations_description(vocabulary) do
+    case vocabulary -- Policy.framework_operations() do
+      [] ->
+        "this build declares no operation beside the framework's own"
+
+      names ->
+        "the operations this build declares are #{spoken_names(names)}, beside the framework's own"
+    end
+  end
+
+  defp declared_roles_description([]), do: "no entity type declares a role"
+
+  defp declared_roles_description(role_names) do
+    "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
+  end
+
   defp dead_include_message(module, dead_entity_types) do
     "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
   end
@@ -2349,6 +2405,15 @@ defmodule Hologram.Compiler do
     Enum.map_join(references, ", ", fn {entity_type, names} ->
       "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
     end)
+  end
+
+  # ":a", ":a and :b", ":a, :b and :c" - the spoken form, for a message listing a few names
+  defp spoken_names([name]), do: inspect(name)
+
+  defp spoken_names(names) do
+    {init, [last]} = Enum.split(names, -1)
+
+    "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
   end
 
   defp server_only_query_message(module, references) do
@@ -2430,6 +2495,42 @@ defmodule Hologram.Compiler do
   # A registered query is read for the session user on the server and replayed on the client from
   # its own database - there is no server authority to claim on the client, and a claim the server
   # honored would hand the client rows it may not hold.
+  defp validate_operation_ask!(%{operation: :dynamic}, _vocabulary, _role_names), do: :ok
+
+  defp validate_operation_ask!(%{operation: operation} = ask, vocabulary, _role_names)
+       when is_atom(operation) do
+    if operation in vocabulary do
+      :ok
+    else
+      raise Hologram.CompileError,
+        message:
+          "unknown operation #{inspect(operation)} in #{ask_location(ask)} - no entity type declares an allow line for it; #{declared_operations_description(vocabulary)}"
+    end
+  end
+
+  # The two names a role tuple may carry - Policy's own @role_operations, which a per-type check
+  # there reads and this build-wide one mirrors.
+  defp validate_operation_ask!(
+         %{operation: {name, role_name} = operation} = ask,
+         _vocabulary,
+         role_names
+       )
+       when name in [:grant_role, :revoke_role] do
+    if role_name in role_names do
+      :ok
+    else
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in #{inspect(operation)} in #{ask_location(ask)} - #{declared_roles_description(role_names)}"
+    end
+  end
+
+  defp validate_operation_ask!(%{operation: operation} = ask, _vocabulary, _role_names) do
+    raise Hologram.CompileError,
+      message:
+        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+  end
+
   defp validate_untrusted_queries!({module, module_terms}) do
     Enum.each(module_terms, fn term ->
       if term.trust do
