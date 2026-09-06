@@ -75,9 +75,51 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :boolean, _opts), do: is_boolean(value)
 
-  def attribute_value_valid?(value, :date, _opts), do: is_struct(value, Date)
+  # Date.new/3 will not build an impossible date, but a struct literal will, and so will a map
+  # update - both are ordinary Elixir. So the fields are asked of the struct's own calendar, which
+  # is the question Date.new/3 itself asks.
+  #
+  # The guard is Calendar.ISO's own: valid_date?/3 is defined only for integers, so a literal
+  # carrying a float or a string (%Date{month: 6.5}) would raise FunctionClauseError out of a
+  # function that owes a boolean. Falling through to the clause below answers false instead, which
+  # is what Date.new/3 refusing to answer at all means here.
+  def attribute_value_valid?(
+        %Date{calendar: calendar, year: year, month: month, day: day},
+        :date,
+        _opts
+      )
+      when is_integer(year) and is_integer(month) and is_integer(day) do
+    calendar.valid_date?(year, month, day)
+  end
 
-  def attribute_value_valid?(value, :datetime, _opts), do: is_struct(value, DateTime)
+  def attribute_value_valid?(_value, :date, _opts), do: false
+
+  # Both halves, asked of the struct's own calendar and guarded the same way, for the reasons the
+  # :date clause above gives.
+  # The zone fields are deliberately not read: the codec normalizes every instant to UTC through a
+  # unix round trip, and a zone question is not a calendar question.
+  def attribute_value_valid?(
+        %DateTime{
+          calendar: calendar,
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: {microsecond_amount, microsecond_precision} = microsecond
+        },
+        :datetime,
+        _opts
+      )
+      when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
+             is_integer(minute) and is_integer(second) and is_integer(microsecond_amount) and
+             is_integer(microsecond_precision) do
+    calendar.valid_date?(year, month, day) and
+      calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
+  def attribute_value_valid?(_value, :datetime, _opts), do: false
 
   def attribute_value_valid?(value, :enum, opts),
     do: is_atom(value) and value in Keyword.fetch!(opts, :values)
@@ -90,7 +132,27 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
-  def attribute_value_valid?(value, :time, _opts), do: is_struct(value, Time)
+  # Asked of the struct's own calendar, and guarded, for the reasons the :date clause gives.
+  # valid_time?/4
+  # judges the microsecond PRECISION beside the amount, so {0, 7} is refused as firmly as
+  # {1_000_000, 6}.
+  def attribute_value_valid?(
+        %Time{
+          calendar: calendar,
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: {microsecond_amount, microsecond_precision} = microsecond
+        },
+        :time,
+        _opts
+      )
+      when is_integer(hour) and is_integer(minute) and is_integer(second) and
+             is_integer(microsecond_amount) and is_integer(microsecond_precision) do
+    calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
+  def attribute_value_valid?(_value, :time, _opts), do: false
 
   # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
   # generates and stores ids in that spelling, and the client tier compares ids

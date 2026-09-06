@@ -20,6 +20,7 @@ defmodule HologramFeatureTests.TimeAttributePage do
     <p>
       <button $click={action: :add_shop_without_hours}> Add a shop with no hours </button>
       <button $click={action: :add_two_shops}> Add two shops at different times </button>
+      <button $click={action: :refuse_impossible_hour}> Refuse a shop opening at an hour the clock lacks </button>
       <button $click={action: :refuse_late_shop}> Refuse a shop opening too late </button>
     </p>
     <Shops cid="shops" />
@@ -52,6 +53,25 @@ defmodule HologramFeatureTests.TimeAttributePage do
       |> DB.create()
 
     put_state(component, :result, "created_two")
+  end
+
+  # Built by hand, because Time.new/4 would refuse to build it - and a struct literal is ordinary
+  # Elixir. The browser has to read the fields to refuse this one, since it is the right struct.
+  def action(:refuse_impossible_hour, _params, component) do
+    impossible_hour = %Time{
+      hour: 25,
+      minute: 0,
+      second: 0,
+      microsecond: {0, 0},
+      calendar: Calendar.ISO
+    }
+
+    {:error, %{opens_at: [{:type, :time}]}} =
+      %{name: "impossible", opens_at: impossible_hour}
+      |> Shop.new()
+      |> DB.create()
+
+    put_state(component, :result, "refused_type_time")
   end
 
   # The bounds are baked into the bundle, so this refusal never leaves the browser - which it can

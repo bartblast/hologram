@@ -20,16 +20,56 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "validates :date values" do
       assert attribute_value_valid?(~D[2026-07-17], :date)
+      assert attribute_value_valid?(%Date{year: 2024, month: 2, day: 29}, :date)
       refute attribute_value_valid?("2026-07-17", :date)
       refute attribute_value_valid?(~N[2026-07-17 12:00:00], :date)
       refute attribute_value_valid?(~U[2026-07-17 12:00:00Z], :date)
+      refute attribute_value_valid?(%Date{year: 2026, month: 13, day: 40}, :date)
+      refute attribute_value_valid?(%Date{year: 2026, month: 2, day: 30}, :date)
+    end
+
+    # Calendar.ISO.valid_date?/3 is defined for integers only, so without the clause guard these
+    # raise FunctionClauseError out of a function that owes a boolean.
+    test "refuses a :date whose fields are not integers" do
+      refute attribute_value_valid?(%Date{year: 2026, month: 6.5, day: 15}, :date)
+      refute attribute_value_valid?(%Date{year: 2026.0, month: 6, day: 15}, :date)
+      refute attribute_value_valid?(%Date{year: 2026, month: 6, day: 15.5}, :date)
+      refute attribute_value_valid?(%Date{year: "2026", month: 6, day: 15}, :date)
+      refute attribute_value_valid?(%Date{year: 2026, month: :june, day: 15}, :date)
     end
 
     test "validates :datetime values" do
       assert attribute_value_valid?(~U[2026-07-17 12:00:00Z], :datetime)
+      assert attribute_value_valid?(~U[2024-02-29 23:59:59.999999Z], :datetime)
       refute attribute_value_valid?(~N[2026-07-17 12:00:00], :datetime)
       refute attribute_value_valid?(~D[2026-07-17], :datetime)
       refute attribute_value_valid?("2026-07-17T12:00:00Z", :datetime)
+
+      # Each half alone - a valid clock does not excuse an impossible date, and the other way round.
+      refute attribute_value_valid?(
+               %{~U[2026-07-17 12:00:00Z] | month: 13, day: 40},
+               :datetime
+             )
+
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | month: 2, day: 30}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | hour: 25}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | second: 60}, :datetime)
+
+      refute attribute_value_valid?(
+               %{~U[2026-07-17 12:00:00Z] | microsecond: {0, 7}},
+               :datetime
+             )
+    end
+
+    test "refuses a :datetime whose fields are not integers" do
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | month: 6.5}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | hour: 11.5}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | year: "2026"}, :datetime)
+
+      refute attribute_value_valid?(
+               %{~U[2026-07-17 12:00:00Z] | microsecond: {0.5, 6}},
+               :datetime
+             )
     end
 
     test "accepts :datetime values in any time zone representation" do
@@ -71,9 +111,63 @@ defmodule Hologram.Entity.ValidatorTest do
     test "validates :time values" do
       assert attribute_value_valid?(~T[11:00:00], :time)
       assert attribute_value_valid?(~T[11:00:00.123456], :time)
+      assert attribute_value_valid?(~T[23:59:59.999999], :time)
       refute attribute_value_valid?("11:00:00", :time)
       refute attribute_value_valid?(~N[2026-07-17 11:00:00], :time)
       refute attribute_value_valid?(~U[2026-07-17 11:00:00Z], :time)
+
+      refute attribute_value_valid?(
+               %Time{hour: 25, minute: 0, second: 0, microsecond: {0, 0}, calendar: Calendar.ISO},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 0, minute: 60, second: 0, microsecond: {0, 0}, calendar: Calendar.ISO},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 0, minute: 0, second: 60, microsecond: {0, 0}, calendar: Calendar.ISO},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{
+                 hour: 0,
+                 minute: 0,
+                 second: 0,
+                 microsecond: {1_000_000, 6},
+                 calendar: Calendar.ISO
+               },
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 0, minute: 0, second: 0, microsecond: {0, 7}, calendar: Calendar.ISO},
+               :time
+             )
+    end
+
+    test "refuses a :time whose fields are not integers" do
+      refute attribute_value_valid?(
+               %Time{hour: 11.5, minute: 0, second: 0, microsecond: {0, 0}},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 11, minute: "0", second: 0, microsecond: {0, 0}},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 11, minute: 0, second: 0, microsecond: {0.5, 6}},
+               :time
+             )
+
+      refute attribute_value_valid?(
+               %Time{hour: 11, minute: 0, second: 0, microsecond: {0, 6.0}},
+               :time
+             )
     end
 
     test "validates :uuid values" do
@@ -222,6 +316,33 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "reports type violations with the expected type" do
       assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, {:type, :boolean}}]}
+
+      impossible_date_data = %{
+        a: %Date{year: 2026, month: 13, day: 40},
+        b: ~U[2026-07-17 12:00:00Z],
+        c: :x,
+        d: 1.5
+      }
+
+      assert validate(Module4, impossible_date_data) == {:error, [{:a, {:type, :date}}]}
+
+      impossible_datetime_data = %{
+        a: ~D[2026-07-17],
+        b: %{~U[2026-07-17 12:00:00Z] | hour: 25},
+        c: :x,
+        d: 1.5
+      }
+
+      assert validate(Module4, impossible_datetime_data) == {:error, [{:b, {:type, :datetime}}]}
+
+      fractional_field_data = %{
+        a: %Date{year: 2026, month: 6.5, day: 15},
+        b: ~U[2026-07-17 12:00:00Z],
+        c: :x,
+        d: 1.5
+      }
+
+      assert validate(Module4, fractional_field_data) == {:error, [{:a, {:type, :date}}]}
     end
 
     test "reports values violations for enum attributes" do
@@ -279,6 +400,17 @@ defmodule Hologram.Entity.ValidatorTest do
       assert validate(InlineEntityFixture94, %{opens_at: nil}) == :ok
 
       assert validate(InlineEntityFixture94, %{opens_at: "11:00:00"}) ==
+               {:error, [{:opens_at, {:type, :time}}]}
+
+      impossible_hour = %Time{
+        hour: 25,
+        minute: 0,
+        second: 0,
+        microsecond: {0, 0},
+        calendar: Calendar.ISO
+      }
+
+      assert validate(InlineEntityFixture94, %{opens_at: impossible_hour}) ==
                {:error, [{:opens_at, {:type, :time}}]}
 
       assert validate(InlineEntityFixture94, %{opens_at: ~T[07:59:59]}) ==
@@ -779,6 +911,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :released_on, :date, max: "2030-12-31"
+        end
+      end
+    end
+
+    test "rejects max option holding a date the calendar never reaches" do
+      expected_msg =
+        "invalid max option ~D[2030-13-01] for attribute :released_on in Hologram.Entity.ValidatorTest.InlineEntityFixture101 - the max option must match the attribute type :date"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture101 do
+          use Hologram.Entity
+
+          attribute :released_on, :date, max: %Date{year: 2030, month: 13, day: 1}
         end
       end
     end

@@ -238,6 +238,47 @@ describe("Model", () => {
       );
     });
 
+    // The last two spellings are the ones only the SHAPE check can refuse: their fields name a
+    // real day, so the calendar behind it would pass them. The wire carries one spelling per
+    // date, which is what lets these compare as plain strings at all.
+    it("raises for a date the wire spelled some other way", () => {
+      for (const spelling of ["garbage", "2026-7-17", "2026-08-16T00:00:00Z"]) {
+        assert.throw(
+          () => Model.box(TASK, row({due_on: spelling})),
+          HologramRuntimeError,
+          `invalid date on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    // Well-formed digits naming no day of any year, which Elixir reading the same string refuses
+    // as :invalid_date - so this side refuses them too rather than building a struct saying the
+    // fortieth of the thirteenth. February is the case the leap rule decides.
+    it("raises for a date whose fields the calendar never reaches", () => {
+      for (const spelling of ["2026-13-40", "2026-02-29", "2026-04-31"]) {
+        assert.throw(
+          () => Model.box(TASK, row({due_on: spelling})),
+          HologramRuntimeError,
+          `invalid date on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    it("boxes the last day of a leap February", () => {
+      const boxed = Model.box(TASK, row({due_on: "2024-02-29"}));
+
+      assert.deepEqual(
+        field(boxed, "due_on"),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Date")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(29)],
+          [Type.atom("month"), Type.integer(2)],
+          [Type.atom("year"), Type.integer(2024)],
+        ]),
+      );
+    });
+
     it("boxes a datetime as the struct a template reads, in UTC", () => {
       const boxed = Model.box(TASK, row());
 
@@ -261,6 +302,44 @@ describe("Model", () => {
           [Type.atom("year"), Type.integer(2026)],
           [Type.atom("zone_abbr"), Type.bitstring("UTC")],
         ]),
+      );
+    });
+
+    // The regex constrains digit COUNT only, so these reach the calendar rather than the shape
+    // check - the date half, the clock half, and the leap rule that only February exercises.
+    it("raises for a datetime whose fields the calendar never reaches", () => {
+      const spellings = [
+        "2026-13-40T25:00:00Z",
+        "2026-02-29T00:00:00Z",
+        "2026-04-31T00:00:00Z",
+        "2026-08-16T24:00:00Z",
+        "2026-08-16T00:60:00Z",
+        "2026-08-16T00:00:60Z",
+      ];
+
+      for (const spelling of spellings) {
+        assert.throw(
+          () => Model.box(TASK, row({updated_at: spelling})),
+          HologramRuntimeError,
+          `invalid datetime on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    it("boxes the last instant of a leap February", () => {
+      const boxed = Model.box(
+        TASK,
+        row({updated_at: "2024-02-29T23:59:59.999999Z"}),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "day"),
+        Type.integer(29),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "microsecond"),
+        Type.tuple([Type.integer(999999), Type.integer(6)]),
       );
     });
 
@@ -506,7 +585,9 @@ describe("Model", () => {
 
       const boxed = Model.boxResult(
         term({
-          include: {tags: {cardinality: "set", entity: PROJECT, include: {}}},
+          include: {
+            tags: {cardinality: "set", entity: PROJECT, include: {}},
+          },
         }),
         [included],
       );
@@ -523,7 +604,10 @@ describe("Model", () => {
 
   describe("computeSortKeys()", () => {
     it("computes a null sort key for a server-only string, whose value never arrives", () => {
-      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: "Łódź"});
+      const attributes = Model.computeSortKeys(TASK, {
+        id: "t1",
+        title: "Łódź",
+      });
 
       assert.isNull(attributes.internal_notes_sort);
     });
@@ -553,7 +637,10 @@ describe("Model", () => {
     });
 
     it("computes the sort key of a string attribute", () => {
-      const attributes = Model.computeSortKeys(TASK, {id: "t1", title: "Łódź"});
+      const attributes = Model.computeSortKeys(TASK, {
+        id: "t1",
+        title: "Łódź",
+      });
 
       assert.equal(attributes.title_sort, "lodz");
     });

@@ -63,7 +63,10 @@ describe("Elixir_Hologram_Entity", () => {
       [Type.atom("zone_abbr"), Type.bitstring("UTC")],
     ]);
 
-  const boxedTime = (hour, minute = 0, microsecond = 0) =>
+  // Arguments in the order a clock reads them, so a call says what it looks like it says. The
+  // second was hardcoded to zero until 2026-09-06, which quietly made a three-argument call name
+  // a microsecond while reading as though it named a second.
+  const boxedTime = (hour, minute = 0, second = 0, microsecond = 0) =>
     Type.struct("Time", [
       [Type.atom("calendar"), Type.alias("Calendar.ISO")],
       [Type.atom("hour"), Type.integer(hour)],
@@ -72,7 +75,7 @@ describe("Elixir_Hologram_Entity", () => {
         Type.tuple([Type.integer(microsecond), Type.integer(6)]),
       ],
       [Type.atom("minute"), Type.integer(minute)],
-      [Type.atom("second"), Type.integer(0)],
+      [Type.atom("second"), Type.integer(second)],
     ]);
 
   const validate = Elixir_Hologram_Entity["validate/1"];
@@ -169,7 +172,10 @@ describe("Elixir_Hologram_Entity", () => {
             bio: {max_length: 10, optional: true},
             count: {max: Type.integer(10), min: Type.integer(1)},
             country_code: {length: 2, optional: true},
-            email: {format: {opts: Type.list([]), source: "@"}, optional: true},
+            email: {
+              format: {opts: Type.list([]), source: "@"},
+              optional: true,
+            },
             handle: {
               format: {opts: Type.list([]), source: "^[a-z_]+$"},
               min_length: 3,
@@ -857,6 +863,96 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    // An instant asks both readers, so a non-integer in either half refuses it.
+    it("reports an instant field that is not an integer as a type violation", () => {
+      const instantWith = (overrides) =>
+        Type.struct("DateTime", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), overrides.day ?? Type.integer(1)],
+          [Type.atom("hour"), overrides.hour ?? Type.integer(12)],
+          [
+            Type.atom("microsecond"),
+            overrides.microsecond ??
+              Type.tuple([Type.integer(0), Type.integer(0)]),
+          ],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("month"), overrides.month ?? Type.integer(6)],
+          [Type.atom("second"), Type.integer(0)],
+          [Type.atom("std_offset"), Type.integer(0)],
+          [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+          [Type.atom("utc_offset"), Type.integer(0)],
+          [Type.atom("year"), overrides.year ?? Type.integer(2026)],
+          [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+        ]);
+
+      const instantViolation = violation(
+        "held_at",
+        Type.tuple([Type.atom("type"), Type.atom("datetime")]),
+      );
+
+      assert.deepEqual(
+        item({held_at: instantWith({month: Type.float(6.5)})}),
+        instantViolation,
+      );
+
+      assert.deepEqual(
+        item({held_at: instantWith({hour: Type.float(12.0)})}),
+        instantViolation,
+      );
+
+      assert.deepEqual(
+        item({held_at: instantWith({year: Type.bitstring("2026")})}),
+        instantViolation,
+      );
+
+      // The date half is fine and the clock half is fine - only the microsecond pair is not.
+      assert.deepEqual(
+        item({
+          held_at: instantWith({
+            microsecond: Type.tuple([Type.float(0.5), Type.integer(6)]),
+          }),
+        }),
+        instantViolation,
+      );
+
+      assert.deepEqual(item({held_at: instantWith({})}), Type.atom("ok"));
+    });
+
+    // Both halves of an instant, each alone - a valid clock does not excuse an impossible date,
+    // and the other way round.
+    it("reports an instant the calendar never reaches as a type violation", () => {
+      const typeViolation = violation(
+        "held_at",
+        Type.tuple([Type.atom("type"), Type.atom("datetime")]),
+      );
+
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 13, 40)}),
+        typeViolation,
+      );
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 2, 30)}),
+        typeViolation,
+      );
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 1, 1, 25)}),
+        typeViolation,
+      );
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2028, 2, 29)}),
+        Type.atom("ok"),
+      );
+    });
+
+    // A zone is not a calendar question, so the four zone fields are never read - an instant an
+    // hour east of UTC is a real instant and reaches the constraint pass like any other.
+    it("accepts an instant carrying a time zone offset", () => {
+      assert.deepEqual(
+        item({held_at: boxedDateTime(2026, 6, 1, 12, 3600)}),
+        Type.atom("ok"),
+      );
+    });
+
     // The instant is what is compared, not the wall clock: 2026-01-01T00:00 at an offset of one
     // hour east is 2025-12-31T23:00 UTC, which is before the bound.
     it("compares a datetime by its instant rather than by its wall clock", () => {
@@ -869,6 +965,41 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    // Mirrors the Elixir refusal: an impossible date is not a date, so it carries {:type, :date}
+    // rather than a reason of its own.
+    it("reports a date the calendar never reaches as a type violation", () => {
+      assert.deepEqual(
+        item({released_on: boxedDate(2026, 13, 40)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("type"), Type.atom("date")]),
+        ),
+      );
+    });
+
+    it("accepts the last day of a leap February and refuses the day after", () => {
+      assert.deepEqual(
+        item({released_on: boxedDate(2024, 2, 29)}),
+        Type.atom("ok"),
+      );
+
+      assert.deepEqual(
+        item({released_on: boxedDate(2024, 2, 30)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("type"), Type.atom("date")]),
+        ),
+      );
+
+      assert.deepEqual(
+        item({released_on: boxedDate(2026, 2, 29)}),
+        violation(
+          "released_on",
+          Type.tuple([Type.atom("type"), Type.atom("date")]),
+        ),
+      );
+    });
+
     it("reports a date after the declared maximum", () => {
       assert.deepEqual(
         item({released_on: boxedDate(2031, 1, 1)}),
@@ -876,6 +1007,144 @@ describe("Elixir_Hologram_Entity", () => {
           "released_on",
           Type.tuple([Type.atom("max"), boxedDate(2030, 12, 31)]),
         ),
+      );
+    });
+
+    // Calendar.ISO's own guards are is_integer before they are ranges, so a struct literal holding
+    // a float, a string or an atom is refused rather than compared. Asked of the BOXED term: a
+    // float 6.0 converts to an integer JS number, so checking the number would let it through here
+    // while the server refuses it.
+    it("reports a temporal field that is not an integer as a type violation", () => {
+      const dateAt = (year, month, day) =>
+        Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), day],
+          [Type.atom("month"), month],
+          [Type.atom("year"), year],
+        ]);
+
+      const dateViolation = violation(
+        "released_on",
+        Type.tuple([Type.atom("type"), Type.atom("date")]),
+      );
+
+      const int = Type.integer;
+
+      assert.deepEqual(
+        item({released_on: dateAt(int(2026), Type.float(6.5), int(15))}),
+        dateViolation,
+      );
+
+      // A float whose value is whole - the case a Number.isInteger check would wave through.
+      assert.deepEqual(
+        item({released_on: dateAt(int(2026), Type.float(6.0), int(15))}),
+        dateViolation,
+      );
+
+      assert.deepEqual(
+        item({released_on: dateAt(Type.bitstring("2026"), int(6), int(15))}),
+        dateViolation,
+      );
+
+      assert.deepEqual(
+        item({released_on: dateAt(int(2026), Type.atom("june"), int(15))}),
+        dateViolation,
+      );
+    });
+
+    // The same rule on a time, including both halves of the microsecond pair and a microsecond
+    // that is not a pair at all - which the server answers by its clause head failing to match.
+    it("reports a time field that is not an integer as a type violation", () => {
+      const timeWith = (hour, microsecond) =>
+        Type.struct("Time", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("hour"), hour],
+          [Type.atom("microsecond"), microsecond],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("second"), Type.integer(0)],
+        ]);
+
+      const pair = Type.tuple([Type.integer(0), Type.integer(6)]);
+
+      const timeViolation = violation(
+        "opens_at",
+        Type.tuple([Type.atom("type"), Type.atom("time")]),
+      );
+
+      assert.deepEqual(
+        item({opens_at: timeWith(Type.float(11.5), pair)}),
+        timeViolation,
+      );
+      assert.deepEqual(
+        item({opens_at: timeWith(Type.float(11.0), pair)}),
+        timeViolation,
+      );
+
+      assert.deepEqual(
+        item({
+          opens_at: timeWith(
+            Type.integer(11),
+            Type.tuple([Type.float(0.5), Type.integer(6)]),
+          ),
+        }),
+        timeViolation,
+      );
+
+      assert.deepEqual(
+        item({
+          opens_at: timeWith(
+            Type.integer(11),
+            Type.tuple([Type.integer(0), Type.float(6.0)]),
+          ),
+        }),
+        timeViolation,
+      );
+
+      assert.deepEqual(
+        item({opens_at: timeWith(Type.integer(11), Type.integer(0))}),
+        timeViolation,
+      );
+    });
+
+    // Mirrors Calendar.ISO.valid_time?/4, whose is_microsecond guard judges the PRECISION beside
+    // the amount - a check over the clock fields alone would pass both of the last two cases.
+    it("reports a time the clock never reaches as a type violation", () => {
+      const typeViolation = violation(
+        "opens_at",
+        Type.tuple([Type.atom("type"), Type.atom("time")]),
+      );
+
+      const timeAtPrecision = (precision) =>
+        Type.struct("Time", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("hour"), Type.integer(11)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(0), Type.integer(precision)]),
+          ],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("second"), Type.integer(0)],
+        ]);
+
+      assert.deepEqual(item({opens_at: boxedTime(24)}), typeViolation);
+      assert.deepEqual(item({opens_at: boxedTime(11, 60)}), typeViolation);
+      assert.deepEqual(item({opens_at: boxedTime(11, 0, 60)}), typeViolation);
+
+      assert.deepEqual(
+        item({opens_at: boxedTime(11, 0, 0, 1000000)}),
+        typeViolation,
+      );
+
+      assert.deepEqual(item({opens_at: timeAtPrecision(7)}), typeViolation);
+      assert.deepEqual(item({opens_at: timeAtPrecision(6)}), Type.atom("ok"));
+    });
+
+    // The last microsecond of the day is a real time, so it reaches the CONSTRAINT pass and is
+    // refused by the declared maximum - which a type violation would have suppressed.
+    it("accepts the clock's last instant, which the declared maximum then refuses", () => {
+      assert.deepEqual(
+        item({opens_at: boxedTime(23, 59, 59, 999999)}),
+        violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
       );
     });
 
@@ -896,7 +1165,7 @@ describe("Elixir_Hologram_Entity", () => {
     // The microsecond is part of the clock, so a value one of them past the maximum is past it.
     it("compares a time by its microsecond as well as by its second", () => {
       assert.deepEqual(
-        item({opens_at: boxedTime(20, 0, 1)}),
+        item({opens_at: boxedTime(20, 0, 0, 1)}),
         violation("opens_at", Type.tuple([Type.atom("max"), boxedTime(20)])),
       );
     });
