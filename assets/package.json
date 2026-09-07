@@ -9,7 +9,7 @@
     "eslint": "^9",
     "jsdom": "27.0.0",
     "jsdom-global": "^3",
-    "mocha": "^11",
+    "mocha": "^12",
     "prettier": "^3",
     "sinon": "^22"
   },
