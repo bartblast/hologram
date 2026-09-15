@@ -32,7 +32,10 @@ defmodule Hologram.Commons.TaskUtilsTest do
       # The caller is linked to its tasks, so the raise reaches it as an exit, not as a raise.
       {pid, ref} = spawn_monitor(fn -> map_concurrently([1], fn _elem -> raise "boom" end) end)
 
-      assert_receive {:DOWN, ^ref, :process, ^pid, {%RuntimeError{message: "boom"}, _stacktrace}}
+      # The default 100 ms is not enough on a cold CI VM, where the first Task.async_stream
+      # call still has modules to load. This is a deadline, not a wait.
+      assert_receive {:DOWN, ^ref, :process, ^pid, {%RuntimeError{message: "boom"}, _stacktrace}},
+                     1_000
     end
   end
 end
