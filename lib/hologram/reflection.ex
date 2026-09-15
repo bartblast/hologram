@@ -308,6 +308,32 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists the names that may be Elixir modules in the loaded OTP applications used by the project (except :hex),
+  without checking any of them: the names come from each application's spec and, in dev and test, from the
+  BEAM files in its ebin directory. Modules listed in @ignored_modules module attribute are left out.
+  The project OTP application is included.
+  """
+  @spec list_candidate_modules() :: list(module)
+  def list_candidate_modules do
+    Application.ensure_loaded(otp_app())
+
+    list_loaded_otp_apps()
+    |> Kernel.--([:hex])
+    |> list_candidate_modules()
+  end
+
+  @doc """
+  Lists the names that may be Elixir modules in the given OTP apps, without checking any of them.
+  Modules listed in @ignored_modules module attribute are left out.
+  """
+  @spec list_candidate_modules(list(atom)) :: list(module)
+  def list_candidate_modules(apps) do
+    apps
+    |> Enum.reduce([], &include_app_elixir_modules/2)
+    |> Kernel.--(@ignored_modules)
+  end
+
+  @doc """
   Lists modules by scanning BEAM files in the given OTP app's ebin directory.
   This is useful for detecting newly compiled modules that haven't been added to
   Application.spec yet during development.
@@ -353,9 +379,8 @@ defmodule Hologram.Reflection do
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
     apps
-    |> Enum.reduce([], &include_app_elixir_modules/2)
+    |> list_candidate_modules()
     |> Enum.filter(&elixir_module?/1)
-    |> Kernel.--(@ignored_modules)
   end
 
   @doc """

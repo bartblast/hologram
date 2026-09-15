@@ -323,6 +323,35 @@ defmodule Hologram.ReflectionTest do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
+  describe "list_candidate_modules/0" do
+    test "includes the project's Elixir modules" do
+      result = list_candidate_modules()
+
+      assert Hologram.Reflection in result
+      assert Module1 in result
+      assert Calendar.ISO in result
+    end
+
+    test "excludes ignored modules" do
+      refute Kernel.SpecialForms in list_candidate_modules()
+    end
+  end
+
+  describe "list_candidate_modules/1" do
+    test "includes the given apps' modules, Erlang ones too" do
+      result = list_candidate_modules([:elixir, :stdlib])
+
+      assert Kernel in result
+      assert Calendar.ISO in result
+      assert :maps in result
+      refute Hologram.Reflection in result
+    end
+
+    test "excludes ignored modules" do
+      refute Kernel.SpecialForms in list_candidate_modules([:elixir])
+    end
+  end
+
   test "list_components/0" do
     result = list_components()
 
