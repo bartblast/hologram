@@ -111,8 +111,7 @@ defmodule Hologram.Compiler do
 
     ir_plt
     |> PLT.get_all()
-    |> TaskUtils.async_many(fn {_module, ir} -> CallGraph.build(call_graph, ir) end)
-    |> Task.await_many(:infinity)
+    |> TaskUtils.map_concurrently(fn {_module, ir} -> CallGraph.build(call_graph, ir) end)
 
     CallGraph.add_non_discoverable_edges(call_graph)
   end
@@ -140,7 +139,7 @@ defmodule Hologram.Compiler do
 
     modules
     |> Enum.chunk_every(chunk_size)
-    |> TaskUtils.async_many(fn module_chunk ->
+    |> TaskUtils.map_concurrently(fn module_chunk ->
       Enum.each(module_chunk, fn module ->
         beam_source = resolve_beam_source(module, umbrella?)
 
@@ -150,7 +149,6 @@ defmodule Hologram.Compiler do
         end
       end)
     end)
-    |> Task.await_many(:infinity)
 
     ir_plt
   end
@@ -169,9 +167,10 @@ defmodule Hologram.Compiler do
     # the removal note there).
     umbrella? = Reflection.umbrella?()
 
-    Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt, umbrella?))
-    |> Task.await_many(:infinity)
+    TaskUtils.map_concurrently(
+      Reflection.list_elixir_modules(),
+      &rebuild_module_digest_plt_entry!(&1, module_digest_plt, umbrella?)
+    )
 
     module_digest_plt
   end
@@ -371,11 +370,9 @@ defmodule Hologram.Compiler do
   """
   @spec bundle(list({term, T.file_path(), String.t()}), T.opts()) :: list(map)
   def bundle(entry_files_info, opts) do
-    entry_files_info
-    |> TaskUtils.async_many(fn {entry_name, entry_file_path, bundle_name} ->
+    TaskUtils.map_concurrently(entry_files_info, fn {entry_name, entry_file_path, bundle_name} ->
       bundle(entry_name, entry_file_path, bundle_name, opts)
     end)
-    |> Task.await_many(:infinity)
   end
 
   @doc """
@@ -490,8 +487,7 @@ defmodule Hologram.Compiler do
     server_callback_analysis_by_templatable =
       CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
-    page_modules
-    |> TaskUtils.async_many(fn page_module ->
+    TaskUtils.map_concurrently(page_modules, fn page_module ->
       entry_name = Reflection.module_name(page_module)
 
       entry_file_path =
@@ -509,7 +505,6 @@ defmodule Hologram.Compiler do
 
       {page_module, entry_file_path}
     end)
-    |> Task.await_many(:infinity)
   end
 
   @doc """
@@ -738,17 +733,12 @@ defmodule Hologram.Compiler do
     # when resolve_beam_source/2 goes (see the removal note there).
     umbrella? = Reflection.umbrella?()
 
-    delete_tasks =
-      TaskUtils.async_many(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
+    TaskUtils.map_concurrently(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
 
-    rebuild_tasks =
-      TaskUtils.async_many(
-        module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
-        &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
-      )
-
-    Task.await_many(delete_tasks, :infinity)
-    Task.await_many(rebuild_tasks, :infinity)
+    TaskUtils.map_concurrently(
+      module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
+      &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
+    )
 
     ir_plt
   end
@@ -1244,10 +1234,9 @@ defmodule Hologram.Compiler do
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
     |> Enum.sort()
-    |> TaskUtils.async_many(fn {module, module_mfas} ->
+    |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
       render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas)
     end)
-    |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
   end
 
@@ -1326,10 +1315,9 @@ defmodule Hologram.Compiler do
   defp render_erlang_function_defs(mfas, erlang_js_dir) do
     mfas
     |> filter_erlang_mfas()
-    |> TaskUtils.async_many(fn {module, function, arity} ->
+    |> TaskUtils.map_concurrently(fn {module, function, arity} ->
       Encoder.encode_erlang_function(module, function, arity, erlang_js_dir)
     end)
-    |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
   end
 

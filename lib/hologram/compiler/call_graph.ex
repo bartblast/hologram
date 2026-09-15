@@ -1047,25 +1047,18 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec patch(t, PLT.t(), map) :: t
   def patch(call_graph, ir_plt, diff) do
-    remove_tasks =
-      TaskUtils.async_many(diff.removed_modules, &remove_module_vertices(call_graph, &1))
+    TaskUtils.map_concurrently(diff.removed_modules, &remove_module_vertices(call_graph, &1))
 
-    update_tasks =
-      TaskUtils.async_many(diff.edited_modules, fn module ->
-        remote_incoming_edges = remote_incoming_edges(call_graph, module)
+    TaskUtils.map_concurrently(diff.edited_modules, fn module ->
+      remote_incoming_edges = remote_incoming_edges(call_graph, module)
 
-        call_graph
-        |> remove_module_vertices(module)
-        |> build_for_module(ir_plt, module)
-        |> add_edges(remote_incoming_edges)
-      end)
+      call_graph
+      |> remove_module_vertices(module)
+      |> build_for_module(ir_plt, module)
+      |> add_edges(remote_incoming_edges)
+    end)
 
-    add_tasks =
-      TaskUtils.async_many(diff.added_modules, &build_for_module(call_graph, ir_plt, &1))
-
-    Task.await_many(remove_tasks, :infinity)
-    Task.await_many(update_tasks, :infinity)
-    Task.await_many(add_tasks, :infinity)
+    TaskUtils.map_concurrently(diff.added_modules, &build_for_module(call_graph, ir_plt, &1))
 
     refresh_protocol_dispatch_edges(call_graph, diff.added_modules ++ diff.edited_modules)
 
