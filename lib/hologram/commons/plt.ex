@@ -80,14 +80,6 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Returns true if the PLT holds the given key, without copying its value out.
-  """
-  @spec member?(PLT.t(), any) :: boolean
-  def member?(%{table_ref: table_ref, table_name: table_name}, key) do
-    ETS.member?(table_ref || table_name, key)
-  end
-
-  @doc """
   Returns all items stored in the PLT.
   """
   @spec get_all(PLT.t()) :: map
@@ -144,6 +136,14 @@ defmodule Hologram.Commons.PLT do
     else
       plt
     end
+  end
+
+  @doc """
+  Returns true if the PLT holds the given key, without copying its value out.
+  """
+  @spec member?(PLT.t(), any) :: boolean
+  def member?(%{table_ref: table_ref, table_name: table_name}, key) do
+    ETS.member?(table_ref || table_name, key)
   end
 
   @doc """
