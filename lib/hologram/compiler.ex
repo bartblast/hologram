@@ -1168,7 +1168,7 @@ defmodule Hologram.Compiler do
 
   # Functions are listed by module, then function name, then arity. The module order is the
   # sort below; the order within a module comes from IR.aggregate_module_funs/1 on the protocol
-  # path and from the sort in encode_module_function_defs/5 on the cached one.
+  # path and from the sort in render_module_function_defs/6 on the cached one.
   defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas) do
     mfas
     |> filter_elixir_mfas()
@@ -1184,7 +1184,8 @@ defmodule Hologram.Compiler do
   # A protocol's dispatcher functions are selected against the whole reachable set, in
   # maybe_prune_protocol_dispatcher_function_defs/3, so their JavaScript depends on the entry
   # file being built and cannot be keyed by MFA alone. Every other module's functions encode
-  # the same wherever they are reached from, so each is encoded once per compile.
+  # the same wherever they are reached from, so each is encoded once per compile in the common
+  # case, and never differently.
   defp render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas) do
     context = %Context{module: module, async_mfas: async_mfas}
 
@@ -1223,48 +1224,53 @@ defmodule Hologram.Compiler do
   end
 
   defp function_encoded?(encode_plt, module, {function, arity}) do
-    PLT.get(encode_plt, {module, function, arity}) != :error
+    PLT.member?(encode_plt, {module, function, arity})
   end
 
-  # The module IR is read once here however many functions are missing, so a module is copied
-  # out of the IR PLT at most once per compile rather than once per entry file that reaches it.
+  # The module IR is read once here however many functions are missing. A later entry file that
+  # needs a function this one did not reads it again, so a module is copied out of the IR PLT
+  # once per entry file that finds one of its functions missing, not once per compile.
   defp encode_missing_module_functions(fun_arities, module, ir_plt, encode_plt, context) do
     module_name = Reflection.module_name(module)
 
+    # Read outside the rescue below, so a module absent from the IR PLT raises the KeyError it
+    # always did rather than being reported as an encoding failure.
     funs =
       ir_plt
       |> PLT.get!(module)
       |> IR.aggregate_module_funs()
       |> Map.new()
 
-    Enum.each(fun_arities, fn {function, arity} = key ->
-      case funs do
-        %{^key => {visibility, clauses}} ->
-          js =
-            Encoder.encode_elixir_function(
-              module_name,
-              function,
-              arity,
-              visibility,
-              clauses,
-              context
-            )
+    try do
+      Enum.each(fun_arities, fn {function, arity} = key ->
+        case funs do
+          %{^key => {visibility, clauses}} ->
+            js =
+              Encoder.encode_elixir_function(
+                module_name,
+                function,
+                arity,
+                visibility,
+                clauses,
+                context
+              )
 
-          PLT.put(encode_plt, {module, function, arity}, js)
+            PLT.put(encode_plt, {module, function, arity}, js)
 
-        _no_definition ->
-          :ok
-      end
-    end)
-  rescue
-    error ->
-      message =
-        StringUtils.normalize_newlines("""
-        can't encode #{Reflection.module_name(module)} module definition
-        #{Exception.message(error)}\
-        """)
+          _no_definition ->
+            :ok
+        end
+      end)
+    rescue
+      error ->
+        message =
+          StringUtils.normalize_newlines("""
+          can't encode #{module_name} module definition
+          #{Exception.message(error)}\
+          """)
 
-      reraise RuntimeError, [message: message], __STACKTRACE__
+        reraise RuntimeError, [message: message], __STACKTRACE__
+    end
   end
 
   # A manually ported function's clauses aren't encoded, so its raise sites have

@@ -89,6 +89,16 @@ defmodule Hologram.Commons.ETSTest do
     end
   end
 
+  describe "member?/2" do
+    test "key exists", %{table_ref: table_ref} do
+      assert member?(table_ref, :my_key_2)
+    end
+
+    test "key doesn't exist", %{table_ref: table_ref} do
+      refute member?(table_ref, :my_key_3)
+    end
+  end
+
   describe "get!/2" do
     test "key exists", %{table_ref: table_ref} do
       assert get!(table_ref, :my_key_2) == :my_value_2

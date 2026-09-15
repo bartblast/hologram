@@ -160,7 +160,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       app_versions = Compiler.build_app_versions(call_graph_for_runtime)
 
       # Filled by the entry file renderers as they go: each reachable function's JavaScript
-      # is produced once per compile and read back by every entry file that needs it.
+      # is produced once per compile in the common case and read back by every entry file that
+      # needs it.
       encode_plt = PLT.start(supervisor: sup)
 
       runtime_entry_file_path =
