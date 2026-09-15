@@ -1,17 +1,19 @@
 alias Hologram.Benchmarks.Fixtures.Page1
+alias Hologram.Commons.PLT
 alias Hologram.Compiler
 alias Hologram.Compiler.CallGraph
 alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "build_page_js/7" => fn {call_graph, ir_plt, async_mfas,
+    "build_page_js/8" => fn {call_graph, ir_plt, encode_plt, async_mfas,
                              server_callback_analysis_by_templatable, runtime_js_binding_modules,
                              js_dir} ->
       Compiler.build_page_js(
         Page1,
         call_graph,
         ir_plt,
+        encode_plt,
         async_mfas,
         server_callback_analysis_by_templatable,
         runtime_js_binding_modules,
@@ -44,13 +46,21 @@ Benchee.run(
 
     js_dir = Path.join([Reflection.root_dir(), "assets", "js"])
 
-    {call_graph_for_pages, ir_plt, async_mfas, server_callback_analysis_by_templatable,
+    {call_graph_for_pages, ir_plt, PLT.start(), async_mfas,
+     server_callback_analysis_by_templatable, runtime_js_binding_modules, js_dir}
+  end,
+  before_each: fn {call_graph, ir_plt, encode_plt, async_mfas,
+                   server_callback_analysis_by_templatable, runtime_js_binding_modules, js_dir} ->
+    # Every iteration starts from an empty encode PLT, the way a compile does.
+    PLT.reset(encode_plt)
+
+    {call_graph, ir_plt, encode_plt, async_mfas, server_callback_analysis_by_templatable,
      runtime_js_binding_modules, js_dir}
   end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.build_page_js/7", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.build_page_js/8", file: Path.join(__DIR__, "README.md")}
   ],
   time: 10
 )

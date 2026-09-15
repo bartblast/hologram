@@ -1,16 +1,18 @@
 alias Hologram.Commons.FileUtils
+alias Hologram.Commons.PLT
 alias Hologram.Compiler
 alias Hologram.Compiler.CallGraph
 alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "create_page_entry_files/6" => fn {page_modules, call_graph, ir_plt, async_mfas,
+    "create_page_entry_files/7" => fn {page_modules, call_graph, ir_plt, encode_plt, async_mfas,
                                        runtime_js_binding_modules, opts} ->
       Compiler.create_page_entry_files(
         page_modules,
         call_graph,
         ir_plt,
+        encode_plt,
         async_mfas,
         runtime_js_binding_modules,
         opts
@@ -39,19 +41,25 @@ Benchee.run(
     opts = [
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
       tmp_dir:
-        Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_page_entry_files_6"])
+        Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_page_entry_files_7"])
     ]
 
-    {page_modules, call_graph_for_pages, ir_plt, async_mfas, runtime_js_binding_modules, opts}
+    {page_modules, call_graph_for_pages, ir_plt, PLT.start(), async_mfas,
+     runtime_js_binding_modules, opts}
   end,
-  before_each: fn {page_modules, call_graph, ir_plt, async_mfas, runtime_js_binding_modules, opts} ->
+  before_each: fn {page_modules, call_graph, ir_plt, encode_plt, async_mfas,
+                   runtime_js_binding_modules, opts} ->
     FileUtils.recreate_dir(opts[:tmp_dir])
-    {page_modules, call_graph, ir_plt, async_mfas, runtime_js_binding_modules, opts}
+
+    # Every iteration starts from an empty encode PLT, the way a compile does.
+    PLT.reset(encode_plt)
+
+    {page_modules, call_graph, ir_plt, encode_plt, async_mfas, runtime_js_binding_modules, opts}
   end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.create_page_entry_files/6",
+     description: "Hologram.Compiler.create_page_entry_files/7",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

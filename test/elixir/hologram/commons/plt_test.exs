@@ -140,6 +140,26 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
+  describe "member?/2" do
+    test "key exists", %{plt: plt} do
+      assert member?(plt, :my_key_2)
+    end
+
+    test "key doesn't exist", %{plt: plt} do
+      refute member?(plt, :my_key_3)
+    end
+
+    test "resolve ETS table by name" do
+      table_name = random_atom()
+
+      [table_name: table_name]
+      |> start()
+      |> put(@items)
+
+      assert member?(%PLT{table_name: table_name}, :my_key_2)
+    end
+  end
+
   test "put/2", %{plt: %{table_ref: table_ref} = plt} do
     items = [
       {:my_key_3, :my_value_3},

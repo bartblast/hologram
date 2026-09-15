@@ -91,6 +91,14 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Returns true if the ETS table holds the given key, without copying its value out.
+  """
+  @spec member?(tid, any) :: boolean
+  def member?(table_name_or_ref, key) do
+    :ets.member(table_name_or_ref, key)
+  end
+
+  @doc """
   Puts multiple items into the ETS table.
   """
   @spec put(tid, list({any, any})) :: true

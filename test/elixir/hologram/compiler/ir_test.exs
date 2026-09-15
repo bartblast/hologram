@@ -70,6 +70,46 @@ defmodule Hologram.Compiler.IRTest do
                {{:my_fun_b, 1}, {:private, [fun_clause_3]}}
              ]
     end
+
+    test "functions are sorted by name and arity" do
+      fun_clause = %IR.FunctionClause{
+        params: [],
+        guards: [],
+        body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
+      }
+
+      module_def = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: MyModule},
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              name: :my_fun_b,
+              arity: 1,
+              visibility: :public,
+              clause: fun_clause
+            },
+            %IR.FunctionDefinition{
+              name: :my_fun_a,
+              arity: 2,
+              visibility: :public,
+              clause: fun_clause
+            },
+            %IR.FunctionDefinition{
+              name: :my_fun_a,
+              arity: 1,
+              visibility: :private,
+              clause: fun_clause
+            }
+          ]
+        }
+      }
+
+      assert aggregate_module_funs(module_def) == [
+               {{:my_fun_a, 1}, {:private, [fun_clause]}},
+               {{:my_fun_a, 2}, {:public, [fun_clause]}},
+               {{:my_fun_b, 1}, {:public, [fun_clause]}}
+             ]
+    end
   end
 
   test "for_code/1" do

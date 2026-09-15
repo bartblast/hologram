@@ -139,6 +139,14 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Returns true if the PLT holds the given key, without copying its value out.
+  """
+  @spec member?(PLT.t(), any) :: boolean
+  def member?(%{table_ref: table_ref, table_name: table_name}, key) do
+    ETS.member?(table_ref || table_name, key)
+  end
+
+  @doc """
   Puts multiple items into the PLT.
   """
   @spec put(PLT.t(), list({any, any})) :: PLT.t()
