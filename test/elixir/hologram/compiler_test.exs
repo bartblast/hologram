@@ -101,33 +101,33 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
-  describe "aggregate_js_imports/2" do
-    test "empty MFAs list" do
-      assert aggregate_js_imports([]) == %{imports: [], bindings: %{}}
+  describe "aggregate_js_imports/3" do
+    test "empty MFAs list", %{ir_plt: ir_plt} do
+      assert aggregate_js_imports([], ir_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "filters out Erlang modules" do
+    test "filters out Erlang modules", %{ir_plt: ir_plt} do
       mfas = [{:erlang, :+, 2}, {:maps, :get, 2}]
 
-      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "no modules have JS imports" do
+    test "no modules have JS imports", %{ir_plt: ir_plt} do
       mfas = [{Enum, :map, 2}, {Kernel, :+, 2}]
 
-      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "skips modules that use Hologram.JS but have no imports" do
+    test "skips modules that use Hologram.JS but have no imports", %{ir_plt: ir_plt} do
       mfas = [{Module13, :func, 0}]
 
-      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "single module with imports" do
+    test "single module with imports", %{ir_plt: ir_plt} do
       mfas = [{Module12, :func, 0}, {Enum, :map, 2}]
 
-      assert aggregate_js_imports(mfas) == %{
+      assert aggregate_js_imports(mfas, ir_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"},
                  %{from: "chart.js", export: "helpers", alias: "$2"}
@@ -141,10 +141,10 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "multiple modules with imports from different sources" do
+    test "multiple modules with imports from different sources", %{ir_plt: ir_plt} do
       mfas = [{Module12, :func, 0}, {Module17, :func, 0}]
 
-      assert aggregate_js_imports(mfas) == %{
+      assert aggregate_js_imports(mfas, ir_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"},
                  %{from: "chart.js", export: "helpers", alias: "$2"},
@@ -162,10 +162,10 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "deduplicates modules when multiple MFAs reference the same module" do
+    test "deduplicates modules when multiple MFAs reference the same module", %{ir_plt: ir_plt} do
       mfas = [{Module12, :func_a, 0}, {Module12, :func_b, 1}]
 
-      assert aggregate_js_imports(mfas) == %{
+      assert aggregate_js_imports(mfas, ir_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"},
                  %{from: "chart.js", export: "helpers", alias: "$2"}
@@ -179,10 +179,10 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "deduplicates imports when multiple modules import the same export" do
+    test "deduplicates imports when multiple modules import the same export", %{ir_plt: ir_plt} do
       mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
 
-      assert aggregate_js_imports(mfas) == %{
+      assert aggregate_js_imports(mfas, ir_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"}
                ],
@@ -197,10 +197,10 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "skips excluded modules" do
+    test "skips excluded modules", %{ir_plt: ir_plt} do
       mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
 
-      assert aggregate_js_imports(mfas, MapSet.new([Module14])) == %{
+      assert aggregate_js_imports(mfas, ir_plt, MapSet.new([Module14])) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"}
                ],
@@ -212,10 +212,13 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "skips the imports of a module that is excluded" do
+    test "skips the imports of a module that is excluded", %{ir_plt: ir_plt} do
       mfas = [{Module12, :func, 0}]
 
-      assert aggregate_js_imports(mfas, MapSet.new([Module12])) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt, MapSet.new([Module12])) == %{
+               imports: [],
+               bindings: %{}
+             }
     end
   end
 
@@ -1510,14 +1513,16 @@ defmodule Hologram.CompilerTest do
     assert list_components(plt) == [Module11, Module3]
   end
 
-  describe "list_js_import_modules/1" do
-    test "returns the modules that declare JS imports" do
+  describe "list_js_import_modules/2" do
+    test "returns the modules that declare JS imports", %{ir_plt: ir_plt} do
       mfas = [{Module12, :func, 0}, {Enum, :map, 2}, {Module14, :func, 0}]
 
-      assert list_js_import_modules(mfas) == [Module12, Module14]
+      assert list_js_import_modules(mfas, ir_plt) == [Module12, Module14]
     end
 
-    test "filters out Erlang modules, modules without JS imports and duplicates" do
+    test "filters out Erlang modules, modules without JS imports and duplicates", %{
+      ir_plt: ir_plt
+    } do
       mfas = [
         {:erlang, :+, 2},
         {Enum, :map, 2},
@@ -1526,7 +1531,7 @@ defmodule Hologram.CompilerTest do
         {Module12, :func_2, 0}
       ]
 
-      assert list_js_import_modules(mfas) == [Module12]
+      assert list_js_import_modules(mfas, ir_plt) == [Module12]
     end
   end
 

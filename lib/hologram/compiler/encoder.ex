@@ -228,7 +228,7 @@ defmodule Hologram.Compiler.Encoder do
     captured_function_js = encode_as_string(captured_function, true)
 
     captured_module_str =
-      if Reflection.elixir_module?(captured_module) do
+      if Reflection.elixir_module?(captured_module, context.ir_plt) do
         Reflection.module_name(captured_module)
       else
         ":#{captured_module}"

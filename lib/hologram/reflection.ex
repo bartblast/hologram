@@ -1,6 +1,8 @@
 defmodule Hologram.Reflection do
   @moduledoc false
 
+  alias Hologram.Commons.PLT
+
   @call_graph_dump_file_name "call_graph.bin"
 
   @compiler_lock_file_name "hologram_compiler.lock"
@@ -219,6 +221,18 @@ defmodule Hologram.Reflection do
   def elixir_module?(_term), do: false
 
   @doc """
+  Like elixir_module?/1, but answered from the given IR PLT when it can be: the IR PLT holds IR
+  for exactly the Elixir modules the compiler knows, so a module it holds is an Elixir module and
+  its code path is not consulted. A term it does not hold (an Erlang module, an Elixir-named Erlang
+  module, Kernel.SpecialForms, a name with no BEAM) is decided the elixir_module?/1 way. A nil PLT
+  is the same as elixir_module?/1.
+  """
+  @spec elixir_module?(term, PLT.t() | nil) :: boolean
+  def elixir_module?(term, nil), do: elixir_module?(term)
+
+  def elixir_module?(term, ir_plt), do: PLT.member?(ir_plt, term) or elixir_module?(term)
+
+  @doc """
   Returns true if the given term is an existing Erlang module, or false otherwise.
 
   An Erlang module is detected by the absence of the `__info__/1` function that the
@@ -249,6 +263,16 @@ defmodule Hologram.Reflection do
   end
 
   def erlang_module?(_term), do: false
+
+  @doc """
+  Like erlang_module?/1, but answered from the given IR PLT when it can be: a module the IR PLT
+  holds is an Elixir module, so it is not an Erlang one and its code path is not consulted. A term
+  it does not hold is decided the erlang_module?/1 way. A nil PLT is the same as erlang_module?/1.
+  """
+  @spec erlang_module?(term, PLT.t() | nil) :: boolean
+  def erlang_module?(term, nil), do: erlang_module?(term)
+
+  def erlang_module?(term, ir_plt), do: not PLT.member?(ir_plt, term) and erlang_module?(term)
 
   @doc """
   Returns true if the given term is an exception module, or false otherwise.

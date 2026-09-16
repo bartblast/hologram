@@ -21,14 +21,14 @@ defmodule Hologram.Compiler do
   - `:imports` — unique imports with generated `$1`, `$2`, ... aliases for JS import statements
   - `:bindings` — per-module map of user alias to generated alias for `__bindings__` on module proxies
   """
-  @spec aggregate_js_imports(list(mfa), MapSet.t(module)) :: %{
+  @spec aggregate_js_imports(list(mfa), PLT.t(), MapSet.t(module)) :: %{
           imports: list(%{from: String.t(), export: String.t(), alias: String.t()}),
           bindings: %{module => %{String.t() => String.t()}}
         }
-  def aggregate_js_imports(mfas, excluded_modules \\ MapSet.new()) do
+  def aggregate_js_imports(mfas, ir_plt, excluded_modules \\ MapSet.new()) do
     modules_with_imports =
       mfas
-      |> list_js_import_modules()
+      |> list_js_import_modules(ir_plt)
       |> Enum.reject(&MapSet.member?(excluded_modules, &1))
 
     unique_imports =
@@ -244,7 +244,7 @@ defmodule Hologram.Compiler do
       CallGraph.list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
 
     %{imports: imports, bindings: bindings} =
-      aggregate_js_imports(mfas, runtime_js_binding_modules)
+      aggregate_js_imports(mfas, ir_plt, runtime_js_binding_modules)
 
     import_statements =
       imports
@@ -260,7 +260,7 @@ defmodule Hologram.Compiler do
 
     erlang_function_defs =
       mfas
-      |> render_erlang_function_defs(erlang_js_dir)
+      |> render_erlang_function_defs(ir_plt, erlang_js_dir)
       |> render_block()
 
     elixir_function_defs =
@@ -270,7 +270,7 @@ defmodule Hologram.Compiler do
 
     module_metadata_registration =
       mfas
-      |> render_module_metadata_registration()
+      |> render_module_metadata_registration(ir_plt)
       |> render_block()
 
     """
@@ -312,7 +312,7 @@ defmodule Hologram.Compiler do
           T.file_path()
         ) :: String.t()
   def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, js_dir) do
-    %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas)
+    %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas, ir_plt)
 
     import_statements =
       imports
@@ -329,7 +329,7 @@ defmodule Hologram.Compiler do
 
     erlang_function_defs =
       runtime_mfas
-      |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
+      |> render_erlang_function_defs(ir_plt, Path.join(js_dir, "erlang"))
       |> render_block()
 
     elixir_function_defs =
@@ -339,7 +339,7 @@ defmodule Hologram.Compiler do
 
     module_metadata_registration =
       runtime_mfas
-      |> render_module_metadata_registration()
+      |> render_module_metadata_registration(ir_plt)
       |> render_block()
 
     manually_ported_clause_heads =
@@ -679,12 +679,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists the Elixir modules referenced by the given MFAs that declare JS imports.
+  Lists the Elixir modules referenced by the given MFAs that declare JS imports. The IR PLT tells
+  the Elixir modules apart from the Erlang ones.
   """
-  @spec list_js_import_modules(list(mfa)) :: list(module)
-  def list_js_import_modules(mfas) do
+  @spec list_js_import_modules(list(mfa), PLT.t()) :: list(module)
+  def list_js_import_modules(mfas, ir_plt) do
     mfas
-    |> filter_elixir_mfas()
+    |> filter_elixir_mfas(ir_plt)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(
@@ -1020,12 +1021,18 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp filter_elixir_mfas(mfas) do
-    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.elixir_module?(module) end)
+  # The IR PLT answers for every module it holds, so a module the compiler knows never costs a
+  # code path lookup here, however many MFAs of it the list has.
+  defp filter_elixir_mfas(mfas, ir_plt) do
+    Enum.filter(mfas, fn {module, _function, _arity} ->
+      Reflection.elixir_module?(module, ir_plt)
+    end)
   end
 
-  defp filter_erlang_mfas(mfas) do
-    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.erlang_module?(module) end)
+  defp filter_erlang_mfas(mfas, ir_plt) do
+    Enum.filter(mfas, fn {module, _function, _arity} ->
+      Reflection.erlang_module?(module, ir_plt)
+    end)
   end
 
   defp function_encoded?(encode_plt, module, {function, arity}) do
@@ -1292,7 +1299,7 @@ defmodule Hologram.Compiler do
   # path and from the sort in render_module_function_defs/6 on the cached one.
   defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas) do
     mfas
-    |> filter_elixir_mfas()
+    |> filter_elixir_mfas(ir_plt)
     |> group_mfas_by_module()
     |> Enum.sort()
     |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
@@ -1334,7 +1341,7 @@ defmodule Hologram.Compiler do
             arity,
             visibility,
             clauses,
-            %Context{module: module}
+            %Context{ir_plt: ir_plt, module: module}
           )
         end)
 
@@ -1349,7 +1356,7 @@ defmodule Hologram.Compiler do
   # the same wherever they are reached from, so each is encoded once per compile in the common
   # case, and never differently.
   defp render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas) do
-    context = %Context{module: module, async_mfas: async_mfas}
+    context = %Context{async_mfas: async_mfas, ir_plt: ir_plt, module: module}
 
     if Reflection.protocol?(module) do
       ir_plt
@@ -1365,17 +1372,17 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_module_metadata_registration(mfas) do
+  defp render_module_metadata_registration(mfas, ir_plt) do
     mfas
-    |> filter_elixir_mfas()
+    |> filter_elixir_mfas(ir_plt)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Encoder.encode_module_metadata_registration()
   end
 
-  defp render_erlang_function_defs(mfas, erlang_js_dir) do
+  defp render_erlang_function_defs(mfas, ir_plt, erlang_js_dir) do
     mfas
-    |> filter_erlang_mfas()
+    |> filter_erlang_mfas(ir_plt)
     |> TaskUtils.map_concurrently(fn {module, function, arity} ->
       Encoder.encode_erlang_function(module, function, arity, erlang_js_dir)
     end)

@@ -2,6 +2,7 @@ defmodule Hologram.ReflectionTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Reflection
 
+  alias Hologram.Commons.PLT
   alias Hologram.Test.Fixtures.Reflection.Module1
   alias Hologram.Test.Fixtures.Reflection.Module2
   alias Hologram.Test.Fixtures.Reflection.Module3
@@ -371,6 +372,43 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "elixir_module?/2" do
+    setup do
+      [ir_plt: PLT.start()]
+    end
+
+    test "module the IR PLT holds, without consulting the code path", %{ir_plt: ir_plt} do
+      PLT.put(ir_plt, Aaa.Bbb, :ir)
+
+      assert elixir_module?(Aaa.Bbb, ir_plt)
+    end
+
+    test "existing Elixir module the IR PLT does not hold", %{ir_plt: ir_plt} do
+      assert elixir_module?(Calendar.ISO, ir_plt)
+    end
+
+    test "non existing Elixir module the IR PLT does not hold", %{ir_plt: ir_plt} do
+      refute elixir_module?(Aaa.Bbb, ir_plt)
+    end
+
+    test "existing Erlang module", %{ir_plt: ir_plt} do
+      refute elixir_module?(:maps, ir_plt)
+    end
+
+    test "Erlang module that uses Elixir-style naming", %{ir_plt: ir_plt} do
+      refute elixir_module?(build_elixir_named_erlang_module(), ir_plt)
+    end
+
+    test "non-atom", %{ir_plt: ir_plt} do
+      refute elixir_module?(123, ir_plt)
+    end
+
+    test "nil IR PLT decides the elixir_module?/1 way" do
+      assert elixir_module?(Calendar.ISO, nil)
+      refute elixir_module?(Aaa.Bbb, nil)
+    end
+  end
+
   describe "erlang_module?" do
     test "existing Elixir module" do
       refute erlang_module?(Calendar.ISO)
@@ -407,6 +445,46 @@ defmodule Hologram.ReflectionTest do
       assert :code.is_loaded(module) == false
       assert erlang_module?(module)
       assert :code.is_loaded(module) == false
+    end
+  end
+
+  describe "erlang_module?/2" do
+    setup do
+      [ir_plt: PLT.start()]
+    end
+
+    test "module the IR PLT holds is not one, without consulting the code path", %{ir_plt: ir_plt} do
+      module = build_elixir_named_erlang_module()
+      PLT.put(ir_plt, module, :ir)
+
+      refute erlang_module?(module, ir_plt)
+    end
+
+    test "existing Erlang module", %{ir_plt: ir_plt} do
+      assert erlang_module?(:maps, ir_plt)
+    end
+
+    test "Erlang module that uses Elixir-style naming the IR PLT does not hold", %{ir_plt: ir_plt} do
+      assert erlang_module?(build_elixir_named_erlang_module(), ir_plt)
+    end
+
+    test "existing Elixir module", %{ir_plt: ir_plt} do
+      refute erlang_module?(Calendar.ISO, ir_plt)
+    end
+
+    test "atom that starts with a lowercase letter and is not an existing Erlang module", %{
+      ir_plt: ir_plt
+    } do
+      refute erlang_module?(:my_module, ir_plt)
+    end
+
+    test "non-atom", %{ir_plt: ir_plt} do
+      refute erlang_module?(123, ir_plt)
+    end
+
+    test "nil IR PLT decides the erlang_module?/1 way" do
+      assert erlang_module?(:maps, nil)
+      refute erlang_module?(Calendar.ISO, nil)
     end
   end
 

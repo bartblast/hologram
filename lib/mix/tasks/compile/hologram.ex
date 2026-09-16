@@ -193,7 +193,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # imported JavaScript module, which the two would then take turns overwriting.
       runtime_js_binding_modules =
         runtime_mfas
-        |> Compiler.list_js_import_modules()
+        |> Compiler.list_js_import_modules(ir_plt)
         |> MapSet.new()
 
       page_entry_files_info =
