@@ -1500,11 +1500,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "excludes Hex MFAs" do
       module_17_ir = IR.for_module(Module17)
 
-      call_graph =
-        start()
-        |> build(module_17_ir)
-        |> add_edge({Module17, :action, 3}, {Hex, :start, 2})
-        |> add_edge({Module17, :action, 3}, {Hex, :version, 0})
+      call_graph = start(module_info_plt: module_info_plt_fixture())
+      build(call_graph, module_17_ir)
+      add_edge(call_graph, {Module17, :action, 3}, {Hex, :start, 2})
+      add_edge(call_graph, {Module17, :action, 3}, {Hex, :version, 0})
 
       result = list_page_mfas_with_analysis(call_graph, Module17)
 
@@ -1517,11 +1516,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "excludes Hex.* MFAs" do
       module_17_ir = IR.for_module(Module17)
 
-      call_graph =
-        start()
-        |> build(module_17_ir)
-        |> add_edge({Module17, :action, 3}, {Hex.API, :request, 4})
-        |> add_edge({Module17, :action, 3}, {Hex.Registry.Server, :versions, 2})
+      call_graph = start(module_info_plt: module_info_plt_fixture())
+      build(call_graph, module_17_ir)
+      add_edge(call_graph, {Module17, :action, 3}, {Hex.API, :request, 4})
+      add_edge(call_graph, {Module17, :action, 3}, {Hex.Registry.Server, :versions, 2})
 
       result = list_page_mfas_with_analysis(call_graph, Module17)
 
@@ -1534,10 +1532,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "excludes Hex implementations for Inspect and String.Chars protocols" do
       module_17_ir = IR.for_module(Module17)
 
-      result =
-        start()
-        |> build(module_17_ir)
-        |> list_page_mfas_with_analysis(Module17)
+      call_graph = start(module_info_plt: module_info_plt_fixture())
+      build(call_graph, module_17_ir)
+
+      result = list_page_mfas_with_analysis(call_graph, Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -2456,6 +2454,26 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "reachable_mfas/4" do
+    test "drops MFAs of Elixir-named modules the module info PLT does not know and keeps Erlang ones" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Collectable.Atom, :into, 1})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {:lists, :reverse, 1})
+
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_info_plt_fixture())
+
+      assert Enum.sort(result) == [{Module5, :my_fun, 0}, {:lists, :reverse, 1}]
+    end
+
+    test "drops every Elixir-named MFA without a module info PLT" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, {:lists, :reverse, 1})
+
+      assert reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), nil) == [
+               {:lists, :reverse, 1}
+             ]
+    end
+
     test "includes implementations for built-in types when their protocol is reached", %{
       full_call_graph: full_call_graph
     } do

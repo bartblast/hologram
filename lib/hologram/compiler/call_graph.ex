@@ -1459,6 +1459,17 @@ defmodule Hologram.Compiler.CallGraph do
   # reachable. Each round traverses only vertices not yet in the state, extends the
   # dispatch types only from the newly reached vertices, and evaluates only the new
   # implementation candidates plus the pending ones against the grown type set.
+  # An Elixir-named module exists when the module info PLT has an entry for it (one ETS lookup);
+  # an Erlang-named one is asked the usual way, and those are the handful of stdlib modules the
+  # VM has loaded already.
+  defp existing_module?(module, module_info_plt) do
+    if Reflection.alias?(module) do
+      module_info_plt != nil and PLT.member?(module_info_plt, module)
+    else
+      Reflection.module?(module)
+    end
+  end
+
   defp expand_reachable_state(graph, state, entry_vertices, module_info_plt) do
     new_vertices =
       Digraph.reachable(graph, entry_vertices,
@@ -1591,7 +1602,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     Enum.filter(vertices, fn
       # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-      {module, _function, _arity} -> Reflection.module?(module)
+      {module, _function, _arity} -> existing_module?(module, module_info_plt)
       _module_vertex -> false
     end)
   end
