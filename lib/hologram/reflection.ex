@@ -519,6 +519,22 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the application of every module listed by a loaded application, as a map. It is the
+  lookup `Application.get_application/1` makes for one module at a time, which walks the module
+  lists of every loaded application on each call, done once for all of them. A module listed by
+  more than one application keeps the first one in `Application.loaded_applications/0` order.
+  """
+  @spec list_module_applications() :: %{module => atom}
+  def list_module_applications do
+    Enum.reduce(Application.loaded_applications(), %{}, fn {app, _description, _version}, acc ->
+      app
+      |> Application.spec(:modules)
+      |> List.wrap()
+      |> Enum.reduce(acc, &Map.put_new(&2, &1, app))
+    end)
+  end
+
+  @doc """
   Lists Elixir modules which are Hologram pages and that belong to any of the OTP apps in the project.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/reflection/list_pages_0/README.md

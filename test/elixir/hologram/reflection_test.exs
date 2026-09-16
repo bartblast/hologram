@@ -761,6 +761,31 @@ defmodule Hologram.ReflectionTest do
     assert :hologram in result
   end
 
+  describe "list_module_applications/0" do
+    test "maps modules of the project, of Elixir and of Erlang/OTP to their applications" do
+      result = list_module_applications()
+
+      assert result[Hologram.Reflection] == :hologram
+      assert result[Enum] == :elixir
+      assert result[:lists] == :stdlib
+    end
+
+    test "has no entry for a module no loaded application lists" do
+      refute Map.has_key?(list_module_applications(), Aaa.Bbb)
+    end
+
+    test "agrees with Application.get_application/1" do
+      result = list_module_applications()
+
+      result
+      |> Map.keys()
+      |> Enum.take_every(50)
+      |> Enum.each(fn module ->
+        assert Application.get_application(module) == result[module]
+      end)
+    end
+  end
+
   test "list_pages/0" do
     result = list_pages()
 
