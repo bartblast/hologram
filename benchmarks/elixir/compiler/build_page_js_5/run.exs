@@ -6,18 +6,8 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "build_page_js/8" => fn {graph, module_info_plt, ir_plt, encode_plt, async_mfas,
-                             server_callback_analysis_by_templatable, opts} ->
-      Compiler.build_page_js(
-        Page1,
-        graph,
-        module_info_plt,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        server_callback_analysis_by_templatable,
-        opts
-      )
+    "build_page_js/5" => fn {mfas, ir_plt, encode_plt, async_mfas, opts} ->
+      Compiler.build_page_js(mfas, ir_plt, encode_plt, async_mfas, opts)
     end
   },
   before_scenario: fn _input ->
@@ -39,6 +29,14 @@ Benchee.run(
     server_callback_analysis_by_templatable =
       CallGraph.server_callback_analysis_by_templatable(graph, templatables, module_info_plt)
 
+    mfas =
+      CallGraph.list_page_mfas(
+        graph,
+        Page1,
+        server_callback_analysis_by_templatable,
+        module_info_plt
+      )
+
     runtime_js_binding_modules =
       runtime_mfas
       |> Compiler.list_js_import_modules(ir_plt)
@@ -49,11 +47,9 @@ Benchee.run(
       runtime_js_binding_modules: runtime_js_binding_modules
     ]
 
-    {graph, module_info_plt, ir_plt, PLT.start(), async_mfas,
-     server_callback_analysis_by_templatable, opts}
+    {mfas, ir_plt, PLT.start(), async_mfas, opts}
   end,
-  before_each: fn {_graph, _module_info_plt, _ir_plt, encode_plt, _async_mfas,
-                   _server_callback_analysis_by_templatable, _opts} = input ->
+  before_each: fn {_mfas, _ir_plt, encode_plt, _async_mfas, _opts} = input ->
     # Every iteration starts from an empty encode PLT, the way a compile does.
     PLT.reset(encode_plt)
 
@@ -62,7 +58,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.build_page_js/8", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.build_page_js/5", file: Path.join(__DIR__, "README.md")}
   ],
   time: 10
 )

@@ -222,7 +222,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_page_js/8" do
+  describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -255,15 +255,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module24,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module24,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -283,15 +288,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module25,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module25,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -311,15 +321,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module11,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module11,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -334,15 +349,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module19,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module19,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -366,15 +386,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module21,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module21,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -399,15 +424,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module23,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module23,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -433,15 +463,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module23,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module23,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir,
           runtime_js_binding_modules: MapSet.new([Module18])
         )

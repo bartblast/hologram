@@ -10,7 +10,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -216,9 +215,9 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  The page's reachable functions are found in the given graph with the given module info PLT,
-  so that callers building many pages at once can share one graph (see
-  CallGraph.with_shared_graph/2).
+  The page's reachable MFAs are given (see `CallGraph.list_page_mfas/4`), so that a caller building
+  many pages can encode their functions first with `encode_reachable_functions/4` and render every
+  page from the encode PLT.
 
   ## Options
 
@@ -228,38 +227,12 @@ defmodule Hologram.Compiler do
       aggregated, because the runtime script, which every page loads, already registers their
       bindings (default: none).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_8/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_5/README.md
   """
-  @spec build_page_js(
-          module,
-          Digraph.t(),
-          PLT.t() | nil,
-          PLT.t(),
-          PLT.t(),
-          MapSet.t(mfa),
-          %{module => CallGraph.server_callback_analysis()},
-          T.opts()
-        ) :: String.t()
-  def build_page_js(
-        page_module,
-        graph,
-        module_info_plt,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        server_callback_analysis_by_templatable,
-        opts
-      ) do
+  @spec build_page_js([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) :: String.t()
+  def build_page_js(mfas, ir_plt, encode_plt, async_mfas, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
     runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
-
-    mfas =
-      CallGraph.list_page_mfas(
-        graph,
-        page_module,
-        server_callback_analysis_by_templatable,
-        module_info_plt
-      )
 
     %{imports: imports, bindings: bindings} =
       aggregate_js_imports(mfas, ir_plt, runtime_js_binding_modules)
@@ -536,14 +509,13 @@ defmodule Hologram.Compiler do
         entry_name = Reflection.module_name(page_module)
 
         entry_file_path =
-          page_module
-          |> build_page_js(
-            read_graph.(),
-            module_info_plt,
-            ir_plt,
-            encode_plt,
-            async_mfas,
+          read_graph.()
+          |> CallGraph.list_page_mfas(
+            page_module,
             server_callback_analysis_by_templatable,
+            module_info_plt
+          )
+          |> build_page_js(ir_plt, encode_plt, async_mfas,
             js_dir: opts[:js_dir],
             runtime_js_binding_modules: runtime_js_binding_modules
           )
