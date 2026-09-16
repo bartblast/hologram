@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.build_module_digest_plt!/0
+Hologram.Compiler.build_module_info_plt!/3
 
 ## System
 
@@ -62,12 +62,43 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_module_digest_plt!/0</td>
-    <td style="white-space: nowrap; text-align: right">2.79</td>
-    <td style="white-space: nowrap; text-align: right">357.86 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.05%</td>
-    <td style="white-space: nowrap; text-align: right">357.23 ms</td>
-    <td style="white-space: nowrap; text-align: right">388.32 ms</td>
+    <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
+    <td style="white-space: nowrap; text-align: right">9.07</td>
+    <td style="white-space: nowrap; text-align: right">110.22 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;9.58%</td>
+    <td style="white-space: nowrap; text-align: right">109.10 ms</td>
+    <td style="white-space: nowrap; text-align: right">174.01 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">no previous dump (every beam read)</td>
+    <td style="white-space: nowrap; text-align: right">5.53</td>
+    <td style="white-space: nowrap; text-align: right">180.72 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;10.82%</td>
+    <td style="white-space: nowrap; text-align: right">175.07 ms</td>
+    <td style="white-space: nowrap; text-align: right">266.03 ms</td>
+  </tr>
+
+</table>
+
+
+Run Time Comparison
+
+<table style="width: 1%">
+  <tr>
+    <th>Name</th>
+    <th style="text-align: right">IPS</th>
+    <th style="text-align: right">Slower</th>
+  <tr>
+    <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
+    <td style="white-space: nowrap;text-align: right">9.07</td>
+    <td>&nbsp;</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">no previous dump (every beam read)</td>
+    <td style="white-space: nowrap; text-align: right">5.53</td>
+    <td style="white-space: nowrap; text-align: right">1.64x</td>
   </tr>
 
 </table>

@@ -36,7 +36,7 @@ build_ir_plt/0          2.11      473.87 ms     ±1.43%      471.78 ms      490.
 ```
 
 
-### ✅ compiler » build_module_digest_plt!_0
+### ✅ compiler » build_module_info_plt!_3
 
 ```
 Name                                 ips        average  deviation         median         99th %
@@ -206,7 +206,7 @@ create_runtime_entry_file/4         26.28       38.05 ms    ±10.77%       37.67
 ```
 
 
-### ✅ compiler » diff_module_digest_plts_2
+### ✅ compiler » diff_module_info_plts_2
 
 ```
 Name                                         ips        average  deviation         median         99th %
@@ -278,7 +278,7 @@ do load     0.00189 K - 57460.24x slower +529.67 ms
 ```
 
 
-### ✅ compiler » maybe_load_module_digest_plt_1
+### ✅ compiler » maybe_load_module_info_plt_1
 
 ```
 Name              ips        average  deviation         median         99th %
