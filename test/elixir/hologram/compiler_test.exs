@@ -734,6 +734,49 @@ defmodule Hologram.CompilerTest do
       assert js_2 == js_1
     end
 
+    test "remembers a reachable function the module does not define", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      undefined_mfa = {Enum, :hologram_undefined_fun, 9}
+
+      js =
+        build_runtime_js(
+          [undefined_mfa | runtime_mfas],
+          ir_plt,
+          encode_plt,
+          MapSet.new(),
+          [],
+          @js_dir
+        )
+
+      expected_js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], @js_dir)
+
+      assert js == expected_js
+      assert PLT.get(encode_plt, undefined_mfa) == {:ok, nil}
+    end
+
+    test "does not read the module IR again for a function the module does not define", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      mfas = [{Enum, :hologram_undefined_fun, 9} | runtime_mfas]
+
+      js_1 = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      # A clone, so the PLT shared by the whole test module keeps its Enum entry.
+      ir_plt_without_enum =
+        ir_plt
+        |> PLT.clone()
+        |> PLT.delete(Enum)
+
+      js_2 = build_runtime_js(mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], @js_dir)
+
+      assert js_2 == js_1
+    end
+
     test "protocol functions are rendered per entry file and not cached", %{
       encode_plt: encode_plt,
       ir_plt: ir_plt,

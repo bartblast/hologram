@@ -972,7 +972,8 @@ defmodule Hologram.Compiler do
 
   # The module IR is read once here however many functions are missing. A later entry file that
   # needs a function this one did not reads it again, so a module is copied out of the IR PLT
-  # once per entry file that finds one of its functions missing, not once per compile.
+  # once per entry file that finds one of its functions missing, not once per compile. A function
+  # the module does not define is stored as nil.
   defp encode_missing_module_functions(fun_arities, module, ir_plt, encode_plt, context) do
     module_name = Reflection.module_name(module)
 
@@ -1000,8 +1001,10 @@ defmodule Hologram.Compiler do
 
             PLT.put(encode_plt, {module, function, arity}, js)
 
+          # Remembered as defining nothing, so later entry files that reach it do not read the
+          # module again.
           _no_definition ->
-            :ok
+            PLT.put(encode_plt, {module, function, arity}, nil)
         end
       end)
     rescue
@@ -1025,11 +1028,16 @@ defmodule Hologram.Compiler do
 
     Enum.flat_map(fun_arities, fn {function, arity} ->
       case PLT.get(encode_plt, {module, function, arity}) do
+        # A reachable MFA with no definition in the module IR renders nothing, which is what
+        # prune_module_def/2 has always done with it.
+        {:ok, nil} ->
+          []
+
         {:ok, js} ->
           [js]
 
-        # A reachable MFA with no definition in the module IR renders nothing, which is what
-        # prune_module_def/2 has always done with it.
+        # Unreachable once the missing functions are encoded; kept so an entry without a value
+        # renders nothing.
         :error ->
           []
       end
