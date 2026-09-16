@@ -192,6 +192,24 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the stack trace metadata of every module the given module info PLT holds a source path
+  for: its application and its source file relative to the root of the code that compiled it, the
+  form `Hologram.Compiler.Encoder.encode_module_metadata_registration/2` renders. Computed once
+  per compile, so the bundles look each module up instead of asking the VM about it per bundle.
+  """
+  @spec build_module_metadata(PLT.t()) :: %{module => %{app: atom | nil, file: String.t()}}
+  def build_module_metadata(module_info_plt) do
+    apps = Reflection.list_module_applications()
+    root_dir = Reflection.root_dir()
+
+    for {module, %{source_path: source_path}} when is_binary(source_path) <-
+          PLT.get_all(module_info_plt),
+        into: %{} do
+      {module, %{app: apps[module], file: Reflection.relative_source_path(source_path, root_dir)}}
+    end
+  end
+
+  @doc """
   Builds page digest PLT, where the keys represent page modules,
   and the values are hex digests of their corresponding JavaScript bundles.
   """
@@ -295,6 +313,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds Hologram runtime JavaScript source code.
+
+  ## Options
+
+    * `:js_dir` - the directory of Hologram's JavaScript sources, which the runtime script imports
+      from (required).
+    * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
+      it; the modules it does not hold are read from the loaded modules (default: none).
   """
   @spec build_runtime_js(
           list(mfa),
@@ -302,9 +327,11 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          T.file_path()
+          T.opts()
         ) :: String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, js_dir) do
+  def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
+    js_dir = Keyword.fetch!(opts, :js_dir)
+
     %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas, ir_plt)
 
     import_statements =
@@ -332,7 +359,7 @@ defmodule Hologram.Compiler do
 
     module_metadata_registration =
       runtime_mfas
-      |> render_module_metadata_registration(ir_plt, nil)
+      |> render_module_metadata_registration(ir_plt, opts[:module_metadata])
       |> render_block()
 
     manually_ported_clause_heads =
@@ -536,6 +563,7 @@ defmodule Hologram.Compiler do
           mfas
           |> build_page_js(ir_plt, encode_plt, async_mfas,
             js_dir: opts[:js_dir],
+            module_metadata: opts[:module_metadata],
             runtime_js_binding_modules: runtime_js_binding_modules
           )
           |> create_entry_file(entry_name, opts[:tmp_dir])
@@ -560,7 +588,10 @@ defmodule Hologram.Compiler do
         ) :: T.file_path()
   def create_runtime_entry_file(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions, opts[:js_dir])
+    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions,
+      js_dir: opts[:js_dir],
+      module_metadata: opts[:module_metadata]
+    )
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
