@@ -47,9 +47,13 @@ defmodule Hologram.ReflectionTest do
     {module, binary}
   end
 
-  # Code compiled inside the test run carries no debug info unless asked for, and a
-  # digest of a beam without a Dbgi chunk would be the same for any source.
   defp compile_to_digest(code) do
+    beam_info(compile_with_debug_info(code)).digest
+  end
+
+  # Code compiled inside the test run carries no debug info unless asked for, and a beam
+  # without a Dbgi chunk has the same digest for any source and no literals to read.
+  defp compile_with_debug_info(code) do
     debug_info? = Code.get_compiler_option(:debug_info)
     Code.put_compiler_option(:debug_info, true)
 
@@ -57,7 +61,7 @@ defmodule Hologram.ReflectionTest do
       [{module, bytecode}] = Code.compile_string(code)
       :code.purge(module)
       :code.delete(module)
-      beam_info(bytecode).digest
+      bytecode
     after
       Code.put_compiler_option(:debug_info, debug_info?)
     end
@@ -136,14 +140,37 @@ defmodule Hologram.ReflectionTest do
                protocol_implementation?: false,
                struct?: false,
                exception?: false,
-               ecto_schema?: false
+               ecto_schema?: false,
+               layout_module: nil,
+               protocol_functions: nil,
+               implementation_for: nil,
+               implemented_protocol: nil
              } = beam_info(beam_path)
 
       assert is_integer(digest)
     end
 
     test "page module" do
-      assert %{page?: true, component?: false} = beam_info(:code.which(Module2))
+      assert %{page?: true, component?: false, layout_module: Module4} =
+               beam_info(:code.which(Module2))
+    end
+
+    test "page module without a layout" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithoutLayout do def __is_hologram_page__, do: true end"
+        )
+
+      assert %{page?: true, layout_module: nil} = beam_info(bytecode)
+    end
+
+    test "page module whose layout function computes its value" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithComputedLayout do def __is_hologram_page__, do: true; def __layout_module__, do: Application.get_env(:hologram, :layout) end"
+        )
+
+      assert %{page?: true, layout_module: nil} = beam_info(bytecode)
     end
 
     test "component module" do
@@ -151,15 +178,23 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "protocol module" do
-      assert %{protocol?: true, protocol_implementation?: false} =
+      assert %{
+               protocol?: true,
+               protocol_implementation?: false,
+               protocol_functions: [to_string: 1]
+             } =
                beam_info(:code.which(String.Chars))
 
       assert protocol?(String.Chars)
     end
 
     test "protocol implementation module" do
-      assert %{protocol?: false, protocol_implementation?: true} =
-               beam_info(:code.which(Enumerable.Function))
+      assert %{
+               protocol?: false,
+               protocol_implementation?: true,
+               implementation_for: Function,
+               implemented_protocol: Enumerable
+             } = beam_info(:code.which(Enumerable.Function))
 
       assert protocol_implementation?(Enumerable.Function)
     end

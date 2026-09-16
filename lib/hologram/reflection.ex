@@ -44,6 +44,10 @@ defmodule Hologram.Reflection do
   a protocol, a protocol implementation, a struct, an exception or an Ecto schema. Each flag is the export
   table check that the `Reflection` predicate of the same name performs after loading the module, read from
   the file instead.
+  A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
+  are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
+  and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
+  when the function is missing or returns something that is not a literal.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
   source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
   and size are nil.
@@ -61,7 +65,11 @@ defmodule Hologram.Reflection do
         protocol_implementation?: false,
         struct?: false,
         exception?: false,
-        ecto_schema?: false
+        ecto_schema?: false,
+        layout_module: MyLayout,
+        protocol_functions: nil,
+        implementation_for: nil,
+        implemented_protocol: nil
       }
   """
   # TODO: Narrow the spec back to charlist, and rename the param back to
@@ -78,7 +86,11 @@ defmodule Hologram.Reflection do
             protocol_implementation?: boolean,
             struct?: boolean,
             exception?: boolean,
-            ecto_schema?: boolean
+            ecto_schema?: boolean,
+            layout_module: module | nil,
+            protocol_functions: list({atom, arity}) | nil,
+            implementation_for: module | nil,
+            implemented_protocol: module | nil
           }
           | nil
   def beam_info(beam_source) do
@@ -92,17 +104,34 @@ defmodule Hologram.Reflection do
       :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi"])
 
     if {:__info__, 1} in exports do
+      page? = {:__is_hologram_page__, 0} in exports
+      protocol? = {:__protocol__, 1} in exports
+      protocol_implementation? = {:__impl__, 1} in exports
+
+      # Only the kinds of module that have literals to read get their debug info decoded; a plain
+      # module's chunk is hashed as bytes and never decoded.
+      definitions =
+        if page? or protocol? or protocol_implementation? do
+          debug_info_definitions(dbgi_chunk)
+        else
+          []
+        end
+
       %{
         digest: :erlang.phash2(dbgi_chunk),
         mtime: mtime,
         size: size,
-        page?: {:__is_hologram_page__, 0} in exports,
+        page?: page?,
         component?: {:__is_hologram_component__, 0} in exports,
-        protocol?: {:__protocol__, 1} in exports,
-        protocol_implementation?: {:__impl__, 1} in exports,
+        protocol?: protocol?,
+        protocol_implementation?: protocol_implementation?,
         struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
         exception?: {:exception, 1} in exports and {:message, 1} in exports,
-        ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports
+        ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports,
+        layout_module: literal_return(definitions, :__layout_module__, []),
+        protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
+        implementation_for: literal_return(definitions, :__impl__, [:for]),
+        implemented_protocol: literal_return(definitions, :__impl__, [:protocol])
       }
     end
   end
@@ -823,6 +852,15 @@ defmodule Hologram.Reflection do
     end
   end
 
+  # The function definitions from an Elixir debug info chunk, each {{name, arity}, kind, meta,
+  # clauses} with clauses as {meta, args, guards, body} in expanded quoted form.
+  defp debug_info_definitions(dbgi_chunk) do
+    case :erlang.binary_to_term(dbgi_chunk) do
+      {:debug_info_v1, _backend, {:elixir_v1, %{definitions: definitions}, _specs}} -> definitions
+      _other -> []
+    end
+  end
+
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -847,6 +885,20 @@ defmodule Hologram.Reflection do
 
   # TODO: Remove together with beam_source/1 (see the removal note there), which
   # is its only caller.
+  # The value returned by the clause of the named function that takes exactly the given literal
+  # arguments and has no guard, when that value is a literal; nil when there is no such clause or
+  # the clause computes its value.
+  defp literal_return(definitions, name, args) do
+    with {_name_arity, _kind, _meta, clauses} <-
+           List.keyfind(definitions, {name, length(args)}, 0),
+         {_meta, _args, [], body} <- Enum.find(clauses, &match?({_meta, ^args, [], _body}, &1)),
+         true <- Macro.quoted_literal?(body) do
+      body
+    else
+      _no_literal -> nil
+    end
+  end
+
   defp object_code(module) do
     case :code.get_object_code(module) do
       {^module, binary, _beam_path} -> binary
