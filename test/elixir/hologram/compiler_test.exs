@@ -1162,6 +1162,48 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
+  test "create_page_entry_files/7 with the component modules given", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_components"])
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    build = fn opts ->
+      page_modules
+      |> create_page_entry_files(
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        MapSet.new(),
+        opts
+      )
+      |> Enum.map(fn {page_module, entry_file_path} ->
+        {page_module, File.read!(entry_file_path)}
+      end)
+    end
+
+    opts_with_components = Keyword.put(opts, :components, Reflection.list_components())
+
+    listed = build.(opts)
+    given = build.(opts_with_components)
+
+    assert given == listed
+  end
+
   test "create_runtime_entry_file/6", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,

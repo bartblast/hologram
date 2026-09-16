@@ -70,6 +70,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Agent.update(tracker, fn state -> %{state | current: state.current - 1} end)
   end
 
+  defp load_module_info_items(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+    assert File.exists?(dump_path)
+
+    plt = PLT.start()
+    PLT.load(plt, dump_path)
+    PLT.get_all(plt)
+  end
+
   defp setup_empty_assets_and_build_dirs(opts) do
     assets_dir = setup_empty_assets_dir()
     build_dir = setup_empty_build_dir()
@@ -100,7 +109,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_call_graph(opts)
     test_dirs(opts)
     test_js_deps(opts)
-    test_module_digest_plt(opts)
+    test_module_info_plt(opts)
     test_page_bundles(opts)
     test_page_digest_plt(opts)
     test_runtime_bundle(opts)
@@ -134,19 +143,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
            |> File.exists?()
   end
 
-  defp test_module_digest_plt(opts) do
-    module_digest_plt_dump_path =
-      Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+  defp test_module_info_plt(opts) do
+    module_info_items = load_module_info_items(opts)
 
-    assert File.exists?(module_digest_plt_dump_path)
+    assert map_size(module_info_items) > 1_000
 
-    module_digest_plt = PLT.start()
-    PLT.load(module_digest_plt, module_digest_plt_dump_path)
-    module_digest_items = PLT.get_all(module_digest_plt)
-
-    assert map_size(module_digest_items) > 1_000
-
-    assert is_integer(module_digest_items[Module1])
+    assert %{digest: digest, page?: true, component?: false} = module_info_items[Module1]
+    assert is_integer(digest)
   end
 
   defp test_old_build_static_artifacts_cleanup(opts) do
@@ -307,12 +310,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
     run(opts)
     test_build_artifacts(opts)
 
+    first_run_module_info = load_module_info_items(opts)[Module1]
+
     # Test case 2: when there are previous build artifacts
     generate_old_bundle("old_bundle_1", opts)
     generate_old_bundle("old_bundle_2", opts)
     run(opts)
     test_build_artifacts(opts)
     test_old_build_static_artifacts_cleanup(opts)
+
+    # Reused or re-read, an untouched module keeps its entry across runs
+    assert load_module_info_items(opts)[Module1] == first_run_module_info
   end
 
   test "stops the processes it spawns once compilation finishes", %{opts: initial_opts} do

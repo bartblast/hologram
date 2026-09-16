@@ -488,6 +488,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Creates page bundle entry file.
+  Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
+  passes the module info PLT's components.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
@@ -510,7 +512,7 @@ defmodule Hologram.Compiler do
         opts
       ) do
     graph = CallGraph.get_graph(call_graph)
-    templatables = page_modules ++ Reflection.list_components()
+    templatables = page_modules ++ (opts[:components] || Reflection.list_components())
 
     server_callback_analysis_by_templatable =
       CallGraph.server_callback_analysis_by_templatable(graph, templatables)
