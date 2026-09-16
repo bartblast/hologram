@@ -49,7 +49,7 @@ no previous dump (every beam read)                           5.59      178.92 ms
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_page_js/5        128.08        7.81 ms     ±8.80%        7.81 ms       10.20 ms
+build_page_js/5        175.66        5.69 ms    ±15.80%        5.48 ms        9.17 ms
 ```
 
 

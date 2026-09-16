@@ -49,9 +49,12 @@ Benchee.run(
 
     {mfas, ir_plt, PLT.start(), async_mfas, opts}
   end,
-  before_each: fn {_mfas, _ir_plt, encode_plt, _async_mfas, _opts} = input ->
-    # Every iteration starts from an empty encode PLT, the way a compile does.
+  before_each: fn {mfas, ir_plt, encode_plt, async_mfas, _opts} = input ->
+    # A compile encodes the reachable functions of all pages before it renders any page, so every
+    # iteration renders from an encode PLT filled for the page, and the encoding is left out of
+    # the measurement (encode_reachable_functions_4 measures it).
     PLT.reset(encode_plt)
+    Compiler.encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas)
 
     input
   end,
