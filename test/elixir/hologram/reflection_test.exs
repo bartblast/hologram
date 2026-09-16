@@ -245,6 +245,16 @@ defmodule Hologram.ReflectionTest do
 
   # TODO: Remove this describe when Hologram.Reflection.beam_source/1 goes (see
   # the removal note there).
+  test "beam_info_keys/0" do
+    keys =
+      Module1
+      |> :code.which()
+      |> beam_info()
+      |> Map.keys()
+
+    assert Enum.sort(beam_info_keys()) == Enum.sort(keys)
+  end
+
   describe "beam_source/1" do
     test "module whose beam file exists" do
       assert beam_source(Hologram.Reflection) == :code.which(Hologram.Reflection)

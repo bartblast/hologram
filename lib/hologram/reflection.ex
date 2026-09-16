@@ -3,6 +3,23 @@ defmodule Hologram.Reflection do
 
   alias Hologram.Commons.PLT
 
+  @beam_info_keys [
+    :digest,
+    :mtime,
+    :size,
+    :page?,
+    :component?,
+    :protocol?,
+    :protocol_implementation?,
+    :struct?,
+    :exception?,
+    :ecto_schema?,
+    :layout_module,
+    :protocol_functions,
+    :implementation_for,
+    :implemented_protocol
+  ]
+
   @call_graph_dump_file_name "call_graph.bin"
 
   @compiler_lock_file_name "hologram_compiler.lock"
@@ -135,6 +152,13 @@ defmodule Hologram.Reflection do
       }
     end
   end
+
+  @doc """
+  Returns the keys of a map returned by beam_info/1. A stored entry that lacks one of them was
+  written by an older Hologram and has to be read again.
+  """
+  @spec beam_info_keys() :: [atom, ...]
+  def beam_info_keys, do: @beam_info_keys
 
   # TODO: Remove together with Hologram.Compiler.resolve_beam_source/2 (see the
   # removal note there), consolidated_beam_removed?/1 and object_code/1 included.

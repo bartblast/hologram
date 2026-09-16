@@ -544,8 +544,8 @@ defmodule Hologram.CompilerTest do
 
     test "reuses the old entry when the BEAM is untouched and older than the dump" do
       beam_path = :code.which(Hologram.Reflection)
-      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
-      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1, page?: true}
       old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
 
       plt = build_module_info_plt!(old_plt, mtime + 1)
@@ -579,6 +579,19 @@ defmodule Hologram.CompilerTest do
       beam_path = :code.which(Hologram.Reflection)
       %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
       old_info = %{digest: 1, mtime: mtime - 1, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads the BEAM when the old entry lacks a key beam_info/1 returns now" do
+      # The entry shape a dump written by an older Hologram holds. A path dependency or the
+      # project itself keeps its build dir across Hologram changes, so such a dump can be read.
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
       old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
 
       plt = build_module_info_plt!(old_plt, mtime + 1)

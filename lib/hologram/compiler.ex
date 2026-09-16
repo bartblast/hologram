@@ -934,6 +934,13 @@ defmodule Hologram.Compiler do
     entry_file_path
   end
 
+  # A dump written by an older Hologram can hold entries without the keys added since. Fetched
+  # dependencies lose their build dir, dumps included, when Mix recompiles them, but a path
+  # dependency or the project itself keeps it, so the entry is checked rather than trusted.
+  defp current_module_info?(info) do
+    Enum.all?(Reflection.beam_info_keys(), &Map.has_key?(info, &1))
+  end
+
   defp edited_module?(old_infos, module, digest) do
     match?(%{digest: old_digest} when old_digest != digest, old_infos[module])
   end
@@ -1451,7 +1458,8 @@ defmodule Hologram.Compiler do
     with {:ok, %{mtime: mtime, size: size} = info} when is_integer(mtime) <-
            PLT.get(old_plt, module),
          {:ok, %File.Stat{mtime: ^mtime, size: ^size}} when mtime <= dumped_at - 1 <-
-           File.stat(beam_path, time: :posix) do
+           File.stat(beam_path, time: :posix),
+         true <- current_module_info?(info) do
       info
     else
       _fallback -> nil
