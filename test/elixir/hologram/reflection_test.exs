@@ -141,6 +141,7 @@ defmodule Hologram.ReflectionTest do
                struct?: false,
                exception?: false,
                ecto_schema?: false,
+               source_path: source_path,
                layout_module: nil,
                protocol_functions: nil,
                implementation_for: nil,
@@ -148,6 +149,12 @@ defmodule Hologram.ReflectionTest do
              } = beam_info(beam_path)
 
       assert is_integer(digest)
+      assert String.ends_with?(source_path, "test/elixir/support/fixtures/reflection/module_1.ex")
+    end
+
+    test "source path is the one the loaded module reports" do
+      assert beam_info(:code.which(Module1)).source_path == source_path(Module1)
+      assert beam_info(:code.which(Enum)).source_path == source_path(Enum)
     end
 
     test "page module" do
