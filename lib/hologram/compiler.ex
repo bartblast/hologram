@@ -176,6 +176,32 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds a persistent lookup table (PLT) holding, for every Elixir module in the project, the info the compiler
+  needs before building IR: see `Hologram.Reflection.beam_info/1` for the entry shape.
+
+  Each module's BEAM is read once. A module whose entry in `old_plt` has the same mtime and size as its BEAM
+  now, and whose BEAM was last written at least a second before `dumped_at` (the mtime of the dump `old_plt`
+  was loaded from, in posix seconds), reuses that entry without reading the BEAM. Pass nil as `dumped_at` to
+  read every BEAM.
+  """
+  @spec build_module_info_plt!(PLT.t(), non_neg_integer | nil, T.opts()) :: PLT.t()
+  def build_module_info_plt!(old_plt, dumped_at, opts \\ []) do
+    new_plt = PLT.start(opts)
+
+    # TODO: Remove this flag and the argument it feeds to
+    # rebuild_module_info_plt_entry!/5 when resolve_beam_source/2 goes (see
+    # the removal note there).
+    umbrella? = Reflection.umbrella?()
+
+    TaskUtils.map_concurrently(
+      Reflection.list_candidate_modules(),
+      &rebuild_module_info_plt_entry!(&1, old_plt, dumped_at, new_plt, umbrella?)
+    )
+
+    new_plt
+  end
+
+  @doc """
   Builds page digest PLT, where the keys represent page modules,
   and the values are hex digests of their corresponding JavaScript bundles.
   """
@@ -1199,6 +1225,20 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
+
+    # No beam: not a module of this project. Not reusable: read it. Read gives nil: not an Elixir module.
+    info =
+      beam_source &&
+        (reusable_module_info(module, beam_source, old_plt, dumped_at) ||
+           Reflection.beam_info(beam_source))
+
+    if info, do: PLT.put(new_plt, module, info)
+  end
+
   # Travels with the per-module metadata, which is emitted under the same
   # setting - a bundle built without client stacktraces names no application
   # and no version anywhere.
@@ -1360,9 +1400,10 @@ defmodule Hologram.Compiler do
   # pointing at purged consolidated beams. That means this function,
   # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
   # them by then), plus unwinding the umbrella? flag threaded through
-  # build_ir_plt/1, build_module_digest_plt!/1, patch_ir_plt!/2,
-  # rebuild_ir_plt_entry!/3 and rebuild_module_digest_plt_entry!/3 - their
-  # bodies go back to resolving the beam path with :code.which/1 directly.
+  # build_ir_plt/1, build_module_digest_plt!/1, build_module_info_plt!/3,
+  # patch_ir_plt!/2, rebuild_ir_plt_entry!/3, rebuild_module_digest_plt_entry!/3
+  # and rebuild_module_info_plt_entry!/5 - their bodies go back to resolving the
+  # beam path with :code.which/1 directly.
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
   defp resolve_beam_source(module, false) do
@@ -1372,6 +1413,25 @@ defmodule Hologram.Compiler do
       beam_path
     end
   end
+
+  # The previous entry is trusted only when the beam file looks untouched (same mtime and size) and was
+  # written at least a second before the previous dump: mtimes have whole-second resolution, so a beam
+  # rewritten during the dump's own second could match on both and still differ. A beam that came as a
+  # binary (see resolve_beam_source/2) has no file to stat and is always read, as is everything when
+  # there is no previous dump.
+  defp reusable_module_info(module, beam_path, old_plt, dumped_at)
+       when is_list(beam_path) and is_integer(dumped_at) do
+    with {:ok, %{mtime: mtime, size: size} = info} when is_integer(mtime) <-
+           PLT.get(old_plt, module),
+         {:ok, %File.Stat{mtime: ^mtime, size: ^size}} when mtime <= dumped_at - 1 <-
+           File.stat(beam_path, time: :posix) do
+      info
+    else
+      _fallback -> nil
+    end
+  end
+
+  defp reusable_module_info(_module, _beam_source, _old_plt, _dumped_at), do: nil
 
   defp validate_module_prop_usages(module, ir) do
     ir

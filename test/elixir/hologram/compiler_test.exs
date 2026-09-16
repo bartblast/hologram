@@ -513,6 +513,88 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_module_info_plt!/3" do
+    test "adds an entry for every Elixir module that has a BEAM, none for the rest" do
+      assert %PLT{} = plt = build_module_info_plt!(PLT.start(), nil)
+
+      assert %{digest: digest, page?: false, component?: false} =
+               PLT.get!(plt, Hologram.Reflection)
+
+      assert is_integer(digest)
+      assert PLT.get(plt, MyModule) == :error
+      assert PLT.get(plt, Kernel.SpecialForms) == :error
+    end
+
+    test "marks pages and components" do
+      plt = build_module_info_plt!(PLT.start(), nil)
+
+      assert %{page?: true} = PLT.get!(plt, Hologram.Test.Fixtures.Reflection.Module2)
+      assert %{component?: true} = PLT.get!(plt, Hologram.Test.Fixtures.Reflection.Module3)
+    end
+
+    test "entries match beam_info/1" do
+      plt = build_module_info_plt!(PLT.start(), nil)
+      beam_path = :code.which(Hologram.Reflection)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reuses the old entry when the BEAM is untouched and older than the dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == old_info
+    end
+
+    test "reads the BEAM when it was written within a second of the dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads the BEAM when its size differs from the old entry" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size + 1, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads the BEAM when its mtime differs from the old entry" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime - 1, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads every BEAM when there is no previous dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, nil)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+  end
+
   test "build_page_digest_plt/2" do
     build_dir = Path.join("/", "my_build_dir")
     opts = [build_dir: build_dir]

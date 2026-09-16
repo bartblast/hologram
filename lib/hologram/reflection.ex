@@ -365,13 +365,15 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists the names that may be Elixir modules in the given OTP apps, without checking any of them.
-  Modules listed in @ignored_modules module attribute are left out.
+  Lists the names that may be Elixir modules in the given OTP apps, without checking any of them beyond
+  the name: Erlang-named modules (no `Elixir.` prefix) and modules listed in @ignored_modules module
+  attribute are left out.
   """
   @spec list_candidate_modules(list(atom)) :: list(module)
   def list_candidate_modules(apps) do
     apps
     |> Enum.reduce([], &include_app_elixir_modules/2)
+    |> Enum.filter(&alias?/1)
     |> Kernel.--(@ignored_modules)
   end
 

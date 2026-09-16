@@ -408,12 +408,13 @@ defmodule Hologram.ReflectionTest do
   end
 
   describe "list_candidate_modules/1" do
-    test "includes the given apps' modules, Erlang ones too" do
+    test "includes the given apps' Elixir-named modules and no Erlang-named ones" do
       result = list_candidate_modules([:elixir, :stdlib])
 
       assert Kernel in result
       assert Calendar.ISO in result
-      assert :maps in result
+      refute :maps in result
+      refute :elixir_map in result
       refute Hologram.Reflection in result
     end
 
