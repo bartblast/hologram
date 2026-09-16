@@ -1895,7 +1895,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  describe "encode_module_metadata_registration/1" do
+  describe "encode_module_metadata_registration/2" do
     setup do
       on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
       :ok
@@ -1904,20 +1904,53 @@ defmodule Hologram.Compiler.EncoderTest do
     test "registers the metadata of each module the bundle defines" do
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      assert encode_module_metadata_registration([Hologram.Reflection]) ==
+      assert encode_module_metadata_registration([Hologram.Reflection], nil) ==
                ~s/ERTS.registerModuleMetadata({"Hologram.Reflection": {app: "hologram", file: "lib\/hologram\/reflection.ex"}});/
     end
 
     test "registers nothing when client stacktraces are disabled" do
       Application.put_env(:hologram, :client_stacktraces, false)
 
-      assert encode_module_metadata_registration([Hologram.Reflection]) == ""
+      assert encode_module_metadata_registration([Hologram.Reflection], nil) == ""
     end
 
     test "registers nothing for a module that can't be loaded" do
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      assert encode_module_metadata_registration([Aaa.Bbb]) == ""
+      assert encode_module_metadata_registration([Aaa.Bbb], nil) == ""
+    end
+
+    test "renders a module from the map without reading the module" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      module_metadata = %{Aaa.Bbb => %{app: :my_app, file: "lib/aaa/bbb.ex"}}
+
+      assert encode_module_metadata_registration([Aaa.Bbb], module_metadata) ==
+               ~s/ERTS.registerModuleMetadata({"Aaa.Bbb": {app: "my_app", file: "lib\/aaa\/bbb.ex"}});/
+    end
+
+    test "reads a module absent from the map from the loaded module" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert encode_module_metadata_registration([Hologram.Reflection], %{}) ==
+               encode_module_metadata_registration([Hologram.Reflection], nil)
+    end
+
+    test "omits an application the map does not know" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      module_metadata = %{Aaa.Bbb => %{app: nil, file: "x.ex"}}
+
+      assert encode_module_metadata_registration([Aaa.Bbb], module_metadata) ==
+               ~s/ERTS.registerModuleMetadata({"Aaa.Bbb": {file: "x.ex"}});/
+    end
+
+    test "registers nothing when client stacktraces are disabled, whatever the map holds" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      module_metadata = %{Aaa.Bbb => %{app: :my_app, file: "lib/aaa/bbb.ex"}}
+
+      assert encode_module_metadata_registration([Aaa.Bbb], module_metadata) == ""
     end
   end
 

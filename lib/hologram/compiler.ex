@@ -223,6 +223,8 @@ defmodule Hologram.Compiler do
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the page script imports
       from (required).
+    * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
+      it; the modules it does not hold are read from the loaded modules (default: none).
     * `:runtime_js_binding_modules` - modules whose JS imports are skipped when the imports are
       aggregated, because the runtime script, which every page loads, already registers their
       bindings (default: none).
@@ -261,7 +263,7 @@ defmodule Hologram.Compiler do
 
     module_metadata_registration =
       mfas
-      |> render_module_metadata_registration(ir_plt)
+      |> render_module_metadata_registration(ir_plt, opts[:module_metadata])
       |> render_block()
 
     """
@@ -330,7 +332,7 @@ defmodule Hologram.Compiler do
 
     module_metadata_registration =
       runtime_mfas
-      |> render_module_metadata_registration(ir_plt)
+      |> render_module_metadata_registration(ir_plt, nil)
       |> render_block()
 
     manually_ported_clause_heads =
@@ -1431,12 +1433,12 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_module_metadata_registration(mfas, ir_plt) do
+  defp render_module_metadata_registration(mfas, ir_plt, module_metadata) do
     mfas
     |> filter_elixir_mfas(ir_plt)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
-    |> Encoder.encode_module_metadata_registration()
+    |> Encoder.encode_module_metadata_registration(module_metadata)
   end
 
   defp render_erlang_function_defs(mfas, ir_plt, erlang_js_dir) do
