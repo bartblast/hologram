@@ -1396,6 +1396,30 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Digraph.vertices/1, :infinity)
   end
 
+  @doc """
+  Runs the function with a reader of the call graph's current graph, shared with every process
+  through :persistent_term: the graph is copied out of the Agent once, each call of the reader
+  returns it without copying, and it is released when the function returns or raises. The graph
+  is the one at the time of the call; edits made to the call graph meanwhile are not seen.
+
+  Pass the reader, not the graph, into the tasks that need it: a closure that captures the graph
+  copies it into every task it starts, and the reader captures only the key.
+  """
+  @spec with_shared_graph(t, ((-> Digraph.t()) -> result)) :: result when result: term
+  def with_shared_graph(%{pid: pid}, fun) do
+    key = {__MODULE__, make_ref()}
+
+    # The put runs in the Agent, so the graph goes from the Agent's heap straight into the
+    # shared area, and the caller never holds a copy.
+    Agent.get(pid, &:persistent_term.put(key, &1), :infinity)
+
+    try do
+      fun.(fn -> :persistent_term.get(key) end)
+    after
+      :persistent_term.erase(key)
+    end
+  end
+
   # TODO: think how to avoid this
   # A component module can be passed as a prop to another component, allowing dynamic usage.
   # In such cases, when this scenario is identified, it becomes necessary
