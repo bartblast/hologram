@@ -40,8 +40,8 @@ build_ir_plt/0          2.11      473.87 ms     ±1.43%      471.78 ms      490.
 
 ```
 Name                                                          ips        average  deviation         median         99th %
-previous dump, nothing changed (every entry reused)          7.96      125.66 ms    ±26.76%      114.85 ms      327.97 ms
-no previous dump (every beam read)                           5.33      187.49 ms    ±20.51%      172.58 ms      373.02 ms
+previous dump, nothing changed (every entry reused)          8.60      116.29 ms    ±21.17%      108.93 ms      241.02 ms
+no previous dump (every beam read)                           5.59      178.92 ms    ±14.63%      171.34 ms      272.53 ms
 ```
 
 

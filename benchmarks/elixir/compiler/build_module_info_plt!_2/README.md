@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
-    <td style="white-space: nowrap; text-align: right">7.96</td>
-    <td style="white-space: nowrap; text-align: right">125.66 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;26.76%</td>
-    <td style="white-space: nowrap; text-align: right">114.85 ms</td>
-    <td style="white-space: nowrap; text-align: right">327.97 ms</td>
+    <td style="white-space: nowrap; text-align: right">8.60</td>
+    <td style="white-space: nowrap; text-align: right">116.29 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;21.17%</td>
+    <td style="white-space: nowrap; text-align: right">108.93 ms</td>
+    <td style="white-space: nowrap; text-align: right">241.02 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no previous dump (every beam read)</td>
-    <td style="white-space: nowrap; text-align: right">5.33</td>
-    <td style="white-space: nowrap; text-align: right">187.49 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;20.51%</td>
-    <td style="white-space: nowrap; text-align: right">172.58 ms</td>
-    <td style="white-space: nowrap; text-align: right">373.02 ms</td>
+    <td style="white-space: nowrap; text-align: right">5.59</td>
+    <td style="white-space: nowrap; text-align: right">178.92 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;14.63%</td>
+    <td style="white-space: nowrap; text-align: right">171.34 ms</td>
+    <td style="white-space: nowrap; text-align: right">272.53 ms</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
-    <td style="white-space: nowrap;text-align: right">7.96</td>
+    <td style="white-space: nowrap;text-align: right">8.60</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no previous dump (every beam read)</td>
-    <td style="white-space: nowrap; text-align: right">5.33</td>
-    <td style="white-space: nowrap; text-align: right">1.49x</td>
+    <td style="white-space: nowrap; text-align: right">5.59</td>
+    <td style="white-space: nowrap; text-align: right">1.54x</td>
   </tr>
 
 </table>
