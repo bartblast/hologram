@@ -470,7 +470,9 @@ defmodule Hologram.Compiler do
   Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
   passes the module info PLT's components.
   The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
-  copies it.
+  copies it. Every page's reachable MFAs are listed first, their functions are encoded into the
+  encode PLT with one IR read per module (`encode_reachable_functions/4`), and then the pages are
+  rendered from that cache.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
   """
@@ -505,16 +507,31 @@ defmodule Hologram.Compiler do
           module_info_plt
         )
 
-      TaskUtils.map_concurrently(page_modules, fn page_module ->
+      # Listing a page's MFAs is a cheap graph walk, and knowing every page's before rendering any
+      # lets each module's IR be read once for all pages, rather than by every page that finds one
+      # of its functions missing, concurrently with the others.
+      mfas_by_page =
+        TaskUtils.map_concurrently(page_modules, fn page_module ->
+          mfas =
+            CallGraph.list_page_mfas(
+              read_graph.(),
+              page_module,
+              server_callback_analysis_by_templatable,
+              module_info_plt
+            )
+
+          {page_module, mfas}
+        end)
+
+      mfas_by_page
+      |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
+      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas)
+
+      TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
         entry_name = Reflection.module_name(page_module)
 
         entry_file_path =
-          read_graph.()
-          |> CallGraph.list_page_mfas(
-            page_module,
-            server_callback_analysis_by_templatable,
-            module_info_plt
-          )
+          mfas
           |> build_page_js(ir_plt, encode_plt, async_mfas,
             js_dir: opts[:js_dir],
             runtime_js_binding_modules: runtime_js_binding_modules

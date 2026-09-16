@@ -1317,6 +1317,84 @@ defmodule Hologram.CompilerTest do
     assert count_shared_graphs.() == shared_graphs_before
   end
 
+  test "create_page_entry_files/7 reads each module's IR once for all pages", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_reads"])
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    server_callback_analysis_by_templatable =
+      CallGraph.server_callback_analysis_by_templatable(
+        graph,
+        page_modules ++ Reflection.list_components(),
+        module_info_plt
+      )
+
+    # The Elixir modules each page reaches, split into protocols, which are read and rendered per
+    # page, and the rest, which are read once for all pages.
+    modules_by_page =
+      Enum.map(page_modules, fn page_module ->
+        graph
+        |> CallGraph.list_page_mfas(
+          page_module,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+        |> Enum.map(fn {module, _function, _arity} -> module end)
+        |> Enum.uniq()
+        |> Enum.filter(&Reflection.elixir_module?(&1, ir_plt))
+      end)
+
+    {protocol_modules, other_modules} =
+      modules_by_page
+      |> List.flatten()
+      |> Enum.uniq()
+      |> Enum.split_with(&Reflection.protocol?/1)
+
+    protocol_reads =
+      modules_by_page
+      |> List.flatten()
+      |> Enum.count(&(&1 in protocol_modules))
+
+    # Call counts are kept per function for every process, so the tasks are counted too.
+    :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
+
+    try do
+      create_page_entry_files(
+        page_modules,
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        MapSet.new(),
+        opts
+      )
+
+      assert other_modules != []
+
+      assert :erlang.trace_info({PLT, :get!, 2}, :call_count) ==
+               {:call_count, length(other_modules) + protocol_reads}
+    after
+      :erlang.trace_pattern({PLT, :get!, 2}, false, [:call_count])
+    end
+  end
+
   test "create_page_entry_files/7 with the component modules given", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
