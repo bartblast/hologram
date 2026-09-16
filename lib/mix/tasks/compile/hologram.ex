@@ -135,7 +135,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       ir_plt = Compiler.build_ir_plt(modules: modules, supervisor: sup)
 
       {call_graph, call_graph_dump_path} =
-        Compiler.maybe_load_call_graph(build_dir, supervisor: sup)
+        Compiler.maybe_load_call_graph(build_dir,
+          module_infos: Compiler.module_infos(new_module_info_plt),
+          supervisor: sup
+        )
 
       call_graph
       |> CallGraph.patch(ir_plt, module_digests_diff)

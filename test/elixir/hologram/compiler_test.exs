@@ -230,7 +230,11 @@ defmodule Hologram.CompilerTest do
       templatables = Reflection.list_pages() ++ Reflection.list_components()
 
       server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+        CallGraph.server_callback_analysis_by_templatable(
+          graph,
+          templatables,
+          CallGraph.module_infos(call_graph)
+        )
 
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
       [
@@ -456,6 +460,13 @@ defmodule Hologram.CompilerTest do
     assert %CallGraph{} = call_graph = build_call_graph()
 
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
+  end
+
+  test "build_call_graph/2", %{ir_plt: ir_plt} do
+    module_infos = %{Hologram.Test.Fixtures.Compiler.Module14 => %{page?: true}}
+
+    assert %CallGraph{} = call_graph = build_call_graph(ir_plt, module_infos)
+    assert CallGraph.module_infos(call_graph) == module_infos
   end
 
   describe "build_call_graph/1" do

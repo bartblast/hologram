@@ -505,7 +505,11 @@ defmodule Hologram.Compiler do
     templatables = page_modules ++ (opts[:components] || Reflection.list_components())
 
     server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+      CallGraph.server_callback_analysis_by_templatable(
+        graph,
+        templatables,
+        CallGraph.module_infos(call_graph)
+      )
 
     TaskUtils.map_concurrently(page_modules, fn page_module ->
       entry_name = Reflection.module_name(page_module)

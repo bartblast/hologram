@@ -61,7 +61,14 @@ defmodule Hologram.Compiler.CallGraphTest do
   @tmp_dir Reflection.tmp_dir()
 
   defp app_protocol_dispatch_types_with_analysis(graph) do
-    app_protocol_dispatch_types(graph, Reflection.list_pages(), broadcast_caller_analysis(graph))
+    module_infos = module_infos_fixture()
+
+    app_protocol_dispatch_types(
+      graph,
+      Reflection.list_pages(),
+      broadcast_caller_analysis(graph, module_infos),
+      module_infos
+    )
   end
 
   # The Erlang functions each ported module calls, taken from the "Deps" comment
@@ -90,9 +97,25 @@ defmodule Hologram.Compiler.CallGraphTest do
     templatables = [page_module | Reflection.list_components()]
 
     server_callback_analysis_by_templatable =
-      server_callback_analysis_by_templatable(graph, templatables)
+      server_callback_analysis_by_templatable(graph, templatables, module_infos_fixture())
 
     list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+  end
+
+  # The module facts of the fixture app, read once per test run: the call graph functions
+  # answer module questions from these instead of loading modules.
+  defp module_infos_fixture do
+    case :persistent_term.get({__MODULE__, :module_infos}, nil) do
+      nil ->
+        module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
+        module_infos = Compiler.module_infos(module_info_plt)
+        PLT.stop(module_info_plt)
+        :persistent_term.put({__MODULE__, :module_infos}, module_infos)
+        module_infos
+
+      module_infos ->
+        module_infos
+    end
   end
 
   # An End marker paired with the Deps comment under it, yielding one
@@ -125,10 +148,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   setup_all do
-    module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
-    module_infos = Compiler.module_infos(module_info_plt)
-    PLT.stop(module_info_plt)
-
+    module_infos = module_infos_fixture()
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt, module_infos)
     runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph, Reflection.list_pages())
@@ -185,7 +205,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
-  describe "app_protocol_dispatch_types/3" do
+  describe "app_protocol_dispatch_types/4" do
     test "includes types reachable from page client code" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
 
@@ -229,11 +249,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "returns only built-in types for a graph without app type references" do
       graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
 
-      assert app_protocol_dispatch_types_with_analysis(graph) == protocol_dispatch_types([])
+      assert app_protocol_dispatch_types_with_analysis(graph) ==
+               protocol_dispatch_types([], module_infos_fixture())
     end
   end
 
-  describe "broadcast_caller_analysis/1" do
+  describe "broadcast_caller_analysis/2" do
     test "includes struct types reachable from broadcast_action callers" do
       graph =
         Digraph.new()
@@ -243,7 +264,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :my_fun, 0}, {Module7, :my_fun, 0})
         |> Digraph.add_edge({Module7, :my_fun, 0}, Module12)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert Struct1 in result.dispatch_types
       assert Module12 in result.dispatch_types
@@ -257,7 +278,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 4})
         |> Digraph.add_edge({Module6, :my_fun, 0}, Module12)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert Struct1 in result.dispatch_types
       assert Module12 in result.dispatch_types
@@ -271,7 +292,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
         |> Digraph.add_edge({Module6, :my_fun, 0}, Module4)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert Enum.sort(result.referenced_components) == [Module15, Module4]
     end
@@ -284,7 +305,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :command, 3}, {Component, :put_broadcast, 4})
         |> Digraph.add_edge({Module6, :command, 3}, Module4)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert Enum.sort(result.referenced_components) == [Module15, Module4]
     end
@@ -297,7 +318,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :command, 3}, {Component, :put_broadcast_except, 5})
         |> Digraph.add_edge({Module6, :command, 3}, Module4)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert Enum.sort(result.referenced_components) == [Module15, Module4]
     end
@@ -308,7 +329,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
         |> Digraph.add_edge({Module5, :my_fun, 0}, Module12)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert result.referenced_components == []
     end
@@ -319,7 +340,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
         |> Digraph.add_edge({Module5, :my_fun, 0}, Module14)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       assert result.referenced_components == []
     end
@@ -330,9 +351,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
         |> Digraph.add_edge({Module5, :my_fun, 0}, Module15)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
-      assert result.dispatch_types == protocol_dispatch_types([])
+      assert result.dispatch_types == protocol_dispatch_types([], module_infos_fixture())
       assert result.referenced_components == []
     end
 
@@ -344,7 +365,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Module15)
 
-      result = broadcast_caller_analysis(graph)
+      result = broadcast_caller_analysis(graph, module_infos_fixture())
 
       refute Struct1 in result.dispatch_types
       refute Module15 in result.referenced_components
@@ -2328,12 +2349,18 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "protocol_dispatch_dependency_vertices/2" do
+  describe "protocol_dispatch_dependency_vertices/3" do
     test "retains dispatch helpers of reached protocol functions", %{
       full_call_graph: call_graph
     } do
       graph = get_graph(call_graph)
-      result = protocol_dispatch_dependency_vertices(graph, [{String.Chars, :to_string, 1}])
+
+      result =
+        protocol_dispatch_dependency_vertices(
+          graph,
+          [{String.Chars, :to_string, 1}],
+          module_infos_fixture()
+        )
 
       assert {String.Chars, :impl_for, 1} in result
       assert {String.Chars, :impl_for!, 1} in result
@@ -2343,7 +2370,13 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "doesn't pull protocol implementations", %{full_call_graph: call_graph} do
       graph = get_graph(call_graph)
-      result = protocol_dispatch_dependency_vertices(graph, [{String.Chars, :to_string, 1}])
+
+      result =
+        protocol_dispatch_dependency_vertices(
+          graph,
+          [{String.Chars, :to_string, 1}],
+          module_infos_fixture()
+        )
 
       refute {StringCharsModule12, :to_string, 1} in result
       refute {String.Chars.URI, :to_string, 1} in result
@@ -2354,13 +2387,17 @@ defmodule Hologram.Compiler.CallGraphTest do
     } do
       graph = get_graph(call_graph)
 
-      assert protocol_dispatch_dependency_vertices(graph, [{Module5, :my_fun, 0}]) == []
+      assert protocol_dispatch_dependency_vertices(
+               graph,
+               [{Module5, :my_fun, 0}],
+               module_infos_fixture()
+             ) == []
     end
   end
 
-  describe "protocol_dispatch_types/1" do
+  describe "protocol_dispatch_types/2" do
     test "includes built-in protocol dispatch types" do
-      assert protocol_dispatch_types([]) ==
+      assert protocol_dispatch_types([], module_infos_fixture()) ==
                MapSet.new([
                  Any,
                  Atom,
@@ -2378,27 +2415,33 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "includes struct modules among module vertices" do
-      assert Struct1 in protocol_dispatch_types([Struct1])
+      assert Struct1 in protocol_dispatch_types([Struct1], module_infos_fixture())
     end
 
     test "excludes non-struct modules among module vertices" do
-      refute Module1 in protocol_dispatch_types([Module1])
+      refute Module1 in protocol_dispatch_types([Module1], module_infos_fixture())
     end
 
     test "excludes non-alias atom vertices" do
-      refute :abc in protocol_dispatch_types([:abc])
+      refute :abc in protocol_dispatch_types([:abc], module_infos_fixture())
     end
 
     test "includes modules of __struct__/0 MFAs" do
-      assert Struct1 in protocol_dispatch_types([{Struct1, :__struct__, 0}])
+      assert Struct1 in protocol_dispatch_types(
+               [{Struct1, :__struct__, 0}],
+               module_infos_fixture()
+             )
     end
 
     test "includes modules of __struct__/1 MFAs" do
-      assert Struct1 in protocol_dispatch_types([{Struct1, :__struct__, 1}])
+      assert Struct1 in protocol_dispatch_types(
+               [{Struct1, :__struct__, 1}],
+               module_infos_fixture()
+             )
     end
 
     test "excludes modules of MFAs other than __struct__/0 and __struct__/1" do
-      refute Struct1 in protocol_dispatch_types([{Struct1, :my_fun, 1}])
+      refute Struct1 in protocol_dispatch_types([{Struct1, :my_fun, 1}], module_infos_fixture())
     end
   end
 
@@ -2409,7 +2452,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == graph
   end
 
-  describe "reachable_mfas/3" do
+  describe "reachable_mfas/4" do
     test "includes implementations for built-in types when their protocol is reached", %{
       full_call_graph: full_call_graph
     } do
@@ -2419,7 +2462,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
 
       assert {Protocol1, :my_fun, 1} in result
       assert {Protocol1.Integer, :__impl__, 1} in result
@@ -2435,7 +2479,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
+
       struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
       refute {struct_1_impl, :__impl__, 1} in result
@@ -2452,7 +2498,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module5, :my_fun, 0}, Struct1)
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
+
       struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
       assert {struct_1_impl, :__impl__, 1} in result
@@ -2469,7 +2517,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> get_graph()
 
       extra_types = MapSet.new([Struct1])
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}], extra_types)
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}], extra_types, module_infos_fixture())
       struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
       assert {struct_1_impl, :__impl__, 1} in result
@@ -2490,7 +2538,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -2509,7 +2558,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module5, :my_fun, 0}, Struct1)
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
 
       assert Enum.count(result, &(&1 == {struct_1_impl, :my_fun, 1})) == 1
     end
@@ -2523,7 +2573,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
 
       assert {String.Chars, :impl_for, 1} in result
       assert {String.Chars, :impl_for!, 1} in result
@@ -2538,7 +2589,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module5, :my_fun, 0}, Struct1)
         |> get_graph()
 
-      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_infos_fixture())
 
       refute Enum.any?(result, &is_atom/1)
     end
@@ -2642,14 +2694,15 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
-  describe "server_callback_analysis_by_templatable/2" do
+  describe "server_callback_analysis_by_templatable/3" do
     test "returns an entry for each given templatable" do
       graph =
         Digraph.new()
         |> Digraph.add_edge({Module2, :init, 3}, Struct1)
         |> Digraph.add_edge({Module4, :command, 3}, Module12)
 
-      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+      result =
+        server_callback_analysis_by_templatable(graph, [Module2, Module4], module_infos_fixture())
 
       analyzed_templatables =
         result
@@ -2665,7 +2718,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :init, 3}, Struct1)
         |> Digraph.add_edge({Module4, :command, 3}, Module12)
 
-      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+      result =
+        server_callback_analysis_by_templatable(graph, [Module2, Module4], module_infos_fixture())
 
       assert Struct1 in result[Module2].dispatch_types
       refute Module12 in result[Module2].dispatch_types
@@ -2680,7 +2734,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Module5, :__schema__, 1})
 
-      result = server_callback_analysis_by_templatable(graph, [Module2])
+      result = server_callback_analysis_by_templatable(graph, [Module2], module_infos_fixture())
 
       assert result[Module2].reflection_mfas == [{Module5, :__schema__, 1}]
     end
@@ -2688,7 +2742,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "doesn't collect reflection MFAs reachable only from command/3" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Module5, :__schema__, 1})
 
-      result = server_callback_analysis_by_templatable(graph, [Module2])
+      result = server_callback_analysis_by_templatable(graph, [Module2], module_infos_fixture())
 
       assert result[Module2].reflection_mfas == []
     end
@@ -2699,7 +2753,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :init, 3}, Module15)
         |> Digraph.add_edge({Module4, :command, 3}, Module3)
 
-      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+      result =
+        server_callback_analysis_by_templatable(graph, [Module2, Module4], module_infos_fixture())
 
       assert result[Module2].server_referenced_components == [Module15]
       assert result[Module4].server_referenced_components == [Module3]
@@ -2708,7 +2763,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "doesn't collect non-component modules referenced in server callbacks" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Module5)
 
-      result = server_callback_analysis_by_templatable(graph, [Module2])
+      result = server_callback_analysis_by_templatable(graph, [Module2], module_infos_fixture())
 
       assert result[Module2].server_referenced_components == []
     end
@@ -2716,7 +2771,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "doesn't collect page modules referenced in server callbacks" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Module14)
 
-      result = server_callback_analysis_by_templatable(graph, [Module2])
+      result = server_callback_analysis_by_templatable(graph, [Module2], module_infos_fixture())
 
       assert result[Module2].server_referenced_components == []
     end
@@ -2727,26 +2782,26 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Module15)
 
-      result = server_callback_analysis_by_templatable(graph, [Module2])
+      result = server_callback_analysis_by_templatable(graph, [Module2], module_infos_fixture())
 
       assert result[Module2].server_referenced_components == []
     end
   end
 
-  describe "server_protocol_dispatch_types/2" do
+  describe "server_protocol_dispatch_types/3" do
     test "includes struct types reachable from init/3" do
       graph =
         Digraph.new()
         |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
         |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
 
-      assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
+      assert Struct1 in server_protocol_dispatch_types(graph, [Module2], module_infos_fixture())
     end
 
     test "includes struct types reachable from command/3" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Struct1, :__struct__, 1})
 
-      assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
+      assert Struct1 in server_protocol_dispatch_types(graph, [Module2], module_infos_fixture())
     end
 
     test "harvests types from all given templatables" do
@@ -2755,7 +2810,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :init, 3}, Struct1)
         |> Digraph.add_edge({Module4, :command, 3}, Module12)
 
-      result = server_protocol_dispatch_types(graph, [Module2, Module4])
+      result = server_protocol_dispatch_types(graph, [Module2, Module4], module_infos_fixture())
 
       assert Struct1 in result
       assert Module12 in result
@@ -2764,7 +2819,8 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "returns only built-in types when init/3 and command/3 vertices don't exist" do
       graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
 
-      assert server_protocol_dispatch_types(graph, [Module2]) == protocol_dispatch_types([])
+      assert server_protocol_dispatch_types(graph, [Module2], module_infos_fixture()) ==
+               protocol_dispatch_types([], module_infos_fixture())
     end
 
     test "doesn't traverse through protocol function vertices" do
@@ -2773,7 +2829,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
 
-      refute Struct1 in server_protocol_dispatch_types(graph, [Module2])
+      refute Struct1 in server_protocol_dispatch_types(graph, [Module2], module_infos_fixture())
     end
   end
 
