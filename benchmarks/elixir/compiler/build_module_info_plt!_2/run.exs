@@ -22,7 +22,7 @@ Benchee.run(
              Reflection.tmp_dir(),
              "benchmarks",
              "compiler",
-             "build_module_info_plt!_3"
+             "build_module_info_plt!_2"
            ])
 
          FileUtils.recreate_dir(build_dir)
@@ -45,7 +45,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.build_module_info_plt!/3",
+     description: "Hologram.Compiler.build_module_info_plt!/2",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10
