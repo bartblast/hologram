@@ -496,6 +496,8 @@ defmodule Hologram.Compiler do
   Creates page bundle entry file.
   Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
   passes the module info PLT's components.
+  The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
+  copies it.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
@@ -517,34 +519,38 @@ defmodule Hologram.Compiler do
         runtime_js_binding_modules,
         opts
       ) do
-    graph = CallGraph.get_graph(call_graph)
+    module_info_plt = CallGraph.module_info_plt(call_graph)
     templatables = page_modules ++ (opts[:components] || Reflection.list_components())
 
-    server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(
-        graph,
-        templatables,
-        CallGraph.module_info_plt(call_graph)
-      )
-
-    TaskUtils.map_concurrently(page_modules, fn page_module ->
-      entry_name = Reflection.module_name(page_module)
-
-      entry_file_path =
-        page_module
-        |> build_page_js(
-          CallGraph.get_graph(call_graph),
-          CallGraph.module_info_plt(call_graph),
-          ir_plt,
-          encode_plt,
-          async_mfas,
-          server_callback_analysis_by_templatable,
-          js_dir: opts[:js_dir],
-          runtime_js_binding_modules: runtime_js_binding_modules
+    # The tasks get the reader, which captures only the shared graph's key: a closure that
+    # captured the graph itself would copy it into every task it starts.
+    CallGraph.with_shared_graph(call_graph, fn read_graph ->
+      server_callback_analysis_by_templatable =
+        CallGraph.server_callback_analysis_by_templatable(
+          read_graph.(),
+          templatables,
+          module_info_plt
         )
-        |> create_entry_file(entry_name, opts[:tmp_dir])
 
-      {page_module, entry_file_path}
+      TaskUtils.map_concurrently(page_modules, fn page_module ->
+        entry_name = Reflection.module_name(page_module)
+
+        entry_file_path =
+          page_module
+          |> build_page_js(
+            read_graph.(),
+            module_info_plt,
+            ir_plt,
+            encode_plt,
+            async_mfas,
+            server_callback_analysis_by_templatable,
+            js_dir: opts[:js_dir],
+            runtime_js_binding_modules: runtime_js_binding_modules
+          )
+          |> create_entry_file(entry_name, opts[:tmp_dir])
+
+        {page_module, entry_file_path}
+      end)
     end)
   end
 

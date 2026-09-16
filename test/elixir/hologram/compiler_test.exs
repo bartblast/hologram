@@ -1180,6 +1180,65 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
+  test "create_page_entry_files/7 asks the call graph for its graph once and releases it", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_shared"])
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    %CallGraph{pid: pid} =
+      call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    count_shared_graphs = fn ->
+      Enum.count(:persistent_term.get(), &match?({{CallGraph, _ref}, _graph}, &1))
+    end
+
+    shared_graphs_before = count_shared_graphs.()
+
+    # Only the call graph's own process is traced, for the messages it receives.
+    :erlang.trace(pid, true, [:receive])
+
+    try do
+      create_page_entry_files(
+        page_modules,
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        MapSet.new(),
+        opts
+      )
+    after
+      :erlang.trace(pid, false, [:receive])
+    end
+
+    ref = :erlang.trace_delivered(pid)
+    assert_receive {:trace_delivered, ^pid, ^ref}
+
+    {:messages, messages} = Process.info(self(), :messages)
+
+    graph_requests =
+      Enum.count(
+        messages,
+        &match?({:trace, ^pid, :receive, {:"$gen_call", _from, {:get, _fun}}}, &1)
+      )
+
+    assert length(page_modules) > 1
+    assert graph_requests == 1
+    assert count_shared_graphs.() == shared_graphs_before
+  end
+
   test "create_page_entry_files/7 with the component modules given", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
