@@ -41,7 +41,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
       CallGraph.server_callback_analysis_by_templatable(
         graph,
         templatables,
-        CallGraph.module_infos(call_graph)
+        CallGraph.module_info_plt(call_graph)
       )
 
     call_graph

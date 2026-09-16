@@ -233,7 +233,7 @@ defmodule Hologram.CompilerTest do
         CallGraph.server_callback_analysis_by_templatable(
           graph,
           templatables,
-          CallGraph.module_infos(call_graph)
+          CallGraph.module_info_plt(call_graph)
         )
 
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
@@ -463,10 +463,11 @@ defmodule Hologram.CompilerTest do
   end
 
   test "build_call_graph/2", %{ir_plt: ir_plt} do
-    module_infos = %{Hologram.Test.Fixtures.Compiler.Module14 => %{page?: true}}
+    module_info_plt = PLT.put(PLT.start(), Module14, %{page?: true})
 
-    assert %CallGraph{} = call_graph = build_call_graph(ir_plt, module_infos)
-    assert CallGraph.module_infos(call_graph) == module_infos
+    assert %CallGraph{} = call_graph = build_call_graph(ir_plt, module_info_plt)
+    assert CallGraph.module_info_plt(call_graph) == module_info_plt
+    assert CallGraph.has_edge?(call_graph, Module14, {Module14, :__route__, 0})
   end
 
   describe "build_call_graph/1" do
@@ -1678,17 +1679,6 @@ defmodule Hologram.CompilerTest do
       assert {plt = %PLT{}, ^dump_path, ^dumped_at} = maybe_load_module_info_plt(build_dir)
       assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
-  end
-
-  test "module_infos/1" do
-    info = %{digest: 1, mtime: 1, size: 1, page?: false, component?: false}
-
-    plt =
-      PLT.start()
-      |> PLT.put(Module1, info)
-      |> PLT.put(Module2, %{info | page?: true})
-
-    assert module_infos(plt) == %{Module1 => info, Module2 => %{info | page?: true}}
   end
 
   describe "patch_ir_plt!/3" do

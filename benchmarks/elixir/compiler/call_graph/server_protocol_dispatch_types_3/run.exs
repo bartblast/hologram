@@ -6,11 +6,11 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "1 templatable" => fn {graph, _templatables, module_infos} ->
-      CallGraph.server_protocol_dispatch_types(graph, [Page1], module_infos)
+    "1 templatable" => fn {graph, _templatables, module_info_plt} ->
+      CallGraph.server_protocol_dispatch_types(graph, [Page1], module_info_plt)
     end,
-    "all templatables" => fn {graph, templatables, module_infos} ->
-      CallGraph.server_protocol_dispatch_types(graph, templatables, module_infos)
+    "all templatables" => fn {graph, templatables, module_info_plt} ->
+      CallGraph.server_protocol_dispatch_types(graph, templatables, module_info_plt)
     end
   },
   before_scenario: fn _input ->
@@ -18,7 +18,7 @@ Benchee.run(
     graph = CallGraph.get_graph(call_graph)
     templatables = [DefaultLayout | Reflection.list_pages()]
 
-    {graph, templatables, CallGraph.module_infos(call_graph)}
+    {graph, templatables, CallGraph.module_info_plt(call_graph)}
   end,
   formatters: [
     Benchee.Formatters.Console,

@@ -4,8 +4,8 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "server_callback_analysis_by_templatable/3" => fn {graph, templatables, module_infos} ->
-      CallGraph.server_callback_analysis_by_templatable(graph, templatables, module_infos)
+    "server_callback_analysis_by_templatable/3" => fn {graph, templatables, module_info_plt} ->
+      CallGraph.server_callback_analysis_by_templatable(graph, templatables, module_info_plt)
     end
   },
   before_scenario: fn _input ->
@@ -18,7 +18,7 @@ Benchee.run(
     graph = CallGraph.get_graph(call_graph_for_pages)
     templatables = pages ++ Reflection.list_components()
 
-    {graph, templatables, CallGraph.module_infos(call_graph)}
+    {graph, templatables, CallGraph.module_info_plt(call_graph)}
   end,
   formatters: [
     Benchee.Formatters.Console,

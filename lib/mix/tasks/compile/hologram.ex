@@ -136,7 +136,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {call_graph, call_graph_dump_path} =
         Compiler.maybe_load_call_graph(build_dir,
-          module_infos: Compiler.module_infos(new_module_info_plt),
+          module_info_plt: new_module_info_plt,
           supervisor: sup
         )
 

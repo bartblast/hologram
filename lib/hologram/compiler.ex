@@ -100,26 +100,24 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the call graph of all modules in the given IR PLT, reading the module facts it needs
-  (see `module_infos/1`) from a module info PLT built on the spot.
+  Builds the call graph of all modules in the given IR PLT, reading its module facts from a module info
+  PLT built on the spot. That PLT stays up for as long as the call graph is used (it is linked to the
+  calling process, like every PLT); the compile task builds its own instead and passes it to
+  `build_call_graph/2`.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_call_graph_1/README.md
   """
   @spec build_call_graph(PLT.t()) :: CallGraph.t()
   def build_call_graph(ir_plt) do
-    module_info_plt = build_module_info_plt!(PLT.start(), nil)
-    call_graph = build_call_graph(ir_plt, module_infos(module_info_plt))
-    PLT.stop(module_info_plt)
-
-    call_graph
+    build_call_graph(ir_plt, build_module_info_plt!(PLT.start(), nil))
   end
 
   @doc """
-  Builds the call graph of all modules in the given IR PLT with the given module facts.
+  Builds the call graph of all modules in the given IR PLT with the given module info PLT as its module facts.
   """
-  @spec build_call_graph(PLT.t(), CallGraph.module_infos()) :: CallGraph.t()
-  def build_call_graph(ir_plt, module_infos) do
-    call_graph = CallGraph.start(module_infos: module_infos)
+  @spec build_call_graph(PLT.t(), PLT.t()) :: CallGraph.t()
+  def build_call_graph(ir_plt, module_info_plt) do
+    call_graph = CallGraph.start(module_info_plt: module_info_plt)
 
     ir_plt
     |> PLT.get_all()
@@ -508,7 +506,7 @@ defmodule Hologram.Compiler do
       CallGraph.server_callback_analysis_by_templatable(
         graph,
         templatables,
-        CallGraph.module_infos(call_graph)
+        CallGraph.module_info_plt(call_graph)
       )
 
     TaskUtils.map_concurrently(page_modules, fn page_module ->
@@ -772,15 +770,6 @@ defmodule Hologram.Compiler do
     PLT.maybe_load(plt, dump_path)
 
     {plt, dump_path, dumped_at}
-  end
-
-  @doc """
-  Returns the entries of the given module info PLT as one map, module to info, which is what the call graph
-  takes as its module facts (see `Hologram.Compiler.CallGraph.start/1`).
-  """
-  @spec module_infos(PLT.t()) :: CallGraph.module_infos()
-  def module_infos(module_info_plt) do
-    PLT.get_all(module_info_plt)
   end
 
   @doc """
