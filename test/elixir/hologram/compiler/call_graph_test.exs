@@ -99,7 +99,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     server_callback_analysis_by_templatable =
       server_callback_analysis_by_templatable(graph, templatables, module_info_plt_fixture())
 
-    list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+    list_page_mfas(
+      graph,
+      page_module,
+      server_callback_analysis_by_templatable,
+      CallGraph.module_info_plt(call_graph)
+    )
   end
 
   # The module info PLT of the fixture app, started once per test run in setup_all (whose
@@ -1523,7 +1528,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "list_page_mfas/3" do
+  describe "list_page_mfas/4" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =
         full_call_graph
@@ -3140,6 +3145,81 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_3 in result
     assert :vertex_4 in result
     assert :vertex_5 in result
+  end
+
+  describe "with_shared_graph/2" do
+    # The shared key under which the given graph is stored, found by the graph, which each test
+    # makes unique with a fresh reference vertex, so tests running meanwhile cannot be mistaken
+    # for it.
+    defp shared_graph_key(graph) do
+      Enum.find_value(:persistent_term.get(), fn
+        {{CallGraph, _ref} = key, ^graph} -> key
+        _other -> nil
+      end)
+    end
+
+    setup %{empty_call_graph: call_graph} do
+      add_edge(call_graph, make_ref(), :vertex_1)
+
+      :ok
+    end
+
+    test "the reader returns the graph at the time of the call", %{empty_call_graph: call_graph} do
+      graph = get_graph(call_graph)
+
+      assert with_shared_graph(call_graph, fn read_graph -> read_graph.() end) == graph
+    end
+
+    test "edits made after the call are not seen", %{empty_call_graph: call_graph} do
+      graph = get_graph(call_graph)
+
+      with_shared_graph(call_graph, fn read_graph ->
+        add_edge(call_graph, :vertex_2, :vertex_3)
+
+        assert read_graph.() == graph
+        assert get_graph(call_graph) != graph
+      end)
+    end
+
+    test "every process reads the same graph", %{empty_call_graph: call_graph} do
+      with_shared_graph(call_graph, fn read_graph ->
+        task = Task.async(fn -> read_graph.() end)
+
+        assert Task.await(task) == read_graph.()
+      end)
+    end
+
+    test "releases the graph when the function returns", %{empty_call_graph: call_graph} do
+      graph = get_graph(call_graph)
+
+      key =
+        with_shared_graph(call_graph, fn _read_graph ->
+          shared_graph_key(graph)
+        end)
+
+      assert {CallGraph, _ref} = key
+      assert :persistent_term.get(key, :released) == :released
+    end
+
+    test "releases the graph when the function raises", %{empty_call_graph: call_graph} do
+      graph = get_graph(call_graph)
+
+      assert_raise RuntimeError, "boom", fn ->
+        with_shared_graph(call_graph, fn _read_graph ->
+          Process.put(:shared_graph_key, shared_graph_key(graph))
+          raise "boom"
+        end)
+      end
+
+      key = Process.get(:shared_graph_key)
+
+      assert {CallGraph, _ref} = key
+      assert :persistent_term.get(key, :released) == :released
+    end
+
+    test "returns what the function returns", %{empty_call_graph: call_graph} do
+      assert with_shared_graph(call_graph, fn _read_graph -> :result end) == :result
+    end
   end
 
   # Consistency tests verifying that the Elixir IR patterns
