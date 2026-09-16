@@ -115,7 +115,8 @@ defmodule Hologram.FrameworkTest do
       # Integer.is_even/1 depends on Kernel.and/2 (via macro_deps)
       # Kernel.and/2 depends on :erlang.andalso/2 (via macro_deps)
       # So Integer.is_even/1 should transitively reach :erlang.andalso/2
-      reachable_from_is_even = CallGraph.reachable_mfas(result, [{Integer, :is_even, 1}])
+      reachable_from_is_even =
+        CallGraph.unbounded_reachable_mfas(result, [{Integer, :is_even, 1}])
 
       assert {:erlang, :andalso, 2} in reachable_from_is_even,
              "Expected Integer.is_even/1 to transitively reach :erlang.andalso/2 through Kernel.and/2"

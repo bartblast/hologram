@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.EncoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Encoder, except: [encode_ir: 2]
 
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -182,6 +183,42 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir) == expected
+    end
+
+    test "with Elixir module/function capture info answered from the IR PLT" do
+      # &Aaa.Bbb.fun/0, a module that only the IR PLT knows
+      ir_plt = PLT.start()
+      PLT.put(ir_plt, Aaa.Bbb, :ir)
+
+      ir = %IR.AnonymousFunctionType{
+        arity: 0,
+        captured_module: Aaa.Bbb,
+        captured_function: :fun,
+        clauses: [
+          %IR.FunctionClause{
+            params: [],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Aaa.Bbb},
+                  function: :fun,
+                  args: []
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("Aaa.Bbb", "fun", 0, [{params: (context) => [], guards: [], body: (context) => {
+        return Elixir_Aaa_Bbb["fun/0"]();
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, %Context{ir_plt: ir_plt}) == expected
     end
 
     test "with Erlang module/function capture info" do

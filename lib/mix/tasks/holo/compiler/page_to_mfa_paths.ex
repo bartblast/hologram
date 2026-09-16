@@ -25,14 +25,15 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPaths do
     page_module = String.to_existing_atom("Elixir." <> page_module_arg)
     {dest_mfa, _binding} = Code.eval_string(dest_mfa_arg)
 
-    graph =
+    call_graph =
       Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
       |> remove_runtime_mfas()
-      |> CallGraph.get_graph()
+
+    graph = CallGraph.get_graph(call_graph)
 
     page_module
-    |> CallGraph.list_page_entry_mfas()
+    |> CallGraph.list_page_entry_mfas(CallGraph.module_info_plt(call_graph))
     |> Enum.each(fn entry_mfa ->
       shortest_path = Digraph.shortest_path(graph, entry_mfa, dest_mfa)
 

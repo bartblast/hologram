@@ -37,11 +37,15 @@ Benchee.run(
     templatables = Reflection.list_pages() ++ Reflection.list_components()
 
     server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+      CallGraph.server_callback_analysis_by_templatable(
+        graph,
+        templatables,
+        CallGraph.module_info_plt(call_graph)
+      )
 
     runtime_js_binding_modules =
       runtime_mfas
-      |> Compiler.list_js_import_modules()
+      |> Compiler.list_js_import_modules(ir_plt)
       |> MapSet.new()
 
     js_dir = Path.join([Reflection.root_dir(), "assets", "js"])

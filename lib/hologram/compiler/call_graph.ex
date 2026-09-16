@@ -12,9 +12,9 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Realtime
   alias Hologram.Reflection
 
-  defstruct pid: nil
+  defstruct pid: nil, module_info_plt: nil
 
-  @type t :: %CallGraph{pid: pid}
+  @type t :: %CallGraph{pid: pid, module_info_plt: PLT.t() | nil}
 
   @type broadcast_caller_analysis :: %{
           dispatch_types: MapSet.t(module),
@@ -33,7 +33,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
-  @dialyzer {:no_opaque, {:start_reachable_state, 3}}
+  @dialyzer {:no_opaque, {:start_reachable_state, 4}}
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
   # The Component helpers queue a broadcast on the server struct, which the framework
@@ -539,18 +539,24 @@ defmodule Hologram.Compiler.CallGraph do
   broadcast-referenced components, and types reachable from action broadcasting
   code (taken from the given precomputed broadcast caller analysis).
   """
-  @spec app_protocol_dispatch_types(Digraph.t(), [module], broadcast_caller_analysis) ::
-          MapSet.t(module)
-  def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis) do
-    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
+  @spec app_protocol_dispatch_types(
+          Digraph.t(),
+          [module],
+          broadcast_caller_analysis,
+          PLT.t() | nil
+        ) :: MapSet.t(module)
+  def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt) do
+    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas(&1, module_info_plt))
 
     page_vertices =
-      Digraph.reachable(graph, page_entry_mfas, opaque_vertex?: &protocol_function_mfa?/1)
+      Digraph.reachable(graph, page_entry_mfas,
+        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
+      )
 
     components =
       page_vertices
       |> Enum.filter(&match?({_module, _function, _arity}, &1))
-      |> extract_uniq_components()
+      |> extract_uniq_components(module_info_plt)
 
     # A broadcast-referenced component executes its server callbacks like any other
     # rendered component (e.g. command/3 triggered while it is mounted), so its
@@ -558,8 +564,8 @@ defmodule Hologram.Compiler.CallGraph do
     templatables =
       Enum.uniq(pages ++ components ++ broadcast_caller_analysis.referenced_components)
 
-    client_types = protocol_dispatch_types(page_vertices)
-    server_types = server_protocol_dispatch_types(graph, templatables)
+    client_types = protocol_dispatch_types(page_vertices, module_info_plt)
+    server_types = server_protocol_dispatch_types(graph, templatables, module_info_plt)
 
     client_types
     |> MapSet.union(server_types)
@@ -577,8 +583,8 @@ defmodule Hologram.Compiler.CallGraph do
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
   """
-  @spec broadcast_caller_analysis(Digraph.t()) :: broadcast_caller_analysis
-  def broadcast_caller_analysis(graph) do
+  @spec broadcast_caller_analysis(Digraph.t(), PLT.t() | nil) :: broadcast_caller_analysis
+  def broadcast_caller_analysis(graph, module_info_plt) do
     caller_vertices =
       for broadcast_mfa <- @broadcast_mfas,
           {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
@@ -586,11 +592,14 @@ defmodule Hologram.Compiler.CallGraph do
       end
 
     broadcast_vertices =
-      Digraph.reachable(graph, caller_vertices, opaque_vertex?: &protocol_function_mfa?/1)
+      Digraph.reachable(graph, caller_vertices,
+        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
+      )
 
     %{
-      dispatch_types: protocol_dispatch_types(broadcast_vertices),
-      referenced_components: extract_component_module_vertices(broadcast_vertices)
+      dispatch_types: protocol_dispatch_types(broadcast_vertices, module_info_plt),
+      referenced_components:
+        extract_component_module_vertices(broadcast_vertices, module_info_plt)
     }
   end
 
@@ -601,7 +610,8 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
-    if Reflection.alias?(value) && !protocol_metadata_mfa?(from_vertex) do
+    if Reflection.alias?(value) &&
+         !protocol_metadata_mfa?(from_vertex, call_graph.module_info_plt) do
       add_edge(call_graph, from_vertex, value)
     end
 
@@ -768,6 +778,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     opts
     |> Keyword.put(:graph, graph)
+    |> Keyword.put(:module_info_plt, call_graph.module_info_plt)
     |> start()
   end
 
@@ -859,15 +870,16 @@ defmodule Hologram.Compiler.CallGraph do
   ## Parameters
 
     * `page_module` - The module of the page for which to list entry MFAs.
+    * `module_info_plt` - The module info PLT the layout module is read from, or nil to ask the page.
 
   ## Returns
 
   A list of MFAs (tuples of {module, function, arity}) that serve as entry points
   for the given page module and its layout.
   """
-  @spec list_page_entry_mfas(module) :: [mfa]
-  def list_page_entry_mfas(page_module) do
-    layout_module = page_module.__layout_module__()
+  @spec list_page_entry_mfas(module, PLT.t() | nil) :: [mfa]
+  def list_page_entry_mfas(page_module, module_info_plt) do
+    layout_module = layout_module(page_module, module_info_plt)
 
     [
       {page_module, :__layout_module__, 0},
@@ -892,19 +904,21 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec list_page_mfas(t, module, %{module => server_callback_analysis}) :: [mfa]
   def list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable) do
-    entry_mfas = list_page_entry_mfas(page_module)
+    module_info_plt = call_graph.module_info_plt
+    entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
     graph = get_graph(call_graph)
 
-    initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
+    initial_state = start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt)
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-    initial_templatables = [page_module | extract_uniq_components(initial_mfas)]
+    initial_templatables = [page_module | extract_uniq_components(initial_mfas, module_info_plt)]
 
     {expanded_state, templatables, server_callback_analysis_by_templatable} =
       expand_reachable_state_with_server_referenced_components(
         graph,
         initial_state,
         initial_templatables,
-        server_callback_analysis_by_templatable
+        server_callback_analysis_by_templatable,
+        module_info_plt
       )
 
     server_types =
@@ -912,14 +926,16 @@ defmodule Hologram.Compiler.CallGraph do
         MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
       end)
 
-    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
+    final_state =
+      expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
 
     graph
-    |> finalize_reachable_mfas(final_state)
+    |> finalize_reachable_mfas(final_state, module_info_plt)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(
       page_module,
-      server_callback_analysis_by_templatable
+      server_callback_analysis_by_templatable,
+      module_info_plt
     )
     |> Enum.uniq()
     |> Enum.sort()
@@ -950,21 +966,25 @@ defmodule Hologram.Compiler.CallGraph do
   def list_runtime_mfas(call_graph, pages) do
     entry_mfas = list_runtime_entry_mfas()
     graph = get_graph(call_graph)
+    module_info_plt = call_graph.module_info_plt
 
     # A component module referenced in broadcast caller code can be delivered to any
     # connected page as a runtime value (e.g. in broadcast action params) and render
     # as a dynamic tag there, so its client code goes into the runtime bundle, which
     # every page loads.
-    broadcast_caller_analysis = broadcast_caller_analysis(graph)
-    app_types = app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis)
+    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
+
+    app_types =
+      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt)
 
     entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
-    initial_state = start_reachable_state(graph, entry_vertices, app_types)
+    initial_state = start_reachable_state(graph, entry_vertices, app_types, module_info_plt)
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
 
     initial_templatables =
       Enum.uniq(
-        broadcast_caller_analysis.referenced_components ++ extract_uniq_components(initial_mfas)
+        broadcast_caller_analysis.referenced_components ++
+          extract_uniq_components(initial_mfas, module_info_plt)
       )
 
     # The same server-referenced component expansion as in list_page_mfas/3, so chains
@@ -976,7 +996,8 @@ defmodule Hologram.Compiler.CallGraph do
         graph,
         initial_state,
         initial_templatables,
-        %{}
+        %{},
+        module_info_plt
       )
 
     server_types =
@@ -984,10 +1005,11 @@ defmodule Hologram.Compiler.CallGraph do
         MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
       end)
 
-    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
+    final_state =
+      expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
 
     graph
-    |> finalize_reachable_mfas(final_state)
+    |> finalize_reachable_mfas(final_state, module_info_plt)
     |> reject_hex_mfas()
     |> Enum.sort()
   end
@@ -1022,6 +1044,12 @@ defmodule Hologram.Compiler.CallGraph do
       call_graph
     end
   end
+
+  @doc """
+  Returns the module info PLT the call graph was started with, or nil.
+  """
+  @spec module_info_plt(t) :: PLT.t() | nil
+  def module_info_plt(%CallGraph{module_info_plt: module_info_plt}), do: module_info_plt
 
   @doc """
   Returns the list of vertices that are MFAs belonging to the given module.
@@ -1072,17 +1100,19 @@ defmodule Hologram.Compiler.CallGraph do
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't pull protocol implementations.
   """
-  @spec protocol_dispatch_dependency_vertices(Digraph.t(), [vertex]) :: [vertex]
-  def protocol_dispatch_dependency_vertices(graph, vertices) do
+  @spec protocol_dispatch_dependency_vertices(Digraph.t(), [vertex], PLT.t() | nil) :: [vertex]
+  def protocol_dispatch_dependency_vertices(graph, vertices, module_info_plt) do
     helper_entry_vertices =
       for vertex <- vertices,
-          protocol_function_mfa?(vertex),
+          protocol_function_mfa?(vertex, module_info_plt),
           {_source_vertex, target_vertex} <- Digraph.outgoing_edges(graph, vertex),
-          protocol_dispatch_helper_mfa?(vertex, target_vertex) do
+          protocol_dispatch_helper_mfa?(vertex, target_vertex, module_info_plt) do
         target_vertex
       end
 
-    Digraph.reachable(graph, helper_entry_vertices, opaque_vertex?: &protocol_function_mfa?/1)
+    Digraph.reachable(graph, helper_entry_vertices,
+      opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
+    )
   end
 
   # TODO: include types declared via the client-side MFA whitelisting feature once it exists.
@@ -1092,11 +1122,11 @@ defmodule Hologram.Compiler.CallGraph do
   The set includes the built-in protocol dispatch types, the struct modules among
   module vertices, and the modules of __struct__/0 and __struct__/1 MFAs.
   """
-  @spec protocol_dispatch_types([vertex]) :: MapSet.t(module)
-  def protocol_dispatch_types(vertices) do
+  @spec protocol_dispatch_types([vertex], PLT.t() | nil) :: MapSet.t(module)
+  def protocol_dispatch_types(vertices, module_info_plt) do
     @built_in_protocol_types
     |> MapSet.new()
-    |> put_protocol_dispatch_types(vertices)
+    |> put_protocol_dispatch_types(vertices, module_info_plt)
   end
 
   @doc """
@@ -1123,10 +1153,10 @@ defmodule Hologram.Compiler.CallGraph do
   app-agnostic analyses, where any implementation could be exercised, see
   unbounded_reachable_mfas/2.
   """
-  @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module)) :: [mfa]
-  def reachable_mfas(graph, entry_vertices, extra_types \\ MapSet.new()) do
-    state = start_reachable_state(graph, entry_vertices, extra_types)
-    finalize_reachable_mfas(graph, state)
+  @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module), PLT.t() | nil) :: [mfa]
+  def reachable_mfas(graph, entry_vertices, extra_types, module_info_plt) do
+    state = start_reachable_state(graph, entry_vertices, extra_types, module_info_plt)
+    finalize_reachable_mfas(graph, state, module_info_plt)
   end
 
   @doc """
@@ -1230,11 +1260,11 @@ defmodule Hologram.Compiler.CallGraph do
   would copy the whole graph into each task process, which costs far more than
   the traversals themselves.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_callback_analysis_by_templatable_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_callback_analysis_by_templatable_3/README.md
   """
-  @spec server_callback_analysis_by_templatable(Digraph.t(), [module]) ::
+  @spec server_callback_analysis_by_templatable(Digraph.t(), [module], PLT.t() | nil) ::
           %{module => server_callback_analysis}
-  def server_callback_analysis_by_templatable(graph, templatables) do
+  def server_callback_analysis_by_templatable(graph, templatables, module_info_plt) do
     Map.new(templatables, fn templatable ->
       # One traversal feeds both the dispatch types and the referenced components,
       # matching what server_protocol_dispatch_types/2 would traverse for a single
@@ -1243,13 +1273,14 @@ defmodule Hologram.Compiler.CallGraph do
         Digraph.reachable(
           graph,
           [{templatable, :command, 3}, {templatable, :init, 3}],
-          opaque_vertex?: &protocol_function_mfa?/1
+          opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
         )
 
       analysis = %{
-        dispatch_types: protocol_dispatch_types(server_vertices),
+        dispatch_types: protocol_dispatch_types(server_vertices, module_info_plt),
         reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph),
-        server_referenced_components: extract_component_module_vertices(server_vertices)
+        server_referenced_components:
+          extract_component_module_vertices(server_vertices, module_info_plt)
       }
 
       {templatable, analysis}
@@ -1263,18 +1294,18 @@ defmodule Hologram.Compiler.CallGraph do
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_protocol_dispatch_types_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_protocol_dispatch_types_3/README.md
   """
-  @spec server_protocol_dispatch_types(Digraph.t(), [module]) :: MapSet.t(module)
-  def server_protocol_dispatch_types(graph, templatables) do
+  @spec server_protocol_dispatch_types(Digraph.t(), [module], PLT.t() | nil) :: MapSet.t(module)
+  def server_protocol_dispatch_types(graph, templatables, module_info_plt) do
     entry_mfas =
       for templatable <- templatables, function <- [:command, :init] do
         {templatable, function, 3}
       end
 
     graph
-    |> Digraph.reachable(entry_mfas, opaque_vertex?: &protocol_function_mfa?/1)
-    |> protocol_dispatch_types()
+    |> Digraph.reachable(entry_mfas, opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt))
+    |> protocol_dispatch_types(module_info_plt)
   end
 
   @doc """
@@ -1299,12 +1330,15 @@ defmodule Hologram.Compiler.CallGraph do
   ## Options
 
     * `:graph` - the initial `Digraph` to seed the agent with; defaults to an empty graph.
+    * `:module_info_plt` - the module info PLT (see `Hologram.Compiler.build_module_info_plt!/3`)
+      the graph answers module questions from; defaults to none, under which every module fact is false.
     * `:supervisor` - a `DynamicSupervisor` to start the agent under as a `:temporary` child;
       when omitted the agent is linked to the calling process.
   """
   @spec start(T.opts()) :: t
   def start(opts \\ []) do
     graph = opts[:graph] || Digraph.new()
+    module_info_plt = opts[:module_info_plt]
 
     {:ok, pid} =
       case opts[:supervisor] do
@@ -1321,7 +1355,7 @@ defmodule Hologram.Compiler.CallGraph do
           DynamicSupervisor.start_child(sup, child_spec)
       end
 
-    %CallGraph{pid: pid}
+    %CallGraph{pid: pid, module_info_plt: module_info_plt}
   end
 
   @doc """
@@ -1383,7 +1417,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp add_protocol_call_graph_edges(call_graph, module) do
-    funs = module.__protocol__(:functions)
+    funs = protocol_functions(module, call_graph.module_info_plt)
     impls = Reflection.list_protocol_implementations(module)
 
     edges =
@@ -1409,9 +1443,10 @@ defmodule Hologram.Compiler.CallGraph do
   defp add_reflection_mfas_reachable_from_server_inits(
          page_mfas,
          page_module,
-         server_callback_analysis_by_templatable
+         server_callback_analysis_by_templatable,
+         module_info_plt
        ) do
-    templatables = [page_module | extract_uniq_components(page_mfas)]
+    templatables = [page_module | extract_uniq_components(page_mfas, module_info_plt)]
 
     added_mfas =
       Enum.flat_map(templatables, fn templatable ->
@@ -1425,18 +1460,30 @@ defmodule Hologram.Compiler.CallGraph do
   # reachable. Each round traverses only vertices not yet in the state, extends the
   # dispatch types only from the newly reached vertices, and evaluates only the new
   # implementation candidates plus the pending ones against the grown type set.
-  defp expand_reachable_state(graph, state, entry_vertices) do
+  # An Elixir-named module exists when the module info PLT has an entry for it (one ETS lookup);
+  # an Erlang-named one is asked the usual way, and those are the handful of stdlib modules the
+  # VM has loaded already.
+  defp existing_module?(module, module_info_plt) do
+    if Reflection.alias?(module) do
+      module_info_plt != nil and PLT.member?(module_info_plt, module)
+    else
+      Reflection.module?(module)
+    end
+  end
+
+  defp expand_reachable_state(graph, state, entry_vertices, module_info_plt) do
     new_vertices =
       Digraph.reachable(graph, entry_vertices,
-        opaque_vertex?: &protocol_function_mfa?/1,
+        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt),
         visited_vertices: state.reached_vertices
       )
 
     reached_vertices = MapSet.union(state.reached_vertices, MapSet.new(new_vertices))
-    types = put_protocol_dispatch_types(state.types, new_vertices)
+    types = put_protocol_dispatch_types(state.types, new_vertices, module_info_plt)
 
     pending_impl_candidates =
-      extract_impl_candidates(graph, new_vertices) ++ state.pending_impl_candidates
+      extract_impl_candidates(graph, new_vertices, module_info_plt) ++
+        state.pending_impl_candidates
 
     new_state = %{
       state
@@ -1445,7 +1492,7 @@ defmodule Hologram.Compiler.CallGraph do
         pending_impl_candidates: pending_impl_candidates
     }
 
-    promote_pending_impl_candidates(graph, new_state)
+    promote_pending_impl_candidates(graph, new_state, module_info_plt)
   end
 
   # A component module referenced in server-executed code can reach the client as a
@@ -1458,7 +1505,8 @@ defmodule Hologram.Compiler.CallGraph do
          graph,
          state,
          templatables,
-         server_callback_analysis_by_templatable
+         server_callback_analysis_by_templatable,
+         module_info_plt
        ) do
     # The page path passes a complete analysis map, but the runtime-bundle path
     # discovers templatables lazily, so analyses missing from the map are computed
@@ -1469,7 +1517,7 @@ defmodule Hologram.Compiler.CallGraph do
     server_callback_analysis_by_templatable =
       Map.merge(
         server_callback_analysis_by_templatable,
-        server_callback_analysis_by_templatable(graph, missing_templatables)
+        server_callback_analysis_by_templatable(graph, missing_templatables, module_info_plt)
       )
 
     new_components =
@@ -1481,13 +1529,13 @@ defmodule Hologram.Compiler.CallGraph do
     if new_components == [] do
       {state, templatables, server_callback_analysis_by_templatable}
     else
-      new_state = expand_reachable_state(graph, state, new_components)
+      new_state = expand_reachable_state(graph, state, new_components, module_info_plt)
 
       newly_reached_components =
         new_state.reached_vertices
         |> MapSet.difference(state.reached_vertices)
         |> Enum.filter(&is_tuple/1)
-        |> extract_uniq_components()
+        |> extract_uniq_components(module_info_plt)
 
       new_templatables = Enum.uniq(templatables ++ new_components ++ newly_reached_components)
 
@@ -1495,28 +1543,29 @@ defmodule Hologram.Compiler.CallGraph do
         graph,
         new_state,
         new_templatables,
-        server_callback_analysis_by_templatable
+        server_callback_analysis_by_templatable,
+        module_info_plt
       )
     end
   end
 
   # Resumes the fixpoint from the given state with additional dispatch types,
   # reaching exactly the vertices a from-scratch run with those types would reach.
-  defp expand_reachable_state_with_types(graph, state, extra_types) do
+  defp expand_reachable_state_with_types(graph, state, extra_types, module_info_plt) do
     new_state = %{state | types: MapSet.union(state.types, extra_types)}
-    promote_pending_impl_candidates(graph, new_state)
+    promote_pending_impl_candidates(graph, new_state, module_info_plt)
   end
 
-  defp extract_component_module_vertices(vertices) do
-    Enum.filter(vertices, &(is_atom(&1) && Reflection.component?(&1)))
+  defp extract_component_module_vertices(vertices, module_info_plt) do
+    Enum.filter(vertices, &(is_atom(&1) && flag?(module_info_plt, &1, :component?)))
   end
 
   # Implementation candidates are read from the dispatch edges added at build time
   # (and refreshed on patch), which is much cheaper than listing implementations
   # via reflection, since that scans BEAM files on disk.
-  defp extract_impl_candidates(graph, vertices) do
+  defp extract_impl_candidates(graph, vertices, module_info_plt) do
     for {_protocol, function, arity} = vertex <- vertices,
-        protocol_function_mfa?(vertex),
+        protocol_function_mfa?(vertex, module_info_plt),
         {_source_vertex, {impl, :__impl__, 1}} <- Digraph.outgoing_edges(graph, vertex),
         impl_entry_vertices =
           Enum.filter(
@@ -1528,28 +1577,67 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  defp extract_uniq_components(mfas) do
+  defp extract_uniq_components(mfas, module_info_plt) do
     mfas
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
-    |> Enum.filter(&Reflection.component?/1)
+    |> Enum.filter(&flag?(module_info_plt, &1, :component?))
   end
 
-  defp finalize_reachable_mfas(graph, state) do
+  # A module the compile knows nothing about (no beam, or an Erlang module) has every flag
+  # false, which is what the Reflection predicates answer for it. The PLT is an ETS table
+  # every process shares, so the lookup copies one entry, never the table.
+  # A module fact from the PLT: nil when there is no PLT, no entry, or the entry has no such key
+  # (a dump written before the key existed).
+  defp fact(nil, _module, _key), do: nil
+
+  defp fact(module_info_plt, module, key) do
+    case PLT.get(module_info_plt, module) do
+      {:ok, info} -> Map.get(info, key)
+      :error -> nil
+    end
+  end
+
+  defp flag?(nil, _module, _flag), do: false
+
+  defp flag?(module_info_plt, module, flag) do
+    match?({:ok, %{^flag => true}}, PLT.get(module_info_plt, module))
+  end
+
+  defp finalize_reachable_mfas(graph, state, module_info_plt) do
     reached_vertices = MapSet.to_list(state.reached_vertices)
-    helper_vertices = protocol_dispatch_dependency_vertices(graph, reached_vertices)
+
+    helper_vertices =
+      protocol_dispatch_dependency_vertices(graph, reached_vertices, module_info_plt)
 
     vertices = Enum.uniq(reached_vertices ++ helper_vertices)
 
     Enum.filter(vertices, fn
       # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-      {module, _function, _arity} -> Reflection.module?(module)
+      {module, _function, _arity} -> existing_module?(module, module_info_plt)
       _module_vertex -> false
     end)
   end
 
+  # The four facts the traversal used to get by calling the module, each with that call as the
+  # fallback for a PLT that has no answer. A nil fact means the value could not be read from the
+  # beam (no PLT, no entry, an old dump, a function whose value is computed rather than a
+  # literal), never that the module has no such value: a page without a layout is rejected by
+  # Compiler.validate_page_modules/1 before any traversal, so calling the module is right.
+  defp implementation_for(impl, module_info_plt) do
+    fact(module_info_plt, impl, :implementation_for) || impl.__impl__(:for)
+  end
+
+  defp implemented_protocol(impl, module_info_plt) do
+    fact(module_info_plt, impl, :implemented_protocol) || impl.__impl__(:protocol)
+  end
+
   defp incoming_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
+  end
+
+  defp layout_module(page_module, module_info_plt) do
+    fact(module_info_plt, page_module, :layout_module) || page_module.__layout_module__()
   end
 
   defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
@@ -1568,7 +1656,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
-    if Reflection.ecto_schema?(module) do
+    if module_flag?(call_graph, module, :ecto_schema?) do
       add_edges(call_graph, [
         {module, {module, :__changeset__, 0}},
         {module, {module, :__schema__, 1}},
@@ -1615,7 +1703,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
-    if Reflection.protocol?(module) do
+    if module_flag?(call_graph, module, :protocol?) do
       add_protocol_call_graph_edges(call_graph, module)
     end
 
@@ -1626,7 +1714,7 @@ defmodule Hologram.Compiler.CallGraph do
   # the callback isn't reachable from any call site - a reached exception
   # module brings its own.
   defp maybe_add_exception_call_graph_edges(call_graph, module) do
-    if Reflection.exception?(module) do
+    if module_flag?(call_graph, module, :exception?) do
       add_edge(call_graph, module, {module, :message, 1})
     end
 
@@ -1634,7 +1722,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_struct_call_graph_edges(call_graph, module) do
-    if Reflection.has_struct?(module) do
+    if module_flag?(call_graph, module, :struct?) do
       add_edges(call_graph, [
         {module, {module, :__struct__, 0}},
         {module, {module, :__struct__, 1}}
@@ -1645,31 +1733,35 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_templatable_call_graph_edges(call_graph, module) do
-    if Reflection.page?(module) do
+    if module_flag?(call_graph, module, :page?) do
       add_page_call_graph_edges(call_graph, module)
     end
 
-    if Reflection.component?(module) do
+    if module_flag?(call_graph, module, :component?) do
       add_component_call_graph_edges(call_graph, module)
     end
 
     call_graph
   end
 
-  defp maybe_put_struct_type(types, module) do
-    if Reflection.has_struct?(module) do
+  defp maybe_put_struct_type(types, module, module_info_plt) do
+    if flag?(module_info_plt, module, :struct?) do
       MapSet.put(types, module)
     else
       types
     end
   end
 
+  defp module_flag?(%CallGraph{module_info_plt: module_info_plt}, module, flag) do
+    flag?(module_info_plt, module, flag)
+  end
+
   # Moves pending implementation candidates whose target type has become reachable
   # into the traversal, continuing rounds until none are promotable.
-  defp promote_pending_impl_candidates(graph, state) do
+  defp promote_pending_impl_candidates(graph, state, module_info_plt) do
     {ready_candidates, pending_impl_candidates} =
       Enum.split_with(state.pending_impl_candidates, fn {impl, _impl_entry_vertices} ->
-        protocol_implementation_reachable?(impl, state.types)
+        protocol_implementation_reachable?(impl, state.types, module_info_plt)
       end)
 
     impl_entry_vertices =
@@ -1683,47 +1775,55 @@ defmodule Hologram.Compiler.CallGraph do
     if impl_entry_vertices == [] do
       new_state
     else
-      expand_reachable_state(graph, new_state, impl_entry_vertices)
+      expand_reachable_state(graph, new_state, impl_entry_vertices, module_info_plt)
     end
   end
 
   defp protocol_dispatch_helper_mfa?(
          {protocol, _function, _arity},
-         {protocol, _helper_function, _helper_arity} = target_vertex
+         {protocol, _helper_function, _helper_arity} = target_vertex,
+         module_info_plt
        ) do
-    !protocol_function_mfa?(target_vertex)
+    !protocol_function_mfa?(target_vertex, module_info_plt)
   end
 
-  defp protocol_dispatch_helper_mfa?(_vertex, _target_vertex), do: false
+  defp protocol_dispatch_helper_mfa?(_vertex, _target_vertex, _module_infos), do: false
 
-  defp protocol_function_mfa?({module, function, arity}) do
-    Reflection.protocol?(module) && {function, arity} in module.__protocol__(:functions)
+  # The flag keeps the function list lookup off every module that is not a protocol.
+  defp protocol_function_mfa?({module, function, arity}, module_info_plt) do
+    flag?(module_info_plt, module, :protocol?) and
+      {function, arity} in protocol_functions(module, module_info_plt)
   end
 
-  defp protocol_function_mfa?(_vertex), do: false
+  defp protocol_function_mfa?(_vertex, _module_infos), do: false
 
-  defp protocol_implementation_reachable?(impl, types) do
-    Reflection.protocol_implementation?(impl) && MapSet.member?(types, impl.__impl__(:for))
+  defp protocol_functions(module, module_info_plt) do
+    fact(module_info_plt, module, :protocol_functions) || module.__protocol__(:functions)
+  end
+
+  defp protocol_implementation_reachable?(impl, types, module_info_plt) do
+    flag?(module_info_plt, impl, :protocol_implementation?) and
+      MapSet.member?(types, implementation_for(impl, module_info_plt))
   end
 
   # Bodies of functions generated by defprotocol (__protocol__/1, impl_for/1, impl_for!/1,
   # struct_impl_for/1) and defimpl (__impl__/1) enumerate module atoms (implementation
   # modules, dispatch target types, the protocol itself) that are metadata, not dependencies.
-  defp protocol_metadata_mfa?({module, function, 1})
+  defp protocol_metadata_mfa?({module, function, 1}, module_info_plt)
        when function in [:__protocol__, :impl_for, :impl_for!, :struct_impl_for] do
-    Reflection.protocol?(module)
+    flag?(module_info_plt, module, :protocol?)
   end
 
-  defp protocol_metadata_mfa?({module, :__impl__, 1}) do
-    Reflection.protocol_implementation?(module)
+  defp protocol_metadata_mfa?({module, :__impl__, 1}, module_info_plt) do
+    flag?(module_info_plt, module, :protocol_implementation?)
   end
 
-  defp protocol_metadata_mfa?(_vertex), do: false
+  defp protocol_metadata_mfa?(_vertex, _module_infos), do: false
 
-  defp put_protocol_dispatch_types(types, vertices) do
+  defp put_protocol_dispatch_types(types, vertices, module_info_plt) do
     Enum.reduce(vertices, types, fn
       module, acc when is_atom(module) ->
-        maybe_put_struct_type(acc, module)
+        maybe_put_struct_type(acc, module, module_info_plt)
 
       {module, :__struct__, arity}, acc when arity in [0, 1] ->
         MapSet.put(acc, module)
@@ -1741,8 +1841,8 @@ defmodule Hologram.Compiler.CallGraph do
   # which would re-introduce vertices that remove_module_vertices already cleaned up.
   defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
     added_or_edited_modules
-    |> Enum.map(&Reflection.protocol_implementation/1)
-    |> Enum.reject(&is_nil/1)
+    |> Enum.filter(&module_flag?(call_graph, &1, :protocol_implementation?))
+    |> Enum.map(&implemented_protocol(&1, call_graph.module_info_plt))
     |> Enum.uniq()
     |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
   end
@@ -1779,7 +1879,7 @@ defmodule Hologram.Compiler.CallGraph do
   # Runs the protocol-aware fixpoint from the given entry vertices and returns the
   # resulting state: the reached vertex set, the accumulated dispatch types, and the
   # implementation candidates whose target types are not reachable yet.
-  defp start_reachable_state(graph, entry_vertices, extra_types) do
+  defp start_reachable_state(graph, entry_vertices, extra_types, module_info_plt) do
     initial_types =
       @built_in_protocol_types
       |> MapSet.new()
@@ -1791,6 +1891,6 @@ defmodule Hologram.Compiler.CallGraph do
       pending_impl_candidates: []
     }
 
-    expand_reachable_state(graph, state, entry_vertices)
+    expand_reachable_state(graph, state, entry_vertices, module_info_plt)
   end
 end

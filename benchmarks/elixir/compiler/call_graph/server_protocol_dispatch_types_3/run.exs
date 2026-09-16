@@ -6,11 +6,11 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "1 templatable" => fn {graph, _templatables} ->
-      CallGraph.server_protocol_dispatch_types(graph, [Page1])
+    "1 templatable" => fn {graph, _templatables, module_info_plt} ->
+      CallGraph.server_protocol_dispatch_types(graph, [Page1], module_info_plt)
     end,
-    "all templatables" => fn {graph, templatables} ->
-      CallGraph.server_protocol_dispatch_types(graph, templatables)
+    "all templatables" => fn {graph, templatables, module_info_plt} ->
+      CallGraph.server_protocol_dispatch_types(graph, templatables, module_info_plt)
     end
   },
   before_scenario: fn _input ->
@@ -18,12 +18,12 @@ Benchee.run(
     graph = CallGraph.get_graph(call_graph)
     templatables = [DefaultLayout | Reflection.list_pages()]
 
-    {graph, templatables}
+    {graph, templatables, CallGraph.module_info_plt(call_graph)}
   end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.CallGraph.server_protocol_dispatch_types/2",
+     description: "Hologram.Compiler.CallGraph.server_protocol_dispatch_types/3",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

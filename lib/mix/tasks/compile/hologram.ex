@@ -135,7 +135,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       ir_plt = Compiler.build_ir_plt(modules: modules, supervisor: sup)
 
       {call_graph, call_graph_dump_path} =
-        Compiler.maybe_load_call_graph(build_dir, supervisor: sup)
+        Compiler.maybe_load_call_graph(build_dir,
+          module_info_plt: new_module_info_plt,
+          supervisor: sup
+        )
 
       call_graph
       |> CallGraph.patch(ir_plt, module_digests_diff)
@@ -190,7 +193,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # imported JavaScript module, which the two would then take turns overwriting.
       runtime_js_binding_modules =
         runtime_mfas
-        |> Compiler.list_js_import_modules()
+        |> Compiler.list_js_import_modules(ir_plt)
         |> MapSet.new()
 
       page_entry_files_info =

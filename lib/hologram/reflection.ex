@@ -1,6 +1,25 @@
 defmodule Hologram.Reflection do
   @moduledoc false
 
+  alias Hologram.Commons.PLT
+
+  @beam_info_keys [
+    :digest,
+    :mtime,
+    :size,
+    :page?,
+    :component?,
+    :protocol?,
+    :protocol_implementation?,
+    :struct?,
+    :exception?,
+    :ecto_schema?,
+    :layout_module,
+    :protocol_functions,
+    :implementation_for,
+    :implemented_protocol
+  ]
+
   @call_graph_dump_file_name "call_graph.bin"
 
   @compiler_lock_file_name "hologram_compiler.lock"
@@ -38,7 +57,14 @@ defmodule Hologram.Reflection do
   @doc """
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
-  seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component.
+  seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
+  a protocol, a protocol implementation, a struct, an exception or an Ecto schema. Each flag is the export
+  table check that the `Reflection` predicate of the same name performs after loading the module, read from
+  the file instead.
+  A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
+  are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
+  and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
+  when the function is missing or returns something that is not a literal.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
   source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
   and size are nil.
@@ -46,7 +72,22 @@ defmodule Hologram.Reflection do
   ## Examples
 
       iex> beam_info(~c"/path/to/Elixir.MyPage.beam")
-      %{digest: 56860599, mtime: 1789514623, size: 1355821, page?: true, component?: false}
+      %{
+        digest: 56860599,
+        mtime: 1789514623,
+        size: 1355821,
+        page?: true,
+        component?: false,
+        protocol?: false,
+        protocol_implementation?: false,
+        struct?: false,
+        exception?: false,
+        ecto_schema?: false,
+        layout_module: MyLayout,
+        protocol_functions: nil,
+        implementation_for: nil,
+        implemented_protocol: nil
+      }
   """
   # TODO: Narrow the spec back to charlist, and rename the param back to
   # beam_path, when beam_source/1 goes (see the removal note there) - nothing
@@ -57,7 +98,16 @@ defmodule Hologram.Reflection do
             mtime: non_neg_integer | nil,
             size: non_neg_integer | nil,
             page?: boolean,
-            component?: boolean
+            component?: boolean,
+            protocol?: boolean,
+            protocol_implementation?: boolean,
+            struct?: boolean,
+            exception?: boolean,
+            ecto_schema?: boolean,
+            layout_module: module | nil,
+            protocol_functions: list({atom, arity}) | nil,
+            implementation_for: module | nil,
+            implemented_protocol: module | nil
           }
           | nil
   def beam_info(beam_source) do
@@ -71,15 +121,44 @@ defmodule Hologram.Reflection do
       :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi"])
 
     if {:__info__, 1} in exports do
+      page? = {:__is_hologram_page__, 0} in exports
+      protocol? = {:__protocol__, 1} in exports
+      protocol_implementation? = {:__impl__, 1} in exports
+
+      # Only the kinds of module that have literals to read get their debug info decoded; a plain
+      # module's chunk is hashed as bytes and never decoded.
+      definitions =
+        if page? or protocol? or protocol_implementation? do
+          debug_info_definitions(dbgi_chunk)
+        else
+          []
+        end
+
       %{
         digest: :erlang.phash2(dbgi_chunk),
         mtime: mtime,
         size: size,
-        page?: {:__is_hologram_page__, 0} in exports,
-        component?: {:__is_hologram_component__, 0} in exports
+        page?: page?,
+        component?: {:__is_hologram_component__, 0} in exports,
+        protocol?: protocol?,
+        protocol_implementation?: protocol_implementation?,
+        struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
+        exception?: {:exception, 1} in exports and {:message, 1} in exports,
+        ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports,
+        layout_module: literal_return(definitions, :__layout_module__, []),
+        protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
+        implementation_for: literal_return(definitions, :__impl__, [:for]),
+        implemented_protocol: literal_return(definitions, :__impl__, [:protocol])
       }
     end
   end
+
+  @doc """
+  Returns the keys of a map returned by beam_info/1. A stored entry that lacks one of them was
+  written by an older Hologram and has to be read again.
+  """
+  @spec beam_info_keys() :: [atom, ...]
+  def beam_info_keys, do: @beam_info_keys
 
   # TODO: Remove together with Hologram.Compiler.resolve_beam_source/2 (see the
   # removal note there), consolidated_beam_removed?/1 and object_code/1 included.
@@ -169,6 +248,7 @@ defmodule Hologram.Reflection do
   the Erlang compiler and are not Elixir modules, so they return false even though
   their names look like Elixir aliases. They are detected by the absence of the
   `__info__/1` function that the Elixir compiler injects into every Elixir module.
+  The module is not loaded to find out (see `has_function?/3`).
 
   ## Examples
 
@@ -188,17 +268,22 @@ defmodule Hologram.Reflection do
   def elixir_module?(term)
 
   def elixir_module?(term) when is_atom(term) do
-    alias?(term) &&
-      case Code.ensure_loaded(term) do
-        {:module, _module} ->
-          function_exported?(term, :__info__, 1)
-
-        _fallback ->
-          false
-      end
+    alias?(term) and has_function?(term, :__info__, 1)
   end
 
   def elixir_module?(_term), do: false
+
+  @doc """
+  Like elixir_module?/1, but answered from the given IR PLT when it can be: the IR PLT holds IR
+  for exactly the Elixir modules the compiler knows, so a module it holds is an Elixir module and
+  its code path is not consulted. A term it does not hold (an Erlang module, an Elixir-named Erlang
+  module, Kernel.SpecialForms, a name with no BEAM) is decided the elixir_module?/1 way. A nil PLT
+  is the same as elixir_module?/1.
+  """
+  @spec elixir_module?(term, PLT.t() | nil) :: boolean
+  def elixir_module?(term, nil), do: elixir_module?(term)
+
+  def elixir_module?(term, ir_plt), do: PLT.member?(ir_plt, term) or elixir_module?(term)
 
   @doc """
   Returns true if the given term is an existing Erlang module, or false otherwise.
@@ -207,6 +292,7 @@ defmodule Hologram.Reflection do
   Elixir compiler injects into every Elixir module. This means Erlang modules that
   use Elixir-style naming for interop (e.g. the atom `Luerl`, whose source is the
   Erlang file `Elixir.Luerl.erl`) are correctly recognized as Erlang modules.
+  The module is not loaded to find out (see `module?/1` and `has_function?/3`).
 
   ## Examples
 
@@ -226,16 +312,20 @@ defmodule Hologram.Reflection do
   def erlang_module?(term)
 
   def erlang_module?(term) when is_atom(term) do
-    case Code.ensure_loaded(term) do
-      {:module, _module} ->
-        !function_exported?(term, :__info__, 1)
-
-      _fallback ->
-        false
-    end
+    module?(term) and not has_function?(term, :__info__, 1)
   end
 
   def erlang_module?(_term), do: false
+
+  @doc """
+  Like erlang_module?/1, but answered from the given IR PLT when it can be: a module the IR PLT
+  holds is an Elixir module, so it is not an Erlang one and its code path is not consulted. A term
+  it does not hold is decided the erlang_module?/1 way. A nil PLT is the same as erlang_module?/1.
+  """
+  @spec erlang_module?(term, PLT.t() | nil) :: boolean
+  def erlang_module?(term, nil), do: erlang_module?(term)
+
+  def erlang_module?(term, ir_plt), do: not PLT.member?(ir_plt, term) and erlang_module?(term)
 
   @doc """
   Returns true if the given term is an exception module, or false otherwise.
@@ -249,13 +339,19 @@ defmodule Hologram.Reflection do
   @doc """
   Returns true if module contains a public function with the given arity, otherwise false.
 
-  Kernel.function_exported?/3 does not load the module in case it is not loaded
-  (in such cases it would return false even when the module has the given function).
+  A loaded module is asked directly. A module that is not loaded is answered from the export
+  table of its BEAM on the code path, without loading it; a name with no BEAM has no functions.
   """
   @spec has_function?(module, atom, integer) :: boolean
   def has_function?(module, function, arity) do
-    Code.ensure_loaded(module)
-    function_exported?(module, function, arity)
+    if :code.is_loaded(module) do
+      function_exported?(module, function, arity)
+    else
+      case :code.which(module) do
+        :non_existing -> false
+        beam_path -> beam_exports_function?(beam_path, function, arity)
+      end
+    end
   end
 
   @doc """
@@ -459,6 +555,7 @@ defmodule Hologram.Reflection do
 
   @doc """
   Returns true if the given term is an existing (Elixir or Erlang) module, or false otherwise.
+  A module exists when the VM holds it or has a BEAM for it on the code path; it is not loaded to find out.
 
   ## Examples
 
@@ -481,13 +578,7 @@ defmodule Hologram.Reflection do
   def module?(term)
 
   def module?(term) when is_atom(term) do
-    case Code.ensure_loaded(term) do
-      {:module, _module} ->
-        true
-
-      _fallback ->
-        false
-    end
+    :code.is_loaded(term) != false or :code.which(term) != :non_existing
   end
 
   def module?(_term), do: false
@@ -766,6 +857,18 @@ defmodule Hologram.Reflection do
 
   defp beam_mtime_and_size(_beam_binary), do: {nil, nil}
 
+  # The export table in the beam is what the VM installs on load, so reading it
+  # from the file answers the same question as function_exported?/3 would after
+  # loading, without loading.
+  # A beam that cannot be read (removed after :code.which/1 found it, or not a beam) exports
+  # nothing, which is what Code.ensure_loaded/1 made of it before this read replaced it.
+  defp beam_exports_function?(beam_path, function, arity) do
+    case :beam_lib.chunks(beam_path, [:exports]) do
+      {:ok, {_module, [{:exports, exports}]}} -> {function, arity} in exports
+      {:error, :beam_lib, _reason} -> false
+    end
+  end
+
   # TODO: Remove together with beam_source/1 (see the removal note there), which
   # is its only caller.
   defp consolidated_beam_removed?(beam_path) do
@@ -774,6 +877,18 @@ defmodule Hologram.Reflection do
     else
       beam_path_str = to_string(beam_path)
       not File.exists?(beam_path_str, [:raw])
+    end
+  end
+
+  # The function definitions from an Elixir debug info chunk, each {{name, arity}, kind, meta,
+  # clauses} with clauses as {meta, args, guards, body} in expanded quoted form.
+  # The chunk is bytes of a compiled BEAM on the code path, the same code the VM loads and runs,
+  # so decoding its term is as trusted as loading the module.
+  # sobelow_skip ["Misc.BinToTerm"]
+  defp debug_info_definitions(dbgi_chunk) do
+    case :erlang.binary_to_term(dbgi_chunk) do
+      {:debug_info_v1, _backend, {:elixir_v1, %{definitions: definitions}, _specs}} -> definitions
+      _other -> []
     end
   end
 
@@ -801,6 +916,20 @@ defmodule Hologram.Reflection do
 
   # TODO: Remove together with beam_source/1 (see the removal note there), which
   # is its only caller.
+  # The value returned by the clause of the named function that takes exactly the given literal
+  # arguments and has no guard, when that value is a literal; nil when there is no such clause or
+  # the clause computes its value.
+  defp literal_return(definitions, name, args) do
+    with {_name_arity, _kind, _meta, clauses} <-
+           List.keyfind(definitions, {name, length(args)}, 0),
+         {_meta, _args, [], body} <- Enum.find(clauses, &match?({_meta, ^args, [], _body}, &1)),
+         true <- Macro.quoted_literal?(body) do
+      body
+    else
+      _no_literal -> nil
+    end
+  end
+
   defp object_code(module) do
     case :code.get_object_code(module) do
       {^module, binary, _beam_path} -> binary
