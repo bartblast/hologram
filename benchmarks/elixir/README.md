@@ -195,7 +195,7 @@ all templatables        2.95 K - 1.12x slower +36.74 μs
 
 ```
 Name                                ips        average  deviation         median         99th %
-create_page_entry_files/7          1.11      903.59 ms     ±6.91%      927.69 ms     1013.67 ms
+create_page_entry_files/7          1.08      925.02 ms     ±4.79%      911.24 ms     1006.72 ms
 ```
 
 
@@ -223,6 +223,14 @@ Name                                         ips        average  deviation      
 no module changes                         953.02        1.05 ms    ±15.03%        1.03 ms        1.39 ms
 1 module edited                           950.84        1.05 ms    ±21.69%        1.02 ms        1.41 ms
 1 module removed                          912.60        1.10 ms    ±34.61%        1.04 ms        2.06 ms
+```
+
+
+### ✅ compiler » encode_reachable_functions_4
+
+```
+Name                                   ips        average  deviation         median         99th %
+encode_reachable_functions/4         21.03       47.56 ms     ±7.25%       46.73 ms       57.80 ms
 ```
 
 

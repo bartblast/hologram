@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.create_page_entry_files/7
+Hologram.Compiler.encode_reachable_functions/4
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">create_page_entry_files/7</td>
-    <td style="white-space: nowrap; text-align: right">1.08</td>
-    <td style="white-space: nowrap; text-align: right">925.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.79%</td>
-    <td style="white-space: nowrap; text-align: right">911.24 ms</td>
-    <td style="white-space: nowrap; text-align: right">1006.72 ms</td>
+    <td style="white-space: nowrap">encode_reachable_functions/4</td>
+    <td style="white-space: nowrap; text-align: right">21.03</td>
+    <td style="white-space: nowrap; text-align: right">47.56 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;7.25%</td>
+    <td style="white-space: nowrap; text-align: right">46.73 ms</td>
+    <td style="white-space: nowrap; text-align: right">57.80 ms</td>
   </tr>
 
 </table>
