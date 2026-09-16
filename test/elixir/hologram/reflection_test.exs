@@ -96,38 +96,6 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "beam_defs/1" do
-    test "beam file path" do
-      beam_path = :code.which(Module1)
-
-      assert [
-               {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
-                [
-                  {[{:line, 7} | _column_2],
-                   [
-                     {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
-                     {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
-                   ], [],
-                   {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
-                    [
-                      {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
-                      {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
-                    ]}}
-                ]},
-               {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
-                [{[{:line, 3} | _column_10], [], [], :value_1}]}
-             ] = beam_defs(beam_path)
-    end
-
-    # TODO: Remove when Hologram.Reflection.beam_source/1 goes (see the removal
-    # note there), together with the beam_source/1 and umbrella?/0 describes.
-    test "beam binary" do
-      {Module1, bytecode, beam_path} = :code.get_object_code(Module1)
-
-      assert beam_defs(bytecode) == beam_defs(beam_path)
-    end
-  end
-
   describe "beam_info/1" do
     test "beam file path of a plain module" do
       beam_path = :code.which(Module1)

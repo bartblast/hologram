@@ -2,7 +2,6 @@ defmodule Hologram.Compiler do
   @moduledoc false
 
   alias Hologram.Commons.CryptographicUtils
-  alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PathUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.StringUtils
@@ -153,28 +152,6 @@ defmodule Hologram.Compiler do
     end)
 
     ir_plt
-  end
-
-  @doc """
-  Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
-  """
-  @spec build_module_digest_plt!(T.opts()) :: PLT.t()
-  def build_module_digest_plt!(opts \\ []) do
-    module_digest_plt = PLT.start(opts)
-
-    # TODO: Remove this flag and the argument it feeds to
-    # rebuild_module_digest_plt_entry!/3 when resolve_beam_source/2 goes (see
-    # the removal note there).
-    umbrella? = Reflection.umbrella?()
-
-    TaskUtils.map_concurrently(
-      Reflection.list_elixir_modules(),
-      &rebuild_module_digest_plt_entry!(&1, module_digest_plt, umbrella?)
-    )
-
-    module_digest_plt
   end
 
   @doc """
@@ -557,29 +534,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Compares two module digest PLTs and returns the added, removed, and edited modules lists.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/diff_module_digest_plts_2/README.md
-  """
-  @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
-          added_modules: list(module),
-          removed_modules: list(module),
-          edited_modules: list(module)
-        }
-  def diff_module_digest_plts(old_plt, new_plt) do
-    old_digests = PLT.get_all(old_plt)
-    new_digests = PLT.get_all(new_plt)
-
-    diff = MapUtils.diff(old_digests, new_digests)
-
-    %{
-      added_modules: Enum.map(diff.added, fn {module, _digest} -> module end),
-      removed_modules: diff.removed,
-      edited_modules: Enum.map(diff.edited, fn {module, _digest} -> module end)
-    }
-  end
-
-  @doc """
   Compares two module info PLTs by digest and returns the added, removed, and edited modules lists.
   An entry whose mtime or size moved but whose digest did not is not an edit.
   """
@@ -779,23 +733,6 @@ defmodule Hologram.Compiler do
     PLT.maybe_load(ir_plt, ir_plt_dump_path)
 
     {ir_plt, ir_plt_dump_path}
-  end
-
-  @doc """
-  Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
-  """
-  @spec maybe_load_module_digest_plt(T.file_path(), T.opts()) :: {PLT.t(), String.t()}
-  def maybe_load_module_digest_plt(build_dir, opts \\ []) do
-    module_digest_plt = PLT.start(opts)
-
-    module_digest_plt_dump_path =
-      Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
-
-    PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
-
-    {module_digest_plt, module_digest_plt_dump_path}
   end
 
   @doc """
@@ -1296,22 +1233,6 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
-  defp rebuild_module_digest_plt_entry!(module, module_digest_plt, umbrella?) do
-    beam_source = resolve_beam_source(module, umbrella?)
-
-    if beam_source do
-      digest =
-        beam_source
-        |> Reflection.beam_defs()
-        # Fast and deterministic for change detection
-        |> :erlang.phash2()
-
-      PLT.put(module_digest_plt, module, digest)
-    end
-  end
-
-  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
-  # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
     beam_source = resolve_beam_source(module, umbrella?)
 
@@ -1485,10 +1406,9 @@ defmodule Hologram.Compiler do
   # pointing at purged consolidated beams. That means this function,
   # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
   # them by then), plus unwinding the umbrella? flag threaded through
-  # build_ir_plt/1, build_module_digest_plt!/1, build_module_info_plt!/3,
-  # patch_ir_plt!/2, rebuild_ir_plt_entry!/3, rebuild_module_digest_plt_entry!/3
-  # and rebuild_module_info_plt_entry!/5 - their bodies go back to resolving the
-  # beam path with :code.which/1 directly.
+  # build_ir_plt/1, build_module_info_plt!/3, patch_ir_plt!/2,
+  # rebuild_ir_plt_entry!/3 and rebuild_module_info_plt_entry!/5 - their
+  # bodies go back to resolving the beam path with :code.which/1 directly.
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
   defp resolve_beam_source(module, false) do

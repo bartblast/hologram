@@ -501,25 +501,6 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_module_digest_plt!/0" do
-    test "adds module digest entries for modules that have a BEAM path" do
-      assert %PLT{} = plt = build_module_digest_plt!()
-
-      assert plt
-             |> PLT.get!(Hologram.Reflection)
-             |> is_integer()
-
-      assert plt
-             |> PLT.get!(Hologram.Compiler)
-             |> is_integer()
-    end
-
-    test "doesn't add module digest entries for modules that don't have a BEAM path" do
-      assert %PLT{} = plt = build_module_digest_plt!()
-      assert PLT.get(plt, MyModule) == :error
-    end
-  end
-
   describe "build_module_info_plt!/3" do
     test "adds an entry for every Elixir module that has a BEAM, none for the rest" do
       assert %PLT{} = plt = build_module_info_plt!(PLT.start(), nil)
@@ -1222,37 +1203,6 @@ defmodule Hologram.CompilerTest do
            |> String.contains?("Interpreter.defineElixirFunction")
   end
 
-  test "diff_module_digest_plts/2" do
-    old_plt =
-      PLT.start()
-      |> PLT.put(:module_1, :digest_1)
-      |> PLT.put(:module_3, :digest_3a)
-      |> PLT.put(:module_5, :digest_5)
-      |> PLT.put(:module_6, :digest_6a)
-      |> PLT.put(:module_7, :digest_7)
-
-    new_plt =
-      PLT.start()
-      |> PLT.put(:module_1, :digest_1)
-      |> PLT.put(:module_2, :digest_2)
-      |> PLT.put(:module_3, :digest_3b)
-      |> PLT.put(:module_4, :digest_4)
-      |> PLT.put(:module_6, :digest_6b)
-
-    result = diff_module_digest_plts(old_plt, new_plt)
-
-    keys =
-      result
-      |> Map.keys()
-      |> Enum.sort()
-
-    assert keys == [:added_modules, :edited_modules, :removed_modules]
-
-    assert Enum.sort(result.added_modules) == [:module_2, :module_4]
-    assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
-    assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
-  end
-
   test "diff_module_info_plts/2" do
     info = fn digest, mtime ->
       %{digest: digest, mtime: mtime, size: 1, page?: false, component?: false}
@@ -1686,34 +1636,6 @@ defmodule Hologram.CompilerTest do
 
       assert {plt = %PLT{}, ^dump_path} = maybe_load_ir_plt(build_dir)
       assert PLT.get_all(plt) == PLT.get_all(ir_plt)
-    end
-  end
-
-  describe "maybe_load_module_digest_plt/1" do
-    setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_digest_plt_1"])
-
-      build_dir = Path.join(test_tmp_dir, "build")
-      clean_dir(build_dir)
-
-      dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
-
-      [build_dir: build_dir, dump_path: dump_path]
-    end
-
-    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
-      assert PLT.get_all(plt) == %{}
-    end
-
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
-      PLT.start()
-      |> PLT.put(:a, 1)
-      |> PLT.put(:b, 2)
-      |> PLT.dump(dump_path)
-
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
-      assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
   end
 

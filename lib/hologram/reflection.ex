@@ -36,41 +36,6 @@ defmodule Hologram.Reflection do
   def alias?(_term), do: false
 
   @doc """
-  Returns BEAM definitions for the given BEAM file path or BEAM binary.
-
-  ## Examples
-
-      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"  
-      iex> beam_defs()
-      [
-        ...,
-        {{:alias?, 1}, :def, [line: 14],
-        [
-          {[line: 16], [{:term, [version: 0, line: 16], nil}],
-            [
-              {{:., [line: 16], [:erlang, :is_atom]}, [line: 16],
-              [{:term, [version: 0, line: 16], nil}]}
-            ],
-            {{:., [line: 19], [String, :starts_with?]}, [line: 19],
-            [
-              {{:., [line: 18], [String.Chars, :to_string]}, [line: 18],
-                [{:term, [version: 0, line: 17], nil}]},
-              "Elixir."
-            ]}},
-          {[line: 22], [{:_, [line: 22], nil}], [], false}
-        ]}
-      ]
-  """
-  # TODO: Narrow the spec back to charlist, and rename the param back to
-  # beam_path, when beam_source/1 goes (see the removal note there) - nothing
-  # passes a BEAM binary here once the umbrella fallback is gone.
-  @spec beam_defs(charlist | binary) :: list(tuple)
-  def beam_defs(beam_source) do
-    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_source)
-    definitions
-  end
-
-  @doc """
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
   seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component.
