@@ -1620,7 +1620,10 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   # The four facts the traversal used to get by calling the module, each with that call as the
-  # fallback for a PLT that has no answer (no PLT, a page without a layout, an old dump).
+  # fallback for a PLT that has no answer. A nil fact means the value could not be read from the
+  # beam (no PLT, no entry, an old dump, a function whose value is computed rather than a
+  # literal), never that the module has no such value: a page without a layout is rejected by
+  # Compiler.validate_page_modules/1 before any traversal, so calling the module is right.
   defp implementation_for(impl, module_info_plt) do
     fact(module_info_plt, impl, :implementation_for) || impl.__impl__(:for)
   end
