@@ -82,13 +82,8 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> Application.delete_env(app, key) end)
   end
 
-  # Compiles the module, unloads it, and leaves its beam on a code path added for
-  # the test, so that the module exists on disk only.
-  defp write_unloaded_module(module, tmp_subdir, body) do
-    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
-    :code.purge(module)
-    :code.delete(module)
-
+  # Leaves the beam on a code path added for the test, so that the module exists on disk only.
+  defp write_unloaded_beam(module, tmp_subdir, bytecode) do
     ebin_dir = Path.join([tmp_dir(), "tests", "reflection", tmp_subdir, "ebin"])
     ebin_dir_charlist = String.to_charlist(ebin_dir)
     beam_path = Path.join(ebin_dir, "#{module}.beam")
@@ -101,6 +96,14 @@ defmodule Hologram.ReflectionTest do
       :code.purge(module)
       :code.delete(module)
     end)
+  end
+
+  # Compiles the module, unloads it, and leaves its beam on disk only.
+  defp write_unloaded_module(module, tmp_subdir, body) do
+    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
+    :code.purge(module)
+    :code.delete(module)
+    write_unloaded_beam(module, tmp_subdir, bytecode)
   end
 
   describe "alias?/1" do
@@ -357,6 +360,15 @@ defmodule Hologram.ReflectionTest do
     test "non-atom" do
       refute elixir_module?(123)
     end
+
+    test "does not load the module" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedElixirModule
+      write_unloaded_module(module, "elixir_module_1", "")
+
+      assert :code.is_loaded(module) == false
+      assert elixir_module?(module)
+      assert :code.is_loaded(module) == false
+    end
   end
 
   describe "erlang_module?" do
@@ -386,6 +398,15 @@ defmodule Hologram.ReflectionTest do
 
     test "non-atom" do
       refute erlang_module?(123)
+    end
+
+    test "does not load the module" do
+      {module, binary} = compile_elixir_named_erlang_module()
+      write_unloaded_beam(module, "erlang_module_1", binary)
+
+      assert :code.is_loaded(module) == false
+      assert erlang_module?(module)
+      assert :code.is_loaded(module) == false
     end
   end
 

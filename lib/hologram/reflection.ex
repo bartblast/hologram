@@ -193,6 +193,7 @@ defmodule Hologram.Reflection do
   the Erlang compiler and are not Elixir modules, so they return false even though
   their names look like Elixir aliases. They are detected by the absence of the
   `__info__/1` function that the Elixir compiler injects into every Elixir module.
+  The module is not loaded to find out (see `has_function?/3`).
 
   ## Examples
 
@@ -212,14 +213,7 @@ defmodule Hologram.Reflection do
   def elixir_module?(term)
 
   def elixir_module?(term) when is_atom(term) do
-    alias?(term) &&
-      case Code.ensure_loaded(term) do
-        {:module, _module} ->
-          function_exported?(term, :__info__, 1)
-
-        _fallback ->
-          false
-      end
+    alias?(term) and has_function?(term, :__info__, 1)
   end
 
   def elixir_module?(_term), do: false
@@ -231,6 +225,7 @@ defmodule Hologram.Reflection do
   Elixir compiler injects into every Elixir module. This means Erlang modules that
   use Elixir-style naming for interop (e.g. the atom `Luerl`, whose source is the
   Erlang file `Elixir.Luerl.erl`) are correctly recognized as Erlang modules.
+  The module is not loaded to find out (see `module?/1` and `has_function?/3`).
 
   ## Examples
 
@@ -250,13 +245,7 @@ defmodule Hologram.Reflection do
   def erlang_module?(term)
 
   def erlang_module?(term) when is_atom(term) do
-    case Code.ensure_loaded(term) do
-      {:module, _module} ->
-        !function_exported?(term, :__info__, 1)
-
-      _fallback ->
-        false
-    end
+    module?(term) and not has_function?(term, :__info__, 1)
   end
 
   def erlang_module?(_term), do: false
