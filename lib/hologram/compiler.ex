@@ -10,7 +10,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -216,9 +215,9 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  The page's reachable functions are found in the given graph with the given module info PLT,
-  so that callers building many pages at once can share one graph (see
-  CallGraph.with_shared_graph/2).
+  The page's reachable MFAs are given (see `CallGraph.list_page_mfas/4`), so that a caller building
+  many pages can encode their functions first with `encode_reachable_functions/4` and render every
+  page from the encode PLT.
 
   ## Options
 
@@ -228,38 +227,12 @@ defmodule Hologram.Compiler do
       aggregated, because the runtime script, which every page loads, already registers their
       bindings (default: none).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_8/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_5/README.md
   """
-  @spec build_page_js(
-          module,
-          Digraph.t(),
-          PLT.t() | nil,
-          PLT.t(),
-          PLT.t(),
-          MapSet.t(mfa),
-          %{module => CallGraph.server_callback_analysis()},
-          T.opts()
-        ) :: String.t()
-  def build_page_js(
-        page_module,
-        graph,
-        module_info_plt,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        server_callback_analysis_by_templatable,
-        opts
-      ) do
+  @spec build_page_js([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) :: String.t()
+  def build_page_js(mfas, ir_plt, encode_plt, async_mfas, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
     runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
-
-    mfas =
-      CallGraph.list_page_mfas(
-        graph,
-        page_module,
-        server_callback_analysis_by_templatable,
-        module_info_plt
-      )
 
     %{imports: imports, bindings: bindings} =
       aggregate_js_imports(mfas, ir_plt, runtime_js_binding_modules)
@@ -497,7 +470,9 @@ defmodule Hologram.Compiler do
   Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
   passes the module info PLT's components.
   The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
-  copies it.
+  copies it. Every page's reachable MFAs are listed first, their functions are encoded into the
+  encode PLT with one IR read per module (`encode_reachable_functions/4`), and then the pages are
+  rendered from that cache.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
   """
@@ -532,18 +507,32 @@ defmodule Hologram.Compiler do
           module_info_plt
         )
 
-      TaskUtils.map_concurrently(page_modules, fn page_module ->
+      # Listing a page's MFAs is a cheap graph walk, and knowing every page's before rendering any
+      # lets each module's IR be read once for all pages, rather than by every page that finds one
+      # of its functions missing, concurrently with the others.
+      mfas_by_page =
+        TaskUtils.map_concurrently(page_modules, fn page_module ->
+          mfas =
+            CallGraph.list_page_mfas(
+              read_graph.(),
+              page_module,
+              server_callback_analysis_by_templatable,
+              module_info_plt
+            )
+
+          {page_module, mfas}
+        end)
+
+      mfas_by_page
+      |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
+      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas)
+
+      TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
         entry_name = Reflection.module_name(page_module)
 
         entry_file_path =
-          page_module
-          |> build_page_js(
-            read_graph.(),
-            module_info_plt,
-            ir_plt,
-            encode_plt,
-            async_mfas,
-            server_callback_analysis_by_templatable,
+          mfas
+          |> build_page_js(ir_plt, encode_plt, async_mfas,
             js_dir: opts[:js_dir],
             runtime_js_binding_modules: runtime_js_binding_modules
           )
@@ -602,6 +591,36 @@ defmodule Hologram.Compiler do
       removed_modules: removed_modules,
       edited_modules: edited_modules
     }
+  end
+
+  @doc """
+  Encodes into the encode PLT every function of the given MFAs that is not there yet, reading each
+  module's IR once however many entry files reach it. Erlang modules are skipped, and so are
+  protocol modules, whose dispatcher functions depend on the entry file and are encoded per entry
+  file.
+  """
+  @spec encode_reachable_functions([mfa], PLT.t(), PLT.t(), MapSet.t(mfa)) :: :ok
+  def encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas) do
+    mfas
+    |> Enum.uniq()
+    |> group_mfas_by_module()
+    # Checked once per module, not per MFA: the lists of many pages repeat the same MFAs.
+    |> Enum.filter(fn {module, _module_mfas} ->
+      Reflection.elixir_module?(module, ir_plt) and not Reflection.protocol?(module)
+    end)
+    |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
+      missing =
+        module_mfas
+        |> Enum.map(fn {_module, function, arity} -> {function, arity} end)
+        |> Enum.reject(&function_encoded?(encode_plt, module, &1))
+
+      if missing != [] do
+        context = %Context{async_mfas: async_mfas, ir_plt: ir_plt, module: module}
+        encode_missing_module_functions(missing, module, ir_plt, encode_plt, context)
+      end
+    end)
+
+    :ok
   end
 
   @doc """
@@ -972,7 +991,8 @@ defmodule Hologram.Compiler do
 
   # The module IR is read once here however many functions are missing. A later entry file that
   # needs a function this one did not reads it again, so a module is copied out of the IR PLT
-  # once per entry file that finds one of its functions missing, not once per compile.
+  # once per entry file that finds one of its functions missing, not once per compile. A function
+  # the module does not define is stored as nil.
   defp encode_missing_module_functions(fun_arities, module, ir_plt, encode_plt, context) do
     module_name = Reflection.module_name(module)
 
@@ -1000,8 +1020,10 @@ defmodule Hologram.Compiler do
 
             PLT.put(encode_plt, {module, function, arity}, js)
 
+          # Remembered as defining nothing, so later entry files that reach it do not read the
+          # module again.
           _no_definition ->
-            :ok
+            PLT.put(encode_plt, {module, function, arity}, nil)
         end
       end)
     rescue
@@ -1025,11 +1047,16 @@ defmodule Hologram.Compiler do
 
     Enum.flat_map(fun_arities, fn {function, arity} ->
       case PLT.get(encode_plt, {module, function, arity}) do
+        # A reachable MFA with no definition in the module IR renders nothing, which is what
+        # prune_module_def/2 has always done with it.
+        {:ok, nil} ->
+          []
+
         {:ok, js} ->
           [js]
 
-        # A reachable MFA with no definition in the module IR renders nothing, which is what
-        # prune_module_def/2 has always done with it.
+        # Unreachable once the missing functions are encoded; kept so an entry without a value
+        # renders nothing.
         :error ->
           []
       end

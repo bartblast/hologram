@@ -222,7 +222,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_page_js/8" do
+  describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -255,15 +255,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module24,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module24,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -283,15 +288,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module25,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module25,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -311,15 +321,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module11,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module11,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -334,15 +349,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module19,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module19,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -366,15 +386,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module21,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module21,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -399,15 +424,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module23,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module23,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir
         )
 
@@ -433,15 +463,20 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module23,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
       result =
         build_page_js(
-          Module23,
-          graph,
-          module_info_plt,
+          mfas,
           ir_plt,
           encode_plt,
           MapSet.new(),
-          server_callback_analysis_by_templatable,
           js_dir: @js_dir,
           runtime_js_binding_modules: MapSet.new([Module18])
         )
@@ -730,6 +765,49 @@ defmodule Hologram.CompilerTest do
 
       js_2 =
         build_runtime_js(runtime_mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], @js_dir)
+
+      assert js_2 == js_1
+    end
+
+    test "remembers a reachable function the module does not define", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      undefined_mfa = {Enum, :hologram_undefined_fun, 9}
+
+      js =
+        build_runtime_js(
+          [undefined_mfa | runtime_mfas],
+          ir_plt,
+          encode_plt,
+          MapSet.new(),
+          [],
+          @js_dir
+        )
+
+      expected_js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], @js_dir)
+
+      assert js == expected_js
+      assert PLT.get(encode_plt, undefined_mfa) == {:ok, nil}
+    end
+
+    test "does not read the module IR again for a function the module does not define", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      mfas = [{Enum, :hologram_undefined_fun, 9} | runtime_mfas]
+
+      js_1 = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+
+      # A clone, so the PLT shared by the whole test module keeps its Enum entry.
+      ir_plt_without_enum =
+        ir_plt
+        |> PLT.clone()
+        |> PLT.delete(Enum)
+
+      js_2 = build_runtime_js(mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], @js_dir)
 
       assert js_2 == js_1
     end
@@ -1239,6 +1317,84 @@ defmodule Hologram.CompilerTest do
     assert count_shared_graphs.() == shared_graphs_before
   end
 
+  test "create_page_entry_files/7 reads each module's IR once for all pages", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_reads"])
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    server_callback_analysis_by_templatable =
+      CallGraph.server_callback_analysis_by_templatable(
+        graph,
+        page_modules ++ Reflection.list_components(),
+        module_info_plt
+      )
+
+    # The Elixir modules each page reaches, split into protocols, which are read and rendered per
+    # page, and the rest, which are read once for all pages.
+    modules_by_page =
+      Enum.map(page_modules, fn page_module ->
+        graph
+        |> CallGraph.list_page_mfas(
+          page_module,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+        |> Enum.map(fn {module, _function, _arity} -> module end)
+        |> Enum.uniq()
+        |> Enum.filter(&Reflection.elixir_module?(&1, ir_plt))
+      end)
+
+    {protocol_modules, other_modules} =
+      modules_by_page
+      |> List.flatten()
+      |> Enum.uniq()
+      |> Enum.split_with(&Reflection.protocol?/1)
+
+    protocol_reads =
+      modules_by_page
+      |> List.flatten()
+      |> Enum.count(&(&1 in protocol_modules))
+
+    # Call counts are kept per function for every process, so the tasks are counted too.
+    :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
+
+    try do
+      create_page_entry_files(
+        page_modules,
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        MapSet.new(),
+        opts
+      )
+
+      assert other_modules != []
+
+      assert :erlang.trace_info({PLT, :get!, 2}, :call_count) ==
+               {:call_count, length(other_modules) + protocol_reads}
+    after
+      :erlang.trace_pattern({PLT, :get!, 2}, false, [:call_count])
+    end
+  end
+
   test "create_page_entry_files/7 with the component modules given", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
@@ -1333,6 +1489,102 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
+  end
+
+  describe "encode_reachable_functions/4" do
+    setup do
+      # A PLT per test, so one test's cache can never stand in for another's encoding.
+      [encode_plt: PLT.start()]
+    end
+
+    test "encodes every Elixir function of the given MFAs", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt
+    } do
+      mfas = [{Enum, :into, 2}, {Module24, :template, 0}, {Module24, :action, 3}]
+
+      encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new())
+
+      assert {:ok, into_js} = PLT.get(encode_plt, {Enum, :into, 2})
+
+      assert String.starts_with?(
+               into_js,
+               ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
+             )
+
+      assert {:ok, template_js} = PLT.get(encode_plt, {Module24, :template, 0})
+      assert String.starts_with?(template_js, "Interpreter.defineElixirFunction(")
+
+      assert {:ok, action_js} = PLT.get(encode_plt, {Module24, :action, 3})
+      assert String.starts_with?(action_js, "Interpreter.defineElixirFunction(")
+
+      assert PLT.size(encode_plt) == 3
+    end
+
+    test "skips Erlang MFAs", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+      encode_reachable_functions([{:erlang, :hd, 1}], ir_plt, encode_plt, MapSet.new())
+
+      assert PLT.size(encode_plt) == 0
+    end
+
+    test "skips protocol modules", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+      encode_reachable_functions(
+        [{String.Chars, :to_string, 1}],
+        ir_plt,
+        encode_plt,
+        MapSet.new()
+      )
+
+      assert PLT.size(encode_plt) == 0
+    end
+
+    test "skips functions already in the PLT", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+      PLT.put(encode_plt, {Enum, :into, 2}, "cached")
+
+      encode_reachable_functions([{Enum, :into, 2}], ir_plt, encode_plt, MapSet.new())
+
+      assert PLT.get(encode_plt, {Enum, :into, 2}) == {:ok, "cached"}
+    end
+
+    test "remembers a function the module does not define", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt
+    } do
+      mfa = {Enum, :hologram_undefined_fun, 9}
+
+      encode_reachable_functions([mfa], ir_plt, encode_plt, MapSet.new())
+
+      assert PLT.get(encode_plt, mfa) == {:ok, nil}
+    end
+
+    test "reads each module's IR once, however many of its MFAs are given, repeats included", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt
+    } do
+      mfas = [
+        {Enum, :into, 2},
+        {Enum, :map, 2},
+        {Enum, :into, 2},
+        {Module24, :template, 0},
+        {Module24, :action, 3}
+      ]
+
+      # Call counts are kept per function for every process, so the tasks the function starts
+      # are counted too.
+      :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
+
+      try do
+        encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new())
+
+        assert :erlang.trace_info({PLT, :get!, 2}, :call_count) == {:call_count, 2}
+      after
+        :erlang.trace_pattern({PLT, :get!, 2}, false, [:call_count])
+      end
+    end
+
+    test "returns :ok", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+      assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new()) == :ok
+    end
   end
 
   describe "get_erlang_function_js/4" do
