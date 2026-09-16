@@ -110,13 +110,16 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
-      {old_module_digest_plt, module_digest_plt_dump_path} =
-        Compiler.maybe_load_module_digest_plt(build_dir, supervisor: sup)
+      {old_module_info_plt, module_info_plt_dump_path, module_info_dumped_at} =
+        Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
 
-      new_module_digest_plt = Compiler.build_module_digest_plt!(supervisor: sup)
+      new_module_info_plt =
+        Compiler.build_module_info_plt!(old_module_info_plt, module_info_dumped_at,
+          supervisor: sup
+        )
 
       module_digests_diff =
-        Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
+        Compiler.diff_module_info_plts(old_module_info_plt, new_module_info_plt)
 
       # Building IR PLT from scratch is faster that dumping it to a file,
       # and then loading and patching it (benchmarked on an app with 1628 modules):
@@ -124,7 +127,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # dump: ~350 ms
       # load: ~465 ms
       # patch: not benchmarked
-      ir_plt = Compiler.build_ir_plt(supervisor: sup)
+      modules =
+        new_module_info_plt
+        |> PLT.get_all()
+        |> Map.keys()
+
+      ir_plt = Compiler.build_ir_plt(modules: modules, supervisor: sup)
 
       {call_graph, call_graph_dump_path} =
         Compiler.maybe_load_call_graph(build_dir, supervisor: sup)
@@ -144,14 +152,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
         |> CallGraph.remove_manually_ported_mfas()
 
-      page_modules = Reflection.list_pages()
+      page_modules = Compiler.list_pages(new_module_info_plt)
+      component_modules = Compiler.list_components(new_module_info_plt)
 
       Compiler.validate_page_modules(page_modules)
 
       # Runs here rather than in each module's own compilation: every module is compiled by now, so
       # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
       # no deadlock when a component renders itself.
-      Compiler.validate_prop_usages(page_modules ++ Reflection.list_components(), ir_plt)
+      Compiler.validate_prop_usages(page_modules ++ component_modules, ir_plt)
 
       runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
 
@@ -192,7 +201,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           encode_plt,
           async_mfas,
           runtime_js_binding_modules,
-          opts
+          Keyword.put(opts, :components, component_modules)
         )
         |> Enum.map(fn {entry_name, entry_file_path} ->
           {entry_name, entry_file_path, "page"}
@@ -217,7 +226,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       PLT.dump(page_digest_plt, page_digest_plt_dump_path)
       CallGraph.dump(call_graph, call_graph_dump_path)
-      PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
+      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
 
       Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 

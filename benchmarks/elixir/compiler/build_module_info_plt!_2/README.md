@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.maybe_load_module_digest_plt/1
+Hologram.Compiler.build_module_info_plt!/2
 
 ## System
 
@@ -62,21 +62,21 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">no load</td>
-    <td style="white-space: nowrap; text-align: right">106.22 K</td>
-    <td style="white-space: nowrap; text-align: right">9.41 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;65.54%</td>
-    <td style="white-space: nowrap; text-align: right">8.96 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">16.17 &micro;s</td>
+    <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
+    <td style="white-space: nowrap; text-align: right">8.60</td>
+    <td style="white-space: nowrap; text-align: right">116.29 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;21.17%</td>
+    <td style="white-space: nowrap; text-align: right">108.93 ms</td>
+    <td style="white-space: nowrap; text-align: right">241.02 ms</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">do load</td>
-    <td style="white-space: nowrap; text-align: right">2.04 K</td>
-    <td style="white-space: nowrap; text-align: right">490.99 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;8.28%</td>
-    <td style="white-space: nowrap; text-align: right">484.08 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">673.91 &micro;s</td>
+    <td style="white-space: nowrap">no previous dump (every beam read)</td>
+    <td style="white-space: nowrap; text-align: right">5.59</td>
+    <td style="white-space: nowrap; text-align: right">178.92 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;14.63%</td>
+    <td style="white-space: nowrap; text-align: right">171.34 ms</td>
+    <td style="white-space: nowrap; text-align: right">272.53 ms</td>
   </tr>
 
 </table>
@@ -90,15 +90,15 @@ Run Time Comparison
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Slower</th>
   <tr>
-    <td style="white-space: nowrap">no load</td>
-    <td style="white-space: nowrap;text-align: right">106.22 K</td>
+    <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
+    <td style="white-space: nowrap;text-align: right">8.60</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">do load</td>
-    <td style="white-space: nowrap; text-align: right">2.04 K</td>
-    <td style="white-space: nowrap; text-align: right">52.15x</td>
+    <td style="white-space: nowrap">no previous dump (every beam read)</td>
+    <td style="white-space: nowrap; text-align: right">5.59</td>
+    <td style="white-space: nowrap; text-align: right">1.54x</td>
   </tr>
 
 </table>

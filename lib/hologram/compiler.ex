@@ -2,7 +2,6 @@ defmodule Hologram.Compiler do
   @moduledoc false
 
   alias Hologram.Commons.CryptographicUtils
-  alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PathUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.StringUtils
@@ -118,6 +117,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
+  Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
+  module info PLT's keys.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
@@ -127,7 +128,7 @@ defmodule Hologram.Compiler do
   def build_ir_plt(opts \\ []) do
     ir_plt = PLT.start(opts)
 
-    modules = Reflection.list_elixir_modules()
+    modules = opts[:modules] || Reflection.list_elixir_modules()
 
     # Processing modules in chunks of 2 improves performance by ~7%
     # (determined experimentally)
@@ -154,25 +155,29 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
+  Builds a persistent lookup table (PLT) holding, for every Elixir module in the project, the info the compiler
+  needs before building IR: see `Hologram.Reflection.beam_info/1` for the entry shape.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
+  Each module's BEAM is read once. A module whose entry in `old_plt` has the same mtime and size as its BEAM
+  now, and whose BEAM was last written at least a second before `dumped_at` (the mtime of the dump `old_plt`
+  was loaded from, in posix seconds), reuses that entry without reading the BEAM. Pass nil as `dumped_at` to
+  read every BEAM.
   """
-  @spec build_module_digest_plt!(T.opts()) :: PLT.t()
-  def build_module_digest_plt!(opts \\ []) do
-    module_digest_plt = PLT.start(opts)
+  @spec build_module_info_plt!(PLT.t(), non_neg_integer | nil, T.opts()) :: PLT.t()
+  def build_module_info_plt!(old_plt, dumped_at, opts \\ []) do
+    new_plt = PLT.start(opts)
 
     # TODO: Remove this flag and the argument it feeds to
-    # rebuild_module_digest_plt_entry!/3 when resolve_beam_source/2 goes (see
+    # rebuild_module_info_plt_entry!/5 when resolve_beam_source/2 goes (see
     # the removal note there).
     umbrella? = Reflection.umbrella?()
 
     TaskUtils.map_concurrently(
-      Reflection.list_elixir_modules(),
-      &rebuild_module_digest_plt_entry!(&1, module_digest_plt, umbrella?)
+      Reflection.list_candidate_modules(),
+      &rebuild_module_info_plt_entry!(&1, old_plt, dumped_at, new_plt, umbrella?)
     )
 
-    module_digest_plt
+    new_plt
   end
 
   @doc """
@@ -460,6 +465,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Creates page bundle entry file.
+  Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
+  passes the module info PLT's components.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
@@ -482,7 +489,7 @@ defmodule Hologram.Compiler do
         opts
       ) do
     graph = CallGraph.get_graph(call_graph)
-    templatables = page_modules ++ Reflection.list_components()
+    templatables = page_modules ++ (opts[:components] || Reflection.list_components())
 
     server_callback_analysis_by_templatable =
       CallGraph.server_callback_analysis_by_templatable(graph, templatables)
@@ -527,25 +534,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Compares two module digest PLTs and returns the added, removed, and edited modules lists.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/diff_module_digest_plts_2/README.md
+  Compares two module info PLTs by digest and returns the added, removed, and edited modules lists.
+  An entry whose mtime or size moved but whose digest did not is not an edit.
   """
-  @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
+  @spec diff_module_info_plts(PLT.t(), PLT.t()) :: %{
           added_modules: list(module),
           removed_modules: list(module),
           edited_modules: list(module)
         }
-  def diff_module_digest_plts(old_plt, new_plt) do
-    old_digests = PLT.get_all(old_plt)
-    new_digests = PLT.get_all(new_plt)
+  def diff_module_info_plts(old_plt, new_plt) do
+    old_infos = PLT.get_all(old_plt)
+    new_infos = PLT.get_all(new_plt)
 
-    diff = MapUtils.diff(old_digests, new_digests)
+    added_modules =
+      for {module, _info} <- new_infos, not Map.has_key?(old_infos, module), do: module
+
+    edited_modules =
+      for {module, %{digest: digest}} <- new_infos,
+          edited_module?(old_infos, module, digest),
+          do: module
+
+    removed_modules =
+      for {module, _info} <- old_infos, not Map.has_key?(new_infos, module), do: module
 
     %{
-      added_modules: Enum.map(diff.added, fn {module, _digest} -> module end),
-      removed_modules: diff.removed,
-      edited_modules: Enum.map(diff.edited, fn {module, _digest} -> module end)
+      added_modules: added_modules,
+      removed_modules: removed_modules,
+      edited_modules: edited_modules
     }
   end
 
@@ -641,6 +656,14 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the component modules recorded in the given module info PLT, sorted by name.
+  """
+  @spec list_components(PLT.t()) :: list(module)
+  def list_components(module_info_plt) do
+    list_modules_where(module_info_plt, :component?)
+  end
+
+  @doc """
   Lists the Elixir modules referenced by the given MFAs that declare JS imports.
   """
   @spec list_js_import_modules(list(mfa)) :: list(module)
@@ -652,6 +675,14 @@ defmodule Hologram.Compiler do
     |> Enum.filter(
       &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
     )
+  end
+
+  @doc """
+  Lists the page modules recorded in the given module info PLT, sorted by name.
+  """
+  @spec list_pages(PLT.t()) :: list(module)
+  def list_pages(module_info_plt) do
+    list_modules_where(module_info_plt, :page?)
   end
 
   @doc """
@@ -705,20 +736,25 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
+  Loads the module info PLT from its dump file in the build dir if the file exists, or creates an empty PLT.
+  Returns the PLT, the dump path, and the dump file's mtime in posix seconds (nil when there is no dump),
+  which `build_module_info_plt!/3` uses to decide which entries can be reused.
   """
-  @spec maybe_load_module_digest_plt(T.file_path(), T.opts()) :: {PLT.t(), String.t()}
-  def maybe_load_module_digest_plt(build_dir, opts \\ []) do
-    module_digest_plt = PLT.start(opts)
+  @spec maybe_load_module_info_plt(T.file_path(), T.opts()) ::
+          {PLT.t(), String.t(), non_neg_integer | nil}
+  def maybe_load_module_info_plt(build_dir, opts \\ []) do
+    plt = PLT.start(opts)
+    dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
 
-    module_digest_plt_dump_path =
-      Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
+    dumped_at =
+      case File.stat(dump_path, time: :posix) do
+        {:ok, %File.Stat{mtime: mtime}} -> mtime
+        {:error, _reason} -> nil
+      end
 
-    PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
+    PLT.maybe_load(plt, dump_path)
 
-    {module_digest_plt, module_digest_plt_dump_path}
+    {plt, dump_path, dumped_at}
   end
 
   @doc """
@@ -882,6 +918,10 @@ defmodule Hologram.Compiler do
     entry_file_path
   end
 
+  defp edited_module?(old_infos, module, digest) do
+    match?(%{digest: old_digest} when old_digest != digest, old_infos[module])
+  end
+
   # The module IR is read once here however many functions are missing. A later entry file that
   # needs a function this one did not reads it again, so a module is copied out of the IR PLT
   # once per entry file that finds one of its functions missing, not once per compile.
@@ -1036,6 +1076,14 @@ defmodule Hologram.Compiler do
 
   defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
 
+  defp list_modules_where(module_info_plt, flag) do
+    module_info_plt
+    |> PLT.get_all()
+    |> Enum.filter(fn {_module, info} -> info[flag] end)
+    |> Enum.map(fn {module, _info} -> module end)
+    |> Enum.sort()
+  end
+
   defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
     max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
 
@@ -1185,18 +1233,16 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
-  defp rebuild_module_digest_plt_entry!(module, module_digest_plt, umbrella?) do
+  defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
     beam_source = resolve_beam_source(module, umbrella?)
 
-    if beam_source do
-      digest =
-        beam_source
-        |> Reflection.beam_defs()
-        # Fast and deterministic for change detection
-        |> :erlang.phash2()
+    # No beam: not a module of this project. Not reusable: read it. Read gives nil: not an Elixir module.
+    info =
+      beam_source &&
+        (reusable_module_info(module, beam_source, old_plt, dumped_at) ||
+           Reflection.beam_info(beam_source))
 
-      PLT.put(module_digest_plt, module, digest)
-    end
+    if info, do: PLT.put(new_plt, module, info)
   end
 
   # Travels with the per-module metadata, which is emitted under the same
@@ -1360,8 +1406,8 @@ defmodule Hologram.Compiler do
   # pointing at purged consolidated beams. That means this function,
   # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
   # them by then), plus unwinding the umbrella? flag threaded through
-  # build_ir_plt/1, build_module_digest_plt!/1, patch_ir_plt!/2,
-  # rebuild_ir_plt_entry!/3 and rebuild_module_digest_plt_entry!/3 - their
+  # build_ir_plt/1, build_module_info_plt!/3, patch_ir_plt!/2,
+  # rebuild_ir_plt_entry!/3 and rebuild_module_info_plt_entry!/5 - their
   # bodies go back to resolving the beam path with :code.which/1 directly.
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
@@ -1372,6 +1418,25 @@ defmodule Hologram.Compiler do
       beam_path
     end
   end
+
+  # The previous entry is trusted only when the beam file looks untouched (same mtime and size) and was
+  # written at least a second before the previous dump: mtimes have whole-second resolution, so a beam
+  # rewritten during the dump's own second could match on both and still differ. A beam that came as a
+  # binary (see resolve_beam_source/2) has no file to stat and is always read, as is everything when
+  # there is no previous dump.
+  defp reusable_module_info(module, beam_path, old_plt, dumped_at)
+       when is_list(beam_path) and is_integer(dumped_at) do
+    with {:ok, %{mtime: mtime, size: size} = info} when is_integer(mtime) <-
+           PLT.get(old_plt, module),
+         {:ok, %File.Stat{mtime: ^mtime, size: ^size}} when mtime <= dumped_at - 1 <-
+           File.stat(beam_path, time: :posix) do
+      info
+    else
+      _fallback -> nil
+    end
+  end
+
+  defp reusable_module_info(_module, _beam_source, _old_plt, _dumped_at), do: nil
 
   defp validate_module_prop_usages(module, ir) do
     ir
