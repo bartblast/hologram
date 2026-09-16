@@ -5,7 +5,7 @@ defmodule App3.MixProject do
     [
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "0f5b48ee7121e8d98026a28d19880ecc10b57714"}
+       ref: "a41171fba466f4c8c67c9d9ebafa375f0b1ece8c"}
     ]
   end
 
