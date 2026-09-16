@@ -605,6 +605,36 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Encodes into the encode PLT every function of the given MFAs that is not there yet, reading each
+  module's IR once however many entry files reach it. Erlang modules are skipped, and so are
+  protocol modules, whose dispatcher functions depend on the entry file and are encoded per entry
+  file.
+  """
+  @spec encode_reachable_functions([mfa], PLT.t(), PLT.t(), MapSet.t(mfa)) :: :ok
+  def encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas) do
+    mfas
+    |> Enum.uniq()
+    |> group_mfas_by_module()
+    # Checked once per module, not per MFA: the lists of many pages repeat the same MFAs.
+    |> Enum.filter(fn {module, _module_mfas} ->
+      Reflection.elixir_module?(module, ir_plt) and not Reflection.protocol?(module)
+    end)
+    |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
+      missing =
+        module_mfas
+        |> Enum.map(fn {_module, function, arity} -> {function, arity} end)
+        |> Enum.reject(&function_encoded?(encode_plt, module, &1))
+
+      if missing != [] do
+        context = %Context{async_mfas: async_mfas, ir_plt: ir_plt, module: module}
+        encode_missing_module_functions(missing, module, ir_plt, encode_plt, context)
+      end
+    end)
+
+    :ok
+  end
+
+  @doc """
   Extracts JavaScript source code for the given ported Erlang function.
 
   Returns the JavaScript function code if it exists in the corresponding .mjs file,
