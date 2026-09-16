@@ -576,6 +576,37 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Compares two module info PLTs by digest and returns the added, removed, and edited modules lists.
+  An entry whose mtime or size moved but whose digest did not is not an edit.
+  """
+  @spec diff_module_info_plts(PLT.t(), PLT.t()) :: %{
+          added_modules: list(module),
+          removed_modules: list(module),
+          edited_modules: list(module)
+        }
+  def diff_module_info_plts(old_plt, new_plt) do
+    old_infos = PLT.get_all(old_plt)
+    new_infos = PLT.get_all(new_plt)
+
+    added_modules =
+      for {module, _info} <- new_infos, not Map.has_key?(old_infos, module), do: module
+
+    edited_modules =
+      for {module, %{digest: digest}} <- new_infos,
+          edited_module?(old_infos, module, digest),
+          do: module
+
+    removed_modules =
+      for {module, _info} <- old_infos, not Map.has_key?(new_infos, module), do: module
+
+    %{
+      added_modules: added_modules,
+      removed_modules: removed_modules,
+      edited_modules: edited_modules
+    }
+  end
+
+  @doc """
   Extracts JavaScript source code for the given ported Erlang function.
 
   Returns the JavaScript function code if it exists in the corresponding .mjs file,
@@ -748,6 +779,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Loads the module info PLT from its dump file in the build dir if the file exists, or creates an empty PLT.
+  Returns the PLT, the dump path, and the dump file's mtime in posix seconds (nil when there is no dump),
+  which `build_module_info_plt!/3` uses to decide which entries can be reused.
+  """
+  @spec maybe_load_module_info_plt(T.file_path(), T.opts()) ::
+          {PLT.t(), String.t(), non_neg_integer | nil}
+  def maybe_load_module_info_plt(build_dir, opts \\ []) do
+    plt = PLT.start(opts)
+    dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
+
+    dumped_at =
+      case File.stat(dump_path, time: :posix) do
+        {:ok, %File.Stat{mtime: mtime}} -> mtime
+        {:error, _reason} -> nil
+      end
+
+    PLT.maybe_load(plt, dump_path)
+
+    {plt, dump_path, dumped_at}
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
@@ -906,6 +959,10 @@ defmodule Hologram.Compiler do
     File.write!(entry_file_path, js)
 
     entry_file_path
+  end
+
+  defp edited_module?(old_infos, module, digest) do
+    match?(%{digest: old_digest} when old_digest != digest, old_infos[module])
   end
 
   # The module IR is read once here however many functions are missing. A later entry file that

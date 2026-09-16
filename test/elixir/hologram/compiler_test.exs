@@ -1204,6 +1204,42 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
+  test "diff_module_info_plts/2" do
+    info = fn digest, mtime ->
+      %{digest: digest, mtime: mtime, size: 1, page?: false, component?: false}
+    end
+
+    old_plt =
+      PLT.start()
+      |> PLT.put(:module_1, info.(1, 100))
+      |> PLT.put(:module_3, info.(3, 100))
+      |> PLT.put(:module_5, info.(5, 100))
+      |> PLT.put(:module_6, info.(6, 100))
+      |> PLT.put(:module_7, info.(7, 100))
+      |> PLT.put(:module_8, info.(8, 100))
+
+    new_plt =
+      PLT.start()
+      |> PLT.put(:module_1, info.(1, 100))
+      |> PLT.put(:module_2, info.(2, 100))
+      |> PLT.put(:module_3, info.(33, 100))
+      |> PLT.put(:module_4, info.(4, 100))
+      |> PLT.put(:module_6, info.(66, 100))
+      |> PLT.put(:module_8, info.(8, 200))
+
+    result = diff_module_info_plts(old_plt, new_plt)
+
+    keys =
+      result
+      |> Map.keys()
+      |> Enum.sort()
+
+    assert keys == [:added_modules, :edited_modules, :removed_modules]
+    assert Enum.sort(result.added_modules) == [:module_2, :module_4]
+    assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
+    assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
+  end
+
   describe "get_erlang_function_js/4" do
     test ":erlang module function that is implemented" do
       result = get_erlang_function_js(:erlang, :+, 2, @erlang_js_dir)
@@ -1598,6 +1634,36 @@ defmodule Hologram.CompilerTest do
       |> PLT.dump(dump_path)
 
       assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
+      assert PLT.get_all(plt) == %{a: 1, b: 2}
+    end
+  end
+
+  describe "maybe_load_module_info_plt/1" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_info_plt_1"])
+
+      build_dir = Path.join(test_tmp_dir, "build")
+      clean_dir(build_dir)
+
+      dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
+
+      [build_dir: build_dir, dump_path: dump_path]
+    end
+
+    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
+      assert {plt = %PLT{}, ^dump_path, nil} = maybe_load_module_info_plt(build_dir)
+      assert PLT.get_all(plt) == %{}
+    end
+
+    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
+      PLT.start()
+      |> PLT.put(:a, 1)
+      |> PLT.put(:b, 2)
+      |> PLT.dump(dump_path)
+
+      dumped_at = File.stat!(dump_path, time: :posix).mtime
+
+      assert {plt = %PLT{}, ^dump_path, ^dumped_at} = maybe_load_module_info_plt(build_dir)
       assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
   end
