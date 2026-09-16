@@ -1042,6 +1042,31 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "relative_source_path/2" do
+    test "dep module" do
+      assert relative_source_path("/proj/deps/my_dep/lib/my_dep/a.ex", "/proj") ==
+               "lib/my_dep/a.ex"
+    end
+
+    test "project module" do
+      assert relative_source_path("/proj/lib/my_app/a.ex", "/proj") == "lib/my_app/a.ex"
+    end
+
+    test "Elixir standard library module" do
+      path = "/home/runner/work/elixir/elixir/lib/elixir/lib/enum.ex"
+
+      assert relative_source_path(path, "/proj") == "lib/enum.ex"
+    end
+
+    test "unrecognized source root" do
+      assert relative_source_path("/foreign/build/machine/lib/a.ex", "/proj") == "a.ex"
+    end
+
+    test "a sibling directory whose name starts with the root's name is not the root" do
+      assert relative_source_path("/proj_other/lib/a.ex", "/proj") == "a.ex"
+    end
+  end
+
   describe "root_dir/0" do
     test "single-app project" do
       assert root_dir() == File.cwd!()

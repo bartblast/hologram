@@ -734,8 +734,16 @@ defmodule Hologram.Reflection do
   """
   @spec relative_source_path(module) :: String.t()
   def relative_source_path(module) do
-    source_path = source_path(module)
-    root_prefix = root_dir() <> "/"
+    relative_source_path(source_path(module), root_dir())
+  end
+
+  @doc """
+  The path form of relative_source_path/1, for callers that have the source path and the project
+  root already and need the relative path of many modules.
+  """
+  @spec relative_source_path(String.t(), String.t()) :: String.t()
+  def relative_source_path(source_path, root_dir) do
+    root_prefix = root_dir <> "/"
     deps_prefix = root_prefix <> "deps/"
 
     cond do
@@ -781,7 +789,8 @@ defmodule Hologram.Reflection do
   """
   @spec source_path(module()) :: String.t()
   def source_path(module) do
-    to_string(module.module_info()[:compile][:source])
+    # module_info(:compile) builds only the compile info, not the whole module info.
+    to_string(module.module_info(:compile)[:source])
   end
 
   @doc """
