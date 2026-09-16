@@ -10,6 +10,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -215,38 +216,49 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  The modules listed in runtime_js_binding_modules are skipped when the JS imports are aggregated,
-  because the runtime script, which every page loads, already registers their bindings.
+  The page's reachable functions are found in the given graph with the given module info PLT,
+  so that callers building many pages at once can share one graph (see
+  CallGraph.with_shared_graph/2).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_7/README.md
+  ## Options
+
+    * `:js_dir` - the directory of Hologram's JavaScript sources, which the page script imports
+      from (required).
+    * `:runtime_js_binding_modules` - modules whose JS imports are skipped when the imports are
+      aggregated, because the runtime script, which every page loads, already registers their
+      bindings (default: none).
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_8/README.md
   """
   @spec build_page_js(
           module,
-          CallGraph.t(),
+          Digraph.t(),
+          PLT.t() | nil,
           PLT.t(),
           PLT.t(),
           MapSet.t(mfa),
           %{module => CallGraph.server_callback_analysis()},
-          MapSet.t(module),
-          T.file_path()
+          T.opts()
         ) :: String.t()
   def build_page_js(
         page_module,
-        call_graph,
+        graph,
+        module_info_plt,
         ir_plt,
         encode_plt,
         async_mfas,
         server_callback_analysis_by_templatable,
-        runtime_js_binding_modules,
-        js_dir
+        opts
       ) do
+    js_dir = Keyword.fetch!(opts, :js_dir)
+    runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
+
     mfas =
-      call_graph
-      |> CallGraph.get_graph()
-      |> CallGraph.list_page_mfas(
+      CallGraph.list_page_mfas(
+        graph,
         page_module,
         server_callback_analysis_by_templatable,
-        CallGraph.module_info_plt(call_graph)
+        module_info_plt
       )
 
     %{imports: imports, bindings: bindings} =
@@ -521,13 +533,14 @@ defmodule Hologram.Compiler do
       entry_file_path =
         page_module
         |> build_page_js(
-          call_graph,
+          CallGraph.get_graph(call_graph),
+          CallGraph.module_info_plt(call_graph),
           ir_plt,
           encode_plt,
           async_mfas,
           server_callback_analysis_by_templatable,
-          runtime_js_binding_modules,
-          opts[:js_dir]
+          js_dir: opts[:js_dir],
+          runtime_js_binding_modules: runtime_js_binding_modules
         )
         |> create_entry_file(entry_name, opts[:tmp_dir])
 

@@ -6,18 +6,17 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "build_page_js/8" => fn {call_graph, ir_plt, encode_plt, async_mfas,
-                             server_callback_analysis_by_templatable, runtime_js_binding_modules,
-                             js_dir} ->
+    "build_page_js/8" => fn {graph, module_info_plt, ir_plt, encode_plt, async_mfas,
+                             server_callback_analysis_by_templatable, opts} ->
       Compiler.build_page_js(
         Page1,
-        call_graph,
+        graph,
+        module_info_plt,
         ir_plt,
         encode_plt,
         async_mfas,
         server_callback_analysis_by_templatable,
-        runtime_js_binding_modules,
-        js_dir
+        opts
       )
     end
   },
@@ -34,32 +33,31 @@ Benchee.run(
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
     graph = CallGraph.get_graph(call_graph_for_pages)
+    module_info_plt = CallGraph.module_info_plt(call_graph)
     templatables = Reflection.list_pages() ++ Reflection.list_components()
 
     server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(
-        graph,
-        templatables,
-        CallGraph.module_info_plt(call_graph)
-      )
+      CallGraph.server_callback_analysis_by_templatable(graph, templatables, module_info_plt)
 
     runtime_js_binding_modules =
       runtime_mfas
       |> Compiler.list_js_import_modules(ir_plt)
       |> MapSet.new()
 
-    js_dir = Path.join([Reflection.root_dir(), "assets", "js"])
+    opts = [
+      js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
+      runtime_js_binding_modules: runtime_js_binding_modules
+    ]
 
-    {call_graph_for_pages, ir_plt, PLT.start(), async_mfas,
-     server_callback_analysis_by_templatable, runtime_js_binding_modules, js_dir}
+    {graph, module_info_plt, ir_plt, PLT.start(), async_mfas,
+     server_callback_analysis_by_templatable, opts}
   end,
-  before_each: fn {call_graph, ir_plt, encode_plt, async_mfas,
-                   server_callback_analysis_by_templatable, runtime_js_binding_modules, js_dir} ->
+  before_each: fn {_graph, _module_info_plt, _ir_plt, encode_plt, _async_mfas,
+                   _server_callback_analysis_by_templatable, _opts} = input ->
     # Every iteration starts from an empty encode PLT, the way a compile does.
     PLT.reset(encode_plt)
 
-    {call_graph, ir_plt, encode_plt, async_mfas, server_callback_analysis_by_templatable,
-     runtime_js_binding_modules, js_dir}
+    input
   end,
   formatters: [
     Benchee.Formatters.Console,

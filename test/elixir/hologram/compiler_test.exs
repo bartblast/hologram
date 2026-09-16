@@ -241,28 +241,30 @@ defmodule Hologram.CompilerTest do
 
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
       [
-        call_graph: call_graph_without_runtime_mfas,
         encode_plt: PLT.start(),
+        graph: graph,
+        module_info_plt: CallGraph.module_info_plt(call_graph),
         server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
       ]
     end
 
     test "has both Erlang and Elixir function defs", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module24,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new(),
-          @js_dir
+          js_dir: @js_dir
         )
 
       js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
@@ -275,21 +277,22 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has only Elixir defs", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module25,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new(),
-          @js_dir
+          js_dir: @js_dir
         )
 
       js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
@@ -302,21 +305,22 @@ defmodule Hologram.CompilerTest do
     end
 
     test "no JS imports", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module11,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new(),
-          @js_dir
+          js_dir: @js_dir
         )
 
       refute String.contains?(result, "import {")
@@ -324,21 +328,22 @@ defmodule Hologram.CompilerTest do
     end
 
     test "single JS import", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module19,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new(),
-          @js_dir
+          js_dir: @js_dir
         )
 
       js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
@@ -355,21 +360,22 @@ defmodule Hologram.CompilerTest do
     end
 
     test "multiple JS imports", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module21,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new(),
-          @js_dir
+          js_dir: @js_dir
         )
 
       js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
@@ -387,21 +393,22 @@ defmodule Hologram.CompilerTest do
     end
 
     test "multiple modules with JS imports", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module23,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new(),
-          @js_dir
+          js_dir: @js_dir
         )
 
       js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
@@ -420,21 +427,23 @@ defmodule Hologram.CompilerTest do
     end
 
     test "skips the JS imports of the modules the runtime script registers", %{
-      call_graph: call_graph,
       encode_plt: encode_plt,
+      graph: graph,
       ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
       server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
     } do
       result =
         build_page_js(
           Module23,
-          call_graph,
+          graph,
+          module_info_plt,
           ir_plt,
           encode_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
-          MapSet.new([Module18]),
-          @js_dir
+          js_dir: @js_dir,
+          runtime_js_binding_modules: MapSet.new([Module18])
         )
 
       js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
