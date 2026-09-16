@@ -836,9 +836,13 @@ defmodule Hologram.Reflection do
   # The export table in the beam is what the VM installs on load, so reading it
   # from the file answers the same question as function_exported?/3 would after
   # loading, without loading.
+  # A beam that cannot be read (removed after :code.which/1 found it, or not a beam) exports
+  # nothing, which is what Code.ensure_loaded/1 made of it before this read replaced it.
   defp beam_exports_function?(beam_path, function, arity) do
-    {:ok, {_module, [{:exports, exports}]}} = :beam_lib.chunks(beam_path, [:exports])
-    {function, arity} in exports
+    case :beam_lib.chunks(beam_path, [:exports]) do
+      {:ok, {_module, [{:exports, exports}]}} -> {function, arity} in exports
+      {:error, :beam_lib, _reason} -> false
+    end
   end
 
   # TODO: Remove together with beam_source/1 (see the removal note there), which

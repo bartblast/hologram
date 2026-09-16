@@ -548,6 +548,14 @@ defmodule Hologram.ReflectionTest do
       refute has_function?(module, :other_fun, 1)
       refute has_function?(module, :my_fun, 2)
     end
+
+    test "not loaded module whose beam cannot be read" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModuleWithUnreadableBeam
+      write_unloaded_beam(module, "has_function_3_unreadable", "not a beam")
+
+      assert is_list(:code.which(module))
+      refute has_function?(module, :my_fun, 1)
+    end
   end
 
   describe "has_struct?/1" do
