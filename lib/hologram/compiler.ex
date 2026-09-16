@@ -714,7 +714,7 @@ defmodule Hologram.Compiler do
     module_digest_plt = PLT.start(opts)
 
     module_digest_plt_dump_path =
-      Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
+      Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
 
     PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
 

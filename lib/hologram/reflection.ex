@@ -9,7 +9,7 @@ defmodule Hologram.Reflection do
 
   @ir_plt_dump_file_name "ir.plt"
 
-  @module_digest_plt_dump_file_name "module_digest.plt"
+  @module_info_plt_dump_file_name "module_info.plt"
 
   @page_digest_plt_dump_file_name "page_digest.plt"
 
@@ -522,11 +522,11 @@ defmodule Hologram.Reflection do
   def module?(_term), do: false
 
   @doc """
-  Returns the module digest PLT dump file name.
+  Returns the module info PLT dump file name.
   """
-  @spec module_digest_plt_dump_file_name() :: String.t()
-  def module_digest_plt_dump_file_name do
-    @module_digest_plt_dump_file_name
+  @spec module_info_plt_dump_file_name() :: String.t()
+  def module_info_plt_dump_file_name do
+    @module_info_plt_dump_file_name
   end
 
   @doc """

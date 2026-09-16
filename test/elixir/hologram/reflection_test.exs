@@ -620,8 +620,8 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "module_digest_plt_dump_file_name/0" do
-    assert module_digest_plt_dump_file_name() == "module_digest.plt"
+  test "module_info_plt_dump_file_name/0" do
+    assert module_info_plt_dump_file_name() == "module_info.plt"
   end
 
   test "module_name/1" do

@@ -136,7 +136,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_module_digest_plt(opts) do
     module_digest_plt_dump_path =
-      Path.join(opts[:build_dir], Reflection.module_digest_plt_dump_file_name())
+      Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
 
     assert File.exists?(module_digest_plt_dump_path)
 
