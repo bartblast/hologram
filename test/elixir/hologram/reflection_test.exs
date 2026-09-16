@@ -101,8 +101,18 @@ defmodule Hologram.ReflectionTest do
       beam_path = :code.which(Module1)
       %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
 
-      assert %{digest: digest, mtime: ^mtime, size: ^size, page?: false, component?: false} =
-               beam_info(beam_path)
+      assert %{
+               digest: digest,
+               mtime: ^mtime,
+               size: ^size,
+               page?: false,
+               component?: false,
+               protocol?: false,
+               protocol_implementation?: false,
+               struct?: false,
+               exception?: false,
+               ecto_schema?: false
+             } = beam_info(beam_path)
 
       assert is_integer(digest)
     end
@@ -113,6 +123,35 @@ defmodule Hologram.ReflectionTest do
 
     test "component module" do
       assert %{page?: false, component?: true} = beam_info(:code.which(Module3))
+    end
+
+    test "protocol module" do
+      assert %{protocol?: true, protocol_implementation?: false} =
+               beam_info(:code.which(String.Chars))
+
+      assert protocol?(String.Chars)
+    end
+
+    test "protocol implementation module" do
+      assert %{protocol?: false, protocol_implementation?: true} =
+               beam_info(:code.which(Enumerable.Function))
+
+      assert protocol_implementation?(Enumerable.Function)
+    end
+
+    test "struct module" do
+      assert %{struct?: true} = beam_info(:code.which(Module9))
+      assert has_struct?(Module9)
+    end
+
+    test "exception module" do
+      assert %{exception?: true, struct?: true} = beam_info(:code.which(ArgumentError))
+      assert exception?(ArgumentError)
+    end
+
+    test "Ecto schema module" do
+      assert %{ecto_schema?: true, struct?: true} = beam_info(:code.which(Module8))
+      assert ecto_schema?(Module8)
     end
 
     # TODO: Remove when Hologram.Reflection.beam_source/1 goes (see the removal

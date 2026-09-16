@@ -38,7 +38,10 @@ defmodule Hologram.Reflection do
   @doc """
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
-  seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component.
+  seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
+  a protocol, a protocol implementation, a struct, an exception or an Ecto schema. Each flag is the export
+  table check that the `Reflection` predicate of the same name performs after loading the module, read from
+  the file instead.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
   source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
   and size are nil.
@@ -46,7 +49,18 @@ defmodule Hologram.Reflection do
   ## Examples
 
       iex> beam_info(~c"/path/to/Elixir.MyPage.beam")
-      %{digest: 56860599, mtime: 1789514623, size: 1355821, page?: true, component?: false}
+      %{
+        digest: 56860599,
+        mtime: 1789514623,
+        size: 1355821,
+        page?: true,
+        component?: false,
+        protocol?: false,
+        protocol_implementation?: false,
+        struct?: false,
+        exception?: false,
+        ecto_schema?: false
+      }
   """
   # TODO: Narrow the spec back to charlist, and rename the param back to
   # beam_path, when beam_source/1 goes (see the removal note there) - nothing
@@ -57,7 +71,12 @@ defmodule Hologram.Reflection do
             mtime: non_neg_integer | nil,
             size: non_neg_integer | nil,
             page?: boolean,
-            component?: boolean
+            component?: boolean,
+            protocol?: boolean,
+            protocol_implementation?: boolean,
+            struct?: boolean,
+            exception?: boolean,
+            ecto_schema?: boolean
           }
           | nil
   def beam_info(beam_source) do
@@ -76,7 +95,12 @@ defmodule Hologram.Reflection do
         mtime: mtime,
         size: size,
         page?: {:__is_hologram_page__, 0} in exports,
-        component?: {:__is_hologram_component__, 0} in exports
+        component?: {:__is_hologram_component__, 0} in exports,
+        protocol?: {:__protocol__, 1} in exports,
+        protocol_implementation?: {:__impl__, 1} in exports,
+        struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
+        exception?: {:exception, 1} in exports and {:message, 1} in exports,
+        ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports
       }
     end
   end
