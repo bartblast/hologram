@@ -174,7 +174,7 @@ Comparison:
 
 ```
 Name                                                ips        average  deviation         median         99th %
-server_callback_analysis_by_templatable/2        7.59 K      131.78 μs    ±12.63%      129.33 μs      158.87 μs
+server_callback_analysis_by_templatable/3        6.50 K      153.95 μs    ±70.79%      145.25 μs      256.90 μs
 ```
 
 
@@ -182,12 +182,12 @@ server_callback_analysis_by_templatable/2        7.59 K      131.78 μs    ±12.
 
 ```
 Name                       ips        average  deviation         median         99th %
-1 templatable           4.27 K      234.04 μs    ±13.34%      230.25 μs      292.67 μs
-all templatables        3.53 K      283.01 μs    ±14.04%      277.25 μs      354.29 μs
+1 templatable           3.30 K      302.72 μs    ±30.03%      284.13 μs      513.32 μs
+all templatables        2.95 K      339.47 μs    ±24.19%      328.79 μs      465.89 μs
 
 Comparison: 
-1 templatable           4.27 K
-all templatables        3.53 K - 1.21x slower +48.96 μs
+1 templatable           3.30 K
+all templatables        2.95 K - 1.12x slower +36.74 μs
 ```
 
 
