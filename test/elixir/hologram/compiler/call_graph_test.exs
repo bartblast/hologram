@@ -118,6 +118,20 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  defp page_entry_mfas(page_module, layout_module) do
+    [
+      {page_module, :__layout_module__, 0},
+      {page_module, :__layout_props__, 0},
+      {page_module, :__params__, 0},
+      {page_module, :__route__, 0},
+      {page_module, :action, 3},
+      {page_module, :template, 0},
+      {layout_module, :__props__, 0},
+      {layout_module, :action, 3},
+      {layout_module, :template, 0}
+    ]
+  end
+
   # An End marker paired with the Deps comment under it, yielding one
   # {source, target} per Erlang dependency. Dependencies on Elixir modules are
   # named without a leading colon and are carried by a different table.
@@ -369,6 +383,29 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute Struct1 in result.dispatch_types
       refute Module15 in result.referenced_components
+    end
+
+    test "knows a protocol function from the PLT function list without calling the protocol" do
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.NoSuchProtocol
+
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {protocol, :my_fun, 1})
+        |> Digraph.add_edge({protocol, :my_fun, 1}, Struct1)
+
+      without_entry = broadcast_caller_analysis(graph, module_info_plt_fixture())
+      assert Struct1 in without_entry.dispatch_types
+
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, protocol, %{
+        protocol?: true,
+        protocol_functions: [my_fun: 1]
+      })
+
+      with_entry = broadcast_caller_analysis(graph, module_info_plt)
+      refute Struct1 in with_entry.dispatch_types
     end
   end
 
@@ -792,6 +829,32 @@ defmodule Hologram.Compiler.CallGraphTest do
                call_graph,
                from_vertex,
                {StringCharsModule12, :to_string, 1}
+             )
+    end
+
+    test "module definition IR, protocol module takes its function list from the PLT" do
+      {:ok, info} = PLT.get(module_info_plt_fixture(), String.Chars)
+
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, String.Chars, %{
+        info
+        | protocol_functions: [fake_fun: 7]
+      })
+
+      call_graph = start(module_info_plt: module_info_plt)
+      build(call_graph, IR.for_module(String.Chars))
+
+      assert has_edge?(
+               call_graph,
+               {String.Chars, :fake_fun, 7},
+               {String.Chars.Atom, :__impl__, 1}
+             )
+
+      refute has_edge?(
+               call_graph,
+               {String.Chars, :to_string, 1},
+               {String.Chars.Atom, :__impl__, 1}
              )
     end
 
@@ -1437,18 +1500,27 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "list_page_entry_mfas/1" do
-    assert list_page_entry_mfas(Module19) == [
-             {Module19, :__layout_module__, 0},
-             {Module19, :__layout_props__, 0},
-             {Module19, :__params__, 0},
-             {Module19, :__route__, 0},
-             {Module19, :action, 3},
-             {Module19, :template, 0},
-             {Module20, :__props__, 0},
-             {Module20, :action, 3},
-             {Module20, :template, 0}
-           ]
+  describe "list_page_entry_mfas/2" do
+    test "with the module info PLT of the app" do
+      assert list_page_entry_mfas(Module19, module_info_plt_fixture()) ==
+               page_entry_mfas(Module19, Module20)
+    end
+
+    test "reads the layout from the PLT without calling the page" do
+      page_module = Hologram.Test.Fixtures.Compiler.CallGraph.NoSuchPage
+      module_info_plt = PLT.put(PLT.start(), page_module, %{layout_module: Module20})
+
+      assert list_page_entry_mfas(page_module, module_info_plt) ==
+               page_entry_mfas(page_module, Module20)
+    end
+
+    test "calls the page when the PLT has no entry for it" do
+      assert list_page_entry_mfas(Module19, PLT.start()) == page_entry_mfas(Module19, Module20)
+    end
+
+    test "calls the page when there is no PLT" do
+      assert list_page_entry_mfas(Module19, nil) == page_entry_mfas(Module19, Module20)
+    end
   end
 
   describe "list_page_mfas/3" do
@@ -1577,6 +1649,32 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "reads an implementation target from the PLT without calling the implementation", %{
+      full_call_graph: full_call_graph
+    } do
+      impl = Hologram.Test.Fixtures.Compiler.CallGraph.NoSuchImpl
+
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, impl, %{
+        protocol_implementation?: true,
+        implementation_for: Module12
+      })
+
+      call_graph = %{CallGraph.clone(full_call_graph) | module_info_plt: module_info_plt}
+
+      result =
+        call_graph
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({String.Chars, :to_string, 1}, {impl, :__impl__, 1})
+        |> add_edge({String.Chars, :to_string, 1}, {impl, :to_string, 1})
+        |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {impl, :__impl__, 1} in result
+      assert {impl, :to_string, 1} in result
     end
 
     test "includes protocol implementations whose type is created only in server init", %{
@@ -2262,6 +2360,28 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
       assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+    end
+
+    test "reads an added implementation protocol from the PLT" do
+      impl_module = StringCharsModule12
+      {:ok, info} = PLT.get(module_info_plt_fixture(), impl_module)
+
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, impl_module, %{
+        info
+        | implemented_protocol: Protocol1
+      })
+
+      call_graph = start(module_info_plt: module_info_plt)
+      ir_plt = PLT.put(PLT.start(), impl_module, IR.for_module(impl_module))
+      diff = %{added_modules: [impl_module], removed_modules: [], edited_modules: []}
+
+      patch(call_graph, ir_plt, diff)
+
+      # The dispatch edges refreshed are those of the protocol the PLT names.
+      assert has_edge?(call_graph, {Protocol1, :my_fun, 1}, {Protocol1.Integer, :__impl__, 1})
+      refute has_edge?(call_graph, {String.Chars, :to_string, 1}, {impl_module, :__impl__, 1})
     end
 
     test "adds protocol dispatch edges when an edited module is a protocol implementation", %{

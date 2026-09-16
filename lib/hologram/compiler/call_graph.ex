@@ -546,7 +546,7 @@ defmodule Hologram.Compiler.CallGraph do
           PLT.t() | nil
         ) :: MapSet.t(module)
   def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt) do
-    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
+    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas(&1, module_info_plt))
 
     page_vertices =
       Digraph.reachable(graph, page_entry_mfas,
@@ -870,15 +870,16 @@ defmodule Hologram.Compiler.CallGraph do
   ## Parameters
 
     * `page_module` - The module of the page for which to list entry MFAs.
+    * `module_info_plt` - The module info PLT the layout module is read from, or nil to ask the page.
 
   ## Returns
 
   A list of MFAs (tuples of {module, function, arity}) that serve as entry points
   for the given page module and its layout.
   """
-  @spec list_page_entry_mfas(module) :: [mfa]
-  def list_page_entry_mfas(page_module) do
-    layout_module = page_module.__layout_module__()
+  @spec list_page_entry_mfas(module, PLT.t() | nil) :: [mfa]
+  def list_page_entry_mfas(page_module, module_info_plt) do
+    layout_module = layout_module(page_module, module_info_plt)
 
     [
       {page_module, :__layout_module__, 0},
@@ -903,9 +904,9 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec list_page_mfas(t, module, %{module => server_callback_analysis}) :: [mfa]
   def list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable) do
-    entry_mfas = list_page_entry_mfas(page_module)
-    graph = get_graph(call_graph)
     module_info_plt = call_graph.module_info_plt
+    entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
+    graph = get_graph(call_graph)
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt)
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
@@ -1416,7 +1417,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp add_protocol_call_graph_edges(call_graph, module) do
-    funs = module.__protocol__(:functions)
+    funs = protocol_functions(module, call_graph.module_info_plt)
     impls = Reflection.list_protocol_implementations(module)
 
     edges =
@@ -1586,6 +1587,17 @@ defmodule Hologram.Compiler.CallGraph do
   # A module the compile knows nothing about (no beam, or an Erlang module) has every flag
   # false, which is what the Reflection predicates answer for it. The PLT is an ETS table
   # every process shares, so the lookup copies one entry, never the table.
+  # A module fact from the PLT: nil when there is no PLT, no entry, or the entry has no such key
+  # (a dump written before the key existed).
+  defp fact(nil, _module, _key), do: nil
+
+  defp fact(module_info_plt, module, key) do
+    case PLT.get(module_info_plt, module) do
+      {:ok, info} -> Map.get(info, key)
+      :error -> nil
+    end
+  end
+
   defp flag?(nil, _module, _flag), do: false
 
   defp flag?(module_info_plt, module, flag) do
@@ -1607,8 +1619,22 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  # The four facts the traversal used to get by calling the module, each with that call as the
+  # fallback for a PLT that has no answer (no PLT, a page without a layout, an old dump).
+  defp implementation_for(impl, module_info_plt) do
+    fact(module_info_plt, impl, :implementation_for) || impl.__impl__(:for)
+  end
+
+  defp implemented_protocol(impl, module_info_plt) do
+    fact(module_info_plt, impl, :implemented_protocol) || impl.__impl__(:protocol)
+  end
+
   defp incoming_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
+  end
+
+  defp layout_module(page_module, module_info_plt) do
+    fact(module_info_plt, page_module, :layout_module) || page_module.__layout_module__()
   end
 
   defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
@@ -1760,18 +1786,21 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp protocol_dispatch_helper_mfa?(_vertex, _target_vertex, _module_infos), do: false
 
-  # The protocol's function list is a real call on a module the facts vouch for; the
-  # flag keeps it off every other module.
+  # The flag keeps the function list lookup off every module that is not a protocol.
   defp protocol_function_mfa?({module, function, arity}, module_info_plt) do
     flag?(module_info_plt, module, :protocol?) and
-      {function, arity} in module.__protocol__(:functions)
+      {function, arity} in protocol_functions(module, module_info_plt)
   end
 
   defp protocol_function_mfa?(_vertex, _module_infos), do: false
 
+  defp protocol_functions(module, module_info_plt) do
+    fact(module_info_plt, module, :protocol_functions) || module.__protocol__(:functions)
+  end
+
   defp protocol_implementation_reachable?(impl, types, module_info_plt) do
     flag?(module_info_plt, impl, :protocol_implementation?) and
-      MapSet.member?(types, impl.__impl__(:for))
+      MapSet.member?(types, implementation_for(impl, module_info_plt))
   end
 
   # Bodies of functions generated by defprotocol (__protocol__/1, impl_for/1, impl_for!/1,
@@ -1810,7 +1839,7 @@ defmodule Hologram.Compiler.CallGraph do
   defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
     added_or_edited_modules
     |> Enum.filter(&module_flag?(call_graph, &1, :protocol_implementation?))
-    |> Enum.map(& &1.__impl__(:protocol))
+    |> Enum.map(&implemented_protocol(&1, call_graph.module_info_plt))
     |> Enum.uniq()
     |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
   end
