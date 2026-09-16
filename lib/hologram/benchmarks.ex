@@ -10,7 +10,9 @@ defmodule Hologram.Benchmarks do
   If the arguments are floats they are treated as percentage (0.2 == 20%),
   otherwise they are treated as (literal) number of modules.
   """
-  @spec generate_module_info_plts(integer, integer, integer) :: {PLT.t(), PLT.t()}
+  @spec generate_module_info_plts(non_neg_integer, non_neg_integer, non_neg_integer) ::
+          {PLT.t(), PLT.t()}
+  @spec generate_module_info_plts(float, float, float) :: {PLT.t(), PLT.t()}
   def generate_module_info_plts(added_modules_spec, removed_modules_spec, edited_modules_spec) do
     validate_args(added_modules_spec, removed_modules_spec, edited_modules_spec)
 
