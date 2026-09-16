@@ -45,11 +45,19 @@ no previous dump (every beam read)                           5.59      178.92 ms
 ```
 
 
+### ✅ compiler » build_module_metadata_1
+
+```
+Name                              ips        average  deviation         median         99th %
+build_module_metadata/1        339.39        2.95 ms    ±23.18%        2.85 ms        4.74 ms
+```
+
+
 ### ✅ compiler » build_page_js_5
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_page_js/5        175.66        5.69 ms    ±15.80%        5.48 ms        9.17 ms
+build_page_js/5        147.18        6.79 ms    ±18.53%        6.63 ms       10.96 ms
 ```
 
 
@@ -195,15 +203,15 @@ all templatables        2.95 K - 1.12x slower +36.74 μs
 
 ```
 Name                                ips        average  deviation         median         99th %
-create_page_entry_files/7          1.08      925.02 ms     ±4.79%      911.24 ms     1006.72 ms
+create_page_entry_files/7          1.08      927.52 ms     ±6.13%      923.40 ms     1048.28 ms
 ```
 
 
-### ✅ compiler » create_runtime_entry_file_4
+### ✅ compiler » create_runtime_entry_file_6
 
 ```
 Name                                  ips        average  deviation         median         99th %
-create_runtime_entry_file/4         26.28       38.05 ms    ±10.77%       37.67 ms       51.59 ms
+create_runtime_entry_file/6          8.71      114.86 ms     ±5.64%      114.69 ms      159.51 ms
 ```
 
 

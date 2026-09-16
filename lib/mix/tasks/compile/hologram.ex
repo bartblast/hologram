@@ -176,6 +176,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       # needs it.
       encode_plt = PLT.start(supervisor: sup)
 
+      # The stack trace metadata of every module, which the bundles look up instead of asking the
+      # VM about each module once per bundle. Built only when client stack traces are on, since the
+      # bundles register no metadata otherwise.
+      module_metadata =
+        if Hologram.client_stacktraces?() do
+          Compiler.build_module_metadata(new_module_info_plt)
+        end
+
+      entry_file_opts = Keyword.put(opts, :module_metadata, module_metadata)
+
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(
           runtime_mfas,
@@ -183,7 +193,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           encode_plt,
           async_mfas,
           app_versions,
-          opts
+          entry_file_opts
         )
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
@@ -204,7 +214,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           encode_plt,
           async_mfas,
           runtime_js_binding_modules,
-          Keyword.put(opts, :components, component_modules)
+          Keyword.put(entry_file_opts, :components, component_modules)
         )
         |> Enum.map(fn {entry_name, entry_file_path} ->
           {entry_name, entry_file_path, "page"}

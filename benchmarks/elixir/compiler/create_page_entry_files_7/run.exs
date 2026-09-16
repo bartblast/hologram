@@ -40,6 +40,7 @@ Benchee.run(
 
     opts = [
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
+      module_metadata: Compiler.build_module_metadata(CallGraph.module_info_plt(call_graph)),
       tmp_dir:
         Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_page_entry_files_7"])
     ]
