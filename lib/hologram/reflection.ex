@@ -273,13 +273,19 @@ defmodule Hologram.Reflection do
   @doc """
   Returns true if module contains a public function with the given arity, otherwise false.
 
-  Kernel.function_exported?/3 does not load the module in case it is not loaded
-  (in such cases it would return false even when the module has the given function).
+  A loaded module is asked directly. A module that is not loaded is answered from the export
+  table of its BEAM on the code path, without loading it; a name with no BEAM has no functions.
   """
   @spec has_function?(module, atom, integer) :: boolean
   def has_function?(module, function, arity) do
-    Code.ensure_loaded(module)
-    function_exported?(module, function, arity)
+    if :code.is_loaded(module) do
+      function_exported?(module, function, arity)
+    else
+      case :code.which(module) do
+        :non_existing -> false
+        beam_path -> beam_exports_function?(beam_path, function, arity)
+      end
+    end
   end
 
   @doc """
@@ -483,6 +489,7 @@ defmodule Hologram.Reflection do
 
   @doc """
   Returns true if the given term is an existing (Elixir or Erlang) module, or false otherwise.
+  A module exists when the VM holds it or has a BEAM for it on the code path; it is not loaded to find out.
 
   ## Examples
 
@@ -505,13 +512,7 @@ defmodule Hologram.Reflection do
   def module?(term)
 
   def module?(term) when is_atom(term) do
-    case Code.ensure_loaded(term) do
-      {:module, _module} ->
-        true
-
-      _fallback ->
-        false
-    end
+    :code.is_loaded(term) != false or :code.which(term) != :non_existing
   end
 
   def module?(_term), do: false
@@ -789,6 +790,14 @@ defmodule Hologram.Reflection do
   end
 
   defp beam_mtime_and_size(_beam_binary), do: {nil, nil}
+
+  # The export table in the beam is what the VM installs on load, so reading it
+  # from the file answers the same question as function_exported?/3 would after
+  # loading, without loading.
+  defp beam_exports_function?(beam_path, function, arity) do
+    {:ok, {_module, [{:exports, exports}]}} = :beam_lib.chunks(beam_path, [:exports])
+    {function, arity} in exports
+  end
 
   # TODO: Remove together with beam_source/1 (see the removal note there), which
   # is its only caller.

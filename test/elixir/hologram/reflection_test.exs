@@ -82,6 +82,27 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> Application.delete_env(app, key) end)
   end
 
+  # Compiles the module, unloads it, and leaves its beam on a code path added for
+  # the test, so that the module exists on disk only.
+  defp write_unloaded_module(module, tmp_subdir, body) do
+    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
+    :code.purge(module)
+    :code.delete(module)
+
+    ebin_dir = Path.join([tmp_dir(), "tests", "reflection", tmp_subdir, "ebin"])
+    ebin_dir_charlist = String.to_charlist(ebin_dir)
+    beam_path = Path.join(ebin_dir, "#{module}.beam")
+    File.mkdir_p!(ebin_dir)
+    File.write!(beam_path, bytecode)
+    true = :code.add_path(ebin_dir_charlist)
+
+    on_exit(fn ->
+      :code.del_path(ebin_dir_charlist)
+      :code.purge(module)
+      :code.delete(module)
+    end)
+  end
+
   describe "alias?/1" do
     test "atom which is an alias" do
       assert alias?(Calendar.ISO)
@@ -376,6 +397,23 @@ defmodule Hologram.ReflectionTest do
     test "returns false if the module doesn't have a function with the given name and arity" do
       refute has_function?(Module4, :test_fun, 3)
     end
+
+    test "not loaded module that exports the function" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModuleWithFun
+      write_unloaded_module(module, "has_function_3", "def my_fun(_a), do: :ok")
+
+      assert :code.is_loaded(module) == false
+      assert has_function?(module, :my_fun, 1)
+      assert :code.is_loaded(module) == false
+    end
+
+    test "not loaded module that does not export the function" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModuleWithoutFun
+      write_unloaded_module(module, "has_function_3", "def my_fun(_a), do: :ok")
+
+      refute has_function?(module, :other_fun, 1)
+      refute has_function?(module, :my_fun, 2)
+    end
   end
 
   describe "has_struct?/1" do
@@ -621,6 +659,15 @@ defmodule Hologram.ReflectionTest do
 
     test "atom that starts with a lowercase letter and is not an existing Erlang module" do
       refute module?(:my_module)
+    end
+
+    test "does not load the module" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModule
+      write_unloaded_module(module, "module_1", "")
+
+      assert :code.is_loaded(module) == false
+      assert module?(module)
+      assert :code.is_loaded(module) == false
     end
 
     test "non-atom" do
