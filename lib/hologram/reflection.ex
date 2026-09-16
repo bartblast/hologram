@@ -61,12 +61,16 @@ defmodule Hologram.Reflection do
           }
           | nil
   def beam_info(beam_source) do
+    # The stat comes before the read on purpose. If a writer replaces the file in between, the
+    # entry pairs the old mtime and size with the new digest, and the next compile sees the file
+    # differ from the entry and reads it again. The other order could pair the new mtime and
+    # size with the old digest, and that entry would be reused as long as the file stood still.
+    {mtime, size} = beam_mtime_and_size(beam_source)
+
     {:ok, {_module, [{:exports, exports}, {~c"Dbgi", dbgi_chunk}]}} =
       :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi"])
 
     if {:__info__, 1} in exports do
-      {mtime, size} = beam_mtime_and_size(beam_source)
-
       %{
         digest: :erlang.phash2(dbgi_chunk),
         mtime: mtime,
