@@ -241,7 +241,13 @@ defmodule Hologram.Compiler do
         js_dir
       ) do
     mfas =
-      CallGraph.list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+      call_graph
+      |> CallGraph.get_graph()
+      |> CallGraph.list_page_mfas(
+        page_module,
+        server_callback_analysis_by_templatable,
+        CallGraph.module_info_plt(call_graph)
+      )
 
     %{imports: imports, bindings: bindings} =
       aggregate_js_imports(mfas, ir_plt, runtime_js_binding_modules)

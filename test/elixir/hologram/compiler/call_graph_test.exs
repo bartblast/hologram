@@ -99,7 +99,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     server_callback_analysis_by_templatable =
       server_callback_analysis_by_templatable(graph, templatables, module_info_plt_fixture())
 
-    list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+    list_page_mfas(
+      graph,
+      page_module,
+      server_callback_analysis_by_templatable,
+      CallGraph.module_info_plt(call_graph)
+    )
   end
 
   # The module info PLT of the fixture app, started once per test run in setup_all (whose
@@ -1523,7 +1528,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "list_page_mfas/3" do
+  describe "list_page_mfas/4" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =
         full_call_graph

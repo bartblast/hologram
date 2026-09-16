@@ -898,15 +898,19 @@ defmodule Hologram.Compiler.CallGraph do
   Returns the sorted list of MFAs that are reachable by the given page.
   Server dispatch types, reflection MFAs, and server-referenced components of
   the page's templatables are looked up in the given precomputed server
-  callback analysis.
+  callback analysis. The graph is taken as it is, so that callers running many pages at once
+  can share one graph (see with_shared_graph/2) instead of each copying it out of the call graph.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_3/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
-  @spec list_page_mfas(t, module, %{module => server_callback_analysis}) :: [mfa]
-  def list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable) do
-    module_info_plt = call_graph.module_info_plt
+  @spec list_page_mfas(
+          Digraph.t(),
+          module,
+          %{module => server_callback_analysis},
+          PLT.t() | nil
+        ) :: [mfa]
+  def list_page_mfas(graph, page_module, server_callback_analysis_by_templatable, module_info_plt) do
     entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
-    graph = get_graph(call_graph)
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt)
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
@@ -987,7 +991,7 @@ defmodule Hologram.Compiler.CallGraph do
           extract_uniq_components(initial_mfas, module_info_plt)
       )
 
-    # The same server-referenced component expansion as in list_page_mfas/3, so chains
+    # The same server-referenced component expansion as in list_page_mfas/4, so chains
     # like a broadcast-referenced component whose own server callbacks reference
     # further components end up in the runtime bundle too. Analyses are computed on
     # demand from an empty map, since the runtime bundle has no precomputed analysis.
