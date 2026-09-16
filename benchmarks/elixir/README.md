@@ -45,11 +45,11 @@ no previous dump (every beam read)                           5.59      178.92 ms
 ```
 
 
-### ✅ compiler » build_page_js_6
+### ✅ compiler » build_page_js_8
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_page_js/6         70.82       14.12 ms    ±14.38%       14.67 ms       17.32 ms
+build_page_js/8        130.83        7.64 ms     ±8.71%        7.75 ms        9.33 ms
 ```
 
 
@@ -84,11 +84,11 @@ dump dir doesn't exists                          21.80 - 1.01x slower +0.34 ms
 ```
 
 
-### ✅ compiler » call_graph » list_page_mfas_3
+### ✅ compiler » call_graph » list_page_mfas_4
 
 ```
 Name                       ips        average  deviation         median         99th %
-list_page_mfas/3         69.52       14.38 ms    ±22.22%       12.88 ms       20.19 ms
+list_page_mfas/4        544.11        1.84 ms     ±9.06%        1.80 ms        2.28 ms
 ```
 
 
@@ -191,11 +191,11 @@ all templatables        2.95 K - 1.12x slower +36.74 μs
 ```
 
 
-### ✅ compiler » create_page_entry_files_5
+### ✅ compiler » create_page_entry_files_7
 
 ```
 Name                                ips        average  deviation         median         99th %
-create_page_entry_files/5          1.05      949.73 ms     ±2.89%      941.21 ms     1014.11 ms
+create_page_entry_files/7          1.11      903.59 ms     ±6.91%      927.69 ms     1013.67 ms
 ```
 
 

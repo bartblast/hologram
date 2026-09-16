@@ -499,7 +499,7 @@ defmodule Hologram.Compiler do
   The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
   copies it.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
   """
   @spec create_page_entry_files(
           list(module),
