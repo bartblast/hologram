@@ -854,6 +854,9 @@ defmodule Hologram.Reflection do
 
   # The function definitions from an Elixir debug info chunk, each {{name, arity}, kind, meta,
   # clauses} with clauses as {meta, args, guards, body} in expanded quoted form.
+  # The chunk is bytes of a compiled BEAM on the code path, the same code the VM loads and runs,
+  # so decoding its term is as trusted as loading the module.
+  # sobelow_skip ["Misc.BinToTerm"]
   defp debug_info_definitions(dbgi_chunk) do
     case :erlang.binary_to_term(dbgi_chunk) do
       {:debug_info_v1, _backend, {:elixir_v1, %{definitions: definitions}, _specs}} -> definitions
