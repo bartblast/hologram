@@ -492,6 +492,13 @@ defmodule Hologram.CompilerTest do
       assert %PLT{} = ir_plt = build_ir_plt()
       assert PLT.get(ir_plt, MyModule) == :error
     end
+
+    test "builds IR for the given modules only" do
+      assert %PLT{} = ir_plt = build_ir_plt(modules: [Module1])
+
+      assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module1)
+      assert PLT.get(ir_plt, Hologram.Reflection) == :error
+    end
   end
 
   describe "build_module_digest_plt!/0" do
@@ -1484,6 +1491,21 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "list_components/1" do
+    info = fn page?, component? ->
+      %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
+    end
+
+    plt =
+      PLT.start()
+      |> PLT.put(Module3, info.(false, true))
+      |> PLT.put(Module1, info.(false, false))
+      |> PLT.put(Module2, info.(true, false))
+      |> PLT.put(Module11, info.(false, true))
+
+    assert list_components(plt) == [Module11, Module3]
+  end
+
   describe "list_js_import_modules/1" do
     test "returns the modules that declare JS imports" do
       mfas = [{Module12, :func, 0}, {Enum, :map, 2}, {Module14, :func, 0}]
@@ -1502,6 +1524,21 @@ defmodule Hologram.CompilerTest do
 
       assert list_js_import_modules(mfas) == [Module12]
     end
+  end
+
+  test "list_pages/1" do
+    info = fn page?, component? ->
+      %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
+    end
+
+    plt =
+      PLT.start()
+      |> PLT.put(Module3, info.(false, true))
+      |> PLT.put(Module1, info.(false, false))
+      |> PLT.put(Module2, info.(true, false))
+      |> PLT.put(Module11, info.(true, false))
+
+    assert list_pages(plt) == [Module11, Module2]
   end
 
   describe "maybe_install_js_deps/1" do

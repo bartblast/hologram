@@ -118,6 +118,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
+  Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
+  module info PLT's keys.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
@@ -127,7 +129,7 @@ defmodule Hologram.Compiler do
   def build_ir_plt(opts \\ []) do
     ir_plt = PLT.start(opts)
 
-    modules = Reflection.list_elixir_modules()
+    modules = opts[:modules] || Reflection.list_elixir_modules()
 
     # Processing modules in chunks of 2 improves performance by ~7%
     # (determined experimentally)
@@ -698,6 +700,14 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the component modules recorded in the given module info PLT, sorted by name.
+  """
+  @spec list_components(PLT.t()) :: list(module)
+  def list_components(module_info_plt) do
+    list_modules_where(module_info_plt, :component?)
+  end
+
+  @doc """
   Lists the Elixir modules referenced by the given MFAs that declare JS imports.
   """
   @spec list_js_import_modules(list(mfa)) :: list(module)
@@ -709,6 +719,14 @@ defmodule Hologram.Compiler do
     |> Enum.filter(
       &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
     )
+  end
+
+  @doc """
+  Lists the page modules recorded in the given module info PLT, sorted by name.
+  """
+  @spec list_pages(PLT.t()) :: list(module)
+  def list_pages(module_info_plt) do
+    list_modules_where(module_info_plt, :page?)
   end
 
   @doc """
@@ -1118,6 +1136,14 @@ defmodule Hologram.Compiler do
   end
 
   defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
+
+  defp list_modules_where(module_info_plt, flag) do
+    module_info_plt
+    |> PLT.get_all()
+    |> Enum.filter(fn {_module, info} -> info[flag] end)
+    |> Enum.map(fn {module, _info} -> module end)
+    |> Enum.sort()
+  end
 
   defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
     max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
