@@ -758,6 +758,15 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the entries of the given module info PLT as one map, module to info, which is what the call graph
+  takes as its module facts (see `Hologram.Compiler.CallGraph.start/1`).
+  """
+  @spec module_infos(PLT.t()) :: CallGraph.module_infos()
+  def module_infos(module_info_plt) do
+    PLT.get_all(module_info_plt)
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,

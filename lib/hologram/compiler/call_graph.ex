@@ -12,9 +12,9 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Realtime
   alias Hologram.Reflection
 
-  defstruct pid: nil
+  defstruct pid: nil, module_infos: %{}
 
-  @type t :: %CallGraph{pid: pid}
+  @type t :: %CallGraph{pid: pid, module_infos: module_infos}
 
   @type broadcast_caller_analysis :: %{
           dispatch_types: MapSet.t(module),
@@ -22,6 +22,10 @@ defmodule Hologram.Compiler.CallGraph do
         }
 
   @type edge :: {vertex, vertex}
+
+  # One entry per Elixir module the compile knows about, see Hologram.Reflection.beam_info/1
+  # for the entry shape; a module absent from the map has every flag false.
+  @type module_infos :: %{module => map}
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
@@ -768,6 +772,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     opts
     |> Keyword.put(:graph, graph)
+    |> Keyword.put(:module_infos, call_graph.module_infos)
     |> start()
   end
 
@@ -1022,6 +1027,12 @@ defmodule Hologram.Compiler.CallGraph do
       call_graph
     end
   end
+
+  @doc """
+  Returns the module facts the call graph was started with (see `Hologram.Compiler.module_infos/1`).
+  """
+  @spec module_infos(t) :: module_infos
+  def module_infos(%CallGraph{module_infos: module_infos}), do: module_infos
 
   @doc """
   Returns the list of vertices that are MFAs belonging to the given module.
@@ -1299,12 +1310,15 @@ defmodule Hologram.Compiler.CallGraph do
   ## Options
 
     * `:graph` - the initial `Digraph` to seed the agent with; defaults to an empty graph.
+    * `:module_infos` - the module facts the graph answers module questions from (see
+      `Hologram.Compiler.module_infos/1`); defaults to none, under which every module fact is false.
     * `:supervisor` - a `DynamicSupervisor` to start the agent under as a `:temporary` child;
       when omitted the agent is linked to the calling process.
   """
   @spec start(T.opts()) :: t
   def start(opts \\ []) do
     graph = opts[:graph] || Digraph.new()
+    module_infos = opts[:module_infos] || %{}
 
     {:ok, pid} =
       case opts[:supervisor] do
@@ -1321,7 +1335,7 @@ defmodule Hologram.Compiler.CallGraph do
           DynamicSupervisor.start_child(sup, child_spec)
       end
 
-    %CallGraph{pid: pid}
+    %CallGraph{pid: pid, module_infos: module_infos}
   end
 
   @doc """

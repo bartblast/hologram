@@ -1212,7 +1212,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "clone/1", %{full_call_graph: call_graph} do
+    call_graph = %{call_graph | module_infos: %{MyModule => %{page?: true}}}
+
     assert %CallGraph{} = call_graph_clone = clone(call_graph)
+    assert call_graph_clone.module_infos == call_graph.module_infos
 
     refute call_graph_clone == call_graph
     assert get_graph(call_graph_clone) == get_graph(call_graph)
@@ -2119,6 +2122,13 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "module_infos/1" do
+    module_infos = %{MyModule => %{page?: true}}
+
+    assert module_infos(start(module_infos: module_infos)) == module_infos
+    assert module_infos(start()) == %{}
+  end
+
   describe "patch/3" do
     test "adds modules", %{empty_call_graph: call_graph_1} do
       module_9_ir = IR.for_module(Module9)
@@ -2771,6 +2781,16 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert %CallGraph{pid: pid} = start(graph: graph)
       assert is_pid(pid)
       assert Agent.get(pid, & &1) == graph
+    end
+
+    test "default module_infos opt" do
+      assert %CallGraph{module_infos: %{}} = start()
+    end
+
+    test "module_infos opt specified" do
+      module_infos = %{MyModule => %{page?: true}}
+
+      assert %CallGraph{module_infos: ^module_infos} = start(module_infos: module_infos)
     end
   end
 

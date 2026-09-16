@@ -1669,6 +1669,17 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "module_infos/1" do
+    info = %{digest: 1, mtime: 1, size: 1, page?: false, component?: false}
+
+    plt =
+      PLT.start()
+      |> PLT.put(Module1, info)
+      |> PLT.put(Module2, %{info | page?: true})
+
+    assert module_infos(plt) == %{Module1 => info, Module2 => %{info | page?: true}}
+  end
+
   describe "patch_ir_plt!/3" do
     setup do
       ir_plt =
