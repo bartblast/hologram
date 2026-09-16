@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_call_graph/1</td>
-    <td style="white-space: nowrap; text-align: right">3.86</td>
-    <td style="white-space: nowrap; text-align: right">259.15 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;8.54%</td>
-    <td style="white-space: nowrap; text-align: right">257.50 ms</td>
-    <td style="white-space: nowrap; text-align: right">337.47 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.65</td>
+    <td style="white-space: nowrap; text-align: right">1.54 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;24.61%</td>
+    <td style="white-space: nowrap; text-align: right">1.52 s</td>
+    <td style="white-space: nowrap; text-align: right">2.20 s</td>
   </tr>
 
 </table>

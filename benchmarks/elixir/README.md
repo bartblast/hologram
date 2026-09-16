@@ -170,7 +170,7 @@ Comparison:
 ```
 
 
-### ✅ compiler » call_graph » server_callback_analysis_by_templatable_2
+### ✅ compiler » call_graph » server_callback_analysis_by_templatable_3
 
 ```
 Name                                                ips        average  deviation         median         99th %
@@ -178,7 +178,7 @@ server_callback_analysis_by_templatable/2        7.59 K      131.78 μs    ±12.
 ```
 
 
-### ✅ compiler » call_graph » server_protocol_dispatch_types_2
+### ✅ compiler » call_graph » server_protocol_dispatch_types_3
 
 ```
 Name                       ips        average  deviation         median         99th %

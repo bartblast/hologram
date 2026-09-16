@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.CallGraph.server_callback_analysis_by_templatable/2
+Hologram.Compiler.CallGraph.server_callback_analysis_by_templatable/3
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">server_callback_analysis_by_templatable/2</td>
-    <td style="white-space: nowrap; text-align: right">7.59 K</td>
-    <td style="white-space: nowrap; text-align: right">131.78 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;12.63%</td>
-    <td style="white-space: nowrap; text-align: right">129.33 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">158.87 &micro;s</td>
+    <td style="white-space: nowrap">server_callback_analysis_by_templatable/3</td>
+    <td style="white-space: nowrap; text-align: right">7.98 K</td>
+    <td style="white-space: nowrap; text-align: right">125.25 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;14.14%</td>
+    <td style="white-space: nowrap; text-align: right">123.88 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">142.04 &micro;s</td>
   </tr>
 
 </table>

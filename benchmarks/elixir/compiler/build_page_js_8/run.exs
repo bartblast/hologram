@@ -37,7 +37,11 @@ Benchee.run(
     templatables = Reflection.list_pages() ++ Reflection.list_components()
 
     server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+      CallGraph.server_callback_analysis_by_templatable(
+        graph,
+        templatables,
+        CallGraph.module_infos(call_graph)
+      )
 
     runtime_js_binding_modules =
       runtime_mfas
