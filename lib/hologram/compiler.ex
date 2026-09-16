@@ -100,13 +100,26 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the call graph of all modules in the given IR PLT.
+  Builds the call graph of all modules in the given IR PLT, reading the module facts it needs
+  (see `module_infos/1`) from a module info PLT built on the spot.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_call_graph_1/README.md
   """
   @spec build_call_graph(PLT.t()) :: CallGraph.t()
   def build_call_graph(ir_plt) do
-    call_graph = CallGraph.start()
+    module_info_plt = build_module_info_plt!(PLT.start(), nil)
+    call_graph = build_call_graph(ir_plt, module_infos(module_info_plt))
+    PLT.stop(module_info_plt)
+
+    call_graph
+  end
+
+  @doc """
+  Builds the call graph of all modules in the given IR PLT with the given module facts.
+  """
+  @spec build_call_graph(PLT.t(), CallGraph.module_infos()) :: CallGraph.t()
+  def build_call_graph(ir_plt, module_infos) do
+    call_graph = CallGraph.start(module_infos: module_infos)
 
     ir_plt
     |> PLT.get_all()

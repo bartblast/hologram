@@ -1582,7 +1582,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
-    if Reflection.ecto_schema?(module) do
+    if module_flag?(call_graph, module, :ecto_schema?) do
       add_edges(call_graph, [
         {module, {module, :__changeset__, 0}},
         {module, {module, :__schema__, 1}},
@@ -1629,7 +1629,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
-    if Reflection.protocol?(module) do
+    if module_flag?(call_graph, module, :protocol?) do
       add_protocol_call_graph_edges(call_graph, module)
     end
 
@@ -1640,7 +1640,7 @@ defmodule Hologram.Compiler.CallGraph do
   # the callback isn't reachable from any call site - a reached exception
   # module brings its own.
   defp maybe_add_exception_call_graph_edges(call_graph, module) do
-    if Reflection.exception?(module) do
+    if module_flag?(call_graph, module, :exception?) do
       add_edge(call_graph, module, {module, :message, 1})
     end
 
@@ -1648,7 +1648,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_struct_call_graph_edges(call_graph, module) do
-    if Reflection.has_struct?(module) do
+    if module_flag?(call_graph, module, :struct?) do
       add_edges(call_graph, [
         {module, {module, :__struct__, 0}},
         {module, {module, :__struct__, 1}}
@@ -1659,11 +1659,11 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp maybe_add_templatable_call_graph_edges(call_graph, module) do
-    if Reflection.page?(module) do
+    if module_flag?(call_graph, module, :page?) do
       add_page_call_graph_edges(call_graph, module)
     end
 
-    if Reflection.component?(module) do
+    if module_flag?(call_graph, module, :component?) do
       add_component_call_graph_edges(call_graph, module)
     end
 
@@ -1676,6 +1676,12 @@ defmodule Hologram.Compiler.CallGraph do
     else
       types
     end
+  end
+
+  # A module the compile knows nothing about (no beam, or an Erlang module) has every flag
+  # false, which is what the Reflection predicates answer for it.
+  defp module_flag?(%CallGraph{module_infos: module_infos}, module, flag) do
+    match?(%{^module => %{^flag => true}}, module_infos)
   end
 
   # Moves pending implementation candidates whose target type has become reachable
@@ -1755,8 +1761,8 @@ defmodule Hologram.Compiler.CallGraph do
   # which would re-introduce vertices that remove_module_vertices already cleaned up.
   defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
     added_or_edited_modules
-    |> Enum.map(&Reflection.protocol_implementation/1)
-    |> Enum.reject(&is_nil/1)
+    |> Enum.filter(&module_flag?(call_graph, &1, :protocol_implementation?))
+    |> Enum.map(& &1.__impl__(:protocol))
     |> Enum.uniq()
     |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
   end

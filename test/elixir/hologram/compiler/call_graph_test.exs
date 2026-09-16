@@ -125,19 +125,24 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   setup_all do
+    module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
+    module_infos = Compiler.module_infos(module_info_plt)
+    PLT.stop(module_info_plt)
+
     ir_plt = Compiler.build_ir_plt()
-    full_call_graph = Compiler.build_call_graph(ir_plt)
+    full_call_graph = Compiler.build_call_graph(ir_plt, module_infos)
     runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph, Reflection.list_pages())
 
     [
       full_call_graph: full_call_graph,
       ir_plt: ir_plt,
+      module_infos: module_infos,
       runtime_mfas: runtime_mfas
     ]
   end
 
-  setup do
-    [empty_call_graph: start()]
+  setup %{module_infos: module_infos} do
+    [empty_call_graph: start(module_infos: module_infos)]
   end
 
   test "add_edge/3", %{empty_call_graph: call_graph} do
@@ -347,6 +352,27 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "build/3" do
+    test "adds no module edges for a module absent from the module infos" do
+      call_graph = start()
+      ir = IR.for_module(Module14)
+
+      build(call_graph, ir)
+
+      refute has_edge?(call_graph, Module14, {Module14, :__route__, 0})
+      refute has_edge?(call_graph, Module14, {Module14, :__params__, 0})
+    end
+
+    test "adds the module edges for a module present in the module infos", %{
+      empty_call_graph: call_graph
+    } do
+      ir = IR.for_module(Module14)
+
+      build(call_graph, ir)
+
+      assert has_edge?(call_graph, Module14, {Module14, :__route__, 0})
+      assert has_edge?(call_graph, Module14, {Module14, :__params__, 0})
+    end
+
     test "atom type IR, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
       result = build(call_graph, ir, :vertex_1)
@@ -1415,13 +1441,17 @@ defmodule Hologram.Compiler.CallGraphTest do
       [page_module_22_mfas: page_module_22_mfas]
     end
 
-    test "includes action/3, template/0 and other MFAs that should be included" do
+    test "includes action/3, template/0 and other MFAs that should be included", %{
+      module_infos: module_infos
+    } do
       module_14_ir = IR.for_module(Module14)
       module_15_ir = IR.for_module(Module15)
       module_16_ir = IR.for_module(Module16)
 
+      call_graph = start(module_infos: module_infos)
+
       result =
-        start()
+        call_graph
         |> build(module_14_ir)
         |> build(module_15_ir)
         |> build(module_16_ir)
