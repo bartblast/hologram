@@ -492,24 +492,94 @@ defmodule Hologram.CompilerTest do
       assert %PLT{} = ir_plt = build_ir_plt()
       assert PLT.get(ir_plt, MyModule) == :error
     end
+
+    test "builds IR for the given modules only" do
+      assert %PLT{} = ir_plt = build_ir_plt(modules: [Module1])
+
+      assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module1)
+      assert PLT.get(ir_plt, Hologram.Reflection) == :error
+    end
   end
 
-  describe "build_module_digest_plt!/0" do
-    test "adds module digest entries for modules that have a BEAM path" do
-      assert %PLT{} = plt = build_module_digest_plt!()
+  describe "build_module_info_plt!/3" do
+    test "adds an entry for every Elixir module that has a BEAM, none for the rest" do
+      assert %PLT{} = plt = build_module_info_plt!(PLT.start(), nil)
 
-      assert plt
-             |> PLT.get!(Hologram.Reflection)
-             |> is_integer()
+      assert %{digest: digest, page?: false, component?: false} =
+               PLT.get!(plt, Hologram.Reflection)
 
-      assert plt
-             |> PLT.get!(Hologram.Compiler)
-             |> is_integer()
+      assert is_integer(digest)
+      assert PLT.get(plt, MyModule) == :error
+      assert PLT.get(plt, Kernel.SpecialForms) == :error
     end
 
-    test "doesn't add module digest entries for modules that don't have a BEAM path" do
-      assert %PLT{} = plt = build_module_digest_plt!()
-      assert PLT.get(plt, MyModule) == :error
+    test "marks pages and components" do
+      plt = build_module_info_plt!(PLT.start(), nil)
+
+      assert %{page?: true} = PLT.get!(plt, Hologram.Test.Fixtures.Reflection.Module2)
+      assert %{component?: true} = PLT.get!(plt, Hologram.Test.Fixtures.Reflection.Module3)
+    end
+
+    test "entries match beam_info/1" do
+      plt = build_module_info_plt!(PLT.start(), nil)
+      beam_path = :code.which(Hologram.Reflection)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reuses the old entry when the BEAM is untouched and older than the dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == old_info
+    end
+
+    test "reads the BEAM when it was written within a second of the dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads the BEAM when its size differs from the old entry" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size + 1, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads the BEAM when its mtime differs from the old entry" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime - 1, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, mtime + 1)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads every BEAM when there is no previous dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+      old_info = %{digest: 1, mtime: mtime, size: size, page?: true, component?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt = build_module_info_plt!(old_plt, nil)
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
     end
   end
 
@@ -1073,6 +1143,48 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
+  test "create_page_entry_files/7 with the component modules given", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_components"])
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    build = fn opts ->
+      page_modules
+      |> create_page_entry_files(
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        MapSet.new(),
+        opts
+      )
+      |> Enum.map(fn {page_module, entry_file_path} ->
+        {page_module, File.read!(entry_file_path)}
+      end)
+    end
+
+    opts_with_components = Keyword.put(opts, :components, Reflection.list_components())
+
+    listed = build.(opts)
+    given = build.(opts_with_components)
+
+    assert given == listed
+  end
+
   test "create_runtime_entry_file/6", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
@@ -1091,24 +1203,30 @@ defmodule Hologram.CompilerTest do
            |> String.contains?("Interpreter.defineElixirFunction")
   end
 
-  test "diff_module_digest_plts/2" do
+  test "diff_module_info_plts/2" do
+    info = fn digest, mtime ->
+      %{digest: digest, mtime: mtime, size: 1, page?: false, component?: false}
+    end
+
     old_plt =
       PLT.start()
-      |> PLT.put(:module_1, :digest_1)
-      |> PLT.put(:module_3, :digest_3a)
-      |> PLT.put(:module_5, :digest_5)
-      |> PLT.put(:module_6, :digest_6a)
-      |> PLT.put(:module_7, :digest_7)
+      |> PLT.put(:module_1, info.(1, 100))
+      |> PLT.put(:module_3, info.(3, 100))
+      |> PLT.put(:module_5, info.(5, 100))
+      |> PLT.put(:module_6, info.(6, 100))
+      |> PLT.put(:module_7, info.(7, 100))
+      |> PLT.put(:module_8, info.(8, 100))
 
     new_plt =
       PLT.start()
-      |> PLT.put(:module_1, :digest_1)
-      |> PLT.put(:module_2, :digest_2)
-      |> PLT.put(:module_3, :digest_3b)
-      |> PLT.put(:module_4, :digest_4)
-      |> PLT.put(:module_6, :digest_6b)
+      |> PLT.put(:module_1, info.(1, 100))
+      |> PLT.put(:module_2, info.(2, 100))
+      |> PLT.put(:module_3, info.(33, 100))
+      |> PLT.put(:module_4, info.(4, 100))
+      |> PLT.put(:module_6, info.(66, 100))
+      |> PLT.put(:module_8, info.(8, 200))
 
-    result = diff_module_digest_plts(old_plt, new_plt)
+    result = diff_module_info_plts(old_plt, new_plt)
 
     keys =
       result
@@ -1116,7 +1234,6 @@ defmodule Hologram.CompilerTest do
       |> Enum.sort()
 
     assert keys == [:added_modules, :edited_modules, :removed_modules]
-
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
@@ -1366,6 +1483,21 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "list_components/1" do
+    info = fn page?, component? ->
+      %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
+    end
+
+    plt =
+      PLT.start()
+      |> PLT.put(Module3, info.(false, true))
+      |> PLT.put(Module1, info.(false, false))
+      |> PLT.put(Module2, info.(true, false))
+      |> PLT.put(Module11, info.(false, true))
+
+    assert list_components(plt) == [Module11, Module3]
+  end
+
   describe "list_js_import_modules/1" do
     test "returns the modules that declare JS imports" do
       mfas = [{Module12, :func, 0}, {Enum, :map, 2}, {Module14, :func, 0}]
@@ -1384,6 +1516,21 @@ defmodule Hologram.CompilerTest do
 
       assert list_js_import_modules(mfas) == [Module12]
     end
+  end
+
+  test "list_pages/1" do
+    info = fn page?, component? ->
+      %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
+    end
+
+    plt =
+      PLT.start()
+      |> PLT.put(Module3, info.(false, true))
+      |> PLT.put(Module1, info.(false, false))
+      |> PLT.put(Module2, info.(true, false))
+      |> PLT.put(Module11, info.(true, false))
+
+    assert list_pages(plt) == [Module11, Module2]
   end
 
   describe "maybe_install_js_deps/1" do
@@ -1492,20 +1639,20 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "maybe_load_module_digest_plt/1" do
+  describe "maybe_load_module_info_plt/1" do
     setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_digest_plt_1"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_info_plt_1"])
 
       build_dir = Path.join(test_tmp_dir, "build")
       clean_dir(build_dir)
 
-      dump_path = Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
+      dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
 
       [build_dir: build_dir, dump_path: dump_path]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
+      assert {plt = %PLT{}, ^dump_path, nil} = maybe_load_module_info_plt(build_dir)
       assert PLT.get_all(plt) == %{}
     end
 
@@ -1515,7 +1662,9 @@ defmodule Hologram.CompilerTest do
       |> PLT.put(:b, 2)
       |> PLT.dump(dump_path)
 
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
+      dumped_at = File.stat!(dump_path, time: :posix).mtime
+
+      assert {plt = %PLT{}, ^dump_path, ^dumped_at} = maybe_load_module_info_plt(build_dir)
       assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
   end

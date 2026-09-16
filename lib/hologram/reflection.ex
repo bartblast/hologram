@@ -9,7 +9,7 @@ defmodule Hologram.Reflection do
 
   @ir_plt_dump_file_name "ir.plt"
 
-  @module_digest_plt_dump_file_name "module_digest.plt"
+  @module_info_plt_dump_file_name "module_info.plt"
 
   @page_digest_plt_dump_file_name "page_digest.plt"
 
@@ -36,38 +36,49 @@ defmodule Hologram.Reflection do
   def alias?(_term), do: false
 
   @doc """
-  Returns BEAM definitions for the given BEAM file path or BEAM binary.
+  Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
+  loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
+  seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component.
+  Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
+  source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
+  and size are nil.
 
   ## Examples
 
-      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"  
-      iex> beam_defs()
-      [
-        ...,
-        {{:alias?, 1}, :def, [line: 14],
-        [
-          {[line: 16], [{:term, [version: 0, line: 16], nil}],
-            [
-              {{:., [line: 16], [:erlang, :is_atom]}, [line: 16],
-              [{:term, [version: 0, line: 16], nil}]}
-            ],
-            {{:., [line: 19], [String, :starts_with?]}, [line: 19],
-            [
-              {{:., [line: 18], [String.Chars, :to_string]}, [line: 18],
-                [{:term, [version: 0, line: 17], nil}]},
-              "Elixir."
-            ]}},
-          {[line: 22], [{:_, [line: 22], nil}], [], false}
-        ]}
-      ]
+      iex> beam_info(~c"/path/to/Elixir.MyPage.beam")
+      %{digest: 56860599, mtime: 1789514623, size: 1355821, page?: true, component?: false}
   """
   # TODO: Narrow the spec back to charlist, and rename the param back to
   # beam_path, when beam_source/1 goes (see the removal note there) - nothing
   # passes a BEAM binary here once the umbrella fallback is gone.
-  @spec beam_defs(charlist | binary) :: list(tuple)
-  def beam_defs(beam_source) do
-    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_source)
-    definitions
+  @spec beam_info(charlist | binary) ::
+          %{
+            digest: non_neg_integer,
+            mtime: non_neg_integer | nil,
+            size: non_neg_integer | nil,
+            page?: boolean,
+            component?: boolean
+          }
+          | nil
+  def beam_info(beam_source) do
+    # The stat comes before the read on purpose. If a writer replaces the file in between, the
+    # entry pairs the old mtime and size with the new digest, and the next compile sees the file
+    # differ from the entry and reads it again. The other order could pair the new mtime and
+    # size with the old digest, and that entry would be reused as long as the file stood still.
+    {mtime, size} = beam_mtime_and_size(beam_source)
+
+    {:ok, {_module, [{:exports, exports}, {~c"Dbgi", dbgi_chunk}]}} =
+      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi"])
+
+    if {:__info__, 1} in exports do
+      %{
+        digest: :erlang.phash2(dbgi_chunk),
+        mtime: mtime,
+        size: size,
+        page?: {:__is_hologram_page__, 0} in exports,
+        component?: {:__is_hologram_component__, 0} in exports
+      }
+    end
   end
 
   # TODO: Remove together with Hologram.Compiler.resolve_beam_source/2 (see the
@@ -308,6 +319,34 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists the names that may be Elixir modules in the loaded OTP applications used by the project (except :hex),
+  without checking any of them: the names come from each application's spec and, in dev and test, from the
+  BEAM files in its ebin directory. Modules listed in @ignored_modules module attribute are left out.
+  The project OTP application is included.
+  """
+  @spec list_candidate_modules() :: list(module)
+  def list_candidate_modules do
+    Application.ensure_loaded(otp_app())
+
+    list_loaded_otp_apps()
+    |> Kernel.--([:hex])
+    |> list_candidate_modules()
+  end
+
+  @doc """
+  Lists the names that may be Elixir modules in the given OTP apps, without checking any of them beyond
+  the name: Erlang-named modules (no `Elixir.` prefix) and modules listed in @ignored_modules module
+  attribute are left out.
+  """
+  @spec list_candidate_modules(list(atom)) :: list(module)
+  def list_candidate_modules(apps) do
+    apps
+    |> Enum.reduce([], &include_app_elixir_modules/2)
+    |> Enum.filter(&alias?/1)
+    |> Kernel.--(@ignored_modules)
+  end
+
+  @doc """
   Lists modules by scanning BEAM files in the given OTP app's ebin directory.
   This is useful for detecting newly compiled modules that haven't been added to
   Application.spec yet during development.
@@ -353,9 +392,8 @@ defmodule Hologram.Reflection do
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
     apps
-    |> Enum.reduce([], &include_app_elixir_modules/2)
+    |> list_candidate_modules()
     |> Enum.filter(&elixir_module?/1)
-    |> Kernel.--(@ignored_modules)
   end
 
   @doc """
@@ -455,11 +493,11 @@ defmodule Hologram.Reflection do
   def module?(_term), do: false
 
   @doc """
-  Returns the module digest PLT dump file name.
+  Returns the module info PLT dump file name.
   """
-  @spec module_digest_plt_dump_file_name() :: String.t()
-  def module_digest_plt_dump_file_name do
-    @module_digest_plt_dump_file_name
+  @spec module_info_plt_dump_file_name() :: String.t()
+  def module_info_plt_dump_file_name do
+    @module_info_plt_dump_file_name
   end
 
   @doc """
@@ -720,6 +758,13 @@ defmodule Hologram.Reflection do
 
     Enum.sort(apps)
   end
+
+  defp beam_mtime_and_size(beam_path) when is_list(beam_path) do
+    %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+    {mtime, size}
+  end
+
+  defp beam_mtime_and_size(_beam_binary), do: {nil, nil}
 
   # TODO: Remove together with beam_source/1 (see the removal note there), which
   # is its only caller.

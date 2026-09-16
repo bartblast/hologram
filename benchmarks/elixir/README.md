@@ -36,11 +36,12 @@ build_ir_plt/0          2.11      473.87 ms     ±1.43%      471.78 ms      490.
 ```
 
 
-### ✅ compiler » build_module_digest_plt!_0
+### ✅ compiler » build_module_info_plt!_2
 
 ```
-Name                                 ips        average  deviation         median         99th %
-build_module_digest_plt!/0          4.11      243.05 ms     ±3.98%      244.90 ms      260.85 ms
+Name                                                          ips        average  deviation         median         99th %
+previous dump, nothing changed (every entry reused)          8.60      116.29 ms    ±21.17%      108.93 ms      241.02 ms
+no previous dump (every beam read)                           5.59      178.92 ms    ±14.63%      171.34 ms      272.53 ms
 ```
 
 
@@ -206,36 +207,22 @@ create_runtime_entry_file/4         26.28       38.05 ms    ±10.77%       37.67
 ```
 
 
-### ✅ compiler » diff_module_digest_plts_2
+### ✅ compiler » diff_module_info_plts_2
 
 ```
 Name                                         ips        average  deviation         median         99th %
-100% modules removed                      4.38 K      228.42 μs     ±4.93%      226.46 μs      260.13 μs
-100% modules added                        3.45 K      289.46 μs    ±39.02%      268.33 μs      443.12 μs
-33% added, 33% removed, 34% edited        2.65 K      377.79 μs     ±8.42%      373.96 μs      488.15 μs
-10 added, 10 removed, 10 edited           1.71 K      584.17 μs     ±3.88%      579.66 μs      670.54 μs
-no module changes                         1.70 K      588.18 μs     ±3.17%      585.55 μs      649.35 μs
-3 added, 3 removed, 3 edited              1.69 K      593.18 μs     ±4.06%      590.17 μs      680.46 μs
-100% modules edited                       1.67 K      597.66 μs     ±8.51%      582.17 μs      758.03 μs
-1% added, 1% removed, 1% edited           1.66 K      602.28 μs     ±6.15%      585.92 μs      725.35 μs
-1 added, 1 removed, 1 edited              1.62 K      618.24 μs    ±12.12%      611.63 μs      794.26 μs
-1 module added                            1.62 K      618.56 μs     ±6.44%      609.21 μs      751.41 μs
-1 module edited                           1.60 K      625.70 μs    ±19.66%      615.75 μs      743.88 μs
-1 module removed                          1.59 K      627.23 μs     ±7.44%      618.17 μs      780.64 μs
-
-Comparison: 
-100% modules removed                      4.38 K
-100% modules added                        3.45 K - 1.27x slower +61.05 μs
-33% added, 33% removed, 34% edited        2.65 K - 1.65x slower +149.37 μs
-10 added, 10 removed, 10 edited           1.71 K - 2.56x slower +355.76 μs
-no module changes                         1.70 K - 2.58x slower +359.76 μs
-3 added, 3 removed, 3 edited              1.69 K - 2.60x slower +364.76 μs
-100% modules edited                       1.67 K - 2.62x slower +369.25 μs
-1% added, 1% removed, 1% edited           1.66 K - 2.64x slower +373.86 μs
-1 added, 1 removed, 1 edited              1.62 K - 2.71x slower +389.82 μs
-1 module added                            1.62 K - 2.71x slower +390.14 μs
-1 module edited                           1.60 K - 2.74x slower +397.28 μs
-1 module removed                          1.59 K - 2.75x slower +398.82 μs
+100% modules removed                     2550.82        0.39 ms    ±12.42%        0.38 ms        0.50 ms
+100% modules added                       2244.12        0.45 ms     ±6.43%        0.44 ms        0.54 ms
+33% added, 33% removed, 34% edited       1572.38        0.64 ms    ±15.05%        0.63 ms        0.86 ms
+100% modules edited                      1021.17        0.98 ms    ±16.99%        0.97 ms        1.31 ms
+1% added, 1% removed, 1% edited           990.50        1.01 ms    ±14.65%        1.03 ms        1.29 ms
+10 added, 10 removed, 10 edited           978.81        1.02 ms    ±16.40%        1.04 ms        1.31 ms
+1 added, 1 removed, 1 edited              955.73        1.05 ms    ±12.51%        1.02 ms        1.37 ms
+3 added, 3 removed, 3 edited              954.54        1.05 ms    ±12.15%        1.02 ms        1.37 ms
+1 module added                            953.97        1.05 ms    ±16.42%        1.02 ms        1.41 ms
+no module changes                         953.02        1.05 ms    ±15.03%        1.03 ms        1.39 ms
+1 module edited                           950.84        1.05 ms    ±21.69%        1.02 ms        1.41 ms
+1 module removed                          912.60        1.10 ms    ±34.61%        1.04 ms        2.06 ms
 ```
 
 
@@ -278,16 +265,12 @@ do load     0.00189 K - 57460.24x slower +529.67 ms
 ```
 
 
-### ✅ compiler » maybe_load_module_digest_plt_1
+### ✅ compiler » maybe_load_module_info_plt_1
 
 ```
 Name              ips        average  deviation         median         99th %
-no load      106.22 K        9.41 μs    ±65.54%        8.96 μs       16.17 μs
-do load        2.04 K      490.99 μs     ±8.28%      484.08 μs      673.91 μs
-
-Comparison: 
-no load      106.22 K
-do load        2.04 K - 52.15x slower +481.57 μs
+no load       56.86 K      0.0176 ms    ±64.94%      0.0143 ms      0.0521 ms
+do load        0.73 K        1.37 ms    ±11.31%        1.36 ms        1.85 ms
 ```
 
 

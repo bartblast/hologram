@@ -5,21 +5,24 @@ defmodule Hologram.Benchmarks do
   alias Hologram.Compiler
 
   @doc """
-  Generates 2 module digest PLTs that fullfill the conditions given in the arguments.
+  Generates 2 module info PLTs that fullfill the conditions given in the arguments.
 
   If the arguments are floats they are treated as percentage (0.2 == 20%),
   otherwise they are treated as (literal) number of modules.
   """
-  @spec generate_module_digest_plts(integer, integer, integer) :: {PLT.t(), PLT.t()}
-  def generate_module_digest_plts(added_modules_spec, removed_modules_spec, edited_modules_spec) do
+  @spec generate_module_info_plts(non_neg_integer, non_neg_integer, non_neg_integer) ::
+          {PLT.t(), PLT.t()}
+  @spec generate_module_info_plts(float, float, float) :: {PLT.t(), PLT.t()}
+  def generate_module_info_plts(added_modules_spec, removed_modules_spec, edited_modules_spec) do
     validate_args(added_modules_spec, removed_modules_spec, edited_modules_spec)
 
-    module_digests =
-      Compiler.build_module_digest_plt!()
+    module_infos =
+      PLT.start()
+      |> Compiler.build_module_info_plt!(nil)
       |> PLT.get_all()
       |> Map.to_list()
 
-    num_modules = Enum.count(module_digests)
+    num_modules = Enum.count(module_infos)
 
     {num_added_modules, num_removed_modules, num_edited_modules} =
       calculate_num_modules(
@@ -32,36 +35,36 @@ defmodule Hologram.Benchmarks do
     num_untouched_modules =
       num_modules - num_added_modules - num_removed_modules - num_edited_modules
 
-    added_modules_chunk = Enum.take(module_digests, num_added_modules)
+    added_modules_chunk = Enum.take(module_infos, num_added_modules)
 
     removed_modules_chunk =
-      module_digests
+      module_infos
       |> Enum.drop(num_added_modules)
       |> Enum.drop(-num_untouched_modules)
       |> Enum.drop(-num_edited_modules)
 
     old_edited_modules_chunk =
-      module_digests
+      module_infos
       |> Enum.drop(num_added_modules)
       |> Enum.drop(num_removed_modules)
       |> Enum.drop(-num_untouched_modules)
 
-    untouched_modules_chunk = Enum.take(module_digests, -num_untouched_modules)
+    untouched_modules_chunk = Enum.take(module_infos, -num_untouched_modules)
 
-    old_module_digest_plt =
+    old_module_info_plt =
       PLT.start(
         items: removed_modules_chunk ++ old_edited_modules_chunk ++ untouched_modules_chunk
       )
 
     new_edited_modules_chunk =
-      Enum.map(old_edited_modules_chunk, fn {module, digest} ->
-        {module, digest + 1}
+      Enum.map(old_edited_modules_chunk, fn {module, info} ->
+        {module, %{info | digest: info.digest + 1}}
       end)
 
-    new_module_digest_plt =
+    new_module_info_plt =
       PLT.start(items: added_modules_chunk ++ new_edited_modules_chunk ++ untouched_modules_chunk)
 
-    {old_module_digest_plt, new_module_digest_plt}
+    {old_module_info_plt, new_module_info_plt}
   end
 
   # Only one guard for one argument is needed, because the arguments are validated.
