@@ -15,6 +15,18 @@ defmodule Hologram.ReflectionTest do
   # they lack the __info__/1 function that the Elixir compiler injects, and must not be
   # treated as Elixir modules.
   defp build_elixir_named_erlang_module do
+    {module, binary} = compile_elixir_named_erlang_module()
+    {:module, ^module} = :code.load_binary(module, ~c"nofile", binary)
+
+    on_exit(fn ->
+      :code.purge(module)
+      :code.delete(module)
+    end)
+
+    module
+  end
+
+  defp compile_elixir_named_erlang_module do
     module = Hologram.Test.Fixtures.Reflection.ErlangModuleWithElixirName
 
     sources = [
@@ -30,14 +42,24 @@ defmodule Hologram.ReflectionTest do
       end)
 
     {:ok, ^module, binary} = :compile.forms(forms, [:debug_info])
-    {:module, ^module} = :code.load_binary(module, ~c"nofile", binary)
 
-    on_exit(fn ->
+    {module, binary}
+  end
+
+  # Code compiled inside the test run carries no debug info unless asked for, and a
+  # digest of a beam without a Dbgi chunk would be the same for any source.
+  defp compile_to_digest(code) do
+    debug_info? = Code.get_compiler_option(:debug_info)
+    Code.put_compiler_option(:debug_info, true)
+
+    try do
+      [{module, bytecode}] = Code.compile_string(code)
       :code.purge(module)
       :code.delete(module)
-    end)
-
-    module
+      beam_info(bytecode).digest
+    after
+      Code.put_compiler_option(:debug_info, debug_info?)
+    end
   end
 
   defp load_app_depending_on_hologram(app) do
@@ -103,6 +125,54 @@ defmodule Hologram.ReflectionTest do
       {Module1, bytecode, beam_path} = :code.get_object_code(Module1)
 
       assert beam_defs(bytecode) == beam_defs(beam_path)
+    end
+  end
+
+  describe "beam_info/1" do
+    test "beam file path of a plain module" do
+      beam_path = :code.which(Module1)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+
+      assert %{digest: digest, mtime: ^mtime, size: ^size, page?: false, component?: false} =
+               beam_info(beam_path)
+
+      assert is_integer(digest)
+    end
+
+    test "page module" do
+      assert %{page?: true, component?: false} = beam_info(:code.which(Module2))
+    end
+
+    test "component module" do
+      assert %{page?: false, component?: true} = beam_info(:code.which(Module3))
+    end
+
+    # TODO: Remove when Hologram.Reflection.beam_source/1 goes (see the removal
+    # note there), together with the beam_source/1 and umbrella?/0 describes.
+    test "beam binary gives the same digest and no mtime or size" do
+      {Module1, bytecode, beam_path} = :code.get_object_code(Module1)
+
+      assert %{digest: digest, mtime: nil, size: nil} = beam_info(bytecode)
+      assert digest == beam_info(beam_path).digest
+    end
+
+    test "Erlang module that uses Elixir-style naming" do
+      {_module, binary} = compile_elixir_named_erlang_module()
+
+      assert beam_info(binary) == nil
+    end
+
+    test "the same source compiled twice gives the same digest" do
+      code = "defmodule Hologram.Test.Fixtures.Reflection.BeamInfoModule1 do def fun, do: 1 end"
+
+      assert compile_to_digest(code) == compile_to_digest(code)
+    end
+
+    test "a changed definition changes the digest" do
+      code_1 = "defmodule Hologram.Test.Fixtures.Reflection.BeamInfoModule2 do def fun, do: 1 end"
+      code_2 = "defmodule Hologram.Test.Fixtures.Reflection.BeamInfoModule2 do def fun, do: 2 end"
+
+      assert compile_to_digest(code_1) != compile_to_digest(code_2)
     end
   end
 

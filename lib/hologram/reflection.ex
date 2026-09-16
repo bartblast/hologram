@@ -70,6 +70,48 @@ defmodule Hologram.Reflection do
     definitions
   end
 
+  @doc """
+  Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
+  loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
+  seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component.
+  Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
+  source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
+  and size are nil.
+
+  ## Examples
+
+      iex> beam_info(~c"/path/to/Elixir.MyPage.beam")
+      %{digest: 56860599, mtime: 1789514623, size: 1355821, page?: true, component?: false}
+  """
+  # TODO: Narrow the spec back to charlist, and rename the param back to
+  # beam_path, when beam_source/1 goes (see the removal note there) - nothing
+  # passes a BEAM binary here once the umbrella fallback is gone.
+  @spec beam_info(charlist | binary) ::
+          %{
+            digest: non_neg_integer,
+            mtime: non_neg_integer | nil,
+            size: non_neg_integer | nil,
+            page?: boolean,
+            component?: boolean
+          }
+          | nil
+  def beam_info(beam_source) do
+    {:ok, {_module, [{:exports, exports}, {~c"Dbgi", dbgi_chunk}]}} =
+      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi"])
+
+    if {:__info__, 1} in exports do
+      {mtime, size} = beam_mtime_and_size(beam_source)
+
+      %{
+        digest: :erlang.phash2(dbgi_chunk),
+        mtime: mtime,
+        size: size,
+        page?: {:__is_hologram_page__, 0} in exports,
+        component?: {:__is_hologram_component__, 0} in exports
+      }
+    end
+  end
+
   # TODO: Remove together with Hologram.Compiler.resolve_beam_source/2 (see the
   # removal note there), consolidated_beam_removed?/1 and object_code/1 included.
   @doc """
@@ -745,6 +787,13 @@ defmodule Hologram.Reflection do
 
     Enum.sort(apps)
   end
+
+  defp beam_mtime_and_size(beam_path) when is_list(beam_path) do
+    %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
+    {mtime, size}
+  end
+
+  defp beam_mtime_and_size(_beam_binary), do: {nil, nil}
 
   # TODO: Remove together with beam_source/1 (see the removal note there), which
   # is its only caller.
