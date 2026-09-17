@@ -873,6 +873,32 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Splits the given pages into the ones a compile must rebuild and the ones whose bundle it can reuse.
+
+  A page is rebuilt when the pages PLT holds no state for it (a new page, or the first compile in a
+  VM), when the modules of its kept MFAs meet `reaching_modules` (see
+  `Hologram.Compiler.CallGraph.list_modules_reaching/2`: every way a page's bundle depends on a
+  module is a path in the call graph from a vertex of the page, or of a component it renders, to that
+  module), or when the bundle its kept state describes is no longer on disk (a build dir can lose
+  bundles to another build env sharing the static dir).
+
+  Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
+  the pages were given.
+  """
+  @spec partition_affected_pages([module], MapSet.t(module), PLT.t()) ::
+          {[module], [{module, map}]}
+  def partition_affected_pages(page_modules, reaching_modules, pages_plt) do
+    {kept_pages, pages_to_rebuild} =
+      page_modules
+      |> Enum.map(fn page_module ->
+        {page_module, keepable_page_state(pages_plt, page_module, reaching_modules)}
+      end)
+      |> Enum.split_with(fn {_page_module, page_state} -> page_state end)
+
+    {Enum.map(pages_to_rebuild, fn {page_module, nil} -> page_module end), kept_pages}
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
@@ -910,6 +936,22 @@ defmodule Hologram.Compiler do
     |> Enum.each(&PLT.delete(ir_plt, &1))
 
     ir_plt
+  end
+
+  @doc """
+  Whether the runtime bundle must be rebuilt because its inputs differ from the ones the kept runtime
+  state was built from: its MFAs, the JS import modules it registers (which every page bundle leaves
+  out) and the application versions it carries. True when there is no kept state.
+  """
+  @spec runtime_changed?(map | nil, [mfa], MapSet.t(module), keyword(String.t())) :: boolean
+  def runtime_changed?(kept_runtime, runtime_mfas, js_binding_modules, app_versions)
+
+  def runtime_changed?(nil, _runtime_mfas, _js_binding_modules, _app_versions), do: true
+
+  def runtime_changed?(kept_runtime, runtime_mfas, js_binding_modules, app_versions) do
+    kept_runtime.mfas != runtime_mfas or
+      kept_runtime.js_binding_modules != js_binding_modules or
+      kept_runtime.app_versions != app_versions
   end
 
   @doc """
@@ -1219,6 +1261,17 @@ defmodule Hologram.Compiler do
   end
 
   defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
+
+  # nil when the page must be rebuilt, its kept state otherwise.
+  defp keepable_page_state(pages_plt, page_module, reaching_modules) do
+    with {:ok, page_state} <- PLT.get(pages_plt, page_module),
+         true <- MapSet.disjoint?(page_state.modules, reaching_modules),
+         true <- File.exists?(page_state.bundle_info.static_bundle_path) do
+      page_state
+    else
+      _fallback -> nil
+    end
+  end
 
   defp list_modules_where(module_info_plt, flag) do
     module_info_plt
