@@ -50,6 +50,29 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
 
+  # Runs the function with call counts on the one-argument protocol and JS import checks, which
+  # consult a module's code path, and returns its result with the number of such checks.
+  defp count_module_self_checks(fun) do
+    mfas = [{Reflection, :protocol?, 1}, {Reflection, :js_imports?, 1}]
+    Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+    try do
+      result = fun.()
+
+      count =
+        mfas
+        |> Enum.map(fn mfa ->
+          {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+          count
+        end)
+        |> Enum.sum()
+
+      {result, count}
+    after
+      Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+    end
+  end
+
   # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
   # a compiled module carries it. Built by hand rather than taken from a fixture module, because a
   # fixture with a deliberately invalid usage would fail the compile.hologram Mix task tests.
@@ -527,6 +550,40 @@ defmodule Hologram.CompilerTest do
                ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
              )
     end
+
+    test "asks no module whether it is a protocol or declares JS imports when given the module info PLT",
+         %{
+           encode_plt: encode_plt,
+           graph: graph,
+           ir_plt: ir_plt,
+           module_info_plt: module_info_plt,
+           server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+         } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module23,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
+      {without_plt, checks_without_plt} =
+        count_module_self_checks(fn ->
+          build_page_js(mfas, ir_plt, encode_plt, MapSet.new(), js_dir: @js_dir)
+        end)
+
+      {with_plt, checks_with_plt} =
+        count_module_self_checks(fn ->
+          build_page_js(mfas, ir_plt, encode_plt, MapSet.new(),
+            js_dir: @js_dir,
+            module_info_plt: module_info_plt
+          )
+        end)
+
+      assert with_plt == without_plt
+      assert checks_without_plt > 0
+      assert checks_with_plt == 0
+    end
   end
 
   test "build_call_graph/0" do
@@ -745,6 +802,38 @@ defmodule Hologram.CompilerTest do
 
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
       [encode_plt: PLT.start()]
+    end
+
+    test "asks no module whether it is a protocol or declares JS imports when given the module info PLT",
+         %{
+           encode_plt: encode_plt,
+           ir_plt: ir_plt,
+           module_info_plt: module_info_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      # prune_module_def/2 still asks each rendered protocol module itself, on the protocol path.
+      rendered_protocols =
+        runtime_mfas
+        |> Enum.map(fn {module, _function, _arity} -> module end)
+        |> Enum.uniq()
+        |> Enum.count(&Reflection.protocol?/1)
+
+      {without_plt, checks_without_plt} =
+        count_module_self_checks(fn ->
+          build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+        end)
+
+      {with_plt, checks_with_plt} =
+        count_module_self_checks(fn ->
+          build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [],
+            js_dir: @js_dir,
+            module_info_plt: module_info_plt
+          )
+        end)
+
+      assert with_plt == without_plt
+      assert checks_without_plt > 0
+      assert checks_with_plt == rendered_protocols
     end
 
     test "renders reachable function defs", %{

@@ -279,7 +279,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       mfas
-      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
       |> render_block()
 
     module_metadata_registration =
@@ -360,7 +360,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       runtime_mfas
-      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
       |> render_block()
 
     module_metadata_registration =
@@ -1395,14 +1395,22 @@ defmodule Hologram.Compiler do
 
   # Functions are listed by module, then function name, then arity. The module order is the
   # sort below; the order within a module comes from IR.aggregate_module_funs/1 on the protocol
-  # path and from the sort in render_module_function_defs/6 on the cached one.
-  defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas) do
+  # path and from the sort in render_module_function_defs/7 on the cached one.
+  defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas, module_info_plt) do
     mfas
     |> filter_elixir_mfas(ir_plt)
     |> group_mfas_by_module()
     |> Enum.sort()
     |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
-      render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas)
+      render_module_function_defs(
+        module,
+        module_mfas,
+        mfas,
+        ir_plt,
+        encode_plt,
+        async_mfas,
+        module_info_plt
+      )
     end)
     |> Enum.join("\n\n")
   end
@@ -1453,11 +1461,20 @@ defmodule Hologram.Compiler do
   # maybe_prune_protocol_dispatcher_function_defs/3, so their JavaScript depends on the entry
   # file being built and cannot be keyed by MFA alone. Every other module's functions encode
   # the same wherever they are reached from, so each is encoded once per compile in the common
-  # case, and never differently.
-  defp render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas) do
+  # case, and never differently. The module info PLT answers whether a module is a protocol, so a
+  # module that is not loaded is not asked once per entry file.
+  defp render_module_function_defs(
+         module,
+         module_mfas,
+         mfas,
+         ir_plt,
+         encode_plt,
+         async_mfas,
+         module_info_plt
+       ) do
     context = %Context{async_mfas: async_mfas, ir_plt: ir_plt, module: module}
 
-    if Reflection.protocol?(module) do
+    if Reflection.protocol?(module, module_info_plt) do
       ir_plt
       |> PLT.get!(module)
       |> prune_module_def(mfas)
