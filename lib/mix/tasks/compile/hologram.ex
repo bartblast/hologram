@@ -184,7 +184,11 @@ defmodule Mix.Tasks.Compile.Hologram do
           Compiler.build_module_metadata(new_module_info_plt)
         end
 
-      entry_file_opts = Keyword.put(opts, :module_metadata, module_metadata)
+      entry_file_opts =
+        Keyword.merge(opts,
+          module_info_plt: new_module_info_plt,
+          module_metadata: module_metadata
+        )
 
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(
@@ -203,7 +207,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # imported JavaScript module, which the two would then take turns overwriting.
       runtime_js_binding_modules =
         runtime_mfas
-        |> Compiler.list_js_import_modules(ir_plt)
+        |> Compiler.list_js_import_modules(ir_plt, new_module_info_plt)
         |> MapSet.new()
 
       page_entry_files_info =

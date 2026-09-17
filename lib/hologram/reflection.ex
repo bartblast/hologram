@@ -14,6 +14,7 @@ defmodule Hologram.Reflection do
     :struct?,
     :exception?,
     :ecto_schema?,
+    :js_imports?,
     :source_path,
     :layout_module,
     :protocol_functions,
@@ -59,11 +60,11 @@ defmodule Hologram.Reflection do
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
   seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
-  a protocol, a protocol implementation, a struct, an exception or an Ecto schema. Each flag is the export
-  table check that the `Reflection` predicate of the same name performs after loading the module, read from
-  the file instead. The source path is the `:source` of the BEAM's compile info, the value
-  `module.module_info(:compile)[:source]` returns once the module is loaded, as a string (nil when the
-  compile info has none).
+  a protocol, a protocol implementation, a struct, an exception or an Ecto schema, and whether it declares
+  JS imports. Each flag is the export table check that the `Reflection` predicate of the same name
+  performs after loading the module, read from the file instead. The source path is the `:source` of
+  the BEAM's compile info, the value `module.module_info(:compile)[:source]` returns once the module is
+  loaded, as a string (nil when the compile info has none).
   A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
   are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
   and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
@@ -86,6 +87,7 @@ defmodule Hologram.Reflection do
         struct?: false,
         exception?: false,
         ecto_schema?: false,
+        js_imports?: false,
         source_path: "/path/to/lib/my_page.ex",
         layout_module: MyLayout,
         protocol_functions: nil,
@@ -108,6 +110,7 @@ defmodule Hologram.Reflection do
             struct?: boolean,
             exception?: boolean,
             ecto_schema?: boolean,
+            js_imports?: boolean,
             source_path: String.t() | nil,
             layout_module: module | nil,
             protocol_functions: list({atom, arity}) | nil,
@@ -150,6 +153,7 @@ defmodule Hologram.Reflection do
         struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
         exception?: {:exception, 1} in exports and {:message, 1} in exports,
         ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports,
+        js_imports?: {:__js_imports__, 0} in exports,
         source_path: compile_info_source(compile_info),
         layout_module: literal_return(definitions, :__layout_module__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
@@ -392,6 +396,27 @@ defmodule Hologram.Reflection do
   @spec ir_plt_dump_file_name() :: String.t()
   def ir_plt_dump_file_name do
     @ir_plt_dump_file_name
+  end
+
+  @doc """
+  Returns true if the given module declares JS imports with `Hologram.JS`, or false otherwise.
+  """
+  @spec js_imports?(module) :: boolean
+  def js_imports?(module) do
+    has_function?(module, :__js_imports__, 0)
+  end
+
+  @doc """
+  Like js_imports?/1, but answered from the given module info PLT when it holds the module, without
+  touching the module's code path. A nil PLT, or a module the PLT does not hold, is decided the
+  js_imports?/1 way.
+  """
+  @spec js_imports?(module, PLT.t() | nil) :: boolean
+  def js_imports?(module, module_info_plt) do
+    case module_info_flag(module_info_plt, module, :js_imports?) do
+      {:ok, js_imports?} -> js_imports?
+      :error -> js_imports?(module)
+    end
   end
 
   @doc """
@@ -729,6 +754,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like protocol?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  protocol?/1 way.
+  """
+  @spec protocol?(any, PLT.t() | nil) :: boolean
+  def protocol?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :protocol?) do
+      {:ok, protocol?} -> protocol?
+      :error -> protocol?(term)
+    end
+  end
+
+  @doc """
   Returns the protocol module that the given module implements, or nil if it's not a protocol implementation.
   """
   @spec protocol_implementation(module) :: module | nil
@@ -965,6 +1003,17 @@ defmodule Hologram.Reflection do
       body
     else
       _no_literal -> nil
+    end
+  end
+
+  # The value of a boolean flag in the module info PLT entry of the given term, or :error when there
+  # is no PLT, no entry, or the entry has no such flag (a dump written before the flag existed).
+  defp module_info_flag(nil, _term, _flag), do: :error
+
+  defp module_info_flag(module_info_plt, term, flag) do
+    case PLT.get(module_info_plt, term) do
+      {:ok, %{^flag => value}} when is_boolean(value) -> {:ok, value}
+      _no_flag -> :error
     end
   end
 

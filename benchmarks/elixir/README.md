@@ -57,7 +57,7 @@ build_module_metadata/1        339.39        2.95 ms    ±23.18%        2.85 ms 
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_page_js/5        147.18        6.79 ms    ±18.53%        6.63 ms       10.96 ms
+build_page_js/5        200.33        4.99 ms    ±38.43%        4.66 ms        9.51 ms
 ```
 
 
@@ -65,7 +65,7 @@ build_page_js/5        147.18        6.79 ms    ±18.53%        6.63 ms       10
 
 ```
 Name               ips        average  deviation         median         99th %
-bundle/2          4.59      218.01 ms     ±1.91%      217.77 ms      233.56 ms
+bundle/2          3.08      325.17 ms     ±8.13%      320.82 ms      393.36 ms
 ```
 
 
@@ -203,7 +203,7 @@ all templatables        2.95 K - 1.12x slower +36.74 μs
 
 ```
 Name                                ips        average  deviation         median         99th %
-create_page_entry_files/7          1.08      927.52 ms     ±6.13%      923.40 ms     1048.28 ms
+create_page_entry_files/7          0.97         1.03 s    ±19.78%         0.97 s         1.53 s
 ```
 
 
@@ -211,7 +211,7 @@ create_page_entry_files/7          1.08      927.52 ms     ±6.13%      923.40 m
 
 ```
 Name                                  ips        average  deviation         median         99th %
-create_runtime_entry_file/6          8.71      114.86 ms     ±5.64%      114.69 ms      159.51 ms
+create_runtime_entry_file/6          8.55      116.95 ms    ±19.08%      113.40 ms      306.48 ms
 ```
 
 
@@ -234,11 +234,11 @@ no module changes                         953.02        1.05 ms    ±15.03%     
 ```
 
 
-### ✅ compiler » encode_reachable_functions_4
+### ✅ compiler » encode_reachable_functions_5
 
 ```
 Name                                   ips        average  deviation         median         99th %
-encode_reachable_functions/4         21.03       47.56 ms     ±7.25%       46.73 ms       57.80 ms
+encode_reachable_functions/5         49.45       20.22 ms    ±20.34%       19.37 ms       38.19 ms
 ```
 
 

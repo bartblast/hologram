@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_page_js/5</td>
-    <td style="white-space: nowrap; text-align: right">147.18</td>
-    <td style="white-space: nowrap; text-align: right">6.79 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;18.53%</td>
-    <td style="white-space: nowrap; text-align: right">6.63 ms</td>
-    <td style="white-space: nowrap; text-align: right">10.96 ms</td>
+    <td style="white-space: nowrap; text-align: right">200.33</td>
+    <td style="white-space: nowrap; text-align: right">4.99 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;38.43%</td>
+    <td style="white-space: nowrap; text-align: right">4.66 ms</td>
+    <td style="white-space: nowrap; text-align: right">9.51 ms</td>
   </tr>
 
 </table>

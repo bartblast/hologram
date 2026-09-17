@@ -50,6 +50,29 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
 
+  # Runs the function with call counts on the one-argument protocol and JS import checks, which
+  # consult a module's code path, and returns its result with the number of such checks.
+  defp count_module_self_checks(fun) do
+    mfas = [{Reflection, :protocol?, 1}, {Reflection, :js_imports?, 1}]
+    Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+    try do
+      result = fun.()
+
+      count =
+        mfas
+        |> Enum.map(fn mfa ->
+          {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+          count
+        end)
+        |> Enum.sum()
+
+      {result, count}
+    after
+      Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+    end
+  end
+
   # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
   # a compiled module carries it. Built by hand rather than taken from a fixture module, because a
   # fixture with a deliberately invalid usage would fail the compile.hologram Mix task tests.
@@ -97,37 +120,41 @@ defmodule Hologram.CompilerTest do
     [
       call_graph: call_graph,
       ir_plt: ir_plt,
+      module_info_plt: CallGraph.module_info_plt(call_graph),
       runtime_mfas: CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     ]
   end
 
-  describe "aggregate_js_imports/3" do
-    test "empty MFAs list", %{ir_plt: ir_plt} do
-      assert aggregate_js_imports([], ir_plt) == %{imports: [], bindings: %{}}
+  describe "aggregate_js_imports/4" do
+    test "empty MFAs list", %{ir_plt: ir_plt, module_info_plt: module_info_plt} do
+      assert aggregate_js_imports([], ir_plt, module_info_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "filters out Erlang modules", %{ir_plt: ir_plt} do
+    test "filters out Erlang modules", %{ir_plt: ir_plt, module_info_plt: module_info_plt} do
       mfas = [{:erlang, :+, 2}, {:maps, :get, 2}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "no modules have JS imports", %{ir_plt: ir_plt} do
+    test "no modules have JS imports", %{ir_plt: ir_plt, module_info_plt: module_info_plt} do
       mfas = [{Enum, :map, 2}, {Kernel, :+, 2}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "skips modules that use Hologram.JS but have no imports", %{ir_plt: ir_plt} do
+    test "skips modules that use Hologram.JS but have no imports", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       mfas = [{Module13, :func, 0}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{imports: [], bindings: %{}}
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{imports: [], bindings: %{}}
     end
 
-    test "single module with imports", %{ir_plt: ir_plt} do
+    test "single module with imports", %{ir_plt: ir_plt, module_info_plt: module_info_plt} do
       mfas = [{Module12, :func, 0}, {Enum, :map, 2}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"},
                  %{from: "chart.js", export: "helpers", alias: "$2"}
@@ -141,10 +168,13 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "multiple modules with imports from different sources", %{ir_plt: ir_plt} do
+    test "multiple modules with imports from different sources", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       mfas = [{Module12, :func, 0}, {Module17, :func, 0}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"},
                  %{from: "chart.js", export: "helpers", alias: "$2"},
@@ -162,10 +192,13 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "deduplicates modules when multiple MFAs reference the same module", %{ir_plt: ir_plt} do
+    test "deduplicates modules when multiple MFAs reference the same module", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       mfas = [{Module12, :func_a, 0}, {Module12, :func_b, 1}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"},
                  %{from: "chart.js", export: "helpers", alias: "$2"}
@@ -179,10 +212,13 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "deduplicates imports when multiple modules import the same export", %{ir_plt: ir_plt} do
+    test "deduplicates imports when multiple modules import the same export", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
 
-      assert aggregate_js_imports(mfas, ir_plt) == %{
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"}
                ],
@@ -197,10 +233,10 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "skips excluded modules", %{ir_plt: ir_plt} do
+    test "skips excluded modules", %{ir_plt: ir_plt, module_info_plt: module_info_plt} do
       mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
 
-      assert aggregate_js_imports(mfas, ir_plt, MapSet.new([Module14])) == %{
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt, MapSet.new([Module14])) == %{
                imports: [
                  %{from: "chart.js", export: "Chart", alias: "$1"}
                ],
@@ -212,13 +248,26 @@ defmodule Hologram.CompilerTest do
              }
     end
 
-    test "skips the imports of a module that is excluded", %{ir_plt: ir_plt} do
+    test "skips the imports of a module that is excluded", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       mfas = [{Module12, :func, 0}]
 
-      assert aggregate_js_imports(mfas, ir_plt, MapSet.new([Module12])) == %{
+      assert aggregate_js_imports(mfas, ir_plt, module_info_plt, MapSet.new([Module12])) == %{
                imports: [],
                bindings: %{}
              }
+    end
+
+    test "a nil module info PLT asks every module", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      mfas = [{Module12, :func, 0}, {Enum, :map, 2}]
+
+      assert aggregate_js_imports(mfas, ir_plt, nil) ==
+               aggregate_js_imports(mfas, ir_plt, module_info_plt)
     end
   end
 
@@ -501,6 +550,40 @@ defmodule Hologram.CompilerTest do
                ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
              )
     end
+
+    test "asks no module whether it is a protocol or declares JS imports when given the module info PLT",
+         %{
+           encode_plt: encode_plt,
+           graph: graph,
+           ir_plt: ir_plt,
+           module_info_plt: module_info_plt,
+           server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+         } do
+      mfas =
+        CallGraph.list_page_mfas(
+          graph,
+          Module23,
+          server_callback_analysis_by_templatable,
+          module_info_plt
+        )
+
+      {without_plt, checks_without_plt} =
+        count_module_self_checks(fn ->
+          build_page_js(mfas, ir_plt, encode_plt, MapSet.new(), js_dir: @js_dir)
+        end)
+
+      {with_plt, checks_with_plt} =
+        count_module_self_checks(fn ->
+          build_page_js(mfas, ir_plt, encode_plt, MapSet.new(),
+            js_dir: @js_dir,
+            module_info_plt: module_info_plt
+          )
+        end)
+
+      assert with_plt == without_plt
+      assert checks_without_plt > 0
+      assert checks_with_plt == 0
+    end
   end
 
   test "build_call_graph/0" do
@@ -719,6 +802,38 @@ defmodule Hologram.CompilerTest do
 
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
       [encode_plt: PLT.start()]
+    end
+
+    test "asks no module whether it is a protocol or declares JS imports when given the module info PLT",
+         %{
+           encode_plt: encode_plt,
+           ir_plt: ir_plt,
+           module_info_plt: module_info_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      # prune_module_def/2 still asks each rendered protocol module itself, on the protocol path.
+      rendered_protocols =
+        runtime_mfas
+        |> Enum.map(fn {module, _function, _arity} -> module end)
+        |> Enum.uniq()
+        |> Enum.count(&Reflection.protocol?/1)
+
+      {without_plt, checks_without_plt} =
+        count_module_self_checks(fn ->
+          build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+        end)
+
+      {with_plt, checks_with_plt} =
+        count_module_self_checks(fn ->
+          build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [],
+            js_dir: @js_dir,
+            module_info_plt: module_info_plt
+          )
+        end)
+
+      assert with_plt == without_plt
+      assert checks_without_plt > 0
+      assert checks_with_plt == rendered_protocols
     end
 
     test "renders reachable function defs", %{
@@ -1605,7 +1720,7 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
-  describe "encode_reachable_functions/4" do
+  describe "encode_reachable_functions/5" do
     setup do
       # A PLT per test, so one test's cache can never stand in for another's encoding.
       [encode_plt: PLT.start()]
@@ -1613,11 +1728,12 @@ defmodule Hologram.CompilerTest do
 
     test "encodes every Elixir function of the given MFAs", %{
       encode_plt: encode_plt,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfas = [{Enum, :into, 2}, {Module24, :template, 0}, {Module24, :action, 3}]
 
-      encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new())
+      encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new(), module_info_plt)
 
       assert {:ok, into_js} = PLT.get(encode_plt, {Enum, :into, 2})
 
@@ -1635,45 +1751,72 @@ defmodule Hologram.CompilerTest do
       assert PLT.size(encode_plt) == 3
     end
 
-    test "skips Erlang MFAs", %{encode_plt: encode_plt, ir_plt: ir_plt} do
-      encode_reachable_functions([{:erlang, :hd, 1}], ir_plt, encode_plt, MapSet.new())
-
-      assert PLT.size(encode_plt) == 0
-    end
-
-    test "skips protocol modules", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+    test "skips Erlang MFAs", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       encode_reachable_functions(
-        [{String.Chars, :to_string, 1}],
+        [{:erlang, :hd, 1}],
         ir_plt,
         encode_plt,
-        MapSet.new()
+        MapSet.new(),
+        module_info_plt
       )
 
       assert PLT.size(encode_plt) == 0
     end
 
-    test "skips functions already in the PLT", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+    test "skips protocol modules", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      encode_reachable_functions(
+        [{String.Chars, :to_string, 1}],
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        module_info_plt
+      )
+
+      assert PLT.size(encode_plt) == 0
+    end
+
+    test "skips functions already in the PLT", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       PLT.put(encode_plt, {Enum, :into, 2}, "cached")
 
-      encode_reachable_functions([{Enum, :into, 2}], ir_plt, encode_plt, MapSet.new())
+      encode_reachable_functions(
+        [{Enum, :into, 2}],
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        module_info_plt
+      )
 
       assert PLT.get(encode_plt, {Enum, :into, 2}) == {:ok, "cached"}
     end
 
     test "remembers a function the module does not define", %{
       encode_plt: encode_plt,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfa = {Enum, :hologram_undefined_fun, 9}
 
-      encode_reachable_functions([mfa], ir_plt, encode_plt, MapSet.new())
+      encode_reachable_functions([mfa], ir_plt, encode_plt, MapSet.new(), module_info_plt)
 
       assert PLT.get(encode_plt, mfa) == {:ok, nil}
     end
 
     test "reads each module's IR once, however many of its MFAs are given, repeats included", %{
       encode_plt: encode_plt,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfas = [
         {Enum, :into, 2},
@@ -1688,7 +1831,7 @@ defmodule Hologram.CompilerTest do
       :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
 
       try do
-        encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new())
+        encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new(), module_info_plt)
 
         assert :erlang.trace_info({PLT, :get!, 2}, :call_count) == {:call_count, 2}
       after
@@ -1696,8 +1839,33 @@ defmodule Hologram.CompilerTest do
       end
     end
 
-    test "returns :ok", %{encode_plt: encode_plt, ir_plt: ir_plt} do
-      assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new()) == :ok
+    test "skips a module the module info PLT marks as a protocol, without asking it", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      {:ok, info} = PLT.get(module_info_plt, Enum)
+      module_info_plt = PLT.clone(module_info_plt)
+      PLT.put(module_info_plt, Enum, %{info | protocol?: true})
+
+      encode_reachable_functions(
+        [{Enum, :into, 2}],
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        module_info_plt
+      )
+
+      assert PLT.size(encode_plt) == 0
+    end
+
+    test "returns :ok", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new(), module_info_plt) ==
+               :ok
     end
   end
 
@@ -1960,15 +2128,19 @@ defmodule Hologram.CompilerTest do
     assert list_components(plt) == [Module11, Module3]
   end
 
-  describe "list_js_import_modules/2" do
-    test "returns the modules that declare JS imports", %{ir_plt: ir_plt} do
+  describe "list_js_import_modules/3" do
+    test "returns the modules that declare JS imports", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       mfas = [{Module12, :func, 0}, {Enum, :map, 2}, {Module14, :func, 0}]
 
-      assert list_js_import_modules(mfas, ir_plt) == [Module12, Module14]
+      assert list_js_import_modules(mfas, ir_plt, module_info_plt) == [Module12, Module14]
     end
 
     test "filters out Erlang modules, modules without JS imports and duplicates", %{
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfas = [
         {:erlang, :+, 2},
@@ -1978,7 +2150,22 @@ defmodule Hologram.CompilerTest do
         {Module12, :func_2, 0}
       ]
 
-      assert list_js_import_modules(mfas, ir_plt) == [Module12]
+      assert list_js_import_modules(mfas, ir_plt, module_info_plt) == [Module12]
+    end
+
+    test "a module the module info PLT marks as having no imports is not asked", %{
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      {:ok, info} = PLT.get(module_info_plt, Module12)
+      module_info_plt = PLT.clone(module_info_plt)
+      PLT.put(module_info_plt, Module12, %{info | js_imports?: false})
+
+      assert list_js_import_modules([{Module12, :func, 0}], ir_plt, module_info_plt) == []
+    end
+
+    test "a nil module info PLT asks every module", %{ir_plt: ir_plt} do
+      assert list_js_import_modules([{Module12, :func, 0}], ir_plt, nil) == [Module12]
     end
   end
 

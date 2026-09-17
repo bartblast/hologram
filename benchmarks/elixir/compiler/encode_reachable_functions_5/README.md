@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.encode_reachable_functions/4
+Hologram.Compiler.encode_reachable_functions/5
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">encode_reachable_functions/4</td>
-    <td style="white-space: nowrap; text-align: right">21.03</td>
-    <td style="white-space: nowrap; text-align: right">47.56 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.25%</td>
-    <td style="white-space: nowrap; text-align: right">46.73 ms</td>
-    <td style="white-space: nowrap; text-align: right">57.80 ms</td>
+    <td style="white-space: nowrap">encode_reachable_functions/5</td>
+    <td style="white-space: nowrap; text-align: right">49.45</td>
+    <td style="white-space: nowrap; text-align: right">20.22 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;20.34%</td>
+    <td style="white-space: nowrap; text-align: right">19.37 ms</td>
+    <td style="white-space: nowrap; text-align: right">38.19 ms</td>
   </tr>
 
 </table>

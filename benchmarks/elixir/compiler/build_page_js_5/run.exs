@@ -39,23 +39,31 @@ Benchee.run(
 
     runtime_js_binding_modules =
       runtime_mfas
-      |> Compiler.list_js_import_modules(ir_plt)
+      |> Compiler.list_js_import_modules(ir_plt, module_info_plt)
       |> MapSet.new()
 
     opts = [
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
+      module_info_plt: module_info_plt,
       module_metadata: Compiler.build_module_metadata(module_info_plt),
       runtime_js_binding_modules: runtime_js_binding_modules
     ]
 
     {mfas, ir_plt, PLT.start(), async_mfas, opts}
   end,
-  before_each: fn {mfas, ir_plt, encode_plt, async_mfas, _opts} = input ->
+  before_each: fn {mfas, ir_plt, encode_plt, async_mfas, opts} = input ->
     # A compile encodes the reachable functions of all pages before it renders any page, so every
     # iteration renders from an encode PLT filled for the page, and the encoding is left out of
-    # the measurement (encode_reachable_functions_4 measures it).
+    # the measurement (encode_reachable_functions_5 measures it).
     PLT.reset(encode_plt)
-    Compiler.encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas)
+
+    Compiler.encode_reachable_functions(
+      mfas,
+      ir_plt,
+      encode_plt,
+      async_mfas,
+      opts[:module_info_plt]
+    )
 
     input
   end,

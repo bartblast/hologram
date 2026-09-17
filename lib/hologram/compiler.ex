@@ -16,19 +16,20 @@ defmodule Hologram.Compiler do
 
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
-  skipping the modules whose bindings another bundle already registers.
+  skipping the modules whose bindings another bundle already registers. The module info PLT says which
+  modules declare imports; with nil, every module is asked.
   Returns a map with:
   - `:imports` — unique imports with generated `$1`, `$2`, ... aliases for JS import statements
   - `:bindings` — per-module map of user alias to generated alias for `__bindings__` on module proxies
   """
-  @spec aggregate_js_imports(list(mfa), PLT.t(), MapSet.t(module)) :: %{
+  @spec aggregate_js_imports(list(mfa), PLT.t(), PLT.t() | nil, MapSet.t(module)) :: %{
           imports: list(%{from: String.t(), export: String.t(), alias: String.t()}),
           bindings: %{module => %{String.t() => String.t()}}
         }
-  def aggregate_js_imports(mfas, ir_plt, excluded_modules \\ MapSet.new()) do
+  def aggregate_js_imports(mfas, ir_plt, module_info_plt, excluded_modules \\ MapSet.new()) do
     modules_with_imports =
       mfas
-      |> list_js_import_modules(ir_plt)
+      |> list_js_import_modules(ir_plt, module_info_plt)
       |> Enum.reject(&MapSet.member?(excluded_modules, &1))
 
     unique_imports =
@@ -234,13 +235,15 @@ defmodule Hologram.Compiler do
   Builds JavaScript code for the given Hologram page.
 
   The page's reachable MFAs are given (see `CallGraph.list_page_mfas/4`), so that a caller building
-  many pages can encode their functions first with `encode_reachable_functions/4` and render every
+  many pages can encode their functions first with `encode_reachable_functions/5` and render every
   page from the encode PLT.
 
   ## Options
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the page script imports
       from (required).
+    * `:module_info_plt` - the module info PLT the bundled modules are classified from; without it
+      each module is asked, which reads the BEAM of a module that is not loaded (default: none).
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
     * `:runtime_js_binding_modules` - modules whose JS imports are skipped when the imports are
@@ -255,7 +258,7 @@ defmodule Hologram.Compiler do
     runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
 
     %{imports: imports, bindings: bindings} =
-      aggregate_js_imports(mfas, ir_plt, runtime_js_binding_modules)
+      aggregate_js_imports(mfas, ir_plt, opts[:module_info_plt], runtime_js_binding_modules)
 
     import_statements =
       imports
@@ -276,7 +279,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       mfas
-      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
       |> render_block()
 
     module_metadata_registration =
@@ -318,6 +321,8 @@ defmodule Hologram.Compiler do
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the runtime script imports
       from (required).
+    * `:module_info_plt` - the module info PLT the bundled modules are classified from; without it
+      each module is asked, which reads the BEAM of a module that is not loaded (default: none).
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
   """
@@ -332,7 +337,8 @@ defmodule Hologram.Compiler do
   def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
 
-    %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas, ir_plt)
+    %{imports: imports, bindings: bindings} =
+      aggregate_js_imports(runtime_mfas, ir_plt, opts[:module_info_plt])
 
     import_statements =
       imports
@@ -354,7 +360,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       runtime_mfas
-      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas)
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
       |> render_block()
 
     module_metadata_registration =
@@ -500,7 +506,7 @@ defmodule Hologram.Compiler do
   passes the module info PLT's components.
   The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
   copies it. Every page's reachable MFAs are listed first, their functions are encoded into the
-  encode PLT with one IR read per module (`encode_reachable_functions/4`), and then the pages are
+  encode PLT with one IR read per module (`encode_reachable_functions/5`), and then the pages are
   rendered from that cache.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
@@ -554,7 +560,7 @@ defmodule Hologram.Compiler do
 
       mfas_by_page
       |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
-      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas)
+      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
 
       TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
         entry_name = Reflection.module_name(page_module)
@@ -563,6 +569,7 @@ defmodule Hologram.Compiler do
           mfas
           |> build_page_js(ir_plt, encode_plt, async_mfas,
             js_dir: opts[:js_dir],
+            module_info_plt: module_info_plt,
             module_metadata: opts[:module_metadata],
             runtime_js_binding_modules: runtime_js_binding_modules
           )
@@ -590,6 +597,7 @@ defmodule Hologram.Compiler do
     runtime_mfas
     |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions,
       js_dir: opts[:js_dir],
+      module_info_plt: opts[:module_info_plt],
       module_metadata: opts[:module_metadata]
     )
     |> create_entry_file("runtime", opts[:tmp_dir])
@@ -630,16 +638,19 @@ defmodule Hologram.Compiler do
   Encodes into the encode PLT every function of the given MFAs that is not there yet, reading each
   module's IR once however many entry files reach it. Erlang modules are skipped, and so are
   protocol modules, whose dispatcher functions depend on the entry file and are encoded per entry
-  file.
+  file; the module info PLT says which modules are protocols without touching their code paths.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/encode_reachable_functions_5/README.md
   """
-  @spec encode_reachable_functions([mfa], PLT.t(), PLT.t(), MapSet.t(mfa)) :: :ok
-  def encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas) do
+  @spec encode_reachable_functions([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), PLT.t() | nil) :: :ok
+  def encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas, module_info_plt) do
     mfas
     |> Enum.uniq()
     |> group_mfas_by_module()
     # Checked once per module, not per MFA: the lists of many pages repeat the same MFAs.
     |> Enum.filter(fn {module, _module_mfas} ->
-      Reflection.elixir_module?(module, ir_plt) and not Reflection.protocol?(module)
+      Reflection.elixir_module?(module, ir_plt) and
+        not Reflection.protocol?(module, module_info_plt)
     end)
     |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
       missing =
@@ -757,17 +768,16 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists the Elixir modules referenced by the given MFAs that declare JS imports. The IR PLT tells
-  the Elixir modules apart from the Erlang ones.
+  the Elixir modules apart from the Erlang ones, and the module info PLT says which of them declare
+  imports without touching their code paths; with nil, every module is asked.
   """
-  @spec list_js_import_modules(list(mfa), PLT.t()) :: list(module)
-  def list_js_import_modules(mfas, ir_plt) do
+  @spec list_js_import_modules(list(mfa), PLT.t(), PLT.t() | nil) :: list(module)
+  def list_js_import_modules(mfas, ir_plt, module_info_plt) do
     mfas
     |> filter_elixir_mfas(ir_plt)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
-    |> Enum.filter(
-      &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
-    )
+    |> Enum.filter(&(Reflection.js_imports?(&1, module_info_plt) and &1.__js_imports__() != []))
   end
 
   @doc """
@@ -1388,14 +1398,22 @@ defmodule Hologram.Compiler do
 
   # Functions are listed by module, then function name, then arity. The module order is the
   # sort below; the order within a module comes from IR.aggregate_module_funs/1 on the protocol
-  # path and from the sort in render_module_function_defs/6 on the cached one.
-  defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas) do
+  # path and from the sort in render_module_function_defs/7 on the cached one.
+  defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas, module_info_plt) do
     mfas
     |> filter_elixir_mfas(ir_plt)
     |> group_mfas_by_module()
     |> Enum.sort()
     |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
-      render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas)
+      render_module_function_defs(
+        module,
+        module_mfas,
+        mfas,
+        ir_plt,
+        encode_plt,
+        async_mfas,
+        module_info_plt
+      )
     end)
     |> Enum.join("\n\n")
   end
@@ -1446,11 +1464,20 @@ defmodule Hologram.Compiler do
   # maybe_prune_protocol_dispatcher_function_defs/3, so their JavaScript depends on the entry
   # file being built and cannot be keyed by MFA alone. Every other module's functions encode
   # the same wherever they are reached from, so each is encoded once per compile in the common
-  # case, and never differently.
-  defp render_module_function_defs(module, module_mfas, mfas, ir_plt, encode_plt, async_mfas) do
+  # case, and never differently. The module info PLT answers whether a module is a protocol, so a
+  # module that is not loaded is not asked once per entry file.
+  defp render_module_function_defs(
+         module,
+         module_mfas,
+         mfas,
+         ir_plt,
+         encode_plt,
+         async_mfas,
+         module_info_plt
+       ) do
     context = %Context{async_mfas: async_mfas, ir_plt: ir_plt, module: module}
 
-    if Reflection.protocol?(module) do
+    if Reflection.protocol?(module, module_info_plt) do
       ir_plt
       |> PLT.get!(module)
       |> prune_module_def(mfas)
