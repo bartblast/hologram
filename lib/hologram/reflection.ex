@@ -17,6 +17,7 @@ defmodule Hologram.Reflection do
     :js_imports?,
     :source_path,
     :layout_module,
+    :route,
     :protocol_functions,
     :implementation_for,
     :implemented_protocol
@@ -65,9 +66,9 @@ defmodule Hologram.Reflection do
   performs after loading the module, read from the file instead. The source path is the `:source` of
   the BEAM's compile info, the value `module.module_info(:compile)[:source]` returns once the module is
   loaded, as a string (nil when the compile info has none).
-  A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
-  are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
-  and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
+  A page's layout module and route, a protocol's functions, and the target and protocol of a protocol
+  implementation are read from the debug info, where `__layout_module__/0`, `__route__/0`,
+  `__protocol__(:functions)`, `__impl__(:for)` and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
   when the function is missing or returns something that is not a literal.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
   source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
@@ -90,6 +91,7 @@ defmodule Hologram.Reflection do
         js_imports?: false,
         source_path: "/path/to/lib/my_page.ex",
         layout_module: MyLayout,
+        route: "/my-page",
         protocol_functions: nil,
         implementation_for: nil,
         implemented_protocol: nil
@@ -113,6 +115,7 @@ defmodule Hologram.Reflection do
             js_imports?: boolean,
             source_path: String.t() | nil,
             layout_module: module | nil,
+            route: String.t() | nil,
             protocol_functions: list({atom, arity}) | nil,
             implementation_for: module | nil,
             implemented_protocol: module | nil
@@ -156,6 +159,7 @@ defmodule Hologram.Reflection do
         js_imports?: {:__js_imports__, 0} in exports,
         source_path: compile_info_source(compile_info),
         layout_module: literal_return(definitions, :__layout_module__, []),
+        route: literal_return(definitions, :__route__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
         implementation_for: literal_return(definitions, :__impl__, [:for]),
         implemented_protocol: literal_return(definitions, :__impl__, [:protocol])
