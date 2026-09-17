@@ -121,7 +121,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # holds the IR this compile reads, no more: the modules of the diff first, for the graph
       # patch, then the rest once the graph says what is reachable.
       {cache, old_module_info_plt, module_info_dumped_at} =
-        load_before_state(build_dir, module_info_plt_dump_path, call_graph_dump_path, sup)
+        load_before_state(build_dir, call_graph_dump_path, sup)
 
       new_module_info_plt =
         Compiler.build_module_info_plt!(old_module_info_plt, module_info_dumped_at,
@@ -252,11 +252,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       CallGraph.dump(call_graph, call_graph_dump_path)
       PLT.dump(new_module_info_plt, module_info_plt_dump_path)
 
-      # Last, so that a compile that fails anywhere before leaves the before picture of the last
-      # finished one, against which the partly patched IR PLT and call graph are patched again.
-      new_module_info_plt
-      |> PLT.get_all()
-      |> Cache.put_module_infos()
+      # The dump time is kept with the infos, since the reuse guard compares them against it (see
+      # Hologram.Compiler.Cache). Last, so that a compile that fails anywhere before leaves the
+      # before picture of the last finished one, against which the partly patched IR PLT and call
+      # graph are patched again.
+      module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
+      module_infos = PLT.get_all(new_module_info_plt)
+      Cache.put_module_infos(module_infos, module_info_dumped_at)
 
       Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 
@@ -294,7 +296,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # first compile in a VM (or after a reset) starts from the build dir instead: the cache is emptied,
   # so that nothing a failed compile left in it survives, the graph is loaded from its dump, and the
   # module info dump written next to that graph is the before picture.
-  defp load_before_state(build_dir, module_info_plt_dump_path, call_graph_dump_path, sup) do
+  defp load_before_state(build_dir, call_graph_dump_path, sup) do
     case Cache.get() do
       %{module_infos: nil} ->
         :ok = Cache.reset()
@@ -321,9 +323,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       cache ->
         items = Map.to_list(cache.module_infos)
         module_info_plt = PLT.start(items: items, supervisor: sup)
-        dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-
-        {cache, module_info_plt, dumped_at}
+        {cache, module_info_plt, cache.dumped_at}
     end
   end
 

@@ -27,6 +27,7 @@ defmodule Hologram.Compiler.CacheTest do
     test "returns an empty call graph, an empty IR PLT and no module infos at first" do
       assert %{
                call_graph: %CallGraph{} = call_graph,
+               dumped_at: nil,
                ir_plt: %PLT{} = ir_plt,
                module_infos: nil
              } = get()
@@ -55,11 +56,11 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
-  test "put_module_infos/1" do
+  test "put_module_infos/2" do
     module_infos = %{Module1 => %{digest: "a"}}
 
-    assert put_module_infos(module_infos) == :ok
-    assert %{module_infos: ^module_infos} = get()
+    assert put_module_infos(module_infos, 123) == :ok
+    assert %{dumped_at: 123, module_infos: ^module_infos} = get()
   end
 
   describe "reset/0" do
@@ -89,12 +90,12 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_ir_plt) == []
     end
 
-    test "forgets the module infos" do
-      put_module_infos(%{Module1 => %{digest: "a"}})
+    test "forgets the module infos and the dump time" do
+      put_module_infos(%{Module1 => %{digest: "a"}}, 123)
 
       reset()
 
-      assert %{module_infos: nil} = get()
+      assert %{dumped_at: nil, module_infos: nil} = get()
     end
   end
 

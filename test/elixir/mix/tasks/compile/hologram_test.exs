@@ -364,12 +364,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "an edited module gets its IR rebuilt", %{opts: opts} do
       run(opts)
 
-      %{ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      %{dumped_at: dumped_at, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
       PLT.put(ir_plt, Module1, :stale)
 
       # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
       edited_info = %{module_infos[Module1] | digest: "edited", mtime: 0}
-      Cache.put_module_infos(%{module_infos | Module1 => edited_info})
+      Cache.put_module_infos(%{module_infos | Module1 => edited_info}, dumped_at)
 
       run(opts)
 
@@ -399,7 +399,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a removed module loses its IR entry and its call graph vertices", %{opts: opts} do
       run(opts)
 
-      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      %{
+        call_graph: call_graph,
+        dumped_at: dumped_at,
+        ir_plt: ir_plt,
+        module_infos: module_infos
+      } = Cache.get()
+
       removed_vertex = {:removed_module, :fun, 0}
 
       PLT.put(ir_plt, :removed_module, :ir)
@@ -408,7 +414,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       module_infos
       |> Map.put(:removed_module, %{digest: "removed"})
-      |> Cache.put_module_infos()
+      |> Cache.put_module_infos(dumped_at)
 
       run(opts)
 
@@ -445,6 +451,30 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
       assert CallGraph.has_vertex?(call_graph, Module2)
       assert module_infos == load_module_info_items(opts)
+    end
+
+    test "reuses the kept module infos against the time the kept compile wrote", %{opts: opts} do
+      run(opts)
+
+      %{ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      module_1_info = module_infos[Module1]
+
+      # The state of a compile that dumped in the same second as the beam was last written: its
+      # entry cannot be reused, since a beam rewritten during that second matches on mtime and size
+      # and still differs. A dump time read from disk can belong to a later compile by another VM,
+      # which would make the guard trust the entry below and miss the edit it carries.
+      Cache.put_module_infos(
+        %{module_infos | Module1 => %{module_1_info | digest: "stale"}},
+        module_1_info.mtime
+      )
+
+      dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+      File.touch!(dump_path, module_1_info.mtime + 100)
+
+      run(opts)
+
+      assert is_integer(Cache.get().module_infos[Module1].digest)
+      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
     test "a run whose build dir has no call graph dump rebuilds the graph", %{opts: opts} do
