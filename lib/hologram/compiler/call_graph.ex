@@ -866,6 +866,8 @@ defmodule Hologram.Compiler.CallGraph do
   given modules included. The compile task uses it, before the graph is patched, to find the pages
   and components a change to those modules can affect: every way a page's bundle depends on a module
   is a path in the graph from a vertex of the page, or of a component it renders, to that module.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_modules_reaching_2/README.md
   """
   @spec list_modules_reaching(t, [module]) :: MapSet.t(module)
   def list_modules_reaching(call_graph, modules) do
