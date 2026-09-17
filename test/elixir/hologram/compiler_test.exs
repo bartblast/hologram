@@ -2708,12 +2708,26 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "validate_page_modules/1" do
-    test "doesn't raise any error if all pages have a route and a layout specified" do
-      assert validate_page_modules([Module9, Module11]) == :ok
+  describe "validate_page_modules/2" do
+    # The module info PLT entries of the given pages: the fixture PLT's for file fixtures, and the
+    # given ones for pages defined in a test, which are compiled without debug info.
+    defp page_module_info_plt(module_info_plt, file_pages, inline_entries) do
+      file_entries = Enum.map(file_pages, &{&1, PLT.get!(module_info_plt, &1)})
+
+      PLT.start(items: file_entries ++ inline_entries)
     end
 
-    test "raises error if any of the pages doesn't have a route specified" do
+    test "doesn't raise any error if all pages have a route and a layout specified", %{
+      module_info_plt: module_info_plt
+    } do
+      plt = page_module_info_plt(module_info_plt, [Module9, Module11], [])
+
+      assert validate_page_modules([Module9, Module11], plt) == :ok
+    end
+
+    test "raises error if any of the pages doesn't have a route specified", %{
+      module_info_plt: module_info_plt
+    } do
       # Inline fixture used, because file fixture would raise error in compile.hologram Mix task tests.
       defmodule InlinePageModuleFixture1 do
         use Hologram.Page
@@ -2726,15 +2740,23 @@ defmodule Hologram.CompilerTest do
         end
       end
 
+      plt =
+        page_module_info_plt(module_info_plt, [Module11], [
+          {InlinePageModuleFixture1,
+           %{route: nil, layout_module: Hologram.Test.Fixtures.LayoutFixture}}
+        ])
+
       expected_msg =
         "page 'Hologram.CompilerTest.InlinePageModuleFixture1' doesn't have a route specified (use the route/1 macro to fix it)"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
-        validate_page_modules([Module11, InlinePageModuleFixture1])
+        validate_page_modules([Module11, InlinePageModuleFixture1], plt)
       end
     end
 
-    test "raises error if any of the pages doesn't have a layout specified" do
+    test "raises error if any of the pages doesn't have a layout specified", %{
+      module_info_plt: module_info_plt
+    } do
       # Inline fixture used, because file fixture would raise error in compile.hologram Mix task tests.
       defmodule InlinePageModuleFixture2 do
         use Hologram.Page
@@ -2747,11 +2769,92 @@ defmodule Hologram.CompilerTest do
         end
       end
 
+      plt =
+        page_module_info_plt(module_info_plt, [Module11], [
+          {InlinePageModuleFixture2,
+           %{route: "/hologram-compilertest-inline-page-module-fixture-2", layout_module: nil}}
+        ])
+
       expected_msg =
         "page 'Hologram.CompilerTest.InlinePageModuleFixture2' doesn't have a layout module specified (use the layout/1 macro to fix it)"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
-        validate_page_modules([Module11, InlinePageModuleFixture2])
+        validate_page_modules([Module11, InlinePageModuleFixture2], plt)
+      end
+    end
+
+    test "raises error if any of the pages has a route that is not a string", %{
+      module_info_plt: module_info_plt
+    } do
+      plt =
+        page_module_info_plt(module_info_plt, [Module11], [
+          {Module9, %{route: :admin, layout_module: Hologram.Test.Fixtures.LayoutFixture}}
+        ])
+
+      expected_msg =
+        "page 'Hologram.Test.Fixtures.Compiler.Module9' has a route that is not a string: :admin (pass a string to the route/1 macro to fix it)"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_page_modules([Module11, Module9], plt)
+      end
+    end
+
+    test "asks the page for a route built at runtime, and accepts a string", %{
+      module_info_plt: module_info_plt
+    } do
+      # Inline fixture used, because file fixture would raise error in compile.hologram Mix task tests.
+      defmodule InlinePageModuleFixture3 do
+        use Hologram.Page
+
+        @prefix "hologram-compilertest"
+
+        route "/#{@prefix}/inline-page-module-fixture-3"
+
+        layout Hologram.Test.Fixtures.LayoutFixture
+
+        @impl Page
+        def template do
+          ~HOLO""
+        end
+      end
+
+      plt =
+        page_module_info_plt(module_info_plt, [], [
+          {InlinePageModuleFixture3,
+           %{route: nil, layout_module: Hologram.Test.Fixtures.LayoutFixture}}
+        ])
+
+      assert validate_page_modules([InlinePageModuleFixture3], plt) == :ok
+    end
+
+    test "raises error if a route built at runtime is not a string", %{
+      module_info_plt: module_info_plt
+    } do
+      # Inline fixture used, because file fixture would raise error in compile.hologram Mix task tests.
+      defmodule InlinePageModuleFixture4 do
+        use Hologram.Page
+
+        route String.to_existing_atom("admin")
+
+        layout Hologram.Test.Fixtures.LayoutFixture
+
+        @impl Page
+        def template do
+          ~HOLO""
+        end
+      end
+
+      plt =
+        page_module_info_plt(module_info_plt, [], [
+          {InlinePageModuleFixture4,
+           %{route: nil, layout_module: Hologram.Test.Fixtures.LayoutFixture}}
+        ])
+
+      expected_msg =
+        "page 'Hologram.CompilerTest.InlinePageModuleFixture4' has a route that is not a string: :admin (pass a string to the route/1 macro to fix it)"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_page_modules([InlinePageModuleFixture4], plt)
       end
     end
   end

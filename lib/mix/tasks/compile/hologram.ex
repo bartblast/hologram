@@ -158,7 +158,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       page_modules = Compiler.list_pages(new_module_info_plt)
       component_modules = Compiler.list_components(new_module_info_plt)
 
-      Compiler.validate_page_modules(page_modules)
+      Compiler.validate_page_modules(page_modules, new_module_info_plt)
 
       # Runs here rather than in each module's own compilation: every module is compiled by now, so
       # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
