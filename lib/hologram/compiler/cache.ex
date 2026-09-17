@@ -7,7 +7,8 @@ defmodule Hologram.Compiler.Cache do
   # module infos of the last finished compile are kept with them, with the mtime of the dump that
   # compile wrote: they are the picture both were brought in line with, so the next compile diffs
   # against them rather than against the dump on disk, which another VM sharing the build dir may
-  # have rewritten. Started on first use
+  # have rewritten. What each page and the runtime were built from is kept too, so that a compile
+  # rebuilds only the pages an edit reaches. Started on first use
   # and not linked to the caller, so it outlives the compile that started it. A compile that finds
   # no module infos here starts from the build dir, so nothing depends on the cache for
   # correctness.
@@ -17,11 +18,22 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
 
+  @type page_state :: %{mfas: [mfa], modules: MapSet.t(module), bundle_info: map}
+
+  @type runtime_state :: %{
+          app_versions: keyword(String.t()),
+          bundle_info: map,
+          js_binding_modules: MapSet.t(module),
+          mfas: [mfa]
+        }
+
   @type t :: %{
           call_graph: CallGraph.t(),
           dumped_at: non_neg_integer | nil,
           ir_plt: PLT.t(),
-          module_infos: %{module => map} | nil
+          module_infos: %{module => map} | nil,
+          pages_plt: PLT.t(),
+          runtime: runtime_state | nil
         }
 
   @doc """
@@ -36,9 +48,18 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Returns the kept call graph and IR PLT, and the module infos of the last finished compile with the
-  mtime of the module info dump it wrote (both nil when no compile has finished in this VM). Starts
-  the cache on first use.
+  Forgets what a page was built from, for a page that no longer exists.
+  """
+  @spec delete_page(module) :: :ok
+  def delete_page(page_module) do
+    GenServer.call(server(), {:delete_page, page_module})
+  end
+
+  @doc """
+  Returns the kept call graph, IR PLT and page states, the module infos of the last finished compile
+  with the mtime of the module info dump it wrote, and what the runtime bundle was built from (the
+  module infos and the runtime state are nil when no compile has finished in this VM). Starts the
+  cache on first use.
   """
   @spec get() :: t
   def get do
@@ -50,12 +71,26 @@ defmodule Hologram.Compiler.Cache do
     {:reply, :ok, %{state | dumped_at: nil, module_infos: nil}}
   end
 
+  def handle_call({:delete_page, page_module}, _from, state) do
+    PLT.delete(state.pages_plt, page_module)
+    {:reply, :ok, state}
+  end
+
   def handle_call(:get, _from, state) do
     {:reply, state, state}
   end
 
   def handle_call({:put_module_infos, module_infos, dumped_at}, _from, state) do
     {:reply, :ok, %{state | dumped_at: dumped_at, module_infos: module_infos}}
+  end
+
+  def handle_call({:put_page, page_module, page_state}, _from, state) do
+    PLT.put(state.pages_plt, page_module, page_state)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:put_runtime, runtime_state}, _from, state) do
+    {:reply, :ok, %{state | runtime: runtime_state}}
   end
 
   def handle_call(:reset, _from, state) do
@@ -81,25 +116,52 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Replaces the kept call graph and IR PLT with empty ones and forgets the kept module infos and dump
-  time, so the next compile starts from the build dir, as the first one in the VM does.
+  Keeps a page's reachable MFAs, their modules and the info of the bundle built from them, so that the
+  next compile can reuse that bundle when nothing the page reaches has changed. Put right after the
+  bundle is written, so the state and the file on disk go together.
+  """
+  @spec put_page(module, page_state) :: :ok
+  def put_page(page_module, page_state) do
+    GenServer.call(server(), {:put_page, page_module, page_state})
+  end
+
+  @doc """
+  Keeps what the runtime bundle was built from: its MFAs, the JS import modules it registers (which
+  every page bundle leaves out), the application versions it carries and the info of its bundle.
+  """
+  @spec put_runtime(runtime_state) :: :ok
+  def put_runtime(runtime_state) do
+    GenServer.call(server(), {:put_runtime, runtime_state})
+  end
+
+  @doc """
+  Replaces the kept call graph, IR PLT and page states with empty ones and forgets the kept module
+  infos, dump time and runtime state, so the next compile starts from the build dir, as the first one
+  in the VM does.
   """
   @spec reset() :: :ok
   def reset do
     GenServer.call(server(), :reset)
   end
 
-  # The call graph's and the IR PLT's processes are linked to the cache, but a normal stop does
+  # The call graph's and the PLTs' processes are linked to the cache, but a normal stop does
   # not take a linked process down with it, so they are stopped here.
   @impl GenServer
   def terminate(_reason, state) do
     stop_kept(state)
   end
 
-  # The call graph and the PLT are started from within the cache process, so their processes are
+  # The call graph and the PLTs are started from within the cache process, so their processes are
   # linked to the cache, not to whichever process ran the compile.
   defp initial_state do
-    %{call_graph: CallGraph.start(), dumped_at: nil, ir_plt: PLT.start(), module_infos: nil}
+    %{
+      call_graph: CallGraph.start(),
+      dumped_at: nil,
+      ir_plt: PLT.start(),
+      module_infos: nil,
+      pages_plt: PLT.start(),
+      runtime: nil
+    }
   end
 
   defp server do
@@ -112,5 +174,6 @@ defmodule Hologram.Compiler.Cache do
   defp stop_kept(state) do
     CallGraph.stop(state.call_graph)
     PLT.stop(state.ir_plt)
+    PLT.stop(state.pages_plt)
   end
 end
