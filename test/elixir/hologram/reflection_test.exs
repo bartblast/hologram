@@ -141,6 +141,7 @@ defmodule Hologram.ReflectionTest do
                struct?: false,
                exception?: false,
                ecto_schema?: false,
+               js_imports?: false,
                source_path: source_path,
                layout_module: nil,
                protocol_functions: nil,
@@ -150,6 +151,12 @@ defmodule Hologram.ReflectionTest do
 
       assert is_integer(digest)
       assert String.ends_with?(source_path, "test/elixir/support/fixtures/reflection/module_1.ex")
+    end
+
+    test "module with JS imports" do
+      module = Hologram.Test.Fixtures.Compiler.Module12
+
+      assert %{js_imports?: true} = beam_info(:code.which(module))
     end
 
     test "source path is the one the loaded module reports" do

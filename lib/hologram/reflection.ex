@@ -14,6 +14,7 @@ defmodule Hologram.Reflection do
     :struct?,
     :exception?,
     :ecto_schema?,
+    :js_imports?,
     :source_path,
     :layout_module,
     :protocol_functions,
@@ -59,11 +60,11 @@ defmodule Hologram.Reflection do
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
   seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
-  a protocol, a protocol implementation, a struct, an exception or an Ecto schema. Each flag is the export
-  table check that the `Reflection` predicate of the same name performs after loading the module, read from
-  the file instead. The source path is the `:source` of the BEAM's compile info, the value
-  `module.module_info(:compile)[:source]` returns once the module is loaded, as a string (nil when the
-  compile info has none).
+  a protocol, a protocol implementation, a struct, an exception or an Ecto schema, and whether it declares
+  JS imports. Each flag is the export table check that the `Reflection` predicate of the same name
+  performs after loading the module, read from the file instead. The source path is the `:source` of
+  the BEAM's compile info, the value `module.module_info(:compile)[:source]` returns once the module is
+  loaded, as a string (nil when the compile info has none).
   A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
   are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
   and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
@@ -86,6 +87,7 @@ defmodule Hologram.Reflection do
         struct?: false,
         exception?: false,
         ecto_schema?: false,
+        js_imports?: false,
         source_path: "/path/to/lib/my_page.ex",
         layout_module: MyLayout,
         protocol_functions: nil,
@@ -108,6 +110,7 @@ defmodule Hologram.Reflection do
             struct?: boolean,
             exception?: boolean,
             ecto_schema?: boolean,
+            js_imports?: boolean,
             source_path: String.t() | nil,
             layout_module: module | nil,
             protocol_functions: list({atom, arity}) | nil,
@@ -150,6 +153,7 @@ defmodule Hologram.Reflection do
         struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
         exception?: {:exception, 1} in exports and {:message, 1} in exports,
         ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports,
+        js_imports?: {:__js_imports__, 0} in exports,
         source_path: compile_info_source(compile_info),
         layout_module: literal_return(definitions, :__layout_module__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
