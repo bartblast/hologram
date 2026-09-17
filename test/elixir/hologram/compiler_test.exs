@@ -2417,6 +2417,155 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "partition_pages_to_rebuild/4" do
+    setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+      call_graph_without_runtime_mfas =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+      page_modules = Reflection.list_pages()
+
+      mfas_by_page =
+        list_mfas_by_page(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          Reflection.list_components()
+        )
+
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_pages_to_rebuild_4"])
+      clean_dir(test_tmp_dir)
+      bundle_path = Path.join(test_tmp_dir, "page-kept.js")
+      File.write!(bundle_path, "bundle")
+
+      pages_plt = PLT.start()
+
+      Enum.each(mfas_by_page, fn {page_module, mfas} ->
+        PLT.put(pages_plt, page_module, %{
+          bundle_info: %{static_bundle_path: bundle_path},
+          mfas: mfas,
+          modules: MapSet.new(mfas, &elem(&1, 0))
+        })
+      end)
+
+      [
+        call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+        component_modules: Reflection.list_components(),
+        mfas_by_page: mfas_by_page,
+        page_modules: page_modules,
+        pages_plt: pages_plt
+      ]
+    end
+
+    test "lists the MFAs of the pages to rebuild and keeps the rest", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt
+    } do
+      [{reaching_page, _mfas} | _rest] = mfas_by_page
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          component_modules,
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new([reaching_page])
+        )
+
+      assert Enum.map(rebuilt, &elem(&1, 0)) == [reaching_page]
+      assert length(kept) == length(page_modules) - 1
+      refute reaching_page in Enum.map(kept, &elem(&1, 0))
+    end
+
+    test "keeps every page when nothing reaches them", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules,
+      pages_plt: pages_plt
+    } do
+      assert {[], kept} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 component_modules,
+                 pages_plt: pages_plt,
+                 reaching_modules: MapSet.new()
+               )
+
+      assert length(kept) == length(page_modules)
+    end
+
+    test "relisting keeps the pages whose MFAs are unchanged", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules,
+      pages_plt: pages_plt
+    } do
+      assert {[], kept} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 component_modules,
+                 pages_plt: pages_plt,
+                 reaching_modules: MapSet.new(),
+                 relist_all?: true
+               )
+
+      assert length(kept) == length(page_modules)
+    end
+
+    test "relisting rebuilds a page whose MFAs moved", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt
+    } do
+      [{moved_page, moved_page_mfas} | _rest] = mfas_by_page
+
+      PLT.put(pages_plt, moved_page, %{
+        bundle_info: %{static_bundle_path: Path.join(@tmp_dir, "page-kept.js")},
+        mfas: tl(moved_page_mfas),
+        modules: MapSet.new(moved_page_mfas, &elem(&1, 0))
+      })
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          component_modules,
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new(),
+          relist_all?: true
+        )
+
+      assert rebuilt == [{moved_page, moved_page_mfas}]
+      refute moved_page in Enum.map(kept, &elem(&1, 0))
+    end
+
+    test "rebuild_all? rebuilds every page", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules,
+      pages_plt: pages_plt
+    } do
+      assert {rebuilt, []} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 component_modules,
+                 pages_plt: pages_plt,
+                 reaching_modules: MapSet.new(),
+                 rebuild_all?: true
+               )
+
+      assert length(rebuilt) == length(page_modules)
+    end
+  end
+
   describe "patch_ir_plt!/3" do
     setup do
       ir_plt =

@@ -136,6 +136,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
 
+      # Before the patch, while the removed and edited modules still have their vertices and their
+      # callers: every way a page's bundle depends on a module is a path to that module, so the
+      # pages whose bundles can change are the ones these modules reach back to. Added modules need
+      # no walk of their own, since a new module is only reachable through an edited one.
+      reaching_modules =
+        CallGraph.list_modules_reaching(
+          call_graph,
+          module_digests_diff.removed_modules ++ module_digests_diff.edited_modules
+        )
+
       call_graph
       |> CallGraph.patch(ir_plt, module_digests_diff)
       |> CallGraph.add_non_discoverable_edges()
@@ -172,12 +182,36 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
-      mfas_by_page =
-        Compiler.list_mfas_by_page(page_modules, call_graph_for_pages, component_modules)
+      # Every page loads the runtime script, so the JS bindings it registers are available
+      # app-wide. A page bundle registering them again would only bundle a second copy of the
+      # imported JavaScript module, which the two would then take turns overwriting.
+      runtime_js_binding_modules =
+        runtime_mfas
+        |> Compiler.list_js_import_modules(ir_plt, new_module_info_plt)
+        |> MapSet.new()
+
+      {mfas_by_page, kept_pages} =
+        Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages, component_modules,
+          pages_plt: cache.pages_plt,
+          reaching_modules: reaching_modules,
+          rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
+          relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
+        )
+
+      kept_mfas_by_page =
+        Enum.map(kept_pages, fn {page_module, page_state} -> {page_module, page_state.mfas} end)
 
       # Every entry file reads its IR from here on, so the IR it reads is built in one pass first,
-      # and whatever an earlier compile kept that no entry file reads any more is dropped.
-      ir_modules = Compiler.list_ir_modules(runtime_mfas, mfas_by_page, new_module_info_plt)
+      # and whatever an earlier compile kept that no entry file reads any more is dropped. A kept
+      # page renders no entry file this time, but its IR stays, so that a later compile that does
+      # rebuild it finds the IR it reads.
+      ir_modules =
+        Compiler.list_ir_modules(
+          runtime_mfas,
+          mfas_by_page ++ kept_mfas_by_page,
+          new_module_info_plt
+        )
+
       Compiler.build_missing_ir!(ir_plt, ir_modules)
       Compiler.prune_ir_plt(ir_plt, templatable_modules ++ ir_modules)
 
@@ -210,14 +244,6 @@ defmodule Mix.Tasks.Compile.Hologram do
           entry_file_opts
         )
 
-      # Every page loads the runtime script, so the JS bindings it registers are available
-      # app-wide. A page bundle registering them again would only bundle a second copy of the
-      # imported JavaScript module, which the two would then take turns overwriting.
-      runtime_js_binding_modules =
-        runtime_mfas
-        |> Compiler.list_js_import_modules(ir_plt, new_module_info_plt)
-        |> MapSet.new()
-
       page_entry_files_info =
         mfas_by_page
         |> Compiler.create_page_entry_files(
@@ -238,7 +264,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> File.ls!()
         |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
 
-      bundles_info = Compiler.bundle(entry_files_info, opts)
+      built_bundles_info = Compiler.bundle(entry_files_info, opts)
+
+      # A kept page's bundle is the file an earlier compile wrote, with the digest it recorded, so
+      # it belongs in the page digest PLT and among the artifacts the cleanup below keeps.
+      kept_bundles_info =
+        Enum.map(kept_pages, fn {_page_module, %{bundle_info: info}} -> info end)
+
+      bundles_info = built_bundles_info ++ kept_bundles_info
 
       new_build_static_artifacts =
         Enum.reduce(bundles_info, [], fn bundle_info, acc ->
@@ -260,6 +293,18 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_infos = PLT.get_all(new_module_info_plt)
       Cache.put_module_infos(module_infos, module_info_dumped_at)
 
+      # After the dumps as well: what is kept describes files that are on disk and a page digest PLT
+      # that names them.
+      keep_built_bundles(
+        built_bundles_info,
+        mfas_by_page,
+        runtime_mfas,
+        runtime_js_binding_modules,
+        app_versions: app_versions,
+        pages_plt: cache.pages_plt,
+        page_modules: page_modules
+      )
+
       Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 
       Logger.info("Hologram: compiler finished")
@@ -278,6 +323,61 @@ defmodule Mix.Tasks.Compile.Hologram do
     with_lock(lock_path, fn ->
       compile(opts)
     end)
+  end
+
+  # Records what this compile built, so that the next one can reuse the bundles of the pages an edit
+  # does not reach: a state per page bundle it wrote, the runtime's inputs with its bundle, and no
+  # state for a page that no longer exists (whose bundle the artifact cleanup has just deleted).
+  defp keep_built_bundles(
+         built_bundles_info,
+         mfas_by_page,
+         runtime_mfas,
+         runtime_js_binding_modules,
+         opts
+       ) do
+    mfas_by_page_map = Map.new(mfas_by_page)
+
+    Enum.each(built_bundles_info, fn
+      %{bundle_name: "page", entry_name: page_module} = bundle_info ->
+        mfas = mfas_by_page_map[page_module]
+
+        Cache.put_page(page_module, %{
+          bundle_info: bundle_info,
+          mfas: mfas,
+          modules: page_state_modules(mfas)
+        })
+
+      %{bundle_name: "runtime"} = bundle_info ->
+        Cache.put_runtime(%{
+          app_versions: opts[:app_versions],
+          bundle_info: bundle_info,
+          js_binding_modules: runtime_js_binding_modules,
+          mfas: runtime_mfas
+        })
+    end)
+
+    opts[:pages_plt]
+    |> PLT.keys()
+    |> Kernel.--(opts[:page_modules])
+    |> Enum.each(&Cache.delete_page/1)
+  end
+
+  defp page_state_modules(mfas) do
+    mfas
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> MapSet.new()
+  end
+
+  defp runtime_js_bindings_changed?(nil, _js_binding_modules), do: false
+
+  defp runtime_js_bindings_changed?(kept_runtime, js_binding_modules) do
+    kept_runtime.js_binding_modules != js_binding_modules
+  end
+
+  defp runtime_mfas_changed?(nil, _runtime_mfas), do: false
+
+  defp runtime_mfas_changed?(kept_runtime, runtime_mfas) do
+    kept_runtime.mfas != runtime_mfas
   end
 
   defp compiler_enabled? do

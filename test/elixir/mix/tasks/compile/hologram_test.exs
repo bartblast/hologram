@@ -84,6 +84,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.get_all(plt)
   end
 
+  defp load_page_digest_items(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
+    assert File.exists?(dump_path)
+
+    plt = PLT.start()
+    PLT.load(plt, dump_path)
+    PLT.get_all(plt)
+  end
+
   defp setup_empty_assets_and_build_dirs(opts) do
     assets_dir = setup_empty_assets_dir()
     build_dir = setup_empty_build_dir()
@@ -330,7 +339,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert load_module_info_items(opts)[Module1] == first_run_module_info
   end
 
-  describe "kept IR PLT and call graph" do
+  describe "kept compile state" do
     setup do
       Cache.reset()
     end
@@ -429,6 +438,138 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(fresh_build_dir_opts)
 
       test_call_graph(fresh_build_dir_opts)
+    end
+
+    test "a run with no changes rebuilds no page", %{opts: opts} do
+      run(opts)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        # The runtime bundle only, which the next commit makes conditional too.
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds the pages reaching an edited module, with a full compile's result", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{dumped_at: dumped_at, module_infos: module_infos, pages_plt: pages_plt} = Cache.get()
+
+      pages_reaching_module_2 =
+        pages_plt
+        |> PLT.get_all()
+        |> Enum.count(fn {_page_module, page_state} ->
+          MapSet.member?(page_state.modules, Module2)
+        end)
+
+      # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
+      edited_info = %{module_infos[Module2] | digest: "edited", mtime: 0}
+      Cache.put_module_infos(%{module_infos | Module2 => edited_info}, dumped_at)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) ==
+                 {:call_count, pages_reaching_module_2 + 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert pages_reaching_module_2 < @num_pages
+      partial_digests = load_page_digest_items(opts)
+
+      Cache.reset()
+      run(opts)
+
+      assert load_page_digest_items(opts) == partial_digests
+      test_page_bundles(opts)
+    end
+
+    test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do
+      run(opts)
+
+      kept_bundle_paths =
+        Cache.get().pages_plt
+        |> PLT.get_all()
+        |> Enum.reject(fn {_page_module, page_state} ->
+          MapSet.member?(page_state.modules, Module2)
+        end)
+        |> Enum.map(fn {_page_module, page_state} ->
+          page_state.bundle_info.static_bundle_path
+        end)
+
+      %{dumped_at: dumped_at, module_infos: module_infos} = Cache.get()
+      edited_info = %{module_infos[Module2] | digest: "edited", mtime: 0}
+      Cache.put_module_infos(%{module_infos | Module2 => edited_info}, dumped_at)
+
+      run(opts)
+
+      assert kept_bundle_paths != []
+      assert Enum.all?(kept_bundle_paths, &File.exists?/1)
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds a page whose kept bundle is gone", %{opts: opts} do
+      run(opts)
+
+      {:ok, page_state} = PLT.get(Cache.get().pages_plt, Module1)
+      File.rm!(page_state.bundle_info.static_bundle_path)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        # That page and the runtime.
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 2}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert File.exists?(page_state.bundle_info.static_bundle_path)
+      test_page_bundles(opts)
+    end
+
+    test "forgets the state and the bundle of a page that no longer exists", %{opts: opts} do
+      run(opts)
+
+      digest = String.duplicate("a", 32)
+      bundle_path = Path.join(opts[:static_dir], "page-#{digest}.js")
+      source_map_path = bundle_path <> ".map"
+      File.write!(bundle_path, "bundle")
+      File.write!(source_map_path, "map")
+
+      Cache.put_page(:gone_page, %{
+        bundle_info: %{
+          bundle_name: "page",
+          digest: digest,
+          entry_name: :gone_page,
+          static_bundle_path: bundle_path,
+          static_source_map_path: source_map_path
+        },
+        mfas: [],
+        modules: MapSet.new()
+      })
+
+      run(opts)
+
+      assert PLT.get(Cache.get().pages_plt, :gone_page) == :error
+      refute File.exists?(bundle_path)
+      refute File.exists?(source_map_path)
     end
 
     test "a run after a reset starts from the build dir", %{opts: opts} do

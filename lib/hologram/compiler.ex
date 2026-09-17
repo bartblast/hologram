@@ -899,6 +899,45 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns `{mfas_by_page, kept_pages}`: the reachable MFAs of the pages this compile must rebuild
+  (see `list_mfas_by_page/3`), and the pages whose kept bundle it can reuse, each with its state.
+
+  Options:
+
+    * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
+    * `:reaching_modules` - the modules that reach the changed ones, from
+      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/3` for
+      what makes a page affected.
+    * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
+      moved although nothing it reaches was edited: a function that joined the runtime's set leaves
+      the page's bundle, and one that left it enters. The otherwise kept pages are listed again and
+      those whose list differs from the one their bundle was built from are rebuilt.
+    * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
+      those imports out, which their MFA lists do not show, so every page is rebuilt.
+  """
+  @spec partition_pages_to_rebuild([module], CallGraph.t(), [module], T.opts()) ::
+          {[{module, [mfa]}], [{module, map}]}
+  def partition_pages_to_rebuild(page_modules, call_graph, component_modules, opts) do
+    {pages_to_rebuild, kept_pages} =
+      if opts[:rebuild_all?] do
+        {page_modules, []}
+      else
+        partition_affected_pages(page_modules, opts[:reaching_modules], opts[:pages_plt])
+      end
+
+    mfas_by_page = list_mfas_by_page(pages_to_rebuild, call_graph, component_modules)
+
+    if opts[:relist_all?] do
+      {relisted_mfas_by_page, still_kept_pages} =
+        relist_kept_pages(kept_pages, call_graph, component_modules)
+
+      {mfas_by_page ++ relisted_mfas_by_page, still_kept_pages}
+    else
+      {mfas_by_page, kept_pages}
+    end
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
@@ -1420,6 +1459,27 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
+  # The kept pages whose MFAs moved, with their new lists, and the ones whose MFAs are unchanged.
+  defp relist_kept_pages(kept_pages, call_graph, component_modules) do
+    mfas_by_kept_page =
+      kept_pages
+      |> Enum.map(fn {page_module, _page_state} -> page_module end)
+      |> list_mfas_by_page(call_graph, component_modules)
+      |> Map.new()
+
+    {changed_pages, unchanged_pages} =
+      Enum.split_with(kept_pages, fn {page_module, page_state} ->
+        mfas_by_kept_page[page_module] != page_state.mfas
+      end)
+
+    relisted_mfas_by_page =
+      Enum.map(changed_pages, fn {page_module, _page_state} ->
+        {page_module, mfas_by_kept_page[page_module]}
+      end)
+
+    {relisted_mfas_by_page, unchanged_pages}
+  end
+
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
     # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
     # with :code.which/1, which is exactly the stale path that yielded nil here.
