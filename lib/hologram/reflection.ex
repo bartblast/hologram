@@ -29,8 +29,6 @@ defmodule Hologram.Reflection do
 
   @ignored_modules [Kernel.SpecialForms]
 
-  @ir_plt_dump_file_name "ir.plt"
-
   @module_info_plt_dump_file_name "module_info.plt"
 
   @page_digest_plt_dump_file_name "page_digest.plt"
@@ -395,14 +393,6 @@ defmodule Hologram.Reflection do
   def hologram_dep_dir do
     fallback_dir = Path.join(Mix.Project.deps_path(), "hologram")
     Map.get(Mix.Project.deps_paths(), :hologram, fallback_dir)
-  end
-
-  @doc """
-  Returns the IR PLT dump file name.
-  """
-  @spec ir_plt_dump_file_name() :: String.t()
-  def ir_plt_dump_file_name do
-    @ir_plt_dump_file_name
   end
 
   @doc """

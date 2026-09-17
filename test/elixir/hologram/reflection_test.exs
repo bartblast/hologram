@@ -637,10 +637,6 @@ defmodule Hologram.ReflectionTest do
     assert hologram_dep_dir() == File.cwd!() <> "/deps/hologram"
   end
 
-  test "ir_plt_dump_file_name/0" do
-    assert ir_plt_dump_file_name() == "ir.plt"
-  end
-
   describe "js_imports?/1" do
     test "module that declares JS imports" do
       assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12)

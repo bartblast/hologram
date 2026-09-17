@@ -6,7 +6,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
+  alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.IR
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
@@ -32,6 +34,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
 
   @num_pages Enum.count(Reflection.list_pages())
+
+  # A module of the test build that no page and no runtime function reaches.
+  @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
   defp count_plt_processes do
     Enum.count(Process.list(), fn pid ->
@@ -241,6 +246,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     System.put_env("HOLOGRAM_START", "1")
 
     on_exit(fn ->
+      Cache.reset()
+
       if original_hologram_start_flag do
         System.put_env("HOLOGRAM_START", original_hologram_start_flag)
       else
@@ -323,6 +330,189 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert load_module_info_items(opts)[Module1] == first_run_module_info
   end
 
+  describe "kept IR PLT and call graph" do
+    setup do
+      Cache.reset()
+    end
+
+    test "the second run keeps what the first run built", %{opts: opts} do
+      run(opts)
+      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+
+      assert module_infos == load_module_info_items(opts)
+
+      run(opts)
+
+      assert %{call_graph: ^call_graph, ir_plt: ^ir_plt, module_infos: module_infos} =
+               Cache.get()
+
+      assert module_infos == load_module_info_items(opts)
+    end
+
+    test "holds the IR of the pages and the modules they reach, and not of the rest", %{
+      opts: opts
+    } do
+      run(opts)
+
+      ir_modules = PLT.keys(Cache.get().ir_plt)
+
+      assert Module1 in ir_modules
+      assert Module2 in ir_modules
+      refute @unreached_module in ir_modules
+    end
+
+    test "an edited module gets its IR rebuilt", %{opts: opts} do
+      run(opts)
+
+      %{dumped_at: dumped_at, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      PLT.put(ir_plt, Module1, :stale)
+
+      # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
+      edited_info = %{module_infos[Module1] | digest: "edited", mtime: 0}
+      Cache.put_module_infos(%{module_infos | Module1 => edited_info}, dumped_at)
+
+      run(opts)
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module1}}} =
+               PLT.get(ir_plt, Module1)
+    end
+
+    test "a run with no changes builds no IR and loads no call graph", %{opts: opts} do
+      run(opts)
+
+      counted_mfas = [{IR, :for_module, 2}, {CallGraph, :load, 2}]
+
+      # Call counts are kept per function for every process, so the run's tasks are counted too.
+      Enum.each(counted_mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      try do
+        run(opts)
+
+        Enum.each(counted_mfas, fn mfa ->
+          assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
+        end)
+      after
+        Enum.each(counted_mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+      end
+    end
+
+    test "a removed module loses its IR entry and its call graph vertices", %{opts: opts} do
+      run(opts)
+
+      %{
+        call_graph: call_graph,
+        dumped_at: dumped_at,
+        ir_plt: ir_plt,
+        module_infos: module_infos
+      } = Cache.get()
+
+      removed_vertex = {:removed_module, :fun, 0}
+
+      PLT.put(ir_plt, :removed_module, :ir)
+      CallGraph.add_vertex(call_graph, removed_vertex)
+      assert CallGraph.has_vertex?(call_graph, removed_vertex)
+
+      module_infos
+      |> Map.put(:removed_module, %{digest: "removed"})
+      |> Cache.put_module_infos(dumped_at)
+
+      run(opts)
+
+      assert PLT.get(ir_plt, :removed_module) == :error
+      refute CallGraph.has_vertex?(call_graph, removed_vertex)
+    end
+
+    test "a run into a fresh build dir dumps the whole call graph", %{opts: opts} do
+      run(opts)
+
+      fresh_build_dir_opts = Keyword.put(opts, :build_dir, setup_empty_build_dir())
+      run(fresh_build_dir_opts)
+
+      test_call_graph(fresh_build_dir_opts)
+    end
+
+    test "a run after a reset starts from the build dir", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      mfa = {CallGraph, :load, 2}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+
+      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
+      assert CallGraph.has_vertex?(call_graph, Module2)
+      assert module_infos == load_module_info_items(opts)
+    end
+
+    test "reuses the kept module infos against the time the kept compile wrote", %{opts: opts} do
+      run(opts)
+
+      %{ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      module_1_info = module_infos[Module1]
+
+      # The state of a compile that dumped in the same second as the beam was last written: its
+      # entry cannot be reused, since a beam rewritten during that second matches on mtime and size
+      # and still differs. A dump time read from disk can belong to a later compile by another VM,
+      # which would make the guard trust the entry below and miss the edit it carries.
+      Cache.put_module_infos(
+        %{module_infos | Module1 => %{module_1_info | digest: "stale"}},
+        module_1_info.mtime
+      )
+
+      dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+      File.touch!(dump_path, module_1_info.mtime + 100)
+
+      run(opts)
+
+      assert is_integer(Cache.get().module_infos[Module1].digest)
+      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
+    end
+
+    test "a run that fails leaves the next one cold", %{opts: opts} do
+      run(opts)
+
+      # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
+      # in place, bundles, and only then raises, which is the shape of a compile that dies after
+      # changing what the cache keeps.
+      blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
+      File.rm!(blocked_dump_path)
+      File.mkdir!(blocked_dump_path)
+
+      assert_raise File.Error, fn -> run(opts) end
+      assert Cache.get().module_infos == nil
+
+      File.rmdir!(blocked_dump_path)
+
+      run(opts)
+
+      assert Cache.get().module_infos == load_module_info_items(opts)
+      test_call_graph(opts)
+    end
+
+    test "a run whose build dir has no call graph dump rebuilds the graph", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.rm!()
+
+      Cache.reset()
+
+      run(opts)
+
+      test_call_graph(opts)
+    end
+  end
+
   describe "module metadata" do
     setup do
       on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
@@ -377,6 +567,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   test "stops the processes it spawns once compilation finishes", %{opts: initial_opts} do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
+
+    # The cache's own PLT lives on after the run, so it is started before the count.
+    Cache.get()
 
     before_count = count_plt_processes()
     run(opts)

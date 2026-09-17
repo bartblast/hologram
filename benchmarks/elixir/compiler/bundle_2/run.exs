@@ -69,10 +69,16 @@ Benchee.run(
       |> Compiler.list_js_import_modules(ir_plt, module_info_plt)
       |> MapSet.new()
 
-    page_entry_files_info =
-      Reflection.list_pages()
-      |> Compiler.create_page_entry_files(
+    mfas_by_page =
+      Compiler.list_mfas_by_page(
+        Reflection.list_pages(),
         call_graph_for_pages,
+        Reflection.list_components()
+      )
+
+    page_entry_files_info =
+      mfas_by_page
+      |> Compiler.create_page_entry_files(
         ir_plt,
         encode_plt,
         async_mfas,

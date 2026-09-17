@@ -6,7 +6,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -640,6 +639,46 @@ defmodule Hologram.CompilerTest do
 
       assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module1)
       assert PLT.get(ir_plt, Hologram.Reflection) == :error
+    end
+
+    test "fills the given PLT" do
+      plt = PLT.start()
+
+      assert build_ir_plt(plt: plt, modules: [Module1]) == plt
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module1}}} =
+               PLT.get(plt, Module1)
+
+      PLT.stop(plt)
+    end
+  end
+
+  describe "build_missing_ir!/2" do
+    test "builds the IR of modules the PLT doesn't hold" do
+      ir_plt = PLT.start()
+
+      build_missing_ir!(ir_plt, [Module1, Module2])
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module1}}} =
+               PLT.get(ir_plt, Module1)
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module2}}} =
+               PLT.get(ir_plt, Module2)
+    end
+
+    test "leaves the entries it holds alone" do
+      ir_plt = PLT.put(PLT.start(), Module1, :ir_1)
+
+      build_missing_ir!(ir_plt, [Module1, Module2])
+
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module2)
+    end
+
+    test "returns the PLT" do
+      ir_plt = PLT.start()
+
+      assert build_missing_ir!(ir_plt, [Module1]) == ir_plt
     end
   end
 
@@ -1369,301 +1408,180 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "create_page_entry_files/7", %{
-    call_graph: call_graph,
-    ir_plt: ir_plt,
-    runtime_mfas: runtime_mfas
-  } do
-    opts = [
-      js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7"])
-    ]
+  describe "create_page_entry_files/6" do
+    setup %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      page_modules = Reflection.list_pages()
 
-    clean_dir(opts[:tmp_dir])
-
-    page_modules = Reflection.list_pages()
-
-    call_graph_without_runtime_mfas =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
-
-    result =
-      create_page_entry_files(
-        page_modules,
-        call_graph_without_runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        MapSet.new(),
-        opts
-      )
-
-    assert Enum.count(result) == Enum.count(page_modules)
-
-    Enum.each(result, fn {page_module, entry_file_path} ->
-      assert page_module in page_modules
-
-      module_name = Reflection.module_name(page_module)
-      assert entry_file_path == Path.join(opts[:tmp_dir], "#{module_name}.entry.js")
-
-      assert entry_file_path
-             |> File.read!()
-             |> String.contains?("Interpreter.defineElixirFunction")
-    end)
-  end
-
-  test "create_page_entry_files/7 asks the call graph for its graph once and releases it", %{
-    call_graph: call_graph,
-    ir_plt: ir_plt,
-    runtime_mfas: runtime_mfas
-  } do
-    opts = [
-      js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_shared"])
-    ]
-
-    clean_dir(opts[:tmp_dir])
-
-    page_modules = Reflection.list_pages()
-
-    %CallGraph{pid: pid} =
       call_graph_without_runtime_mfas =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-    count_shared_graphs = fn ->
-      Enum.count(:persistent_term.get(), &match?({{CallGraph, _ref}, _graph}, &1))
-    end
-
-    shared_graphs_before = count_shared_graphs.()
-
-    # Only the call graph's own process is traced, for the messages it receives.
-    :erlang.trace(pid, true, [:receive])
-
-    try do
-      create_page_entry_files(
-        page_modules,
-        call_graph_without_runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        MapSet.new(),
-        opts
-      )
-    after
-      :erlang.trace(pid, false, [:receive])
-    end
-
-    ref = :erlang.trace_delivered(pid)
-    assert_receive {:trace_delivered, ^pid, ^ref}
-
-    {:messages, messages} = Process.info(self(), :messages)
-
-    graph_requests =
-      Enum.count(
-        messages,
-        &match?({:trace, ^pid, :receive, {:"$gen_call", _from, {:get, _fun}}}, &1)
-      )
-
-    assert length(page_modules) > 1
-    assert graph_requests == 1
-    assert count_shared_graphs.() == shared_graphs_before
-  end
-
-  test "create_page_entry_files/7 reads each module's IR once for all pages", %{
-    call_graph: call_graph,
-    ir_plt: ir_plt,
-    runtime_mfas: runtime_mfas
-  } do
-    opts = [
-      js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_reads"])
-    ]
-
-    clean_dir(opts[:tmp_dir])
-
-    page_modules = Reflection.list_pages()
-
-    call_graph_without_runtime_mfas =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
-
-    graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
-    module_info_plt = CallGraph.module_info_plt(call_graph)
-
-    server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(
-        graph,
-        page_modules ++ Reflection.list_components(),
-        module_info_plt
-      )
-
-    # The Elixir modules each page reaches, split into protocols, which are read and rendered per
-    # page, and the rest, which are read once for all pages.
-    modules_by_page =
-      Enum.map(page_modules, fn page_module ->
-        graph
-        |> CallGraph.list_page_mfas(
-          page_module,
-          server_callback_analysis_by_templatable,
-          module_info_plt
+      mfas_by_page =
+        list_mfas_by_page(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          Reflection.list_components()
         )
-        |> Enum.map(fn {module, _function, _arity} -> module end)
+
+      [
+        mfas_by_page: mfas_by_page,
+        opts: [js_dir: @js_dir, module_info_plt: module_info_plt],
+        page_modules: page_modules
+      ]
+    end
+
+    test "creates an entry file for each page", %{
+      ir_plt: ir_plt,
+      mfas_by_page: mfas_by_page,
+      opts: opts,
+      page_modules: page_modules
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_6"])
+      clean_dir(tmp_dir)
+
+      result =
+        create_page_entry_files(
+          mfas_by_page,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          MapSet.new(),
+          Keyword.put(opts, :tmp_dir, tmp_dir)
+        )
+
+      assert Enum.count(result) == Enum.count(page_modules)
+
+      Enum.each(result, fn {page_module, entry_file_path} ->
+        assert page_module in page_modules
+
+        module_name = Reflection.module_name(page_module)
+        assert entry_file_path == Path.join(tmp_dir, "#{module_name}.entry.js")
+
+        assert entry_file_path
+               |> File.read!()
+               |> String.contains?("Interpreter.defineElixirFunction")
+      end)
+    end
+
+    test "reads each module's IR once for all pages", %{
+      ir_plt: ir_plt,
+      mfas_by_page: mfas_by_page,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_6_reads"])
+      clean_dir(tmp_dir)
+
+      # The Elixir modules each page reaches, split into protocols, which are read and rendered per
+      # page, and the rest, which are read once for all pages.
+      modules_by_page =
+        Enum.map(mfas_by_page, fn {_page_module, mfas} ->
+          mfas
+          |> Enum.map(fn {module, _function, _arity} -> module end)
+          |> Enum.uniq()
+          |> Enum.filter(&Reflection.elixir_module?(&1, ir_plt))
+        end)
+
+      {protocol_modules, other_modules} =
+        modules_by_page
+        |> List.flatten()
         |> Enum.uniq()
-        |> Enum.filter(&Reflection.elixir_module?(&1, ir_plt))
-      end)
+        |> Enum.split_with(&Reflection.protocol?/1)
 
-    {protocol_modules, other_modules} =
-      modules_by_page
-      |> List.flatten()
-      |> Enum.uniq()
-      |> Enum.split_with(&Reflection.protocol?/1)
+      protocol_reads =
+        modules_by_page
+        |> List.flatten()
+        |> Enum.count(&(&1 in protocol_modules))
 
-    protocol_reads =
-      modules_by_page
-      |> List.flatten()
-      |> Enum.count(&(&1 in protocol_modules))
-
-    # Call counts are kept per function for every process, so the tasks are counted too.
-    :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
-
-    try do
-      create_page_entry_files(
-        page_modules,
-        call_graph_without_runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        MapSet.new(),
-        opts
-      )
-
-      assert other_modules != []
-
-      assert :erlang.trace_info({PLT, :get!, 2}, :call_count) ==
-               {:call_count, length(other_modules) + protocol_reads}
-    after
-      :erlang.trace_pattern({PLT, :get!, 2}, false, [:call_count])
-    end
-  end
-
-  test "create_page_entry_files/7 renders the module metadata from the given map", %{
-    call_graph: call_graph,
-    ir_plt: ir_plt,
-    runtime_mfas: runtime_mfas
-  } do
-    opts = [
-      js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_metadata"])
-    ]
-
-    clean_dir(opts[:tmp_dir])
-
-    page_modules = Reflection.list_pages()
-
-    call_graph_without_runtime_mfas =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
-
-    build = fn opts ->
-      page_modules
-      |> create_page_entry_files(
-        call_graph_without_runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        MapSet.new(),
-        opts
-      )
-      |> Enum.map(fn {page_module, entry_file_path} ->
-        {page_module, File.read!(entry_file_path)}
-      end)
-    end
-
-    module_metadata =
-      call_graph
-      |> CallGraph.module_info_plt()
-      |> build_module_metadata()
-
-    without_map = build.(opts)
-
-    # Call counts are kept per function for every process, so the page tasks are counted too.
-    # The baseline is a build that renders no metadata at all: whatever else in the phase loads a
-    # module is counted there too, and the map must add nothing to it.
-    count_module_loads = fn build_fun ->
-      :erlang.trace_pattern({Code, :ensure_loaded?, 1}, true, [:call_count])
+      # Call counts are kept per function for every process, so the tasks are counted too.
+      :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
 
       try do
-        result = build_fun.()
-        {:call_count, count} = :erlang.trace_info({Code, :ensure_loaded?, 1}, :call_count)
-        {result, count}
+        create_page_entry_files(
+          mfas_by_page,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          MapSet.new(),
+          Keyword.put(opts, :tmp_dir, tmp_dir)
+        )
+
+        assert other_modules != []
+
+        assert :erlang.trace_info({PLT, :get!, 2}, :call_count) ==
+                 {:call_count, length(other_modules) + protocol_reads}
       after
-        :erlang.trace_pattern({Code, :ensure_loaded?, 1}, false, [:call_count])
+        :erlang.trace_pattern({PLT, :get!, 2}, false, [:call_count])
       end
     end
 
-    Application.put_env(:hologram, :client_stacktraces, false)
+    test "renders the module metadata from the given map", %{
+      ir_plt: ir_plt,
+      mfas_by_page: mfas_by_page,
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_6_metadata"])
+      clean_dir(tmp_dir)
 
-    {_without_metadata, baseline_loads} =
-      try do
-        count_module_loads.(fn -> build.(opts) end)
-      after
-        Application.delete_env(:hologram, :client_stacktraces)
+      opts = Keyword.put(opts, :tmp_dir, tmp_dir)
+
+      build = fn opts ->
+        mfas_by_page
+        |> create_page_entry_files(
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          MapSet.new(),
+          opts
+        )
+        |> Enum.map(fn {page_module, entry_file_path} ->
+          {page_module, File.read!(entry_file_path)}
+        end)
       end
 
-    {with_map, loads} =
-      count_module_loads.(fn -> build.(Keyword.put(opts, :module_metadata, module_metadata)) end)
+      module_metadata = build_module_metadata(module_info_plt)
 
-    assert with_map == without_map
-    {_page_module, first_page_js} = hd(with_map)
-    assert String.contains?(first_page_js, "ERTS.registerModuleMetadata(")
-    assert loads == baseline_loads
-  end
+      without_map = build.(opts)
 
-  test "create_page_entry_files/7 with the component modules given", %{
-    call_graph: call_graph,
-    ir_plt: ir_plt,
-    runtime_mfas: runtime_mfas
-  } do
-    opts = [
-      js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_components"])
-    ]
+      # Call counts are kept per function for every process, so the page tasks are counted too.
+      # The baseline is a build that renders no metadata at all: whatever else in the phase loads a
+      # module is counted there too, and the map must add nothing to it.
+      count_module_loads = fn build_fun ->
+        :erlang.trace_pattern({Code, :ensure_loaded?, 1}, true, [:call_count])
 
-    clean_dir(opts[:tmp_dir])
+        try do
+          result = build_fun.()
+          {:call_count, count} = :erlang.trace_info({Code, :ensure_loaded?, 1}, :call_count)
+          {result, count}
+        after
+          :erlang.trace_pattern({Code, :ensure_loaded?, 1}, false, [:call_count])
+        end
+      end
 
-    page_modules = Reflection.list_pages()
+      Application.put_env(:hologram, :client_stacktraces, false)
 
-    call_graph_without_runtime_mfas =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+      {_without_metadata, baseline_loads} =
+        try do
+          count_module_loads.(fn -> build.(opts) end)
+        after
+          Application.delete_env(:hologram, :client_stacktraces)
+        end
 
-    build = fn opts ->
-      page_modules
-      |> create_page_entry_files(
-        call_graph_without_runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        MapSet.new(),
-        opts
-      )
-      |> Enum.map(fn {page_module, entry_file_path} ->
-        {page_module, File.read!(entry_file_path)}
-      end)
+      {with_map, loads} =
+        count_module_loads.(fn ->
+          build.(Keyword.put(opts, :module_metadata, module_metadata))
+        end)
+
+      assert with_map == without_map
+      {_page_module, first_page_js} = hd(with_map)
+      assert String.contains?(first_page_js, "ERTS.registerModuleMetadata(")
+      assert loads == baseline_loads
     end
-
-    opts_with_components = Keyword.put(opts, :components, Reflection.list_components())
-
-    listed = build.(opts)
-    given = build.(opts_with_components)
-
-    assert given == listed
   end
 
   test "create_runtime_entry_file/6", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
@@ -2128,6 +2046,53 @@ defmodule Hologram.CompilerTest do
     assert list_components(plt) == [Module11, Module3]
   end
 
+  describe "list_ir_modules/3" do
+    setup do
+      info = %{digest: 1, mtime: 1, size: 1}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, info)
+        |> PLT.put(Module2, info)
+        |> PLT.put(Module3, info)
+        |> PLT.put(Hologram.JS, info)
+
+      [module_info_plt: module_info_plt]
+    end
+
+    test "lists the modules of the runtime and page MFAs once", %{
+      module_info_plt: module_info_plt
+    } do
+      runtime_mfas = [{Module1, :fun_1, 0}, {Module1, :fun_2, 0}]
+
+      mfas_by_page = [
+        {Module11, [{Module1, :fun_3, 0}, {Module2, :fun_1, 0}]},
+        {Module12, [{Module2, :fun_2, 1}]}
+      ]
+
+      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+
+      assert Enum.count(modules, &(&1 == Module1)) == 1
+      assert Enum.count(modules, &(&1 == Module2)) == 1
+      refute Module3 in modules
+    end
+
+    test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
+      assert list_ir_modules([], [], module_info_plt) == [Hologram.JS]
+    end
+
+    test "leaves out modules the module info PLT doesn't hold", %{
+      module_info_plt: module_info_plt
+    } do
+      runtime_mfas = [{Module1, :fun_1, 0}, {:lists, :map, 2}]
+      mfas_by_page = [{Module11, [{Module4, :fun_1, 0}]}]
+
+      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
+    end
+  end
+
   describe "list_js_import_modules/3" do
     test "returns the modules that declare JS imports", %{
       ir_plt: ir_plt,
@@ -2166,6 +2131,95 @@ defmodule Hologram.CompilerTest do
 
     test "a nil module info PLT asks every module", %{ir_plt: ir_plt} do
       assert list_js_import_modules([{Module12, :func, 0}], ir_plt, nil) == [Module12]
+    end
+  end
+
+  describe "list_mfas_by_page/3" do
+    setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+      call_graph_without_runtime_mfas =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+      [
+        call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+        component_modules: Reflection.list_components(),
+        page_modules: Reflection.list_pages()
+      ]
+    end
+
+    test "lists each page's reachable MFAs", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules
+    } do
+      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+      module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
+
+      server_callback_analysis_by_templatable =
+        CallGraph.server_callback_analysis_by_templatable(
+          graph,
+          page_modules ++ component_modules,
+          module_info_plt
+        )
+
+      expected =
+        Enum.map(page_modules, fn page_module ->
+          mfas =
+            CallGraph.list_page_mfas(
+              graph,
+              page_module,
+              server_callback_analysis_by_templatable,
+              module_info_plt
+            )
+
+          {page_module, mfas}
+        end)
+
+      result =
+        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, component_modules)
+
+      assert length(page_modules) > 1
+      assert Enum.all?(result, fn {_page_module, mfas} -> mfas != [] end)
+      assert result == expected
+    end
+
+    test "asks the call graph for its graph once and releases it", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules
+    } do
+      %CallGraph{pid: pid} = call_graph_without_runtime_mfas
+
+      count_shared_graphs = fn ->
+        Enum.count(:persistent_term.get(), &match?({{CallGraph, _ref}, _graph}, &1))
+      end
+
+      shared_graphs_before = count_shared_graphs.()
+
+      # Only the call graph's own process is traced, for the messages it receives.
+      :erlang.trace(pid, true, [:receive])
+
+      try do
+        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, component_modules)
+      after
+        :erlang.trace(pid, false, [:receive])
+      end
+
+      ref = :erlang.trace_delivered(pid)
+      assert_receive {:trace_delivered, ^pid, ^ref}
+
+      {:messages, messages} = Process.info(self(), :messages)
+
+      graph_requests =
+        Enum.count(
+          messages,
+          &match?({:trace, ^pid, :receive, {:"$gen_call", _from, {:get, _fun}}}, &1)
+        )
+
+      assert length(page_modules) > 1
+      assert graph_requests == 1
+      assert count_shared_graphs.() == shared_graphs_before
     end
   end
 
@@ -2240,56 +2294,6 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "maybe_load_call_graph/1" do
-    setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_call_graph_1"])
-
-      build_dir = Path.join(test_tmp_dir, "build")
-      clean_dir(build_dir)
-
-      dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
-
-      [build_dir: build_dir, dump_path: dump_path]
-    end
-
-    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
-      assert CallGraph.get_graph(call_graph) == Digraph.new()
-    end
-
-    test "dump file exists", %{build_dir: build_dir, call_graph: call_graph, dump_path: dump_path} do
-      CallGraph.dump(call_graph, dump_path)
-
-      assert {loaded_call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
-      assert CallGraph.get_graph(loaded_call_graph) == CallGraph.get_graph(call_graph)
-    end
-  end
-
-  describe "maybe_load_ir_plt/1" do
-    setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_ir_plt_1"])
-
-      build_dir = Path.join(test_tmp_dir, "build")
-      clean_dir(build_dir)
-
-      dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
-
-      [build_dir: build_dir, dump_path: dump_path]
-    end
-
-    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_ir_plt(build_dir)
-      assert PLT.get_all(plt) == %{}
-    end
-
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path, ir_plt: ir_plt} do
-      PLT.dump(ir_plt, dump_path)
-
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_ir_plt(build_dir)
-      assert PLT.get_all(plt) == PLT.get_all(ir_plt)
-    end
-  end
-
   describe "maybe_load_module_info_plt/1" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_info_plt_1"])
@@ -2317,6 +2321,25 @@ defmodule Hologram.CompilerTest do
 
       assert {plt = %PLT{}, ^dump_path, ^dumped_at} = maybe_load_module_info_plt(build_dir)
       assert PLT.get_all(plt) == %{a: 1, b: 2}
+    end
+  end
+
+  describe "module_info_dumped_at/1" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "module_info_dumped_at_1"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join(test_tmp_dir, Reflection.module_info_plt_dump_file_name())]
+    end
+
+    test "dump file exists", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+
+      assert module_info_dumped_at(dump_path) == File.stat!(dump_path, time: :posix).mtime
+    end
+
+    test "dump file doesn't exist", %{dump_path: dump_path} do
+      assert module_info_dumped_at(dump_path) == nil
     end
   end
 
@@ -2428,6 +2451,36 @@ defmodule Hologram.CompilerTest do
 
       assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: ^module}}} =
                PLT.get(ir_plt, module)
+    end
+  end
+
+  describe "prune_ir_plt/2" do
+    setup do
+      ir_plt =
+        PLT.start()
+        |> PLT.put(Module1, :ir_1)
+        |> PLT.put(Module2, :ir_2)
+        |> PLT.put(Module3, :ir_3)
+
+      [ir_plt: ir_plt]
+    end
+
+    test "deletes the entries of modules not in the list", %{ir_plt: ir_plt} do
+      prune_ir_plt(ir_plt, [Module1, Module3])
+
+      assert PLT.get(ir_plt, Module2) == :error
+    end
+
+    test "keeps the entries of the listed modules", %{ir_plt: ir_plt} do
+      prune_ir_plt(ir_plt, [Module1, Module3, Module4])
+
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+      assert PLT.get(ir_plt, Module3) == {:ok, :ir_3}
+      assert PLT.get(ir_plt, Module4) == :error
+    end
+
+    test "returns the PLT", %{ir_plt: ir_plt} do
+      assert prune_ir_plt(ir_plt, [Module1]) == ir_plt
     end
   end
 

@@ -97,6 +97,22 @@ defmodule Hologram.Commons.PLTTest do
   # Tested in start/1 tests:
   # test "init/1"
 
+  describe "keys/1" do
+    test "PLT with items", %{plt: plt} do
+      sorted_keys =
+        plt
+        |> keys()
+        |> Enum.sort()
+
+      assert sorted_keys == [:my_key_1, :my_key_2]
+    end
+
+    test "empty PLT" do
+      plt = start()
+      assert keys(plt) == []
+    end
+  end
+
   test "load/2", %{plt: plt} do
     dump_dir = Path.join([@tmp_dir, "tests", "commons", "plt", "load_2"])
     clean_dir(dump_dir)

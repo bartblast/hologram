@@ -6,11 +6,10 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "create_page_entry_files/7" => fn {page_modules, call_graph, ir_plt, encode_plt, async_mfas,
+    "create_page_entry_files/6" => fn {mfas_by_page, ir_plt, encode_plt, async_mfas,
                                        runtime_js_binding_modules, opts} ->
       Compiler.create_page_entry_files(
-        page_modules,
-        call_graph,
+        mfas_by_page,
         ir_plt,
         encode_plt,
         async_mfas,
@@ -22,6 +21,7 @@ Benchee.run(
   before_scenario: fn _input ->
     ir_plt = Compiler.build_ir_plt()
     call_graph = Compiler.build_call_graph(ir_plt)
+    module_info_plt = CallGraph.module_info_plt(call_graph)
 
     # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
     async_mfas = CallGraph.list_async_mfas(call_graph)
@@ -31,36 +31,40 @@ Benchee.run(
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
-    page_modules = Reflection.list_pages()
+    mfas_by_page =
+      Compiler.list_mfas_by_page(
+        Reflection.list_pages(),
+        call_graph_for_pages,
+        Reflection.list_components()
+      )
 
     runtime_js_binding_modules =
       runtime_mfas
-      |> Compiler.list_js_import_modules(ir_plt, CallGraph.module_info_plt(call_graph))
+      |> Compiler.list_js_import_modules(ir_plt, module_info_plt)
       |> MapSet.new()
 
     opts = [
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
-      module_metadata: Compiler.build_module_metadata(CallGraph.module_info_plt(call_graph)),
+      module_info_plt: module_info_plt,
+      module_metadata: Compiler.build_module_metadata(module_info_plt),
       tmp_dir:
-        Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_page_entry_files_7"])
+        Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_page_entry_files_6"])
     ]
 
-    {page_modules, call_graph_for_pages, ir_plt, PLT.start(), async_mfas,
-     runtime_js_binding_modules, opts}
+    {mfas_by_page, ir_plt, PLT.start(), async_mfas, runtime_js_binding_modules, opts}
   end,
-  before_each: fn {page_modules, call_graph, ir_plt, encode_plt, async_mfas,
-                   runtime_js_binding_modules, opts} ->
+  before_each: fn {mfas_by_page, ir_plt, encode_plt, async_mfas, runtime_js_binding_modules, opts} ->
     FileUtils.recreate_dir(opts[:tmp_dir])
 
     # Every iteration starts from an empty encode PLT, the way a compile does.
     PLT.reset(encode_plt)
 
-    {page_modules, call_graph, ir_plt, encode_plt, async_mfas, runtime_js_binding_modules, opts}
+    {mfas_by_page, ir_plt, encode_plt, async_mfas, runtime_js_binding_modules, opts}
   end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.create_page_entry_files/7",
+     description: "Hologram.Compiler.create_page_entry_files/6",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

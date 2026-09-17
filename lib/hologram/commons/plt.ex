@@ -113,6 +113,14 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Returns the keys stored in the PLT, without copying the values out (get_all/1 copies the whole table).
+  """
+  @spec keys(PLT.t()) :: list
+  def keys(%{table_ref: table_ref}) do
+    ETS.keys(table_ref)
+  end
+
+  @doc """
   Populates the PLT with items dumped to the given file.
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()

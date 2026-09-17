@@ -131,6 +131,8 @@ defmodule Hologram.Compiler do
   Builds IR persistent lookup table (PLT) of all modules in the project.
   Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
   module info PLT's keys.
+  Pass `plt:` to fill an existing PLT instead of starting one; the compile task passes the PLT it keeps between
+  compiles.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
@@ -138,7 +140,7 @@ defmodule Hologram.Compiler do
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
   def build_ir_plt(opts \\ []) do
-    ir_plt = PLT.start(opts)
+    ir_plt = opts[:plt] || PLT.start(opts)
 
     modules = opts[:modules] || Reflection.list_elixir_modules()
 
@@ -164,6 +166,18 @@ defmodule Hologram.Compiler do
     end)
 
     ir_plt
+  end
+
+  @doc """
+  Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
+  calls it for the modules it is about to read, once the call graph says which they are.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_missing_ir!_2/README.md
+  """
+  @spec build_missing_ir!(PLT.t(), [module]) :: PLT.t()
+  def build_missing_ir!(ir_plt, modules) do
+    missing_modules = Enum.reject(modules, &PLT.member?(ir_plt, &1))
+    build_ir_plt(plt: ir_plt, modules: missing_modules)
   end
 
   @doc """
@@ -501,19 +515,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates page bundle entry file.
-  Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
-  passes the module info PLT's components.
-  The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
-  copies it. Every page's reachable MFAs are listed first, their functions are encoded into the
-  encode PLT with one IR read per module (`encode_reachable_functions/5`), and then the pages are
-  rendered from that cache.
+  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/3`).
+  Knowing every page's MFAs before rendering any lets each module's IR be read once for all pages:
+  their functions are encoded into the encode PLT with one IR read per module
+  (`encode_reachable_functions/5`), and then the pages are rendered from that cache.
+  The module info PLT is taken from the `module_info_plt:` opt.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
   @spec create_page_entry_files(
-          list(module),
-          CallGraph.t(),
+          list({module, list(mfa)}),
           PLT.t(),
           PLT.t(),
           MapSet.t(mfa),
@@ -521,62 +532,33 @@ defmodule Hologram.Compiler do
           T.opts()
         ) :: list({module, T.file_path()})
   def create_page_entry_files(
-        page_modules,
-        call_graph,
+        mfas_by_page,
         ir_plt,
         encode_plt,
         async_mfas,
         runtime_js_binding_modules,
         opts
       ) do
-    module_info_plt = CallGraph.module_info_plt(call_graph)
-    templatables = page_modules ++ (opts[:components] || Reflection.list_components())
+    module_info_plt = opts[:module_info_plt]
 
-    # The tasks get the reader, which captures only the shared graph's key: a closure that
-    # captured the graph itself would copy it into every task it starts.
-    CallGraph.with_shared_graph(call_graph, fn read_graph ->
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          read_graph.(),
-          templatables,
-          module_info_plt
+    mfas_by_page
+    |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
+    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
+
+    TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
+      entry_name = Reflection.module_name(page_module)
+
+      entry_file_path =
+        mfas
+        |> build_page_js(ir_plt, encode_plt, async_mfas,
+          js_dir: opts[:js_dir],
+          module_info_plt: module_info_plt,
+          module_metadata: opts[:module_metadata],
+          runtime_js_binding_modules: runtime_js_binding_modules
         )
+        |> create_entry_file(entry_name, opts[:tmp_dir])
 
-      # Listing a page's MFAs is a cheap graph walk, and knowing every page's before rendering any
-      # lets each module's IR be read once for all pages, rather than by every page that finds one
-      # of its functions missing, concurrently with the others.
-      mfas_by_page =
-        TaskUtils.map_concurrently(page_modules, fn page_module ->
-          mfas =
-            CallGraph.list_page_mfas(
-              read_graph.(),
-              page_module,
-              server_callback_analysis_by_templatable,
-              module_info_plt
-            )
-
-          {page_module, mfas}
-        end)
-
-      mfas_by_page
-      |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
-      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
-
-      TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
-        entry_name = Reflection.module_name(page_module)
-
-        entry_file_path =
-          mfas
-          |> build_page_js(ir_plt, encode_plt, async_mfas,
-            js_dir: opts[:js_dir],
-            module_info_plt: module_info_plt,
-            module_metadata: opts[:module_metadata],
-            runtime_js_binding_modules: runtime_js_binding_modules
-          )
-          |> create_entry_file(entry_name, opts[:tmp_dir])
-
-        {page_module, entry_file_path}
-      end)
+      {page_module, entry_file_path}
     end)
   end
 
@@ -767,6 +749,22 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the modules whose IR the entry files read: the modules of the runtime MFAs, of every page's MFAs and
+  of the manually ported MFAs (the runtime entry file renders their clause heads), each once. Only the modules
+  the module info PLT holds are listed, since the IR PLT is built for those alone (an Erlang module has no IR).
+  """
+  @spec list_ir_modules(list(mfa), list({module, list(mfa)}), PLT.t()) :: list(module)
+  def list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt) do
+    page_mfas = Enum.flat_map(mfas_by_page, fn {_page_module, mfas} -> mfas end)
+
+    [runtime_mfas, page_mfas, CallGraph.manually_ported_elixir_mfas()]
+    |> Stream.concat()
+    |> Stream.map(fn {module, _function, _arity} -> module end)
+    |> Stream.uniq()
+    |> Enum.filter(&PLT.member?(module_info_plt, &1))
+  end
+
+  @doc """
   Lists the Elixir modules referenced by the given MFAs that declare JS imports. The IR PLT tells
   the Elixir modules apart from the Erlang ones, and the module info PLT says which of them declare
   imports without touching their code paths; with nil, every module is asked.
@@ -778,6 +776,41 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&(Reflection.js_imports?(&1, module_info_plt) and &1.__js_imports__() != []))
+  end
+
+  @doc """
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`). The call graph's
+  graph is read once and shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
+  copies it. The component modules are the templatables, besides the pages, whose server callbacks are
+  analysed.
+  """
+  @spec list_mfas_by_page(list(module), CallGraph.t(), list(module)) :: list({module, list(mfa)})
+  def list_mfas_by_page(page_modules, call_graph, component_modules) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    # The tasks get the reader, which captures only the shared graph's key: a closure that
+    # captured the graph itself would copy it into every task it starts.
+    CallGraph.with_shared_graph(call_graph, fn read_graph ->
+      server_callback_analysis_by_templatable =
+        CallGraph.server_callback_analysis_by_templatable(
+          read_graph.(),
+          page_modules ++ component_modules,
+          module_info_plt
+        )
+
+      # Listing a page's MFAs is a cheap graph walk.
+      TaskUtils.map_concurrently(page_modules, fn page_module ->
+        mfas =
+          CallGraph.list_page_mfas(
+            read_graph.(),
+            page_module,
+            server_callback_analysis_by_templatable,
+            module_info_plt
+          )
+
+        {page_module, mfas}
+      end)
+    end)
   end
 
   @doc """
@@ -811,34 +844,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Loads call graph from a dump file if the file exists or creates an empty call graph.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
-  """
-  @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
-  def maybe_load_call_graph(build_dir, opts \\ []) do
-    call_graph = CallGraph.start(opts)
-    call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
-    CallGraph.maybe_load(call_graph, call_graph_dump_path)
-
-    {call_graph, call_graph_dump_path}
-  end
-
-  @doc """
-  Loads IR PLT from a dump file if the file exists or creates an empty PLT.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_ir_plt_1/README.md
-  """
-  @spec maybe_load_ir_plt(T.file_path()) :: {PLT.t(), String.t()}
-  def maybe_load_ir_plt(build_dir) do
-    ir_plt = PLT.start()
-    ir_plt_dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
-    PLT.maybe_load(ir_plt, ir_plt_dump_path)
-
-    {ir_plt, ir_plt_dump_path}
-  end
-
-  @doc """
   Loads the module info PLT from its dump file in the build dir if the file exists, or creates an empty PLT.
   Returns the PLT, the dump path, and the dump file's mtime in posix seconds (nil when there is no dump),
   which `build_module_info_plt!/3` uses to decide which entries can be reused.
@@ -848,12 +853,7 @@ defmodule Hologram.Compiler do
   def maybe_load_module_info_plt(build_dir, opts \\ []) do
     plt = PLT.start(opts)
     dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
-
-    dumped_at =
-      case File.stat(dump_path, time: :posix) do
-        {:ok, %File.Stat{mtime: mtime}} -> mtime
-        {:error, _reason} -> nil
-      end
+    dumped_at = module_info_dumped_at(dump_path)
 
     PLT.maybe_load(plt, dump_path)
 
@@ -861,10 +861,24 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the mtime in posix seconds of the module info dump at the given path, which
+  `build_module_info_plt!/3` takes as `dumped_at`, or nil when there is no dump.
+  """
+  @spec module_info_dumped_at(T.file_path()) :: non_neg_integer | nil
+  def module_info_dumped_at(dump_path) do
+    case File.stat(dump_path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} -> mtime
+      {:error, _reason} -> nil
+    end
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
   and adding the IR of new modules.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/patch_ir_plt!_2/README.md
   """
   @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
   def patch_ir_plt!(ir_plt, module_digests_diff) do
@@ -878,6 +892,22 @@ defmodule Hologram.Compiler do
       module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
       &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
     )
+
+    ir_plt
+  end
+
+  @doc """
+  Deletes from the IR PLT the entries of modules not in the given list, and returns the PLT. Reads the keys
+  only, never the values: the table can hold gigabytes.
+  """
+  @spec prune_ir_plt(PLT.t(), [module]) :: PLT.t()
+  def prune_ir_plt(ir_plt, modules) do
+    kept_modules = MapSet.new(modules)
+
+    ir_plt
+    |> PLT.keys()
+    |> Enum.reject(&MapSet.member?(kept_modules, &1))
+    |> Enum.each(&PLT.delete(ir_plt, &1))
 
     ir_plt
   end
