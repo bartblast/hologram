@@ -1535,6 +1535,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({:module_2, :fun_b, 0}, {:module_3, :fun_c, 0})
       |> add_edge({:module_4, :fun_d, 0}, :module_3)
       |> add_edge({:module_5, :fun_e, 0}, {:module_6, :fun_f, 0})
+      # A page calling a protocol, the protocol dispatching to one implementation, and an ordinary
+      # caller of that implementation.
+      |> add_edge({:page_module, :template, 0}, {String.Chars, :to_string, 1})
+      |> add_edge({String.Chars, :to_string, 1}, {StringCharsModule12, :to_string, 1})
+      |> add_edge({:caller_module, :fun_g, 0}, {StringCharsModule12, :to_string, 1})
 
       :ok
     end
@@ -1554,6 +1559,20 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "doesn't follow outgoing edges", %{empty_call_graph: call_graph} do
       assert list_modules_reaching(call_graph, [:module_2]) ==
                MapSet.new([:module_1, :module_2])
+    end
+
+    test "stops at a protocol's dispatch function", %{empty_call_graph: call_graph} do
+      reaching_modules = list_modules_reaching(call_graph, [StringCharsModule12])
+
+      assert MapSet.member?(reaching_modules, StringCharsModule12)
+      refute MapSet.member?(reaching_modules, String.Chars)
+      refute MapSet.member?(reaching_modules, :page_module)
+    end
+
+    test "follows a non-dispatch caller of the same module", %{empty_call_graph: call_graph} do
+      reaching_modules = list_modules_reaching(call_graph, [StringCharsModule12])
+
+      assert MapSet.member?(reaching_modules, :caller_module)
     end
 
     test "empty modules list", %{empty_call_graph: call_graph} do

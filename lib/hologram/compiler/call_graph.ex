@@ -884,8 +884,16 @@ defmodule Hologram.Compiler.CallGraph do
         module_vertex -> MapSet.member?(target_modules, module_vertex)
       end)
 
+    protocol_function_mfa? = &protocol_function_mfa?(&1, call_graph.module_info_plt)
+
     graph
-    |> Digraph.reaching(target_vertices)
+    |> Digraph.reaching(target_vertices, opaque_vertex?: protocol_function_mfa?)
+    # A protocol's dispatch function is where the reverse walk stops, and it is dropped with the
+    # walk: a page that calls the protocol carries only the implementations of its own types, and
+    # it holds each of those modules in its kept modules, so the pages an edited implementation
+    # affects are found by that intersection rather than through the dispatch edges. Editing a
+    # protocol module itself still reaches its callers, since the target modules are unioned back in.
+    |> Enum.reject(protocol_function_mfa?)
     |> Enum.map(fn
       {module, _function, _arity} -> module
       module_vertex -> module_vertex
