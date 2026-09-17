@@ -879,16 +879,23 @@ defmodule Hologram.Compiler do
   def maybe_load_module_info_plt(build_dir, opts \\ []) do
     plt = PLT.start(opts)
     dump_path = Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
-
-    dumped_at =
-      case File.stat(dump_path, time: :posix) do
-        {:ok, %File.Stat{mtime: mtime}} -> mtime
-        {:error, _reason} -> nil
-      end
+    dumped_at = module_info_dumped_at(dump_path)
 
     PLT.maybe_load(plt, dump_path)
 
     {plt, dump_path, dumped_at}
+  end
+
+  @doc """
+  Returns the mtime in posix seconds of the module info dump at the given path, which
+  `build_module_info_plt!/3` takes as `dumped_at`, or nil when there is no dump.
+  """
+  @spec module_info_dumped_at(T.file_path()) :: non_neg_integer | nil
+  def module_info_dumped_at(dump_path) do
+    case File.stat(dump_path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} -> mtime
+      {:error, _reason} -> nil
+    end
   end
 
   @doc """

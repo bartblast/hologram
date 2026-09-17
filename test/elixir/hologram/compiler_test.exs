@@ -2375,6 +2375,25 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "module_info_dumped_at/1" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "module_info_dumped_at_1"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join(test_tmp_dir, Reflection.module_info_plt_dump_file_name())]
+    end
+
+    test "dump file exists", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+
+      assert module_info_dumped_at(dump_path) == File.stat!(dump_path, time: :posix).mtime
+    end
+
+    test "dump file doesn't exist", %{dump_path: dump_path} do
+      assert module_info_dumped_at(dump_path) == nil
+    end
+  end
+
   describe "patch_ir_plt!/3" do
     setup do
       ir_plt =

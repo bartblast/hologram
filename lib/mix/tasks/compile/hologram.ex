@@ -23,6 +23,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
+  alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
 
@@ -110,8 +111,17 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
-      {old_module_info_plt, module_info_plt_dump_path, module_info_dumped_at} =
-        Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
+      module_info_plt_dump_path =
+        Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
+
+      call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
+
+      # The IR PLT and the call graph are kept between compiles (see Hologram.Compiler.Cache), and
+      # the module infos they were last brought in line with are the before picture. The IR PLT
+      # holds the IR this compile reads, no more: the modules of the diff first, for the graph
+      # patch, then the rest once the graph says what is reachable.
+      {cache, old_module_info_plt, module_info_dumped_at} =
+        load_before_state(build_dir, module_info_plt_dump_path, call_graph_dump_path, sup)
 
       new_module_info_plt =
         Compiler.build_module_info_plt!(old_module_info_plt, module_info_dumped_at,
@@ -121,24 +131,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_digests_diff =
         Compiler.diff_module_info_plts(old_module_info_plt, new_module_info_plt)
 
-      # Building IR PLT from scratch is faster that dumping it to a file,
-      # and then loading and patching it (benchmarked on an app with 1628 modules):
-      # build: ~310 ms
-      # dump: ~350 ms
-      # load: ~465 ms
-      # patch: not benchmarked
-      modules =
-        new_module_info_plt
-        |> PLT.get_all()
-        |> Map.keys()
+      ir_plt = Compiler.patch_ir_plt!(cache.ir_plt, module_digests_diff)
 
-      ir_plt = Compiler.build_ir_plt(modules: modules, supervisor: sup)
-
-      {call_graph, call_graph_dump_path} =
-        Compiler.maybe_load_call_graph(build_dir,
-          module_info_plt: new_module_info_plt,
-          supervisor: sup
-        )
+      # The graph answers module questions from the module info PLT of the compile at hand.
+      call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
 
       call_graph
       |> CallGraph.patch(ir_plt, module_digests_diff)
@@ -160,16 +156,30 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.validate_page_modules(page_modules, new_module_info_plt)
 
+      templatable_modules = page_modules ++ component_modules
+      Compiler.build_missing_ir!(ir_plt, templatable_modules)
+
       # Runs here rather than in each module's own compilation: every module is compiled by now, so
       # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
       # no deadlock when a component renders itself.
-      Compiler.validate_prop_usages(page_modules ++ component_modules, ir_plt)
+      Compiler.validate_prop_usages(templatable_modules, ir_plt)
 
       runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
 
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well.
       app_versions = Compiler.build_app_versions(call_graph_for_runtime)
+
+      call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+
+      mfas_by_page =
+        Compiler.list_mfas_by_page(page_modules, call_graph_for_pages, component_modules)
+
+      # Every entry file reads its IR from here on, so the IR it reads is built in one pass first,
+      # and whatever an earlier compile kept that no entry file reads any more is dropped.
+      ir_modules = Compiler.list_ir_modules(runtime_mfas, mfas_by_page, new_module_info_plt)
+      Compiler.build_missing_ir!(ir_plt, ir_modules)
+      Compiler.prune_ir_plt(ir_plt, templatable_modules ++ ir_modules)
 
       # Filled by the entry file renderers as they go: each reachable function's JavaScript
       # is produced once per compile in the common case and read back by every entry file that
@@ -200,8 +210,6 @@ defmodule Mix.Tasks.Compile.Hologram do
           entry_file_opts
         )
 
-      call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
-
       # Every page loads the runtime script, so the JS bindings it registers are available
       # app-wide. A page bundle registering them again would only bundle a second copy of the
       # imported JavaScript module, which the two would then take turns overwriting.
@@ -209,9 +217,6 @@ defmodule Mix.Tasks.Compile.Hologram do
         runtime_mfas
         |> Compiler.list_js_import_modules(ir_plt, new_module_info_plt)
         |> MapSet.new()
-
-      mfas_by_page =
-        Compiler.list_mfas_by_page(page_modules, call_graph_for_pages, component_modules)
 
       page_entry_files_info =
         mfas_by_page
@@ -247,6 +252,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       CallGraph.dump(call_graph, call_graph_dump_path)
       PLT.dump(new_module_info_plt, module_info_plt_dump_path)
 
+      # Last, so that a compile that fails anywhere before leaves the before picture of the last
+      # finished one, against which the partly patched IR PLT and call graph are patched again.
+      new_module_info_plt
+      |> PLT.get_all()
+      |> Cache.put_module_infos()
+
       Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 
       Logger.info("Hologram: compiler finished")
@@ -275,6 +286,33 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp language_server_build?(opts) do
     path_components = Path.split(opts[:build_dir])
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
+  end
+
+  # Returns the cache, the module info PLT to diff against, and the dump time the module info reuse
+  # guard takes. After a compile that finished in this VM, the kept module infos are what the kept
+  # IR PLT and call graph are in line with, whatever another VM wrote to the build dir since. The
+  # first compile in a VM (or after a reset) starts from the build dir instead: the cache is emptied,
+  # so that nothing a failed compile left in it survives, the graph is loaded from its dump, and the
+  # module info dump written next to that graph is the before picture.
+  defp load_before_state(build_dir, module_info_plt_dump_path, call_graph_dump_path, sup) do
+    case Cache.get() do
+      %{module_infos: nil} ->
+        :ok = Cache.reset()
+        cache = Cache.get()
+        CallGraph.maybe_load(cache.call_graph, call_graph_dump_path)
+
+        {module_info_plt, _dump_path, dumped_at} =
+          Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
+
+        {cache, module_info_plt, dumped_at}
+
+      cache ->
+        items = Map.to_list(cache.module_infos)
+        module_info_plt = PLT.start(items: items, supervisor: sup)
+        dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
+
+        {cache, module_info_plt, dumped_at}
+    end
   end
 
   # The removal here shares the path-based race documented at
