@@ -194,6 +194,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages, component_modules,
           pages_plt: cache.pages_plt,
           reaching_modules: reaching_modules,
+          static_dir: opts[:static_dir],
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
@@ -240,7 +241,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         if keep_runtime_bundle?(cache.runtime, reaching_modules,
              app_versions: app_versions,
              js_binding_modules: runtime_js_binding_modules,
-             mfas: runtime_mfas
+             mfas: runtime_mfas,
+             static_dir: opts[:static_dir]
            ) do
           []
         else
@@ -395,6 +397,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       inputs[:app_versions]
     ) and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
+      Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path)
   end
 

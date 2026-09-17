@@ -620,6 +620,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(opts)
     end
 
+    test "a run into a fresh static dir rebuilds every bundle", %{opts: opts} do
+      run(opts)
+
+      fresh_static_dir = Path.join(@test_dir, "static_fresh")
+      clean_dir(fresh_static_dir)
+      fresh_static_dir_opts = Keyword.put(opts, :static_dir, fresh_static_dir)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(fresh_static_dir_opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, @num_pages + 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      test_page_bundles(fresh_static_dir_opts)
+      test_runtime_bundle(fresh_static_dir_opts)
+    end
+
     test "a run after a reset starts from the build dir", %{opts: opts} do
       run(opts)
       Cache.reset()

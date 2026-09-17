@@ -2343,9 +2343,9 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "partition_affected_pages/3" do
+  describe "partition_affected_pages/4" do
     setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_3"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_4"])
       clean_dir(test_tmp_dir)
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
@@ -2361,49 +2361,71 @@ defmodule Hologram.CompilerTest do
 
       pages_plt = PLT.start()
 
-      [bundle_path: bundle_path, page_state: page_state, pages_plt: pages_plt]
+      [
+        bundle_path: bundle_path,
+        page_state: page_state,
+        pages_plt: pages_plt,
+        static_dir: test_tmp_dir
+      ]
     end
 
-    test "a page with no kept state is rebuilt", %{pages_plt: pages_plt} do
-      assert partition_affected_pages([Module1], MapSet.new(), pages_plt) == {[Module1], []}
+    test "a page with no kept state is rebuilt", %{pages_plt: pages_plt, static_dir: static_dir} do
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+               {[Module1], []}
     end
 
     test "a page whose kept modules meet the reaching modules is rebuilt", %{
       bundle_path: bundle_path,
       page_state: page_state,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       PLT.put(pages_plt, Module1, page_state.([Module1, Module2], bundle_path))
 
-      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt) ==
+      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt, static_dir) ==
                {[Module1], []}
     end
 
     test "a page whose kept modules do not meet them is kept with its state", %{
       bundle_path: bundle_path,
       page_state: page_state,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       state = page_state.([Module1], bundle_path)
       PLT.put(pages_plt, Module1, state)
 
-      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt) ==
+      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt, static_dir) ==
                {[], [{Module1, state}]}
     end
 
     test "a page whose kept bundle is gone is rebuilt", %{
       page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], Path.join(static_dir, "page-gone.js")))
+
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+               {[Module1], []}
+    end
+
+    test "a page whose kept bundle lives in another static dir is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
       pages_plt: pages_plt
     } do
-      PLT.put(pages_plt, Module1, page_state.([Module1], "/removed/page-gone.js"))
+      PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
 
-      assert partition_affected_pages([Module1], MapSet.new(), pages_plt) == {[Module1], []}
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, "/other/static") ==
+               {[Module1], []}
     end
 
     test "keeps the given order in both lists", %{
       bundle_path: bundle_path,
       page_state: page_state,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
       PLT.put(pages_plt, Module3, page_state.([Module3], bundle_path))
@@ -2412,7 +2434,8 @@ defmodule Hologram.CompilerTest do
                partition_affected_pages(
                  [Module1, Module2, Module3, Module4],
                  MapSet.new(),
-                 pages_plt
+                 pages_plt,
+                 static_dir
                )
     end
   end
@@ -2437,6 +2460,7 @@ defmodule Hologram.CompilerTest do
       clean_dir(test_tmp_dir)
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      static_dir = test_tmp_dir
 
       pages_plt = PLT.start()
 
@@ -2453,7 +2477,8 @@ defmodule Hologram.CompilerTest do
         component_modules: Reflection.list_components(),
         mfas_by_page: mfas_by_page,
         page_modules: page_modules,
-        pages_plt: pages_plt
+        pages_plt: pages_plt,
+        static_dir: static_dir
       ]
     end
 
@@ -2462,7 +2487,8 @@ defmodule Hologram.CompilerTest do
       component_modules: component_modules,
       mfas_by_page: mfas_by_page,
       page_modules: page_modules,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       [{reaching_page, _mfas} | _rest] = mfas_by_page
 
@@ -2472,7 +2498,8 @@ defmodule Hologram.CompilerTest do
           call_graph_without_runtime_mfas,
           component_modules,
           pages_plt: pages_plt,
-          reaching_modules: MapSet.new([reaching_page])
+          reaching_modules: MapSet.new([reaching_page]),
+          static_dir: static_dir
         )
 
       assert Enum.map(rebuilt, &elem(&1, 0)) == [reaching_page]
@@ -2484,7 +2511,8 @@ defmodule Hologram.CompilerTest do
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       component_modules: component_modules,
       page_modules: page_modules,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       assert {[], kept} =
                partition_pages_to_rebuild(
@@ -2492,7 +2520,8 @@ defmodule Hologram.CompilerTest do
                  call_graph_without_runtime_mfas,
                  component_modules,
                  pages_plt: pages_plt,
-                 reaching_modules: MapSet.new()
+                 reaching_modules: MapSet.new(),
+                 static_dir: static_dir
                )
 
       assert length(kept) == length(page_modules)
@@ -2502,7 +2531,8 @@ defmodule Hologram.CompilerTest do
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       component_modules: component_modules,
       page_modules: page_modules,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       assert {[], kept} =
                partition_pages_to_rebuild(
@@ -2511,7 +2541,8 @@ defmodule Hologram.CompilerTest do
                  component_modules,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
-                 relist_all?: true
+                 relist_all?: true,
+                 static_dir: static_dir
                )
 
       assert length(kept) == length(page_modules)
@@ -2522,7 +2553,8 @@ defmodule Hologram.CompilerTest do
       component_modules: component_modules,
       mfas_by_page: mfas_by_page,
       page_modules: page_modules,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       [{moved_page, moved_page_mfas} | _rest] = mfas_by_page
 
@@ -2539,7 +2571,8 @@ defmodule Hologram.CompilerTest do
           component_modules,
           pages_plt: pages_plt,
           reaching_modules: MapSet.new(),
-          relist_all?: true
+          relist_all?: true,
+          static_dir: static_dir
         )
 
       assert rebuilt == [{moved_page, moved_page_mfas}]
@@ -2550,7 +2583,8 @@ defmodule Hologram.CompilerTest do
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       component_modules: component_modules,
       page_modules: page_modules,
-      pages_plt: pages_plt
+      pages_plt: pages_plt,
+      static_dir: static_dir
     } do
       assert {rebuilt, []} =
                partition_pages_to_rebuild(
@@ -2559,7 +2593,8 @@ defmodule Hologram.CompilerTest do
                  component_modules,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
-                 rebuild_all?: true
+                 rebuild_all?: true,
+                 static_dir: static_dir
                )
 
       assert length(rebuilt) == length(page_modules)
