@@ -171,6 +171,8 @@ defmodule Hologram.Compiler do
   @doc """
   Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
   calls it for the modules it is about to read, once the call graph says which they are.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_missing_ir!_2/README.md
   """
   @spec build_missing_ir!(PLT.t(), [module]) :: PLT.t()
   def build_missing_ir!(ir_plt, modules) do
@@ -875,6 +877,8 @@ defmodule Hologram.Compiler do
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
   and adding the IR of new modules.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/patch_ir_plt!_2/README.md
   """
   @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
   def patch_ir_plt!(ir_plt, module_digests_diff) do
