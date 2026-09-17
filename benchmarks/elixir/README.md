@@ -65,7 +65,7 @@ build_page_js/5        200.33        4.99 ms    ±38.43%        4.66 ms        9
 
 ```
 Name               ips        average  deviation         median         99th %
-bundle/2          4.59      218.01 ms     ±1.91%      217.77 ms      233.56 ms
+bundle/2          3.08      325.17 ms     ±8.13%      320.82 ms      393.36 ms
 ```
 
 
