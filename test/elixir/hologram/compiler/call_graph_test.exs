@@ -1528,6 +1528,39 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_modules_reaching/2" do
+    setup %{empty_call_graph: call_graph} do
+      call_graph
+      |> add_edge({:module_1, :fun_a, 0}, {:module_2, :fun_b, 0})
+      |> add_edge({:module_2, :fun_b, 0}, {:module_3, :fun_c, 0})
+      |> add_edge({:module_4, :fun_d, 0}, :module_3)
+      |> add_edge({:module_5, :fun_e, 0}, {:module_6, :fun_f, 0})
+
+      :ok
+    end
+
+    test "returns the modules reaching the given modules, the given modules included", %{
+      empty_call_graph: call_graph
+    } do
+      assert list_modules_reaching(call_graph, [:module_3]) ==
+               MapSet.new([:module_1, :module_2, :module_3, :module_4])
+    end
+
+    test "includes a given module that has no vertices", %{empty_call_graph: call_graph} do
+      assert list_modules_reaching(call_graph, [:module_3, :module_7]) ==
+               MapSet.new([:module_1, :module_2, :module_3, :module_4, :module_7])
+    end
+
+    test "doesn't follow outgoing edges", %{empty_call_graph: call_graph} do
+      assert list_modules_reaching(call_graph, [:module_2]) ==
+               MapSet.new([:module_1, :module_2])
+    end
+
+    test "empty modules list", %{empty_call_graph: call_graph} do
+      assert list_modules_reaching(call_graph, []) == MapSet.new()
+    end
+  end
+
   describe "list_page_mfas/4" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =

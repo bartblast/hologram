@@ -862,6 +862,37 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the modules of every vertex from which a vertex of the given modules can be reached, the
+  given modules included. The compile task uses it, before the graph is patched, to find the pages
+  and components a change to those modules can affect: every way a page's bundle depends on a module
+  is a path in the graph from a vertex of the page, or of a component it renders, to that module.
+  """
+  @spec list_modules_reaching(t, [module]) :: MapSet.t(module)
+  def list_modules_reaching(call_graph, modules) do
+    graph = get_graph(call_graph)
+    target_modules = MapSet.new(modules)
+
+    # One pass over the vertices rather than a scan per module: the graph holds a vertex per
+    # function of the app.
+    target_vertices =
+      graph
+      |> Digraph.vertices()
+      |> Enum.filter(fn
+        {module, _function, _arity} -> MapSet.member?(target_modules, module)
+        module_vertex -> MapSet.member?(target_modules, module_vertex)
+      end)
+
+    graph
+    |> Digraph.reaching(target_vertices)
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module_vertex -> module_vertex
+    end)
+    |> MapSet.new()
+    |> MapSet.union(target_modules)
+  end
+
+  @doc """
   Lists the entry MFAs {module, function, arity} for a given page module.
 
   This function returns a list of MFAs that are considered entry points for a page,
