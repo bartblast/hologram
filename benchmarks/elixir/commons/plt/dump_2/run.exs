@@ -18,7 +18,7 @@ Benchee.run(
              "commons",
              "plt",
              "dump_2",
-             Reflection.ir_plt_dump_file_name()
+             "ir.plt"
            ])
 
          PLT.dump(ir_plt, dump_path)

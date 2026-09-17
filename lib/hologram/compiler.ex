@@ -842,34 +842,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Loads call graph from a dump file if the file exists or creates an empty call graph.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
-  """
-  @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
-  def maybe_load_call_graph(build_dir, opts \\ []) do
-    call_graph = CallGraph.start(opts)
-    call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
-    CallGraph.maybe_load(call_graph, call_graph_dump_path)
-
-    {call_graph, call_graph_dump_path}
-  end
-
-  @doc """
-  Loads IR PLT from a dump file if the file exists or creates an empty PLT.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_ir_plt_1/README.md
-  """
-  @spec maybe_load_ir_plt(T.file_path()) :: {PLT.t(), String.t()}
-  def maybe_load_ir_plt(build_dir) do
-    ir_plt = PLT.start()
-    ir_plt_dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
-    PLT.maybe_load(ir_plt, ir_plt_dump_path)
-
-    {ir_plt, ir_plt_dump_path}
-  end
-
-  @doc """
   Loads the module info PLT from its dump file in the build dir if the file exists, or creates an empty PLT.
   Returns the PLT, the dump path, and the dump file's mtime in posix seconds (nil when there is no dump),
   which `build_module_info_plt!/3` uses to decide which entries can be reused.

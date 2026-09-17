@@ -6,7 +6,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -2292,56 +2291,6 @@ defmodule Hologram.CompilerTest do
 
       assert maybe_install_js_deps(assets_dir, build_dir) == nil
       assert File.stat!(package_json_digest_path).mtime == package_json_digest_mtime
-    end
-  end
-
-  describe "maybe_load_call_graph/1" do
-    setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_call_graph_1"])
-
-      build_dir = Path.join(test_tmp_dir, "build")
-      clean_dir(build_dir)
-
-      dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
-
-      [build_dir: build_dir, dump_path: dump_path]
-    end
-
-    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
-      assert CallGraph.get_graph(call_graph) == Digraph.new()
-    end
-
-    test "dump file exists", %{build_dir: build_dir, call_graph: call_graph, dump_path: dump_path} do
-      CallGraph.dump(call_graph, dump_path)
-
-      assert {loaded_call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
-      assert CallGraph.get_graph(loaded_call_graph) == CallGraph.get_graph(call_graph)
-    end
-  end
-
-  describe "maybe_load_ir_plt/1" do
-    setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_ir_plt_1"])
-
-      build_dir = Path.join(test_tmp_dir, "build")
-      clean_dir(build_dir)
-
-      dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
-
-      [build_dir: build_dir, dump_path: dump_path]
-    end
-
-    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_ir_plt(build_dir)
-      assert PLT.get_all(plt) == %{}
-    end
-
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path, ir_plt: ir_plt} do
-      PLT.dump(ir_plt, dump_path)
-
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_ir_plt(build_dir)
-      assert PLT.get_all(plt) == PLT.get_all(ir_plt)
     end
   end
 
