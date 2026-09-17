@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.CacheTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.Cache
+  alias Hologram.Compiler.CallGraph
 
   setup do
     stop_cache()
@@ -23,13 +24,21 @@ defmodule Hologram.Compiler.CacheTest do
       assert is_pid(Process.whereis(Cache))
     end
 
-    test "returns an empty IR PLT and no module infos at first" do
-      assert %{ir_plt: %PLT{} = ir_plt, module_infos: nil, dumped_at: nil} = get()
+    test "returns an empty call graph, an empty IR PLT and no module infos at first" do
+      assert %{
+               call_graph: %CallGraph{} = call_graph,
+               ir_plt: %PLT{} = ir_plt,
+               module_infos: nil
+             } = get()
+
+      assert CallGraph.vertices(call_graph) == []
       assert PLT.keys(ir_plt) == []
     end
 
-    test "returns the same IR PLT on every call" do
-      assert get().ir_plt == get().ir_plt
+    test "returns the same call graph and IR PLT on every call" do
+      %{call_graph: call_graph, ir_plt: ir_plt} = get()
+
+      assert %{call_graph: ^call_graph, ir_plt: ^ir_plt} = get()
     end
 
     test "doesn't link the cache to the caller" do
@@ -46,14 +55,27 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
-  test "put_module_infos/2" do
+  test "put_module_infos/1" do
     module_infos = %{Module1 => %{digest: "a"}}
 
-    assert put_module_infos(module_infos, 123) == :ok
-    assert %{module_infos: ^module_infos, dumped_at: 123} = get()
+    assert put_module_infos(module_infos) == :ok
+    assert %{module_infos: ^module_infos} = get()
   end
 
   describe "reset/0" do
+    test "stops the kept call graph and starts an empty one" do
+      old_call_graph = get().call_graph
+      CallGraph.add_vertex(old_call_graph, {Module1, :fun_1, 0})
+
+      assert reset() == :ok
+
+      new_call_graph = get().call_graph
+
+      refute Process.alive?(old_call_graph.pid)
+      assert new_call_graph.pid != old_call_graph.pid
+      assert CallGraph.vertices(new_call_graph) == []
+    end
+
     test "stops the kept IR PLT and starts an empty one" do
       old_ir_plt = get().ir_plt
       PLT.put(old_ir_plt, Module1, :ir_1)
@@ -68,19 +90,20 @@ defmodule Hologram.Compiler.CacheTest do
     end
 
     test "forgets the module infos" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123)
+      put_module_infos(%{Module1 => %{digest: "a"}})
 
       reset()
 
-      assert %{module_infos: nil, dumped_at: nil} = get()
+      assert %{module_infos: nil} = get()
     end
   end
 
   test "terminate/2" do
-    ir_plt = get().ir_plt
+    %{call_graph: call_graph, ir_plt: ir_plt} = get()
 
     GenServer.stop(Cache)
 
+    refute Process.alive?(call_graph.pid)
     refute Process.alive?(ir_plt.pid)
   end
 end

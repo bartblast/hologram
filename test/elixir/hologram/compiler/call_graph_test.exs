@@ -2470,6 +2470,32 @@ defmodule Hologram.Compiler.CallGraphTest do
                {{:module_3, :fun_c, :arity_c}, Module9}
              ]
     end
+
+    test "patching again with the same diff gives the same graph", %{empty_call_graph: call_graph} do
+      ir_plt =
+        PLT.start()
+        |> PLT.put(Module9, IR.for_module(Module9))
+        |> PLT.put(Module10, IR.for_module(Module10))
+
+      call_graph
+      |> add_edge({:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0})
+      |> add_edge({:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0})
+      |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_b, :arity_b})
+      |> add_edge({Module9, :my_fun_3, 2}, {:module_4, :fun_d, :arity_d})
+
+      diff = %{
+        added_modules: [Module10],
+        removed_modules: [:module_2],
+        edited_modules: [Module9]
+      }
+
+      patch(call_graph, ir_plt, diff)
+      graph_after_first_patch = get_graph(call_graph)
+
+      patch(call_graph, ir_plt, diff)
+
+      assert get_graph(call_graph) == graph_after_first_patch
+    end
   end
 
   describe "protocol_dispatch_dependency_vertices/3" do
