@@ -655,6 +655,33 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_module_metadata/1" do
+    test "maps each module with a source path to its application and relative source file" do
+      module_info_plt =
+        PLT.put(PLT.start(), [
+          {Hologram.Reflection, %{source_path: Reflection.source_path(Hologram.Reflection)}},
+          {Enum, %{source_path: Reflection.source_path(Enum)}}
+        ])
+
+      assert build_module_metadata(module_info_plt) == %{
+               Enum => %{app: :elixir, file: "lib/enum.ex"},
+               Hologram.Reflection => %{app: :hologram, file: "lib/hologram/reflection.ex"}
+             }
+    end
+
+    test "leaves out a module without a source path" do
+      module_info_plt = PLT.put(PLT.start(), Aaa.Bbb, %{source_path: nil})
+
+      assert build_module_metadata(module_info_plt) == %{}
+    end
+
+    test "gives nil for the application of a module no loaded application lists" do
+      module_info_plt = PLT.put(PLT.start(), Aaa.Bbb, %{source_path: "/elsewhere/aaa/bbb.ex"})
+
+      assert build_module_metadata(module_info_plt) == %{Aaa.Bbb => %{app: nil, file: "bbb.ex"}}
+    end
+  end
+
   test "build_page_digest_plt/2" do
     build_dir = Path.join("/", "my_build_dir")
     opts = [build_dir: build_dir]
@@ -699,7 +726,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -736,7 +763,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js_1 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js_1 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert {:ok, into_js} = PLT.get(encode_plt, {Enum, :into, 2})
 
@@ -745,7 +772,7 @@ defmodule Hologram.CompilerTest do
                ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
              )
 
-      js_2 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js_2 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert js_2 == js_1
     end
@@ -755,7 +782,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js_1 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js_1 = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       # A clone, so the PLT shared by the whole test module keeps its Enum entry.
       ir_plt_without_enum =
@@ -764,7 +791,9 @@ defmodule Hologram.CompilerTest do
         |> PLT.delete(Enum)
 
       js_2 =
-        build_runtime_js(runtime_mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], @js_dir)
+        build_runtime_js(runtime_mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [],
+          js_dir: @js_dir
+        )
 
       assert js_2 == js_1
     end
@@ -783,10 +812,11 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @js_dir
+          js_dir: @js_dir
         )
 
-      expected_js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], @js_dir)
+      expected_js =
+        build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], js_dir: @js_dir)
 
       assert js == expected_js
       assert PLT.get(encode_plt, undefined_mfa) == {:ok, nil}
@@ -799,7 +829,7 @@ defmodule Hologram.CompilerTest do
     } do
       mfas = [{Enum, :hologram_undefined_fun, 9} | runtime_mfas]
 
-      js_1 = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js_1 = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       # A clone, so the PLT shared by the whole test module keeps its Enum entry.
       ir_plt_without_enum =
@@ -807,7 +837,8 @@ defmodule Hologram.CompilerTest do
         |> PLT.clone()
         |> PLT.delete(Enum)
 
-      js_2 = build_runtime_js(mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], @js_dir)
+      js_2 =
+        build_runtime_js(mfas, ir_plt_without_enum, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert js_2 == js_1
     end
@@ -817,7 +848,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -832,7 +863,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       {into_pos, _length} = :binary.match(js, ~s/defineElixirFunction("Enum", "into", 2/)
 
@@ -847,7 +878,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -869,7 +900,7 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, true)
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -885,7 +916,7 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, false)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -900,7 +931,7 @@ defmodule Hologram.CompilerTest do
     } do
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -917,7 +948,10 @@ defmodule Hologram.CompilerTest do
 
       app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), app_versions, @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), app_versions,
+          js_dir: @js_dir
+        )
 
       assert String.contains?(
                js,
@@ -934,7 +968,10 @@ defmodule Hologram.CompilerTest do
 
       app_versions = [{:"my-app", "9.8.7"}]
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), app_versions, @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), app_versions,
+          js_dir: @js_dir
+        )
 
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
@@ -948,7 +985,10 @@ defmodule Hologram.CompilerTest do
 
       app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), app_versions, @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), app_versions,
+          js_dir: @js_dir
+        )
 
       assert String.contains?(js, "ERTS.appVersions = {};")
     end
@@ -961,7 +1001,7 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(
                js,
@@ -970,7 +1010,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "no JS imports", %{encode_plt: encode_plt, ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       refute String.contains?(js, "import {")
       refute String.contains?(js, "registerJsBindings")
@@ -983,7 +1023,7 @@ defmodule Hologram.CompilerTest do
     } do
       mfas = runtime_mfas ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
 
-      js = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @js_dir)
+      js = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
       js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
@@ -1393,6 +1433,80 @@ defmodule Hologram.CompilerTest do
     after
       :erlang.trace_pattern({PLT, :get!, 2}, false, [:call_count])
     end
+  end
+
+  test "create_page_entry_files/7 renders the module metadata from the given map", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_metadata"])
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    build = fn opts ->
+      page_modules
+      |> create_page_entry_files(
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        MapSet.new(),
+        opts
+      )
+      |> Enum.map(fn {page_module, entry_file_path} ->
+        {page_module, File.read!(entry_file_path)}
+      end)
+    end
+
+    module_metadata =
+      call_graph
+      |> CallGraph.module_info_plt()
+      |> build_module_metadata()
+
+    without_map = build.(opts)
+
+    # Call counts are kept per function for every process, so the page tasks are counted too.
+    # The baseline is a build that renders no metadata at all: whatever else in the phase loads a
+    # module is counted there too, and the map must add nothing to it.
+    count_module_loads = fn build_fun ->
+      :erlang.trace_pattern({Code, :ensure_loaded?, 1}, true, [:call_count])
+
+      try do
+        result = build_fun.()
+        {:call_count, count} = :erlang.trace_info({Code, :ensure_loaded?, 1}, :call_count)
+        {result, count}
+      after
+        :erlang.trace_pattern({Code, :ensure_loaded?, 1}, false, [:call_count])
+      end
+    end
+
+    Application.put_env(:hologram, :client_stacktraces, false)
+
+    {_without_metadata, baseline_loads} =
+      try do
+        count_module_loads.(fn -> build.(opts) end)
+      after
+        Application.delete_env(:hologram, :client_stacktraces)
+      end
+
+    {with_map, loads} =
+      count_module_loads.(fn -> build.(Keyword.put(opts, :module_metadata, module_metadata)) end)
+
+    assert with_map == without_map
+    {_page_module, first_page_js} = hd(with_map)
+    assert String.contains?(first_page_js, "ERTS.registerModuleMetadata(")
+    assert loads == baseline_loads
   end
 
   test "create_page_entry_files/7 with the component modules given", %{

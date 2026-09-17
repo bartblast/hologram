@@ -688,22 +688,26 @@ defmodule Hologram.Compiler.Encoder do
   Generates the ERTS registration statement carrying the metadata of the given modules.
 
   Each bundle registers the modules it defines, so a stacktrace frame can name the application a
-  module belongs to and the source file it was compiled from. Returns an empty string when client
-  stacktraces are disabled, or when none of the modules can be loaded to read their metadata
-  from.
+  module belongs to and the source file it was compiled from. The metadata of a module held by the
+  given map (see `Hologram.Compiler.build_module_metadata/1`) is taken from it; any other module's
+  is read from the loaded module, and the map may be nil. Returns an empty string when client
+  stacktraces are disabled, or when none of the modules has metadata to register.
 
   ## Examples
 
-      iex> encode_module_metadata_registration([Aaa.Bbb])
+      iex> encode_module_metadata_registration([Aaa.Bbb], %{Aaa.Bbb => %{app: :my_app, file: "lib/aaa/bbb.ex"}})
       "ERTS.registerModuleMetadata({\"Aaa.Bbb\": {app: \"my_app\", file: \"lib/aaa/bbb.ex\"}});"
   """
-  @spec encode_module_metadata_registration(list(module)) :: String.t()
-  def encode_module_metadata_registration(modules) do
+  @spec encode_module_metadata_registration(
+          list(module),
+          %{module => %{app: atom | nil, file: String.t() | nil}} | nil
+        ) :: String.t()
+  def encode_module_metadata_registration(modules, module_metadata) do
     entries =
       if Hologram.client_stacktraces?() do
         modules
         |> Enum.sort()
-        |> Enum.map(fn module -> {module, encode_module_metadata(module)} end)
+        |> Enum.map(fn module -> {module, encode_module_metadata(module, module_metadata)} end)
         |> Enum.reject(fn {_module, metadata} -> metadata == "{}" end)
         |> Enum.map_join(", ", fn {module, metadata} ->
           ~s/"#{Reflection.module_name(module)}": #{metadata}/
@@ -1043,12 +1047,11 @@ defmodule Hologram.Compiler.Encoder do
   # "(app vsn) file:line" prefix as server frames - the version comes from
   # ERTS.appVersions, keyed by the app named here.
   # Nil values are omitted rather than encoded as null.
-  defp encode_module_metadata(module) do
+  defp encode_module_metadata(module, module_metadata) do
     entries =
-      if Code.ensure_loaded?(module) do
-        [app: Application.get_application(module), file: Reflection.relative_source_path(module)]
-      else
-        []
+      case module_metadata do
+        %{^module => %{app: app, file: file}} -> [app: app, file: file]
+        _no_precomputed_metadata -> loaded_module_metadata(module)
       end
 
     fields =
@@ -1220,6 +1223,14 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp has_match_operator?(_ast), do: false
+
+  defp loaded_module_metadata(module) do
+    if Code.ensure_loaded?(module) do
+      [app: Application.get_application(module), file: Reflection.relative_source_path(module)]
+    else
+      []
+    end
+  end
 
   # A stacktrace frame reports the line the function currently running has
   # reached, so each call records its own line before it is made - the way the

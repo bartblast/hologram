@@ -14,6 +14,7 @@ defmodule Hologram.Reflection do
     :struct?,
     :exception?,
     :ecto_schema?,
+    :source_path,
     :layout_module,
     :protocol_functions,
     :implementation_for,
@@ -60,7 +61,9 @@ defmodule Hologram.Reflection do
   seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
   a protocol, a protocol implementation, a struct, an exception or an Ecto schema. Each flag is the export
   table check that the `Reflection` predicate of the same name performs after loading the module, read from
-  the file instead.
+  the file instead. The source path is the `:source` of the BEAM's compile info, the value
+  `module.module_info(:compile)[:source]` returns once the module is loaded, as a string (nil when the
+  compile info has none).
   A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
   are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
   and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
@@ -83,6 +86,7 @@ defmodule Hologram.Reflection do
         struct?: false,
         exception?: false,
         ecto_schema?: false,
+        source_path: "/path/to/lib/my_page.ex",
         layout_module: MyLayout,
         protocol_functions: nil,
         implementation_for: nil,
@@ -104,6 +108,7 @@ defmodule Hologram.Reflection do
             struct?: boolean,
             exception?: boolean,
             ecto_schema?: boolean,
+            source_path: String.t() | nil,
             layout_module: module | nil,
             protocol_functions: list({atom, arity}) | nil,
             implementation_for: module | nil,
@@ -117,8 +122,8 @@ defmodule Hologram.Reflection do
     # size with the old digest, and that entry would be reused as long as the file stood still.
     {mtime, size} = beam_mtime_and_size(beam_source)
 
-    {:ok, {_module, [{:exports, exports}, {~c"Dbgi", dbgi_chunk}]}} =
-      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi"])
+    {:ok, {_module, [{:exports, exports}, {~c"Dbgi", dbgi_chunk}, {:compile_info, compile_info}]}} =
+      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info])
 
     if {:__info__, 1} in exports do
       page? = {:__is_hologram_page__, 0} in exports
@@ -145,6 +150,7 @@ defmodule Hologram.Reflection do
         struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
         exception?: {:exception, 1} in exports and {:message, 1} in exports,
         ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports,
+        source_path: compile_info_source(compile_info),
         layout_module: literal_return(definitions, :__layout_module__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
         implementation_for: literal_return(definitions, :__impl__, [:for]),
@@ -513,6 +519,22 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the application of every module listed by a loaded application, as a map. It is the
+  lookup `Application.get_application/1` makes for one module at a time, which walks the module
+  lists of every loaded application on each call, done once for all of them. A module listed by
+  more than one application keeps the first one in `Application.loaded_applications/0` order.
+  """
+  @spec list_module_applications() :: %{module => atom}
+  def list_module_applications do
+    Enum.reduce(Application.loaded_applications(), %{}, fn {app, _description, _version}, acc ->
+      app
+      |> Application.spec(:modules)
+      |> List.wrap()
+      |> Enum.reduce(acc, &Map.put_new(&2, &1, app))
+    end)
+  end
+
+  @doc """
   Lists Elixir modules which are Hologram pages and that belong to any of the OTP apps in the project.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/reflection/list_pages_0/README.md
@@ -734,8 +756,16 @@ defmodule Hologram.Reflection do
   """
   @spec relative_source_path(module) :: String.t()
   def relative_source_path(module) do
-    source_path = source_path(module)
-    root_prefix = root_dir() <> "/"
+    relative_source_path(source_path(module), root_dir())
+  end
+
+  @doc """
+  The path form of relative_source_path/1, for callers that have the source path and the project
+  root already and need the relative path of many modules.
+  """
+  @spec relative_source_path(String.t(), String.t()) :: String.t()
+  def relative_source_path(source_path, root_dir) do
+    root_prefix = root_dir <> "/"
     deps_prefix = root_prefix <> "deps/"
 
     cond do
@@ -781,7 +811,8 @@ defmodule Hologram.Reflection do
   """
   @spec source_path(module()) :: String.t()
   def source_path(module) do
-    to_string(module.module_info()[:compile][:source])
+    # module_info(:compile) builds only the compile info, not the whole module info.
+    to_string(module.module_info(:compile)[:source])
   end
 
   @doc """
@@ -866,6 +897,13 @@ defmodule Hologram.Reflection do
     case :beam_lib.chunks(beam_path, [:exports]) do
       {:ok, {_module, [{:exports, exports}]}} -> {function, arity} in exports
       {:error, :beam_lib, _reason} -> false
+    end
+  end
+
+  defp compile_info_source(compile_info) do
+    case Keyword.get(compile_info, :source) do
+      nil -> nil
+      source -> to_string(source)
     end
   end
 

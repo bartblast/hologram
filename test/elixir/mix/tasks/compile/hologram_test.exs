@@ -323,6 +323,58 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert load_module_info_items(opts)[Module1] == first_run_module_info
   end
 
+  describe "module metadata" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      :ok
+    end
+
+    test "a page bundle registers the source file of its page", %{opts: initial_opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      opts = setup_empty_assets_and_build_dirs(initial_opts)
+
+      run(opts)
+
+      page_digest_plt = PLT.start()
+
+      PLT.load(
+        page_digest_plt,
+        Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
+      )
+
+      bundle_path = Path.join(opts[:static_dir], "page-#{PLT.get!(page_digest_plt, Module1)}.js")
+      bundle = File.read!(bundle_path)
+
+      assert String.contains?(bundle, "registerModuleMetadata")
+
+      assert String.contains?(
+               bundle,
+               "test/elixir/support/fixtures/mix/tasks/compile/hologram/module_1.ex"
+             )
+    end
+
+    test "is built only when client stack traces are on", %{opts: initial_opts} do
+      opts = setup_empty_assets_and_build_dirs(initial_opts)
+      mfa = {Compiler, :build_module_metadata, 1}
+
+      count_builds = fn stacktraces? ->
+        Application.put_env(:hologram, :client_stacktraces, stacktraces?)
+        :erlang.trace_pattern(mfa, true, [:call_count])
+
+        try do
+          run(opts)
+          {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+          count
+        after
+          :erlang.trace_pattern(mfa, false, [:call_count])
+        end
+      end
+
+      assert count_builds.(false) == 0
+      assert count_builds.(true) == 1
+    end
+  end
+
   test "stops the processes it spawns once compilation finishes", %{opts: initial_opts} do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
 
