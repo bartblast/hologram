@@ -662,6 +662,61 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(fresh_static_dir_opts)
     end
 
+    test "a run with no changes does not rebuild the app versions", %{opts: opts} do
+      run(opts)
+
+      mfa = {Compiler, :build_app_versions, 1}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+    end
+
+    test "an edit of another application's module rebuilds the app versions", %{opts: opts} do
+      run(opts)
+
+      %{app_versions: app_versions, dumped_at: dumped_at, module_infos: module_infos} =
+        Cache.get()
+
+      other_app_module =
+        Enum.find_value(module_infos, fn {module, _info} ->
+          if Application.get_application(module) not in [:hologram, nil], do: module
+        end)
+
+      edited_info = %{module_infos[other_app_module] | digest: "edited", mtime: 0}
+      Cache.put_module_infos(%{module_infos | other_app_module => edited_info}, dumped_at)
+
+      mfa = {Compiler, :build_app_versions, 1}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().app_versions == app_versions
+    end
+
+    test "the kept app versions are the ones a full compile finds", %{opts: opts} do
+      run(opts)
+      run(opts)
+      warm_app_versions = Cache.get().app_versions
+
+      Cache.reset()
+      run(opts)
+
+      assert warm_app_versions == Cache.get().app_versions
+      assert warm_app_versions != []
+    end
+
     test "a run after a reset starts from the build dir", %{opts: opts} do
       run(opts)
       Cache.reset()
