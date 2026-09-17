@@ -600,6 +600,60 @@ defmodule Hologram.ReflectionTest do
     assert ir_plt_dump_file_name() == "ir.plt"
   end
 
+  describe "js_imports?/1" do
+    test "module that declares JS imports" do
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12)
+    end
+
+    test "module that does not declare JS imports" do
+      refute js_imports?(Hologram.Reflection)
+    end
+
+    test "non-existing module" do
+      refute js_imports?(Aaa.Bbb)
+    end
+  end
+
+  describe "js_imports?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{js_imports?: true})
+
+      assert js_imports?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Hologram.Test.Fixtures.Compiler.Module12, %{js_imports?: false})
+
+      refute js_imports?(Hologram.Test.Fixtures.Compiler.Module12, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the js_imports?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12, module_info_plt)
+      refute js_imports?(Hologram.Reflection, module_info_plt)
+    end
+
+    test "entry without the flag is decided the js_imports?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Hologram.Test.Fixtures.Compiler.Module12, %{digest: 1})
+
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12, module_info_plt)
+    end
+
+    test "nil PLT decides the js_imports?/1 way" do
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12, nil)
+      refute js_imports?(Hologram.Reflection, nil)
+    end
+  end
+
   test "list_all_otp_apps/0" do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
@@ -1030,6 +1084,39 @@ defmodule Hologram.ReflectionTest do
 
     test "non-module" do
       refute protocol?(123)
+    end
+  end
+
+  describe "protocol?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{protocol?: true})
+
+      assert protocol?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, String.Chars, %{protocol?: false})
+
+      refute protocol?(String.Chars, module_info_plt)
+    end
+
+    test "term the PLT does not hold is decided the protocol?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert protocol?(String.Chars, module_info_plt)
+      refute protocol?(Calendar.ISO, module_info_plt)
+      refute protocol?(123, module_info_plt)
+    end
+
+    test "nil PLT decides the protocol?/1 way" do
+      assert protocol?(String.Chars, nil)
+      refute protocol?(Calendar.ISO, nil)
     end
   end
 

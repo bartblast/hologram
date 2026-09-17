@@ -399,6 +399,27 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if the given module declares JS imports with `Hologram.JS`, or false otherwise.
+  """
+  @spec js_imports?(module) :: boolean
+  def js_imports?(module) do
+    has_function?(module, :__js_imports__, 0)
+  end
+
+  @doc """
+  Like js_imports?/1, but answered from the given module info PLT when it holds the module, without
+  touching the module's code path. A nil PLT, or a module the PLT does not hold, is decided the
+  js_imports?/1 way.
+  """
+  @spec js_imports?(module, PLT.t() | nil) :: boolean
+  def js_imports?(module, module_info_plt) do
+    case module_info_flag(module_info_plt, module, :js_imports?) do
+      {:ok, js_imports?} -> js_imports?
+      :error -> js_imports?(module)
+    end
+  end
+
+  @doc """
   Lists all OTP applications, both loaded and not loaded.
   """
   @spec list_all_otp_apps() :: list(atom)
@@ -733,6 +754,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like protocol?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  protocol?/1 way.
+  """
+  @spec protocol?(any, PLT.t() | nil) :: boolean
+  def protocol?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :protocol?) do
+      {:ok, protocol?} -> protocol?
+      :error -> protocol?(term)
+    end
+  end
+
+  @doc """
   Returns the protocol module that the given module implements, or nil if it's not a protocol implementation.
   """
   @spec protocol_implementation(module) :: module | nil
@@ -969,6 +1003,17 @@ defmodule Hologram.Reflection do
       body
     else
       _no_literal -> nil
+    end
+  end
+
+  # The value of a boolean flag in the module info PLT entry of the given term, or :error when there
+  # is no PLT, no entry, or the entry has no such flag (a dump written before the flag existed).
+  defp module_info_flag(nil, _term, _flag), do: :error
+
+  defp module_info_flag(module_info_plt, term, flag) do
+    case PLT.get(module_info_plt, term) do
+      {:ok, %{^flag => value}} when is_boolean(value) -> {:ok, value}
+      _no_flag -> :error
     end
   end
 
