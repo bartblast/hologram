@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">1 templatable</td>
-    <td style="white-space: nowrap; text-align: right">3.30 K</td>
-    <td style="white-space: nowrap; text-align: right">302.72 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;30.03%</td>
-    <td style="white-space: nowrap; text-align: right">284.13 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">513.32 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">3.51 K</td>
+    <td style="white-space: nowrap; text-align: right">284.68 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;18.39%</td>
+    <td style="white-space: nowrap; text-align: right">279.79 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">319.46 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">all templatables</td>
-    <td style="white-space: nowrap; text-align: right">2.95 K</td>
-    <td style="white-space: nowrap; text-align: right">339.47 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;24.19%</td>
-    <td style="white-space: nowrap; text-align: right">328.79 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">465.89 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">3.01 K</td>
+    <td style="white-space: nowrap; text-align: right">332.74 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;18.98%</td>
+    <td style="white-space: nowrap; text-align: right">325.88 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">392.50 &micro;s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">1 templatable</td>
-    <td style="white-space: nowrap;text-align: right">3.30 K</td>
+    <td style="white-space: nowrap;text-align: right">3.51 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">all templatables</td>
-    <td style="white-space: nowrap; text-align: right">2.95 K</td>
-    <td style="white-space: nowrap; text-align: right">1.12x</td>
+    <td style="white-space: nowrap; text-align: right">3.01 K</td>
+    <td style="white-space: nowrap; text-align: right">1.17x</td>
   </tr>
 
 </table>

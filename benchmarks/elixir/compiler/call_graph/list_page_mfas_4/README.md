@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_page_mfas/4</td>
-    <td style="white-space: nowrap; text-align: right">544.11</td>
-    <td style="white-space: nowrap; text-align: right">1.84 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.06%</td>
-    <td style="white-space: nowrap; text-align: right">1.80 ms</td>
-    <td style="white-space: nowrap; text-align: right">2.28 ms</td>
+    <td style="white-space: nowrap; text-align: right">570.04</td>
+    <td style="white-space: nowrap; text-align: right">1.75 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;7.29%</td>
+    <td style="white-space: nowrap; text-align: right">1.74 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.88 ms</td>
   </tr>
 
 </table>

@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_components/0</td>
-    <td style="white-space: nowrap; text-align: right">52.34</td>
-    <td style="white-space: nowrap; text-align: right">19.10 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;6.92%</td>
-    <td style="white-space: nowrap; text-align: right">19.23 ms</td>
-    <td style="white-space: nowrap; text-align: right">21.79 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.56</td>
+    <td style="white-space: nowrap; text-align: right">640.28 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;16.28%</td>
+    <td style="white-space: nowrap; text-align: right">595.18 ms</td>
+    <td style="white-space: nowrap; text-align: right">1007.60 ms</td>
   </tr>
 
 </table>

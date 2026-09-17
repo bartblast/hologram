@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">encode_reachable_functions/5</td>
-    <td style="white-space: nowrap; text-align: right">49.45</td>
-    <td style="white-space: nowrap; text-align: right">20.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;20.34%</td>
-    <td style="white-space: nowrap; text-align: right">19.37 ms</td>
-    <td style="white-space: nowrap; text-align: right">38.19 ms</td>
+    <td style="white-space: nowrap; text-align: right">57.65</td>
+    <td style="white-space: nowrap; text-align: right">17.35 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.26%</td>
+    <td style="white-space: nowrap; text-align: right">17.06 ms</td>
+    <td style="white-space: nowrap; text-align: right">19.72 ms</td>
   </tr>
 
 </table>

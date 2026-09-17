@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">bundle/2</td>
-    <td style="white-space: nowrap; text-align: right">3.08</td>
-    <td style="white-space: nowrap; text-align: right">325.17 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;8.13%</td>
-    <td style="white-space: nowrap; text-align: right">320.82 ms</td>
-    <td style="white-space: nowrap; text-align: right">393.36 ms</td>
+    <td style="white-space: nowrap; text-align: right">3.19</td>
+    <td style="white-space: nowrap; text-align: right">313.84 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.52%</td>
+    <td style="white-space: nowrap; text-align: right">316.81 ms</td>
+    <td style="white-space: nowrap; text-align: right">335.77 ms</td>
   </tr>
 
 </table>
