@@ -25,6 +25,17 @@ defmodule Hologram.Compiler.Cache do
         }
 
   @doc """
+  Forgets the kept module infos and dump time while keeping the IR PLT and the call graph, so that the
+  next compile starts from the build dir. The compile task calls it before it changes the kept state in
+  place: a compile that dies mid-way must not leave a half-patched graph that the next compile would
+  trust.
+  """
+  @spec clear_module_infos() :: :ok
+  def clear_module_infos do
+    GenServer.call(server(), :clear_module_infos)
+  end
+
+  @doc """
   Returns the kept call graph and IR PLT, and the module infos of the last finished compile with the
   mtime of the module info dump it wrote (both nil when no compile has finished in this VM). Starts
   the cache on first use.
@@ -35,6 +46,10 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @impl GenServer
+  def handle_call(:clear_module_infos, _from, state) do
+    {:reply, :ok, %{state | dumped_at: nil, module_infos: nil}}
+  end
+
   def handle_call(:get, _from, state) do
     {:reply, state, state}
   end

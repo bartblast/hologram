@@ -15,6 +15,28 @@ defmodule Hologram.Compiler.CacheTest do
     if Process.whereis(Cache), do: GenServer.stop(Cache)
   end
 
+  describe "clear_module_infos/0" do
+    test "forgets the module infos and the dump time" do
+      put_module_infos(%{Module1 => %{digest: "a"}}, 123)
+
+      assert clear_module_infos() == :ok
+      assert %{dumped_at: nil, module_infos: nil} = get()
+    end
+
+    test "keeps the call graph and the IR PLT" do
+      %{call_graph: call_graph, ir_plt: ir_plt} = get()
+      CallGraph.add_vertex(call_graph, {Module1, :fun_1, 0})
+      PLT.put(ir_plt, Module1, :ir_1)
+      assert CallGraph.has_vertex?(call_graph, {Module1, :fun_1, 0})
+
+      clear_module_infos()
+
+      assert %{call_graph: ^call_graph, ir_plt: ^ir_plt} = get()
+      assert CallGraph.has_vertex?(call_graph, {Module1, :fun_1, 0})
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+    end
+  end
+
   describe "get/0" do
     test "starts the cache on first use" do
       refute Process.whereis(Cache)
