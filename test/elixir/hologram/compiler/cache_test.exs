@@ -37,6 +37,19 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
+  describe "delete_page/2" do
+    test "forgets a kept page" do
+      put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
+
+      assert delete_page(Module1) == :ok
+      assert PLT.get(get().pages_plt, Module1) == :error
+    end
+
+    test "a page that was never kept" do
+      assert delete_page(Module1) == :ok
+    end
+  end
+
   describe "get/0" do
     test "starts the cache on first use" do
       refute Process.whereis(Cache)
@@ -46,22 +59,25 @@ defmodule Hologram.Compiler.CacheTest do
       assert is_pid(Process.whereis(Cache))
     end
 
-    test "returns an empty call graph, an empty IR PLT and no module infos at first" do
+    test "returns empty kept state at first" do
       assert %{
                call_graph: %CallGraph{} = call_graph,
                dumped_at: nil,
                ir_plt: %PLT{} = ir_plt,
-               module_infos: nil
+               module_infos: nil,
+               pages_plt: %PLT{} = pages_plt,
+               runtime: nil
              } = get()
 
       assert CallGraph.vertices(call_graph) == []
       assert PLT.keys(ir_plt) == []
+      assert PLT.keys(pages_plt) == []
     end
 
-    test "returns the same call graph and IR PLT on every call" do
-      %{call_graph: call_graph, ir_plt: ir_plt} = get()
+    test "returns the same call graph and PLTs on every call" do
+      %{call_graph: call_graph, ir_plt: ir_plt, pages_plt: pages_plt} = get()
 
-      assert %{call_graph: ^call_graph, ir_plt: ^ir_plt} = get()
+      assert %{call_graph: ^call_graph, ir_plt: ^ir_plt, pages_plt: ^pages_plt} = get()
     end
 
     test "doesn't link the cache to the caller" do
@@ -83,6 +99,29 @@ defmodule Hologram.Compiler.CacheTest do
 
     assert put_module_infos(module_infos, 123) == :ok
     assert %{dumped_at: 123, module_infos: ^module_infos} = get()
+  end
+
+  test "put_page/2" do
+    page_state = %{
+      mfas: [{Module1, :fun_1, 0}],
+      modules: MapSet.new([Module1]),
+      bundle_info: %{digest: "a"}
+    }
+
+    assert put_page(Module1, page_state) == :ok
+    assert PLT.get(get().pages_plt, Module1) == {:ok, page_state}
+  end
+
+  test "put_runtime/1" do
+    runtime_state = %{
+      app_versions: [hologram: "1.0.0"],
+      bundle_info: %{digest: "a"},
+      js_binding_modules: MapSet.new([Module1]),
+      mfas: [{Module1, :fun_1, 0}]
+    }
+
+    assert put_runtime(runtime_state) == :ok
+    assert %{runtime: ^runtime_state} = get()
   end
 
   describe "reset/0" do
@@ -119,14 +158,36 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert %{dumped_at: nil, module_infos: nil} = get()
     end
+
+    test "stops the kept page states and starts an empty PLT" do
+      old_pages_plt = get().pages_plt
+      put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
+
+      put_runtime(%{
+        app_versions: [],
+        bundle_info: %{},
+        js_binding_modules: MapSet.new(),
+        mfas: []
+      })
+
+      reset()
+
+      %{pages_plt: new_pages_plt, runtime: runtime} = get()
+
+      refute Process.alive?(old_pages_plt.pid)
+      assert new_pages_plt.table_ref != old_pages_plt.table_ref
+      assert PLT.keys(new_pages_plt) == []
+      assert runtime == nil
+    end
   end
 
   test "terminate/2" do
-    %{call_graph: call_graph, ir_plt: ir_plt} = get()
+    %{call_graph: call_graph, ir_plt: ir_plt, pages_plt: pages_plt} = get()
 
     GenServer.stop(Cache)
 
     refute Process.alive?(call_graph.pid)
     refute Process.alive?(ir_plt.pid)
+    refute Process.alive?(pages_plt.pid)
   end
 end

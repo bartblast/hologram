@@ -2343,6 +2343,285 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "partition_affected_pages/4" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_4"])
+      clean_dir(test_tmp_dir)
+
+      bundle_path = Path.join(test_tmp_dir, "page-kept.js")
+      File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".map", "map")
+
+      page_state = fn modules, path ->
+        %{
+          bundle_info: %{static_bundle_path: path, static_source_map_path: path <> ".map"},
+          mfas: Enum.map(modules, &{&1, :fun_1, 0}),
+          modules: MapSet.new(modules)
+        }
+      end
+
+      pages_plt = PLT.start()
+
+      [
+        bundle_path: bundle_path,
+        page_state: page_state,
+        pages_plt: pages_plt,
+        static_dir: test_tmp_dir
+      ]
+    end
+
+    test "a page with no kept state is rebuilt", %{pages_plt: pages_plt, static_dir: static_dir} do
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+               {[Module1], []}
+    end
+
+    test "a page whose kept modules meet the reaching modules is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1, Module2], bundle_path))
+
+      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt, static_dir) ==
+               {[Module1], []}
+    end
+
+    test "a page whose kept modules do not meet them is kept with its state", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      state = page_state.([Module1], bundle_path)
+      PLT.put(pages_plt, Module1, state)
+
+      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt, static_dir) ==
+               {[], [{Module1, state}]}
+    end
+
+    test "a page whose kept bundle is gone is rebuilt", %{
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], Path.join(static_dir, "page-gone.js")))
+
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+               {[Module1], []}
+    end
+
+    test "a page whose kept source map is gone is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
+      File.rm!(bundle_path <> ".map")
+
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+               {[Module1], []}
+    end
+
+    test "a page whose kept bundle lives in another static dir is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
+
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, "/other/static") ==
+               {[Module1], []}
+    end
+
+    test "keeps the given order in both lists", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
+      PLT.put(pages_plt, Module3, page_state.([Module3], bundle_path))
+
+      assert {[Module2, Module4], [{Module1, _state_1}, {Module3, _state_3}]} =
+               partition_affected_pages(
+                 [Module1, Module2, Module3, Module4],
+                 MapSet.new(),
+                 pages_plt,
+                 static_dir
+               )
+    end
+  end
+
+  describe "partition_pages_to_rebuild/4" do
+    setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+      call_graph_without_runtime_mfas =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+      page_modules = Reflection.list_pages()
+
+      mfas_by_page =
+        list_mfas_by_page(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          Reflection.list_components()
+        )
+
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_pages_to_rebuild_4"])
+      clean_dir(test_tmp_dir)
+      bundle_path = Path.join(test_tmp_dir, "page-kept.js")
+      File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".map", "map")
+      static_dir = test_tmp_dir
+
+      pages_plt = PLT.start()
+
+      Enum.each(mfas_by_page, fn {page_module, mfas} ->
+        PLT.put(pages_plt, page_module, %{
+          bundle_info: %{
+            static_bundle_path: bundle_path,
+            static_source_map_path: bundle_path <> ".map"
+          },
+          mfas: mfas,
+          modules: MapSet.new(mfas, &elem(&1, 0))
+        })
+      end)
+
+      [
+        call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+        component_modules: Reflection.list_components(),
+        mfas_by_page: mfas_by_page,
+        page_modules: page_modules,
+        pages_plt: pages_plt,
+        static_dir: static_dir
+      ]
+    end
+
+    test "lists the MFAs of the pages to rebuild and keeps the rest", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{reaching_page, _mfas} | _rest] = mfas_by_page
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          component_modules,
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new([reaching_page]),
+          static_dir: static_dir
+        )
+
+      assert Enum.map(rebuilt, &elem(&1, 0)) == [reaching_page]
+      assert length(kept) == length(page_modules) - 1
+      refute reaching_page in Enum.map(kept, &elem(&1, 0))
+    end
+
+    test "keeps every page when nothing reaches them", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      assert {[], kept} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 component_modules,
+                 pages_plt: pages_plt,
+                 reaching_modules: MapSet.new(),
+                 static_dir: static_dir
+               )
+
+      assert length(kept) == length(page_modules)
+    end
+
+    test "relisting keeps the pages whose MFAs are unchanged", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      assert {[], kept} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 component_modules,
+                 pages_plt: pages_plt,
+                 reaching_modules: MapSet.new(),
+                 relist_all?: true,
+                 static_dir: static_dir
+               )
+
+      assert length(kept) == length(page_modules)
+    end
+
+    test "relisting rebuilds a page whose MFAs moved", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{moved_page, moved_page_mfas} | _rest] = mfas_by_page
+
+      PLT.put(pages_plt, moved_page, %{
+        bundle_info: %{
+          static_bundle_path: Path.join(static_dir, "page-kept.js"),
+          static_source_map_path: Path.join(static_dir, "page-kept.js.map")
+        },
+        mfas: tl(moved_page_mfas),
+        modules: MapSet.new(moved_page_mfas, &elem(&1, 0))
+      })
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          component_modules,
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new(),
+          relist_all?: true,
+          static_dir: static_dir
+        )
+
+      assert rebuilt == [{moved_page, moved_page_mfas}]
+      refute moved_page in Enum.map(kept, &elem(&1, 0))
+    end
+
+    test "rebuild_all? rebuilds every page", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      assert {rebuilt, []} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 component_modules,
+                 pages_plt: pages_plt,
+                 reaching_modules: MapSet.new(),
+                 rebuild_all?: true,
+                 static_dir: static_dir
+               )
+
+      assert length(rebuilt) == length(page_modules)
+    end
+  end
+
   describe "patch_ir_plt!/3" do
     setup do
       ir_plt =
@@ -2481,6 +2760,64 @@ defmodule Hologram.CompilerTest do
 
     test "returns the PLT", %{ir_plt: ir_plt} do
       assert prune_ir_plt(ir_plt, [Module1]) == ir_plt
+    end
+  end
+
+  describe "runtime_changed?/4" do
+    setup do
+      kept_runtime = %{
+        app_versions: [hologram: "1.0.0"],
+        bundle_info: %{digest: "a"},
+        js_binding_modules: MapSet.new([Module1]),
+        mfas: [{Module1, :fun_1, 0}]
+      }
+
+      [kept_runtime: kept_runtime]
+    end
+
+    test "false when nothing differs", %{kept_runtime: kept_runtime} do
+      refute runtime_changed?(
+               kept_runtime,
+               kept_runtime.mfas,
+               kept_runtime.js_binding_modules,
+               kept_runtime.app_versions
+             )
+    end
+
+    test "true when there is no kept runtime", %{kept_runtime: kept_runtime} do
+      assert runtime_changed?(
+               nil,
+               kept_runtime.mfas,
+               kept_runtime.js_binding_modules,
+               kept_runtime.app_versions
+             )
+    end
+
+    test "true when the MFAs differ", %{kept_runtime: kept_runtime} do
+      assert runtime_changed?(
+               kept_runtime,
+               [{Module2, :fun_1, 0}],
+               kept_runtime.js_binding_modules,
+               kept_runtime.app_versions
+             )
+    end
+
+    test "true when the JS binding modules differ", %{kept_runtime: kept_runtime} do
+      assert runtime_changed?(
+               kept_runtime,
+               kept_runtime.mfas,
+               MapSet.new([Module2]),
+               kept_runtime.app_versions
+             )
+    end
+
+    test "true when the app versions differ", %{kept_runtime: kept_runtime} do
+      assert runtime_changed?(
+               kept_runtime,
+               kept_runtime.mfas,
+               kept_runtime.js_binding_modules,
+               hologram: "1.0.1"
+             )
     end
   end
 

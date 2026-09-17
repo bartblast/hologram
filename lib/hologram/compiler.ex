@@ -873,6 +873,78 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Splits the given pages into the ones a compile must rebuild and the ones whose bundle it can reuse.
+
+  A page is rebuilt when the pages PLT holds no state for it (a new page, or the first compile in a
+  VM), when the modules of its kept MFAs meet `reaching_modules` (see
+  `Hologram.Compiler.CallGraph.list_modules_reaching/2`: every way a page's bundle depends on a
+  module is a path in the call graph from a vertex of the page, or of a component it renders, to that
+  module), when the bundle its kept state describes or that bundle's source map is no longer on disk
+  (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
+  belongs to a static dir other than the given one.
+
+  Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
+  the pages were given.
+  """
+  @spec partition_affected_pages([module], MapSet.t(module), PLT.t(), T.file_path()) ::
+          {[module], [{module, map}]}
+  def partition_affected_pages(page_modules, reaching_modules, pages_plt, static_dir) do
+    {kept_pages, pages_to_rebuild} =
+      page_modules
+      |> Enum.map(fn page_module ->
+        {page_module, keepable_page_state(pages_plt, page_module, reaching_modules, static_dir)}
+      end)
+      |> Enum.split_with(fn {_page_module, page_state} -> page_state end)
+
+    {Enum.map(pages_to_rebuild, fn {page_module, nil} -> page_module end), kept_pages}
+  end
+
+  @doc """
+  Returns `{mfas_by_page, kept_pages}`: the reachable MFAs of the pages this compile must rebuild
+  (see `list_mfas_by_page/3`), and the pages whose kept bundle it can reuse, each with its state.
+
+  Options:
+
+    * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
+    * `:reaching_modules` - the modules that reach the changed ones, from
+      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/4` for
+      what makes a page affected.
+    * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
+    * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
+      moved although nothing it reaches was edited: a function that joined the runtime's set leaves
+      the page's bundle, and one that left it enters. The otherwise kept pages are listed again and
+      those whose list differs from the one their bundle was built from are rebuilt.
+    * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
+      those imports out, which their MFA lists do not show, so every page is rebuilt.
+  """
+  @spec partition_pages_to_rebuild([module], CallGraph.t(), [module], T.opts()) ::
+          {[{module, [mfa]}], [{module, map}]}
+  def partition_pages_to_rebuild(page_modules, call_graph, component_modules, opts) do
+    {pages_to_rebuild, kept_pages} =
+      if opts[:rebuild_all?] do
+        {page_modules, []}
+      else
+        partition_affected_pages(
+          page_modules,
+          opts[:reaching_modules],
+          opts[:pages_plt],
+          opts[:static_dir]
+        )
+      end
+
+    mfas_by_page = list_mfas_by_page(pages_to_rebuild, call_graph, component_modules)
+
+    if opts[:relist_all?] do
+      {relisted_mfas_by_page, still_kept_pages} =
+        relist_kept_pages(kept_pages, call_graph, component_modules)
+
+      {mfas_by_page ++ relisted_mfas_by_page, still_kept_pages}
+    else
+      {mfas_by_page, kept_pages}
+    end
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
@@ -910,6 +982,22 @@ defmodule Hologram.Compiler do
     |> Enum.each(&PLT.delete(ir_plt, &1))
 
     ir_plt
+  end
+
+  @doc """
+  Whether the runtime bundle must be rebuilt because its inputs differ from the ones the kept runtime
+  state was built from: its MFAs, the JS import modules it registers (which every page bundle leaves
+  out) and the application versions it carries. True when there is no kept state.
+  """
+  @spec runtime_changed?(map | nil, [mfa], MapSet.t(module), keyword(String.t())) :: boolean
+  def runtime_changed?(kept_runtime, runtime_mfas, js_binding_modules, app_versions)
+
+  def runtime_changed?(nil, _runtime_mfas, _js_binding_modules, _app_versions), do: true
+
+  def runtime_changed?(kept_runtime, runtime_mfas, js_binding_modules, app_versions) do
+    kept_runtime.mfas != runtime_mfas or
+      kept_runtime.js_binding_modules != js_binding_modules or
+      kept_runtime.app_versions != app_versions
   end
 
   @doc """
@@ -1220,6 +1308,21 @@ defmodule Hologram.Compiler do
 
   defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
 
+  # nil when the page must be rebuilt, its kept state otherwise.
+  defp keepable_page_state(pages_plt, page_module, reaching_modules, static_dir) do
+    with {:ok, page_state} <- PLT.get(pages_plt, page_module),
+         true <- MapSet.disjoint?(page_state.modules, reaching_modules),
+         # The state names its bundle's path, so it describes one static dir: reusing it for another
+         # would put a digest into that dir's page digest PLT whose file lives elsewhere.
+         true <- Path.dirname(page_state.bundle_info.static_bundle_path) == static_dir,
+         true <- File.exists?(page_state.bundle_info.static_bundle_path),
+         true <- File.exists?(page_state.bundle_info.static_source_map_path) do
+      page_state
+    else
+      _fallback -> nil
+    end
+  end
+
   defp list_modules_where(module_info_plt, flag) do
     module_info_plt
     |> PLT.get_all()
@@ -1367,6 +1470,27 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
+  # The kept pages whose MFAs moved, with their new lists, and the ones whose MFAs are unchanged.
+  defp relist_kept_pages(kept_pages, call_graph, component_modules) do
+    mfas_by_kept_page =
+      kept_pages
+      |> Enum.map(fn {page_module, _page_state} -> page_module end)
+      |> list_mfas_by_page(call_graph, component_modules)
+      |> Map.new()
+
+    {changed_pages, unchanged_pages} =
+      Enum.split_with(kept_pages, fn {page_module, page_state} ->
+        mfas_by_kept_page[page_module] != page_state.mfas
+      end)
+
+    relisted_mfas_by_page =
+      Enum.map(changed_pages, fn {page_module, _page_state} ->
+        {page_module, mfas_by_kept_page[page_module]}
+      end)
+
+    {relisted_mfas_by_page, unchanged_pages}
+  end
+
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
     # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
     # with :code.which/1, which is exactly the stale path that yielded nil here.
