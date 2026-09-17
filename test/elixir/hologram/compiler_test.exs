@@ -654,6 +654,35 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_missing_ir!/2" do
+    test "builds the IR of modules the PLT doesn't hold" do
+      ir_plt = PLT.start()
+
+      build_missing_ir!(ir_plt, [Module1, Module2])
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module1}}} =
+               PLT.get(ir_plt, Module1)
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module2}}} =
+               PLT.get(ir_plt, Module2)
+    end
+
+    test "leaves the entries it holds alone" do
+      ir_plt = PLT.put(PLT.start(), Module1, :ir_1)
+
+      build_missing_ir!(ir_plt, [Module1, Module2])
+
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module2)
+    end
+
+    test "returns the PLT" do
+      ir_plt = PLT.start()
+
+      assert build_missing_ir!(ir_plt, [Module1]) == ir_plt
+    end
+  end
+
   describe "build_module_info_plt!/3" do
     test "adds an entry for every Elixir module that has a BEAM, none for the rest" do
       assert %PLT{} = plt = build_module_info_plt!(PLT.start(), nil)
@@ -2439,6 +2468,36 @@ defmodule Hologram.CompilerTest do
 
       assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: ^module}}} =
                PLT.get(ir_plt, module)
+    end
+  end
+
+  describe "prune_ir_plt/2" do
+    setup do
+      ir_plt =
+        PLT.start()
+        |> PLT.put(Module1, :ir_1)
+        |> PLT.put(Module2, :ir_2)
+        |> PLT.put(Module3, :ir_3)
+
+      [ir_plt: ir_plt]
+    end
+
+    test "deletes the entries of modules not in the list", %{ir_plt: ir_plt} do
+      prune_ir_plt(ir_plt, [Module1, Module3])
+
+      assert PLT.get(ir_plt, Module2) == :error
+    end
+
+    test "keeps the entries of the listed modules", %{ir_plt: ir_plt} do
+      prune_ir_plt(ir_plt, [Module1, Module3, Module4])
+
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+      assert PLT.get(ir_plt, Module3) == {:ok, :ir_3}
+      assert PLT.get(ir_plt, Module4) == :error
+    end
+
+    test "returns the PLT", %{ir_plt: ir_plt} do
+      assert prune_ir_plt(ir_plt, [Module1]) == ir_plt
     end
   end
 

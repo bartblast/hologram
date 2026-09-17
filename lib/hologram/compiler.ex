@@ -169,6 +169,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
+  calls it for the modules it is about to read, once the call graph says which they are.
+  """
+  @spec build_missing_ir!(PLT.t(), [module]) :: PLT.t()
+  def build_missing_ir!(ir_plt, modules) do
+    missing_modules = Enum.reject(modules, &PLT.member?(ir_plt, &1))
+    build_ir_plt(plt: ir_plt, modules: missing_modules)
+  end
+
+  @doc """
   Builds a persistent lookup table (PLT) holding, for every Elixir module in the project, the info the compiler
   needs before building IR: see `Hologram.Reflection.beam_info/1` for the entry shape.
 
@@ -880,6 +890,22 @@ defmodule Hologram.Compiler do
       module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
       &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
     )
+
+    ir_plt
+  end
+
+  @doc """
+  Deletes from the IR PLT the entries of modules not in the given list, and returns the PLT. Reads the keys
+  only, never the values: the table can hold gigabytes.
+  """
+  @spec prune_ir_plt(PLT.t(), [module]) :: PLT.t()
+  def prune_ir_plt(ir_plt, modules) do
+    kept_modules = MapSet.new(modules)
+
+    ir_plt
+    |> PLT.keys()
+    |> Enum.reject(&MapSet.member?(kept_modules, &1))
+    |> Enum.each(&PLT.delete(ir_plt, &1))
 
     ir_plt
   end
