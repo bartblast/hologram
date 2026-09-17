@@ -159,8 +159,9 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{dumped_at: nil, module_infos: nil} = get()
     end
 
-    test "stops the kept page states and starts an empty PLT" do
+    test "stops the kept page states and forgets the app versions and the runtime" do
       old_pages_plt = get().pages_plt
+      put_app_versions(hologram: "1.0.0")
       put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
 
       put_runtime(%{
@@ -172,11 +173,12 @@ defmodule Hologram.Compiler.CacheTest do
 
       reset()
 
-      %{pages_plt: new_pages_plt, runtime: runtime} = get()
+      %{app_versions: app_versions, pages_plt: new_pages_plt, runtime: runtime} = get()
 
       refute Process.alive?(old_pages_plt.pid)
       assert new_pages_plt.table_ref != old_pages_plt.table_ref
       assert PLT.keys(new_pages_plt) == []
+      assert app_versions == nil
       assert runtime == nil
     end
   end
