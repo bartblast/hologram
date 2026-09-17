@@ -70,7 +70,8 @@ defmodule Hologram.Router.PageModuleResolver do
   # page, which would read the BEAM of every module that is not loaded, at boot and on every reload.
   # Each routed page is loaded, as the route calls this replaces did: requests turn names from the
   # browser into existing atoms only, and a page's names exist once its module is loaded. A page
-  # whose module cannot be loaded (its BEAM gone since the dump) is not routed.
+  # whose module cannot be loaded (its BEAM gone since the dump) is not routed. A route the dump
+  # does not hold (one built at runtime, with interpolation say) is asked from the loaded page.
   defp build_search_tree do
     plt = PLT.start()
 
@@ -79,8 +80,9 @@ defmodule Hologram.Router.PageModuleResolver do
       |> PLT.load(impl().dump_path())
       |> PLT.get_all()
       |> Enum.reduce(%SearchTree.Node{}, fn
-        {page_module, %{page?: true, route: route}}, acc when is_binary(route) ->
+        {page_module, %{page?: true} = info}, acc ->
           if Code.ensure_loaded?(page_module) do
+            route = info[:route] || page_module.__route__()
             SearchTree.add_route(acc, route, page_module)
           else
             acc

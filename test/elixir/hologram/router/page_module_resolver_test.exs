@@ -66,6 +66,14 @@ defmodule Hologram.Router.PageModuleResolverTest do
     assert :code.is_loaded(Module1)
   end
 
+  test "init/1 asks a page for its route when the dump does not hold it" do
+    write_dump([{Module1, %{page?: true, route: nil}}])
+
+    init(nil)
+
+    assert resolve("/hologram-test-fixtures-router-pagemoduleresolver-module1") == Module1
+  end
+
   test "init/1 skips a page whose module cannot be loaded" do
     write_dump([{Aaa.Bbb, %{page?: true, route: "/no-such-module"}}])
 
@@ -74,13 +82,11 @@ defmodule Hologram.Router.PageModuleResolverTest do
     refute resolve("/no-such-module")
   end
 
-  test "init/1 skips entries that are not pages or have no route" do
+  test "init/1 skips entries that are not pages" do
     write_dump([
       {Module1,
        %{page?: true, route: "/hologram-test-fixtures-router-pagemoduleresolver-module1"}},
-      {Aaa.NotAPage, %{page?: false, route: "/not-a-page"}},
-      {Aaa.NoRoute, %{page?: true, route: nil}},
-      {Aaa.OldEntry, %{page?: true}}
+      {Module2, %{page?: false, route: "/not-a-page"}}
     ])
 
     init(nil)
