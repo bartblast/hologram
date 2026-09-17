@@ -5,8 +5,8 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "encode_reachable_functions/4" => fn {mfas, ir_plt, encode_plt, async_mfas} ->
-      Compiler.encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas)
+    "encode_reachable_functions/5" => fn {mfas, ir_plt, encode_plt, async_mfas, module_info_plt} ->
+      Compiler.encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas, module_info_plt)
     end
   },
   before_scenario: fn _input ->
@@ -40,9 +40,9 @@ Benchee.run(
         )
       end)
 
-    {mfas, ir_plt, PLT.start(), async_mfas}
+    {mfas, ir_plt, PLT.start(), async_mfas, module_info_plt}
   end,
-  before_each: fn {_mfas, _ir_plt, encode_plt, _async_mfas} = input ->
+  before_each: fn {_mfas, _ir_plt, encode_plt, _async_mfas, _module_info_plt} = input ->
     # Every iteration starts from an empty encode PLT, the way a compile does.
     PLT.reset(encode_plt)
 
@@ -51,7 +51,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.encode_reachable_functions/4",
+     description: "Hologram.Compiler.encode_reachable_functions/5",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

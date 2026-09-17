@@ -235,7 +235,7 @@ defmodule Hologram.Compiler do
   Builds JavaScript code for the given Hologram page.
 
   The page's reachable MFAs are given (see `CallGraph.list_page_mfas/4`), so that a caller building
-  many pages can encode their functions first with `encode_reachable_functions/4` and render every
+  many pages can encode their functions first with `encode_reachable_functions/5` and render every
   page from the encode PLT.
 
   ## Options
@@ -506,7 +506,7 @@ defmodule Hologram.Compiler do
   passes the module info PLT's components.
   The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
   copies it. Every page's reachable MFAs are listed first, their functions are encoded into the
-  encode PLT with one IR read per module (`encode_reachable_functions/4`), and then the pages are
+  encode PLT with one IR read per module (`encode_reachable_functions/5`), and then the pages are
   rendered from that cache.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
@@ -560,7 +560,7 @@ defmodule Hologram.Compiler do
 
       mfas_by_page
       |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
-      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas)
+      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
 
       TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
         entry_name = Reflection.module_name(page_module)
@@ -638,16 +638,19 @@ defmodule Hologram.Compiler do
   Encodes into the encode PLT every function of the given MFAs that is not there yet, reading each
   module's IR once however many entry files reach it. Erlang modules are skipped, and so are
   protocol modules, whose dispatcher functions depend on the entry file and are encoded per entry
-  file.
+  file; the module info PLT says which modules are protocols without touching their code paths.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/encode_reachable_functions_5/README.md
   """
-  @spec encode_reachable_functions([mfa], PLT.t(), PLT.t(), MapSet.t(mfa)) :: :ok
-  def encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas) do
+  @spec encode_reachable_functions([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), PLT.t() | nil) :: :ok
+  def encode_reachable_functions(mfas, ir_plt, encode_plt, async_mfas, module_info_plt) do
     mfas
     |> Enum.uniq()
     |> group_mfas_by_module()
     # Checked once per module, not per MFA: the lists of many pages repeat the same MFAs.
     |> Enum.filter(fn {module, _module_mfas} ->
-      Reflection.elixir_module?(module, ir_plt) and not Reflection.protocol?(module)
+      Reflection.elixir_module?(module, ir_plt) and
+        not Reflection.protocol?(module, module_info_plt)
     end)
     |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
       missing =

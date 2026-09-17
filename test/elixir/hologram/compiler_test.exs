@@ -1720,7 +1720,7 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
-  describe "encode_reachable_functions/4" do
+  describe "encode_reachable_functions/5" do
     setup do
       # A PLT per test, so one test's cache can never stand in for another's encoding.
       [encode_plt: PLT.start()]
@@ -1728,11 +1728,12 @@ defmodule Hologram.CompilerTest do
 
     test "encodes every Elixir function of the given MFAs", %{
       encode_plt: encode_plt,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfas = [{Enum, :into, 2}, {Module24, :template, 0}, {Module24, :action, 3}]
 
-      encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new())
+      encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new(), module_info_plt)
 
       assert {:ok, into_js} = PLT.get(encode_plt, {Enum, :into, 2})
 
@@ -1750,45 +1751,72 @@ defmodule Hologram.CompilerTest do
       assert PLT.size(encode_plt) == 3
     end
 
-    test "skips Erlang MFAs", %{encode_plt: encode_plt, ir_plt: ir_plt} do
-      encode_reachable_functions([{:erlang, :hd, 1}], ir_plt, encode_plt, MapSet.new())
-
-      assert PLT.size(encode_plt) == 0
-    end
-
-    test "skips protocol modules", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+    test "skips Erlang MFAs", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       encode_reachable_functions(
-        [{String.Chars, :to_string, 1}],
+        [{:erlang, :hd, 1}],
         ir_plt,
         encode_plt,
-        MapSet.new()
+        MapSet.new(),
+        module_info_plt
       )
 
       assert PLT.size(encode_plt) == 0
     end
 
-    test "skips functions already in the PLT", %{encode_plt: encode_plt, ir_plt: ir_plt} do
+    test "skips protocol modules", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      encode_reachable_functions(
+        [{String.Chars, :to_string, 1}],
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        module_info_plt
+      )
+
+      assert PLT.size(encode_plt) == 0
+    end
+
+    test "skips functions already in the PLT", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
       PLT.put(encode_plt, {Enum, :into, 2}, "cached")
 
-      encode_reachable_functions([{Enum, :into, 2}], ir_plt, encode_plt, MapSet.new())
+      encode_reachable_functions(
+        [{Enum, :into, 2}],
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        module_info_plt
+      )
 
       assert PLT.get(encode_plt, {Enum, :into, 2}) == {:ok, "cached"}
     end
 
     test "remembers a function the module does not define", %{
       encode_plt: encode_plt,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfa = {Enum, :hologram_undefined_fun, 9}
 
-      encode_reachable_functions([mfa], ir_plt, encode_plt, MapSet.new())
+      encode_reachable_functions([mfa], ir_plt, encode_plt, MapSet.new(), module_info_plt)
 
       assert PLT.get(encode_plt, mfa) == {:ok, nil}
     end
 
     test "reads each module's IR once, however many of its MFAs are given, repeats included", %{
       encode_plt: encode_plt,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
     } do
       mfas = [
         {Enum, :into, 2},
@@ -1803,7 +1831,7 @@ defmodule Hologram.CompilerTest do
       :erlang.trace_pattern({PLT, :get!, 2}, true, [:call_count])
 
       try do
-        encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new())
+        encode_reachable_functions(mfas, ir_plt, encode_plt, MapSet.new(), module_info_plt)
 
         assert :erlang.trace_info({PLT, :get!, 2}, :call_count) == {:call_count, 2}
       after
@@ -1811,8 +1839,33 @@ defmodule Hologram.CompilerTest do
       end
     end
 
-    test "returns :ok", %{encode_plt: encode_plt, ir_plt: ir_plt} do
-      assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new()) == :ok
+    test "skips a module the module info PLT marks as a protocol, without asking it", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      {:ok, info} = PLT.get(module_info_plt, Enum)
+      module_info_plt = PLT.clone(module_info_plt)
+      PLT.put(module_info_plt, Enum, %{info | protocol?: true})
+
+      encode_reachable_functions(
+        [{Enum, :into, 2}],
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        module_info_plt
+      )
+
+      assert PLT.size(encode_plt) == 0
+    end
+
+    test "returns :ok", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt
+    } do
+      assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new(), module_info_plt) ==
+               :ok
     end
   end
 
