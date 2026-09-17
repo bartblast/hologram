@@ -446,6 +446,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert CallGraph.has_vertex?(call_graph, Module2)
       assert module_infos == load_module_info_items(opts)
     end
+
+    test "a run whose build dir has no call graph dump rebuilds the graph", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.rm!()
+
+      Cache.reset()
+
+      run(opts)
+
+      test_call_graph(opts)
+    end
   end
 
   describe "module metadata" do
