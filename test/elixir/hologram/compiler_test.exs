@@ -2168,6 +2168,53 @@ defmodule Hologram.CompilerTest do
     assert list_components(plt) == [Module11, Module3]
   end
 
+  describe "list_ir_modules/3" do
+    setup do
+      info = %{digest: 1, mtime: 1, size: 1}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, info)
+        |> PLT.put(Module2, info)
+        |> PLT.put(Module3, info)
+        |> PLT.put(Hologram.JS, info)
+
+      [module_info_plt: module_info_plt]
+    end
+
+    test "lists the modules of the runtime and page MFAs once", %{
+      module_info_plt: module_info_plt
+    } do
+      runtime_mfas = [{Module1, :fun_1, 0}, {Module1, :fun_2, 0}]
+
+      mfas_by_page = [
+        {Module11, [{Module1, :fun_3, 0}, {Module2, :fun_1, 0}]},
+        {Module12, [{Module2, :fun_2, 1}]}
+      ]
+
+      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+
+      assert Enum.count(modules, &(&1 == Module1)) == 1
+      assert Enum.count(modules, &(&1 == Module2)) == 1
+      refute Module3 in modules
+    end
+
+    test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
+      assert list_ir_modules([], [], module_info_plt) == [Hologram.JS]
+    end
+
+    test "leaves out modules the module info PLT doesn't hold", %{
+      module_info_plt: module_info_plt
+    } do
+      runtime_mfas = [{Module1, :fun_1, 0}, {:lists, :map, 2}]
+      mfas_by_page = [{Module11, [{Module4, :fun_1, 0}]}]
+
+      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
+    end
+  end
+
   describe "list_js_import_modules/3" do
     test "returns the modules that declare JS imports", %{
       ir_plt: ir_plt,

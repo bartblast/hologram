@@ -779,6 +779,22 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the modules whose IR the entry files read: the modules of the runtime MFAs, of every page's MFAs and
+  of the manually ported MFAs (the runtime entry file renders their clause heads), each once. Only the modules
+  the module info PLT holds are listed, since the IR PLT is built for those alone (an Erlang module has no IR).
+  """
+  @spec list_ir_modules(list(mfa), list({module, list(mfa)}), PLT.t()) :: list(module)
+  def list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt) do
+    page_mfas = Enum.flat_map(mfas_by_page, fn {_page_module, mfas} -> mfas end)
+
+    [runtime_mfas, page_mfas, CallGraph.manually_ported_elixir_mfas()]
+    |> Stream.concat()
+    |> Stream.map(fn {module, _function, _arity} -> module end)
+    |> Stream.uniq()
+    |> Enum.filter(&PLT.member?(module_info_plt, &1))
+  end
+
+  @doc """
   Lists the Elixir modules referenced by the given MFAs that declare JS imports. The IR PLT tells
   the Elixir modules apart from the Erlang ones, and the module info PLT says which of them declare
   imports without touching their code paths; with nil, every module is asked.
