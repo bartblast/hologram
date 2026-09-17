@@ -91,6 +91,14 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Returns the keys of the ETS table, without copying the values out.
+  """
+  @spec keys(tid) :: list
+  def keys(table_name_or_ref) do
+    :ets.select(table_name_or_ref, [{{:"$1", :_}, [], [:"$1"]}])
+  end
+
+  @doc """
   Returns true if the ETS table holds the given key, without copying its value out.
   """
   @spec member?(tid, any) :: boolean

@@ -105,6 +105,22 @@ defmodule Hologram.Commons.ETSTest do
     assert get_all(table_ref) == %{my_key_1: :my_value_1, my_key_2: :my_value_2}
   end
 
+  describe "keys/1" do
+    test "table with items", %{table_ref: table_ref} do
+      sorted_keys =
+        table_ref
+        |> keys()
+        |> Enum.sort()
+
+      assert sorted_keys == [:my_key_1, :my_key_2]
+    end
+
+    test "empty table" do
+      table_ref = create_unnamed_table()
+      assert keys(table_ref) == []
+    end
+  end
+
   describe "member?/2" do
     test "key exists", %{table_ref: table_ref} do
       assert member?(table_ref, :my_key_2)
