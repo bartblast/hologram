@@ -16,19 +16,20 @@ defmodule Hologram.Compiler do
 
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
-  skipping the modules whose bindings another bundle already registers.
+  skipping the modules whose bindings another bundle already registers. The module info PLT says which
+  modules declare imports; with nil, every module is asked.
   Returns a map with:
   - `:imports` — unique imports with generated `$1`, `$2`, ... aliases for JS import statements
   - `:bindings` — per-module map of user alias to generated alias for `__bindings__` on module proxies
   """
-  @spec aggregate_js_imports(list(mfa), PLT.t(), MapSet.t(module)) :: %{
+  @spec aggregate_js_imports(list(mfa), PLT.t(), PLT.t() | nil, MapSet.t(module)) :: %{
           imports: list(%{from: String.t(), export: String.t(), alias: String.t()}),
           bindings: %{module => %{String.t() => String.t()}}
         }
-  def aggregate_js_imports(mfas, ir_plt, excluded_modules \\ MapSet.new()) do
+  def aggregate_js_imports(mfas, ir_plt, module_info_plt, excluded_modules \\ MapSet.new()) do
     modules_with_imports =
       mfas
-      |> list_js_import_modules(ir_plt)
+      |> list_js_import_modules(ir_plt, module_info_plt)
       |> Enum.reject(&MapSet.member?(excluded_modules, &1))
 
     unique_imports =
@@ -241,6 +242,8 @@ defmodule Hologram.Compiler do
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the page script imports
       from (required).
+    * `:module_info_plt` - the module info PLT the bundled modules are classified from; without it
+      each module is asked, which reads the BEAM of a module that is not loaded (default: none).
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
     * `:runtime_js_binding_modules` - modules whose JS imports are skipped when the imports are
@@ -255,7 +258,7 @@ defmodule Hologram.Compiler do
     runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
 
     %{imports: imports, bindings: bindings} =
-      aggregate_js_imports(mfas, ir_plt, runtime_js_binding_modules)
+      aggregate_js_imports(mfas, ir_plt, opts[:module_info_plt], runtime_js_binding_modules)
 
     import_statements =
       imports
@@ -318,6 +321,8 @@ defmodule Hologram.Compiler do
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the runtime script imports
       from (required).
+    * `:module_info_plt` - the module info PLT the bundled modules are classified from; without it
+      each module is asked, which reads the BEAM of a module that is not loaded (default: none).
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
   """
@@ -332,7 +337,8 @@ defmodule Hologram.Compiler do
   def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
 
-    %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas, ir_plt)
+    %{imports: imports, bindings: bindings} =
+      aggregate_js_imports(runtime_mfas, ir_plt, opts[:module_info_plt])
 
     import_statements =
       imports
@@ -563,6 +569,7 @@ defmodule Hologram.Compiler do
           mfas
           |> build_page_js(ir_plt, encode_plt, async_mfas,
             js_dir: opts[:js_dir],
+            module_info_plt: module_info_plt,
             module_metadata: opts[:module_metadata],
             runtime_js_binding_modules: runtime_js_binding_modules
           )
@@ -590,6 +597,7 @@ defmodule Hologram.Compiler do
     runtime_mfas
     |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions,
       js_dir: opts[:js_dir],
+      module_info_plt: opts[:module_info_plt],
       module_metadata: opts[:module_metadata]
     )
     |> create_entry_file("runtime", opts[:tmp_dir])
@@ -757,17 +765,16 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists the Elixir modules referenced by the given MFAs that declare JS imports. The IR PLT tells
-  the Elixir modules apart from the Erlang ones.
+  the Elixir modules apart from the Erlang ones, and the module info PLT says which of them declare
+  imports without touching their code paths; with nil, every module is asked.
   """
-  @spec list_js_import_modules(list(mfa), PLT.t()) :: list(module)
-  def list_js_import_modules(mfas, ir_plt) do
+  @spec list_js_import_modules(list(mfa), PLT.t(), PLT.t() | nil) :: list(module)
+  def list_js_import_modules(mfas, ir_plt, module_info_plt) do
     mfas
     |> filter_elixir_mfas(ir_plt)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
-    |> Enum.filter(
-      &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
-    )
+    |> Enum.filter(&(Reflection.js_imports?(&1, module_info_plt) and &1.__js_imports__() != []))
   end
 
   @doc """
