@@ -449,8 +449,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       try do
         run(opts)
 
-        # The runtime bundle only, which the next commit makes conditional too.
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
       after
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
@@ -482,8 +481,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       try do
         run(opts)
 
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, pages_reaching_module_2 + 1}
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, pages_reaching_module_2}
       after
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
@@ -534,8 +532,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       try do
         run(opts)
 
-        # That page and the runtime.
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 2}
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
       after
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
@@ -570,6 +567,57 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert PLT.get(Cache.get().pages_plt, :gone_page) == :error
       refute File.exists?(bundle_path)
       refute File.exists?(source_map_path)
+    end
+
+    test "rebundles the runtime when a module it carries was edited", %{opts: opts} do
+      run(opts)
+
+      %{dumped_at: dumped_at, module_infos: module_infos, runtime: runtime} = Cache.get()
+
+      runtime_module =
+        Enum.find_value(runtime.mfas, fn {module, _function, _arity} ->
+          if Map.has_key?(module_infos, module), do: module
+        end)
+
+      edited_info = %{module_infos[runtime_module] | digest: "edited", mtime: 0}
+      Cache.put_module_infos(%{module_infos | runtime_module => edited_info}, dumped_at)
+
+      # The edit is faked in the kept infos, so the beam and with it the rebuilt bundle are
+      # byte-identical and keep their digest; what the test asserts is that the bundle was built.
+      mfa = {Compiler, :create_runtime_entry_file, 6}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().runtime.mfas == runtime.mfas
+      test_runtime_bundle(opts)
+    end
+
+    test "rebundles the runtime when its bundle is gone", %{opts: opts} do
+      run(opts)
+
+      runtime = Cache.get().runtime
+      File.rm!(runtime.bundle_info.static_bundle_path)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert File.exists?(Cache.get().runtime.bundle_info.static_bundle_path)
+      test_runtime_bundle(opts)
     end
 
     test "a run after a reset starts from the build dir", %{opts: opts} do

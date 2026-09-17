@@ -234,15 +234,28 @@ defmodule Mix.Tasks.Compile.Hologram do
           module_metadata: module_metadata
         )
 
-      runtime_entry_file_path =
-        Compiler.create_runtime_entry_file(
-          runtime_mfas,
-          ir_plt,
-          encode_plt,
-          async_mfas,
-          app_versions,
-          entry_file_opts
-        )
+      # The runtime bundle is kept like a page's: rebuilt when its inputs differ from the ones it
+      # was built from, when a module it carries was edited, or when its file is gone.
+      runtime_entry_files_info =
+        if keep_runtime_bundle?(cache.runtime, reaching_modules,
+             app_versions: app_versions,
+             js_binding_modules: runtime_js_binding_modules,
+             mfas: runtime_mfas
+           ) do
+          []
+        else
+          runtime_entry_file_path =
+            Compiler.create_runtime_entry_file(
+              runtime_mfas,
+              ir_plt,
+              encode_plt,
+              async_mfas,
+              app_versions,
+              entry_file_opts
+            )
+
+          [{"runtime", runtime_entry_file_path, "runtime"}]
+        end
 
       page_entry_files_info =
         mfas_by_page
@@ -257,7 +270,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           {entry_name, entry_file_path, "page"}
         end)
 
-      entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
+      entry_files_info = runtime_entry_files_info ++ page_entry_files_info
 
       old_build_static_artifacts =
         opts[:static_dir]
@@ -266,10 +279,17 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       built_bundles_info = Compiler.bundle(entry_files_info, opts)
 
-      # A kept page's bundle is the file an earlier compile wrote, with the digest it recorded, so
-      # it belongs in the page digest PLT and among the artifacts the cleanup below keeps.
-      kept_bundles_info =
+      # A kept bundle is the file an earlier compile wrote, with the digest it recorded, so it
+      # belongs in the page digest PLT and among the artifacts the cleanup below keeps.
+      kept_page_bundles_info =
         Enum.map(kept_pages, fn {_page_module, %{bundle_info: info}} -> info end)
+
+      kept_bundles_info =
+        if runtime_entry_files_info == [] do
+          [cache.runtime.bundle_info | kept_page_bundles_info]
+        else
+          kept_page_bundles_info
+        end
 
       bundles_info = built_bundles_info ++ kept_bundles_info
 
@@ -360,6 +380,28 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> PLT.keys()
     |> Kernel.--(opts[:page_modules])
     |> Enum.each(&Cache.delete_page/1)
+  end
+
+  # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
+  # the JS imports it registers or the app versions it names differ from the kept ones, and when a
+  # module of those MFAs was edited: its functions are in the bundle, so their code is too.
+  defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
+
+  defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
+    not Compiler.runtime_changed?(
+      kept_runtime,
+      inputs[:mfas],
+      inputs[:js_binding_modules],
+      inputs[:app_versions]
+    ) and
+      runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
+      File.exists?(kept_runtime.bundle_info.static_bundle_path)
+  end
+
+  defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
+    runtime_mfas
+    |> page_state_modules()
+    |> MapSet.disjoint?(reaching_modules)
   end
 
   defp page_state_modules(mfas) do
