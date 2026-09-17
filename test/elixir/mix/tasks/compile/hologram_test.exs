@@ -477,6 +477,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
+    test "a run that fails leaves the next one cold", %{opts: opts} do
+      run(opts)
+
+      # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
+      # in place, bundles, and only then raises, which is the shape of a compile that dies after
+      # changing what the cache keeps.
+      blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
+      File.rm!(blocked_dump_path)
+      File.mkdir!(blocked_dump_path)
+
+      assert_raise File.Error, fn -> run(opts) end
+      assert Cache.get().module_infos == nil
+
+      File.rmdir!(blocked_dump_path)
+
+      run(opts)
+
+      assert Cache.get().module_infos == load_module_info_items(opts)
+      test_call_graph(opts)
+    end
+
     test "a run whose build dir has no call graph dump rebuilds the graph", %{opts: opts} do
       run(opts)
 

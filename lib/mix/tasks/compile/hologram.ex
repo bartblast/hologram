@@ -291,11 +291,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # Returns the cache, the module info PLT to diff against, and the dump time the module info reuse
-  # guard takes. After a compile that finished in this VM, the kept module infos are what the kept
-  # IR PLT and call graph are in line with, whatever another VM wrote to the build dir since. The
-  # first compile in a VM (or after a reset) starts from the build dir instead: the cache is emptied,
-  # so that nothing a failed compile left in it survives, the graph is loaded from its dump, and the
-  # module info dump written next to that graph is the before picture.
+  # guard takes. The kept module infos are the proof that the kept IR PLT and call graph are exactly
+  # in line with them, whatever another VM wrote to the build dir since, and they exist only between
+  # two finished compiles. Without them (the first compile in a VM, or after a failed one) the cache
+  # is emptied and the build dir is the before picture: the graph comes from its dump and the module
+  # info dump written next to it says what changed.
   defp load_before_state(build_dir, call_graph_dump_path, sup) do
     case Cache.get() do
       %{module_infos: nil} ->
@@ -323,6 +323,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       cache ->
         items = Map.to_list(cache.module_infos)
         module_info_plt = PLT.start(items: items, supervisor: sup)
+
+        # Cleared before anything is patched in place: a compile that dies mid-patch can leave the
+        # kept graph without edges that only its callers would rebuild, so the next compile must
+        # start from the dumps rather than from a half-patched graph. The infos are put back last,
+        # after the dumps.
+        :ok = Cache.clear_module_infos()
+
         {cache, module_info_plt, cache.dumped_at}
     end
   end
