@@ -1453,65 +1453,6 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
-  test "create_page_entry_files/7 asks the call graph for its graph once and releases it", %{
-    call_graph: call_graph,
-    ir_plt: ir_plt,
-    runtime_mfas: runtime_mfas
-  } do
-    opts = [
-      js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_7_shared"])
-    ]
-
-    clean_dir(opts[:tmp_dir])
-
-    page_modules = Reflection.list_pages()
-
-    %CallGraph{pid: pid} =
-      call_graph_without_runtime_mfas =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
-
-    count_shared_graphs = fn ->
-      Enum.count(:persistent_term.get(), &match?({{CallGraph, _ref}, _graph}, &1))
-    end
-
-    shared_graphs_before = count_shared_graphs.()
-
-    # Only the call graph's own process is traced, for the messages it receives.
-    :erlang.trace(pid, true, [:receive])
-
-    try do
-      create_page_entry_files(
-        page_modules,
-        call_graph_without_runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        MapSet.new(),
-        opts
-      )
-    after
-      :erlang.trace(pid, false, [:receive])
-    end
-
-    ref = :erlang.trace_delivered(pid)
-    assert_receive {:trace_delivered, ^pid, ^ref}
-
-    {:messages, messages} = Process.info(self(), :messages)
-
-    graph_requests =
-      Enum.count(
-        messages,
-        &match?({:trace, ^pid, :receive, {:"$gen_call", _from, {:get, _fun}}}, &1)
-      )
-
-    assert length(page_modules) > 1
-    assert graph_requests == 1
-    assert count_shared_graphs.() == shared_graphs_before
-  end
-
   test "create_page_entry_files/7 reads each module's IR once for all pages", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
@@ -2253,6 +2194,95 @@ defmodule Hologram.CompilerTest do
 
     test "a nil module info PLT asks every module", %{ir_plt: ir_plt} do
       assert list_js_import_modules([{Module12, :func, 0}], ir_plt, nil) == [Module12]
+    end
+  end
+
+  describe "list_mfas_by_page/3" do
+    setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+      call_graph_without_runtime_mfas =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+      [
+        call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+        component_modules: Reflection.list_components(),
+        page_modules: Reflection.list_pages()
+      ]
+    end
+
+    test "lists each page's reachable MFAs", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules
+    } do
+      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+      module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
+
+      server_callback_analysis_by_templatable =
+        CallGraph.server_callback_analysis_by_templatable(
+          graph,
+          page_modules ++ component_modules,
+          module_info_plt
+        )
+
+      expected =
+        Enum.map(page_modules, fn page_module ->
+          mfas =
+            CallGraph.list_page_mfas(
+              graph,
+              page_module,
+              server_callback_analysis_by_templatable,
+              module_info_plt
+            )
+
+          {page_module, mfas}
+        end)
+
+      result =
+        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, component_modules)
+
+      assert length(page_modules) > 1
+      assert Enum.all?(result, fn {_page_module, mfas} -> mfas != [] end)
+      assert result == expected
+    end
+
+    test "asks the call graph for its graph once and releases it", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      page_modules: page_modules
+    } do
+      %CallGraph{pid: pid} = call_graph_without_runtime_mfas
+
+      count_shared_graphs = fn ->
+        Enum.count(:persistent_term.get(), &match?({{CallGraph, _ref}, _graph}, &1))
+      end
+
+      shared_graphs_before = count_shared_graphs.()
+
+      # Only the call graph's own process is traced, for the messages it receives.
+      :erlang.trace(pid, true, [:receive])
+
+      try do
+        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, component_modules)
+      after
+        :erlang.trace(pid, false, [:receive])
+      end
+
+      ref = :erlang.trace_delivered(pid)
+      assert_receive {:trace_delivered, ^pid, ^ref}
+
+      {:messages, messages} = Process.info(self(), :messages)
+
+      graph_requests =
+        Enum.count(
+          messages,
+          &match?({:trace, ^pid, :receive, {:"$gen_call", _from, {:get, _fun}}}, &1)
+        )
+
+      assert length(page_modules) > 1
+      assert graph_requests == 1
+      assert count_shared_graphs.() == shared_graphs_before
     end
   end
 

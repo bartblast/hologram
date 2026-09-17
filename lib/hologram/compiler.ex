@@ -516,10 +516,9 @@ defmodule Hologram.Compiler do
   Creates page bundle entry file.
   Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
   passes the module info PLT's components.
-  The page graph is shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
-  copies it. Every page's reachable MFAs are listed first, their functions are encoded into the
-  encode PLT with one IR read per module (`encode_reachable_functions/5`), and then the pages are
-  rendered from that cache.
+  Every page's reachable MFAs are listed first (`list_mfas_by_page/3`), their functions are encoded
+  into the encode PLT with one IR read per module (`encode_reachable_functions/5`), and then the
+  pages are rendered from that cache.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
   """
@@ -542,53 +541,31 @@ defmodule Hologram.Compiler do
         opts
       ) do
     module_info_plt = CallGraph.module_info_plt(call_graph)
-    templatables = page_modules ++ (opts[:components] || Reflection.list_components())
+    component_modules = opts[:components] || Reflection.list_components()
 
-    # The tasks get the reader, which captures only the shared graph's key: a closure that
-    # captured the graph itself would copy it into every task it starts.
-    CallGraph.with_shared_graph(call_graph, fn read_graph ->
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          read_graph.(),
-          templatables,
-          module_info_plt
+    # Knowing every page's MFAs before rendering any lets each module's IR be read once for all
+    # pages, rather than by every page that finds one of its functions missing, concurrently with
+    # the others.
+    mfas_by_page = list_mfas_by_page(page_modules, call_graph, component_modules)
+
+    mfas_by_page
+    |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
+    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
+
+    TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
+      entry_name = Reflection.module_name(page_module)
+
+      entry_file_path =
+        mfas
+        |> build_page_js(ir_plt, encode_plt, async_mfas,
+          js_dir: opts[:js_dir],
+          module_info_plt: module_info_plt,
+          module_metadata: opts[:module_metadata],
+          runtime_js_binding_modules: runtime_js_binding_modules
         )
+        |> create_entry_file(entry_name, opts[:tmp_dir])
 
-      # Listing a page's MFAs is a cheap graph walk, and knowing every page's before rendering any
-      # lets each module's IR be read once for all pages, rather than by every page that finds one
-      # of its functions missing, concurrently with the others.
-      mfas_by_page =
-        TaskUtils.map_concurrently(page_modules, fn page_module ->
-          mfas =
-            CallGraph.list_page_mfas(
-              read_graph.(),
-              page_module,
-              server_callback_analysis_by_templatable,
-              module_info_plt
-            )
-
-          {page_module, mfas}
-        end)
-
-      mfas_by_page
-      |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
-      |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
-
-      TaskUtils.map_concurrently(mfas_by_page, fn {page_module, mfas} ->
-        entry_name = Reflection.module_name(page_module)
-
-        entry_file_path =
-          mfas
-          |> build_page_js(ir_plt, encode_plt, async_mfas,
-            js_dir: opts[:js_dir],
-            module_info_plt: module_info_plt,
-            module_metadata: opts[:module_metadata],
-            runtime_js_binding_modules: runtime_js_binding_modules
-          )
-          |> create_entry_file(entry_name, opts[:tmp_dir])
-
-        {page_module, entry_file_path}
-      end)
+      {page_module, entry_file_path}
     end)
   end
 
@@ -806,6 +783,41 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&(Reflection.js_imports?(&1, module_info_plt) and &1.__js_imports__() != []))
+  end
+
+  @doc """
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`). The call graph's
+  graph is read once and shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
+  copies it. The component modules are the templatables, besides the pages, whose server callbacks are
+  analysed.
+  """
+  @spec list_mfas_by_page(list(module), CallGraph.t(), list(module)) :: list({module, list(mfa)})
+  def list_mfas_by_page(page_modules, call_graph, component_modules) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    # The tasks get the reader, which captures only the shared graph's key: a closure that
+    # captured the graph itself would copy it into every task it starts.
+    CallGraph.with_shared_graph(call_graph, fn read_graph ->
+      server_callback_analysis_by_templatable =
+        CallGraph.server_callback_analysis_by_templatable(
+          read_graph.(),
+          page_modules ++ component_modules,
+          module_info_plt
+        )
+
+      # Listing a page's MFAs is a cheap graph walk.
+      TaskUtils.map_concurrently(page_modules, fn page_module ->
+        mfas =
+          CallGraph.list_page_mfas(
+            read_graph.(),
+            page_module,
+            server_callback_analysis_by_templatable,
+            module_info_plt
+          )
+
+        {page_module, mfas}
+      end)
+    end)
   end
 
   @doc """
