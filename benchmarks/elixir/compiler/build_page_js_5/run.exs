@@ -44,6 +44,7 @@ Benchee.run(
 
     opts = [
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
+      module_info_plt: module_info_plt,
       module_metadata: Compiler.build_module_metadata(module_info_plt),
       runtime_js_binding_modules: runtime_js_binding_modules
     ]
