@@ -343,11 +343,11 @@ do load        0.31 K - 208.97x slower +3.24 ms
 ```
 
 
-### ✅ compiler » validate_page_modules_1
+### ✅ compiler » validate_page_modules_2
 
 ```
 Name                              ips        average  deviation         median         99th %
-validate_page_modules/1         42.99       23.26 ms     ±4.34%       23.02 ms       28.04 ms
+validate_page_modules/2       64.75 K       15.44 μs    ±57.83%       14.42 μs       48.75 μs
 ```
 
 

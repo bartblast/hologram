@@ -914,28 +914,18 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Raises a compilation error if any page module lacks a specified route or layout.
+  Raises a compilation error if any page module lacks a specified route or layout, or has a route that
+  is not a string. The route and the layout come from the pages' entries in the given module info PLT;
+  a page is asked only for what its entry does not hold (a route built at runtime, say).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/validate_page_modules_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_page_modules_2/README.md
   """
-  @spec validate_page_modules(list(module)) :: :ok
-  def validate_page_modules(page_modules) do
+  @spec validate_page_modules(list(module), PLT.t()) :: :ok
+  def validate_page_modules(page_modules, module_info_plt) do
     Enum.each(page_modules, fn page_module ->
-      if !Reflection.has_function?(page_module, :__route__, 0) do
-        module_name = Reflection.module_name(page_module)
-
-        raise Hologram.CompileError,
-          message:
-            "page '#{module_name}' doesn't have a route specified (use the route/1 macro to fix it)"
-      end
-
-      if !Reflection.has_function?(page_module, :__layout_module__, 0) do
-        module_name = Reflection.module_name(page_module)
-
-        raise Hologram.CompileError,
-          message:
-            "page '#{module_name}' doesn't have a layout module specified (use the layout/1 macro to fix it)"
-      end
+      info = PLT.get!(module_info_plt, page_module)
+      validate_page_route(page_module, info.route)
+      validate_page_layout(page_module, info.layout_module)
     end)
   end
 
@@ -1599,6 +1589,44 @@ defmodule Hologram.Compiler do
   # A spread decides only whether a prop is present, so it blocks the required check and nothing
   # else. A value written at the usage is judged either way: being overridden by a later spread
   # doesn't make an invalid literal valid, it just makes it dead as well as wrong.
+  defp validate_page_layout(page_module, nil) do
+    if !Reflection.has_function?(page_module, :__layout_module__, 0) do
+      module_name = Reflection.module_name(page_module)
+
+      raise Hologram.CompileError,
+        message:
+          "page '#{module_name}' doesn't have a layout module specified (use the layout/1 macro to fix it)"
+    end
+  end
+
+  defp validate_page_layout(_page_module, _layout_module), do: :ok
+
+  # A route the module info PLT does not hold is either missing or built at runtime; only the second
+  # can be asked from the page.
+  defp validate_page_route(page_module, nil) do
+    if !Reflection.has_function?(page_module, :__route__, 0) do
+      module_name = Reflection.module_name(page_module)
+
+      raise Hologram.CompileError,
+        message:
+          "page '#{module_name}' doesn't have a route specified (use the route/1 macro to fix it)"
+    end
+
+    validate_page_route_type(page_module, page_module.__route__())
+  end
+
+  defp validate_page_route(page_module, route), do: validate_page_route_type(page_module, route)
+
+  defp validate_page_route_type(_page_module, route) when is_binary(route), do: :ok
+
+  defp validate_page_route_type(page_module, route) do
+    module_name = Reflection.module_name(page_module)
+
+    raise Hologram.CompileError,
+      message:
+        "page '#{module_name}' has a route that is not a string: #{inspect(route)} (pass a string to the route/1 macro to fix it)"
+  end
+
   defp validate_prop_usage({component_module, prop_entries, has_spread?}, module) do
     if Reflection.has_function?(component_module, :__props__, 0) do
       validate_required_props(component_module, prop_entries, has_spread?, module)

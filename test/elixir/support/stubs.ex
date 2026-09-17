@@ -13,6 +13,12 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
+  # The fixture pages the tests that start the page module resolver request.
+  @page_module_resolver_pages [
+    Hologram.Test.Fixtures.Router.Module1,
+    Hologram.Test.Fixtures.Router.PageModuleResolver.Module1
+  ]
+
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
 
@@ -71,6 +77,8 @@ defmodule Hologram.Test.Stubs do
 
   def setup_page_module_resolver(stub, start_link \\ true) do
     stub_with(PageModuleResolverMock, stub)
+
+    setup_page_module_resolver_dump(stub)
 
     :persistent_term.erase(stub.persistent_term_key())
 
@@ -158,6 +166,17 @@ defmodule Hologram.Test.Stubs do
     quote do
       defmodule alias!(unquote(random_module).PageModuleResolverStub) do
         @behaviour PageModuleResolver
+
+        def dump_path do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "page_module_resolver",
+            "dump_path_0",
+            "#{unquote(random_string())}.plt"
+          ])
+        end
 
         def persistent_term_key, do: unquote(random_atom())
       end
@@ -248,6 +267,24 @@ defmodule Hologram.Test.Stubs do
     |> PLT.put(:module_b, :module_b_digest)
     |> PLT.put(:module_c, :module_c_digest)
     |> PLT.dump(dump_path)
+
+    :ok
+  end
+
+  # The module info PLT entries the resolver reads: the fixture pages with their routes.
+  defp setup_page_module_resolver_dump(stub) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    items =
+      Enum.map(@page_module_resolver_pages, fn page_module ->
+        {page_module, %{page?: true, route: page_module.__route__()}}
+      end)
+
+    plt = PLT.start(items: items)
+    PLT.dump(plt, dump_path)
+    PLT.stop(plt)
 
     :ok
   end

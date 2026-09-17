@@ -144,6 +144,7 @@ defmodule Hologram.ReflectionTest do
                js_imports?: false,
                source_path: source_path,
                layout_module: nil,
+               route: nil,
                protocol_functions: nil,
                implementation_for: nil,
                implemented_protocol: nil
@@ -165,8 +166,12 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "page module" do
-      assert %{page?: true, component?: false, layout_module: Module4} =
-               beam_info(:code.which(Module2))
+      assert %{
+               page?: true,
+               component?: false,
+               layout_module: Module4,
+               route: "/hologram-test-fixtures-commons-reflection-module2"
+             } = beam_info(:code.which(Module2))
     end
 
     test "page module without a layout" do
@@ -175,7 +180,7 @@ defmodule Hologram.ReflectionTest do
           "defmodule PageWithoutLayout do def __is_hologram_page__, do: true end"
         )
 
-      assert %{page?: true, layout_module: nil} = beam_info(bytecode)
+      assert %{page?: true, layout_module: nil, route: nil} = beam_info(bytecode)
     end
 
     test "page module whose layout function computes its value" do
@@ -185,6 +190,42 @@ defmodule Hologram.ReflectionTest do
         )
 
       assert %{page?: true, layout_module: nil} = beam_info(bytecode)
+    end
+
+    test "page module whose route is not a string" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithAtomRoute do def __is_hologram_page__, do: true; def __route__, do: :admin end"
+        )
+
+      assert %{page?: true, route: :admin} = beam_info(bytecode)
+    end
+
+    test "page module whose route is interpolated from a module attribute" do
+      bytecode =
+        compile_with_debug_info(
+          ~S'defmodule PageWithInterpolatedRoute do def __is_hologram_page__, do: true; @prefix "admin"; def __route__, do: "/#{@prefix}/users" end'
+        )
+
+      assert %{page?: true, route: "/admin/users"} = beam_info(bytecode)
+    end
+
+    test "page module whose route comes from a module attribute" do
+      bytecode =
+        compile_with_debug_info(
+          ~S'defmodule PageWithAttributeRoute do def __is_hologram_page__, do: true; @path "/from-attribute"; def __route__, do: @path end'
+        )
+
+      assert %{page?: true, route: "/from-attribute"} = beam_info(bytecode)
+    end
+
+    test "page module whose route function computes its value" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithComputedRoute do def __is_hologram_page__, do: true; def __route__, do: Application.get_env(:hologram, :route) end"
+        )
+
+      assert %{page?: true, route: nil} = beam_info(bytecode)
     end
 
     test "component module" do

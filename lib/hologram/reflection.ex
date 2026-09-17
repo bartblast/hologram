@@ -17,6 +17,7 @@ defmodule Hologram.Reflection do
     :js_imports?,
     :source_path,
     :layout_module,
+    :route,
     :protocol_functions,
     :implementation_for,
     :implemented_protocol
@@ -65,10 +66,13 @@ defmodule Hologram.Reflection do
   performs after loading the module, read from the file instead. The source path is the `:source` of
   the BEAM's compile info, the value `module.module_info(:compile)[:source]` returns once the module is
   loaded, as a string (nil when the compile info has none).
-  A page's layout module, a protocol's functions, and the target and protocol of a protocol implementation
-  are read from the debug info, where `__layout_module__/0`, `__protocol__(:functions)`, `__impl__(:for)`
-  and `__impl__(:protocol)` return them as literals. They are nil for every other kind of module, and nil
-  when the function is missing or returns something that is not a literal.
+  A page's layout module and route, a protocol's functions, and the target and protocol of a protocol
+  implementation are read from the debug info, where `__layout_module__/0`, `__route__/0`,
+  `__protocol__(:functions)`, `__impl__(:for)` and `__impl__(:protocol)` return them as literals. They
+  are nil for every other kind of module, and nil when the function is missing or returns something
+  that is not a literal.
+  The route is recorded as written: a route built at runtime (with interpolation, say) is nil here, and
+  `Hologram.Compiler.validate_page_modules/2` checks that every page has a route and that it is a string.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
   source named `Elixir.Something.erl`). Accepts the BEAM file path or the BEAM binary; with a binary, mtime
   and size are nil.
@@ -90,6 +94,7 @@ defmodule Hologram.Reflection do
         js_imports?: false,
         source_path: "/path/to/lib/my_page.ex",
         layout_module: MyLayout,
+        route: "/my-page",
         protocol_functions: nil,
         implementation_for: nil,
         implemented_protocol: nil
@@ -113,6 +118,7 @@ defmodule Hologram.Reflection do
             js_imports?: boolean,
             source_path: String.t() | nil,
             layout_module: module | nil,
+            route: term,
             protocol_functions: list({atom, arity}) | nil,
             implementation_for: module | nil,
             implemented_protocol: module | nil
@@ -156,6 +162,7 @@ defmodule Hologram.Reflection do
         js_imports?: {:__js_imports__, 0} in exports,
         source_path: compile_info_source(compile_info),
         layout_module: literal_return(definitions, :__layout_module__, []),
+        route: literal_return(definitions, :__route__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
         implementation_for: literal_return(definitions, :__impl__, [:for]),
         implemented_protocol: literal_return(definitions, :__impl__, [:protocol])
@@ -990,17 +997,20 @@ defmodule Hologram.Reflection do
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
   end
 
-  # TODO: Remove together with beam_source/1 (see the removal note there), which
-  # is its only caller.
   # The value returned by the clause of the named function that takes exactly the given literal
   # arguments and has no guard, when that value is a literal; nil when there is no such clause or
-  # the clause computes its value.
+  # the clause computes its value. The body is the quoted form of the literal, and a binary built
+  # from literal parts (a string interpolated from a module attribute, say) is quoted as the
+  # expression that builds it, so the body is evaluated to get the value. Macro.quoted_literal?/1
+  # has ruled out calls and variables, so evaluating it runs nothing but the construction.
+  # sobelow_skip ["RCE.CodeModule"]
   defp literal_return(definitions, name, args) do
     with {_name_arity, _kind, _meta, clauses} <-
            List.keyfind(definitions, {name, length(args)}, 0),
          {_meta, _args, [], body} <- Enum.find(clauses, &match?({_meta, ^args, [], _body}, &1)),
          true <- Macro.quoted_literal?(body) do
-      body
+      {value, _binding} = Code.eval_quoted(body)
+      value
     else
       _no_literal -> nil
     end
@@ -1017,6 +1027,8 @@ defmodule Hologram.Reflection do
     end
   end
 
+  # TODO: Remove together with beam_source/1 (see the removal note there), which
+  # is its only caller.
   defp object_code(module) do
     case :code.get_object_code(module) do
       {^module, binary, _beam_path} -> binary
