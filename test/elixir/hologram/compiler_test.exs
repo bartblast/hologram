@@ -270,6 +270,36 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "app_versions_changed?/2" do
+    setup do
+      [diff: %{added_modules: [], removed_modules: [], edited_modules: []}]
+    end
+
+    test "an added module", %{diff: diff} do
+      assert app_versions_changed?(%{diff | added_modules: [Module1]}, :hologram)
+    end
+
+    test "an edited module of another application", %{diff: diff} do
+      assert app_versions_changed?(%{diff | edited_modules: [Enum]}, :hologram)
+    end
+
+    test "an edited module of no application", %{diff: diff} do
+      assert app_versions_changed?(%{diff | edited_modules: [:no_such_module]}, :hologram)
+    end
+
+    test "an empty diff", %{diff: diff} do
+      refute app_versions_changed?(diff, :hologram)
+    end
+
+    test "a removed module", %{diff: diff} do
+      assert app_versions_changed?(%{diff | removed_modules: [Module1]}, :hologram)
+    end
+
+    test "edited modules of the project's application only", %{diff: diff} do
+      refute app_versions_changed?(%{diff | edited_modules: [Compiler, Reflection]}, :hologram)
+    end
+  end
+
   describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
