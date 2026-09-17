@@ -131,6 +131,8 @@ defmodule Hologram.Compiler do
   Builds IR persistent lookup table (PLT) of all modules in the project.
   Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
   module info PLT's keys.
+  Pass `plt:` to fill an existing PLT instead of starting one; the compile task passes the PLT it keeps between
+  compiles.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
@@ -138,7 +140,7 @@ defmodule Hologram.Compiler do
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
   def build_ir_plt(opts \\ []) do
-    ir_plt = PLT.start(opts)
+    ir_plt = opts[:plt] || PLT.start(opts)
 
     modules = opts[:modules] || Reflection.list_elixir_modules()
 

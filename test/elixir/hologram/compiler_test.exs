@@ -641,6 +641,17 @@ defmodule Hologram.CompilerTest do
       assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module1)
       assert PLT.get(ir_plt, Hologram.Reflection) == :error
     end
+
+    test "fills the given PLT" do
+      plt = PLT.start()
+
+      assert build_ir_plt(plt: plt, modules: [Module1]) == plt
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module1}}} =
+               PLT.get(plt, Module1)
+
+      PLT.stop(plt)
+    end
   end
 
   describe "build_module_info_plt!/3" do
