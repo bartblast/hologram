@@ -210,15 +210,17 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Compiler.list_js_import_modules(ir_plt, new_module_info_plt)
         |> MapSet.new()
 
+      mfas_by_page =
+        Compiler.list_mfas_by_page(page_modules, call_graph_for_pages, component_modules)
+
       page_entry_files_info =
-        page_modules
+        mfas_by_page
         |> Compiler.create_page_entry_files(
-          call_graph_for_pages,
           ir_plt,
           encode_plt,
           async_mfas,
           runtime_js_binding_modules,
-          Keyword.put(entry_file_opts, :components, component_modules)
+          entry_file_opts
         )
         |> Enum.map(fn {entry_name, entry_file_path} ->
           {entry_name, entry_file_path, "page"}

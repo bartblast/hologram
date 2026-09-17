@@ -513,18 +513,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates page bundle entry file.
-  Pass `components:` in opts to use exactly those component modules instead of listing them; the compile task
-  passes the module info PLT's components.
-  Every page's reachable MFAs are listed first (`list_mfas_by_page/3`), their functions are encoded
-  into the encode PLT with one IR read per module (`encode_reachable_functions/5`), and then the
-  pages are rendered from that cache.
+  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/3`).
+  Knowing every page's MFAs before rendering any lets each module's IR be read once for all pages:
+  their functions are encoded into the encode PLT with one IR read per module
+  (`encode_reachable_functions/5`), and then the pages are rendered from that cache.
+  The module info PLT is taken from the `module_info_plt:` opt.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_7/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
   @spec create_page_entry_files(
-          list(module),
-          CallGraph.t(),
+          list({module, list(mfa)}),
           PLT.t(),
           PLT.t(),
           MapSet.t(mfa),
@@ -532,21 +530,14 @@ defmodule Hologram.Compiler do
           T.opts()
         ) :: list({module, T.file_path()})
   def create_page_entry_files(
-        page_modules,
-        call_graph,
+        mfas_by_page,
         ir_plt,
         encode_plt,
         async_mfas,
         runtime_js_binding_modules,
         opts
       ) do
-    module_info_plt = CallGraph.module_info_plt(call_graph)
-    component_modules = opts[:components] || Reflection.list_components()
-
-    # Knowing every page's MFAs before rendering any lets each module's IR be read once for all
-    # pages, rather than by every page that finds one of its functions missing, concurrently with
-    # the others.
-    mfas_by_page = list_mfas_by_page(page_modules, call_graph, component_modules)
+    module_info_plt = opts[:module_info_plt]
 
     mfas_by_page
     |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
