@@ -620,6 +620,26 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(opts)
     end
 
+    test "rebundles the runtime when its source map is gone", %{opts: opts} do
+      run(opts)
+
+      runtime = Cache.get().runtime
+      File.rm!(runtime.bundle_info.static_source_map_path)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      test_runtime_bundle(opts)
+    end
+
     test "a run into a fresh static dir rebuilds every bundle", %{opts: opts} do
       run(opts)
 

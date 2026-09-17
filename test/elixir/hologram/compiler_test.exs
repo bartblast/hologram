@@ -2350,10 +2350,11 @@ defmodule Hologram.CompilerTest do
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".map", "map")
 
       page_state = fn modules, path ->
         %{
-          bundle_info: %{static_bundle_path: path},
+          bundle_info: %{static_bundle_path: path, static_source_map_path: path <> ".map"},
           mfas: Enum.map(modules, &{&1, :fun_1, 0}),
           modules: MapSet.new(modules)
         }
@@ -2410,6 +2411,19 @@ defmodule Hologram.CompilerTest do
                {[Module1], []}
     end
 
+    test "a page whose kept source map is gone is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
+      File.rm!(bundle_path <> ".map")
+
+      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+               {[Module1], []}
+    end
+
     test "a page whose kept bundle lives in another static dir is rebuilt", %{
       bundle_path: bundle_path,
       page_state: page_state,
@@ -2460,13 +2474,17 @@ defmodule Hologram.CompilerTest do
       clean_dir(test_tmp_dir)
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".map", "map")
       static_dir = test_tmp_dir
 
       pages_plt = PLT.start()
 
       Enum.each(mfas_by_page, fn {page_module, mfas} ->
         PLT.put(pages_plt, page_module, %{
-          bundle_info: %{static_bundle_path: bundle_path},
+          bundle_info: %{
+            static_bundle_path: bundle_path,
+            static_source_map_path: bundle_path <> ".map"
+          },
           mfas: mfas,
           modules: MapSet.new(mfas, &elem(&1, 0))
         })
@@ -2559,7 +2577,10 @@ defmodule Hologram.CompilerTest do
       [{moved_page, moved_page_mfas} | _rest] = mfas_by_page
 
       PLT.put(pages_plt, moved_page, %{
-        bundle_info: %{static_bundle_path: Path.join(@tmp_dir, "page-kept.js")},
+        bundle_info: %{
+          static_bundle_path: Path.join(static_dir, "page-kept.js"),
+          static_source_map_path: Path.join(static_dir, "page-kept.js.map")
+        },
         mfas: tl(moved_page_mfas),
         modules: MapSet.new(moved_page_mfas, &elem(&1, 0))
       })

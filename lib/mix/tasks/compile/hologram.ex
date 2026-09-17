@@ -386,7 +386,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
-  # module of those MFAs was edited: its functions are in the bundle, so their code is too.
+  # module of those MFAs was edited: its functions are in the bundle, so their code is too. Both of
+  # its files are required, since nothing else in the compile would recreate a missing source map.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -398,7 +399,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     ) and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
-      File.exists?(kept_runtime.bundle_info.static_bundle_path)
+      File.exists?(kept_runtime.bundle_info.static_bundle_path) and
+      File.exists?(kept_runtime.bundle_info.static_source_map_path)
   end
 
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do

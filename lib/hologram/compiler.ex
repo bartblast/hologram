@@ -879,9 +879,9 @@ defmodule Hologram.Compiler do
   VM), when the modules of its kept MFAs meet `reaching_modules` (see
   `Hologram.Compiler.CallGraph.list_modules_reaching/2`: every way a page's bundle depends on a
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
-  module), when the bundle its kept state describes is no longer on disk (a build dir can lose
-  bundles to another build env sharing the static dir), or when that bundle belongs to a static dir
-  other than the given one.
+  module), when the bundle its kept state describes or that bundle's source map is no longer on disk
+  (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
+  belongs to a static dir other than the given one.
 
   Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
   the pages were given.
@@ -1315,7 +1315,8 @@ defmodule Hologram.Compiler do
          # The state names its bundle's path, so it describes one static dir: reusing it for another
          # would put a digest into that dir's page digest PLT whose file lives elsewhere.
          true <- Path.dirname(page_state.bundle_info.static_bundle_path) == static_dir,
-         true <- File.exists?(page_state.bundle_info.static_bundle_path) do
+         true <- File.exists?(page_state.bundle_info.static_bundle_path),
+         true <- File.exists?(page_state.bundle_info.static_source_map_path) do
       page_state
     else
       _fallback -> nil
