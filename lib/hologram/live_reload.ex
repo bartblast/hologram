@@ -20,6 +20,10 @@ defmodule Hologram.LiveReload do
   """
   @callback reload(String.t() | nil, any, keyword) :: :ok
 
+  # How long a request for a pending page waits for its bundle, in milliseconds. Past it the page is
+  # served with the bundle it had, and the reload event heals the tab once the page is built.
+  @await_page_timeout 60_000
+
   # in milliseconds
   @debounce_delay 1_000
 
@@ -51,6 +55,31 @@ defmodule Hologram.LiveReload do
   end
 
   @impl GenServer
+  def handle_call({:await_page, page_module}, from, state) do
+    if MapSet.member?(state.pending, page_module) do
+      # Kept in request order, which is the order they are built in. A handful of pages at most.
+      priority =
+        if page_module in state.priority,
+          do: state.priority,
+          # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
+          else: state.priority ++ [page_module]
+
+      waiters = Map.update(state.waiters, page_module, [from], &[from | &1])
+      new_state = %{state | priority: priority, waiters: waiters}
+
+      # With no pass running, the page is pending because the last one failed before building it:
+      # a new pass builds it, first. Its compile finds nothing to recompile but the pages left
+      # pending.
+      if new_state.pass do
+        {:noreply, new_state}
+      else
+        {:noreply, start_pass(nil, new_state)}
+      end
+    else
+      {:reply, :ok, state}
+    end
+  end
+
   def handle_call({:bundles_built, built}, _from, state) do
     pages = List.delete(built, :runtime)
 
@@ -72,10 +101,15 @@ defmodule Hologram.LiveReload do
       broadcast_reload(pages)
     end
 
+    {released_waiters, waiters} = Map.split(state.waiters, pages)
+    reply_to_waiters(released_waiters)
+
     new_state = %{
       state
       | pass: %{state.pass | registries_reloaded?: true},
-        pending: MapSet.difference(state.pending, MapSet.new(pages))
+        pending: MapSet.difference(state.pending, MapSet.new(pages)),
+        priority: state.priority -- pages,
+        waiters: waiters
     }
 
     {:reply, :ok, new_state}
@@ -163,6 +197,31 @@ defmodule Hologram.LiveReload do
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{pass: %{ref: ref}} = state) do
     Logger.error("Hologram: live reload pass failed: #{inspect(reason)}")
     {:noreply, finish_pass(state)}
+  end
+
+  @doc """
+  Waits until a live reload has built the given page's bundle, when it is pending, and has it built
+  next. Returns at once for a page that is not pending, and when live reload is not running. The
+  controller calls it before rendering a page in dev, so that a page the call graph could not tell
+  the scheduler about (a path computed at runtime, a redirect) is still served with its current
+  bundle.
+
+  A request that waits longer than a minute, or whose live reload process goes away, gets the
+  page's bundle as it is.
+  """
+  @spec await_page(module) :: :ok
+  def await_page(page_module) do
+    case GenServer.whereis(__MODULE__) do
+      nil ->
+        :ok
+
+      pid ->
+        try do
+          GenServer.call(pid, {:await_page, page_module}, @await_page_timeout)
+        catch
+          :exit, _reason -> :ok
+        end
+    end
   end
 
   @doc """
@@ -355,9 +414,13 @@ defmodule Hologram.LiveReload do
   end
 
   # A pass ended, whether it finished or failed: the pages requested during it are no longer
-  # pulled forward, and a save that arrived during it starts the next pass.
+  # pulled forward, and a save that arrived during it starts the next pass. A request still waiting
+  # is answered: its page is served with the bundle it had, and the reload event heals the tab once
+  # the page is built.
   defp finish_pass(state) do
-    new_state = %{state | pass: nil, priority: []}
+    reply_to_waiters(state.waiters)
+
+    new_state = %{state | pass: nil, priority: [], waiters: %{}}
 
     case new_state.superseded_by do
       nil -> new_state
@@ -403,6 +466,12 @@ defmodule Hologram.LiveReload do
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
+  end
+
+  defp reply_to_waiters(waiters) do
+    Enum.each(waiters, fn {_page_module, froms} ->
+      Enum.each(froms, &GenServer.reply(&1, :ok))
+    end)
   end
 
   # Determines whether to process a file event and returns the target file to reload

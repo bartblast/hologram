@@ -325,6 +325,14 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "await_page/1" do
+    test "returns at once when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.await_page(Page1) == :ok
+    end
+  end
+
   describe "live reload pass" do
     setup :set_mox_global
 
@@ -478,6 +486,128 @@ defmodule Hologram.LiveReloadTest do
       send(pid, {:debounced_reload, "second.ex"})
 
       assert_receive :second_started
+    end
+
+    test "a request for a page that is not pending gets its bundle at once", %{pid: _pid} do
+      assert LiveReload.await_page(Page1) == :ok
+    end
+
+    test "a request for a pending page waits for its batch, and pulls it to the front", %{
+      pid: pid
+    } do
+      # The open page keeps the first batch to itself, so the other two stay pending.
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page1)
+
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        first_remaining = MapSet.new([Page1, Page2, Page3])
+        first_batch = next_batch.(first_remaining, %{})
+        bundles_built.(first_batch)
+
+        send(test_pid, {:waiting, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        second_remaining = MapSet.new([Page2, Page3])
+        second_batch = next_batch.(second_remaining, %{})
+        send(test_pid, {:second_batch, second_batch})
+        bundles_built.(second_batch)
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:waiting, task_pid}
+
+      request = Task.async(fn -> LiveReload.await_page(Page3) end)
+
+      # The request is parked once the scheduler has handled it.
+      wait_until(fn -> Map.has_key?(:sys.get_state(pid).waiters, Page3) end)
+      assert Task.yield(request, 50) == nil
+
+      send(task_pid, :continue)
+
+      assert_receive {:second_batch, [Page3]}
+      assert Task.await(request) == :ok
+    end
+
+    test "a request for a page a failed pass left pending starts a pass that builds it", %{
+      pid: pid
+    } do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page1)
+
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, opts ->
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          remaining = MapSet.new([Page1, Page2])
+          next_batch.(remaining, %{})
+
+          raise "expected test error"
+
+        nil, _endpoint, opts ->
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+          remaining = MapSet.new([Page1, Page2])
+          batch = next_batch.(remaining, %{})
+          send(test_pid, {:requested_pass_batch, batch})
+          bundles_built.(batch)
+
+          :ok
+      end)
+
+      capture_log(fn ->
+        send(pid, {:debounced_reload, "first.ex"})
+        :sys.get_state(pid)
+        wait_until(fn -> :sys.get_state(pid).pass == nil end)
+      end)
+
+      assert :sys.get_state(pid).pending == MapSet.new([Page1, Page2])
+
+      assert LiveReload.await_page(Page2) == :ok
+      assert_receive {:requested_pass_batch, [Page2]}
+    end
+
+    test "a waiting request is answered when the pass ends without its page", %{pid: pid} do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page1)
+
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        remaining = MapSet.new([Page1, Page2])
+        next_batch.(remaining, %{})
+
+        send(test_pid, {:waiting, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:waiting, task_pid}
+
+      request = Task.async(fn -> LiveReload.await_page(Page2) end)
+      wait_until(fn -> Map.has_key?(:sys.get_state(pid).waiters, Page2) end)
+
+      send(task_pid, :continue)
+
+      assert Task.await(request) == :ok
+      assert :sys.get_state(pid).waiters == %{}
     end
   end
 end
