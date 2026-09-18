@@ -129,6 +129,20 @@ defmodule Hologram.Commons.TaskUtilsTest do
       assert :counters.get(counter, 1) <= 2
     end
 
+    test "a task killed outright is an exit in a caller that traps exits" do
+      Process.flag(:trap_exit, true)
+
+      reason =
+        catch_exit(
+          map_concurrently([1, 2], fn
+            1 -> Process.exit(self(), :kill)
+            2 -> :ok
+          end)
+        )
+
+      assert reason == :killed
+    end
+
     test "returns results in the enumerable's order when tasks finish out of order" do
       result =
         map_concurrently(

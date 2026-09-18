@@ -31,6 +31,11 @@ defmodule Hologram.Commons.TaskUtils do
 
       {:ok, {_index, {:failed, _kind, _reason, _stacktrace} = failure}}, _results ->
         {:halt, failure}
+
+      # Reached only by a caller that traps exits, for a task that died without returning (killed).
+      # A caller that does not trap exits dies with such a task through the link before this runs.
+      {:exit, reason}, _results ->
+        {:halt, {:exited, reason}}
     end)
     |> sort_or_reraise()
   end
@@ -40,6 +45,8 @@ defmodule Hologram.Commons.TaskUtils do
   catch
     kind, reason -> {:failed, kind, reason, __STACKTRACE__}
   end
+
+  defp sort_or_reraise({:exited, reason}), do: exit(reason)
 
   defp sort_or_reraise({:failed, kind, reason, stacktrace}) do
     :erlang.raise(kind, reason, stacktrace)
