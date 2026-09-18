@@ -1008,8 +1008,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
-      # in place, bundles, and only then raises, which is the shape of a compile that dies after
-      # changing what the cache keeps.
+      # in place and only then raises, which is the shape of a compile that dies after changing
+      # what the cache keeps.
       blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
       File.rm!(blocked_dump_path)
       File.mkdir!(blocked_dump_path)
@@ -1023,6 +1023,108 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert Cache.get().module_infos == load_module_info_items(opts)
       test_call_graph(opts)
+    end
+
+    test "a run that fails while bundling leaves the next one warm, with its pages pending", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos,
+        pages_plt: pages_plt
+      } = Cache.get()
+
+      pages_reaching_module_2 =
+        pages_plt
+        |> PLT.get_all()
+        |> Enum.filter(fn {_page_module, page_state} ->
+          MapSet.member?(page_state.modules, Module2)
+        end)
+        |> MapSet.new(fn {page_module, _page_state} -> page_module end)
+
+      report_compiled(Module2)
+      edited_info = %{module_infos[Module2] | digest: "edited"}
+
+      Cache.put_module_infos(
+        %{module_infos | Module2 => edited_info},
+        dumped_at,
+        editable_modules
+      )
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      assert Cache.get().module_infos == load_module_info_items(opts)
+      assert Cache.get().pending_pages == pages_reaching_module_2
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) ==
+                 {:call_count, MapSet.size(pages_reaching_module_2)}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert MapSet.size(pages_reaching_module_2) > 0
+      assert Cache.get().pending_pages == MapSet.new()
+      test_page_bundles(opts)
+    end
+
+    test "a run that fails while bundling leaves the next one rebuilding the runtime", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos,
+        runtime: runtime
+      } = Cache.get()
+
+      # Only a beam a save can rewrite is rechecked, so the fake edit must be of such a module.
+      runtime_module =
+        Enum.find_value(runtime.mfas, fn {module, _function, _arity} ->
+          if MapSet.member?(editable_modules, module) and Map.has_key?(module_infos, module),
+            do: module
+        end)
+
+      report_compiled(runtime_module)
+      edited_info = %{module_infos[runtime_module] | digest: "edited"}
+
+      Cache.put_module_infos(
+        %{module_infos | runtime_module => edited_info},
+        dumped_at,
+        editable_modules
+      )
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      mfa = {Compiler, :create_runtime_entry_file, 6}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().runtime.mfas == runtime.mfas
+      test_runtime_bundle(opts)
     end
 
     test "a run whose build dir has no call graph dump rebuilds the graph", %{opts: opts} do

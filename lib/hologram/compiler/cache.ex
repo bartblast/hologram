@@ -192,9 +192,10 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Keeps what the runtime bundle was built from: its MFAs, the JS import modules it registers (which
-  every page bundle leaves out), the application versions it carries and the info of its bundle.
+  every page bundle leaves out), the application versions it carries and the info of its bundle. nil
+  forgets it, so that the next compile rebuilds the runtime bundle.
   """
-  @spec put_runtime(runtime_state) :: :ok
+  @spec put_runtime(runtime_state | nil) :: :ok
   def put_runtime(runtime_state) do
     GenServer.call(server(), {:put_runtime, runtime_state})
   end

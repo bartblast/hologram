@@ -28,14 +28,69 @@ defmodule Hologram.Commons.TaskUtilsTest do
       assert :counters.get(counter, 2) > 1
     end
 
-    test "a task's raise takes the caller down" do
-      # The caller is linked to its tasks, so the raise reaches it as an exit, not as a raise.
-      {pid, ref} = spawn_monitor(fn -> map_concurrently([1], fn _elem -> raise "boom" end) end)
+    test "a task's raise is raised in the caller" do
+      assert_raise RuntimeError, "boom", fn ->
+        map_concurrently([1, 2], fn
+          1 -> :ok
+          2 -> raise "boom"
+        end)
+      end
+    end
 
-      # The default 100 ms is not enough on a cold CI VM, where the first Task.async_stream
-      # call still has modules to load. This is a deadline, not a wait.
-      assert_receive {:DOWN, ^ref, :process, ^pid, {%RuntimeError{message: "boom"}, _stacktrace}},
-                     1_000
+    test "a task's raise keeps the task's stacktrace" do
+      stacktrace =
+        try do
+          map_concurrently([1], fn _elem -> raise "boom" end)
+        rescue
+          RuntimeError -> __STACKTRACE__
+        end
+
+      assert Enum.any?(stacktrace, fn {module, _function, _arity, _location} ->
+               module == __MODULE__
+             end)
+    end
+
+    test "a task's throw is thrown in the caller" do
+      assert catch_throw(map_concurrently([1], fn _elem -> throw(:boom) end)) == :boom
+    end
+
+    test "a task's exit is an exit in the caller" do
+      assert catch_exit(map_concurrently([1], fn _elem -> exit(:boom) end)) == :boom
+    end
+
+    test "the caller's after clause runs when a task fails" do
+      test_pid = self()
+
+      try do
+        map_concurrently([1], fn _elem -> raise "boom" end)
+      rescue
+        RuntimeError -> :ok
+      after
+        send(test_pid, :after_ran)
+      end
+
+      assert_received :after_ran
+    end
+
+    test "the tasks after a failure are not all run" do
+      counter = :counters.new(1, [:atomics])
+
+      assert_raise RuntimeError, fn ->
+        map_concurrently(
+          1..20,
+          fn
+            1 ->
+              raise "boom"
+
+            _elem ->
+              :counters.add(counter, 1, 1)
+              Process.sleep(50)
+          end,
+          max_concurrency: 2
+        )
+      end
+
+      assert :counters.get(counter, 1) < 19
     end
   end
 end

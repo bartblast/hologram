@@ -300,6 +300,25 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       entry_files_info = runtime_entry_files_info ++ page_entry_files_info
 
+      CallGraph.dump(call_graph, call_graph_dump_path)
+      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
+
+      # The dump time is kept with the infos, since the reuse guard compares them against it (see
+      # Hologram.Compiler.Cache). After everything that patches the IR PLT and the call graph, so
+      # that a compile that fails there leaves the before picture of the last finished one, against
+      # which the partly patched IR PLT and call graph are patched again. Before the bundling, so
+      # that a compile that fails there leaves this picture, and the next compile rebuilds the pages
+      # it left pending.
+      module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
+      module_infos = PLT.get_all(new_module_info_plt)
+      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
+      Cache.put_app_versions(app_versions)
+
+      # The kept runtime state describes the bundle this compile replaces. A compile that fails
+      # during the bundling leaves the next one diffing against the infos just kept, which show no
+      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
+      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
+
       old_build_static_artifacts =
         opts[:static_dir]
         |> File.ls!()
@@ -335,20 +354,9 @@ defmodule Mix.Tasks.Compile.Hologram do
         Compiler.build_page_digest_plt(bundles_info, Keyword.put(opts, :supervisor, sup))
 
       PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-      CallGraph.dump(call_graph, call_graph_dump_path)
-      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
 
-      # The dump time is kept with the infos, since the reuse guard compares them against it (see
-      # Hologram.Compiler.Cache). Last, so that a compile that fails anywhere before leaves the
-      # before picture of the last finished one, against which the partly patched IR PLT and call
-      # graph are patched again.
-      module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-      module_infos = PLT.get_all(new_module_info_plt)
-      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
-      Cache.put_app_versions(app_versions)
-
-      # After the dumps as well: what is kept describes files that are on disk and a page digest PLT
-      # that names them.
+      # After the page digest dump: what is kept describes files that are on disk and a page digest
+      # PLT that names them.
       keep_built_bundles(
         built_bundles_info,
         mfas_by_page,
