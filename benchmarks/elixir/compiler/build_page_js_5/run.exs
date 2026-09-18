@@ -24,18 +24,7 @@ Benchee.run(
 
     graph = CallGraph.get_graph(call_graph_for_pages)
     module_info_plt = CallGraph.module_info_plt(call_graph)
-    templatables = Reflection.list_pages() ++ Reflection.list_components()
-
-    server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(graph, templatables, module_info_plt)
-
-    mfas =
-      CallGraph.list_page_mfas(
-        graph,
-        Page1,
-        server_callback_analysis_by_templatable,
-        module_info_plt
-      )
+    mfas = CallGraph.list_page_mfas(graph, Page1, PLT.start(), module_info_plt)
 
     runtime_js_binding_modules =
       runtime_mfas

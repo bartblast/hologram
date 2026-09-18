@@ -307,22 +307,12 @@ defmodule Hologram.CompilerTest do
         |> CallGraph.clone()
         |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
-      templatables = Reflection.list_pages() ++ Reflection.list_components()
-
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          graph,
-          templatables,
-          CallGraph.module_info_plt(call_graph)
-        )
-
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
       [
+        analyses: PLT.start(),
         encode_plt: PLT.start(),
-        graph: graph,
-        module_info_plt: CallGraph.module_info_plt(call_graph),
-        server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+        graph: CallGraph.get_graph(call_graph_without_runtime_mfas),
+        module_info_plt: CallGraph.module_info_plt(call_graph)
       ]
     end
 
@@ -331,13 +321,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module24,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -364,13 +354,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module25,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -397,13 +387,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module11,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -425,13 +415,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module19,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -462,13 +452,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module21,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -500,13 +490,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module23,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -539,13 +529,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module23,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -586,13 +576,13 @@ defmodule Hologram.CompilerTest do
            graph: graph,
            ir_plt: ir_plt,
            module_info_plt: module_info_plt,
-           server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+           analyses: analyses
          } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module23,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -2240,23 +2230,19 @@ defmodule Hologram.CompilerTest do
       graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
       module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
 
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          graph,
+      analyses_items =
+        graph
+        |> CallGraph.server_callback_analysis_by_templatable(
           page_modules ++ component_modules,
           module_info_plt
         )
+        |> Map.to_list()
+
+      analyses = PLT.start(items: analyses_items)
 
       expected =
         Enum.map(page_modules, fn page_module ->
-          mfas =
-            CallGraph.list_page_mfas(
-              graph,
-              page_module,
-              server_callback_analysis_by_templatable,
-              module_info_plt
-            )
-
+          mfas = CallGraph.list_page_mfas(graph, page_module, analyses, module_info_plt)
           {page_module, mfas}
         end)
 

@@ -938,37 +938,37 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
   Server dispatch types, reflection MFAs, and server-referenced components of
-  the page's templatables are looked up in the given precomputed server
-  callback analysis. The graph is taken as it is, so that callers running many pages at once
+  the page's templatables come from their server callback analyses (see
+  server_callback_analysis_by_templatable/3), which are read from `analyses`, a PLT the caller keeps
+  for as long as it lists pages, and computed and put there when missing. Pages listed against the
+  same PLT, at once or in rounds, compute each templatable's analysis once; tasks listing pages at
+  once may compute a missing analysis twice and put the same value twice, which is harmless.
+  The graph is taken as it is, so that callers running many pages at once
   can share one graph (see with_shared_graph/2) instead of each copying it out of the call graph.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
-  @spec list_page_mfas(
-          Digraph.t(),
-          module,
-          %{module => server_callback_analysis},
-          PLT.t() | nil
-        ) :: [mfa]
-  def list_page_mfas(graph, page_module, server_callback_analysis_by_templatable, module_info_plt) do
+  @spec list_page_mfas(Digraph.t(), module, PLT.t(), PLT.t() | nil) :: [mfa]
+  def list_page_mfas(graph, page_module, analyses, module_info_plt) do
     entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt)
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
     initial_templatables = [page_module | extract_uniq_components(initial_mfas, module_info_plt)]
 
-    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+    {expanded_state, templatables} =
       expand_reachable_state_with_server_referenced_components(
         graph,
         initial_state,
         initial_templatables,
-        server_callback_analysis_by_templatable,
+        analyses,
         module_info_plt
       )
 
     server_types =
       Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
+        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
+        MapSet.union(acc, analysis.dispatch_types)
       end)
 
     final_state =
@@ -978,8 +978,9 @@ defmodule Hologram.Compiler.CallGraph do
     |> finalize_reachable_mfas(final_state, module_info_plt)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(
+      graph,
       page_module,
-      server_callback_analysis_by_templatable,
+      analyses,
       module_info_plt
     )
     |> Enum.uniq()
@@ -1034,21 +1035,28 @@ defmodule Hologram.Compiler.CallGraph do
 
     # The same server-referenced component expansion as in list_page_mfas/4, so chains
     # like a broadcast-referenced component whose own server callbacks reference
-    # further components end up in the runtime bundle too. Analyses are computed on
-    # demand from an empty map, since the runtime bundle has no precomputed analysis.
-    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+    # further components end up in the runtime bundle too. The runtime lists against a PLT
+    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
+    # taken on the graph that still holds the runtime's functions, so they must not mix
+    # with the pages'.
+    analyses = PLT.start()
+
+    {expanded_state, templatables} =
       expand_reachable_state_with_server_referenced_components(
         graph,
         initial_state,
         initial_templatables,
-        %{},
+        analyses,
         module_info_plt
       )
 
     server_types =
       Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
+        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
+        MapSet.union(acc, analysis.dispatch_types)
       end)
+
+    PLT.stop(analyses)
 
     final_state =
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
@@ -1511,15 +1519,16 @@ defmodule Hologram.Compiler.CallGraph do
   # that are reachable from server inits (init/3) of the components used by the page.
   defp add_reflection_mfas_reachable_from_server_inits(
          page_mfas,
+         graph,
          page_module,
-         server_callback_analysis_by_templatable,
+         analyses,
          module_info_plt
        ) do
     templatables = [page_module | extract_uniq_components(page_mfas, module_info_plt)]
 
     added_mfas =
       Enum.flat_map(templatables, fn templatable ->
-        server_callback_analysis_by_templatable[templatable].reflection_mfas
+        server_callback_analysis(graph, templatable, analyses, module_info_plt).reflection_mfas
       end)
 
     page_mfas ++ added_mfas
@@ -1574,29 +1583,20 @@ defmodule Hologram.Compiler.CallGraph do
          graph,
          state,
          templatables,
-         server_callback_analysis_by_templatable,
+         analyses,
          module_info_plt
        ) do
-    # The page path passes a complete analysis map, but the runtime-bundle path
-    # discovers templatables lazily, so analyses missing from the map are computed
-    # on demand.
-    missing_templatables =
-      Enum.reject(templatables, &Map.has_key?(server_callback_analysis_by_templatable, &1))
-
-    server_callback_analysis_by_templatable =
-      Map.merge(
-        server_callback_analysis_by_templatable,
-        server_callback_analysis_by_templatable(graph, missing_templatables, module_info_plt)
-      )
-
+    # The analyses are read from the PLT, and computed into it as templatables turn up.
     new_components =
       templatables
-      |> Enum.flat_map(&server_callback_analysis_by_templatable[&1].server_referenced_components)
+      |> Enum.flat_map(fn templatable ->
+        server_callback_analysis(graph, templatable, analyses, module_info_plt).server_referenced_components
+      end)
       |> Enum.uniq()
       |> Kernel.--(templatables)
 
     if new_components == [] do
-      {state, templatables, server_callback_analysis_by_templatable}
+      {state, templatables}
     else
       new_state = expand_reachable_state(graph, state, new_components, module_info_plt)
 
@@ -1612,7 +1612,7 @@ defmodule Hologram.Compiler.CallGraph do
         graph,
         new_state,
         new_templatables,
-        server_callback_analysis_by_templatable,
+        analyses,
         module_info_plt
       )
     end
@@ -1942,6 +1942,24 @@ defmodule Hologram.Compiler.CallGraph do
       nil when is_nil(default) -> :error
       nil -> {:ok, default}
       _fallback -> :error
+    end
+  end
+
+  # A templatable's server callback analysis, from the PLT when it holds one, else computed and
+  # put there for the pages listed after this one.
+  defp server_callback_analysis(graph, templatable, analyses, module_info_plt) do
+    case PLT.get(analyses, templatable) do
+      {:ok, analysis} ->
+        analysis
+
+      :error ->
+        analysis =
+          graph
+          |> server_callback_analysis_by_templatable([templatable], module_info_plt)
+          |> Map.fetch!(templatable)
+
+        PLT.put(analyses, templatable, analysis)
+        analysis
     end
   end
 

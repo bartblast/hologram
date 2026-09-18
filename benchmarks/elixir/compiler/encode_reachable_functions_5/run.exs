@@ -24,20 +24,12 @@ Benchee.run(
 
     graph = CallGraph.get_graph(call_graph_for_pages)
     module_info_plt = CallGraph.module_info_plt(call_graph)
-    templatables = page_modules ++ Reflection.list_components()
-
-    server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(graph, templatables, module_info_plt)
+    analyses = PLT.start()
 
     # The MFAs of every page, repeats included, the way the page entry files hand them over.
     mfas =
       Enum.flat_map(page_modules, fn page_module ->
-        CallGraph.list_page_mfas(
-          graph,
-          page_module,
-          server_callback_analysis_by_templatable,
-          module_info_plt
-        )
+        CallGraph.list_page_mfas(graph, page_module, analyses, module_info_plt)
       end)
 
     {mfas, ir_plt, PLT.start(), async_mfas, module_info_plt}

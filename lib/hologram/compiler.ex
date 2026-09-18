@@ -829,25 +829,25 @@ defmodule Hologram.Compiler do
     # The tasks get the reader, which captures only the shared graph's key: a closure that
     # captured the graph itself would copy it into every task it starts.
     CallGraph.with_shared_graph(call_graph, fn read_graph ->
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          read_graph.(),
+      analyses_items =
+        read_graph.()
+        |> CallGraph.server_callback_analysis_by_templatable(
           page_modules ++ component_modules,
           module_info_plt
         )
+        |> Map.to_list()
 
-      # Listing a page's MFAs is a cheap graph walk.
-      TaskUtils.map_concurrently(page_modules, fn page_module ->
-        mfas =
-          CallGraph.list_page_mfas(
-            read_graph.(),
-            page_module,
-            server_callback_analysis_by_templatable,
-            module_info_plt
-          )
+      analyses = PLT.start(items: analyses_items)
 
-        {page_module, mfas}
-      end)
+      try do
+        # Listing a page's MFAs is a cheap graph walk.
+        TaskUtils.map_concurrently(page_modules, fn page_module ->
+          mfas = CallGraph.list_page_mfas(read_graph.(), page_module, analyses, module_info_plt)
+          {page_module, mfas}
+        end)
+      after
+        PLT.stop(analyses)
+      end
     end)
   end
 

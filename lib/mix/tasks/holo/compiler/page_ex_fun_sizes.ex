@@ -35,21 +35,10 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
 
     call_graph = build_call_graph(ir_plt)
     graph = CallGraph.get_graph(call_graph)
-    templatables = [page_module | Reflection.list_components()]
-
-    server_callback_analysis_by_templatable =
-      CallGraph.server_callback_analysis_by_templatable(
-        graph,
-        templatables,
-        CallGraph.module_info_plt(call_graph)
-      )
+    analyses = PLT.start()
 
     graph
-    |> CallGraph.list_page_mfas(
-      page_module,
-      server_callback_analysis_by_templatable,
-      CallGraph.module_info_plt(call_graph)
-    )
+    |> CallGraph.list_page_mfas(page_module, analyses, CallGraph.module_info_plt(call_graph))
     |> filter_elixir_mfas()
     |> calculate_encoded_fun_sizes(aggregated_funs)
     |> sort_by_size_and_mfa()
