@@ -17,7 +17,8 @@ describe("LiveReload", () => {
   // would otherwise leave the document replaced for every suite that follows.
   afterEach(() => {
     globalThis.document = originalDocument;
-    LiveReload.stalePageModules = new Set();
+    globalThis.Hologram.config.liveReload = false;
+    LiveReload.pageBundleDigests = new Map();
     sinon.restore();
   });
 
@@ -53,35 +54,47 @@ describe("LiveReload", () => {
 
       sinon.assert.notCalled(reloadStub);
     });
+  });
 
-    it("marks the rebuilt pages stale when the page shown was not rebuilt", () => {
-      sinon.stub(LiveReload, "reload");
+  describe("holdsOldPageBundle()", () => {
+    const pageModule = Type.atom("Elixir.MyApp.Page1");
 
-      LiveReload.handleReload(["Elixir.MyApp.Page2"], currentPageModule);
-      LiveReload.handleReload(["Elixir.MyApp.Page3"], currentPageModule);
+    beforeEach(() => {
+      globalThis.Hologram.config.liveReload = true;
+    });
 
-      assert.deepStrictEqual(
-        LiveReload.stalePageModules,
-        new Set(["Elixir.MyApp.Page2", "Elixir.MyApp.Page3"]),
-      );
+    it("a page this tab never loaded", () => {
+      assert.isFalse(LiveReload.holdsOldPageBundle(pageModule, "digest-1"));
+    });
+
+    it("a page loaded under the digest the server serves", () => {
+      LiveReload.recordPageBundle(pageModule, "digest-1");
+
+      assert.isFalse(LiveReload.holdsOldPageBundle(pageModule, "digest-1"));
+    });
+
+    it("a page loaded under another digest", () => {
+      LiveReload.recordPageBundle(pageModule, "digest-1");
+
+      assert.isTrue(LiveReload.holdsOldPageBundle(pageModule, "digest-2"));
+    });
+
+    it("a page loaded under another digest, where live reload does not run", () => {
+      globalThis.Hologram.config.liveReload = false;
+      LiveReload.recordPageBundle(pageModule, "digest-1");
+
+      assert.isFalse(LiveReload.holdsOldPageBundle(pageModule, "digest-2"));
     });
   });
 
-  describe("isStale()", () => {
-    it("a page no reload has rebuilt", () => {
-      assert.isFalse(LiveReload.isStale(Type.atom("Elixir.MyApp.Page2")));
-    });
+  it("recordPageBundle()", () => {
+    LiveReload.recordPageBundle(Type.atom("Elixir.MyApp.Page1"), "digest-1");
+    LiveReload.recordPageBundle(Type.atom("Elixir.MyApp.Page1"), "digest-2");
 
-    it("a page a reload has rebuilt", () => {
-      sinon.stub(LiveReload, "reload");
-
-      LiveReload.handleReload(
-        ["Elixir.MyApp.Page2"],
-        Type.atom("Elixir.MyApp.Page1"),
-      );
-
-      assert.isTrue(LiveReload.isStale(Type.atom("Elixir.MyApp.Page2")));
-    });
+    assert.deepStrictEqual(
+      LiveReload.pageBundleDigests,
+      new Map([["Elixir.MyApp.Page1", "digest-2"]]),
+    );
   });
 
   it("reload()", () => {

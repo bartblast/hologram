@@ -1088,7 +1088,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               "globalThis.Hologram.config = {errorOverlay: true, stacktraces: true};"
+               "globalThis.Hologram.config = {errorOverlay: true, liveReload: true, stacktraces: true};"
              )
     end
 
@@ -1104,7 +1104,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: false};"
+               "globalThis.Hologram.config = {errorOverlay: false, liveReload: true, stacktraces: false};"
              )
     end
 
@@ -1189,8 +1189,30 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: true};"
+               "globalThis.Hologram.config = {errorOverlay: false, liveReload: true, stacktraces: true};"
              )
+    end
+
+    test "turns live reload off in the client config outside the dev and test envs", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      previous_env = System.get_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        if previous_env do
+          System.put_env("HOLOGRAM_ENV", previous_env)
+        else
+          System.delete_env("HOLOGRAM_ENV")
+        end
+      end)
+
+      System.put_env("HOLOGRAM_ENV", "prod")
+
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+
+      assert js =~ ~r/globalThis\.Hologram\.config = \{errorOverlay: \w+, liveReload: false, /
     end
 
     test "no JS imports", %{encode_plt: encode_plt, ir_plt: ir_plt, runtime_mfas: runtime_mfas} do

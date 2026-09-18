@@ -689,7 +689,11 @@ export function defineRuntimeGlobals() {
   // In the browser the runtime bundle bootstrap sets the config object before
   // any dispatch can run - mirror that invariant here. Frame tracking defaults
   // to off, matching how the suite ran before the shadow call stack existed.
-  globalThis.Hologram.config ??= {errorOverlay: false, stacktraces: false};
+  globalThis.Hologram.config ??= {
+    errorOverlay: false,
+    liveReload: false,
+    stacktraces: false,
+  };
 
   defineGlobalModule("Erlang", Erlang);
   defineGlobalModule("Erlang_Binary", Erlang_Binary);

@@ -5,11 +5,13 @@ import ErrorOverlay from "./error_overlay.mjs";
 const OVERLAY_ID = "hologram-live-reload-error-overlay";
 
 // The client half of live reload: reloading the page once the server has
-// recompiled, and reporting a compilation error until it does.
+// recompiled, reporting a compilation error until it does, and telling when a
+// page's code this tab holds from an earlier visit has been rebuilt since.
 export default class LiveReload {
-  // The pages a live reload rebuilt since this document loaded, other than the one it
-  // shows. A bundle of one that this tab holds from an earlier visit is out of date.
-  static stalePageModules = new Set();
+  // The digest of the bundle this tab loaded for each page, by the page module's
+  // value. A bundle is named by the digest of its content, so a page the server
+  // now serves under another digest has code this tab holds in an older version.
+  static pageBundleDigests = new Map();
 
   // The pages arrive as the server names them ("Elixir.MyApp.HomePage"), which is the
   // value of the boxed page module atom. The tab reloads when its own page is among them,
@@ -17,16 +19,24 @@ export default class LiveReload {
   static handleReload(pages, currentPageModule) {
     if (pages === "all" || pages.includes(currentPageModule.value)) {
       $.reload();
-      return;
-    }
-
-    for (const page of pages) {
-      $.stalePageModules.add(page);
     }
   }
 
-  static isStale(pageModule) {
-    return $.stalePageModules.has(pageModule.value);
+  // Whether this tab holds the page's code under a digest other than the given one, the
+  // digest the server serves the page under now. Answered only where live reload runs:
+  // elsewhere a digest can change only with a deploy, which is not this module's concern.
+  static holdsOldPageBundle(pageModule, pageDigest) {
+    if (!globalThis.Hologram.config.liveReload) {
+      return false;
+    }
+
+    const heldDigest = $.pageBundleDigests.get(pageModule.value);
+
+    return heldDigest !== undefined && heldDigest !== pageDigest;
+  }
+
+  static recordPageBundle(pageModule, pageDigest) {
+    $.pageBundleDigests.set(pageModule.value, pageDigest);
   }
 
   static reload() {

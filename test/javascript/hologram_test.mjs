@@ -22,6 +22,7 @@ import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import LiveReload from "../../assets/js/live_reload.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1472,6 +1473,55 @@ describe("Hologram", () => {
 
       assert.match(thrownError?.message ?? "", /Too many redirects/);
       assert.isAtMost(fetchPageStub.callCount, 10);
+    });
+
+    describe("a page whose code the tab holds from an earlier visit", () => {
+      const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+
+      let requestAnimationFrameSpy;
+
+      beforeEach(() => {
+        globalThis.Hologram.config.liveReload = true;
+
+        // The frame's work is the in-app navigation. Not running it keeps these tests about
+        // whether it was scheduled at all.
+        requestAnimationFrameSpy = sinon.spy();
+        window.requestAnimationFrame = requestAnimationFrameSpy;
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config.liveReload = false;
+        LiveReload.pageBundleDigests = new Map();
+        delete window.requestAnimationFrame;
+      });
+
+      it("is handed to the browser when the server has rebuilt it since", async () => {
+        LiveReload.recordPageBundle(module7, "old");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        sinon.assert.notCalled(requestAnimationFrameSpy);
+      });
+
+      it("is shown in the app when its code is current", async () => {
+        LiveReload.recordPageBundle(module7, "same");
+
+        await Hologram.loadNewPage("/target", payloadFor("same"));
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.calledOnce(requestAnimationFrameSpy);
+      });
+
+      it("is shown in the app where live reload does not run", async () => {
+        globalThis.Hologram.config.liveReload = false;
+        LiveReload.recordPageBundle(module7, "old");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.calledOnce(requestAnimationFrameSpy);
+      });
     });
 
     // The page the server described is patched in as soon as it arrives, so it is on screen a

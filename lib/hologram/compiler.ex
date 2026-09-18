@@ -1676,8 +1676,14 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # liveReload lets the client load a page afresh when it holds that page's code in an older
+  # version (see live_reload.mjs). Live reload runs in dev only, and test is included so that the
+  # feature tests can drive it, as the SSE stream's live reload subscription does.
   defp render_client_config do
-    ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
+    live_reload? = Hologram.env() in [:dev, :test]
+
+    "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
+      "stacktraces: #{Hologram.client_stacktraces?()}}"
   end
 
   # Functions are listed by module, then function name, then arity. The module order is the

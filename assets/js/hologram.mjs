@@ -18,6 +18,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
+import LiveReload from "./live_reload.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -434,6 +435,18 @@ export default class Hologram {
   static async loadNewPage(pagePath, payload, hopCount = 0) {
     if (payload.type === "redirect") {
       return Hologram.#followRedirect(payload, hopCount);
+    }
+
+    const pageModule = Interpreter.evaluateJavaScriptExpression(
+      payload.pageModule,
+    );
+
+    // The tab holds this page's code from an earlier visit, and a live reload has rebuilt it since.
+    // Running the held copy would show the page as it was before the edit, so the browser loads
+    // the page afresh instead.
+    if (LiveReload.holdsOldPageBundle(pageModule, payload.pageDigest)) {
+      Hologram.navigateBrowserTo(pagePath);
+      return;
     }
 
     await $.#savePageSnapshot();
@@ -1092,7 +1105,14 @@ export default class Hologram {
 
     await Client.fetchPageBundlePath(
       Hologram.#pageModule,
-      (resp) => $.#loadPageBundle(resp, epoch),
+      (resp) => {
+        LiveReload.recordPageBundle(
+          Hologram.#pageModule,
+          $.#pageDigestFromBundlePath(resp),
+        );
+
+        $.#loadPageBundle(resp, epoch);
+      },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
         $.#deadEpochs.add(epoch);
@@ -1223,13 +1243,18 @@ export default class Hologram {
   // A loaded document has no payload, so it carries the same six values as an inline script that
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
-    const mountData =
-      $.#mountData ?? globalThis.Hologram.pageMountData(Hologram.#deps);
+    // A loaded document's bundle digest comes with the other values its boot script sets.
+    const mountData = $.#mountData ?? {
+      ...globalThis.Hologram.pageMountData(Hologram.#deps),
+      pageDigest: globalThis.Hologram.initialPageDigest,
+    };
 
     $.#mountData = null;
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
+
+    LiveReload.recordPageBundle(mountData.pageModule, mountData.pageDigest);
 
     ComponentRegistry.populate(mountData.componentRegistry);
 
@@ -1361,6 +1386,11 @@ export default class Hologram {
     return `/hologram/page-${pageDigest}.js`;
   }
 
+  // The inverse of #pageBundlePath.
+  static #pageDigestFromBundlePath(pageBundlePath) {
+    return pageBundlePath.slice("/hologram/page-".length, -".js".length);
+  }
+
   static #pageSnapshotKey(historyId) {
     return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
   }
@@ -1453,6 +1483,7 @@ export default class Hologram {
       componentRegistry: Interpreter.evaluateJavaScriptExpression(
         payload.componentRegistry,
       ),
+      pageDigest: payload.pageDigest,
       pageModule: pageModule,
       pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
       selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
