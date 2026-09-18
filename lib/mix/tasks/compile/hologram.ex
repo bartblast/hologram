@@ -9,7 +9,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   pages before others (live reload, for the pages open in the browser) orders with two options:
 
     * `:next_batch` - called with the pages still to build (a `MapSet`) and the page links (a map
-      from each page to the `MapSet` of pages it links to), returns the pages to build now, a
+      from each page to the `MapSet` of pages it links to, as the last compile that built the page
+      found them; a page no compile has built links to no page), returns the pages to build now, a
       non-empty list of some of them, or `:stop` to leave the rest pending for the next compile.
       The runtime bundle, when it is rebuilt, is built with the first batch, or alone when the
       first answer is `:stop`. Defaults to every page in one batch.
@@ -242,6 +243,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       # rebuilt by the next one, whether or not its own edit reaches them.
       Cache.put_pending_pages(pages_to_rebuild)
 
+      old_page_states = list_old_page_states(pages_to_rebuild, cache.pages_plt)
+      page_states = kept_pages ++ old_page_states
+
       kept_mfas_by_page =
         Enum.map(kept_pages, fn {page_module, page_state} -> {page_module, page_state.mfas} end)
 
@@ -345,15 +349,17 @@ defmodule Mix.Tasks.Compile.Hologram do
       # never when the compile stops before the page's batch.
       bundles =
         %{
-          pages:
-            initial_page_bundles_info(
-              kept_pages,
-              mfas_by_page,
-              cache.pages_plt,
-              opts[:static_dir]
-            ),
+          pages: initial_page_bundles_info(kept_pages, old_page_states, opts[:static_dir]),
           runtime: if(runtime_entry_files_info == [], do: cache.runtime.bundle_info)
         }
+
+      # The links a page's last built state found. The scheduler reads the open pages' links only,
+      # and an open page's links move only by the edit at hand; a page no compile built links to no
+      # page.
+      links =
+        page_states
+        |> Enum.map(fn {page_module, page_state} -> {page_module, page_state.modules} end)
+        |> Compiler.list_page_links(page_modules)
 
       batch_context = %{
         app_versions: app_versions,
@@ -361,7 +367,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         ir_plt: ir_plt,
-        links: Compiler.list_page_links(mfas_by_page ++ kept_mfas_by_page, page_modules),
+        links: links,
         mfas_by_page: Map.new(mfas_by_page),
         old_runtime_bundle_info: cache.runtime && cache.runtime.bundle_info,
         opts: opts,
@@ -519,18 +525,17 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The bundle of each kept page, and the bundle each page still to rebuild had, if it had one that
   # can still be served: one whose file is gone, or that belongs to another static dir, would have
   # the page digest PLT name a bundle this static dir does not have.
-  defp initial_page_bundles_info(kept_pages, mfas_by_page, pages_plt, static_dir) do
+  defp initial_page_bundles_info(kept_pages, old_page_states, static_dir) do
     kept_page_bundles_info =
       Map.new(kept_pages, fn {page_module, page_state} ->
         {page_module, page_state.bundle_info}
       end)
 
-    Enum.reduce(mfas_by_page, kept_page_bundles_info, fn {page_module, _mfas}, acc ->
-      with {:ok, page_state} <- PLT.get(pages_plt, page_module),
-           true <- Compiler.usable_bundle?(page_state.bundle_info, static_dir) do
+    Enum.reduce(old_page_states, kept_page_bundles_info, fn {page_module, page_state}, acc ->
+      if Compiler.usable_bundle?(page_state.bundle_info, static_dir) do
         Map.put(acc, page_module, page_state.bundle_info)
       else
-        _unusable -> acc
+        acc
       end
     end)
   end
@@ -647,6 +652,17 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp language_server_build?(opts) do
     path_components = Path.split(opts[:build_dir])
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
+  end
+
+  # The states of the pages to rebuild that an earlier compile built. Each still serves its bundle
+  # until its new one is written, and its links order the batches.
+  defp list_old_page_states(page_modules, pages_plt) do
+    Enum.flat_map(page_modules, fn page_module ->
+      case PLT.get(pages_plt, page_module) do
+        {:ok, page_state} -> [{page_module, page_state}]
+        :error -> []
+      end
+    end)
   end
 
   # Returns the cache, the module info PLT to diff against, and the dump time the module info reuse

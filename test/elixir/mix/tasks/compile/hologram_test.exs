@@ -971,6 +971,43 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute MapSet.member?(links[@linking_page], @linking_page)
     end
 
+    test "a page to rebuild links to the pages its kept state names", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([@linking_page])
+
+      {record_links, recorded_links} = record_calls()
+
+      next_batch = fn remaining_pages, links ->
+        record_links.(links)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.put(opts, :next_batch, next_batch))
+
+      assert [links] = recorded_links.()
+      assert MapSet.member?(links[@linking_page], @linked_page)
+    end
+
+    test "a page no compile has built links to no page", %{opts: opts} do
+      run(opts)
+
+      Cache.reset()
+
+      {record_links, recorded_links} = record_calls()
+
+      next_batch = fn remaining_pages, links ->
+        record_links.(links)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.put(opts, :next_batch, next_batch))
+
+      assert [links] = recorded_links.()
+      assert map_size(links) == @num_pages
+      assert Enum.all?(links, fn {_page_module, linked_pages} -> linked_pages == MapSet.new() end)
+    end
+
     test "an empty batch is refused", %{opts: opts} do
       run(opts)
 

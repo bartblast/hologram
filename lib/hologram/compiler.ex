@@ -857,25 +857,27 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists, for each page, the pages whose module is among the modules of the page's reachable MFAs,
-  the page itself excluded. A link or a path helper in a template is a call with the page module as
-  an argument, which reaches the page's module vertex and through it `__params__/0` and
-  `__route__/0` only, so the modules of a page's MFAs name exactly the pages it links to, one hop
-  away.
+  Lists, for each given page, the pages among the modules it reaches, itself excluded. A link or a
+  path helper in a template is a call with the page module as an argument, which reaches the page's
+  module vertex and through it `__params__/0` and `__route__/0` only, so the modules of a page's
+  reachable MFAs, given as the `MapSet` a page state keeps, name exactly the pages it links to, one
+  hop away. A page whose modules are not given, one no compile has built, links to no page.
   """
-  @spec list_page_links([{module, [mfa]}], [module]) :: %{module => MapSet.t(module)}
-  def list_page_links(mfas_by_page, page_modules) do
+  @spec list_page_links([{module, MapSet.t(module)}], [module]) :: %{module => MapSet.t(module)}
+  def list_page_links(modules_by_page, page_modules) do
     page_set = MapSet.new(page_modules)
 
-    Map.new(mfas_by_page, fn {page_module, mfas} ->
-      linked_pages =
-        mfas
-        |> MapSet.new(fn {module, _function, _arity} -> module end)
-        |> MapSet.intersection(page_set)
-        |> MapSet.delete(page_module)
+    links =
+      Map.new(modules_by_page, fn {page_module, modules} ->
+        linked_pages =
+          modules
+          |> MapSet.intersection(page_set)
+          |> MapSet.delete(page_module)
 
-      {page_module, linked_pages}
-    end)
+        {page_module, linked_pages}
+      end)
+
+    Map.new(page_modules, &{&1, Map.get(links, &1, MapSet.new())})
   end
 
   @doc """

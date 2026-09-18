@@ -2374,36 +2374,43 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "list_page_links/2" do
-    test "a page links to the pages whose functions it reaches" do
-      mfas_by_page = [
-        {Module1, [{Module1, :template, 0}, {Module2, :__route__, 0}, {Module3, :__params__, 0}]}
-      ]
+    test "a page links to the pages whose modules it reaches" do
+      modules_by_page = [{Module1, MapSet.new([Module1, Module2, Module3])}]
 
-      assert list_page_links(mfas_by_page, [Module1, Module2, Module3]) == %{
-               Module1 => MapSet.new([Module2, Module3])
+      assert list_page_links(modules_by_page, [Module1, Module2, Module3]) == %{
+               Module1 => MapSet.new([Module2, Module3]),
+               Module2 => MapSet.new(),
+               Module3 => MapSet.new()
              }
     end
 
     test "a page does not link to itself" do
-      mfas_by_page = [{Module1, [{Module1, :template, 0}, {Module1, :__route__, 0}]}]
+      modules_by_page = [{Module1, MapSet.new([Module1])}]
 
-      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+      assert list_page_links(modules_by_page, [Module1]) == %{Module1 => MapSet.new()}
     end
 
     test "a reached module that is not a page is not a link" do
-      mfas_by_page = [{Module1, [{Module2, :fun_1, 0}]}]
+      modules_by_page = [{Module1, MapSet.new([Module2])}]
 
-      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+      assert list_page_links(modules_by_page, [Module1]) == %{Module1 => MapSet.new()}
     end
 
-    test "a page with no MFAs links to no page" do
-      assert list_page_links([{Module1, []}], [Module1, Module2]) == %{Module1 => MapSet.new()}
+    test "a page with no modules links to no page" do
+      assert list_page_links([{Module1, MapSet.new()}], [Module1, Module2]) == %{
+               Module1 => MapSet.new(),
+               Module2 => MapSet.new()
+             }
+    end
+
+    test "a page whose modules are not given links to no page" do
+      assert list_page_links([], [Module1]) == %{Module1 => MapSet.new()}
     end
 
     test "every given page gets an entry" do
-      mfas_by_page = [{Module1, [{Module2, :__route__, 0}]}, {Module2, []}]
+      modules_by_page = [{Module1, MapSet.new([Module2])}]
 
-      assert list_page_links(mfas_by_page, [Module1, Module2]) == %{
+      assert list_page_links(modules_by_page, [Module1, Module2]) == %{
                Module1 => MapSet.new([Module2]),
                Module2 => MapSet.new()
              }
