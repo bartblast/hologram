@@ -456,6 +456,11 @@ export default class Hologram {
     });
   }
 
+  // The module of the page this tab shows, as the last mount or restore set it.
+  static pageModule() {
+    return Hologram.#pageModule;
+  }
+
   // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
   static queueActionsFromServerInits() {

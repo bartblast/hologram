@@ -12,6 +12,7 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import LiveReload from "../../assets/js/live_reload.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
@@ -631,6 +632,23 @@ describe("Sse", () => {
     });
   });
 
+  describe("compilation_error event", () => {
+    it("shows the overlay with the parsed lines", async () => {
+      stubHandshakeResponse();
+      const showStub = sinon.stub(LiveReload, "showErrorOverlay");
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.compilation_error({
+        data: '[[{"text":"boom","tone":"banner"}]]',
+      });
+
+      sinon.assert.calledOnceWithExactly(showStub, [
+        [{text: "boom", tone: "banner"}],
+      ]);
+    });
+  });
+
   describe("add_sub_receipts event", () => {
     it("inserts new entries and leaves non-matching entries intact", async () => {
       const adds = Type.list([receiptA]);
@@ -770,6 +788,42 @@ describe("Sse", () => {
         SubscriptionReceiptRegistry.entries.get(encodedBindingA),
         staleReceiptA,
       );
+    });
+  });
+
+  describe("reload event", () => {
+    it("hands the parsed pages and the page shown to live reload", async () => {
+      stubHandshakeResponse();
+
+      const pageModule = Type.atom("Elixir.MyApp.Page1");
+      sinon.stub(Hologram, "pageModule").returns(pageModule);
+      const handleReloadStub = sinon.stub(LiveReload, "handleReload");
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.reload({data: '["Elixir.MyApp.Page1"]'});
+
+      sinon.assert.calledOnceWithExactly(
+        handleReloadStub,
+        ["Elixir.MyApp.Page1"],
+        pageModule,
+      );
+    });
+
+    it("hands over all when every tab must reload", async () => {
+      stubHandshakeResponse();
+
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.Page1"));
+      const handleReloadStub = sinon.stub(LiveReload, "handleReload");
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.reload({data: '"all"'});
+
+      sinon.assert.calledOnce(handleReloadStub);
+      assert.strictEqual(handleReloadStub.firstCall.args[0], "all");
     });
   });
 });

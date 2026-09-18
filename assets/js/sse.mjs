@@ -5,6 +5,7 @@ import ComponentRegistry from "./component_registry.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
+import LiveReload from "./live_reload.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -135,6 +136,12 @@ export default class Sse {
         }
       });
 
+      // Live reload events carry plain JSON rather than encoded terms: the server builds
+      // them outside any page, from a compiler diagnostic and a list of page names.
+      $.eventSource.addEventListener("compilation_error", (event) => {
+        LiveReload.showErrorOverlay(JSON.parse(event.data));
+      });
+
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {
         const keys = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.purge(keys);
@@ -143,6 +150,10 @@ export default class Sse {
       $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
         const refreshed = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
+      });
+
+      $.eventSource.addEventListener("reload", (event) => {
+        LiveReload.handleReload(JSON.parse(event.data), Hologram.pageModule());
       });
 
       $.eventSource.onopen = () => {
