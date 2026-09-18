@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.CacheTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Tracer
 
   setup do
     stop_cache()
@@ -57,6 +58,17 @@ defmodule Hologram.Compiler.CacheTest do
       get()
 
       assert is_pid(Process.whereis(Cache))
+    end
+
+    test "registers the tracer, with its table owned by the cache" do
+      tracers = Code.get_compiler_option(:tracers)
+      on_exit(fn -> Code.put_compiler_option(:tracers, tracers) end)
+      Code.put_compiler_option(:tracers, tracers -- [Tracer])
+
+      get()
+
+      assert Tracer in Code.get_compiler_option(:tracers)
+      assert :ets.info(Tracer, :owner) == Process.whereis(Cache)
     end
 
     test "returns empty kept state at first" do
@@ -195,5 +207,6 @@ defmodule Hologram.Compiler.CacheTest do
     refute Process.alive?(call_graph.pid)
     refute Process.alive?(ir_plt.pid)
     refute Process.alive?(pages_plt.pid)
+    assert :ets.whereis(Tracer) == :undefined
   end
 end

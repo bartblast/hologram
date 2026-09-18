@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.TracerTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Compiler.Tracer
 
+  alias Hologram.Compiler.Cache
   alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
 
@@ -15,12 +16,22 @@ defmodule Hologram.Compiler.TracerTest do
     tracers = Code.get_compiler_option(:tracers)
     on_exit(fn -> Code.put_compiler_option(:tracers, tracers) end)
 
-    # Owned by the test process, so the table dies with each test.
-    register()
+    # A fresh cache registers the tracer with a fresh table, so no test sees another's records.
+    stop_cache()
+    Cache.get()
+    on_exit(&stop_cache/0)
 
     clean_dir(@test_dir)
 
     :ok
+  end
+
+  defp report(module, bytecode) do
+    trace({:on_module, bytecode, :none}, %Macro.Env{module: module})
+  end
+
+  defp stop_cache do
+    if Process.whereis(Cache), do: GenServer.stop(Cache)
   end
 
   # take/1 compares bytes only, so a beam here is any binary.
@@ -30,12 +41,13 @@ defmodule Hologram.Compiler.TracerTest do
     String.to_charlist(beam_path)
   end
 
-  defp report(module, bytecode) do
-    trace({:on_module, bytecode, :none}, %Macro.Env{module: module})
-  end
-
   describe "register/0" do
     test "creates the table" do
+      GenServer.stop(Cache)
+      assert :ets.whereis(Tracer) == :undefined
+
+      register()
+
       assert :ets.whereis(Tracer) != :undefined
     end
 
@@ -117,7 +129,7 @@ defmodule Hologram.Compiler.TracerTest do
     end
 
     test "returns the empty set when the table does not exist" do
-      :ets.delete(Tracer)
+      GenServer.stop(Cache)
 
       assert take(%{}) == MapSet.new()
     end
@@ -144,7 +156,7 @@ defmodule Hologram.Compiler.TracerTest do
     end
 
     test "returns ok when the table does not exist" do
-      :ets.delete(Tracer)
+      GenServer.stop(Cache)
 
       assert report(@module_1, "bytecode") == :ok
     end

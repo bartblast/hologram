@@ -11,12 +11,15 @@ defmodule Hologram.Compiler.Cache do
   # runtime were built from is kept too, so that a compile rebuilds only the pages an edit
   # reaches. Started on first use and not linked to the caller, so it outlives the compile that
   # started it. A compile that finds no module infos here starts from the build dir, so nothing
-  # depends on the cache for correctness.
+  # depends on the cache for correctness. The cache also registers Hologram.Compiler.Tracer when
+  # it starts, and owns its table: the modules the tracer records are only of use to a compile that
+  # has the kept state to apply them to, so the two live and die together.
 
   use GenServer
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Tracer
 
   @type page_state :: %{mfas: [mfa], modules: MapSet.t(module), bundle_info: map}
 
@@ -113,6 +116,9 @@ defmodule Hologram.Compiler.Cache do
 
   @impl GenServer
   def init(nil) do
+    # Before the first compile in the VM scans, so that every module compiled after it is recorded.
+    Tracer.register()
+
     {:ok, initial_state()}
   end
 
