@@ -427,6 +427,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "a run with no changes reads no module against the whole code path", %{opts: opts} do
+      run(opts)
+
+      full_scan_mfa = {Compiler, :build_module_info_plt!, 3}
+      warm_scan_mfa = {Compiler, :update_module_info_plt!, 5}
+
+      Enum.each([full_scan_mfa, warm_scan_mfa], &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(full_scan_mfa, :call_count) == {:call_count, 0}
+        assert :erlang.trace_info(warm_scan_mfa, :call_count) == {:call_count, 1}
+      after
+        Enum.each(
+          [full_scan_mfa, warm_scan_mfa],
+          &:erlang.trace_pattern(&1, false, [:call_count])
+        )
+      end
+    end
+
     test "a removed module loses its IR entry and its call graph vertices", %{opts: opts} do
       run(opts)
 
@@ -446,12 +467,62 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       module_infos
       |> Map.put(:removed_module, %{digest: "removed"})
-      |> Cache.put_module_infos(dumped_at, editable_modules)
+      |> Cache.put_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
 
       run(opts)
 
       assert PLT.get(ir_plt, :removed_module) == :error
       refute CallGraph.has_vertex?(call_graph, removed_vertex)
+    end
+
+    test "copies the kept entries of the modules outside the editable applications", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        Cache.get()
+
+      # A library's beam is not rewritten while the VM runs, so its kept entry is taken as it is:
+      # the mtime faked here would make a check of the beam read it, and no page is rebuilt for it.
+      kept_info = %{module_infos[Enum] | digest: "kept", mtime: 0}
+      Cache.put_module_infos(%{module_infos | Enum => kept_info}, dumped_at, editable_modules)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().module_infos[Enum] == kept_info
+    end
+
+    test "picks up a module added to an editable application", %{opts: opts} do
+      run(opts)
+
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        ir_plt: ir_plt,
+        module_infos: module_infos
+      } = Cache.get()
+
+      # The state of a compile that ran before the module existed.
+      PLT.delete(ir_plt, Module1)
+
+      module_infos
+      |> Map.delete(Module1)
+      |> Cache.put_module_infos(dumped_at, editable_modules)
+
+      run(opts)
+
+      assert Cache.get().module_infos[Module1] == module_infos[Module1]
+      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
     test "a run into a fresh build dir dumps the whole call graph", %{opts: opts} do
@@ -619,9 +690,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
         runtime: runtime
       } = Cache.get()
 
+      # Only a beam a save can rewrite is rechecked, so the fake edit must be of such a module.
       runtime_module =
         Enum.find_value(runtime.mfas, fn {module, _function, _arity} ->
-          if Map.has_key?(module_infos, module), do: module
+          if MapSet.member?(editable_modules, module) and Map.has_key?(module_infos, module),
+            do: module
         end)
 
       edited_info = %{module_infos[runtime_module] | digest: "edited", mtime: 0}
@@ -737,9 +810,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = Cache.get()
 
+      # Only a beam a save can rewrite is rechecked, and of those the consolidated protocols belong
+      # to other applications.
       other_app_module =
         Enum.find_value(module_infos, fn {module, _info} ->
-          if Application.get_application(module) not in [:hologram, nil], do: module
+          if MapSet.member?(editable_modules, module) and
+               Application.get_application(module) not in [:hologram, nil],
+             do: module
         end)
 
       edited_info = %{module_infos[other_app_module] | digest: "edited", mtime: 0}
