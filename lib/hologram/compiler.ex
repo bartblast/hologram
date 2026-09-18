@@ -788,15 +788,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists the modules whose IR the entry files read: the modules of the runtime MFAs, of every page's MFAs and
+  Lists the modules whose IR the entry files rendered from the given MFAs read: the modules of those MFAs and
   of the manually ported MFAs (the runtime entry file renders their clause heads), each once. Only the modules
   the module info PLT holds are listed, since the IR PLT is built for those alone (an Erlang module has no IR).
   """
-  @spec list_ir_modules(list(mfa), list({module, list(mfa)}), PLT.t()) :: list(module)
-  def list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt) do
-    page_mfas = Enum.flat_map(mfas_by_page, fn {_page_module, mfas} -> mfas end)
-
-    [runtime_mfas, page_mfas, CallGraph.manually_ported_elixir_mfas()]
+  @spec list_ir_modules([mfa], PLT.t()) :: [module]
+  def list_ir_modules(mfas, module_info_plt) do
+    [mfas, CallGraph.manually_ported_elixir_mfas()]
     |> Stream.concat()
     |> Stream.map(fn {module, _function, _arity} -> module end)
     |> Stream.uniq()
@@ -815,6 +813,29 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&(Reflection.js_imports?(&1, module_info_plt) and &1.__js_imports__() != []))
+  end
+
+  @doc """
+  Lists the modules whose IR and function encodings a compile keeps: the modules the runtime entry file
+  reads (see `list_ir_modules/2`), the modules each page reaches, and the templatables (whose templates the
+  prop usage validation reads), each once. A page's modules are given as the `MapSet` of the modules of its
+  reachable MFAs, as a page state keeps it. Only the modules the module info PLT holds are listed, since
+  the IR PLT is built for those alone.
+  """
+  @spec list_kept_modules([mfa], [{module, MapSet.t(module)}], [module], PLT.t()) :: [module]
+  def list_kept_modules(runtime_mfas, modules_by_page, templatable_modules, module_info_plt) do
+    page_reached_modules =
+      modules_by_page
+      |> Enum.reduce(MapSet.new(), fn {_page_module, modules}, acc ->
+        MapSet.union(acc, modules)
+      end)
+      |> Enum.filter(&PLT.member?(module_info_plt, &1))
+
+    runtime_mfas
+    |> list_ir_modules(module_info_plt)
+    |> Enum.concat(page_reached_modules)
+    |> Enum.concat(templatable_modules)
+    |> Enum.uniq()
   end
 
   @doc """

@@ -989,7 +989,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert MapSet.member?(links[@linking_page], @linked_page)
     end
 
-    test "a page no compile has built links to no page", %{opts: opts} do
+    test "a page no compile has built links to the pages its listing names", %{opts: opts} do
       run(opts)
 
       Cache.reset()
@@ -1005,7 +1005,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert [links] = recorded_links.()
       assert map_size(links) == @num_pages
-      assert Enum.all?(links, fn {_page_module, linked_pages} -> linked_pages == MapSet.new() end)
+      assert MapSet.member?(links[@linking_page], @linked_page)
+    end
+
+    test "a run into an empty build dir builds each module's IR once", %{opts: opts} do
+      Cache.reset()
+      fresh_build_dir_opts = Keyword.put(opts, :build_dir, setup_empty_build_dir())
+
+      Code.ensure_loaded!(IR)
+      count = count_calls({IR, :for_module, 2}, fn -> run(fresh_build_dir_opts) end)
+
+      assert count <= map_size(load_module_info_items(fresh_build_dir_opts))
+      test_page_bundles(fresh_build_dir_opts)
     end
 
     test "an empty batch is refused", %{opts: opts} do

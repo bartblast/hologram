@@ -10,10 +10,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     * `:next_batch` - called with the pages still to build (a `MapSet`) and the page links (a map
       from each page to the `MapSet` of pages it links to, as the last compile that built the page
-      found them; a page no compile has built links to no page), returns the pages to build now, a
-      non-empty list of some of them, or `:stop` to leave the rest pending for the next compile.
-      The runtime bundle, when it is rebuilt, is built with the first batch, or alone when the
-      first answer is `:stop`. Defaults to every page in one batch.
+      found them, or as this compile finds them for a page no compile has built), returns the
+      pages to build now, a non-empty list of some of them, or `:stop` to leave the rest pending
+      for the next compile. The runtime bundle, when it is rebuilt, is built with the first batch,
+      or alone when the first answer is `:stop`. Defaults to every page in one batch.
 
     * `:bundles_built` - called after each batch is on disk and named by the page digest PLT dump,
       with the page modules built, preceded by `:runtime` when the runtime bundle was built.
@@ -244,24 +244,52 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_pending_pages(pages_to_rebuild)
 
       old_page_states = list_old_page_states(pages_to_rebuild, cache.pages_plt)
-      page_states = kept_pages ++ old_page_states
 
-      kept_mfas_by_page =
-        Enum.map(kept_pages, fn {page_module, page_state} -> {page_module, page_state.mfas} end)
+      recorded_pages =
+        MapSet.new(old_page_states, fn {page_module, _page_state} -> page_module end)
 
-      # Every entry file reads its IR from here on, so the IR it reads is built in one pass first,
-      # and whatever an earlier compile kept that no entry file reads any more is dropped. A kept
-      # page renders no entry file this time, but its IR stays, so that a later compile that does
-      # rebuild it finds the IR it reads.
-      ir_modules =
-        Compiler.list_ir_modules(
+      # A page to rebuild that no compile has built has no state to take its modules from, which is
+      # every page on a build into an empty build dir or on the first compile in a VM, so its own
+      # MFA list stands in for one.
+      unrecorded_mfas_by_page =
+        Enum.reject(mfas_by_page, fn {page_module, _mfas} ->
+          MapSet.member?(recorded_pages, page_module)
+        end)
+
+      # The modules each page reaches: as its last built state recorded them, or as this compile
+      # lists them for a page that has no state.
+      modules_by_page =
+        Enum.map(kept_pages ++ old_page_states, fn {page_module, page_state} ->
+          {page_module, page_state.modules}
+        end) ++
+          Enum.map(unrecorded_mfas_by_page, fn {page_module, mfas} ->
+            {page_module, page_state_modules(mfas)}
+          end)
+
+      # What an earlier compile kept that no page, the runtime or a templatable reaches any more is
+      # dropped first, encodings included. A page rebuilt reads mostly what its old state names, and
+      # the IR it reads for the first time is built right after. The IR of a page with no state is
+      # kept too: on a build into an empty build dir the diff has just built the IR of every module,
+      # which pruning it would only have the pages build again. A kept page renders no entry file
+      # this time, but its IR stays, so that a later compile that does rebuild it finds the IR it
+      # reads.
+      kept_modules =
+        Compiler.list_kept_modules(
           runtime_mfas,
-          mfas_by_page ++ kept_mfas_by_page,
+          modules_by_page,
+          templatable_modules,
           new_module_info_plt
         )
 
+      Compiler.prune_ir_plt(ir_plt, kept_modules)
+
+      ir_modules =
+        mfas_by_page
+        |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
+        |> Enum.concat(runtime_mfas)
+        |> Compiler.list_ir_modules(new_module_info_plt)
+
       Compiler.build_missing_ir!(ir_plt, ir_modules)
-      Compiler.prune_ir_plt(ir_plt, templatable_modules ++ ir_modules)
 
       # Filled by the entry file renderers as they go, and kept between compiles (see
       # Hologram.Compiler.Cache): each reachable function's JavaScript is produced once and read back
@@ -276,7 +304,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       encode_plt =
         cache.encode_plt
         |> patch_encode_plt(cache.encoding_inputs, encoding_inputs, module_digests_diff)
-        |> Compiler.prune_encode_plt(templatable_modules ++ ir_modules)
+        |> Compiler.prune_encode_plt(kept_modules)
 
       # The stack trace metadata of every module, which the bundles look up instead of asking the
       # VM about each module once per bundle. Built only when client stack traces are on, since the
@@ -353,13 +381,10 @@ defmodule Mix.Tasks.Compile.Hologram do
           runtime: if(runtime_entry_files_info == [], do: cache.runtime.bundle_info)
         }
 
-      # The links a page's last built state found. The scheduler reads the open pages' links only,
-      # and an open page's links move only by the edit at hand; a page no compile built links to no
-      # page.
-      links =
-        page_states
-        |> Enum.map(fn {page_module, page_state} -> {page_module, page_state.modules} end)
-        |> Compiler.list_page_links(page_modules)
+      # The links a page's last built state found, or its own listing found for a page with no
+      # state. The scheduler reads the open pages' links only, and an open page's links move only
+      # by the edit at hand.
+      links = Compiler.list_page_links(modules_by_page, page_modules)
 
       batch_context = %{
         app_versions: app_versions,
@@ -655,7 +680,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The states of the pages to rebuild that an earlier compile built. Each still serves its bundle
-  # until its new one is written, and its links order the batches.
+  # until its new one is written, and its modules say what IR to keep and which pages it links to.
   defp list_old_page_states(page_modules, pages_plt) do
     Enum.flat_map(page_modules, fn page_module ->
       case PLT.get(pages_plt, page_module) do

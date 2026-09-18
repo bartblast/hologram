@@ -125,6 +125,18 @@ defmodule Hologram.CompilerTest do
     [assets_dir: assets_dir, build_dir: build_dir]
   end
 
+  # A module info PLT holding Module1, Module2, Module3 and Hologram.JS, the module of the manually
+  # ported MFAs, so that the modules outside it are the ones a lister leaves out.
+  defp small_module_info_plt do
+    info = %{digest: 1, mtime: 1, size: 1}
+
+    PLT.start()
+    |> PLT.put(Module1, info)
+    |> PLT.put(Module2, info)
+    |> PLT.put(Module3, info)
+    |> PLT.put(Hologram.JS, info)
+  end
+
   setup_all do
     ir_plt = build_ir_plt()
     call_graph = build_call_graph(ir_plt)
@@ -2128,31 +2140,21 @@ defmodule Hologram.CompilerTest do
     assert list_components(plt) == [Module11, Module3]
   end
 
-  describe "list_ir_modules/3" do
+  describe "list_ir_modules/2" do
     setup do
-      info = %{digest: 1, mtime: 1, size: 1}
-
-      module_info_plt =
-        PLT.start()
-        |> PLT.put(Module1, info)
-        |> PLT.put(Module2, info)
-        |> PLT.put(Module3, info)
-        |> PLT.put(Hologram.JS, info)
-
-      [module_info_plt: module_info_plt]
+      [module_info_plt: small_module_info_plt()]
     end
 
-    test "lists the modules of the runtime and page MFAs once", %{
-      module_info_plt: module_info_plt
-    } do
-      runtime_mfas = [{Module1, :fun_1, 0}, {Module1, :fun_2, 0}]
-
-      mfas_by_page = [
-        {Module11, [{Module1, :fun_3, 0}, {Module2, :fun_1, 0}]},
-        {Module12, [{Module2, :fun_2, 1}]}
+    test "lists the modules of the MFAs once", %{module_info_plt: module_info_plt} do
+      mfas = [
+        {Module1, :fun_1, 0},
+        {Module1, :fun_2, 0},
+        {Module1, :fun_3, 0},
+        {Module2, :fun_1, 0},
+        {Module2, :fun_2, 1}
       ]
 
-      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+      modules = list_ir_modules(mfas, module_info_plt)
 
       assert Enum.count(modules, &(&1 == Module1)) == 1
       assert Enum.count(modules, &(&1 == Module2)) == 1
@@ -2160,16 +2162,15 @@ defmodule Hologram.CompilerTest do
     end
 
     test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
-      assert list_ir_modules([], [], module_info_plt) == [Hologram.JS]
+      assert list_ir_modules([], module_info_plt) == [Hologram.JS]
     end
 
     test "leaves out modules the module info PLT doesn't hold", %{
       module_info_plt: module_info_plt
     } do
-      runtime_mfas = [{Module1, :fun_1, 0}, {:lists, :map, 2}]
-      mfas_by_page = [{Module11, [{Module4, :fun_1, 0}]}]
+      mfas = [{Module1, :fun_1, 0}, {:lists, :map, 2}, {Module4, :fun_1, 0}]
 
-      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+      modules = list_ir_modules(mfas, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
     end
@@ -2213,6 +2214,58 @@ defmodule Hologram.CompilerTest do
 
     test "a nil module info PLT asks every module", %{ir_plt: ir_plt} do
       assert list_js_import_modules([{Module12, :func, 0}], ir_plt, nil) == [Module12]
+    end
+  end
+
+  describe "list_kept_modules/4" do
+    setup do
+      [module_info_plt: small_module_info_plt()]
+    end
+
+    test "lists the modules of the runtime MFAs", %{module_info_plt: module_info_plt} do
+      modules = list_kept_modules([{Module1, :fun_1, 0}], [], [], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
+    end
+
+    test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
+      assert list_kept_modules([], [], [], module_info_plt) == [Hologram.JS]
+    end
+
+    test "lists the templatables", %{module_info_plt: module_info_plt} do
+      modules = list_kept_modules([], [], [Module11, Module12], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module11, Module12])
+    end
+
+    test "lists the modules the pages reach", %{module_info_plt: module_info_plt} do
+      modules_by_page = [
+        {Module11, MapSet.new([Module1, Module2])},
+        {Module12, MapSet.new([Module2, Module3])}
+      ]
+
+      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1, Module2, Module3])
+    end
+
+    test "leaves out modules the module info PLT doesn't hold", %{
+      module_info_plt: module_info_plt
+    } do
+      modules_by_page = [{Module11, MapSet.new([Module1, Module4, :lists])}]
+
+      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
+    end
+
+    test "lists each module once", %{module_info_plt: module_info_plt} do
+      modules_by_page = [{Module11, MapSet.new([Module1])}]
+
+      modules =
+        list_kept_modules([{Module1, :fun_1, 0}], modules_by_page, [Module1], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
     end
   end
 
