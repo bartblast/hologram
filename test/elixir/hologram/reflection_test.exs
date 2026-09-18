@@ -81,10 +81,17 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> :application.unload(app) end)
   end
 
+  # Puts the key back as it was before the test, set or not.
   defp put_env_with_cleanup(app, key, value) do
+    previous = Application.fetch_env(app, key)
     Application.put_env(app, key, value)
 
-    on_exit(fn -> Application.delete_env(app, key) end)
+    on_exit(fn ->
+      case previous do
+        {:ok, previous_value} -> Application.put_env(app, key, previous_value)
+        :error -> Application.delete_env(app, key)
+      end
+    end)
   end
 
   # Leaves the beam on a code path added for the test, so that the module exists on disk only.
@@ -1244,6 +1251,21 @@ defmodule Hologram.ReflectionTest do
     test "module that does not implement a protocol" do
       refute protocol_implementation?(Calendar.ISO)
     end
+  end
+
+  test "put_env_with_cleanup/3 puts back the value the key had" do
+    key = :put_env_with_cleanup_test_key
+    Application.put_env(:hologram, key, :before)
+
+    # Registered first, so it runs after the helper's cleanup: on_exit callbacks run in reverse order.
+    on_exit(fn ->
+      assert Application.fetch_env(:hologram, key) == {:ok, :before}
+      Application.delete_env(:hologram, key)
+    end)
+
+    put_env_with_cleanup(:hologram, key, :during)
+
+    assert Application.fetch_env!(:hologram, key) == :during
   end
 
   describe "relative_source_path/1" do
