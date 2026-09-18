@@ -226,8 +226,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Compiler.list_js_import_modules(ir_plt, new_module_info_plt)
         |> MapSet.new()
 
-      {mfas_by_page, kept_pages} =
-        Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages, component_modules,
+      {pages_to_rebuild, kept_pages} =
+        Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
           pages_plt: cache.pages_plt,
           pending_pages: cache.pending_pages,
           reaching_modules: reaching_modules,
@@ -236,11 +236,11 @@ defmodule Mix.Tasks.Compile.Hologram do
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
 
+      mfas_by_page = Compiler.list_mfas_by_page(pages_to_rebuild, call_graph_for_pages)
+
       # Pending until their bundles are built, so that the pages this compile does not get to are
       # rebuilt by the next one, whether or not its own edit reaches them.
-      mfas_by_page
-      |> Enum.map(fn {page_module, _mfas} -> page_module end)
-      |> Cache.put_pending_pages()
+      Cache.put_pending_pages(pages_to_rebuild)
 
       kept_mfas_by_page =
         Enum.map(kept_pages, fn {page_module, page_state} -> {page_module, page_state.mfas} end)
