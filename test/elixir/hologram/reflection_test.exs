@@ -753,6 +753,24 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "list_editable_apps/0" do
+    test "lists the project's application, and only it, without umbrella apps or path dependencies" do
+      assert list_editable_apps() == [:hologram]
+    end
+
+    test "adds the applications the Phoenix endpoint reloads" do
+      put_env_with_cleanup(:hologram, Module7, reloadable_apps: [:file_system])
+
+      assert list_editable_apps() == [:hologram, :file_system]
+    end
+
+    test "leaves out a reloadable application that is not loaded" do
+      put_env_with_cleanup(:hologram, Module7, reloadable_apps: [:not_loaded_app])
+
+      assert list_editable_apps() == [:hologram]
+    end
+  end
+
   test "list_elixir_modules/0" do
     result = list_elixir_modules()
 

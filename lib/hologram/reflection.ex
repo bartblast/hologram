@@ -494,6 +494,37 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists the loaded OTP applications whose beams a running VM can rewrite on a save: the project's
+  application, in an umbrella every child application, every path dependency, and the applications
+  the Phoenix endpoint is configured to reload (`:reloadable_apps`). The beams of every other
+  application stand still while the VM runs, since only `mix deps.compile` rewrites them. Requires a
+  Mix project context.
+  """
+  @spec list_editable_apps() :: list(atom)
+  def list_editable_apps do
+    otp_app = otp_app()
+    Application.ensure_loaded(otp_app)
+
+    umbrella_apps =
+      case Mix.Project.apps_paths() do
+        nil -> []
+        apps_paths -> Map.keys(apps_paths)
+      end
+
+    path_dep_apps = for %Mix.Dep{app: app, scm: Mix.SCM.Path} <- Mix.Dep.cached(), do: app
+
+    # With no endpoint configured the key is nil, and the lookup returns the default.
+    phoenix_reloadable_apps =
+      otp_app
+      |> Application.get_env(phoenix_endpoint_for_app(otp_app), [])
+      |> Keyword.get(:reloadable_apps, [])
+
+    [otp_app | umbrella_apps ++ path_dep_apps ++ phoenix_reloadable_apps]
+    |> Enum.uniq()
+    |> Enum.filter(&Application.spec/1)
+  end
+
+  @doc """
   Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   The project OTP application is included.
