@@ -227,7 +227,7 @@ export default class Hologram {
 
     if (mapValue.isPage === false) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.leaveApp(pagePath);
+      Hologram.navigateBrowserTo(pagePath);
     } else if (mapValue.payload === null) {
       mapValue.isNavigateConfirmed = true;
     } else {
@@ -285,7 +285,7 @@ export default class Hologram {
 
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.leaveApp(mapValue.pagePath);
+      Hologram.navigateBrowserTo(mapValue.pagePath);
     } else {
       mapValue.isPage = false;
     }
@@ -427,15 +427,6 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
-  // Gives the path back to the browser, which is how Hologram answers anything it cannot mount: a
-  // target outside the app, or a response a page's middleware wrote itself. The browser then gets
-  // the same answer a typed-in URL would have got, address bar and history included.
-  static leaveApp(url) {
-    window.location.assign(url);
-  }
-
-  // Made public to make tests easier
-  //
   // Takes the page the server described, or where it says to go instead. A redirect is followed by
   // asking for the page it names, so only the page actually arrived at is mounted and only its path
   // enters history - the same trail a browser leaves, where the pages passed through on the way are
@@ -454,6 +445,16 @@ export default class Hologram {
 
       history.pushState($.#historyId, null, pagePath);
     });
+  }
+
+  // Made public to make tests easier
+  //
+  // Hands the navigation to the browser instead of doing it in the app, which is how Hologram answers
+  // anything it does not mount itself: a target outside the app, or a response a page's middleware
+  // wrote itself. The browser then gets the same answer a typed-in URL would have got, address bar
+  // and history included: the document is loaded afresh and a history entry is added.
+  static navigateBrowserTo(url) {
+    window.location.assign(url);
   }
 
   // The module of the page this tab shows, as the last mount or restore set it.
@@ -1337,7 +1338,7 @@ export default class Hologram {
     return Client.fetchPage(
       toParam,
       (payload) => Hologram.loadNewPage(pagePath, payload),
-      () => Hologram.leaveApp(pagePath),
+      () => Hologram.navigateBrowserTo(pagePath),
     );
   }
 
@@ -1371,7 +1372,7 @@ export default class Hologram {
   // fetch forever, silently.
   static #followRedirect(payload, hopCount) {
     if (!payload.pageModule) {
-      Hologram.leaveApp(payload.to);
+      Hologram.navigateBrowserTo(payload.to);
       return null;
     }
 
@@ -1390,7 +1391,7 @@ export default class Hologram {
       toParam,
       (nextPayload) =>
         Hologram.loadNewPage(payload.to, nextPayload, hopCount + 1),
-      () => Hologram.leaveApp(payload.to),
+      () => Hologram.navigateBrowserTo(payload.to),
     );
   }
 

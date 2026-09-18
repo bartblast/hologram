@@ -336,7 +336,7 @@ describe("Hologram", () => {
     // Dropping the entry instead would leave the link dead: the click looks the target up here,
     // and an entry that is not there does nothing at all.
     it("hands the target to the browser when the prefetch found no page", () => {
-      const leaveAppStub = sinon.stub(Hologram, "leaveApp");
+      const navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
 
       eventTargetNode = {__hologramId__: "dummy_hologram_id"};
       const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
@@ -361,10 +361,10 @@ describe("Hologram", () => {
 
       assert.equal(Hologram.prefetchedPages.size, 0);
 
-      sinon.assert.calledOnceWithExactly(leaveAppStub, pagePath);
+      sinon.assert.calledOnceWithExactly(navigateBrowserToStub, pagePath);
       sinon.assert.notCalled(loadNewPageStub);
 
-      leaveAppStub.restore();
+      navigateBrowserToStub.restore();
     });
 
     it("is a no-op if there is no prefeteched pages map entry for the given map key", () => {
@@ -1414,7 +1414,7 @@ describe("Hologram", () => {
       assignedUrls = [];
 
       assignStub = sinon
-        .stub(Hologram, "leaveApp")
+        .stub(Hologram, "navigateBrowserTo")
         .callsFake((url) => assignedUrls.push(url));
 
       fetchPageStub = sinon.stub(Client, "fetchPage");
@@ -1933,13 +1933,13 @@ describe("Hologram", () => {
   });
 
   describe("handlePrefetchPageNotPage()", () => {
-    let leaveAppStub;
+    let navigateBrowserToStub;
 
     beforeEach(() => {
-      leaveAppStub = sinon.stub(Hologram, "leaveApp");
+      navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
     });
 
-    afterEach(() => leaveAppStub.restore());
+    afterEach(() => navigateBrowserToStub.restore());
 
     it("leaves the app when navigate has already been confirmed", () => {
       Hologram.prefetchedPages = new Map([
@@ -1958,7 +1958,10 @@ describe("Hologram", () => {
       Hologram.handlePrefetchPageNotPage("dummy_map_key");
 
       assert.equal(Hologram.prefetchedPages.size, 0);
-      sinon.assert.calledOnceWithExactly(leaveAppStub, "/my-page-path");
+      sinon.assert.calledOnceWithExactly(
+        navigateBrowserToStub,
+        "/my-page-path",
+      );
     });
 
     // Before the click, the answer is only remembered: leaving the app on hover would take the
@@ -1983,7 +1986,7 @@ describe("Hologram", () => {
 
       assert.equal(Hologram.prefetchedPages.size, 1);
       assert.isFalse(Hologram.prefetchedPages.get(mapKey).isPage);
-      sinon.assert.notCalled(leaveAppStub);
+      sinon.assert.notCalled(navigateBrowserToStub);
     });
 
     it("no prefetchedPages map entry", () => {
@@ -1992,7 +1995,7 @@ describe("Hologram", () => {
       Hologram.handlePrefetchPageNotPage("dummy_map_key");
 
       assert.equal(Hologram.prefetchedPages.size, 0);
-      sinon.assert.notCalled(leaveAppStub);
+      sinon.assert.notCalled(navigateBrowserToStub);
     });
   });
 
