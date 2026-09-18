@@ -178,6 +178,32 @@ defmodule HologramFeatureTests.LiveReloadTest do
       |> assert_text(css("#count"), "0")
     end
 
+    # Returning from outside the app loads a new document, which restores the page's snapshot
+    # rather than mounting from mount data. The snapshot it saves on leaving has to carry the
+    # document's digest all the same, or a later rebuild would go unnoticed on the way back.
+    feature "reloads it when it was rebuilt since a document restored it", %{session: session} do
+      session =
+        session
+        |> visit(Page1)
+        |> click(link("Page 2 link"))
+        |> assert_page(Page2)
+        |> visit("/external")
+        |> assert_text("External Page")
+        |> go_back()
+        |> assert_page(Page2)
+        |> click(link("Page 1 link"))
+        |> assert_page(Page1)
+
+      instance_id = current_instance_id(session)
+
+      give_page_another_digest(Page2)
+
+      session
+      |> go_back()
+      |> wait_for_new_document(instance_id)
+      |> assert_page(Page2)
+    end
+
     feature "restores its state when its snapshot fits the code", %{session: session} do
       session =
         session

@@ -1196,6 +1196,14 @@ export default class Hologram {
         )
       ) {
         $.#restorePageSnapshot(pageSnapshot);
+
+        // The mount after a restore reads no mount data, which is where a page's bundle digest is
+        // recorded, so this document's is recorded here: the snapshot it saves on leaving is stamped
+        // with it.
+        LiveReload.recordPageBundle(
+          pageSnapshot.pageModule,
+          globalThis.Hologram.initialPageDigest,
+        );
       }
     } else {
       $.#historyId = Utils.randomUUID();
