@@ -924,18 +924,34 @@ defmodule Hologram.Compiler do
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
   module), when the bundle its kept state describes or that bundle's source map is no longer on disk
   (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
-  belongs to a static dir other than the given one.
+  belongs to a static dir other than the given one. A page in `pending_pages` is rebuilt too: an
+  earlier compile set out to build it and did not, so its kept bundle may predate an edit.
 
   Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
   the pages were given.
   """
-  @spec partition_affected_pages([module], MapSet.t(module), PLT.t(), T.file_path()) ::
+  @spec partition_affected_pages(
+          [module],
+          MapSet.t(module),
+          MapSet.t(module),
+          PLT.t(),
+          T.file_path()
+        ) ::
           {[module], [{module, map}]}
-  def partition_affected_pages(page_modules, reaching_modules, pages_plt, static_dir) do
+  def partition_affected_pages(
+        page_modules,
+        reaching_modules,
+        pending_pages,
+        pages_plt,
+        static_dir
+      ) do
     {kept_pages, pages_to_rebuild} =
       page_modules
       |> Enum.map(fn page_module ->
-        {page_module, keepable_page_state(pages_plt, page_module, reaching_modules, static_dir)}
+        page_state =
+          keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir)
+
+        {page_module, page_state}
       end)
       |> Enum.split_with(fn {_page_module, page_state} -> page_state end)
 
@@ -949,8 +965,11 @@ defmodule Hologram.Compiler do
   Options:
 
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
+    * `:pending_pages` - the pages an earlier compile left unbuilt (see
+      `Hologram.Compiler.Cache.put_pending_pages/1`); they are rebuilt whether or not the edit reaches
+      them. Defaults to none.
     * `:reaching_modules` - the modules that reach the changed ones, from
-      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/4` for
+      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/5` for
       what makes a page affected.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
     * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
@@ -970,6 +989,7 @@ defmodule Hologram.Compiler do
         partition_affected_pages(
           page_modules,
           opts[:reaching_modules],
+          Keyword.get(opts, :pending_pages, MapSet.new()),
           opts[:pages_plt],
           opts[:static_dir]
         )
@@ -1408,8 +1428,9 @@ defmodule Hologram.Compiler do
   defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
 
   # nil when the page must be rebuilt, its kept state otherwise.
-  defp keepable_page_state(pages_plt, page_module, reaching_modules, static_dir) do
-    with {:ok, page_state} <- PLT.get(pages_plt, page_module),
+  defp keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir) do
+    with false <- MapSet.member?(pending_pages, page_module),
+         {:ok, page_state} <- PLT.get(pages_plt, page_module),
          true <- MapSet.disjoint?(page_state.modules, reaching_modules),
          # The state names its bundle's path, so it describes one static dir: reusing it for another
          # would put a digest into that dir's page digest PLT whose file lives elsewhere.
