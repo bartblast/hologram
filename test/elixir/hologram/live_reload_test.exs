@@ -8,6 +8,7 @@ defmodule Hologram.LiveReloadTest do
   use Hologram.Test.BasicCase, async: false
 
   alias Hologram.LiveReload
+  alias Hologram.Realtime.SubscriptionRegistry
 
   @debounce_delay LiveReload.debounce_delay()
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
@@ -28,7 +29,7 @@ defmodule Hologram.LiveReloadTest do
 
   describe "handle_info/2, file events" do
     setup do
-      [state: %{endpoint: nil, timer_ref: nil}]
+      [state: LiveReload.initial_state(nil)]
     end
 
     test "ignores :stop file events", %{state: state} do
@@ -137,6 +138,62 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "open_pages/0" do
+    setup do
+      wait_for_process_cleanup(SubscriptionRegistry)
+      start_supervised!(SubscriptionRegistry)
+
+      wait_for_process_cleanup(LiveReload)
+      start_supervised!({LiveReload, watch?: false})
+
+      :ok
+    end
+
+    test "lists the page each tab with an SSE connection shows" do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      LiveReload.page_rendered("instance-1", Module1)
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module1}
+    end
+
+    test "a tab's later render replaces the page it showed" do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      LiveReload.page_rendered("instance-1", Module1)
+      LiveReload.page_rendered("instance-1", Module2)
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module2}
+    end
+
+    test "forgets a tab with no SSE connection" do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      LiveReload.page_rendered("instance-1", Module1)
+      LiveReload.page_rendered("instance-2", Module2)
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module1}
+      assert :sys.get_state(LiveReload).open_pages == %{"instance-1" => Module1}
+    end
+  end
+
+  describe "page_rendered/2" do
+    test "does nothing when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.page_rendered("instance-1", Module1) == :ok
+    end
+  end
+
+  describe "start_link/1" do
+    test "registers the process under its module name" do
+      wait_for_process_cleanup(LiveReload)
+      pid = start_supervised!({LiveReload, watch?: false})
+
+      assert Process.whereis(LiveReload) == pid
+    end
+  end
+
   describe "watched_dirs/0" do
     test "single-app project" do
       result = LiveReload.watched_dirs()
@@ -203,7 +260,7 @@ defmodule Hologram.LiveReloadTest do
 
   describe "debounced reload handling" do
     setup do
-      [state: %{endpoint: :dummy_endpoint, timer_ref: make_ref()}]
+      [state: %{LiveReload.initial_state(:dummy_endpoint) | timer_ref: make_ref()}]
     end
 
     test "debounced_reload always triggers reload attempt", %{state: state} do

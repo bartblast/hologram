@@ -7,6 +7,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
   alias Hologram.LiveReload.Diagnostic
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -19,23 +20,45 @@ defmodule Hologram.LiveReload do
   @debounce_delay 1_000
 
   @doc """
-  Starts live reload process.
+  Starts live reload process, registered under its module name.
+
+  ## Options
+
+    * `:watch?` - whether to watch the source files (default: `true`). Tests start the process
+      without watching the source tree.
   """
   @spec start_link(keyword) :: GenServer.on_start()
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, nil)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @impl GenServer
-  def init(_opts) do
-    {:ok, pid} =
-      :os.type()
-      |> watcher_opts()
-      |> FileSystem.start_link()
+  def init(opts) do
+    if Keyword.get(opts, :watch?, true) do
+      {:ok, pid} =
+        :os.type()
+        |> watcher_opts()
+        |> FileSystem.start_link()
 
-    FileSystem.subscribe(pid)
+      FileSystem.subscribe(pid)
+    end
 
-    {:ok, %{endpoint: Reflection.phoenix_endpoint(), timer_ref: nil}}
+    {:ok, initial_state(Reflection.phoenix_endpoint())}
+  end
+
+  @impl GenServer
+  def handle_call(:open_pages, _from, state) do
+    open_pages =
+      Map.filter(state.open_pages, fn {instance_id, _page_module} ->
+        SubscriptionRegistry.bindings_of(instance_id) != nil
+      end)
+
+    {:reply, open_pages, %{state | open_pages: open_pages}}
+  end
+
+  @impl GenServer
+  def handle_cast({:page_rendered, instance_id, page_module}, state) do
+    {:noreply, %{state | open_pages: Map.put(state.open_pages, instance_id, page_module)}}
   end
 
   @impl GenServer
@@ -73,6 +96,46 @@ defmodule Hologram.LiveReload do
   """
   @spec debounce_delay :: pos_integer
   def debounce_delay, do: @debounce_delay
+
+  # Public for tests, which drive the callbacks with a state of their own.
+  @doc false
+  @spec initial_state(any) :: map
+  def initial_state(endpoint) do
+    %{
+      endpoint: endpoint,
+      # What each tab showed at its last render, by instance id.
+      open_pages: %{},
+      # The live reload pass running, if any.
+      pass: nil,
+      # The pages the running or the last pass has not built.
+      pending: MapSet.new(),
+      # Pages asked for while pending, built first.
+      priority: [],
+      # A save that arrived during the pass, which starts the next one.
+      superseded_by: nil,
+      timer_ref: nil,
+      # The requests waiting for a page's bundle, by page module.
+      waiters: %{}
+    }
+  end
+
+  @doc """
+  Returns the page each open tab shows, by instance id: what each tab showed at its last render,
+  for the tabs that still hold an SSE connection. The tabs that do not are forgotten.
+  """
+  @spec open_pages() :: %{String.t() => module}
+  def open_pages do
+    GenServer.call(__MODULE__, :open_pages)
+  end
+
+  @doc """
+  Records that the tab with the given instance id shows the given page, which a live reload then
+  builds first. Does nothing when live reload is not running.
+  """
+  @spec page_rendered(String.t(), module) :: :ok
+  def page_rendered(instance_id, page_module) do
+    GenServer.cast(__MODULE__, {:page_rendered, instance_id, page_module})
+  end
 
   @doc """
   Reloads the application after a file change by recompiling Elixir code,
