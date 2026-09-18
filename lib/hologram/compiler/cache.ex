@@ -9,11 +9,13 @@ defmodule Hologram.Compiler.Cache do
   # brought in line with, so the next compile diffs against them rather than against the dump on
   # disk, which another VM sharing the build dir may have rewritten. What each page and the
   # runtime were built from is kept too, so that a compile rebuilds only the pages an edit
-  # reaches. Started on first use and not linked to the caller, so it outlives the compile that
-  # started it. A compile that finds no module infos here starts from the build dir, so nothing
-  # depends on the cache for correctness. The cache also registers Hologram.Compiler.Tracer when
-  # it starts, and owns its table: the modules the tracer records are only of use to a compile that
-  # has the kept state to apply them to, so the two live and die together.
+  # reaches, with the pages a compile set out to build and has not built yet, so that the next
+  # compile rebuilds them whether or not its own edit reaches them. Started on first use and not
+  # linked to the caller, so it outlives the compile that started it. A compile that finds no
+  # module infos here starts from the build dir, so nothing depends on the cache for correctness.
+  # The cache also registers Hologram.Compiler.Tracer when it starts, and owns its table: the
+  # modules the tracer records are only of use to a compile that has the kept state to apply them
+  # to, so the two live and die together.
 
   use GenServer
 
@@ -38,6 +40,7 @@ defmodule Hologram.Compiler.Cache do
           ir_plt: PLT.t(),
           module_infos: %{module => map} | nil,
           pages_plt: PLT.t(),
+          pending_pages: MapSet.t(module),
           runtime: runtime_state | nil
         }
 
@@ -61,7 +64,15 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Returns the kept call graph, IR PLT and page states, the application versions, the module infos of
+  Forgets the given pages as pending. The compile task calls it once it has built their bundles.
+  """
+  @spec delete_pending_pages([module]) :: :ok
+  def delete_pending_pages(page_modules) do
+    GenServer.call(server(), {:delete_pending_pages, page_modules})
+  end
+
+  @doc """
+  Returns the kept call graph, IR PLT and page states, the pending pages, the application versions, the module infos of
   the last finished compile with the mtime of the module info dump it wrote and the modules whose
   beams a save can rewrite, and what the runtime bundle was built from (the module infos, the
   editable modules and the runtime state are nil when no compile has finished in this VM). Starts
@@ -80,6 +91,11 @@ defmodule Hologram.Compiler.Cache do
   def handle_call({:delete_page, page_module}, _from, state) do
     PLT.delete(state.pages_plt, page_module)
     {:reply, :ok, state}
+  end
+
+  def handle_call({:delete_pending_pages, page_modules}, _from, state) do
+    pending_pages = MapSet.difference(state.pending_pages, MapSet.new(page_modules))
+    {:reply, :ok, %{state | pending_pages: pending_pages}}
   end
 
   def handle_call(:get, _from, state) do
@@ -103,6 +119,10 @@ defmodule Hologram.Compiler.Cache do
   def handle_call({:put_page, page_module, page_state}, _from, state) do
     PLT.put(state.pages_plt, page_module, page_state)
     {:reply, :ok, state}
+  end
+
+  def handle_call({:put_pending_pages, page_modules}, _from, state) do
+    {:reply, :ok, %{state | pending_pages: MapSet.new(page_modules)}}
   end
 
   def handle_call({:put_runtime, runtime_state}, _from, state) do
@@ -161,6 +181,16 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
+  Keeps the pages a compile is about to build, in place of the ones kept before, so that whatever it
+  leaves unbuilt (a scheduler that stops the compile before their batch, or a failure) is rebuilt by
+  the next compile.
+  """
+  @spec put_pending_pages([module]) :: :ok
+  def put_pending_pages(page_modules) do
+    GenServer.call(server(), {:put_pending_pages, page_modules})
+  end
+
+  @doc """
   Keeps what the runtime bundle was built from: its MFAs, the JS import modules it registers (which
   every page bundle leaves out), the application versions it carries and the info of its bundle.
   """
@@ -171,8 +201,8 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Replaces the kept call graph, IR PLT and page states with empty ones and forgets the kept module
-  infos, dump time, editable modules, application versions and runtime state, so the next compile starts
-  from the build dir, as the first one in the VM does.
+  infos, dump time, editable modules, pending pages, application versions and runtime state, so the
+  next compile starts from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -197,6 +227,7 @@ defmodule Hologram.Compiler.Cache do
       ir_plt: PLT.start(),
       module_infos: nil,
       pages_plt: PLT.start(),
+      pending_pages: MapSet.new(),
       runtime: nil
     }
   end
