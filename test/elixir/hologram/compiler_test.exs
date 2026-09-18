@@ -3443,6 +3443,47 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "usable_bundle?/2" do
+    setup do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "usable_bundle_2"])
+      clean_dir(static_dir)
+
+      bundle_path = Path.join(static_dir, "page-kept.js")
+      File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".map", "map")
+
+      bundle_info = %{
+        static_bundle_path: bundle_path,
+        static_source_map_path: bundle_path <> ".map"
+      }
+
+      [bundle_info: bundle_info, static_dir: static_dir]
+    end
+
+    test "a bundle and its source map on disk in the given static dir", %{
+      bundle_info: bundle_info,
+      static_dir: static_dir
+    } do
+      assert usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle whose file is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
+      File.rm!(bundle_info.static_bundle_path)
+
+      refute usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle whose source map is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
+      File.rm!(bundle_info.static_source_map_path)
+
+      refute usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle in another static dir", %{bundle_info: bundle_info} do
+      refute usable_bundle?(bundle_info, "/other/static")
+    end
+  end
+
   describe "validate_page_modules/2" do
     # The module info PLT entries of the given pages: the fixture PLT's for file fixtures, and the
     # given ones for pages defined in a test, which are compiled without debug info.

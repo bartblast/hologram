@@ -1151,6 +1151,19 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Whether the bundle the given bundle info describes can still be served from the given static dir:
+  it was written there, and both the bundle and its source map are on disk. A build dir can lose
+  bundles to another build env sharing the static dir, and the info names one static dir, so reusing
+  it for another would put a digest into that dir's page digest PLT whose file lives elsewhere.
+  """
+  @spec usable_bundle?(map, T.file_path()) :: boolean
+  def usable_bundle?(bundle_info, static_dir) do
+    Path.dirname(bundle_info.static_bundle_path) == static_dir and
+      File.exists?(bundle_info.static_bundle_path) and
+      File.exists?(bundle_info.static_source_map_path)
+  end
+
+  @doc """
   Raises a compilation error if any page module lacks a specified route or layout, or has a route that
   is not a string. The route and the layout come from the pages' entries in the given module info PLT;
   a page is asked only for what its entry does not hold (a route built at runtime, say).
@@ -1432,11 +1445,7 @@ defmodule Hologram.Compiler do
     with false <- MapSet.member?(pending_pages, page_module),
          {:ok, page_state} <- PLT.get(pages_plt, page_module),
          true <- MapSet.disjoint?(page_state.modules, reaching_modules),
-         # The state names its bundle's path, so it describes one static dir: reusing it for another
-         # would put a digest into that dir's page digest PLT whose file lives elsewhere.
-         true <- Path.dirname(page_state.bundle_info.static_bundle_path) == static_dir,
-         true <- File.exists?(page_state.bundle_info.static_bundle_path),
-         true <- File.exists?(page_state.bundle_info.static_source_map_path) do
+         true <- usable_bundle?(page_state.bundle_info, static_dir) do
       page_state
     else
       _fallback -> nil

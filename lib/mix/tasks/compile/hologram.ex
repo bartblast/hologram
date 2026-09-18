@@ -334,7 +334,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       # never when the compile stops before the page's batch.
       bundles =
         %{
-          pages: initial_page_bundles_info(kept_pages, mfas_by_page, cache.pages_plt),
+          pages:
+            initial_page_bundles_info(
+              kept_pages,
+              mfas_by_page,
+              cache.pages_plt,
+              opts[:static_dir]
+            ),
           runtime: if(runtime_entry_files_info == [], do: cache.runtime.bundle_info)
         }
 
@@ -499,17 +505,21 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.each(&Cache.delete_page/1)
   end
 
-  # The bundle of each kept page, and the bundle each page still to rebuild had, if it had one.
-  defp initial_page_bundles_info(kept_pages, mfas_by_page, pages_plt) do
+  # The bundle of each kept page, and the bundle each page still to rebuild had, if it had one that
+  # can still be served: one whose file is gone, or that belongs to another static dir, would have
+  # the page digest PLT name a bundle this static dir does not have.
+  defp initial_page_bundles_info(kept_pages, mfas_by_page, pages_plt, static_dir) do
     kept_page_bundles_info =
       Map.new(kept_pages, fn {page_module, page_state} ->
         {page_module, page_state.bundle_info}
       end)
 
     Enum.reduce(mfas_by_page, kept_page_bundles_info, fn {page_module, _mfas}, acc ->
-      case PLT.get(pages_plt, page_module) do
-        {:ok, page_state} -> Map.put(acc, page_module, page_state.bundle_info)
-        :error -> acc
+      with {:ok, page_state} <- PLT.get(pages_plt, page_module),
+           true <- Compiler.usable_bundle?(page_state.bundle_info, static_dir) do
+        Map.put(acc, page_module, page_state.bundle_info)
+      else
+        _unusable -> acc
       end
     end)
   end

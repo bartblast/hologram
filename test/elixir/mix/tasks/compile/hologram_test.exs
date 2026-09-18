@@ -880,6 +880,48 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "a pending page whose kept bundle is gone is not named in the page digest dump", %{
+      opts: opts
+    } do
+      run(opts)
+
+      [page_module] =
+        1
+        |> put_pending_kept_pages()
+        |> MapSet.to_list()
+
+      %{pages_plt: pages_plt} = Cache.get()
+      {:ok, page_state} = PLT.get(pages_plt, page_module)
+      File.rm!(page_state.bundle_info.static_bundle_path)
+
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+
+      page_digests = load_page_digest_items(opts)
+
+      refute Map.has_key?(page_digests, page_module)
+    end
+
+    test "a pending page whose kept source map is gone is not named in the page digest dump", %{
+      opts: opts
+    } do
+      run(opts)
+
+      [page_module] =
+        1
+        |> put_pending_kept_pages()
+        |> MapSet.to_list()
+
+      %{pages_plt: pages_plt} = Cache.get()
+      {:ok, page_state} = PLT.get(pages_plt, page_module)
+      File.rm!(page_state.bundle_info.static_source_map_path)
+
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+
+      page_digests = load_page_digest_items(opts)
+
+      refute Map.has_key?(page_digests, page_module)
+    end
+
     test "a batch callback that exits leaves no lock behind", %{opts: opts} do
       run(opts)
 
