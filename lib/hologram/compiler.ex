@@ -607,6 +607,23 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Deletes from the encode PLT the entries of the given modules' functions, and returns the PLT. A
+  module's functions are encoded again from its IR once it was edited, and are gone with it once it
+  was removed. Reads the keys only, never the values.
+  """
+  @spec delete_module_encodings(PLT.t(), [module]) :: PLT.t()
+  def delete_module_encodings(encode_plt, modules) do
+    dropped_modules = MapSet.new(modules)
+
+    encode_plt
+    |> PLT.keys()
+    |> Enum.filter(fn {module, _function, _arity} -> MapSet.member?(dropped_modules, module) end)
+    |> Enum.each(&PLT.delete(encode_plt, &1))
+
+    encode_plt
+  end
+
+  @doc """
   Compares two module info PLTs by digest and returns the added, removed, and edited modules lists.
   An entry whose mtime or size moved but whose digest did not is not an edit.
   """
@@ -1029,6 +1046,23 @@ defmodule Hologram.Compiler do
     )
 
     ir_plt
+  end
+
+  @doc """
+  Deletes from the encode PLT the entries of the functions of modules not in the given list, and
+  returns the PLT: the encodings kept are those of the modules whose IR is kept (see
+  `prune_ir_plt/2`). Reads the keys only, never the values.
+  """
+  @spec prune_encode_plt(PLT.t(), [module]) :: PLT.t()
+  def prune_encode_plt(encode_plt, modules) do
+    kept_modules = MapSet.new(modules)
+
+    encode_plt
+    |> PLT.keys()
+    |> Enum.reject(fn {module, _function, _arity} -> MapSet.member?(kept_modules, module) end)
+    |> Enum.each(&PLT.delete(encode_plt, &1))
+
+    encode_plt
   end
 
   @doc """

@@ -44,6 +44,18 @@ defmodule Hologram.Compiler.CacheTest do
       assert CallGraph.has_vertex?(call_graph, {Module1, :fun_1, 0})
       assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
     end
+
+    test "keeps the encode PLT and the encoding inputs" do
+      %{encode_plt: encode_plt} = get()
+      PLT.put(encode_plt, {Module1, :fun_1, 0}, "js")
+      encoding_inputs = %{async_mfas: MapSet.new(), client_stacktraces?: true}
+      put_encoding_inputs(encoding_inputs)
+
+      clear_module_infos()
+
+      assert %{encode_plt: ^encode_plt, encoding_inputs: ^encoding_inputs} = get()
+      assert PLT.get(encode_plt, {Module1, :fun_1, 0}) == {:ok, "js"}
+    end
   end
 
   describe "delete_page/2" do
@@ -100,6 +112,8 @@ defmodule Hologram.Compiler.CacheTest do
                call_graph: %CallGraph{} = call_graph,
                dumped_at: nil,
                editable_modules: nil,
+               encode_plt: %PLT{} = encode_plt,
+               encoding_inputs: nil,
                ir_plt: %PLT{} = ir_plt,
                module_infos: nil,
                pages_plt: %PLT{} = pages_plt,
@@ -110,14 +124,21 @@ defmodule Hologram.Compiler.CacheTest do
       assert pending_pages == MapSet.new()
 
       assert CallGraph.vertices(call_graph) == []
+      assert PLT.keys(encode_plt) == []
       assert PLT.keys(ir_plt) == []
       assert PLT.keys(pages_plt) == []
     end
 
     test "returns the same call graph and PLTs on every call" do
-      %{call_graph: call_graph, ir_plt: ir_plt, pages_plt: pages_plt} = get()
+      %{call_graph: call_graph, encode_plt: encode_plt, ir_plt: ir_plt, pages_plt: pages_plt} =
+        get()
 
-      assert %{call_graph: ^call_graph, ir_plt: ^ir_plt, pages_plt: ^pages_plt} = get()
+      assert %{
+               call_graph: ^call_graph,
+               encode_plt: ^encode_plt,
+               ir_plt: ^ir_plt,
+               pages_plt: ^pages_plt
+             } = get()
     end
 
     test "doesn't link the cache to the caller" do
@@ -132,6 +153,16 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert Process.alive?(cache_pid)
     end
+  end
+
+  test "put_encoding_inputs/1" do
+    encoding_inputs = %{
+      async_mfas: MapSet.new([{Module1, :fun_1, 0}]),
+      client_stacktraces?: false
+    }
+
+    assert put_encoding_inputs(encoding_inputs) == :ok
+    assert %{encoding_inputs: ^encoding_inputs} = get()
   end
 
   test "put_module_infos/3" do
@@ -188,6 +219,21 @@ defmodule Hologram.Compiler.CacheTest do
       assert CallGraph.vertices(new_call_graph) == []
     end
 
+    test "stops the kept encode PLT and starts an empty one, and forgets the encoding inputs" do
+      old_encode_plt = get().encode_plt
+      PLT.put(old_encode_plt, {Module1, :fun_1, 0}, "js")
+      put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
+
+      assert reset() == :ok
+
+      %{encode_plt: new_encode_plt, encoding_inputs: encoding_inputs} = get()
+
+      refute Process.alive?(old_encode_plt.pid)
+      assert new_encode_plt.table_ref != old_encode_plt.table_ref
+      assert PLT.keys(new_encode_plt) == []
+      assert encoding_inputs == nil
+    end
+
     test "stops the kept IR PLT and starts an empty one" do
       old_ir_plt = get().ir_plt
       PLT.put(old_ir_plt, Module1, :ir_1)
@@ -242,11 +288,13 @@ defmodule Hologram.Compiler.CacheTest do
   end
 
   test "terminate/2" do
-    %{call_graph: call_graph, ir_plt: ir_plt, pages_plt: pages_plt} = get()
+    %{call_graph: call_graph, encode_plt: encode_plt, ir_plt: ir_plt, pages_plt: pages_plt} =
+      get()
 
     GenServer.stop(Cache)
 
     refute Process.alive?(call_graph.pid)
+    refute Process.alive?(encode_plt.pid)
     refute Process.alive?(ir_plt.pid)
     refute Process.alive?(pages_plt.pid)
     assert :ets.whereis(Tracer) == :undefined

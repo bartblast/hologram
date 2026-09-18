@@ -34,6 +34,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
 
+  # A function's JavaScript is produced by one call of this, however it is reached.
+  @encode_function_mfa {Hologram.Compiler.Encoder, :encode_elixir_function, 6}
+
   @num_pages Enum.count(Reflection.list_pages())
 
   # A page whose template holds a link to another page, and that page.
@@ -42,6 +45,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+
+  # How many times the function is called, in any process, while the given function runs.
+  defp count_calls(mfa, fun) do
+    :erlang.trace_pattern(mfa, true, [:call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:call_count])
+    end
+  end
 
   defp count_plt_processes do
     Enum.count(Process.list(), fn pid ->
@@ -684,6 +700,101 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert Cache.get().pending_pages == MapSet.new()
       test_page_bundles(opts)
+    end
+
+    test "a page rebuilt with no edit encodes no function again", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      assert count_calls(@encode_function_mfa, fn -> run(opts) end) == 0
+      test_page_bundles(opts)
+    end
+
+    test "an edited module's functions are encoded again, fewer than from scratch", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module2)
+      kept_count = count_calls(@encode_function_mfa, fn -> run(opts) end)
+
+      fake_edit(Module2)
+      %{encode_plt: encode_plt} = Cache.get()
+      PLT.reset(encode_plt)
+      scratch_count = count_calls(@encode_function_mfa, fn -> run(opts) end)
+
+      assert kept_count > 0
+      assert kept_count < scratch_count
+      test_page_bundles(opts)
+    end
+
+    test "a removed module loses its encodings", %{opts: opts} do
+      run(opts)
+
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        encode_plt: encode_plt,
+        module_infos: module_infos
+      } = Cache.get()
+
+      PLT.put(encode_plt, {:removed_module, :fun, 0}, "js")
+
+      module_infos
+      |> Map.put(:removed_module, %{digest: "removed"})
+      |> Cache.put_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
+
+      run(opts)
+
+      assert PLT.get(encode_plt, {:removed_module, :fun, 0}) == :error
+    end
+
+    test "changed async MFAs empty the kept encodings", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      %{encoding_inputs: encoding_inputs} = Cache.get()
+      async_mfas = MapSet.put(encoding_inputs.async_mfas, {Module1, :fun_1, 0})
+      Cache.put_encoding_inputs(%{encoding_inputs | async_mfas: async_mfas})
+
+      assert count_calls(@encode_function_mfa, fn -> run(opts) end) > 0
+    end
+
+    test "a changed client stacktraces setting empties the kept encodings", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      %{encoding_inputs: encoding_inputs} = Cache.get()
+      stacktraces? = not encoding_inputs.client_stacktraces?
+      Cache.put_encoding_inputs(%{encoding_inputs | client_stacktraces?: stacktraces?})
+
+      assert count_calls(@encode_function_mfa, fn -> run(opts) end) > 0
+    end
+
+    test "keeps what the encodings were made with", %{opts: opts} do
+      run(opts)
+
+      assert %{async_mfas: %MapSet{}, client_stacktraces?: stacktraces?} =
+               Cache.get().encoding_inputs
+
+      assert stacktraces? == Hologram.client_stacktraces?()
+    end
+
+    test "keeps the encodings of the modules whose IR it keeps, no others", %{opts: opts} do
+      run(opts)
+
+      %{encode_plt: encode_plt, ir_plt: ir_plt} = Cache.get()
+      PLT.put(encode_plt, {@unreached_module, :fun_1, 0}, "js")
+
+      run(opts)
+
+      assert PLT.get(encode_plt, {@unreached_module, :fun_1, 0}) == :error
+
+      encoded_modules =
+        encode_plt
+        |> PLT.keys()
+        |> MapSet.new(fn {module, _function, _arity} -> module end)
+
+      assert MapSet.size(encoded_modules) > 0
+      assert MapSet.subset?(encoded_modules, MapSet.new(PLT.keys(ir_plt)))
     end
 
     test "a pending page that no longer exists is forgotten", %{opts: opts} do
