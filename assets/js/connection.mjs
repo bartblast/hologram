@@ -1,7 +1,6 @@
 "use strict";
 
 import GlobalRegistry from "./global_registry.mjs";
-import LiveReload from "./live_reload.mjs";
 import Serializer from "./serializer.mjs";
 import Utils from "./utils.mjs";
 
@@ -153,33 +152,18 @@ export default class Connection {
       return;
     }
 
-    if (encodedMessage === '"reload"') {
-      LiveReload.reload();
-      return;
+    // Currently, the only supported message type other than "pong" is "reply", which carries a
+    // correlation ID. Live reload messages travel on the SSE stream.
+    const [_type, payload, correlationId] = JSON.parse(encodedMessage);
+
+    if ($.pendingRequests.has(correlationId)) {
+      const request = $.pendingRequests.get(correlationId);
+
+      clearTimeout(request.timerId);
+      $.pendingRequests.delete(correlationId);
+
+      request.onSuccess(payload);
     }
-
-    const decodedMessage = JSON.parse(encodedMessage);
-
-    if (decodedMessage.length === 3) {
-      // Currently, the only supported message type that has a correlation ID is "reply"
-      const [_type, payload, correlationId] = decodedMessage;
-
-      if ($.pendingRequests.has(correlationId)) {
-        const request = $.pendingRequests.get(correlationId);
-
-        clearTimeout(request.timerId);
-        $.pendingRequests.delete(correlationId);
-
-        request.onSuccess(payload);
-      }
-
-      return;
-    }
-
-    // Currently, the only supported message type that has a payload,
-    // but doesn't have a correlation ID is "compilation_error"
-    const [_type, payload] = decodedMessage;
-    LiveReload.showErrorOverlay(payload);
   }
 
   static handleOpen(_event) {

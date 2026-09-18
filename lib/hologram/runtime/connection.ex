@@ -14,10 +14,6 @@ defmodule Hologram.Runtime.Connection do
 
   @impl WebSock
   def init(plug_conn) do
-    if Hologram.env() == :dev do
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
-    end
-
     connection_id = UUID.uuid4()
 
     # context = gproc_context(Hologram.env())
@@ -39,18 +35,6 @@ defmodule Hologram.Runtime.Connection do
     reply = encode(reply_type, reply_payload, correlation_id)
 
     {:reply, :ok, {:text, reply}, new_state}
-  end
-
-  @impl WebSock
-  def handle_info({:compilation_error, lines}, state) do
-    message = encode("compilation_error", lines, nil)
-    {:push, {:text, message}, state}
-  end
-
-  @impl WebSock
-  def handle_info(:reload, state) do
-    message = encode("reload", :__no_payload__, nil)
-    {:push, {:text, message}, state}
   end
 
   @impl WebSock
@@ -78,10 +62,6 @@ defmodule Hologram.Runtime.Connection do
 
   defp encode(type, :__no_payload__, nil) do
     Jason.encode!(type)
-  end
-
-  defp encode(type, payload, nil) do
-    Jason.encode!([type, payload])
   end
 
   defp encode(type, payload, correlation_id) do

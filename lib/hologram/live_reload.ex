@@ -160,8 +160,9 @@ defmodule Hologram.LiveReload do
     )
   end
 
+  # Every tab reloads, as it did when the WebSocket carried this. The tabs' SSE streams forward it.
   defp broadcast_reload do
-    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :reload)
+    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", {:reload, :all})
   end
 
   defp impl do
