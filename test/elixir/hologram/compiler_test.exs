@@ -2957,6 +2957,63 @@ defmodule Hologram.CompilerTest do
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
   end
 
+  describe "update_module_info_plt!/5" do
+    test "copies the entries of the modules that are not editable" do
+      old_plt = PLT.put(PLT.start(), Enum, %{digest: "kept"})
+
+      plt = update_module_info_plt!(old_plt, nil, MapSet.new(), [])
+
+      assert PLT.get!(plt, Enum) == %{digest: "kept"}
+    end
+
+    test "reads an editable beam that has no entry" do
+      beam_path = :code.which(Hologram.Reflection)
+
+      plt =
+        update_module_info_plt!(PLT.start(), nil, MapSet.new(), [
+          {Hologram.Reflection, beam_path}
+        ])
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reuses the entry of an editable beam that is untouched and older than the dump" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1, page?: true}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt =
+        update_module_info_plt!(old_plt, mtime + 1, MapSet.new([Hologram.Reflection]), [
+          {Hologram.Reflection, beam_path}
+        ])
+
+      assert PLT.get!(plt, Hologram.Reflection) == old_info
+    end
+
+    test "reads an editable beam whose entry does not match its file" do
+      beam_path = :code.which(Hologram.Reflection)
+      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: mtime - 1}
+      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      plt =
+        update_module_info_plt!(old_plt, mtime + 1, MapSet.new([Hologram.Reflection]), [
+          {Hologram.Reflection, beam_path}
+        ])
+
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "drops the entry of an editable module whose beam is gone" do
+      old_plt = PLT.put(PLT.start(), :removed_module, %{digest: "removed"})
+
+      plt = update_module_info_plt!(old_plt, nil, MapSet.new([:removed_module]), [])
+
+      assert PLT.get(plt, :removed_module) == :error
+    end
+  end
+
   describe "validate_prop_usages/2" do
     test "doesn't raise when every required prop is written at the usage" do
       plt = PLT.put(PLT.start(), Module32, IR.for_module(Module32))

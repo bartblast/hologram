@@ -1053,6 +1053,39 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds the module info PLT of a live-reload compile from `old_plt`, the PLT of the last finished compile
+  in this VM. The entries of the modules that were not among the editable beams then (`editable_modules`)
+  are copied: nothing rewrites those beams while the VM runs. The editable beams now (`editable_beams`,
+  `{module, beam_path}` pairs from `Hologram.Reflection.list_editable_beams/0`) are read, or their entry is
+  reused under the same guard as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the
+  last compile wrote. A module of `editable_modules` that is not among the beams now gets no entry: its beam
+  is gone.
+  """
+  @spec update_module_info_plt!(
+          PLT.t(),
+          non_neg_integer | nil,
+          MapSet.t(module),
+          list({module, charlist}),
+          T.opts()
+        ) :: PLT.t()
+  def update_module_info_plt!(old_plt, dumped_at, editable_modules, editable_beams, opts \\ []) do
+    new_plt = PLT.start(opts)
+
+    kept_items =
+      old_plt
+      |> PLT.get_all()
+      |> Enum.reject(fn {module, _info} -> MapSet.member?(editable_modules, module) end)
+
+    PLT.put(new_plt, kept_items)
+
+    TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
+      put_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at)
+    end)
+
+    new_plt
+  end
+
+  @doc """
   Raises a compilation error if any page module lacks a specified route or layout, or has a route that
   is not a string. The route and the layout come from the pages' entries in the given module info PLT;
   a page is asked only for what its entry does not hold (a route built at runtime, say).
@@ -1489,8 +1522,15 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
-  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
-  # when resolve_beam_source/2 goes (see the removal note there).
+  # Not reusable: read it. Read gives nil: not an Elixir module.
+  defp put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at) do
+    info =
+      reusable_module_info(module, beam_source, old_plt, dumped_at) ||
+        Reflection.beam_info(beam_source)
+
+    if info, do: PLT.put(new_plt, module, info)
+  end
+
   # The kept pages whose MFAs moved, with their new lists, and the ones whose MFAs are unchanged.
   defp relist_kept_pages(kept_pages, call_graph, component_modules) do
     mfas_by_kept_page =
@@ -1512,6 +1552,8 @@ defmodule Hologram.Compiler do
     {relisted_mfas_by_page, unchanged_pages}
   end
 
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
     # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
     # with :code.which/1, which is exactly the stale path that yielded nil here.
@@ -1523,15 +1565,10 @@ defmodule Hologram.Compiler do
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
-    beam_source = resolve_beam_source(module, umbrella?)
-
-    # No beam: not a module of this project. Not reusable: read it. Read gives nil: not an Elixir module.
-    info =
-      beam_source &&
-        (reusable_module_info(module, beam_source, old_plt, dumped_at) ||
-           Reflection.beam_info(beam_source))
-
-    if info, do: PLT.put(new_plt, module, info)
+    # No beam: not a module of this project.
+    if beam_source = resolve_beam_source(module, umbrella?) do
+      put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
+    end
   end
 
   # Travels with the per-module metadata, which is emitted under the same
