@@ -175,14 +175,35 @@ defmodule Hologram.LiveReloadTest do
       assert LiveReload.open_pages() == %{"instance-1" => Module2}
     end
 
-    test "forgets a tab with no SSE connection" do
-      :ok = SubscriptionRegistry.register_connection("instance-1", self())
-
+    test "keeps a tab whose SSE connection has not attached yet" do
       LiveReload.page_rendered("instance-1", Module1)
-      LiveReload.page_rendered("instance-2", Module2)
 
       assert LiveReload.open_pages() == %{"instance-1" => Module1}
-      assert :sys.get_state(LiveReload).open_pages == %{"instance-1" => Module1}
+      assert {Module1, missing_since} = :sys.get_state(LiveReload).open_pages["instance-1"]
+      assert is_integer(missing_since)
+    end
+
+    test "forgets a tab seen without an SSE connection for longer than the grace period" do
+      LiveReload.page_rendered("instance-1", Module1)
+
+      long_ago = System.monotonic_time(:millisecond) - 60_000
+
+      :sys.replace_state(LiveReload, fn state ->
+        %{state | open_pages: %{"instance-1" => {Module1, long_ago}}}
+      end)
+
+      assert LiveReload.open_pages() == %{}
+      assert :sys.get_state(LiveReload).open_pages == %{}
+    end
+
+    test "a tab seen with its SSE connection again is no longer missing" do
+      LiveReload.page_rendered("instance-1", Module1)
+      LiveReload.open_pages()
+
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module1}
+      assert :sys.get_state(LiveReload).open_pages == %{"instance-1" => {Module1, nil}}
     end
   end
 

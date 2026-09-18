@@ -24,6 +24,12 @@ defmodule Hologram.LiveReload do
   # served with the bundle it had, and the reload event heals the tab once the page is built.
   @await_page_timeout 60_000
 
+  # How long a tab may be seen without an SSE connection before it counts as closed, in
+  # milliseconds. A tab is without one between its page's render and the stream's attach, which
+  # SubscriptionRegistry.attach_wait_ms/0 bounds, and while it reconnects, each attempt up to the
+  # client's 5 s backoff ceiling. Six attach windows cover the first and a few of the second.
+  @connection_grace_ms 6 * SubscriptionRegistry.attach_wait_ms()
+
   # in milliseconds
   @debounce_delay 1_000
 
@@ -125,9 +131,7 @@ defmodule Hologram.LiveReload do
       {:reply, :stop, new_state}
     else
       open_page_modules =
-        open_pages
-        |> Map.values()
-        |> MapSet.new()
+        MapSet.new(open_pages, fn {_instance_id, {page_module, _missing_since}} -> page_module end)
 
       batch =
         plan_batch(
@@ -144,12 +148,19 @@ defmodule Hologram.LiveReload do
 
   def handle_call(:open_pages, _from, state) do
     open_pages = prune_open_pages(state.open_pages)
-    {:reply, open_pages, %{state | open_pages: open_pages}}
+
+    reply =
+      Map.new(open_pages, fn {instance_id, {page_module, _missing_since}} ->
+        {instance_id, page_module}
+      end)
+
+    {:reply, reply, %{state | open_pages: open_pages}}
   end
 
   @impl GenServer
   def handle_cast({:page_rendered, instance_id, page_module}, state) do
-    {:noreply, %{state | open_pages: Map.put(state.open_pages, instance_id, page_module)}}
+    open_pages = Map.put(state.open_pages, instance_id, {page_module, nil})
+    {:noreply, %{state | open_pages: open_pages}}
   end
 
   @impl GenServer
@@ -236,7 +247,8 @@ defmodule Hologram.LiveReload do
   def initial_state(endpoint) do
     %{
       endpoint: endpoint,
-      # What each tab showed at its last render, by instance id.
+      # What each tab showed at its last render, by instance id, with when it was first seen without
+      # an SSE connection (nil while it holds one).
       open_pages: %{},
       # The live reload pass running, if any.
       pass: nil,
@@ -253,8 +265,9 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
-  Returns the page each open tab shows, by instance id: what each tab showed at its last render,
-  for the tabs that still hold an SSE connection. The tabs that do not are forgotten.
+  Returns the page each open tab shows, by instance id: what each tab showed at its last render.
+  A tab counts as open while it holds an SSE connection, and for a while without one: a page renders
+  before its stream attaches, and a stream reconnects. A tab without one for longer is forgotten.
   """
   @spec open_pages() :: %{String.t() => module}
   def open_pages do
@@ -432,10 +445,25 @@ defmodule Hologram.LiveReload do
     Application.get_env(:hologram, :live_reload_impl, __MODULE__)
   end
 
-  # The tabs that no longer hold an SSE connection are closed, so their pages are not built first.
+  # A tab seen without an SSE connection for longer than the grace period is closed, and its page is
+  # no longer built first. A tab seen with one again is not missing any more.
   defp prune_open_pages(open_pages) do
-    Map.filter(open_pages, fn {instance_id, _page_module} ->
-      SubscriptionRegistry.bindings_of(instance_id) != nil
+    now = System.monotonic_time(:millisecond)
+
+    Enum.reduce(open_pages, %{}, fn {instance_id, {page_module, missing_since}}, acc ->
+      cond do
+        SubscriptionRegistry.bindings_of(instance_id) != nil ->
+          Map.put(acc, instance_id, {page_module, nil})
+
+        missing_since == nil ->
+          Map.put(acc, instance_id, {page_module, now})
+
+        now - missing_since < @connection_grace_ms ->
+          Map.put(acc, instance_id, {page_module, missing_since})
+
+        true ->
+          acc
+      end
     end)
   end
 
