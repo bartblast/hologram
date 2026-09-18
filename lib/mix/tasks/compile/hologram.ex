@@ -212,11 +212,18 @@ defmodule Mix.Tasks.Compile.Hologram do
       {mfas_by_page, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages, component_modules,
           pages_plt: cache.pages_plt,
+          pending_pages: cache.pending_pages,
           reaching_modules: reaching_modules,
           static_dir: opts[:static_dir],
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
+
+      # Pending until their bundles are built, so that the pages this compile does not get to are
+      # rebuilt by the next one, whether or not its own edit reaches them.
+      mfas_by_page
+      |> Enum.map(fn {page_module, _mfas} -> page_module end)
+      |> Cache.put_pending_pages()
 
       kept_mfas_by_page =
         Enum.map(kept_pages, fn {page_module, page_state} -> {page_module, page_state.mfas} end)
@@ -299,6 +306,11 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
 
       built_bundles_info = Compiler.bundle(entry_files_info, opts)
+
+      built_bundles_info
+      |> Enum.filter(&(&1.bundle_name == "page"))
+      |> Enum.map(& &1.entry_name)
+      |> Cache.delete_pending_pages()
 
       # A kept bundle is the file an earlier compile wrote, with the digest it recorded, so it
       # belongs in the page digest PLT and among the artifacts the cleanup below keeps.

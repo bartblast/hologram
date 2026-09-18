@@ -611,6 +611,45 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_page_bundles(opts)
     end
 
+    test "a page an earlier run left pending is rebuilt with no edit", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([Module1])
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().pending_pages == MapSet.new()
+      test_page_bundles(opts)
+    end
+
+    test "a pending page that no longer exists is forgotten", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([@unreached_module])
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().pending_pages == MapSet.new()
+    end
+
     test "rebuilds the pages reaching an edited module, with a full compile's result", %{
       opts: opts
     } do
