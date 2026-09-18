@@ -259,10 +259,20 @@ defmodule Mix.Tasks.Compile.Hologram do
       Compiler.build_missing_ir!(ir_plt, ir_modules)
       Compiler.prune_ir_plt(ir_plt, templatable_modules ++ ir_modules)
 
-      # Filled by the entry file renderers as they go: each reachable function's JavaScript
-      # is produced once per compile in the common case and read back by every entry file that
-      # needs it.
-      encode_plt = PLT.start(supervisor: sup)
+      # Filled by the entry file renderers as they go, and kept between compiles (see
+      # Hologram.Compiler.Cache): each reachable function's JavaScript is produced once and read back
+      # by every entry file that needs it, in this compile and the next ones. What a function's
+      # JavaScript depends on besides its module's IR is compared with what the kept encodings were
+      # made with; while it holds, only the edited modules' functions are encoded again.
+      encoding_inputs = %{
+        async_mfas: async_mfas,
+        client_stacktraces?: Hologram.client_stacktraces?()
+      }
+
+      encode_plt =
+        cache.encode_plt
+        |> patch_encode_plt(cache.encoding_inputs, encoding_inputs, module_digests_diff)
+        |> Compiler.prune_encode_plt(templatable_modules ++ ir_modules)
 
       # The stack trace metadata of every module, which the bundles look up instead of asking the
       # VM about each module once per bundle. Built only when client stack traces are on, since the
@@ -315,6 +325,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_infos = PLT.get_all(new_module_info_plt)
       Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
+      Cache.put_encoding_inputs(encoding_inputs)
 
       # The kept runtime state describes the bundle this compile replaces. A compile that fails
       # during the bundling leaves the next one diffing against the infos just kept, which show no
@@ -601,6 +612,19 @@ defmodule Mix.Tasks.Compile.Hologram do
     mfas
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> MapSet.new()
+  end
+
+  # With the inputs unchanged, the edited modules' encodings are dropped and the rest are kept; a
+  # removed module's go with the prune that follows, since its IR is not kept. Changed inputs, or
+  # none kept (a cold compile), empty the PLT: a change in the async MFAs can change the JavaScript
+  # of functions in modules the edit did not touch, the callers of a function that starts or stops
+  # awaiting, so everything is encoded again for that one compile.
+  defp patch_encode_plt(encode_plt, kept_inputs, inputs, module_digests_diff) do
+    if kept_inputs == inputs do
+      Compiler.delete_module_encodings(encode_plt, module_digests_diff.edited_modules)
+    else
+      PLT.reset(encode_plt)
+    end
   end
 
   defp runtime_js_bindings_changed?(nil, _js_binding_modules), do: false
