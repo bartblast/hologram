@@ -35,12 +35,41 @@ export default class LiveReload {
     return heldDigest !== undefined && heldDigest !== pageDigest;
   }
 
+  // The digest of the bundle this tab loaded for the page, or null when it loaded none.
+  static heldPageDigest(pageModule) {
+    if (pageModule === null) {
+      return null;
+    }
+
+    return $.pageBundleDigests.get(pageModule.value) ?? null;
+  }
+
   static recordPageBundle(pageModule, pageDigest) {
     $.pageBundleDigests.set(pageModule.value, pageDigest);
   }
 
   static reload() {
     document.location.reload();
+  }
+
+  // Whether a page snapshot can be restored into the code given by the page digest and the
+  // runtime bundle path: the snapshot holds component state shaped by the code it was taken
+  // with, and component code lives in the page bundle and, for components the runtime
+  // carries, in the runtime bundle. A snapshot with no stamp, taken before stamping existed
+  // or before any bundle was recorded, is taken on trust, as every snapshot used to be.
+  static snapshotFits(snapshot, pageDigest, runtimeBundlePath) {
+    if (!globalThis.Hologram.config.liveReload) {
+      return true;
+    }
+
+    if (snapshot.pageDigest === undefined || snapshot.pageDigest === null) {
+      return true;
+    }
+
+    return (
+      snapshot.pageDigest === pageDigest &&
+      snapshot.runtimeBundlePath === runtimeBundlePath
+    );
   }
 
   // The diagnostic arrives already read into lines of toned segments. The

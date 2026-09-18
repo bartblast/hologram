@@ -1079,9 +1079,18 @@ export default class Hologram {
     Throttler.cancelAll();
 
     await $.#savePageSnapshot();
-    $.#historyId = event.state;
 
     const pageSnapshot = await $.#getPageSnapshot(event.state);
+
+    // Checked while the history id is still the page being left's: the reload saves a snapshot
+    // on its way out, and it must be the one on screen, filed under its own entry, rather than
+    // this page's entry being overwritten with it.
+    if (pageSnapshot && (await $.#isSnapshotOutdated(pageSnapshot))) {
+      LiveReload.reload();
+      return;
+    }
+
+    $.#historyId = event.state;
 
     if (pageSnapshot) {
       $.#restorePageSnapshot(pageSnapshot);
@@ -1174,8 +1183,18 @@ export default class Hologram {
       $.#historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      // Only restore state for back/forward navigation, not page reloads
-      if (!$.#isPageReload() && pageSnapshot) {
+      // Only restore state for back/forward navigation, not page reloads, and only into the code
+      // the snapshot was taken with: this document runs the page's current code, and one that does
+      // not fit mounts from the state the server has just rendered instead.
+      if (
+        !$.#isPageReload() &&
+        pageSnapshot &&
+        LiveReload.snapshotFits(
+          pageSnapshot,
+          globalThis.Hologram.initialPageDigest,
+          $.#runtimeBundlePath(),
+        )
+      ) {
         $.#restorePageSnapshot(pageSnapshot);
       }
     } else {
@@ -1233,6 +1252,38 @@ export default class Hologram {
     return (
       Date.now() - Hologram.prefetchedPages.get(mapKey).timestamp >
       Config.fetchPageTimeoutMs
+    );
+  }
+
+  // Whether a snapshot Back or Forward is about to restore was taken with code other than the
+  // page's current one, or the tab holds the page's code in an older version: either way, the
+  // page is loaded afresh instead. Asks the server which bundle serves the page now, which is worth
+  // a round trip only where live reload runs; if no answer comes, the snapshot is restored as it
+  // always was.
+  static async #isSnapshotOutdated(pageSnapshot) {
+    if (!globalThis.Hologram.config.liveReload) {
+      return false;
+    }
+
+    let currentPageDigest;
+
+    try {
+      const pageBundlePath = await Client.fetchPageBundlePath(
+        pageSnapshot.pageModule,
+      );
+
+      currentPageDigest = $.#pageDigestFromBundlePath(pageBundlePath);
+    } catch {
+      return false;
+    }
+
+    return (
+      !LiveReload.snapshotFits(
+        pageSnapshot,
+        currentPageDigest,
+        $.#runtimeBundlePath(),
+      ) ||
+      LiveReload.holdsOldPageBundle(pageSnapshot.pageModule, currentPageDigest)
     );
   }
 
@@ -1678,6 +1729,12 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
   }
 
+  // The path of the runtime bundle this document runs, digest included, from the asset manifest the
+  // boot script left.
+  static #runtimeBundlePath() {
+    return globalThis.Hologram.assetManifest?.["hologram/runtime.js"] ?? null;
+  }
+
   static async #saveEts() {
     const storageKey = $.#ETS_STORAGE_KEY;
     const serializedEts = Serializer.serialize(ERTS.ets, "client");
@@ -1709,8 +1766,10 @@ export default class Hologram {
     const pageSnapshot = {
       componentRegistryEntries: ComponentRegistry.entries,
       instanceId: App.instanceId,
+      pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
+      runtimeBundlePath: $.#runtimeBundlePath(),
       scrollPosition: [window.scrollX, window.scrollY],
       subscriptionReceipts: Array.from(
         App.subscriptionReceiptRegistry.entries.entries(),

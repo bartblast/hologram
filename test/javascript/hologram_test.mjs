@@ -24,6 +24,7 @@ import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
+import Serializer from "../../assets/js/serializer.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
@@ -1473,6 +1474,39 @@ describe("Hologram", () => {
 
       assert.match(thrownError?.message ?? "", /Too many redirects/);
       assert.isAtMost(fetchPageStub.callCount, 10);
+    });
+
+    describe("the snapshot of the page being left", () => {
+      let originalAssetManifest, serializeStub;
+
+      beforeEach(() => {
+        originalAssetManifest = globalThis.Hologram.assetManifest;
+
+        globalThis.Hologram.assetManifest = {
+          "hologram/runtime.js": "/hologram/runtime-abc.js",
+        };
+
+        window.requestAnimationFrame = () => {};
+        serializeStub = sinon
+          .stub(Serializer, "serialize")
+          .returns("serialized");
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.assetManifest = originalAssetManifest;
+        delete window.requestAnimationFrame;
+        serializeStub.restore();
+      });
+
+      it("is stamped with the code it was taken with", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        // No page is mounted in these tests, so the tab holds no bundle for one.
+        assert.isNull(snapshot.pageDigest);
+        assert.equal(snapshot.runtimeBundlePath, "/hologram/runtime-abc.js");
+      });
     });
 
     describe("a page whose code the tab holds from an earlier visit", () => {

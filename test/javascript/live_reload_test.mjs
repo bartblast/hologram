@@ -56,6 +56,23 @@ describe("LiveReload", () => {
     });
   });
 
+  describe("heldPageDigest()", () => {
+    it("no page", () => {
+      assert.isNull(LiveReload.heldPageDigest(null));
+    });
+
+    it("a page this tab never loaded", () => {
+      assert.isNull(LiveReload.heldPageDigest(Type.atom("Elixir.MyApp.Page1")));
+    });
+
+    it("a page this tab loaded", () => {
+      const pageModule = Type.atom("Elixir.MyApp.Page1");
+      LiveReload.recordPageBundle(pageModule, "digest-1");
+
+      assert.equal(LiveReload.heldPageDigest(pageModule), "digest-1");
+    });
+  });
+
   describe("holdsOldPageBundle()", () => {
     const pageModule = Type.atom("Elixir.MyApp.Page1");
 
@@ -105,6 +122,54 @@ describe("LiveReload", () => {
     LiveReload.reload();
 
     sinon.assert.calledOnce(reloadSpy);
+  });
+
+  describe("snapshotFits()", () => {
+    const snapshot = {pageDigest: "page-1", runtimeBundlePath: "/runtime-1.js"};
+
+    beforeEach(() => {
+      globalThis.Hologram.config.liveReload = true;
+    });
+
+    it("the code it was taken with", () => {
+      assert.isTrue(
+        LiveReload.snapshotFits(snapshot, "page-1", "/runtime-1.js"),
+      );
+    });
+
+    it("another page bundle", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits(snapshot, "page-2", "/runtime-1.js"),
+      );
+    });
+
+    it("another runtime bundle", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits(snapshot, "page-1", "/runtime-2.js"),
+      );
+    });
+
+    it("a snapshot with no stamp", () => {
+      assert.isTrue(LiveReload.snapshotFits({}, "page-2", "/runtime-2.js"));
+    });
+
+    it("a snapshot stamped with no page bundle", () => {
+      assert.isTrue(
+        LiveReload.snapshotFits(
+          {pageDigest: null, runtimeBundlePath: "/runtime-1.js"},
+          "page-2",
+          "/runtime-2.js",
+        ),
+      );
+    });
+
+    it("other code, where live reload does not run", () => {
+      globalThis.Hologram.config.liveReload = false;
+
+      assert.isTrue(
+        LiveReload.snapshotFits(snapshot, "page-2", "/runtime-2.js"),
+      );
+    });
   });
 
   it("showErrorOverlay()", () => {
