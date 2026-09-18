@@ -9,6 +9,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
@@ -91,6 +92,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     plt = PLT.start()
     PLT.load(plt, dump_path)
     PLT.get_all(plt)
+  end
+
+  # What the compiler tracer records when the module is compiled: the bytes its beam holds.
+  defp report_compiled(module) do
+    Tracer.trace({:on_module, File.read!(:code.which(module)), :none}, %Macro.Env{module: module})
   end
 
   defp setup_empty_assets_and_build_dirs(opts) do
@@ -341,6 +347,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "kept compile state" do
     setup do
+      # Reset on the way out too: a test here can leave faked entries in the cache that nothing
+      # rereads, since the modules they are for are not reported as compiled.
+      on_exit(&Cache.reset/0)
       Cache.reset()
     end
 
@@ -393,8 +402,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       PLT.put(ir_plt, Module1, :stale)
 
-      # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
-      edited_info = %{module_infos[Module1] | digest: "edited", mtime: 0}
+      # An edit is compiled, so the compiler reports the module and its beam is read.
+      report_compiled(Module1)
+      edited_info = %{module_infos[Module1] | digest: "edited"}
 
       Cache.put_module_infos(
         %{module_infos | Module1 => edited_info},
@@ -525,6 +535,56 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
+    test "copies the kept entry of an editable module the compiler did not report", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        Cache.get()
+
+      # The mtime faked here would make a check of the beam read it, so a kept digest shows that
+      # the beam was not checked, and no page is rebuilt for it.
+      kept_info = %{module_infos[Module2] | digest: "kept", mtime: 0}
+      Cache.put_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().module_infos[Module2] == kept_info
+    end
+
+    test "a run with no changes checks only the beams of the protocols", %{opts: opts} do
+      run(opts)
+
+      %{editable_modules: editable_modules, module_infos: module_infos} = Cache.get()
+
+      num_editable_protocols =
+        Enum.count(editable_modules, fn module -> module_infos[module].protocol? end)
+
+      # The function a beam is checked through, which is private, so its local calls are counted.
+      mfa = {Compiler, :put_module_info_plt_entry!, 5}
+      :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) == {:call_count, num_editable_protocols}
+      after
+        :erlang.trace_pattern(mfa, false, [:local, :call_count])
+      end
+
+      assert num_editable_protocols > 0
+    end
+
     test "a run into a fresh build dir dumps the whole call graph", %{opts: opts} do
       run(opts)
 
@@ -570,8 +630,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
           MapSet.member?(page_state.modules, Module2)
         end)
 
-      # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
-      edited_info = %{module_infos[Module2] | digest: "edited", mtime: 0}
+      # An edit is compiled, so the compiler reports the module and its beam is read.
+      report_compiled(Module2)
+      edited_info = %{module_infos[Module2] | digest: "edited"}
 
       Cache.put_module_infos(
         %{module_infos | Module2 => edited_info},
@@ -616,7 +677,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
         Cache.get()
 
-      edited_info = %{module_infos[Module2] | digest: "edited", mtime: 0}
+      report_compiled(Module2)
+      edited_info = %{module_infos[Module2] | digest: "edited"}
 
       Cache.put_module_infos(
         %{module_infos | Module2 => edited_info},
@@ -697,7 +759,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
             do: module
         end)
 
-      edited_info = %{module_infos[runtime_module] | digest: "edited", mtime: 0}
+      report_compiled(runtime_module)
+      edited_info = %{module_infos[runtime_module] | digest: "edited"}
 
       Cache.put_module_infos(
         %{module_infos | runtime_module => edited_info},
@@ -878,28 +941,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "reuses the kept module infos against the time the kept compile wrote", %{opts: opts} do
       run(opts)
 
-      %{editable_modules: editable_modules, ir_plt: ir_plt, module_infos: module_infos} =
-        Cache.get()
+      %{editable_modules: editable_modules, module_infos: module_infos} = Cache.get()
 
-      module_1_info = module_infos[Module1]
+      # A consolidated protocol, whose beam a new implementation rewrites without a compile, so it
+      # is checked against its entry on every compile rather than taken from the compiler.
+      protocol_info = module_infos[Enumerable]
 
       # The state of a compile that dumped in the same second as the beam was last written: its
       # entry cannot be reused, since a beam rewritten during that second matches on mtime and size
       # and still differs. A dump time read from disk can belong to a later compile by another VM,
       # which would make the guard trust the entry below and miss the edit it carries.
       Cache.put_module_infos(
-        %{module_infos | Module1 => %{module_1_info | digest: "stale"}},
-        module_1_info.mtime,
+        %{module_infos | Enumerable => %{protocol_info | digest: "stale"}},
+        protocol_info.mtime,
         editable_modules
       )
 
       dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
-      File.touch!(dump_path, module_1_info.mtime + 100)
+      File.touch!(dump_path, protocol_info.mtime + 100)
 
       run(opts)
 
-      assert is_integer(Cache.get().module_infos[Module1].digest)
-      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
+      assert is_integer(Cache.get().module_infos[Enumerable].digest)
     end
 
     test "a run that fails leaves the next one cold", %{opts: opts} do

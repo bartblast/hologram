@@ -25,6 +25,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
 
   # How long an empty lock file is respected before it is presumed abandoned
@@ -129,12 +130,19 @@ defmodule Mix.Tasks.Compile.Hologram do
       editable_beams = Reflection.list_editable_beams()
       editable_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
 
+      # Taken on a cold compile too, so that the modules its full scan covers are forgotten.
+      compiled_modules =
+        editable_beams
+        |> Map.new()
+        |> Tracer.take()
+
       new_module_info_plt =
         build_module_info_plt(
           cache.editable_modules,
           old_module_info_plt,
           module_info_dumped_at,
           editable_beams,
+          compiled_modules,
           sup
         )
 
@@ -366,15 +374,24 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # A cold compile reads every module against the dump; a warm one rescans only the beams a save can
-  # rewrite and copies the rest of the kept entries (see Hologram.Compiler.update_module_info_plt!/5).
-  # The cache holds the editable modules only between two finished compiles, so nil means cold.
-  defp build_module_info_plt(nil, old_plt, dumped_at, _editable_beams, sup) do
+  # A cold compile reads every module against the dump; a warm one reads the modules the compiler
+  # reported among the beams a save can rewrite, and copies the rest of the kept entries (see
+  # Hologram.Compiler.update_module_info_plt!/5). The cache holds the editable modules only between
+  # two finished compiles, so nil means cold.
+  defp build_module_info_plt(nil, old_plt, dumped_at, _editable_beams, _compiled_modules, sup) do
     Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
   end
 
-  defp build_module_info_plt(editable_modules, old_plt, dumped_at, editable_beams, sup) do
+  defp build_module_info_plt(
+         editable_modules,
+         old_plt,
+         dumped_at,
+         editable_beams,
+         compiled_modules,
+         sup
+       ) do
     Compiler.update_module_info_plt!(old_plt, dumped_at, editable_modules, editable_beams,
+      compiled_modules: compiled_modules,
       supervisor: sup
     )
   end
