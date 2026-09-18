@@ -835,6 +835,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists, for each page, the pages whose module is among the modules of the page's reachable MFAs,
+  the page itself excluded. A link or a path helper in a template is a call with the page module as
+  an argument, which reaches the page's module vertex and through it `__params__/0` and
+  `__route__/0` only, so the modules of a page's MFAs name exactly the pages it links to, one hop
+  away.
+  """
+  @spec list_page_links([{module, [mfa]}], [module]) :: %{module => MapSet.t(module)}
+  def list_page_links(mfas_by_page, page_modules) do
+    page_set = MapSet.new(page_modules)
+
+    Map.new(mfas_by_page, fn {page_module, mfas} ->
+      linked_pages =
+        mfas
+        |> MapSet.new(fn {module, _function, _arity} -> module end)
+        |> MapSet.intersection(page_set)
+        |> MapSet.delete(page_module)
+
+      {page_module, linked_pages}
+    end)
+  end
+
+  @doc """
   Lists the page modules recorded in the given module info PLT, sorted by name.
   """
   @spec list_pages(PLT.t()) :: list(module)

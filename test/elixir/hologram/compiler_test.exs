@@ -2253,6 +2253,43 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "list_page_links/2" do
+    test "a page links to the pages whose functions it reaches" do
+      mfas_by_page = [
+        {Module1, [{Module1, :template, 0}, {Module2, :__route__, 0}, {Module3, :__params__, 0}]}
+      ]
+
+      assert list_page_links(mfas_by_page, [Module1, Module2, Module3]) == %{
+               Module1 => MapSet.new([Module2, Module3])
+             }
+    end
+
+    test "a page does not link to itself" do
+      mfas_by_page = [{Module1, [{Module1, :template, 0}, {Module1, :__route__, 0}]}]
+
+      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+    end
+
+    test "a reached module that is not a page is not a link" do
+      mfas_by_page = [{Module1, [{Module2, :fun_1, 0}]}]
+
+      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+    end
+
+    test "a page with no MFAs links to no page" do
+      assert list_page_links([{Module1, []}], [Module1, Module2]) == %{Module1 => MapSet.new()}
+    end
+
+    test "every given page gets an entry" do
+      mfas_by_page = [{Module1, [{Module2, :__route__, 0}]}, {Module2, []}]
+
+      assert list_page_links(mfas_by_page, [Module1, Module2]) == %{
+               Module1 => MapSet.new([Module2]),
+               Module2 => MapSet.new()
+             }
+    end
+  end
+
   test "list_pages/1" do
     info = fn page?, component? ->
       %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
