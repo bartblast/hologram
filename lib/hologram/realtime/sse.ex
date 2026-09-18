@@ -63,6 +63,16 @@ defmodule Hologram.Realtime.SSE do
   end
 
   @doc """
+  Builds the SSE event-stream chunk for a `compilation_error` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and the JSON-encoded lines of the
+  diagnostic (see `Hologram.LiveReload.Diagnostic.to_lines/1`) as the data payload.
+  """
+  @spec encode_compilation_error_envelope(integer, [[map]]) :: String.t()
+  def encode_compilation_error_envelope(id, lines) do
+    "event: compilation_error\nid: #{id}\ndata: #{Jason.encode!(lines)}\n\n"
+  end
+
+  @doc """
   Builds the SSE event-stream chunk for a `drop_sub_receipts` event: the
   standard `event:`/`id:`/`data:` framing with the given id and the encoded
   list of `{channel, cid}` keys as the data payload.
@@ -83,6 +93,17 @@ defmodule Hologram.Realtime.SSE do
   def encode_refresh_sub_receipts_envelope(id, receipts) do
     {:ok, data} = Encoder.encode_term(receipts)
     "event: refresh_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk for a `reload` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and, as the data payload, the JSON
+  list of the page modules whose bundles a live reload rebuilt (`"Elixir.MyApp.HomePage"`),
+  or `"all"` when every tab must reload.
+  """
+  @spec encode_reload_envelope(integer, [module] | :all) :: String.t()
+  def encode_reload_envelope(id, pages) do
+    "event: reload\nid: #{id}\ndata: #{Jason.encode!(pages)}\n\n"
   end
 
   # Public so tests can exercise the prep step without entering the blocking
@@ -177,6 +198,17 @@ defmodule Hologram.Realtime.SSE do
       {:close, _reason} ->
         {:halt, conn}
 
+      # A live reload whose Elixir compile failed. Forwarded as it came: the tab shows it
+      # until a compile succeeds and reloads the page.
+      {:compilation_error, lines} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_compilation_error_envelope(id, lines)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       {:drop_channel, channel} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -227,6 +259,17 @@ defmodule Hologram.Realtime.SSE do
 
           {:halt, conn} ->
             {:halt, conn}
+        end
+
+      # A live reload rebuilt these pages' bundles. Every tab gets the list, and the
+      # client decides whether the page it shows is among them.
+      {:reload, pages} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_reload_envelope(id, pages)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
         end
 
       # A page render declares the complete subscription set, so the bindings are
@@ -300,6 +343,7 @@ defmodule Hologram.Realtime.SSE do
         # once the pump starts, by which point the attach has folded in the handshake's
         # own bindings.
         conn
+        |> maybe_subscribe_to_live_reload()
         |> subscribe_to_announce_topics()
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
@@ -576,6 +620,16 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
     end
+  end
+
+  # Live reload runs in dev only, so nothing publishes on the topic elsewhere except a test,
+  # which is why test streams listen too: the feature tests reload tabs this way.
+  defp maybe_subscribe_to_live_reload(conn) do
+    if Hologram.env() in [:dev, :test] do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+    end
+
+    conn
   end
 
   defp message_pump(conn, session_id, user_id, opts) do
