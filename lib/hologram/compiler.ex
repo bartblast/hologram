@@ -1058,8 +1058,10 @@ defmodule Hologram.Compiler do
   are copied: nothing rewrites those beams while the VM runs. The editable beams now (`editable_beams`,
   `{module, beam_path}` pairs from `Hologram.Reflection.list_editable_beams/0`) are read, or their entry is
   reused under the same guard as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the
-  last compile wrote. A module of `editable_modules` that is not among the beams now gets no entry: its beam
-  is gone.
+  last compile wrote. A module of `editable_modules` that is not among the beams now is looked up as
+  `build_module_info_plt!/3` looks up every module, and gets no entry only when the VM has no beam for it: a
+  deleted module is purged, while a consolidated protocol whose directory is off the code path for a moment
+  (Phoenix's reloader takes it off while it recompiles) still has one.
 
   With `:compiled_modules`, the modules the compiler reported since the last compile whose beams hold what
   it produced (see `Hologram.Compiler.Tracer.take/1`), an editable beam is handled without a stat: a
@@ -1095,6 +1097,13 @@ defmodule Hologram.Compiler do
         compiled_modules
       )
     end)
+
+    listed_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
+    umbrella? = Reflection.umbrella?()
+
+    editable_modules
+    |> MapSet.difference(listed_modules)
+    |> Enum.each(&put_vanished_module_info!(new_plt, &1, old_plt, dumped_at, umbrella?))
 
     new_plt
   end
@@ -1548,6 +1557,17 @@ defmodule Hologram.Compiler do
         Reflection.beam_info(beam_source)
 
     put_module_info(new_plt, module, info)
+  end
+
+  # A module that left the listing without its beam being deleted, as the full scan would see it. A
+  # path the VM still names for a module whose file is gone, or for one compiled in memory, has
+  # nothing to read, so the module gets no entry, as a deleted one.
+  defp put_vanished_module_info!(new_plt, module, old_plt, dumped_at, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
+
+    if beam_source && (is_binary(beam_source) or File.regular?(beam_source)) do
+      put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
+    end
   end
 
   # The kept pages whose MFAs moved, with their new lists, and the ones whose MFAs are unchanged.
