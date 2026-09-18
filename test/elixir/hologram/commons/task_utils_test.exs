@@ -92,5 +92,55 @@ defmodule Hologram.Commons.TaskUtilsTest do
 
       assert :counters.get(counter, 1) < 19
     end
+
+    test "a failure behind a task that has not finished is raised at once" do
+      counter = :counters.new(1, [:atomics])
+
+      {elapsed_us, message} =
+        :timer.tc(fn ->
+          try do
+            map_concurrently(
+              1..20,
+              fn
+                # Does not finish on its own within the test: the stream's stop after the
+                # failure is what ends it.
+                1 ->
+                  receive do
+                    :never -> :ok
+                  after
+                    10_000 -> :ok
+                  end
+
+                2 ->
+                  raise "boom"
+
+                _elem ->
+                  :counters.add(counter, 1, 1)
+              end,
+              max_concurrency: 2
+            )
+          rescue
+            error in RuntimeError -> error.message
+          end
+        end)
+
+      assert message == "boom"
+      assert elapsed_us < 5_000_000
+      assert :counters.get(counter, 1) <= 2
+    end
+
+    test "returns results in the enumerable's order when tasks finish out of order" do
+      result =
+        map_concurrently(
+          1..4,
+          fn elem ->
+            Process.sleep((5 - elem) * 20)
+            elem
+          end,
+          max_concurrency: 4
+        )
+
+      assert result == [1, 2, 3, 4]
+    end
   end
 end
