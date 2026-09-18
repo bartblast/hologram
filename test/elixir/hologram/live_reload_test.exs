@@ -185,6 +185,64 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "plan_batch/5" do
+    # Page1 links to Page6 and Page7, Page4 to Page5: linked pages that do not sort first, so the
+    # linked tier and the rest give different batches.
+    @links %{
+      Page1 => MapSet.new([Page6, Page7]),
+      Page4 => MapSet.new([Page5])
+    }
+
+    @all_pages MapSet.new([Page1, Page2, Page3, Page4, Page5, Page6, Page7])
+
+    test "the priority pages first, in the order requested" do
+      open_pages = MapSet.new([Page1])
+
+      assert LiveReload.plan_batch(@all_pages, @links, [Page6, Page5, Page6], open_pages, 2) ==
+               [Page6, Page5]
+    end
+
+    test "a priority page no longer left to build is skipped" do
+      remaining = MapSet.new([Page1, Page2])
+
+      assert LiveReload.plan_batch(remaining, @links, [Page6], MapSet.new(), 2) == [Page1, Page2]
+    end
+
+    test "then every open page, whatever the batch size" do
+      open_pages = MapSet.new([Page4, Page1, Page6])
+
+      assert LiveReload.plan_batch(@all_pages, @links, [], open_pages, 1) ==
+               [Page1, Page4, Page6]
+    end
+
+    test "then the pages the open ones link to, up to the batch size" do
+      remaining = MapSet.new([Page2, Page3, Page5, Page6, Page7])
+      open_pages = MapSet.new([Page1, Page4])
+
+      assert LiveReload.plan_batch(remaining, @links, [], open_pages, 2) == [Page5, Page6]
+    end
+
+    test "a linked page no longer left to build is skipped" do
+      remaining = MapSet.new([Page2, Page7])
+      open_pages = MapSet.new([Page1])
+
+      assert LiveReload.plan_batch(remaining, @links, [], open_pages, 2) == [Page7]
+    end
+
+    test "then the rest, up to the batch size, sorted" do
+      remaining = MapSet.new([Page7, Page6, Page3])
+
+      assert LiveReload.plan_batch(remaining, @links, [], MapSet.new([Page4]), 2) ==
+               [Page3, Page6]
+    end
+
+    test "with no tab open, the rest" do
+      remaining = MapSet.new([Page2, Page1])
+
+      assert LiveReload.plan_batch(remaining, @links, [], MapSet.new(), 5) == [Page1, Page2]
+    end
+  end
+
   describe "start_link/1" do
     test "registers the process under its module name" do
       wait_for_process_cleanup(LiveReload)

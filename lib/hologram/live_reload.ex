@@ -138,6 +138,56 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
+  Returns the pages to build next, from the pages still to build (`remaining`), in tiers:
+
+    1. the priority pages, the ones requested while pending, in the order they were requested,
+    2. else the pages open in tabs, all of them, since those are what the developer is looking at,
+    3. else up to `batch_size` of the pages the open ones link to, which the developer may click next,
+    4. else up to `batch_size` of the rest.
+
+  The tiers only change the order: every page is built, and pages within tiers 2 to 4 are taken
+  sorted, so that the order is the same for the same input. `links` maps each page to the pages it
+  links to; an open page that is not left to build still contributes its links. Never empty while
+  `remaining` is not.
+  """
+  @spec plan_batch(
+          MapSet.t(module),
+          %{module => MapSet.t(module)},
+          [module],
+          MapSet.t(module),
+          pos_integer
+        ) :: [module]
+  def plan_batch(remaining, links, priority, open_pages, batch_size) do
+    priority_pages =
+      priority
+      |> Enum.filter(&MapSet.member?(remaining, &1))
+      |> Enum.uniq()
+
+    open_remaining_pages = MapSet.intersection(open_pages, remaining)
+
+    cond do
+      priority_pages != [] ->
+        priority_pages
+
+      MapSet.size(open_remaining_pages) > 0 ->
+        Enum.sort(open_remaining_pages)
+
+      true ->
+        linked_pages =
+          open_pages
+          |> Enum.flat_map(&Map.get(links, &1, []))
+          |> MapSet.new()
+          |> MapSet.intersection(remaining)
+
+        tier = if MapSet.size(linked_pages) > 0, do: linked_pages, else: remaining
+
+        tier
+        |> Enum.sort()
+        |> Enum.take(batch_size)
+    end
+  end
+
+  @doc """
   Reloads the application after a file change by recompiling Elixir code,
   recompiling Hologram components, reloading Hologram runtime, and 
   broadcasting reload notifications to connected clients.
