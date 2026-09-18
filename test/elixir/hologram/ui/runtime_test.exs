@@ -38,6 +38,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
+    refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
@@ -52,6 +53,12 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(markup, "globalThis.Hologram.assetManifest")
     assert String.contains?(markup, "globalThis.Hologram.csrfToken")
     assert String.contains?(markup, "globalThis.Hologram.dispatchAction")
+
+    assert String.contains?(
+             markup,
+             ~s(globalThis.Hologram.initialPageDigest = "102790adb6c3b1956db310be523a7693")
+           )
+
     assert String.contains?(markup, "globalThis.Hologram.instanceId")
     assert String.contains?(markup, "globalThis.Hologram.pageMountData")
     assert String.contains?(markup, "hologram/runtime")
@@ -71,6 +78,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
+    refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
@@ -92,6 +100,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
+    refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")

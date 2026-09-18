@@ -84,6 +84,12 @@ defmodule Hologram.Realtime.SSETest do
     token
   end
 
+  defp live_reload_subscriber?(pid) do
+    Hologram.PubSub
+    |> Registry.lookup("hologram_live_reload")
+    |> Enum.any?(fn {subscriber_pid, _value} -> subscriber_pid == pid end)
+  end
+
   defp prepared_test_conn do
     conn =
       :get
@@ -108,6 +114,21 @@ defmodule Hologram.Realtime.SSETest do
     flush_plug_conn_sent()
 
     conn
+  end
+
+  # Puts the env var back as it was before the test, set or not.
+  defp put_hologram_env(env) do
+    previous = System.get_env("HOLOGRAM_ENV")
+
+    on_exit(fn ->
+      if previous do
+        System.put_env("HOLOGRAM_ENV", previous)
+      else
+        System.delete_env("HOLOGRAM_ENV")
+      end
+    end)
+
+    System.put_env("HOLOGRAM_ENV", env)
   end
 
   defp stream_with_identities(stash_identity, claimed_identity) do
@@ -178,6 +199,15 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_compilation_error_envelope/2" do
+    test "wraps the JSON-encoded lines in a compilation_error SSE event envelope" do
+      lines = [[%{text: "** (CompileError) boom", tone: :banner}]]
+
+      assert encode_compilation_error_envelope(42, lines) ==
+               ~s|event: compilation_error\nid: 42\ndata: [[{"text":"** (CompileError) boom","tone":"banner"}]]\n\n|
+    end
+  end
+
   describe "encode_drop_sub_receipts_envelope/2" do
     test "wraps the keys list in a drop_sub_receipts SSE event envelope" do
       keys = [{:notifications, "c1"}]
@@ -195,6 +225,17 @@ defmodule Hologram.Realtime.SSETest do
 
       assert encode_refresh_sub_receipts_envelope(42, receipts) ==
                "event: refresh_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
+    end
+  end
+
+  describe "encode_reload_envelope/2" do
+    test "wraps the JSON list of page module names in a reload SSE event envelope" do
+      assert encode_reload_envelope(42, [Module1, Module2]) ==
+               ~s|event: reload\nid: 42\ndata: ["Elixir.Module1","Elixir.Module2"]\n\n|
+    end
+
+    test "names every tab with all" do
+      assert encode_reload_envelope(42, :all) == ~s|event: reload\nid: 42\ndata: "all"\n\n|
     end
   end
 
@@ -650,6 +691,18 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:compilation_error, ...}" do
+    test "pushes a compilation_error SSE event" do
+      conn = prepared_test_conn()
+      send(self(), {:compilation_error, [[%{text: "boom", tone: :banner}]]})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: compilation_error\nid: "
+      assert updated_conn.resp_body =~ ~s|\ndata: [[{"text":"boom","tone":"banner"}]]\n\n|
+    end
+  end
+
   describe "process_message/4 on {:drop_channel, ...}" do
     test "drops every cid bound to the channel and pushes a drop_sub_receipts SSE event" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
@@ -974,6 +1027,27 @@ defmodule Hologram.Realtime.SSETest do
       process_message(conn, nil, nil, receipts_refresh_interval_ms: 30)
 
       assert_receive :refresh_receipts
+    end
+  end
+
+  describe "process_message/4 on {:reload, ...}" do
+    test "pushes a reload SSE event naming the rebuilt pages" do
+      conn = prepared_test_conn()
+      send(self(), {:reload, [Module1]})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: reload\nid: "
+      assert updated_conn.resp_body =~ ~s|\ndata: ["Elixir.Module1"]\n\n|
+    end
+
+    test "pushes a reload SSE event naming every tab" do
+      conn = prepared_test_conn()
+      send(self(), {:reload, :all})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s|\ndata: "all"\n\n|
     end
   end
 
@@ -1515,6 +1589,33 @@ defmodule Hologram.Realtime.SSETest do
       assert settings.error_logger == true
 
       Process.exit(pid, :kill)
+    end
+
+    test "listens for live reload in the dev and test envs" do
+      for env <- ["dev", "test"] do
+        put_hologram_env(env)
+
+        conn = conn_with_instance_id()
+        pid = spawn(fn -> stream(conn) end)
+        on_exit(fn -> Process.exit(pid, :kill) end)
+
+        wait_until(fn -> live_reload_subscriber?(pid) end)
+      end
+    end
+
+    test "does not listen for live reload in other envs" do
+      put_hologram_env("prod")
+
+      conn = Plug.Conn.fetch_query_params(conn_with_instance_id())
+      pid = spawn(fn -> stream(conn) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
+
+      # The announce topics are joined right after, so once the instance topic has this
+      # process, the live reload subscription would have happened already.
+      topic = Realtime.instance_announce_topic(conn.query_params["instance_id"])
+      wait_until(fn -> Registry.lookup(Hologram.PubSub, topic) != [] end)
+
+      refute live_reload_subscriber?(pid)
     end
   end
 

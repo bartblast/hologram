@@ -14,8 +14,10 @@ defmodule Hologram.Application do
 
   defp children(:dev) do
     if Hologram.enabled?() do
-      # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
-      base_children() ++ [Hologram.LiveReload]
+      # The task supervisor comes first: Hologram.LiveReload runs each live reload pass under it,
+      # unlinked, so that a pass that fails is logged instead of taking the watcher down with it.
+      base_children() ++
+        [{Task.Supervisor, name: Hologram.LiveReload.TaskSupervisor}, Hologram.LiveReload]
     else
       []
     end

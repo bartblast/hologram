@@ -53,45 +53,6 @@ defmodule Hologram.Runtime.ConnectionTest do
     # end
   end
 
-  describe "init/1 environment-dependent behavior" do
-    setup do
-      original_env = System.get_env("HOLOGRAM_ENV")
-
-      on_exit(fn ->
-        if original_env do
-          System.put_env("HOLOGRAM_ENV", original_env)
-        else
-          System.delete_env("HOLOGRAM_ENV")
-        end
-      end)
-
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      :ok
-    end
-
-    test "subscribes to hologram_live_reload topic when env is dev" do
-      System.put_env("HOLOGRAM_ENV", "dev")
-
-      init(@plug_conn)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :test_message)
-
-      assert_receive :test_message
-    end
-
-    test "does not subscribe to hologram_live_reload topic when env is not dev" do
-      System.put_env("HOLOGRAM_ENV", "test")
-
-      init(@plug_conn)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :test_message)
-
-      refute_receive :test_message, 100
-    end
-  end
-
   describe "handle_in/2" do
     test "handles page_bundle_path message" do
       setup_page_digest_registry(PageDigestRegistryStub)
@@ -130,33 +91,15 @@ defmodule Hologram.Runtime.ConnectionTest do
   end
 
   describe "handle_info/2" do
-    test "handles :reload message" do
-      message = :reload
-
-      assert handle_info(message, @state) ==
-               {:push, {:text, ~s'"reload"'}, @state}
+    test "returns {:ok, state} tuple for any message" do
+      assert handle_info(:dummy, @state) == {:ok, @state}
     end
 
-    test "handles {:compilation_error, lines} message" do
-      lines = [
-        [%{tone: :banner, text: "error: undefined function foo/0"}],
-        [%{tone: :chrome, text: "  3 │ "}, %{tone: :body, text: "    foo()"}]
-      ]
+    test "no longer pushes live reload messages, which the SSE stream carries" do
+      assert handle_info(:reload, @state) == {:ok, @state}
 
-      message = {:compilation_error, lines}
-
-      expected_payload =
-        ~s'[[{"text":"error: undefined function foo/0","tone":"banner"}],' <>
-          ~s'[{"text":"  3 │ ","tone":"chrome"},{"text":"    foo()","tone":"body"}]]'
-
-      assert handle_info(message, @state) ==
-               {:push, {:text, ~s'["compilation_error",' <> expected_payload <> "]"}, @state}
-    end
-
-    test "returns {:ok, state} tuple for other messages" do
-      message = :dummy
-
-      assert handle_info(message, @state) == {:ok, @state}
+      assert handle_info({:compilation_error, [[%{tone: :banner, text: "boom"}]]}, @state) ==
+               {:ok, @state}
     end
   end
 

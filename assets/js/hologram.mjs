@@ -18,6 +18,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
+import LiveReload from "./live_reload.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -227,7 +228,7 @@ export default class Hologram {
 
     if (mapValue.isPage === false) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.leaveApp(pagePath);
+      Hologram.navigateBrowserTo(pagePath);
     } else if (mapValue.payload === null) {
       mapValue.isNavigateConfirmed = true;
     } else {
@@ -285,7 +286,7 @@ export default class Hologram {
 
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.leaveApp(mapValue.pagePath);
+      Hologram.navigateBrowserTo(mapValue.pagePath);
     } else {
       mapValue.isPage = false;
     }
@@ -427,15 +428,6 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
-  // Gives the path back to the browser, which is how Hologram answers anything it cannot mount: a
-  // target outside the app, or a response a page's middleware wrote itself. The browser then gets
-  // the same answer a typed-in URL would have got, address bar and history included.
-  static leaveApp(url) {
-    window.location.assign(url);
-  }
-
-  // Made public to make tests easier
-  //
   // Takes the page the server described, or where it says to go instead. A redirect is followed by
   // asking for the page it names, so only the page actually arrived at is mounted and only its path
   // enters history - the same trail a browser leaves, where the pages passed through on the way are
@@ -443,6 +435,18 @@ export default class Hologram {
   static async loadNewPage(pagePath, payload, hopCount = 0) {
     if (payload.type === "redirect") {
       return Hologram.#followRedirect(payload, hopCount);
+    }
+
+    const pageModule = Interpreter.evaluateJavaScriptExpression(
+      payload.pageModule,
+    );
+
+    // The tab holds this page's code from an earlier visit, and a live reload has rebuilt it since.
+    // Running the held copy would show the page as it was before the edit, so the browser loads
+    // the page afresh instead.
+    if (LiveReload.holdsOldPageBundle(pageModule, payload.pageDigest)) {
+      Hologram.navigateBrowserTo(pagePath);
+      return;
     }
 
     await $.#savePageSnapshot();
@@ -454,6 +458,21 @@ export default class Hologram {
 
       history.pushState($.#historyId, null, pagePath);
     });
+  }
+
+  // Made public to make tests easier
+  //
+  // Hands the navigation to the browser instead of doing it in the app, which is how Hologram answers
+  // anything it does not mount itself: a target outside the app, or a response a page's middleware
+  // wrote itself. The browser then gets the same answer a typed-in URL would have got, address bar
+  // and history included: the document is loaded afresh and a history entry is added.
+  static navigateBrowserTo(url) {
+    window.location.assign(url);
+  }
+
+  // The module of the page this tab shows, as the last mount or restore set it.
+  static pageModule() {
+    return Hologram.#pageModule;
   }
 
   // Made public to make tests easier
@@ -1060,9 +1079,18 @@ export default class Hologram {
     Throttler.cancelAll();
 
     await $.#savePageSnapshot();
-    $.#historyId = event.state;
 
     const pageSnapshot = await $.#getPageSnapshot(event.state);
+
+    // Checked while the history id is still the page being left's: the reload saves a snapshot
+    // on its way out, and it must be the one on screen, filed under its own entry, rather than
+    // this page's entry being overwritten with it.
+    if (pageSnapshot && (await $.#isSnapshotOutdated(pageSnapshot))) {
+      LiveReload.reload();
+      return;
+    }
+
+    $.#historyId = event.state;
 
     if (pageSnapshot) {
       $.#restorePageSnapshot(pageSnapshot);
@@ -1086,7 +1114,14 @@ export default class Hologram {
 
     await Client.fetchPageBundlePath(
       Hologram.#pageModule,
-      (resp) => $.#loadPageBundle(resp, epoch),
+      (resp) => {
+        LiveReload.recordPageBundle(
+          Hologram.#pageModule,
+          $.#pageDigestFromBundlePath(resp),
+        );
+
+        $.#loadPageBundle(resp, epoch);
+      },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
         $.#deadEpochs.add(epoch);
@@ -1148,9 +1183,27 @@ export default class Hologram {
       $.#historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      // Only restore state for back/forward navigation, not page reloads
-      if (!$.#isPageReload() && pageSnapshot) {
+      // Only restore state for back/forward navigation, not page reloads, and only into the code
+      // the snapshot was taken with: this document runs the page's current code, and one that does
+      // not fit mounts from the state the server has just rendered instead.
+      if (
+        !$.#isPageReload() &&
+        pageSnapshot &&
+        LiveReload.snapshotFits(
+          pageSnapshot,
+          globalThis.Hologram.initialPageDigest,
+          $.#runtimeBundlePath(),
+        )
+      ) {
         $.#restorePageSnapshot(pageSnapshot);
+
+        // The mount after a restore reads no mount data, which is where a page's bundle digest is
+        // recorded, so this document's is recorded here: the snapshot it saves on leaving is stamped
+        // with it.
+        LiveReload.recordPageBundle(
+          pageSnapshot.pageModule,
+          globalThis.Hologram.initialPageDigest,
+        );
       }
     } else {
       $.#historyId = Utils.randomUUID();
@@ -1210,6 +1263,38 @@ export default class Hologram {
     );
   }
 
+  // Whether a snapshot Back or Forward is about to restore was taken with code other than the
+  // page's current one, or the tab holds the page's code in an older version: either way, the
+  // page is loaded afresh instead. Asks the server which bundle serves the page now, which is worth
+  // a round trip only where live reload runs; if no answer comes, the snapshot is restored as it
+  // always was.
+  static async #isSnapshotOutdated(pageSnapshot) {
+    if (!globalThis.Hologram.config.liveReload) {
+      return false;
+    }
+
+    let currentPageDigest;
+
+    try {
+      const pageBundlePath = await Client.fetchPageBundlePath(
+        pageSnapshot.pageModule,
+      );
+
+      currentPageDigest = $.#pageDigestFromBundlePath(pageBundlePath);
+    } catch {
+      return false;
+    }
+
+    return (
+      !LiveReload.snapshotFits(
+        pageSnapshot,
+        currentPageDigest,
+        $.#runtimeBundlePath(),
+      ) ||
+      LiveReload.holdsOldPageBundle(pageSnapshot.pageModule, currentPageDigest)
+    );
+  }
+
   // What the page was mounted with, left behind by the script the server wrote into the page.
   // A navigation reaches it the same way a document load does, by patching in the page the
   // server described, that script included.
@@ -1217,13 +1302,18 @@ export default class Hologram {
   // A loaded document has no payload, so it carries the same six values as an inline script that
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
-    const mountData =
-      $.#mountData ?? globalThis.Hologram.pageMountData(Hologram.#deps);
+    // A loaded document's bundle digest comes with the other values its boot script sets.
+    const mountData = $.#mountData ?? {
+      ...globalThis.Hologram.pageMountData(Hologram.#deps),
+      pageDigest: globalThis.Hologram.initialPageDigest,
+    };
 
     $.#mountData = null;
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
+
+    LiveReload.recordPageBundle(mountData.pageModule, mountData.pageDigest);
 
     ComponentRegistry.populate(mountData.componentRegistry);
 
@@ -1332,7 +1422,7 @@ export default class Hologram {
     return Client.fetchPage(
       toParam,
       (payload) => Hologram.loadNewPage(pagePath, payload),
-      () => Hologram.leaveApp(pagePath),
+      () => Hologram.navigateBrowserTo(pagePath),
     );
   }
 
@@ -1355,6 +1445,11 @@ export default class Hologram {
     return `/hologram/page-${pageDigest}.js`;
   }
 
+  // The inverse of #pageBundlePath.
+  static #pageDigestFromBundlePath(pageBundlePath) {
+    return pageBundlePath.slice("/hologram/page-".length, -".js".length);
+  }
+
   static #pageSnapshotKey(historyId) {
     return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
   }
@@ -1366,7 +1461,7 @@ export default class Hologram {
   // fetch forever, silently.
   static #followRedirect(payload, hopCount) {
     if (!payload.pageModule) {
-      Hologram.leaveApp(payload.to);
+      Hologram.navigateBrowserTo(payload.to);
       return null;
     }
 
@@ -1385,7 +1480,7 @@ export default class Hologram {
       toParam,
       (nextPayload) =>
         Hologram.loadNewPage(payload.to, nextPayload, hopCount + 1),
-      () => Hologram.leaveApp(payload.to),
+      () => Hologram.navigateBrowserTo(payload.to),
     );
   }
 
@@ -1447,6 +1542,7 @@ export default class Hologram {
       componentRegistry: Interpreter.evaluateJavaScriptExpression(
         payload.componentRegistry,
       ),
+      pageDigest: payload.pageDigest,
       pageModule: pageModule,
       pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
       selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
@@ -1641,6 +1737,12 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
   }
 
+  // The path of the runtime bundle this document runs, digest included, from the asset manifest the
+  // boot script left.
+  static #runtimeBundlePath() {
+    return globalThis.Hologram.assetManifest?.["hologram/runtime.js"] ?? null;
+  }
+
   static async #saveEts() {
     const storageKey = $.#ETS_STORAGE_KEY;
     const serializedEts = Serializer.serialize(ERTS.ets, "client");
@@ -1672,8 +1774,10 @@ export default class Hologram {
     const pageSnapshot = {
       componentRegistryEntries: ComponentRegistry.entries,
       instanceId: App.instanceId,
+      pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
+      runtimeBundlePath: $.#runtimeBundlePath(),
       scrollPosition: [window.scrollX, window.scrollY],
       subscriptionReceipts: Array.from(
         App.subscriptionReceiptRegistry.entries.entries(),

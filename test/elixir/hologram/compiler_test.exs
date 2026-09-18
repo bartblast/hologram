@@ -1088,7 +1088,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               "globalThis.Hologram.config = {errorOverlay: true, stacktraces: true};"
+               "globalThis.Hologram.config = {errorOverlay: true, liveReload: true, stacktraces: true};"
              )
     end
 
@@ -1104,7 +1104,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: false};"
+               "globalThis.Hologram.config = {errorOverlay: false, liveReload: true, stacktraces: false};"
              )
     end
 
@@ -1189,8 +1189,30 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: true};"
+               "globalThis.Hologram.config = {errorOverlay: false, liveReload: true, stacktraces: true};"
              )
+    end
+
+    test "turns live reload off in the client config outside the dev and test envs", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      previous_env = System.get_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        if previous_env do
+          System.put_env("HOLOGRAM_ENV", previous_env)
+        else
+          System.delete_env("HOLOGRAM_ENV")
+        end
+      end)
+
+      System.put_env("HOLOGRAM_ENV", "prod")
+
+      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+
+      assert js =~ ~r/globalThis\.Hologram\.config = \{errorOverlay: \w+, liveReload: false, /
     end
 
     test "no JS imports", %{encode_plt: encode_plt, ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
@@ -2253,6 +2275,43 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "list_page_links/2" do
+    test "a page links to the pages whose functions it reaches" do
+      mfas_by_page = [
+        {Module1, [{Module1, :template, 0}, {Module2, :__route__, 0}, {Module3, :__params__, 0}]}
+      ]
+
+      assert list_page_links(mfas_by_page, [Module1, Module2, Module3]) == %{
+               Module1 => MapSet.new([Module2, Module3])
+             }
+    end
+
+    test "a page does not link to itself" do
+      mfas_by_page = [{Module1, [{Module1, :template, 0}, {Module1, :__route__, 0}]}]
+
+      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+    end
+
+    test "a reached module that is not a page is not a link" do
+      mfas_by_page = [{Module1, [{Module2, :fun_1, 0}]}]
+
+      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+    end
+
+    test "a page with no MFAs links to no page" do
+      assert list_page_links([{Module1, []}], [Module1, Module2]) == %{Module1 => MapSet.new()}
+    end
+
+    test "every given page gets an entry" do
+      mfas_by_page = [{Module1, [{Module2, :__route__, 0}]}, {Module2, []}]
+
+      assert list_page_links(mfas_by_page, [Module1, Module2]) == %{
+               Module1 => MapSet.new([Module2]),
+               Module2 => MapSet.new()
+             }
+    end
+  end
+
   test "list_pages/1" do
     info = fn page?, component? ->
       %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
@@ -2373,9 +2432,9 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "partition_affected_pages/4" do
+  describe "partition_affected_pages/5" do
     setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_4"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_5"])
       clean_dir(test_tmp_dir)
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
@@ -2401,7 +2460,13 @@ defmodule Hologram.CompilerTest do
     end
 
     test "a page with no kept state is rebuilt", %{pages_plt: pages_plt, static_dir: static_dir} do
-      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) ==
                {[Module1], []}
     end
 
@@ -2413,7 +2478,13 @@ defmodule Hologram.CompilerTest do
     } do
       PLT.put(pages_plt, Module1, page_state.([Module1, Module2], bundle_path))
 
-      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt, static_dir) ==
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new([Module2]),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) ==
                {[Module1], []}
     end
 
@@ -2426,7 +2497,13 @@ defmodule Hologram.CompilerTest do
       state = page_state.([Module1], bundle_path)
       PLT.put(pages_plt, Module1, state)
 
-      assert partition_affected_pages([Module1], MapSet.new([Module2]), pages_plt, static_dir) ==
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new([Module2]),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) ==
                {[], [{Module1, state}]}
     end
 
@@ -2437,7 +2514,13 @@ defmodule Hologram.CompilerTest do
     } do
       PLT.put(pages_plt, Module1, page_state.([Module1], Path.join(static_dir, "page-gone.js")))
 
-      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) ==
                {[Module1], []}
     end
 
@@ -2450,7 +2533,13 @@ defmodule Hologram.CompilerTest do
       PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
       File.rm!(bundle_path <> ".map")
 
-      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, static_dir) ==
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) ==
                {[Module1], []}
     end
 
@@ -2461,7 +2550,13 @@ defmodule Hologram.CompilerTest do
     } do
       PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
 
-      assert partition_affected_pages([Module1], MapSet.new(), pages_plt, "/other/static") ==
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new(),
+               pages_plt,
+               "/other/static"
+             ) ==
                {[Module1], []}
     end
 
@@ -2478,9 +2573,45 @@ defmodule Hologram.CompilerTest do
                partition_affected_pages(
                  [Module1, Module2, Module3, Module4],
                  MapSet.new(),
+                 MapSet.new(),
                  pages_plt,
                  static_dir
                )
+    end
+
+    test "a pending page is rebuilt although its kept state is usable", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      PLT.put(pages_plt, Module1, page_state.([Module1], bundle_path))
+
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new([Module1]),
+               pages_plt,
+               static_dir
+             ) == {[Module1], []}
+    end
+
+    test "a pending page that is not among the given pages is left out", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      state = page_state.([Module1], bundle_path)
+      PLT.put(pages_plt, Module1, state)
+
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new([Module2]),
+               pages_plt,
+               static_dir
+             ) == {[], [{Module1, state}]}
     end
   end
 
@@ -2573,6 +2704,31 @@ defmodule Hologram.CompilerTest do
                )
 
       assert length(kept) == length(page_modules)
+    end
+
+    test "rebuilds the pending pages although nothing reaches them", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      component_modules: component_modules,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{pending_page, pending_page_mfas} | _rest] = mfas_by_page
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          component_modules,
+          pages_plt: pages_plt,
+          pending_pages: MapSet.new([pending_page]),
+          reaching_modules: MapSet.new(),
+          static_dir: static_dir
+        )
+
+      assert rebuilt == [{pending_page, pending_page_mfas}]
+      assert length(kept) == length(page_modules) - 1
     end
 
     test "relisting keeps the pages whose MFAs are unchanged", %{
@@ -3284,6 +3440,47 @@ defmodule Hologram.CompilerTest do
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       assert validate_prop_usages([Module38], plt) == :ok
+    end
+  end
+
+  describe "usable_bundle?/2" do
+    setup do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "usable_bundle_2"])
+      clean_dir(static_dir)
+
+      bundle_path = Path.join(static_dir, "page-kept.js")
+      File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".map", "map")
+
+      bundle_info = %{
+        static_bundle_path: bundle_path,
+        static_source_map_path: bundle_path <> ".map"
+      }
+
+      [bundle_info: bundle_info, static_dir: static_dir]
+    end
+
+    test "a bundle and its source map on disk in the given static dir", %{
+      bundle_info: bundle_info,
+      static_dir: static_dir
+    } do
+      assert usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle whose file is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
+      File.rm!(bundle_info.static_bundle_path)
+
+      refute usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle whose source map is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
+      File.rm!(bundle_info.static_source_map_path)
+
+      refute usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle in another static dir", %{bundle_info: bundle_info} do
+      refute usable_bundle?(bundle_info, "/other/static")
     end
   end
 

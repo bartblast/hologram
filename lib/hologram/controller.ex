@@ -6,6 +6,7 @@ defmodule Hologram.Controller do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.LiveReload
   alias Hologram.Page
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -705,6 +706,26 @@ defmodule Hologram.Controller do
   # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
   # untouched on the common path. Applied after the handler's own ops so
   # `server.user_id` stays the source of truth for the key.
+  # In dev a live reload may still be building the page's bundle: the render names the bundle, so
+  # it waits for it, and asking for the page has it built next. This is what serves a page the
+  # live reload could not tell was about to be visited, a path computed at runtime or a redirect,
+  # with its current bundle.
+  defp maybe_await_page_bundle(page_module) do
+    if Hologram.env() == :dev do
+      LiveReload.await_page(page_module)
+    end
+  end
+
+  # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
+  # it rendered last.
+  defp maybe_note_page_rendered(nil, _page_module), do: :ok
+
+  defp maybe_note_page_rendered(instance_id, page_module) do
+    if Hologram.env() == :dev do
+      LiveReload.page_rendered(instance_id, page_module)
+    end
+  end
+
   defp maybe_persist_user_id(conn, %Server{user_id: user_id}, %Server{user_id: user_id}) do
     conn
   end
@@ -739,6 +760,8 @@ defmodule Hologram.Controller do
          client_claimed_sub_keys,
          renderer_opts
        ) do
+    maybe_await_page_bundle(page_module)
+
     conn = Session.init(initial_conn)
 
     server_struct = %{
@@ -765,6 +788,8 @@ defmodule Hologram.Controller do
         server_struct: rendered_server_struct,
         tree: rendered_tree
       } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
+
+      maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
       # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is

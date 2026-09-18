@@ -3,6 +3,21 @@ defmodule Mix.Tasks.Compile.Hologram do
   Builds Hologram project JavaScript bundles, the call graph of the code,
   PLTs needed by the runtime and PLTs needed to speed up future compilation.
 
+  ## Batches
+
+  The pages whose bundles a compile rebuilds are bundled in batches, which a caller that wants some
+  pages before others (live reload, for the pages open in the browser) orders with two options:
+
+    * `:next_batch` - called with the pages still to build (a `MapSet`) and the page links (a map
+      from each page to the `MapSet` of pages it links to), returns the pages to build now, a
+      non-empty list of some of them, or `:stop` to leave the rest pending for the next compile.
+      The runtime bundle, when it is rebuilt, is built with the first batch, or alone when the
+      first answer is `:stop`. Defaults to every page in one batch.
+
+    * `:bundles_built` - called after each batch is on disk and named by the page digest PLT dump,
+      with the page modules built, preceded by `:runtime` when the runtime bundle was built.
+      Defaults to doing nothing.
+
   ## Telemetry
 
   Emits the following events around each compilation run, i.e. the critical
@@ -86,8 +101,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     [
       assets_dir: assets_dir,
       build_dir: build_dir,
+      bundles_built: fn _built -> :ok end,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
+      next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
       node_modules_path: node_modules_path,
       static_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
       tmp_dir: Path.join(build_dir, "tmp")
@@ -212,11 +229,18 @@ defmodule Mix.Tasks.Compile.Hologram do
       {mfas_by_page, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages, component_modules,
           pages_plt: cache.pages_plt,
+          pending_pages: cache.pending_pages,
           reaching_modules: reaching_modules,
           static_dir: opts[:static_dir],
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
+
+      # Pending until their bundles are built, so that the pages this compile does not get to are
+      # rebuilt by the next one, whether or not its own edit reaches them.
+      mfas_by_page
+      |> Enum.map(fn {page_module, _mfas} -> page_module end)
+      |> Cache.put_pending_pages()
 
       kept_mfas_by_page =
         Enum.map(kept_pages, fn {page_module, page_state} -> {page_module, page_state.mfas} end)
@@ -278,76 +302,78 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{"runtime", runtime_entry_file_path, "runtime"}]
         end
 
-      page_entry_files_info =
-        mfas_by_page
-        |> Compiler.create_page_entry_files(
-          ir_plt,
-          encode_plt,
-          async_mfas,
-          runtime_js_binding_modules,
-          entry_file_opts
-        )
-        |> Enum.map(fn {entry_name, entry_file_path} ->
-          {entry_name, entry_file_path, "page"}
-        end)
+      CallGraph.dump(call_graph, call_graph_dump_path)
+      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
 
-      entry_files_info = runtime_entry_files_info ++ page_entry_files_info
+      # The dump time is kept with the infos, since the reuse guard compares them against it (see
+      # Hologram.Compiler.Cache). After everything that patches the IR PLT and the call graph, so
+      # that a compile that fails there leaves the before picture of the last finished one, against
+      # which the partly patched IR PLT and call graph are patched again. Before the bundling, so
+      # that a compile that fails there leaves this picture, and the next compile rebuilds the pages
+      # it left pending.
+      module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
+      module_infos = PLT.get_all(new_module_info_plt)
+      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
+      Cache.put_app_versions(app_versions)
+
+      # The kept runtime state describes the bundle this compile replaces. A compile that fails
+      # during the bundling leaves the next one diffing against the infos just kept, which show no
+      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
+      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
 
       old_build_static_artifacts =
         opts[:static_dir]
         |> File.ls!()
         |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
 
-      built_bundles_info = Compiler.bundle(entry_files_info, opts)
+      forget_removed_pages(cache.pages_plt, page_modules)
 
       # A kept bundle is the file an earlier compile wrote, with the digest it recorded, so it
-      # belongs in the page digest PLT and among the artifacts the cleanup below keeps.
-      kept_page_bundles_info =
-        Enum.map(kept_pages, fn {_page_module, %{bundle_info: info}} -> info end)
+      # belongs in the page digest PLT and among the artifacts the cleanup below keeps. So does the
+      # bundle a page still to rebuild had: it is served until its new one replaces it, which is
+      # never when the compile stops before the page's batch.
+      bundles =
+        %{
+          pages:
+            initial_page_bundles_info(
+              kept_pages,
+              mfas_by_page,
+              cache.pages_plt,
+              opts[:static_dir]
+            ),
+          runtime: if(runtime_entry_files_info == [], do: cache.runtime.bundle_info)
+        }
 
-      kept_bundles_info =
-        if runtime_entry_files_info == [] do
-          [cache.runtime.bundle_info | kept_page_bundles_info]
-        else
-          kept_page_bundles_info
-        end
-
-      bundles_info = built_bundles_info ++ kept_bundles_info
-
-      new_build_static_artifacts =
-        Enum.reduce(bundles_info, [], fn bundle_info, acc ->
-          [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
-        end)
-
-      {page_digest_plt, page_digest_plt_dump_path} =
-        Compiler.build_page_digest_plt(bundles_info, Keyword.put(opts, :supervisor, sup))
-
-      PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-      CallGraph.dump(call_graph, call_graph_dump_path)
-      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
-
-      # The dump time is kept with the infos, since the reuse guard compares them against it (see
-      # Hologram.Compiler.Cache). Last, so that a compile that fails anywhere before leaves the
-      # before picture of the last finished one, against which the partly patched IR PLT and call
-      # graph are patched again.
-      module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-      module_infos = PLT.get_all(new_module_info_plt)
-      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
-      Cache.put_app_versions(app_versions)
-
-      # After the dumps as well: what is kept describes files that are on disk and a page digest PLT
-      # that names them.
-      keep_built_bundles(
-        built_bundles_info,
-        mfas_by_page,
-        runtime_mfas,
-        runtime_js_binding_modules,
+      batch_context = %{
         app_versions: app_versions,
-        pages_plt: cache.pages_plt,
-        page_modules: page_modules
-      )
+        async_mfas: async_mfas,
+        encode_plt: encode_plt,
+        entry_file_opts: entry_file_opts,
+        ir_plt: ir_plt,
+        links: Compiler.list_page_links(mfas_by_page ++ kept_mfas_by_page, page_modules),
+        mfas_by_page: Map.new(mfas_by_page),
+        old_runtime_bundle_info: cache.runtime && cache.runtime.bundle_info,
+        opts: opts,
+        runtime_js_binding_modules: runtime_js_binding_modules,
+        runtime_mfas: runtime_mfas,
+        supervisor: sup
+      }
 
-      Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
+      dump_page_digest_plt(bundles, batch_context)
+
+      remaining_pages = MapSet.new(mfas_by_page, fn {page_module, _mfas} -> page_module end)
+
+      bundles =
+        build_batches(remaining_pages, runtime_entry_files_info, bundles, batch_context)
+
+      # Whatever ended the batches, the static dir keeps the bundles the page digest PLT names, and
+      # the runtime bundle.
+      named_build_static_artifacts =
+        [bundles.runtime | Map.values(bundles.pages)]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.flat_map(fn info -> [info.static_bundle_path, info.static_source_map_path] end)
+
+      Enum.each(old_build_static_artifacts -- named_build_static_artifacts, &File.rm/1)
 
       Logger.info("Hologram: compiler finished")
 
@@ -374,6 +400,23 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # Builds the pages still to rebuild in the batches the :next_batch option asks for, and the runtime
+  # with the first one, and returns the bundles the page digest PLT names once the batches stop: the
+  # ones built, and for the pages the batches did not get to, the ones they had. The runtime is built
+  # even when the first answer is :stop, since the pages kept and the pages built both load it.
+  defp build_batches(remaining_pages, runtime_entry_files_info, bundles, context) do
+    case next_batch(remaining_pages, context) do
+      :stop ->
+        bundle_batch([], runtime_entry_files_info, bundles, context)
+
+      page_modules ->
+        new_bundles = bundle_batch(page_modules, runtime_entry_files_info, bundles, context)
+        new_remaining_pages = MapSet.difference(remaining_pages, MapSet.new(page_modules))
+
+        build_batches(new_remaining_pages, [], new_bundles, context)
+    end
+  end
+
   # A cold compile reads every module against the dump; a warm one reads the modules the compiler
   # reported among the beams a save can rewrite, and copies the rest of the kept entries (see
   # Hologram.Compiler.update_module_info_plt!/5). The cache holds the editable modules only between
@@ -396,6 +439,42 @@ defmodule Mix.Tasks.Compile.Hologram do
     )
   end
 
+  # Builds the given pages, and the runtime when its entry file is given, and records them: their
+  # states in the cache, the page digest PLT that names them, and the pages no longer pending. Then
+  # the :bundles_built option is told what was built, the runtime first.
+  defp bundle_batch([], [], bundles, _context), do: bundles
+
+  defp bundle_batch(page_modules, runtime_entry_files_info, bundles, context) do
+    batch_mfas_by_page = Enum.map(page_modules, &{&1, Map.fetch!(context.mfas_by_page, &1)})
+
+    page_entry_files_info =
+      batch_mfas_by_page
+      |> Compiler.create_page_entry_files(
+        context.ir_plt,
+        context.encode_plt,
+        context.async_mfas,
+        context.runtime_js_binding_modules,
+        context.entry_file_opts
+      )
+      |> Enum.map(fn {page_module, entry_file_path} -> {page_module, entry_file_path, "page"} end)
+
+    built_bundles_info =
+      Compiler.bundle(runtime_entry_files_info ++ page_entry_files_info, context.opts)
+
+    keep_built_bundles(built_bundles_info, context)
+
+    new_bundles = put_built_bundles_info(bundles, built_bundles_info, context)
+    dump_page_digest_plt(new_bundles, context)
+    Cache.delete_pending_pages(page_modules)
+
+    built_entries =
+      if runtime_entry_files_info == [], do: page_modules, else: [:runtime | page_modules]
+
+    context.opts[:bundles_built].(built_entries)
+
+    new_bundles
+  end
+
   defp compile_with_lock(opts) do
     lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
 
@@ -404,21 +483,53 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # Records what this compile built, so that the next one can reuse the bundles of the pages an edit
-  # does not reach: a state per page bundle it wrote, the runtime's inputs with its bundle, and no
-  # state for a page that no longer exists (whose bundle the artifact cleanup has just deleted).
-  defp keep_built_bundles(
-         built_bundles_info,
-         mfas_by_page,
-         runtime_mfas,
-         runtime_js_binding_modules,
-         opts
-       ) do
-    mfas_by_page_map = Map.new(mfas_by_page)
+  # The page digest PLT is dumped after every batch, so that the build dir names the bundles on disk
+  # whenever the batches stop.
+  defp dump_page_digest_plt(bundles, context) do
+    {page_digest_plt, page_digest_plt_dump_path} =
+      bundles.pages
+      |> Map.values()
+      |> Compiler.build_page_digest_plt(
+        Keyword.put(context.opts, :supervisor, context.supervisor)
+      )
 
+    PLT.dump(page_digest_plt, page_digest_plt_dump_path)
+    PLT.stop(page_digest_plt)
+  end
+
+  # No state for a page that no longer exists, whose bundle the artifact cleanup deletes.
+  defp forget_removed_pages(pages_plt, page_modules) do
+    pages_plt
+    |> PLT.keys()
+    |> Kernel.--(page_modules)
+    |> Enum.each(&Cache.delete_page/1)
+  end
+
+  # The bundle of each kept page, and the bundle each page still to rebuild had, if it had one that
+  # can still be served: one whose file is gone, or that belongs to another static dir, would have
+  # the page digest PLT name a bundle this static dir does not have.
+  defp initial_page_bundles_info(kept_pages, mfas_by_page, pages_plt, static_dir) do
+    kept_page_bundles_info =
+      Map.new(kept_pages, fn {page_module, page_state} ->
+        {page_module, page_state.bundle_info}
+      end)
+
+    Enum.reduce(mfas_by_page, kept_page_bundles_info, fn {page_module, _mfas}, acc ->
+      with {:ok, page_state} <- PLT.get(pages_plt, page_module),
+           true <- Compiler.usable_bundle?(page_state.bundle_info, static_dir) do
+        Map.put(acc, page_module, page_state.bundle_info)
+      else
+        _unusable -> acc
+      end
+    end)
+  end
+
+  # Records what a batch built, so that the next compile can reuse the bundles of the pages an edit
+  # does not reach: a state per page bundle it wrote, and the runtime's inputs with its bundle.
+  defp keep_built_bundles(built_bundles_info, context) do
     Enum.each(built_bundles_info, fn
       %{bundle_name: "page", entry_name: page_module} = bundle_info ->
-        mfas = mfas_by_page_map[page_module]
+        mfas = context.mfas_by_page[page_module]
 
         Cache.put_page(page_module, %{
           bundle_info: bundle_info,
@@ -428,17 +539,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       %{bundle_name: "runtime"} = bundle_info ->
         Cache.put_runtime(%{
-          app_versions: opts[:app_versions],
+          app_versions: context.app_versions,
           bundle_info: bundle_info,
-          js_binding_modules: runtime_js_binding_modules,
-          mfas: runtime_mfas
+          js_binding_modules: context.runtime_js_binding_modules,
+          mfas: context.runtime_mfas
         })
     end)
-
-    opts[:pages_plt]
-    |> PLT.keys()
-    |> Kernel.--(opts[:page_modules])
-    |> Enum.each(&Cache.delete_page/1)
   end
 
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
@@ -464,6 +570,31 @@ defmodule Mix.Tasks.Compile.Hologram do
     runtime_mfas
     |> page_state_modules()
     |> MapSet.disjoint?(reaching_modules)
+  end
+
+  # :stop when no page is left to build too, so that a runtime still to build is built alone.
+  defp next_batch(remaining_pages, context) do
+    if MapSet.size(remaining_pages) == 0 do
+      :stop
+    else
+      remaining_pages
+      |> context.opts[:next_batch].(context.links)
+      |> validate_batch!(remaining_pages)
+    end
+  end
+
+  # The runtime bundle is found by scanning the static dir rather than through the page digest PLT, so
+  # the one it replaces is deleted as soon as it is written: a registry reload between two batches
+  # could otherwise find the old one. A page's old bundle stays until the cleanup at the end.
+  defp put_built_bundles_info(bundles, built_bundles_info, context) do
+    Enum.reduce(built_bundles_info, bundles, fn
+      %{bundle_name: "page", entry_name: page_module} = bundle_info, acc ->
+        %{acc | pages: Map.put(acc.pages, page_module, bundle_info)}
+
+      %{bundle_name: "runtime"} = bundle_info, acc ->
+        remove_replaced_bundle(context.old_runtime_bundle_info, bundle_info)
+        %{acc | runtime: bundle_info}
+    end)
   end
 
   defp page_state_modules(mfas) do
@@ -599,6 +730,18 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.each(&File.touch!/1)
   end
 
+  # A digest names its bundle's content, so a rebuild that wrote the same content wrote the same file.
+  defp remove_replaced_bundle(nil, _new_bundle_info), do: :ok
+
+  defp remove_replaced_bundle(old_bundle_info, new_bundle_info) do
+    if old_bundle_info.static_bundle_path != new_bundle_info.static_bundle_path do
+      File.rm(old_bundle_info.static_bundle_path)
+      File.rm(old_bundle_info.static_source_map_path)
+    end
+
+    :ok
+  end
+
   defp remove_lock_file_with_invalid_os_pid(lock_path) do
     Logger.info("Hologram: removing lock file with invalid OS-level PID format")
     File.rm(lock_path)
@@ -675,6 +818,28 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Hologram supports, and a platform fallback would reintroduce the very two-step
   # acquisition the idiom exists to remove.
   #
+  # The :next_batch option answers with pages to build now: some of the remaining ones, and at least
+  # one, since an empty batch would ask again forever.
+  defp validate_batch!(:stop, _remaining_pages), do: :stop
+
+  defp validate_batch!([_page_module | _rest] = page_modules, remaining_pages) do
+    unknown_pages = Enum.reject(page_modules, &MapSet.member?(remaining_pages, &1))
+
+    if unknown_pages != [] do
+      raise ArgumentError,
+            "Hologram: the :next_batch option returned pages that are not left to build: " <>
+              inspect(unknown_pages)
+    end
+
+    Enum.uniq(page_modules)
+  end
+
+  defp validate_batch!(batch, _remaining_pages) do
+    raise ArgumentError,
+          "Hologram: the :next_batch option must return a non-empty list of pages or :stop, got: " <>
+            inspect(batch)
+  end
+
   # The one state left is an empty lock whose owner died between the two steps: nothing
   # would ever fill or remove it. Hence the grace period - an empty lock is respected
   # only while it is young, and the retry loop's stale check clears an abandoned one

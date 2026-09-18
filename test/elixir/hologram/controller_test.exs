@@ -10,6 +10,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Encoder
+  alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -173,6 +174,21 @@ defmodule Hologram.ControllerTest do
     |> handle_sse_handshake_request()
   end
 
+  # Puts the env var back as it was before the test, set or not.
+  defp put_hologram_env(env) do
+    previous = System.get_env("HOLOGRAM_ENV")
+
+    on_exit(fn ->
+      if previous do
+        System.put_env("HOLOGRAM_ENV", previous)
+      else
+        System.delete_env("HOLOGRAM_ENV")
+      end
+    end)
+
+    System.put_env("HOLOGRAM_ENV", env)
+  end
+
   defp render_page_with_instance(page_module, instance_id, client_claimed_sub_keys \\ []) do
     :get
     |> Plug.Test.conn("/")
@@ -183,6 +199,11 @@ defmodule Hologram.ControllerTest do
       instance_id: instance_id,
       csrf_token: @masked_csrf_token
     )
+  end
+
+  defp start_live_reload do
+    wait_for_process_cleanup(LiveReload)
+    start_supervised!({LiveReload, watch?: false})
   end
 
   defp serialize_params(params) when params == %{} do
@@ -1985,6 +2006,53 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module26, :dummy_module_26_digest)
 
       :ok
+    end
+
+    test "in dev, tells live reload which page the tab rendered" do
+      put_hologram_env("dev")
+      start_live_reload()
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      render_page_with_instance(Module14, "test-instance-id")
+
+      assert LiveReload.open_pages() == %{"test-instance-id" => Module14}
+    end
+
+    test "outside dev, tells live reload nothing" do
+      put_hologram_env("test")
+      start_live_reload()
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      render_page_with_instance(Module14, "test-instance-id")
+
+      assert LiveReload.open_pages() == %{}
+    end
+
+    test "in dev, renders a page whose bundle a live reload is building once it is built" do
+      put_hologram_env("dev")
+      pid = start_live_reload()
+
+      # A pass is building the page: pending, with a pass running, so the request waits rather
+      # than starting one.
+      pass_ref = make_ref()
+
+      :sys.replace_state(pid, fn state ->
+        %{
+          state
+          | pass: %{ref: pass_ref, registries_reloaded?: true},
+            pending: MapSet.new([Module14])
+        }
+      end)
+
+      request = Task.async(fn -> render_page_with_instance(Module14, "test-instance-id") end)
+
+      wait_until(fn -> Map.has_key?(:sys.get_state(pid).waiters, Module14) end)
+      assert Task.yield(request, 50) == nil
+
+      # The pass ends, which answers the requests still waiting.
+      send(pid, {pass_ref, :ok})
+
+      assert %Plug.Conn{status: 200} = Task.await(request)
     end
 
     test "skips the render and sends the terminal response when page middleware terminates" do

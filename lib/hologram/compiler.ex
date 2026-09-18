@@ -835,6 +835,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists, for each page, the pages whose module is among the modules of the page's reachable MFAs,
+  the page itself excluded. A link or a path helper in a template is a call with the page module as
+  an argument, which reaches the page's module vertex and through it `__params__/0` and
+  `__route__/0` only, so the modules of a page's MFAs name exactly the pages it links to, one hop
+  away.
+  """
+  @spec list_page_links([{module, [mfa]}], [module]) :: %{module => MapSet.t(module)}
+  def list_page_links(mfas_by_page, page_modules) do
+    page_set = MapSet.new(page_modules)
+
+    Map.new(mfas_by_page, fn {page_module, mfas} ->
+      linked_pages =
+        mfas
+        |> MapSet.new(fn {module, _function, _arity} -> module end)
+        |> MapSet.intersection(page_set)
+        |> MapSet.delete(page_module)
+
+      {page_module, linked_pages}
+    end)
+  end
+
+  @doc """
   Lists the page modules recorded in the given module info PLT, sorted by name.
   """
   @spec list_pages(PLT.t()) :: list(module)
@@ -902,18 +924,34 @@ defmodule Hologram.Compiler do
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
   module), when the bundle its kept state describes or that bundle's source map is no longer on disk
   (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
-  belongs to a static dir other than the given one.
+  belongs to a static dir other than the given one. A page in `pending_pages` is rebuilt too: an
+  earlier compile set out to build it and did not, so its kept bundle may predate an edit.
 
   Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
   the pages were given.
   """
-  @spec partition_affected_pages([module], MapSet.t(module), PLT.t(), T.file_path()) ::
+  @spec partition_affected_pages(
+          [module],
+          MapSet.t(module),
+          MapSet.t(module),
+          PLT.t(),
+          T.file_path()
+        ) ::
           {[module], [{module, map}]}
-  def partition_affected_pages(page_modules, reaching_modules, pages_plt, static_dir) do
+  def partition_affected_pages(
+        page_modules,
+        reaching_modules,
+        pending_pages,
+        pages_plt,
+        static_dir
+      ) do
     {kept_pages, pages_to_rebuild} =
       page_modules
       |> Enum.map(fn page_module ->
-        {page_module, keepable_page_state(pages_plt, page_module, reaching_modules, static_dir)}
+        page_state =
+          keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir)
+
+        {page_module, page_state}
       end)
       |> Enum.split_with(fn {_page_module, page_state} -> page_state end)
 
@@ -927,8 +965,11 @@ defmodule Hologram.Compiler do
   Options:
 
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
+    * `:pending_pages` - the pages an earlier compile left unbuilt (see
+      `Hologram.Compiler.Cache.put_pending_pages/1`); they are rebuilt whether or not the edit reaches
+      them. Defaults to none.
     * `:reaching_modules` - the modules that reach the changed ones, from
-      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/4` for
+      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/5` for
       what makes a page affected.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
     * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
@@ -948,6 +989,7 @@ defmodule Hologram.Compiler do
         partition_affected_pages(
           page_modules,
           opts[:reaching_modules],
+          Keyword.get(opts, :pending_pages, MapSet.new()),
           opts[:pages_plt],
           opts[:static_dir]
         )
@@ -1106,6 +1148,19 @@ defmodule Hologram.Compiler do
     |> Enum.each(&put_vanished_module_info!(new_plt, &1, old_plt, dumped_at, umbrella?))
 
     new_plt
+  end
+
+  @doc """
+  Whether the bundle the given bundle info describes can still be served from the given static dir:
+  it was written there, and both the bundle and its source map are on disk. A build dir can lose
+  bundles to another build env sharing the static dir, and the info names one static dir, so reusing
+  it for another would put a digest into that dir's page digest PLT whose file lives elsewhere.
+  """
+  @spec usable_bundle?(map, T.file_path()) :: boolean
+  def usable_bundle?(bundle_info, static_dir) do
+    Path.dirname(bundle_info.static_bundle_path) == static_dir and
+      File.exists?(bundle_info.static_bundle_path) and
+      File.exists?(bundle_info.static_source_map_path)
   end
 
   @doc """
@@ -1386,14 +1441,11 @@ defmodule Hologram.Compiler do
   defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
 
   # nil when the page must be rebuilt, its kept state otherwise.
-  defp keepable_page_state(pages_plt, page_module, reaching_modules, static_dir) do
-    with {:ok, page_state} <- PLT.get(pages_plt, page_module),
+  defp keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir) do
+    with false <- MapSet.member?(pending_pages, page_module),
+         {:ok, page_state} <- PLT.get(pages_plt, page_module),
          true <- MapSet.disjoint?(page_state.modules, reaching_modules),
-         # The state names its bundle's path, so it describes one static dir: reusing it for another
-         # would put a digest into that dir's page digest PLT whose file lives elsewhere.
-         true <- Path.dirname(page_state.bundle_info.static_bundle_path) == static_dir,
-         true <- File.exists?(page_state.bundle_info.static_bundle_path),
-         true <- File.exists?(page_state.bundle_info.static_source_map_path) do
+         true <- usable_bundle?(page_state.bundle_info, static_dir) do
       page_state
     else
       _fallback -> nil
@@ -1633,8 +1685,14 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # liveReload lets the client load a page afresh when it holds that page's code in an older
+  # version (see live_reload.mjs). Live reload runs in dev only, and test is included so that the
+  # feature tests can drive it, as the SSE stream's live reload subscription does.
   defp render_client_config do
-    ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
+    live_reload? = Hologram.env() in [:dev, :test]
+
+    "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
+      "stacktraces: #{Hologram.client_stacktraces?()}}"
   end
 
   # Functions are listed by module, then function name, then arity. The module order is the

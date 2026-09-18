@@ -7,7 +7,17 @@
 defmodule Hologram.LiveReloadTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
+  import Hologram.Test.Stubs
+  import Mox
+
   alias Hologram.LiveReload
+  alias Hologram.Realtime.SubscriptionRegistry
+
+  use_module_stub :asset_manifest_cache
+  use_module_stub :asset_path_registry
+  use_module_stub :page_digest_registry
+  use_module_stub :page_module_resolver
 
   @debounce_delay LiveReload.debounce_delay()
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
@@ -28,7 +38,7 @@ defmodule Hologram.LiveReloadTest do
 
   describe "handle_info/2, file events" do
     setup do
-      [state: %{endpoint: nil, timer_ref: nil}]
+      [state: LiveReload.initial_state(nil)]
     end
 
     test "ignores :stop file events", %{state: state} do
@@ -137,6 +147,141 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "open_pages/0" do
+    setup do
+      wait_for_process_cleanup(SubscriptionRegistry)
+      start_supervised!(SubscriptionRegistry)
+
+      wait_for_process_cleanup(LiveReload)
+      start_supervised!({LiveReload, watch?: false})
+
+      :ok
+    end
+
+    test "lists the page each tab with an SSE connection shows" do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      LiveReload.page_rendered("instance-1", Module1)
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module1}
+    end
+
+    test "a tab's later render replaces the page it showed" do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      LiveReload.page_rendered("instance-1", Module1)
+      LiveReload.page_rendered("instance-1", Module2)
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module2}
+    end
+
+    test "keeps a tab whose SSE connection has not attached yet" do
+      LiveReload.page_rendered("instance-1", Module1)
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module1}
+      assert {Module1, missing_since} = :sys.get_state(LiveReload).open_pages["instance-1"]
+      assert is_integer(missing_since)
+    end
+
+    test "forgets a tab seen without an SSE connection for longer than the grace period" do
+      LiveReload.page_rendered("instance-1", Module1)
+
+      long_ago = System.monotonic_time(:millisecond) - 60_000
+
+      :sys.replace_state(LiveReload, fn state ->
+        %{state | open_pages: %{"instance-1" => {Module1, long_ago}}}
+      end)
+
+      assert LiveReload.open_pages() == %{}
+      assert :sys.get_state(LiveReload).open_pages == %{}
+    end
+
+    test "a tab seen with its SSE connection again is no longer missing" do
+      LiveReload.page_rendered("instance-1", Module1)
+      LiveReload.open_pages()
+
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+
+      assert LiveReload.open_pages() == %{"instance-1" => Module1}
+      assert :sys.get_state(LiveReload).open_pages == %{"instance-1" => {Module1, nil}}
+    end
+  end
+
+  describe "page_rendered/2" do
+    test "does nothing when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.page_rendered("instance-1", Module1) == :ok
+    end
+  end
+
+  describe "plan_batch/5" do
+    # Page1 links to Page6 and Page7, Page4 to Page5: linked pages that do not sort first, so the
+    # linked tier and the rest give different batches.
+    @links %{
+      Page1 => MapSet.new([Page6, Page7]),
+      Page4 => MapSet.new([Page5])
+    }
+
+    @all_pages MapSet.new([Page1, Page2, Page3, Page4, Page5, Page6, Page7])
+
+    test "the priority pages first, in the order requested" do
+      open_pages = MapSet.new([Page1])
+
+      assert LiveReload.plan_batch(@all_pages, @links, [Page6, Page5, Page6], open_pages, 2) ==
+               [Page6, Page5]
+    end
+
+    test "a priority page no longer left to build is skipped" do
+      remaining = MapSet.new([Page1, Page2])
+
+      assert LiveReload.plan_batch(remaining, @links, [Page6], MapSet.new(), 2) == [Page1, Page2]
+    end
+
+    test "then every open page, whatever the batch size" do
+      open_pages = MapSet.new([Page4, Page1, Page6])
+
+      assert LiveReload.plan_batch(@all_pages, @links, [], open_pages, 1) ==
+               [Page1, Page4, Page6]
+    end
+
+    test "then the pages the open ones link to, up to the batch size" do
+      remaining = MapSet.new([Page2, Page3, Page5, Page6, Page7])
+      open_pages = MapSet.new([Page1, Page4])
+
+      assert LiveReload.plan_batch(remaining, @links, [], open_pages, 2) == [Page5, Page6]
+    end
+
+    test "a linked page no longer left to build is skipped" do
+      remaining = MapSet.new([Page2, Page7])
+      open_pages = MapSet.new([Page1])
+
+      assert LiveReload.plan_batch(remaining, @links, [], open_pages, 2) == [Page7]
+    end
+
+    test "then the rest, up to the batch size, sorted" do
+      remaining = MapSet.new([Page7, Page6, Page3])
+
+      assert LiveReload.plan_batch(remaining, @links, [], MapSet.new([Page4]), 2) ==
+               [Page3, Page6]
+    end
+
+    test "with no tab open, the rest" do
+      remaining = MapSet.new([Page2, Page1])
+
+      assert LiveReload.plan_batch(remaining, @links, [], MapSet.new(), 5) == [Page1, Page2]
+    end
+  end
+
+  describe "start_link/1" do
+    test "registers the process under its module name" do
+      wait_for_process_cleanup(LiveReload)
+      pid = start_supervised!({LiveReload, watch?: false})
+
+      assert Process.whereis(LiveReload) == pid
+    end
+  end
+
   describe "watched_dirs/0" do
     test "single-app project" do
       result = LiveReload.watched_dirs()
@@ -201,37 +346,322 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
-  describe "debounced reload handling" do
+  describe "await_page/1" do
+    test "returns at once when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.await_page(Page1) == :ok
+    end
+  end
+
+  describe "live reload pass" do
+    setup :set_mox_global
+
     setup do
-      [state: %{endpoint: :dummy_endpoint, timer_ref: make_ref()}]
+      setup_asset_path_registry(AssetPathRegistryStub)
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+      setup_page_module_resolver(PageModuleResolverStub)
+
+      wait_for_process_cleanup(SubscriptionRegistry)
+      start_supervised!(SubscriptionRegistry)
+
+      start_supervised!({Task.Supervisor, name: LiveReload.TaskSupervisor})
+
+      wait_for_process_cleanup(LiveReload)
+      pid = start_supervised!({LiveReload, watch?: false})
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+
+      [pid: pid]
     end
 
-    test "debounced_reload always triggers reload attempt", %{state: state} do
-      import Mox, only: [expect: 3]
+    test "a debounced reload runs a pass with the file and the endpoint", %{pid: pid} do
+      test_pid = self()
 
-      # Mock the reload function to be called (but can raise an error to simulate real behavior)
-      expect(LiveReloadMock, :reload, fn @file_path, :dummy_endpoint ->
-        # Simulate Phoenix.CodeReloader failure
-        raise "expected test error"
+      expect(LiveReloadMock, :reload, fn file_path, endpoint, opts ->
+        send(test_pid, {:reloaded, file_path, endpoint, Keyword.keys(opts)})
+        :ok
       end)
 
-      assert_raise RuntimeError, "expected test error", fn ->
-        LiveReload.handle_info({:debounced_reload, @file_path}, state)
-      end
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reloaded, @file_path, nil, option_keys}
+      assert Enum.sort(option_keys) == [:bundles_built, :next_batch]
+
+      wait_until(fn -> :sys.get_state(pid).pass == nil end)
     end
 
-    test "debounced_reload clears timer_ref", %{state: state} do
-      import Mox, only: [expect: 3]
+    test "asks for the pages open in tabs first", %{pid: pid} do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page2)
 
-      timer_ref = make_ref()
-      state_with_timer = %{state | timer_ref: timer_ref}
+      test_pid = self()
 
-      expect(LiveReloadMock, :reload, fn @file_path, :dummy_endpoint -> :ok end)
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        remaining = MapSet.new([Page1, Page2, Page3])
+        batch = next_batch.(remaining, %{})
+        send(test_pid, {:batch, batch})
+        :ok
+      end)
 
-      result = LiveReload.handle_info({:debounced_reload, @file_path}, state_with_timer)
+      send(pid, {:debounced_reload, @file_path})
 
-      assert {:noreply, new_state} = result
-      assert new_state.timer_ref == nil
+      assert_receive {:batch, [Page2]}
+    end
+
+    test "reloads the tabs on the pages a batch built, and no longer counts them pending", %{
+      pid: pid
+    } do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        remaining = MapSet.new([Page1, Page2, Page3])
+        next_batch.(remaining, %{})
+        bundles_built.([Page1, Page2])
+        send(test_pid, :built)
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, [Page1, Page2]}
+      assert_receive :built
+      assert :sys.get_state(pid).pending == MapSet.new([Page3])
+    end
+
+    test "reloads every tab when the runtime bundle was rebuilt", %{pid: pid} do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+        bundles_built.([:runtime, Page1])
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, :all}
+    end
+
+    test "a save during a pass stops it at its next batch and runs a pass of its own", %{
+      pid: pid
+    } do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, opts ->
+          send(test_pid, {:first_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          remaining = MapSet.new([Page1])
+          batch = next_batch.(remaining, %{})
+          send(test_pid, {:first_batch, batch})
+          :ok
+
+        "second.ex", _endpoint, _opts ->
+          send(test_pid, :second_started)
+          :ok
+      end)
+
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:first_started, task_pid}
+
+      send(pid, {:debounced_reload, "second.ex"})
+
+      # Handled once the state can be read back, so the save is recorded before the pass goes on.
+      :sys.get_state(pid)
+      send(task_pid, :continue)
+
+      assert_receive {:first_batch, :stop}
+      assert_receive :second_started
+    end
+
+    test "a pass that fails is logged, and the next save runs a pass", %{pid: pid} do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, _opts ->
+          raise "expected test error"
+
+        "second.ex", _endpoint, _opts ->
+          send(test_pid, :second_started)
+          :ok
+      end)
+
+      log =
+        capture_log(fn ->
+          send(pid, {:debounced_reload, "first.ex"})
+          :sys.get_state(pid)
+          wait_until(fn -> :sys.get_state(pid).pass == nil end)
+        end)
+
+      assert log =~ "Hologram: live reload pass failed"
+
+      send(pid, {:debounced_reload, "second.ex"})
+
+      assert_receive :second_started
+    end
+
+    test "a request for a page that is not pending gets its bundle at once", %{pid: _pid} do
+      assert LiveReload.await_page(Page1) == :ok
+    end
+
+    test "a request for a pending page waits for its batch, and pulls it to the front", %{
+      pid: pid
+    } do
+      # The open page keeps the first batch to itself, so the other two stay pending.
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page1)
+
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        first_remaining = MapSet.new([Page1, Page2, Page3])
+        first_batch = next_batch.(first_remaining, %{})
+        bundles_built.(first_batch)
+
+        send(test_pid, {:waiting, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        second_remaining = MapSet.new([Page2, Page3])
+        second_batch = next_batch.(second_remaining, %{})
+        send(test_pid, {:second_batch, second_batch})
+        bundles_built.(second_batch)
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:waiting, task_pid}
+
+      request = Task.async(fn -> LiveReload.await_page(Page3) end)
+
+      # The request is parked once the scheduler has handled it.
+      wait_until(fn -> Map.has_key?(:sys.get_state(pid).waiters, Page3) end)
+      assert Task.yield(request, 50) == nil
+
+      send(task_pid, :continue)
+
+      assert_receive {:second_batch, [Page3]}
+      assert Task.await(request) == :ok
+    end
+
+    test "a request for a page a failed pass left pending starts a pass that builds it", %{
+      pid: pid
+    } do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page1)
+
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, opts ->
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          remaining = MapSet.new([Page1, Page2])
+          next_batch.(remaining, %{})
+
+          raise "expected test error"
+
+        nil, _endpoint, opts ->
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+          remaining = MapSet.new([Page1, Page2])
+          batch = next_batch.(remaining, %{})
+          send(test_pid, {:requested_pass_batch, batch})
+          bundles_built.(batch)
+
+          :ok
+      end)
+
+      capture_log(fn ->
+        send(pid, {:debounced_reload, "first.ex"})
+        :sys.get_state(pid)
+        wait_until(fn -> :sys.get_state(pid).pass == nil end)
+      end)
+
+      assert :sys.get_state(pid).pending == MapSet.new([Page1, Page2])
+
+      assert LiveReload.await_page(Page2) == :ok
+      assert_receive {:requested_pass_batch, [Page2]}
+    end
+
+    test "a waiting request is answered when the pass ends without its page", %{pid: pid} do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page1)
+
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        remaining = MapSet.new([Page1, Page2])
+        next_batch.(remaining, %{})
+
+        send(test_pid, {:waiting, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:waiting, task_pid}
+
+      request = Task.async(fn -> LiveReload.await_page(Page2) end)
+      wait_until(fn -> Map.has_key?(:sys.get_state(pid).waiters, Page2) end)
+
+      send(task_pid, :continue)
+
+      assert Task.await(request) == :ok
+      assert :sys.get_state(pid).waiters == %{}
+    end
+
+    test "a pass that outlives its scheduler does not report to the replacement", %{pid: pid} do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        send(test_pid, {:started, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        remaining = MapSet.new([Page1])
+        reason = catch_exit(next_batch.(remaining, %{}))
+        send(test_pid, {:callback_exited, reason})
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:started, task_pid}
+
+      # The scheduler goes away and a replacement takes its name, while the pass runs on.
+      stop_supervised!(LiveReload)
+      wait_for_process_cleanup(LiveReload)
+      replacement_pid = start_supervised!({LiveReload, watch?: false})
+
+      send(task_pid, :continue)
+
+      assert_receive {:callback_exited, {:noproc, _call}}
+      assert Process.alive?(replacement_pid)
+      assert :sys.get_state(replacement_pid).pending == MapSet.new()
     end
   end
 end

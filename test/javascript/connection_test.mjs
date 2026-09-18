@@ -9,7 +9,6 @@ import {
 
 import Connection from "../../assets/js/connection.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
-import LiveReload from "../../assets/js/live_reload.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -375,29 +374,6 @@ describe("Connection", () => {
   });
 
   describe("handleMessage()", () => {
-    describe("compilation_error message", () => {
-      it("handles compilation_error message", () => {
-        const showErrorOverlaySpy = sinon.stub(LiveReload, "showErrorOverlay");
-
-        const lines = [
-          [{text: "error: undefined function foo/0", tone: "banner"}],
-          [
-            {text: "  3 │ ", tone: "chrome"},
-            {text: "    foo()", tone: "body"},
-          ],
-        ];
-
-        const message = JSON.stringify(["compilation_error", lines]);
-        const event = {data: message};
-
-        Connection.handleMessage(event);
-
-        sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, lines);
-
-        showErrorOverlaySpy.restore();
-      });
-    });
-
     describe("pong message", () => {
       it("handles pong message", () => {
         Connection.pongTimer = setTimeout(() => {}, 10_000);
@@ -406,19 +382,6 @@ describe("Connection", () => {
         Connection.handleMessage(event);
 
         assert.isNull(Connection.pongTimer);
-      });
-    });
-
-    describe("reload message", () => {
-      it("handles reload message", () => {
-        const reloadStub = sinon.stub(LiveReload, "reload");
-
-        const event = {data: '"reload"'};
-        Connection.handleMessage(event);
-
-        sinon.assert.calledOnce(reloadStub);
-
-        reloadStub.restore();
       });
     });
 

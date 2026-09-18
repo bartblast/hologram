@@ -24,6 +24,14 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
     end
 
+    test "keeps the pending pages" do
+      put_pending_pages([Module1])
+
+      clear_module_infos()
+
+      assert get().pending_pages == MapSet.new([Module1])
+    end
+
     test "keeps the call graph and the IR PLT" do
       %{call_graph: call_graph, ir_plt: ir_plt} = get()
       CallGraph.add_vertex(call_graph, {Module1, :fun_1, 0})
@@ -48,6 +56,22 @@ defmodule Hologram.Compiler.CacheTest do
 
     test "a page that was never kept" do
       assert delete_page(Module1) == :ok
+    end
+  end
+
+  describe "delete_pending_pages/1" do
+    test "forgets the given pages and keeps the rest" do
+      put_pending_pages([Module1, Module2, Module3])
+
+      assert delete_pending_pages([Module1, Module3]) == :ok
+      assert get().pending_pages == MapSet.new([Module2])
+    end
+
+    test "a page that is not pending" do
+      put_pending_pages([Module1])
+
+      assert delete_pending_pages([Module2]) == :ok
+      assert get().pending_pages == MapSet.new([Module1])
     end
   end
 
@@ -79,8 +103,11 @@ defmodule Hologram.Compiler.CacheTest do
                ir_plt: %PLT{} = ir_plt,
                module_infos: nil,
                pages_plt: %PLT{} = pages_plt,
+               pending_pages: pending_pages,
                runtime: nil
              } = get()
+
+      assert pending_pages == MapSet.new()
 
       assert CallGraph.vertices(call_graph) == []
       assert PLT.keys(ir_plt) == []
@@ -128,6 +155,13 @@ defmodule Hologram.Compiler.CacheTest do
     assert PLT.get(get().pages_plt, Module1) == {:ok, page_state}
   end
 
+  test "put_pending_pages/1" do
+    put_pending_pages([Module1, Module2])
+
+    assert put_pending_pages([Module3]) == :ok
+    assert get().pending_pages == MapSet.new([Module3])
+  end
+
   test "put_runtime/1" do
     runtime_state = %{
       app_versions: [hologram: "1.0.0"],
@@ -173,6 +207,14 @@ defmodule Hologram.Compiler.CacheTest do
       reset()
 
       assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
+    end
+
+    test "forgets the pending pages" do
+      put_pending_pages([Module1])
+
+      reset()
+
+      assert get().pending_pages == MapSet.new()
     end
 
     test "stops the kept page states and forgets the app versions and the runtime" do
