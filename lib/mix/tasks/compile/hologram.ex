@@ -123,6 +123,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       {cache, old_module_info_plt, module_info_dumped_at} =
         load_before_state(build_dir, call_graph_dump_path, sup)
 
+      # Listed with the scan, so that the modules kept as editable and the module infos kept with
+      # them describe the same moment.
+      editable_beams = Reflection.list_editable_beams()
+      editable_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
+
       new_module_info_plt =
         Compiler.build_module_info_plt!(old_module_info_plt, module_info_dumped_at,
           supervisor: sup
@@ -314,7 +319,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # graph are patched again.
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
       module_infos = PLT.get_all(new_module_info_plt)
-      Cache.put_module_infos(module_infos, module_info_dumped_at)
+      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
 
       # After the dumps as well: what is kept describes files that are on disk and a page digest PLT

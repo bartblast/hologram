@@ -5,13 +5,13 @@ defmodule Hologram.Compiler.Cache do
   # and the call graph with the module digests diff and builds only the IR it is missing,
   # instead of rebuilding the IR of every module and reloading the graph from its dump. The
   # module infos of the last finished compile are kept with them, with the mtime of the dump that
-  # compile wrote: they are the picture both were brought in line with, so the next compile diffs
-  # against them rather than against the dump on disk, which another VM sharing the build dir may
-  # have rewritten. What each page and the runtime were built from is kept too, so that a compile
-  # rebuilds only the pages an edit reaches. Started on first use
-  # and not linked to the caller, so it outlives the compile that started it. A compile that finds
-  # no module infos here starts from the build dir, so nothing depends on the cache for
-  # correctness.
+  # compile wrote and the modules whose beams a save can rewrite: they are the picture both were
+  # brought in line with, so the next compile diffs against them rather than against the dump on
+  # disk, which another VM sharing the build dir may have rewritten. What each page and the
+  # runtime were built from is kept too, so that a compile rebuilds only the pages an edit
+  # reaches. Started on first use and not linked to the caller, so it outlives the compile that
+  # started it. A compile that finds no module infos here starts from the build dir, so nothing
+  # depends on the cache for correctness.
 
   use GenServer
 
@@ -31,6 +31,7 @@ defmodule Hologram.Compiler.Cache do
           app_versions: keyword(String.t()) | nil,
           call_graph: CallGraph.t(),
           dumped_at: non_neg_integer | nil,
+          editable_modules: MapSet.t(module) | nil,
           ir_plt: PLT.t(),
           module_infos: %{module => map} | nil,
           pages_plt: PLT.t(),
@@ -38,10 +39,10 @@ defmodule Hologram.Compiler.Cache do
         }
 
   @doc """
-  Forgets the kept module infos and dump time while keeping the IR PLT and the call graph, so that the
-  next compile starts from the build dir. The compile task calls it before it changes the kept state in
-  place: a compile that dies mid-way must not leave a half-patched graph that the next compile would
-  trust.
+  Forgets the kept module infos, dump time and editable modules while keeping the IR PLT and the call
+  graph, so that the next compile starts from the build dir. The compile task calls it before it changes
+  the kept state in place: a compile that dies mid-way must not leave a half-patched graph that the next
+  compile would trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -58,10 +59,10 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Returns the kept call graph, IR PLT and page states, the application versions, the module infos of
-  the last finished compile with the mtime of the module info dump it wrote, and what the runtime
-  bundle was built from (the
-  module infos and the runtime state are nil when no compile has finished in this VM). Starts the
-  cache on first use.
+  the last finished compile with the mtime of the module info dump it wrote and the modules whose
+  beams a save can rewrite, and what the runtime bundle was built from (the module infos, the
+  editable modules and the runtime state are nil when no compile has finished in this VM). Starts
+  the cache on first use.
   """
   @spec get() :: t
   def get do
@@ -70,7 +71,7 @@ defmodule Hologram.Compiler.Cache do
 
   @impl GenServer
   def handle_call(:clear_module_infos, _from, state) do
-    {:reply, :ok, %{state | dumped_at: nil, module_infos: nil}}
+    {:reply, :ok, %{state | dumped_at: nil, editable_modules: nil, module_infos: nil}}
   end
 
   def handle_call({:delete_page, page_module}, _from, state) do
@@ -86,8 +87,14 @@ defmodule Hologram.Compiler.Cache do
     {:reply, :ok, %{state | app_versions: app_versions}}
   end
 
-  def handle_call({:put_module_infos, module_infos, dumped_at}, _from, state) do
-    {:reply, :ok, %{state | dumped_at: dumped_at, module_infos: module_infos}}
+  def handle_call({:put_module_infos, module_infos, dumped_at, editable_modules}, _from, state) do
+    {:reply, :ok,
+     %{
+       state
+       | dumped_at: dumped_at,
+         editable_modules: editable_modules,
+         module_infos: module_infos
+     }}
   end
 
   def handle_call({:put_page, page_module, page_state}, _from, state) do
@@ -125,10 +132,16 @@ defmodule Hologram.Compiler.Cache do
   guard of `Hologram.Compiler.build_module_info_plt!/3` compares the entries against that mtime: a time
   read from the dump on disk can belong to a later compile by another VM, and would make the guard
   trust an entry it should re-read.
+
+  With them go the modules whose beams a save can rewrite, as `Hologram.Reflection.list_editable_beams/0`
+  listed them at that compile: the next compile rescans those and what the same directories hold then,
+  and copies every other entry (see `Hologram.Compiler.update_module_info_plt!/5`). Kept with the infos
+  because a module among them that has no beam any more was removed, which the infos alone cannot tell
+  from a dependency's module.
   """
-  @spec put_module_infos(%{module => map}, non_neg_integer) :: :ok
-  def put_module_infos(module_infos, dumped_at) do
-    GenServer.call(server(), {:put_module_infos, module_infos, dumped_at})
+  @spec put_module_infos(%{module => map}, non_neg_integer, MapSet.t(module)) :: :ok
+  def put_module_infos(module_infos, dumped_at, editable_modules) do
+    GenServer.call(server(), {:put_module_infos, module_infos, dumped_at, editable_modules})
   end
 
   @doc """
@@ -152,8 +165,8 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Replaces the kept call graph, IR PLT and page states with empty ones and forgets the kept module
-  infos, dump time, application versions and runtime state, so the next compile starts from the build
-  dir, as the first one in the VM does.
+  infos, dump time, editable modules, application versions and runtime state, so the next compile starts
+  from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -174,6 +187,7 @@ defmodule Hologram.Compiler.Cache do
       app_versions: nil,
       call_graph: CallGraph.start(),
       dumped_at: nil,
+      editable_modules: nil,
       ir_plt: PLT.start(),
       module_infos: nil,
       pages_plt: PLT.start(),

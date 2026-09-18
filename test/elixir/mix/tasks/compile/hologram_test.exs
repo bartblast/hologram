@@ -358,6 +358,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert module_infos == load_module_info_items(opts)
     end
 
+    test "keeps the modules whose beams a save can rewrite", %{opts: opts} do
+      run(opts)
+
+      editable_modules = Cache.get().editable_modules
+
+      assert editable_modules ==
+               MapSet.new(Reflection.list_editable_beams(), fn {module, _beam_path} -> module end)
+
+      assert MapSet.member?(editable_modules, Module1)
+    end
+
     test "holds the IR of the pages and the modules they reach, and not of the rest", %{
       opts: opts
     } do
@@ -373,12 +384,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "an edited module gets its IR rebuilt", %{opts: opts} do
       run(opts)
 
-      %{dumped_at: dumped_at, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        ir_plt: ir_plt,
+        module_infos: module_infos
+      } = Cache.get()
+
       PLT.put(ir_plt, Module1, :stale)
 
       # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
       edited_info = %{module_infos[Module1] | digest: "edited", mtime: 0}
-      Cache.put_module_infos(%{module_infos | Module1 => edited_info}, dumped_at)
+
+      Cache.put_module_infos(
+        %{module_infos | Module1 => edited_info},
+        dumped_at,
+        editable_modules
+      )
 
       run(opts)
 
@@ -411,6 +433,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       %{
         call_graph: call_graph,
         dumped_at: dumped_at,
+        editable_modules: editable_modules,
         ir_plt: ir_plt,
         module_infos: module_infos
       } = Cache.get()
@@ -423,7 +446,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       module_infos
       |> Map.put(:removed_module, %{digest: "removed"})
-      |> Cache.put_module_infos(dumped_at)
+      |> Cache.put_module_infos(dumped_at, editable_modules)
 
       run(opts)
 
@@ -462,7 +485,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     } do
       run(opts)
 
-      %{dumped_at: dumped_at, module_infos: module_infos, pages_plt: pages_plt} = Cache.get()
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos,
+        pages_plt: pages_plt
+      } = Cache.get()
 
       pages_reaching_module_2 =
         pages_plt
@@ -473,7 +501,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # An edit rewrites the beam, so the kept entry no longer matches its mtime and is not reused.
       edited_info = %{module_infos[Module2] | digest: "edited", mtime: 0}
-      Cache.put_module_infos(%{module_infos | Module2 => edited_info}, dumped_at)
+
+      Cache.put_module_infos(
+        %{module_infos | Module2 => edited_info},
+        dumped_at,
+        editable_modules
+      )
 
       mfa = {Compiler, :bundle, 4}
       :erlang.trace_pattern(mfa, true, [:call_count])
@@ -509,9 +542,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
           page_state.bundle_info.static_bundle_path
         end)
 
-      %{dumped_at: dumped_at, module_infos: module_infos} = Cache.get()
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        Cache.get()
+
       edited_info = %{module_infos[Module2] | digest: "edited", mtime: 0}
-      Cache.put_module_infos(%{module_infos | Module2 => edited_info}, dumped_at)
+
+      Cache.put_module_infos(
+        %{module_infos | Module2 => edited_info},
+        dumped_at,
+        editable_modules
+      )
 
       run(opts)
 
@@ -572,7 +612,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "rebundles the runtime when a module it carries was edited", %{opts: opts} do
       run(opts)
 
-      %{dumped_at: dumped_at, module_infos: module_infos, runtime: runtime} = Cache.get()
+      %{
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos,
+        runtime: runtime
+      } = Cache.get()
 
       runtime_module =
         Enum.find_value(runtime.mfas, fn {module, _function, _arity} ->
@@ -580,7 +625,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
         end)
 
       edited_info = %{module_infos[runtime_module] | digest: "edited", mtime: 0}
-      Cache.put_module_infos(%{module_infos | runtime_module => edited_info}, dumped_at)
+
+      Cache.put_module_infos(
+        %{module_infos | runtime_module => edited_info},
+        dumped_at,
+        editable_modules
+      )
 
       # The edit is faked in the kept infos, so the beam and with it the rebuilt bundle are
       # byte-identical and keep their digest; what the test asserts is that the bundle was built.
@@ -680,8 +730,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "an edit of another application's module rebuilds the app versions", %{opts: opts} do
       run(opts)
 
-      %{app_versions: app_versions, dumped_at: dumped_at, module_infos: module_infos} =
-        Cache.get()
+      %{
+        app_versions: app_versions,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = Cache.get()
 
       other_app_module =
         Enum.find_value(module_infos, fn {module, _info} ->
@@ -689,7 +743,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
         end)
 
       edited_info = %{module_infos[other_app_module] | digest: "edited", mtime: 0}
-      Cache.put_module_infos(%{module_infos | other_app_module => edited_info}, dumped_at)
+
+      Cache.put_module_infos(
+        %{module_infos | other_app_module => edited_info},
+        dumped_at,
+        editable_modules
+      )
 
       mfa = {Compiler, :build_app_versions, 1}
       :erlang.trace_pattern(mfa, true, [:call_count])
@@ -742,7 +801,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "reuses the kept module infos against the time the kept compile wrote", %{opts: opts} do
       run(opts)
 
-      %{ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      %{editable_modules: editable_modules, ir_plt: ir_plt, module_infos: module_infos} =
+        Cache.get()
+
       module_1_info = module_infos[Module1]
 
       # The state of a compile that dumped in the same second as the beam was last written: its
@@ -751,7 +812,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # which would make the guard trust the entry below and miss the edit it carries.
       Cache.put_module_infos(
         %{module_infos | Module1 => %{module_1_info | digest: "stale"}},
-        module_1_info.mtime
+        module_1_info.mtime,
+        editable_modules
       )
 
       dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
