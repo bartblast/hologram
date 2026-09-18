@@ -81,10 +81,17 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> :application.unload(app) end)
   end
 
+  # Puts the key back as it was before the test, set or not.
   defp put_env_with_cleanup(app, key, value) do
+    previous = Application.fetch_env(app, key)
     Application.put_env(app, key, value)
 
-    on_exit(fn -> Application.delete_env(app, key) end)
+    on_exit(fn ->
+      case previous do
+        {:ok, previous_value} -> Application.put_env(app, key, previous_value)
+        :error -> Application.delete_env(app, key)
+      end
+    end)
   end
 
   # Leaves the beam on a code path added for the test, so that the module exists on disk only.
@@ -753,6 +760,75 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "list_editable_apps/0" do
+    test "lists the project's application, and only it, without umbrella apps or path dependencies" do
+      assert list_editable_apps() == [:hologram]
+    end
+
+    test "adds the applications the Phoenix endpoint reloads" do
+      put_env_with_cleanup(:hologram, Module7, reloadable_apps: [:file_system])
+
+      assert list_editable_apps() == [:hologram, :file_system]
+    end
+
+    test "leaves out a reloadable application that is not loaded" do
+      put_env_with_cleanup(:hologram, Module7, reloadable_apps: [:not_loaded_app])
+
+      assert list_editable_apps() == [:hologram]
+    end
+  end
+
+  describe "list_editable_beams/0" do
+    test "lists the beams of the editable applications with their paths" do
+      assert {Hologram.Reflection, :code.which(Hologram.Reflection)} in list_editable_beams()
+    end
+
+    test "lists a consolidated protocol from its consolidated beam" do
+      beam_path = :code.which(Enumerable)
+
+      # The test build consolidates protocols.
+      assert :string.find(beam_path, ~c"/consolidated/") != :nomatch
+
+      assert {Enumerable, beam_path} in list_editable_beams()
+    end
+
+    test "leaves out the modules of the other applications" do
+      refute List.keymember?(list_editable_beams(), Enum, 0)
+    end
+
+    test "leaves out the beams of modules that are not Elixir-named" do
+      # The listing reads only the file names, so the files need no content.
+      dir = Path.join([tmp_dir(), "tests", "reflection", "list_editable_beams_0", "consolidated"])
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+
+      elixir_beam_path =
+        Path.join(dir, "Elixir.Hologram.Test.Fixtures.Reflection.EditableModule.beam")
+
+      File.write!(elixir_beam_path, "")
+
+      dir
+      |> Path.join("erlang_named_module.beam")
+      |> File.write!("")
+
+      Code.prepend_path(dir)
+      on_exit(fn -> Code.delete_path(dir) end)
+
+      beam_paths = Map.new(list_editable_beams())
+
+      assert beam_paths[Hologram.Test.Fixtures.Reflection.EditableModule] ==
+               String.to_charlist(elixir_beam_path)
+
+      refute Map.has_key?(beam_paths, :erlang_named_module)
+    end
+
+    test "lists every module once" do
+      modules = Enum.map(list_editable_beams(), fn {module, _beam_path} -> module end)
+
+      assert Enum.uniq(modules) == modules
+    end
+  end
+
   test "list_elixir_modules/0" do
     result = list_elixir_modules()
 
@@ -1175,6 +1251,21 @@ defmodule Hologram.ReflectionTest do
     test "module that does not implement a protocol" do
       refute protocol_implementation?(Calendar.ISO)
     end
+  end
+
+  test "put_env_with_cleanup/3 puts back the value the key had" do
+    key = :put_env_with_cleanup_test_key
+    Application.put_env(:hologram, key, :before)
+
+    # Registered first, so it runs after the helper's cleanup: on_exit callbacks run in reverse order.
+    on_exit(fn ->
+      assert Application.fetch_env(:hologram, key) == {:ok, :before}
+      Application.delete_env(:hologram, key)
+    end)
+
+    put_env_with_cleanup(:hologram, key, :during)
+
+    assert Application.fetch_env!(:hologram, key) == :during
   end
 
   describe "relative_source_path/1" do

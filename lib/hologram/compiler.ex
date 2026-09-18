@@ -1053,6 +1053,62 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds the module info PLT of a live-reload compile from `old_plt`, the PLT of the last finished compile
+  in this VM. The entries of the modules that were not among the editable beams then (`editable_modules`)
+  are copied: nothing rewrites those beams while the VM runs. The editable beams now (`editable_beams`,
+  `{module, beam_path}` pairs from `Hologram.Reflection.list_editable_beams/0`) are read, or their entry is
+  reused under the same guard as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the
+  last compile wrote. A module of `editable_modules` that is not among the beams now is looked up as
+  `build_module_info_plt!/3` looks up every module, and gets no entry only when the VM has no beam for it: a
+  deleted module is purged, while a consolidated protocol whose directory is off the code path for a moment
+  (Phoenix's reloader takes it off while it recompiles) still has one.
+
+  With `:compiled_modules`, the modules the compiler reported since the last compile whose beams hold what
+  it produced (see `Hologram.Compiler.Tracer.take/1`), an editable beam is handled without a stat: a
+  compiled module's beam is read, whatever its entry's mtime and size say; the entry of a module the
+  compiler did not report is copied, unless it is a protocol's, whose consolidated beam is rewritten
+  without a compile, or there is none, in which case the beam is checked as without the option.
+  """
+  @spec update_module_info_plt!(
+          PLT.t(),
+          non_neg_integer | nil,
+          MapSet.t(module),
+          list({module, charlist}),
+          T.opts()
+        ) :: PLT.t()
+  def update_module_info_plt!(old_plt, dumped_at, editable_modules, editable_beams, opts \\ []) do
+    {compiled_modules, opts} = Keyword.pop(opts, :compiled_modules)
+    new_plt = PLT.start(opts)
+
+    kept_items =
+      old_plt
+      |> PLT.get_all()
+      |> Enum.reject(fn {module, _info} -> MapSet.member?(editable_modules, module) end)
+
+    PLT.put(new_plt, kept_items)
+
+    TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
+      update_module_info_plt_entry!(
+        new_plt,
+        module,
+        beam_path,
+        old_plt,
+        dumped_at,
+        compiled_modules
+      )
+    end)
+
+    listed_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
+    umbrella? = Reflection.umbrella?()
+
+    editable_modules
+    |> MapSet.difference(listed_modules)
+    |> Enum.each(&put_vanished_module_info!(new_plt, &1, old_plt, dumped_at, umbrella?))
+
+    new_plt
+  end
+
+  @doc """
   Raises a compilation error if any page module lacks a specified route or layout, or has a route that
   is not a string. The route and the layout come from the pages' entries in the given module info PLT;
   a page is asked only for what its entry does not hold (a route built at runtime, say).
@@ -1489,8 +1545,31 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
-  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
-  # when resolve_beam_source/2 goes (see the removal note there).
+  # Read gives nil: not an Elixir module.
+  defp put_module_info(new_plt, module, info) do
+    if info, do: PLT.put(new_plt, module, info)
+  end
+
+  # Not reusable: read it.
+  defp put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at) do
+    info =
+      reusable_module_info(module, beam_source, old_plt, dumped_at) ||
+        Reflection.beam_info(beam_source)
+
+    put_module_info(new_plt, module, info)
+  end
+
+  # A module that left the listing without its beam being deleted, as the full scan would see it. A
+  # path the VM still names for a module whose file is gone, or for one compiled in memory, has
+  # nothing to read, so the module gets no entry, as a deleted one.
+  defp put_vanished_module_info!(new_plt, module, old_plt, dumped_at, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
+
+    if beam_source && (is_binary(beam_source) or File.regular?(beam_source)) do
+      put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
+    end
+  end
+
   # The kept pages whose MFAs moved, with their new lists, and the ones whose MFAs are unchanged.
   defp relist_kept_pages(kept_pages, call_graph, component_modules) do
     mfas_by_kept_page =
@@ -1512,6 +1591,8 @@ defmodule Hologram.Compiler do
     {relisted_mfas_by_page, unchanged_pages}
   end
 
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
     # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
     # with :code.which/1, which is exactly the stale path that yielded nil here.
@@ -1523,15 +1604,10 @@ defmodule Hologram.Compiler do
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
-    beam_source = resolve_beam_source(module, umbrella?)
-
-    # No beam: not a module of this project. Not reusable: read it. Read gives nil: not an Elixir module.
-    info =
-      beam_source &&
-        (reusable_module_info(module, beam_source, old_plt, dumped_at) ||
-           Reflection.beam_info(beam_source))
-
-    if info, do: PLT.put(new_plt, module, info)
+    # No beam: not a module of this project.
+    if beam_source = resolve_beam_source(module, umbrella?) do
+      put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
+    end
   end
 
   # Travels with the per-module metadata, which is emitted under the same
@@ -1744,6 +1820,34 @@ defmodule Hologram.Compiler do
   end
 
   defp reusable_module_info(_module, _beam_source, _old_plt, _dumped_at), do: nil
+
+  defp update_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at, nil) do
+    put_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at)
+  end
+
+  # A compiled module is read. The kept entry of any other module is copied, unless it is a
+  # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
+  # and a beam with no kept entry, is checked as without the compiled modules.
+  defp update_module_info_plt_entry!(
+         new_plt,
+         module,
+         beam_path,
+         old_plt,
+         dumped_at,
+         compiled_modules
+       ) do
+    if MapSet.member?(compiled_modules, module) do
+      put_module_info(new_plt, module, Reflection.beam_info(beam_path))
+    else
+      case PLT.get(old_plt, module) do
+        {:ok, %{protocol?: false} = info} ->
+          PLT.put(new_plt, module, info)
+
+        _protocol_or_no_entry ->
+          put_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at)
+      end
+    end
+  end
 
   defp validate_module_prop_usages(module, ir) do
     ir

@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.CacheTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Tracer
 
   setup do
     stop_cache()
@@ -16,11 +17,11 @@ defmodule Hologram.Compiler.CacheTest do
   end
 
   describe "clear_module_infos/0" do
-    test "forgets the module infos and the dump time" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123)
+    test "forgets the module infos, the dump time and the editable modules" do
+      put_module_infos(%{Module1 => %{digest: "a"}}, 123, MapSet.new([Module1]))
 
       assert clear_module_infos() == :ok
-      assert %{dumped_at: nil, module_infos: nil} = get()
+      assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
     end
 
     test "keeps the call graph and the IR PLT" do
@@ -59,10 +60,22 @@ defmodule Hologram.Compiler.CacheTest do
       assert is_pid(Process.whereis(Cache))
     end
 
+    test "registers the tracer, with its table owned by the cache" do
+      tracers = Code.get_compiler_option(:tracers)
+      on_exit(fn -> Code.put_compiler_option(:tracers, tracers) end)
+      Code.put_compiler_option(:tracers, tracers -- [Tracer])
+
+      get()
+
+      assert Tracer in Code.get_compiler_option(:tracers)
+      assert :ets.info(Tracer, :owner) == Process.whereis(Cache)
+    end
+
     test "returns empty kept state at first" do
       assert %{
                call_graph: %CallGraph{} = call_graph,
                dumped_at: nil,
+               editable_modules: nil,
                ir_plt: %PLT{} = ir_plt,
                module_infos: nil,
                pages_plt: %PLT{} = pages_plt,
@@ -94,11 +107,14 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
-  test "put_module_infos/2" do
+  test "put_module_infos/3" do
     module_infos = %{Module1 => %{digest: "a"}}
+    editable_modules = MapSet.new([Module1])
 
-    assert put_module_infos(module_infos, 123) == :ok
-    assert %{dumped_at: 123, module_infos: ^module_infos} = get()
+    assert put_module_infos(module_infos, 123, editable_modules) == :ok
+
+    assert %{dumped_at: 123, editable_modules: ^editable_modules, module_infos: ^module_infos} =
+             get()
   end
 
   test "put_page/2" do
@@ -151,12 +167,12 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_ir_plt) == []
     end
 
-    test "forgets the module infos and the dump time" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123)
+    test "forgets the module infos, the dump time and the editable modules" do
+      put_module_infos(%{Module1 => %{digest: "a"}}, 123, MapSet.new([Module1]))
 
       reset()
 
-      assert %{dumped_at: nil, module_infos: nil} = get()
+      assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
     end
 
     test "stops the kept page states and forgets the app versions and the runtime" do
@@ -191,5 +207,6 @@ defmodule Hologram.Compiler.CacheTest do
     refute Process.alive?(call_graph.pid)
     refute Process.alive?(ir_plt.pid)
     refute Process.alive?(pages_plt.pid)
+    assert :ets.whereis(Tracer) == :undefined
   end
 end
