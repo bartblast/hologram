@@ -28,6 +28,7 @@ defmodule Hologram.Compiler.Cache do
         }
 
   @type t :: %{
+          app_versions: keyword(String.t()) | nil,
           call_graph: CallGraph.t(),
           dumped_at: non_neg_integer | nil,
           ir_plt: PLT.t(),
@@ -56,8 +57,9 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Returns the kept call graph, IR PLT and page states, the module infos of the last finished compile
-  with the mtime of the module info dump it wrote, and what the runtime bundle was built from (the
+  Returns the kept call graph, IR PLT and page states, the application versions, the module infos of
+  the last finished compile with the mtime of the module info dump it wrote, and what the runtime
+  bundle was built from (the
   module infos and the runtime state are nil when no compile has finished in this VM). Starts the
   cache on first use.
   """
@@ -78,6 +80,10 @@ defmodule Hologram.Compiler.Cache do
 
   def handle_call(:get, _from, state) do
     {:reply, state, state}
+  end
+
+  def handle_call({:put_app_versions, app_versions}, _from, state) do
+    {:reply, :ok, %{state | app_versions: app_versions}}
   end
 
   def handle_call({:put_module_infos, module_infos, dumped_at}, _from, state) do
@@ -101,6 +107,16 @@ defmodule Hologram.Compiler.Cache do
   @impl GenServer
   def init(nil) do
     {:ok, initial_state()}
+  end
+
+  @doc """
+  Keeps the version of each application the call graph reaches, as `Hologram.Compiler.build_app_versions/1`
+  computes them, so that a compile whose edit cannot have changed them does not compute them again (see
+  `Hologram.Compiler.app_versions_changed?/2`).
+  """
+  @spec put_app_versions(keyword(String.t())) :: :ok
+  def put_app_versions(app_versions) do
+    GenServer.call(server(), {:put_app_versions, app_versions})
   end
 
   @doc """
@@ -136,8 +152,8 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Replaces the kept call graph, IR PLT and page states with empty ones and forgets the kept module
-  infos, dump time and runtime state, so the next compile starts from the build dir, as the first one
-  in the VM does.
+  infos, dump time, application versions and runtime state, so the next compile starts from the build
+  dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -155,6 +171,7 @@ defmodule Hologram.Compiler.Cache do
   # linked to the cache, not to whichever process ran the compile.
   defp initial_state do
     %{
+      app_versions: nil,
       call_graph: CallGraph.start(),
       dumped_at: nil,
       ir_plt: PLT.start(),

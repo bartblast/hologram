@@ -66,6 +66,27 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Whether the application versions `build_app_versions/1` computes can differ from the ones an earlier
+  compile computed, given that compile's module digests diff and the project's OTP application.
+
+  They change in two ways. A module of an application appears in or disappears from the call graph,
+  which takes an added or a removed module. Or an application's version changes, which for a
+  dependency comes with its modules being recompiled, so they show up as edited. An edit to the
+  project's own modules does neither, which is what an ordinary save is, so the kept versions stand.
+
+  A module of no application, or of a sibling application in an umbrella, counts as not the
+  project's: recomputing then is safe, and cheap next to being wrong.
+  """
+  @spec app_versions_changed?(map, atom) :: boolean
+  def app_versions_changed?(module_digests_diff, otp_app) do
+    module_digests_diff.added_modules != [] or module_digests_diff.removed_modules != [] or
+      Enum.any?(
+        module_digests_diff.edited_modules,
+        &(Application.get_application(&1) != otp_app)
+      )
+  end
+
+  @doc """
   Returns the version of each OTP application the given call graph reaches, keyed by application
   name and sorted by it.
 

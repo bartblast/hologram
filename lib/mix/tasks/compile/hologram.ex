@@ -178,7 +178,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well.
-      app_versions = Compiler.build_app_versions(call_graph_for_runtime)
+      app_versions =
+        build_app_versions(cache.app_versions, call_graph_for_runtime, module_digests_diff)
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
@@ -314,6 +315,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
       module_infos = PLT.get_all(new_module_info_plt)
       Cache.put_module_infos(module_infos, module_info_dumped_at)
+      Cache.put_app_versions(app_versions)
 
       # After the dumps as well: what is kept describes files that are on disk and a page digest PLT
       # that names them.
@@ -336,6 +338,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       duration = System.monotonic_time() - start_time
       :telemetry.execute([:hologram, :compiler, :stop], %{duration: duration}, %{})
       DynamicSupervisor.stop(sup)
+    end
+  end
+
+  # The versions of the applications the graph reaches, kept between compiles: an ordinary save edits
+  # the project's own modules, which can move neither the set of applications the graph reaches nor
+  # any of their versions (see Hologram.Compiler.app_versions_changed?/2).
+  defp build_app_versions(nil, call_graph, _module_digests_diff) do
+    Compiler.build_app_versions(call_graph)
+  end
+
+  defp build_app_versions(kept_app_versions, call_graph, module_digests_diff) do
+    if Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app()) do
+      Compiler.build_app_versions(call_graph)
+    else
+      kept_app_versions
     end
   end
 
