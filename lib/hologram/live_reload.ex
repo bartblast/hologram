@@ -3,6 +3,8 @@ defmodule Hologram.LiveReload do
 
   use GenServer
 
+  require Logger
+
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
@@ -12,9 +14,11 @@ defmodule Hologram.LiveReload do
   alias Hologram.Router.PageModuleResolver
 
   @doc """
-  Reloads the given file path using the given endpoint.
+  Reloads the application after a change of the given file (nil when a request for a pending page
+  starts the pass), using the given endpoint. The options go to the Hologram compile task:
+  `:next_batch` and `:bundles_built` (see `Mix.Tasks.Compile.Hologram`).
   """
-  @callback reload(String.t(), any) :: :ok
+  @callback reload(String.t() | nil, any, keyword) :: :ok
 
   # in milliseconds
   @debounce_delay 1_000
@@ -47,12 +51,65 @@ defmodule Hologram.LiveReload do
   end
 
   @impl GenServer
-  def handle_call(:open_pages, _from, state) do
-    open_pages =
-      Map.filter(state.open_pages, fn {instance_id, _page_module} ->
-        SubscriptionRegistry.bindings_of(instance_id) != nil
-      end)
+  def handle_call({:bundles_built, built}, _from, state) do
+    pages = List.delete(built, :runtime)
 
+    # The first batch of a pass is where the registries learn what the compile wrote: the pages and
+    # routes of the module info dump, the static files, among them a new runtime bundle, and the page
+    # digests. Later batches change the page digests only.
+    if state.pass.registries_reloaded? do
+      PageDigestRegistry.reload()
+    else
+      reload_runtime()
+    end
+
+    # A rebuilt runtime bundle no longer matches the page bundles any tab holds, so every tab
+    # reloads, the ones on pages this pass has not built yet included: they ask for their page,
+    # which is then built next.
+    if :runtime in built do
+      broadcast_reload(:all)
+    else
+      broadcast_reload(pages)
+    end
+
+    new_state = %{
+      state
+      | pass: %{state.pass | registries_reloaded?: true},
+        pending: MapSet.difference(state.pending, MapSet.new(pages))
+    }
+
+    {:reply, :ok, new_state}
+  end
+
+  def handle_call({:next_batch, remaining, links}, _from, state) do
+    open_pages = prune_open_pages(state.open_pages)
+    new_state = %{state | open_pages: open_pages, pending: remaining}
+
+    # A save that arrived during the pass ends it here: its compile takes up what this one leaves
+    # pending, with the pages its own edit reaches.
+    if state.superseded_by do
+      {:reply, :stop, new_state}
+    else
+      open_page_modules =
+        open_pages
+        |> Map.values()
+        |> MapSet.new()
+
+      batch =
+        plan_batch(
+          remaining,
+          links,
+          state.priority,
+          open_page_modules,
+          System.schedulers_online()
+        )
+
+      {:reply, batch, new_state}
+    end
+  end
+
+  def handle_call(:open_pages, _from, state) do
+    open_pages = prune_open_pages(state.open_pages)
     {:reply, open_pages, %{state | open_pages: open_pages}}
   end
 
@@ -87,8 +144,25 @@ defmodule Hologram.LiveReload do
 
   @impl GenServer
   def handle_info({:debounced_reload, target_file_path}, state) do
-    impl().reload(target_file_path, state.endpoint)
-    {:noreply, %{state | timer_ref: nil}}
+    new_state = %{state | timer_ref: nil}
+
+    if new_state.pass do
+      {:noreply, %{new_state | superseded_by: target_file_path}}
+    else
+      {:noreply, start_pass(target_file_path, new_state)}
+    end
+  end
+
+  @impl GenServer
+  def handle_info({ref, _result}, %{pass: %{ref: ref}} = state) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, finish_pass(state)}
+  end
+
+  @impl GenServer
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{pass: %{ref: ref}} = state) do
+    Logger.error("Hologram: live reload pass failed: #{inspect(reason)}")
+    {:noreply, finish_pass(state)}
   end
 
   @doc """
@@ -188,19 +262,20 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
-  Reloads the application after a file change by recompiling Elixir code,
-  recompiling Hologram components, reloading Hologram runtime, and 
-  broadcasting reload notifications to connected clients.
+  Reloads the application after a file change by recompiling the Elixir code and then running the
+  Hologram compile with the given options, `:next_batch` and `:bundles_built`, through which the
+  scheduler orders the pages and reloads the tabs batch by batch (see `handle_call/3`). The
+  runtime registries are reloaded once more at the end, for a compile that built no bundle.
 
   If code reloading fails, broadcasts a compilation error instead.
   """
-  @spec reload(String.t(), any) :: :ok
-  def reload(_file_path, endpoint) do
+  @spec reload(String.t() | nil, any, keyword) :: :ok
+  def reload(_file_path, endpoint, opts) do
     case reload_code(endpoint) do
       :ok ->
-        recompile_hologram()
+        recompile_hologram(opts)
         reload_runtime()
-        broadcast_reload()
+        :ok
 
       {:error, output} ->
         broadcast_compilation_error(output)
@@ -273,18 +348,37 @@ defmodule Hologram.LiveReload do
     )
   end
 
-  # Every tab reloads, as it did when the WebSocket carried this. The tabs' SSE streams forward it.
-  defp broadcast_reload do
-    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", {:reload, :all})
+  # The tabs' SSE streams forward it, and each tab reloads when its page is among the pages, or
+  # when they are :all.
+  defp broadcast_reload(pages) do
+    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", {:reload, pages})
+  end
+
+  # A pass ended, whether it finished or failed: the pages requested during it are no longer
+  # pulled forward, and a save that arrived during it starts the next pass.
+  defp finish_pass(state) do
+    new_state = %{state | pass: nil, priority: []}
+
+    case new_state.superseded_by do
+      nil -> new_state
+      file_path -> start_pass(file_path, %{new_state | superseded_by: nil})
+    end
   end
 
   defp impl do
     Application.get_env(:hologram, :live_reload_impl, __MODULE__)
   end
 
-  defp recompile_hologram do
+  # The tabs that no longer hold an SSE connection are closed, so their pages are not built first.
+  defp prune_open_pages(open_pages) do
+    Map.filter(open_pages, fn {instance_id, _page_module} ->
+      SubscriptionRegistry.bindings_of(instance_id) != nil
+    end)
+  end
+
+  defp recompile_hologram(opts) do
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
-    Mix.Tasks.Compile.Hologram.run(force?: true)
+    Mix.Tasks.Compile.Hologram.run([force?: true] ++ opts)
   end
 
   defp reload_code(endpoint) do
@@ -329,5 +423,24 @@ defmodule Hologram.LiveReload do
       _fallback ->
         :ignore
     end
+  end
+
+  # The pass runs in a task, unlinked, so that a failure in it is logged rather than taking this
+  # process down, and so that this process stays free to answer the compile's calls: the compile
+  # asks it for each batch and reports each one built.
+  defp start_pass(file_path, state) do
+    endpoint = state.endpoint
+
+    opts = [
+      bundles_built: &GenServer.call(__MODULE__, {:bundles_built, &1}, :infinity),
+      next_batch: &GenServer.call(__MODULE__, {:next_batch, &1, &2}, :infinity)
+    ]
+
+    task =
+      Task.Supervisor.async_nolink(Hologram.LiveReload.TaskSupervisor, fn ->
+        impl().reload(file_path, endpoint, opts)
+      end)
+
+    %{state | pass: %{ref: task.ref, registries_reloaded?: false}}
   end
 end

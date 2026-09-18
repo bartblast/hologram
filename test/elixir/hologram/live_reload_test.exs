@@ -7,8 +7,17 @@
 defmodule Hologram.LiveReloadTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
+  import Hologram.Test.Stubs
+  import Mox
+
   alias Hologram.LiveReload
   alias Hologram.Realtime.SubscriptionRegistry
+
+  use_module_stub :asset_manifest_cache
+  use_module_stub :asset_path_registry
+  use_module_stub :page_digest_registry
+  use_module_stub :page_module_resolver
 
   @debounce_delay LiveReload.debounce_delay()
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
@@ -316,37 +325,159 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
-  describe "debounced reload handling" do
+  describe "live reload pass" do
+    setup :set_mox_global
+
     setup do
-      [state: %{LiveReload.initial_state(:dummy_endpoint) | timer_ref: make_ref()}]
+      setup_asset_path_registry(AssetPathRegistryStub)
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+      setup_page_module_resolver(PageModuleResolverStub)
+
+      wait_for_process_cleanup(SubscriptionRegistry)
+      start_supervised!(SubscriptionRegistry)
+
+      start_supervised!({Task.Supervisor, name: LiveReload.TaskSupervisor})
+
+      wait_for_process_cleanup(LiveReload)
+      pid = start_supervised!({LiveReload, watch?: false})
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+
+      [pid: pid]
     end
 
-    test "debounced_reload always triggers reload attempt", %{state: state} do
-      import Mox, only: [expect: 3]
+    test "a debounced reload runs a pass with the file and the endpoint", %{pid: pid} do
+      test_pid = self()
 
-      # Mock the reload function to be called (but can raise an error to simulate real behavior)
-      expect(LiveReloadMock, :reload, fn @file_path, :dummy_endpoint ->
-        # Simulate Phoenix.CodeReloader failure
-        raise "expected test error"
+      expect(LiveReloadMock, :reload, fn file_path, endpoint, opts ->
+        send(test_pid, {:reloaded, file_path, endpoint, Keyword.keys(opts)})
+        :ok
       end)
 
-      assert_raise RuntimeError, "expected test error", fn ->
-        LiveReload.handle_info({:debounced_reload, @file_path}, state)
-      end
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reloaded, @file_path, nil, option_keys}
+      assert Enum.sort(option_keys) == [:bundles_built, :next_batch]
+
+      wait_until(fn -> :sys.get_state(pid).pass == nil end)
     end
 
-    test "debounced_reload clears timer_ref", %{state: state} do
-      import Mox, only: [expect: 3]
+    test "asks for the pages open in tabs first", %{pid: pid} do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      LiveReload.page_rendered("instance-1", Page2)
 
-      timer_ref = make_ref()
-      state_with_timer = %{state | timer_ref: timer_ref}
+      test_pid = self()
 
-      expect(LiveReloadMock, :reload, fn @file_path, :dummy_endpoint -> :ok end)
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        remaining = MapSet.new([Page1, Page2, Page3])
+        batch = next_batch.(remaining, %{})
+        send(test_pid, {:batch, batch})
+        :ok
+      end)
 
-      result = LiveReload.handle_info({:debounced_reload, @file_path}, state_with_timer)
+      send(pid, {:debounced_reload, @file_path})
 
-      assert {:noreply, new_state} = result
-      assert new_state.timer_ref == nil
+      assert_receive {:batch, [Page2]}
+    end
+
+    test "reloads the tabs on the pages a batch built, and no longer counts them pending", %{
+      pid: pid
+    } do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        remaining = MapSet.new([Page1, Page2, Page3])
+        next_batch.(remaining, %{})
+        bundles_built.([Page1, Page2])
+        send(test_pid, :built)
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, [Page1, Page2]}
+      assert_receive :built
+      assert :sys.get_state(pid).pending == MapSet.new([Page3])
+    end
+
+    test "reloads every tab when the runtime bundle was rebuilt", %{pid: pid} do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+        bundles_built.([:runtime, Page1])
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, :all}
+    end
+
+    test "a save during a pass stops it at its next batch and runs a pass of its own", %{
+      pid: pid
+    } do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, opts ->
+          send(test_pid, {:first_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          remaining = MapSet.new([Page1])
+          batch = next_batch.(remaining, %{})
+          send(test_pid, {:first_batch, batch})
+          :ok
+
+        "second.ex", _endpoint, _opts ->
+          send(test_pid, :second_started)
+          :ok
+      end)
+
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:first_started, task_pid}
+
+      send(pid, {:debounced_reload, "second.ex"})
+
+      # Handled once the state can be read back, so the save is recorded before the pass goes on.
+      :sys.get_state(pid)
+      send(task_pid, :continue)
+
+      assert_receive {:first_batch, :stop}
+      assert_receive :second_started
+    end
+
+    test "a pass that fails is logged, and the next save runs a pass", %{pid: pid} do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, _opts ->
+          raise "expected test error"
+
+        "second.ex", _endpoint, _opts ->
+          send(test_pid, :second_started)
+          :ok
+      end)
+
+      log =
+        capture_log(fn ->
+          send(pid, {:debounced_reload, "first.ex"})
+          :sys.get_state(pid)
+          wait_until(fn -> :sys.get_state(pid).pass == nil end)
+        end)
+
+      assert log =~ "Hologram: live reload pass failed"
+
+      send(pid, {:debounced_reload, "second.ex"})
+
+      assert_receive :second_started
     end
   end
 end
