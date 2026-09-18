@@ -36,6 +36,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @num_pages Enum.count(Reflection.list_pages())
 
+  # A page whose template holds a link to another page, and that page.
+  @linked_page Hologram.Test.Fixtures.Page.Module2
+  @linking_page Hologram.Test.Fixtures.Page.Module5
+
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
@@ -45,6 +49,29 @@ defmodule Mix.Tasks.Compile.HologramTest do
         {:dictionary, dict} -> Keyword.get(dict, :"$initial_call") == {PLT, :init, 1}
         nil -> false
       end
+    end)
+  end
+
+  # Fakes an edit of the module in the kept state: the compiler reports it, so its beam is read, and
+  # the digest read differs from the kept one.
+  defp fake_edit(module) do
+    %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+      Cache.get()
+
+    report_compiled(module)
+    edited_info = %{module_infos[module] | digest: "edited"}
+    Cache.put_module_infos(%{module_infos | module => edited_info}, dumped_at, editable_modules)
+  end
+
+  # A module the kept runtime carries whose beam a save can rewrite, since only such a beam is
+  # rechecked, so that a fake edit of it is seen.
+  defp find_editable_runtime_module do
+    %{editable_modules: editable_modules, module_infos: module_infos, runtime: runtime} =
+      Cache.get()
+
+    Enum.find_value(runtime.mfas, fn {module, _function, _arity} ->
+      if MapSet.member?(editable_modules, module) and Map.has_key?(module_infos, module),
+        do: module
     end)
   end
 
@@ -92,6 +119,34 @@ defmodule Mix.Tasks.Compile.HologramTest do
     plt = PLT.start()
     PLT.load(plt, dump_path)
     PLT.get_all(plt)
+  end
+
+  # Makes the first kept pages by name pending, so that a run rebuilds them with no edit, and
+  # returns them.
+  defp put_pending_kept_pages(count) do
+    %{pages_plt: pages_plt} = Cache.get()
+
+    page_modules =
+      pages_plt
+      |> PLT.keys()
+      |> Enum.sort()
+      |> Enum.take(count)
+
+    assert length(page_modules) == count
+
+    Cache.put_pending_pages(page_modules)
+
+    MapSet.new(page_modules)
+  end
+
+  # A function that records each value it is called with, and one that returns them in call order.
+  defp record_calls do
+    {:ok, agent} = Agent.start_link(fn -> [] end)
+
+    record = fn value -> Agent.update(agent, &[value | &1]) end
+    recorded = fn -> Agent.get(agent, &Enum.reverse/1) end
+
+    {record, recorded}
   end
 
   # What the compiler tracer records when the module is compiled: the bytes its beam holds.
@@ -648,6 +703,181 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
 
       assert Cache.get().pending_pages == MapSet.new()
+    end
+
+    test "asks for the pages to build in batches", %{opts: opts} do
+      run(opts)
+
+      affected_pages = put_pending_kept_pages(3)
+      num_affected_pages = MapSet.size(affected_pages)
+
+      {record_remaining, recorded_remaining} = record_calls()
+      {record_built, recorded_built} = record_calls()
+
+      next_batch = fn remaining_pages, _links ->
+        record_remaining.(remaining_pages)
+        [Enum.min(remaining_pages)]
+      end
+
+      # The page digest dump is read as each batch is reported, to see that it names every page.
+      bundles_built = fn built ->
+        record_built.({built, map_size(load_page_digest_items(opts))})
+      end
+
+      run(Keyword.merge(opts, bundles_built: bundles_built, next_batch: next_batch))
+
+      remaining = recorded_remaining.()
+
+      assert hd(remaining) == affected_pages
+      assert Enum.map(remaining, &MapSet.size/1) == Enum.to_list(num_affected_pages..1//-1)
+
+      built = recorded_built.()
+
+      assert MapSet.new(built, fn {[page_module], _num_digests} -> page_module end) ==
+               affected_pages
+
+      assert Enum.all?(built, fn {_built, num_digests} -> num_digests == @num_pages end)
+
+      assert Cache.get().pending_pages == MapSet.new()
+      test_page_bundles(opts)
+    end
+
+    test "stopping leaves the pages not built pending, with the bundles they had", %{opts: opts} do
+      run(opts)
+
+      old_digests = load_page_digest_items(opts)
+
+      %{pages_plt: pages_plt} = Cache.get()
+      old_pages = PLT.get_all(pages_plt)
+
+      affected_pages = put_pending_kept_pages(3)
+
+      built_page = Enum.min(affected_pages)
+      not_built_pages = MapSet.delete(affected_pages, built_page)
+
+      next_batch = fn remaining_pages, _links ->
+        if remaining_pages == affected_pages, do: [built_page], else: :stop
+      end
+
+      run(Keyword.put(opts, :next_batch, next_batch))
+
+      assert Cache.get().pending_pages == not_built_pages
+
+      assert Enum.all?(not_built_pages, fn page_module ->
+               File.exists?(old_pages[page_module].bundle_info.static_bundle_path)
+             end)
+
+      new_digests = load_page_digest_items(opts)
+
+      assert map_size(new_digests) == @num_pages
+
+      assert Map.take(new_digests, Enum.to_list(not_built_pages)) ==
+               Map.take(old_digests, Enum.to_list(not_built_pages))
+
+      test_page_bundles(opts)
+
+      mfa = {Compiler, :bundle, 4}
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(opts)
+
+        assert :erlang.trace_info(mfa, :call_count) ==
+                 {:call_count, MapSet.size(not_built_pages)}
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert Cache.get().pending_pages == MapSet.new()
+    end
+
+    test "the runtime is built with the first batch", %{opts: opts} do
+      run(opts)
+
+      runtime_module = find_editable_runtime_module()
+      fake_edit(runtime_module)
+      Cache.put_pending_pages([Module1])
+
+      {record_built, recorded_built} = record_calls()
+
+      next_batch = fn remaining_pages, _links -> [Enum.min(remaining_pages)] end
+
+      # Whether the runtime is kept and its bundle on disk when a batch is reported.
+      bundles_built = fn built ->
+        runtime = Cache.get().runtime
+
+        record_built.(
+          {built, runtime != nil and File.exists?(runtime.bundle_info.static_bundle_path)}
+        )
+      end
+
+      run(Keyword.merge(opts, bundles_built: bundles_built, next_batch: next_batch))
+
+      assert [{[:runtime, _first_page], true} | rest] = recorded_built.()
+      refute Enum.any?(rest, fn {built, _runtime_on_disk?} -> :runtime in built end)
+
+      test_runtime_bundle(opts)
+    end
+
+    test "the runtime is built alone when the first answer is to stop", %{opts: opts} do
+      run(opts)
+
+      runtime_module = find_editable_runtime_module()
+      fake_edit(runtime_module)
+      Cache.put_pending_pages([Module1])
+
+      {record_built, recorded_built} = record_calls()
+
+      run(
+        Keyword.merge(opts,
+          bundles_built: record_built,
+          next_batch: fn _remaining_pages, _links -> :stop end
+        )
+      )
+
+      assert recorded_built.() == [[:runtime]]
+      assert MapSet.member?(Cache.get().pending_pages, Module1)
+      test_runtime_bundle(opts)
+    end
+
+    test "the page links name the pages each page links to", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([Module1])
+
+      {record_links, recorded_links} = record_calls()
+
+      next_batch = fn remaining_pages, links ->
+        record_links.(links)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.put(opts, :next_batch, next_batch))
+
+      assert [links] = recorded_links.()
+      assert map_size(links) == @num_pages
+      assert MapSet.member?(links[@linking_page], @linked_page)
+      refute MapSet.member?(links[@linking_page], @linking_page)
+    end
+
+    test "an empty batch is refused", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([Module1])
+
+      assert_raise ArgumentError, ~r/non-empty list of pages or :stop/, fn ->
+        run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> [] end))
+      end
+    end
+
+    test "a batch holding a page not left to build is refused", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([Module1])
+
+      assert_raise ArgumentError, ~r/not left to build/, fn ->
+        run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> [@linked_page] end))
+      end
     end
 
     test "rebuilds the pages reaching an edited module, with a full compile's result", %{
