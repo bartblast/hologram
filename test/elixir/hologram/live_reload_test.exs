@@ -630,5 +630,38 @@ defmodule Hologram.LiveReloadTest do
       assert Task.await(request) == :ok
       assert :sys.get_state(pid).waiters == %{}
     end
+
+    test "a pass that outlives its scheduler does not report to the replacement", %{pid: pid} do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        send(test_pid, {:started, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        next_batch = Keyword.fetch!(opts, :next_batch)
+        remaining = MapSet.new([Page1])
+        reason = catch_exit(next_batch.(remaining, %{}))
+        send(test_pid, {:callback_exited, reason})
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:started, task_pid}
+
+      # The scheduler goes away and a replacement takes its name, while the pass runs on.
+      stop_supervised!(LiveReload)
+      wait_for_process_cleanup(LiveReload)
+      replacement_pid = start_supervised!({LiveReload, watch?: false})
+
+      send(task_pid, :continue)
+
+      assert_receive {:callback_exited, {:noproc, _call}}
+      assert Process.alive?(replacement_pid)
+      assert :sys.get_state(replacement_pid).pending == MapSet.new()
+    end
   end
 end

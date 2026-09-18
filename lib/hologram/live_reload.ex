@@ -525,12 +525,17 @@ defmodule Hologram.LiveReload do
   # The pass runs in a task, unlinked, so that a failure in it is logged rather than taking this
   # process down, and so that this process stays free to answer the compile's calls: the compile
   # asks it for each batch and reports each one built.
+  #
+  # The callbacks address this process, not the registered name: a pass outliving a crash of this
+  # process must not report to its replacement, which never started it. A call to the gone process
+  # exits the pass instead, and the compile's lock is released on the way out.
   defp start_pass(file_path, state) do
     endpoint = state.endpoint
+    scheduler = self()
 
     opts = [
-      bundles_built: &GenServer.call(__MODULE__, {:bundles_built, &1}, :infinity),
-      next_batch: &GenServer.call(__MODULE__, {:next_batch, &1, &2}, :infinity)
+      bundles_built: &GenServer.call(scheduler, {:bundles_built, &1}, :infinity),
+      next_batch: &GenServer.call(scheduler, {:next_batch, &1, &2}, :infinity)
     ]
 
     task =

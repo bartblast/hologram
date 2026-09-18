@@ -880,6 +880,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "a batch callback that exits leaves no lock behind", %{opts: opts} do
+      run(opts)
+
+      put_pending_kept_pages(1)
+
+      # What a live reload pass whose scheduler went away gets from its next_batch callback.
+      next_batch = fn _remaining_pages, _links -> exit(:noproc) end
+
+      assert catch_exit(run(Keyword.put(opts, :next_batch, next_batch))) == :noproc
+      refute File.exists?(@lock_path)
+    end
+
     test "rebuilds the pages reaching an edited module, with a full compile's result", %{
       opts: opts
     } do
