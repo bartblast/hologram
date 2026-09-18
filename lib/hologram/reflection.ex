@@ -525,6 +525,29 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists the beams a save can rewrite while the VM runs, as `{module, beam_path}` pairs with the path as a
+  charlist: the `Elixir.`-named beams in the ebin directory of every editable application (see
+  `list_editable_apps/0`) and in every consolidated protocols directory on the code path. The directories
+  are walked in code path order and a module is listed once, from the first directory that has it, which
+  is the beam the VM loads: a protocol of the project that is consolidated is listed from the consolidated
+  directory.
+  """
+  @spec list_editable_beams() :: list({module, charlist})
+  def list_editable_beams do
+    ebin_dirs =
+      for app <- list_editable_apps(),
+          lib_dir = :code.lib_dir(app),
+          is_list(lib_dir),
+          do: expand_dir(lib_dir, "ebin")
+
+    :code.get_path()
+    |> Enum.map(&expand_dir(&1, "."))
+    |> Enum.filter(&(&1 in ebin_dirs or Path.basename(&1) == "consolidated"))
+    |> Enum.flat_map(&list_beams_in_dir/1)
+    |> Enum.uniq_by(fn {module, _beam_path} -> module end)
+  end
+
+  @doc """
   Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   The project OTP application is included.
@@ -996,6 +1019,15 @@ defmodule Hologram.Reflection do
     end
   end
 
+  # Both sides of a directory comparison are expanded, so that it does not depend on how each spells
+  # the path.
+  defp expand_dir(dir, subdir) do
+    dir
+    |> List.to_string()
+    |> Path.join(subdir)
+    |> Path.expand()
+  end
+
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -1016,6 +1048,24 @@ defmodule Hologram.Reflection do
 
     # Combine both sources and remove duplicates
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
+  end
+
+  # A beam can belong to a module that is not loaded yet, whose name is not an atom yet.
+  # sobelow_skip ["DOS.StringToAtom"]
+  defp list_beams_in_dir(dir) do
+    dir
+    |> Path.join("*.beam")
+    |> Path.wildcard()
+    |> Enum.map(fn beam_path ->
+      module =
+        beam_path
+        |> Path.basename(".beam")
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        |> String.to_atom()
+
+      {module, String.to_charlist(beam_path)}
+    end)
+    |> Enum.filter(fn {module, _beam_path} -> alias?(module) end)
   end
 
   # The value returned by the clause of the named function that takes exactly the given literal

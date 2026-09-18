@@ -771,6 +771,57 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "list_editable_beams/0" do
+    test "lists the beams of the editable applications with their paths" do
+      assert {Hologram.Reflection, :code.which(Hologram.Reflection)} in list_editable_beams()
+    end
+
+    test "lists a consolidated protocol from its consolidated beam" do
+      beam_path = :code.which(Enumerable)
+
+      # The test build consolidates protocols.
+      assert :string.find(beam_path, ~c"/consolidated/") != :nomatch
+
+      assert {Enumerable, beam_path} in list_editable_beams()
+    end
+
+    test "leaves out the modules of the other applications" do
+      refute List.keymember?(list_editable_beams(), Enum, 0)
+    end
+
+    test "leaves out the beams of modules that are not Elixir-named" do
+      # The listing reads only the file names, so the files need no content.
+      dir = Path.join([tmp_dir(), "tests", "reflection", "list_editable_beams_0", "consolidated"])
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+
+      elixir_beam_path =
+        Path.join(dir, "Elixir.Hologram.Test.Fixtures.Reflection.EditableModule.beam")
+
+      File.write!(elixir_beam_path, "")
+
+      dir
+      |> Path.join("erlang_named_module.beam")
+      |> File.write!("")
+
+      Code.prepend_path(dir)
+      on_exit(fn -> Code.delete_path(dir) end)
+
+      beam_paths = Map.new(list_editable_beams())
+
+      assert beam_paths[Hologram.Test.Fixtures.Reflection.EditableModule] ==
+               String.to_charlist(elixir_beam_path)
+
+      refute Map.has_key?(beam_paths, :erlang_named_module)
+    end
+
+    test "lists every module once" do
+      modules = Enum.map(list_editable_beams(), fn {module, _beam_path} -> module end)
+
+      assert Enum.uniq(modules) == modules
+    end
+  end
+
   test "list_elixir_modules/0" do
     result = list_elixir_modules()
 
