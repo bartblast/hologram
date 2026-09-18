@@ -4,6 +4,9 @@ defmodule Hologram.Compiler.Cache do
   # Kept between two compiles in the same VM, so that a live-reload compile patches the IR PLT
   # and the call graph with the module digests diff and builds only the IR it is missing,
   # instead of rebuilding the IR of every module and reloading the graph from its dump. The
+  # JavaScript of each function the pages reach is kept too, with what it was encoded against
+  # besides its module's IR, so that a save encodes again only the functions of the modules it
+  # edited. The
   # module infos of the last finished compile are kept with them, with the mtime of the dump that
   # compile wrote and the modules whose beams a save can rewrite: they are the picture both were
   # brought in line with, so the next compile diffs against them rather than against the dump on
@@ -23,6 +26,8 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
 
+  @type encoding_inputs :: %{async_mfas: MapSet.t(mfa), client_stacktraces?: boolean}
+
   @type page_state :: %{mfas: [mfa], modules: MapSet.t(module), bundle_info: map}
 
   @type runtime_state :: %{
@@ -37,6 +42,8 @@ defmodule Hologram.Compiler.Cache do
           call_graph: CallGraph.t(),
           dumped_at: non_neg_integer | nil,
           editable_modules: MapSet.t(module) | nil,
+          encode_plt: PLT.t(),
+          encoding_inputs: encoding_inputs | nil,
           ir_plt: PLT.t(),
           module_infos: %{module => map} | nil,
           pages_plt: PLT.t(),
@@ -45,8 +52,8 @@ defmodule Hologram.Compiler.Cache do
         }
 
   @doc """
-  Forgets the kept module infos, dump time and editable modules while keeping the IR PLT and the call
-  graph, so that the next compile starts from the build dir. The compile task calls it before it changes
+  Forgets the kept module infos, dump time and editable modules while keeping the IR PLT, the encode
+  PLT, the encoding inputs and the call graph, so that the next compile starts from the build dir. The compile task calls it before it changes
   the kept state in place: a compile that dies mid-way must not leave a half-patched graph that the next
   compile would trust.
   """
@@ -72,11 +79,11 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Returns the kept call graph, IR PLT and page states, the pending pages, the application versions, the module infos of
-  the last finished compile with the mtime of the module info dump it wrote and the modules whose
-  beams a save can rewrite, and what the runtime bundle was built from (the module infos, the
-  editable modules and the runtime state are nil when no compile has finished in this VM). Starts
-  the cache on first use.
+  Returns the kept call graph, IR PLT, encode PLT and page states, the encoding inputs, the pending
+  pages, the application versions, the module infos of the last finished compile with the mtime of
+  the module info dump it wrote and the modules whose beams a save can rewrite, and what the runtime
+  bundle was built from (the module infos, the editable modules, the encoding inputs and the runtime
+  state are nil when no compile has finished in this VM). Starts the cache on first use.
   """
   @spec get() :: t
   def get do
@@ -104,6 +111,10 @@ defmodule Hologram.Compiler.Cache do
 
   def handle_call({:put_app_versions, app_versions}, _from, state) do
     {:reply, :ok, %{state | app_versions: app_versions}}
+  end
+
+  def handle_call({:put_encoding_inputs, encoding_inputs}, _from, state) do
+    {:reply, :ok, %{state | encoding_inputs: encoding_inputs}}
   end
 
   def handle_call({:put_module_infos, module_infos, dumped_at, editable_modules}, _from, state) do
@@ -150,6 +161,16 @@ defmodule Hologram.Compiler.Cache do
   @spec put_app_versions(keyword(String.t())) :: :ok
   def put_app_versions(app_versions) do
     GenServer.call(server(), {:put_app_versions, app_versions})
+  end
+
+  @doc """
+  Keeps what the kept function encodings depend on besides their modules' IR: the async MFAs, which
+  decide what a function awaits and whether it is awaited, and the client stacktraces setting. The
+  next compile keeps the encodings only while its own inputs are equal to these.
+  """
+  @spec put_encoding_inputs(encoding_inputs) :: :ok
+  def put_encoding_inputs(encoding_inputs) do
+    GenServer.call(server(), {:put_encoding_inputs, encoding_inputs})
   end
 
   @doc """
@@ -201,9 +222,9 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Replaces the kept call graph, IR PLT and page states with empty ones and forgets the kept module
-  infos, dump time, editable modules, pending pages, application versions and runtime state, so the
-  next compile starts from the build dir, as the first one in the VM does.
+  Replaces the kept call graph, IR PLT, encode PLT and page states with empty ones and forgets the
+  kept module infos, dump time, editable modules, encoding inputs, pending pages, application versions
+  and runtime state, so the next compile starts from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -225,6 +246,8 @@ defmodule Hologram.Compiler.Cache do
       call_graph: CallGraph.start(),
       dumped_at: nil,
       editable_modules: nil,
+      encode_plt: PLT.start(),
+      encoding_inputs: nil,
       ir_plt: PLT.start(),
       module_infos: nil,
       pages_plt: PLT.start(),
@@ -242,6 +265,7 @@ defmodule Hologram.Compiler.Cache do
 
   defp stop_kept(state) do
     CallGraph.stop(state.call_graph)
+    PLT.stop(state.encode_plt)
     PLT.stop(state.ir_plt)
     PLT.stop(state.pages_plt)
   end
