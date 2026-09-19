@@ -4,9 +4,9 @@ Last run: 2026-09-17 12:01:09 UTC
 
 ## Summary
 
-Total benchmarks: 38
+Total benchmarks: 37
 
-Successful: 38\
+Successful: 37\
 Warnings: 0\
 Failed: 0
 
@@ -409,14 +409,6 @@ list_elixir_modules/0          4.19      238.81 ms     ±6.60%      231.56 ms   
 ```
 Name                   ips        average  deviation         median         99th %
 list_pages/0          1.34      744.16 ms    ±20.88%      695.32 ms     1247.34 ms
-```
-
-
-### ✅ reflection » list_protocol_implementations_1
-
-```
-Name                                      ips        average  deviation         median         99th %
-list_protocol_implementations/1        132.84        7.53 ms    ±11.27%        7.43 ms        9.56 ms
 ```
 
 

@@ -121,6 +121,15 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Returns the keys whose value matches the given match pattern, without copying the other values out
+  (see `Hologram.Commons.ETS.keys/2`).
+  """
+  @spec keys(PLT.t(), term) :: list
+  def keys(%{table_ref: table_ref}, value_pattern) do
+    ETS.keys(table_ref, value_pattern)
+  end
+
+  @doc """
   Populates the PLT with items dumped to the given file.
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()

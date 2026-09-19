@@ -854,6 +854,43 @@ defmodule Hologram.Compiler.CallGraphTest do
              )
     end
 
+    test "module definition IR, protocol module takes its implementations from the PLT" do
+      impl = Hologram.Test.Fixtures.Compiler.CallGraph.NoSuchImpl
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, impl, %{
+        protocol_implementation?: true,
+        implementation_for: Integer,
+        implemented_protocol: String.Chars
+      })
+
+      call_graph = start(module_info_plt: module_info_plt)
+      build(call_graph, IR.for_module(String.Chars))
+
+      assert has_edge?(call_graph, {String.Chars, :to_string, 1}, {impl, :__impl__, 1})
+      assert has_edge?(call_graph, {String.Chars, :to_string, 1}, {impl, :to_string, 1})
+    end
+
+    test "module definition IR, protocol module skips an implementation the PLT does not hold" do
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+      PLT.delete(module_info_plt, StringCharsModule12)
+
+      call_graph = start(module_info_plt: module_info_plt)
+      build(call_graph, IR.for_module(String.Chars))
+
+      refute has_edge?(
+               call_graph,
+               {String.Chars, :to_string, 1},
+               {StringCharsModule12, :__impl__, 1}
+             )
+
+      assert has_edge?(
+               call_graph,
+               {String.Chars, :to_string, 1},
+               {String.Chars.Atom, :__impl__, 1}
+             )
+    end
+
     test "remote function call IR, module field as an atom", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Module5},
@@ -2523,6 +2560,28 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
       assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+    end
+
+    test "adds protocol dispatch edges when a protocol and its implementation are added together",
+         %{empty_call_graph: call_graph} do
+      ir_plt =
+        PLT.start(
+          items: [
+            {Protocol1, IR.for_module(Protocol1)},
+            {Protocol1.Integer, IR.for_module(Protocol1.Integer)}
+          ]
+        )
+
+      diff = %{
+        added_modules: [Protocol1, Protocol1.Integer],
+        removed_modules: [],
+        edited_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert has_edge?(call_graph, {Protocol1, :my_fun, 1}, {Protocol1.Integer, :__impl__, 1})
+      assert has_edge?(call_graph, {Protocol1, :my_fun, 1}, {Protocol1.Integer, :my_fun, 1})
     end
 
     test "updates modules", %{empty_call_graph: call_graph} do

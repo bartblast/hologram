@@ -113,6 +113,23 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
+  describe "keys/2" do
+    test "keys whose value matches the pattern", %{plt: plt} do
+      put(plt, :my_key_3, :my_value_1)
+
+      sorted_keys =
+        plt
+        |> keys(:my_value_1)
+        |> Enum.sort()
+
+      assert sorted_keys == [:my_key_1, :my_key_3]
+    end
+
+    test "no value matches the pattern", %{plt: plt} do
+      assert keys(plt, :my_value_3) == []
+    end
+  end
+
   test "load/2", %{plt: plt} do
     dump_dir = Path.join([@tmp_dir, "tests", "commons", "plt", "load_2"])
     clean_dir(dump_dir)
