@@ -537,11 +537,12 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/3`).
-  Knowing every page's MFAs before rendering any lets each module's IR be read once for all pages:
-  their functions are encoded into the encode PLT with one IR read per module
-  (`encode_reachable_functions/5`), and then the pages are rendered from that cache.
-  The module info PLT is taken from the `module_info_plt:` opt.
+  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/4`).
+  The functions of all the given pages are encoded into the encode PLT first, with one IR read per
+  module (`encode_reachable_functions/5`), and then each page is rendered from that cache, so a
+  module's IR is read once for all the pages of one call. The compile task calls it once per batch;
+  a function already in the encode PLT, encoded for an earlier batch or an earlier compile, is not
+  encoded again. The module info PLT is taken from the `module_info_plt:` opt.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
