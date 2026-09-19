@@ -10,6 +10,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -536,11 +537,12 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/3`).
-  Knowing every page's MFAs before rendering any lets each module's IR be read once for all pages:
-  their functions are encoded into the encode PLT with one IR read per module
-  (`encode_reachable_functions/5`), and then the pages are rendered from that cache.
-  The module info PLT is taken from the `module_info_plt:` opt.
+  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/4`).
+  The functions of all the given pages are encoded into the encode PLT first, with one IR read per
+  module (`encode_reachable_functions/5`), and then each page is rendered from that cache, so a
+  module's IR is read once for all the pages of one call. The compile task calls it once per batch;
+  a function already in the encode PLT, encoded for an earlier batch or an earlier compile, is not
+  encoded again. The module info PLT is taken from the `module_info_plt:` opt.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
@@ -787,15 +789,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists the modules whose IR the entry files read: the modules of the runtime MFAs, of every page's MFAs and
+  Lists the modules whose IR the entry files rendered from the given MFAs read: the modules of those MFAs and
   of the manually ported MFAs (the runtime entry file renders their clause heads), each once. Only the modules
   the module info PLT holds are listed, since the IR PLT is built for those alone (an Erlang module has no IR).
   """
-  @spec list_ir_modules(list(mfa), list({module, list(mfa)}), PLT.t()) :: list(module)
-  def list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt) do
-    page_mfas = Enum.flat_map(mfas_by_page, fn {_page_module, mfas} -> mfas end)
-
-    [runtime_mfas, page_mfas, CallGraph.manually_ported_elixir_mfas()]
+  @spec list_ir_modules([mfa], PLT.t()) :: [module]
+  def list_ir_modules(mfas, module_info_plt) do
+    [mfas, CallGraph.manually_ported_elixir_mfas()]
     |> Stream.concat()
     |> Stream.map(fn {module, _function, _arity} -> module end)
     |> Stream.uniq()
@@ -817,60 +817,92 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`). The call graph's
-  graph is read once and shared with the page tasks through `CallGraph.with_shared_graph/2`, so no task
-  copies it. The component modules are the templatables, besides the pages, whose server callbacks are
-  analysed.
+  Lists the modules whose IR and function encodings a compile keeps: the modules the runtime entry file
+  reads (see `list_ir_modules/2`), the modules each page reaches, and the templatables (whose templates the
+  prop usage validation reads), each once. A page's modules are given as the `MapSet` of the modules of its
+  reachable MFAs, as a page state keeps it. Only the modules the module info PLT holds are listed, since
+  the IR PLT is built for those alone.
   """
-  @spec list_mfas_by_page(list(module), CallGraph.t(), list(module)) :: list({module, list(mfa)})
-  def list_mfas_by_page(page_modules, call_graph, component_modules) do
-    module_info_plt = CallGraph.module_info_plt(call_graph)
-
-    # The tasks get the reader, which captures only the shared graph's key: a closure that
-    # captured the graph itself would copy it into every task it starts.
-    CallGraph.with_shared_graph(call_graph, fn read_graph ->
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          read_graph.(),
-          page_modules ++ component_modules,
-          module_info_plt
-        )
-
-      # Listing a page's MFAs is a cheap graph walk.
-      TaskUtils.map_concurrently(page_modules, fn page_module ->
-        mfas =
-          CallGraph.list_page_mfas(
-            read_graph.(),
-            page_module,
-            server_callback_analysis_by_templatable,
-            module_info_plt
-          )
-
-        {page_module, mfas}
+  @spec list_kept_modules([mfa], [{module, MapSet.t(module)}], [module], PLT.t()) :: [module]
+  def list_kept_modules(runtime_mfas, modules_by_page, templatable_modules, module_info_plt) do
+    page_reached_modules =
+      modules_by_page
+      |> Enum.reduce(MapSet.new(), fn {_page_module, modules}, acc ->
+        MapSet.union(acc, modules)
       end)
+      |> Enum.filter(&PLT.member?(module_info_plt, &1))
+
+    runtime_mfas
+    |> list_ir_modules(module_info_plt)
+    |> Enum.concat(page_reached_modules)
+    |> Enum.concat(templatable_modules)
+    |> Enum.uniq()
+  end
+
+  @doc """
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`), sharing the call
+  graph's graph with the page tasks (see `CallGraph.with_shared_graph/2`) and the server callback
+  analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/4`
+  against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
+  With no page, the graph is not read: a graph still being rebuilt is not waited for.
+  """
+  @spec list_mfas_by_page([module], CallGraph.t()) :: [{module, [mfa]}]
+  def list_mfas_by_page([], _call_graph), do: []
+
+  def list_mfas_by_page(page_modules, call_graph) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    analyses = PLT.start()
+
+    try do
+      CallGraph.with_shared_graph(
+        call_graph,
+        &list_mfas_by_page(page_modules, &1, analyses, module_info_plt)
+      )
+    after
+      PLT.stop(analyses)
+    end
+  end
+
+  @doc """
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`), one task per
+  page, through the reader of a shared graph (see `CallGraph.with_shared_graph/2`) and the PLT of
+  server callback analyses, which the pages fill as they go: a caller listing pages in rounds, as the
+  compile task does with its batches, computes each templatable's analysis once for all of them.
+  """
+  @spec list_mfas_by_page([module], (-> Digraph.t()), PLT.t(), PLT.t() | nil) ::
+          [{module, [mfa]}]
+  def list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt) do
+    # The tasks get the reader, which captures only the shared graph's key: a closure that
+    # captured the graph itself would copy it into every task it starts. Listing a page's MFAs is
+    # a cheap graph walk.
+    TaskUtils.map_concurrently(page_modules, fn page_module ->
+      mfas = CallGraph.list_page_mfas(read_graph.(), page_module, analyses, module_info_plt)
+      {page_module, mfas}
     end)
   end
 
   @doc """
-  Lists, for each page, the pages whose module is among the modules of the page's reachable MFAs,
-  the page itself excluded. A link or a path helper in a template is a call with the page module as
-  an argument, which reaches the page's module vertex and through it `__params__/0` and
-  `__route__/0` only, so the modules of a page's MFAs name exactly the pages it links to, one hop
-  away.
+  Lists, for each given page, the pages among the modules it reaches, itself excluded. A link or a
+  path helper in a template is a call with the page module as an argument, which reaches the page's
+  module vertex and through it `__params__/0` and `__route__/0` only, so the modules of a page's
+  reachable MFAs, given as the `MapSet` a page state keeps, name exactly the pages it links to, one
+  hop away. A page whose modules are not given, one no compile has built, links to no page.
   """
-  @spec list_page_links([{module, [mfa]}], [module]) :: %{module => MapSet.t(module)}
-  def list_page_links(mfas_by_page, page_modules) do
+  @spec list_page_links([{module, MapSet.t(module)}], [module]) :: %{module => MapSet.t(module)}
+  def list_page_links(modules_by_page, page_modules) do
     page_set = MapSet.new(page_modules)
 
-    Map.new(mfas_by_page, fn {page_module, mfas} ->
-      linked_pages =
-        mfas
-        |> MapSet.new(fn {module, _function, _arity} -> module end)
-        |> MapSet.intersection(page_set)
-        |> MapSet.delete(page_module)
+    links =
+      Map.new(modules_by_page, fn {page_module, modules} ->
+        linked_pages =
+          modules
+          |> MapSet.intersection(page_set)
+          |> MapSet.delete(page_module)
 
-      {page_module, linked_pages}
-    end)
+        {page_module, linked_pages}
+      end)
+
+    Map.new(page_modules, &{&1, Map.get(links, &1, MapSet.new())})
   end
 
   @doc """
@@ -976,8 +1008,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns `{mfas_by_page, kept_pages}`: the reachable MFAs of the pages this compile must rebuild
-  (see `list_mfas_by_page/3`), and the pages whose kept bundle it can reuse, each with its state.
+  Returns `{pages_to_rebuild, kept_pages}`: the pages this compile must rebuild, which it lists with
+  their batches (see `list_mfas_by_page/4`), and the pages whose kept bundle it can reuse, each with
+  its state.
 
   Options:
 
@@ -992,13 +1025,14 @@ defmodule Hologram.Compiler do
     * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
       moved although nothing it reaches was edited: a function that joined the runtime's set leaves
       the page's bundle, and one that left it enters. The otherwise kept pages are listed again and
-      those whose list differs from the one their bundle was built from are rebuilt.
+      those whose list differs from the one their bundle was built from are rebuilt, and listed
+      again with their batch: few pages move, and a page's list is taken when the page is built.
     * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
       those imports out, which their MFA lists do not show, so every page is rebuilt.
   """
-  @spec partition_pages_to_rebuild([module], CallGraph.t(), [module], T.opts()) ::
-          {[{module, [mfa]}], [{module, map}]}
-  def partition_pages_to_rebuild(page_modules, call_graph, component_modules, opts) do
+  @spec partition_pages_to_rebuild([module], CallGraph.t(), T.opts()) ::
+          {[module], [{module, map}]}
+  def partition_pages_to_rebuild(page_modules, call_graph, opts) do
     {pages_to_rebuild, kept_pages} =
       if opts[:rebuild_all?] do
         {page_modules, []}
@@ -1012,15 +1046,11 @@ defmodule Hologram.Compiler do
         )
       end
 
-    mfas_by_page = list_mfas_by_page(pages_to_rebuild, call_graph, component_modules)
-
     if opts[:relist_all?] do
-      {relisted_mfas_by_page, still_kept_pages} =
-        relist_kept_pages(kept_pages, call_graph, component_modules)
-
-      {mfas_by_page ++ relisted_mfas_by_page, still_kept_pages}
+      {moved_pages, still_kept_pages} = relist_kept_pages(kept_pages, call_graph)
+      {pages_to_rebuild ++ moved_pages, still_kept_pages}
     else
-      {mfas_by_page, kept_pages}
+      {pages_to_rebuild, kept_pages}
     end
   end
 
@@ -1656,12 +1686,12 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # The kept pages whose MFAs moved, with their new lists, and the ones whose MFAs are unchanged.
-  defp relist_kept_pages(kept_pages, call_graph, component_modules) do
+  # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states.
+  defp relist_kept_pages(kept_pages, call_graph) do
     mfas_by_kept_page =
       kept_pages
       |> Enum.map(fn {page_module, _page_state} -> page_module end)
-      |> list_mfas_by_page(call_graph, component_modules)
+      |> list_mfas_by_page(call_graph)
       |> Map.new()
 
     {changed_pages, unchanged_pages} =
@@ -1669,12 +1699,9 @@ defmodule Hologram.Compiler do
         mfas_by_kept_page[page_module] != page_state.mfas
       end)
 
-    relisted_mfas_by_page =
-      Enum.map(changed_pages, fn {page_module, _page_state} ->
-        {page_module, mfas_by_kept_page[page_module]}
-      end)
+    moved_pages = Enum.map(changed_pages, fn {page_module, _page_state} -> page_module end)
 
-    {relisted_mfas_by_page, unchanged_pages}
+    {moved_pages, unchanged_pages}
   end
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1

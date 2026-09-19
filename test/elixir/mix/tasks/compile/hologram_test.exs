@@ -971,6 +971,124 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute MapSet.member?(links[@linking_page], @linking_page)
     end
 
+    test "a page to rebuild links to the pages its kept state names", %{opts: opts} do
+      run(opts)
+
+      Cache.put_pending_pages([@linking_page])
+
+      {record_links, recorded_links} = record_calls()
+
+      next_batch = fn remaining_pages, links ->
+        record_links.(links)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.put(opts, :next_batch, next_batch))
+
+      assert [links] = recorded_links.()
+      assert MapSet.member?(links[@linking_page], @linked_page)
+    end
+
+    test "a page no compile has built links to the pages its listing names", %{opts: opts} do
+      run(opts)
+
+      Cache.reset()
+
+      {record_links, recorded_links} = record_calls()
+
+      next_batch = fn remaining_pages, links ->
+        record_links.(links)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.put(opts, :next_batch, next_batch))
+
+      assert [links] = recorded_links.()
+      assert map_size(links) == @num_pages
+      assert MapSet.member?(links[@linking_page], @linked_page)
+    end
+
+    test "a run into an empty build dir builds each module's IR once", %{opts: opts} do
+      Cache.reset()
+      fresh_build_dir_opts = Keyword.put(opts, :build_dir, setup_empty_build_dir())
+
+      Code.ensure_loaded!(IR)
+      count = count_calls({IR, :for_module, 2}, fn -> run(fresh_build_dir_opts) end)
+
+      assert count <= map_size(load_module_info_items(fresh_build_dir_opts))
+      test_page_bundles(fresh_build_dir_opts)
+    end
+
+    test "lists a page's MFAs when its batch is built", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(3)
+
+      mfa = {CallGraph, :list_page_mfas, 4}
+      {record_count, recorded_counts} = record_calls()
+
+      # The pages listed so far, read as each batch is asked for.
+      next_batch = fn remaining_pages, _links ->
+        {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+        record_count.(count)
+        [Enum.min(remaining_pages)]
+      end
+
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        run(Keyword.put(opts, :next_batch, next_batch))
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+
+      assert recorded_counts.() == [0, 1, 2]
+      test_page_bundles(opts)
+    end
+
+    test "stopping lists no MFAs of the pages left pending", %{opts: opts} do
+      run(opts)
+      affected_pages = put_pending_kept_pages(3)
+
+      next_batch = fn remaining_pages, _links ->
+        if remaining_pages == affected_pages, do: [Enum.min(remaining_pages)], else: :stop
+      end
+
+      count =
+        count_calls({CallGraph, :list_page_mfas, 4}, fn ->
+          run(Keyword.put(opts, :next_batch, next_batch))
+        end)
+
+      assert count == 1
+    end
+
+    test "shares the graph with the batches once", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(3)
+
+      next_batch = fn remaining_pages, _links -> [Enum.min(remaining_pages)] end
+
+      count =
+        count_calls({CallGraph, :with_shared_graph, 2}, fn ->
+          run(Keyword.put(opts, :next_batch, next_batch))
+        end)
+
+      assert count == 1
+    end
+
+    test "a run with nothing to rebuild shares no graph", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :with_shared_graph, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "a run with no page states lists each page once", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_calls({CallGraph, :list_page_mfas, 4}, fn -> run(opts) end) == @num_pages
+      test_page_bundles(opts)
+    end
+
     test "an empty batch is refused", %{opts: opts} do
       run(opts)
 

@@ -31,12 +31,7 @@ Benchee.run(
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
-    mfas_by_page =
-      Compiler.list_mfas_by_page(
-        Reflection.list_pages(),
-        call_graph_for_pages,
-        Reflection.list_components()
-      )
+    mfas_by_page = Compiler.list_mfas_by_page(Reflection.list_pages(), call_graph_for_pages)
 
     runtime_js_binding_modules =
       runtime_mfas

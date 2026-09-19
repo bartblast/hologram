@@ -49,6 +49,19 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
 
+  # How many times the function is called, in any process, while the given function runs.
+  defp count_calls(mfa, fun) do
+    :erlang.trace_pattern(mfa, true, [:call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:call_count])
+    end
+  end
+
   # Runs the function with call counts on the one-argument protocol and JS import checks, which
   # consult a module's code path, and returns its result with the number of such checks.
   defp count_module_self_checks(fun) do
@@ -110,6 +123,18 @@ defmodule Hologram.CompilerTest do
     File.cp!(lib_package_json_path, fixture_package_json_path)
 
     [assets_dir: assets_dir, build_dir: build_dir]
+  end
+
+  # A module info PLT holding Module1, Module2, Module3 and Hologram.JS, the module of the manually
+  # ported MFAs, so that the modules outside it are the ones a lister leaves out.
+  defp small_module_info_plt do
+    info = %{digest: 1, mtime: 1, size: 1}
+
+    PLT.start()
+    |> PLT.put(Module1, info)
+    |> PLT.put(Module2, info)
+    |> PLT.put(Module3, info)
+    |> PLT.put(Hologram.JS, info)
   end
 
   setup_all do
@@ -307,22 +332,12 @@ defmodule Hologram.CompilerTest do
         |> CallGraph.clone()
         |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
-      templatables = Reflection.list_pages() ++ Reflection.list_components()
-
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          graph,
-          templatables,
-          CallGraph.module_info_plt(call_graph)
-        )
-
       # A PLT per test, so one test's warm cache can never stand in for another's encoding.
       [
+        analyses: PLT.start(),
         encode_plt: PLT.start(),
-        graph: graph,
-        module_info_plt: CallGraph.module_info_plt(call_graph),
-        server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+        graph: CallGraph.get_graph(call_graph_without_runtime_mfas),
+        module_info_plt: CallGraph.module_info_plt(call_graph)
       ]
     end
 
@@ -331,13 +346,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module24,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -364,13 +379,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module25,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -397,13 +412,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module11,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -425,13 +440,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module19,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -462,13 +477,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module21,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -500,13 +515,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module23,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -539,13 +554,13 @@ defmodule Hologram.CompilerTest do
       graph: graph,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
-      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      analyses: analyses
     } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module23,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -586,13 +601,13 @@ defmodule Hologram.CompilerTest do
            graph: graph,
            ir_plt: ir_plt,
            module_info_plt: module_info_plt,
-           server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+           analyses: analyses
          } do
       mfas =
         CallGraph.list_page_mfas(
           graph,
           Module23,
-          server_callback_analysis_by_templatable,
+          analyses,
           module_info_plt
         )
 
@@ -1473,12 +1488,7 @@ defmodule Hologram.CompilerTest do
         |> CallGraph.clone()
         |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-      mfas_by_page =
-        list_mfas_by_page(
-          page_modules,
-          call_graph_without_runtime_mfas,
-          Reflection.list_components()
-        )
+      mfas_by_page = list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
 
       [
         mfas_by_page: mfas_by_page,
@@ -2130,31 +2140,21 @@ defmodule Hologram.CompilerTest do
     assert list_components(plt) == [Module11, Module3]
   end
 
-  describe "list_ir_modules/3" do
+  describe "list_ir_modules/2" do
     setup do
-      info = %{digest: 1, mtime: 1, size: 1}
-
-      module_info_plt =
-        PLT.start()
-        |> PLT.put(Module1, info)
-        |> PLT.put(Module2, info)
-        |> PLT.put(Module3, info)
-        |> PLT.put(Hologram.JS, info)
-
-      [module_info_plt: module_info_plt]
+      [module_info_plt: small_module_info_plt()]
     end
 
-    test "lists the modules of the runtime and page MFAs once", %{
-      module_info_plt: module_info_plt
-    } do
-      runtime_mfas = [{Module1, :fun_1, 0}, {Module1, :fun_2, 0}]
-
-      mfas_by_page = [
-        {Module11, [{Module1, :fun_3, 0}, {Module2, :fun_1, 0}]},
-        {Module12, [{Module2, :fun_2, 1}]}
+    test "lists the modules of the MFAs once", %{module_info_plt: module_info_plt} do
+      mfas = [
+        {Module1, :fun_1, 0},
+        {Module1, :fun_2, 0},
+        {Module1, :fun_3, 0},
+        {Module2, :fun_1, 0},
+        {Module2, :fun_2, 1}
       ]
 
-      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+      modules = list_ir_modules(mfas, module_info_plt)
 
       assert Enum.count(modules, &(&1 == Module1)) == 1
       assert Enum.count(modules, &(&1 == Module2)) == 1
@@ -2162,16 +2162,15 @@ defmodule Hologram.CompilerTest do
     end
 
     test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
-      assert list_ir_modules([], [], module_info_plt) == [Hologram.JS]
+      assert list_ir_modules([], module_info_plt) == [Hologram.JS]
     end
 
     test "leaves out modules the module info PLT doesn't hold", %{
       module_info_plt: module_info_plt
     } do
-      runtime_mfas = [{Module1, :fun_1, 0}, {:lists, :map, 2}]
-      mfas_by_page = [{Module11, [{Module4, :fun_1, 0}]}]
+      mfas = [{Module1, :fun_1, 0}, {:lists, :map, 2}, {Module4, :fun_1, 0}]
 
-      modules = list_ir_modules(runtime_mfas, mfas_by_page, module_info_plt)
+      modules = list_ir_modules(mfas, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
     end
@@ -2218,7 +2217,59 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_mfas_by_page/3" do
+  describe "list_kept_modules/4" do
+    setup do
+      [module_info_plt: small_module_info_plt()]
+    end
+
+    test "lists the modules of the runtime MFAs", %{module_info_plt: module_info_plt} do
+      modules = list_kept_modules([{Module1, :fun_1, 0}], [], [], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
+    end
+
+    test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
+      assert list_kept_modules([], [], [], module_info_plt) == [Hologram.JS]
+    end
+
+    test "lists the templatables", %{module_info_plt: module_info_plt} do
+      modules = list_kept_modules([], [], [Module11, Module12], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module11, Module12])
+    end
+
+    test "lists the modules the pages reach", %{module_info_plt: module_info_plt} do
+      modules_by_page = [
+        {Module11, MapSet.new([Module1, Module2])},
+        {Module12, MapSet.new([Module2, Module3])}
+      ]
+
+      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1, Module2, Module3])
+    end
+
+    test "leaves out modules the module info PLT doesn't hold", %{
+      module_info_plt: module_info_plt
+    } do
+      modules_by_page = [{Module11, MapSet.new([Module1, Module4, :lists])}]
+
+      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
+    end
+
+    test "lists each module once", %{module_info_plt: module_info_plt} do
+      modules_by_page = [{Module11, MapSet.new([Module1])}]
+
+      modules =
+        list_kept_modules([{Module1, :fun_1, 0}], modules_by_page, [Module1], module_info_plt)
+
+      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
+    end
+  end
+
+  describe "list_mfas_by_page/2" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -2227,41 +2278,25 @@ defmodule Hologram.CompilerTest do
 
       [
         call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-        component_modules: Reflection.list_components(),
         page_modules: Reflection.list_pages()
       ]
     end
 
     test "lists each page's reachable MFAs", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       page_modules: page_modules
     } do
       graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
       module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
 
-      server_callback_analysis_by_templatable =
-        CallGraph.server_callback_analysis_by_templatable(
-          graph,
-          page_modules ++ component_modules,
-          module_info_plt
-        )
-
+      # A PLT per page, so that each expected list is computed on its own.
       expected =
         Enum.map(page_modules, fn page_module ->
-          mfas =
-            CallGraph.list_page_mfas(
-              graph,
-              page_module,
-              server_callback_analysis_by_templatable,
-              module_info_plt
-            )
-
+          mfas = CallGraph.list_page_mfas(graph, page_module, PLT.start(), module_info_plt)
           {page_module, mfas}
         end)
 
-      result =
-        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, component_modules)
+      result = list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
 
       assert length(page_modules) > 1
       assert Enum.all?(result, fn {_page_module, mfas} -> mfas != [] end)
@@ -2270,7 +2305,6 @@ defmodule Hologram.CompilerTest do
 
     test "asks the call graph for its graph once and releases it", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       page_modules: page_modules
     } do
       %CallGraph{pid: pid} = call_graph_without_runtime_mfas
@@ -2285,7 +2319,7 @@ defmodule Hologram.CompilerTest do
       :erlang.trace(pid, true, [:receive])
 
       try do
-        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, component_modules)
+        list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
       after
         :erlang.trace(pid, false, [:receive])
       end
@@ -2305,39 +2339,142 @@ defmodule Hologram.CompilerTest do
       assert graph_requests == 1
       assert count_shared_graphs.() == shared_graphs_before
     end
+
+    # The analyses PLT is linked to the caller while it runs, so a PLT left running would stay
+    # among the caller's links.
+    test "stops the analyses PLT it starts", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_modules: page_modules
+    } do
+      {:links, links_before} = Process.info(self(), :links)
+
+      list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
+
+      {:links, links_after} = Process.info(self(), :links)
+
+      assert MapSet.new(links_after) == MapSet.new(links_before)
+    end
+
+    test "lists nothing and reads no graph for no pages", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas
+    } do
+      count =
+        count_calls({CallGraph, :with_shared_graph, 2}, fn ->
+          assert list_mfas_by_page([], call_graph_without_runtime_mfas) == []
+        end)
+
+      assert count == 0
+    end
+  end
+
+  describe "list_mfas_by_page/4" do
+    setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+      call_graph_without_runtime_mfas =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+      [
+        call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+        module_info_plt: CallGraph.module_info_plt(call_graph_without_runtime_mfas),
+        page_modules: Reflection.list_pages()
+      ]
+    end
+
+    test "lists each page's reachable MFAs through the graph reader", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      module_info_plt: module_info_plt,
+      page_modules: page_modules
+    } do
+      result =
+        CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
+          list_mfas_by_page(page_modules, read_graph, PLT.start(), module_info_plt)
+        end)
+
+      assert Enum.all?(result, fn {_page_module, mfas} -> mfas != [] end)
+      assert result == list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
+    end
+
+    test "keeps the analyses it computes in the given PLT", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      module_info_plt: module_info_plt,
+      page_modules: page_modules
+    } do
+      analyses = PLT.start()
+
+      CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
+        list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt)
+      end)
+
+      assert Enum.all?(page_modules, &match?({:ok, _analysis}, PLT.get(analyses, &1)))
+    end
+
+    test "reads the analyses from the PLT", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      module_info_plt: module_info_plt,
+      page_modules: page_modules
+    } do
+      analyses_items =
+        call_graph_without_runtime_mfas
+        |> CallGraph.get_graph()
+        |> CallGraph.server_callback_analysis_by_templatable(
+          page_modules ++ Reflection.list_components(),
+          module_info_plt
+        )
+        |> Map.to_list()
+
+      analyses = PLT.start(items: analyses_items)
+      mfa = {CallGraph, :server_callback_analysis_by_templatable, 3}
+
+      count =
+        count_calls(mfa, fn ->
+          CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
+            list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt)
+          end)
+        end)
+
+      assert count == 0
+    end
   end
 
   describe "list_page_links/2" do
-    test "a page links to the pages whose functions it reaches" do
-      mfas_by_page = [
-        {Module1, [{Module1, :template, 0}, {Module2, :__route__, 0}, {Module3, :__params__, 0}]}
-      ]
+    test "a page links to the pages whose modules it reaches" do
+      modules_by_page = [{Module1, MapSet.new([Module1, Module2, Module3])}]
 
-      assert list_page_links(mfas_by_page, [Module1, Module2, Module3]) == %{
-               Module1 => MapSet.new([Module2, Module3])
+      assert list_page_links(modules_by_page, [Module1, Module2, Module3]) == %{
+               Module1 => MapSet.new([Module2, Module3]),
+               Module2 => MapSet.new(),
+               Module3 => MapSet.new()
              }
     end
 
     test "a page does not link to itself" do
-      mfas_by_page = [{Module1, [{Module1, :template, 0}, {Module1, :__route__, 0}]}]
+      modules_by_page = [{Module1, MapSet.new([Module1])}]
 
-      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+      assert list_page_links(modules_by_page, [Module1]) == %{Module1 => MapSet.new()}
     end
 
     test "a reached module that is not a page is not a link" do
-      mfas_by_page = [{Module1, [{Module2, :fun_1, 0}]}]
+      modules_by_page = [{Module1, MapSet.new([Module2])}]
 
-      assert list_page_links(mfas_by_page, [Module1]) == %{Module1 => MapSet.new()}
+      assert list_page_links(modules_by_page, [Module1]) == %{Module1 => MapSet.new()}
     end
 
-    test "a page with no MFAs links to no page" do
-      assert list_page_links([{Module1, []}], [Module1, Module2]) == %{Module1 => MapSet.new()}
+    test "a page with no modules links to no page" do
+      assert list_page_links([{Module1, MapSet.new()}], [Module1, Module2]) == %{
+               Module1 => MapSet.new(),
+               Module2 => MapSet.new()
+             }
+    end
+
+    test "a page whose modules are not given links to no page" do
+      assert list_page_links([], [Module1]) == %{Module1 => MapSet.new()}
     end
 
     test "every given page gets an entry" do
-      mfas_by_page = [{Module1, [{Module2, :__route__, 0}]}, {Module2, []}]
+      modules_by_page = [{Module1, MapSet.new([Module2])}]
 
-      assert list_page_links(mfas_by_page, [Module1, Module2]) == %{
+      assert list_page_links(modules_by_page, [Module1, Module2]) == %{
                Module1 => MapSet.new([Module2]),
                Module2 => MapSet.new()
              }
@@ -2647,7 +2784,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "partition_pages_to_rebuild/4" do
+  describe "partition_pages_to_rebuild/3" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -2656,14 +2793,9 @@ defmodule Hologram.CompilerTest do
 
       page_modules = Reflection.list_pages()
 
-      mfas_by_page =
-        list_mfas_by_page(
-          page_modules,
-          call_graph_without_runtime_mfas,
-          Reflection.list_components()
-        )
+      mfas_by_page = list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
 
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_pages_to_rebuild_4"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_pages_to_rebuild_3"])
       clean_dir(test_tmp_dir)
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
@@ -2685,7 +2817,6 @@ defmodule Hologram.CompilerTest do
 
       [
         call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-        component_modules: Reflection.list_components(),
         mfas_by_page: mfas_by_page,
         page_modules: page_modules,
         pages_plt: pages_plt,
@@ -2693,9 +2824,8 @@ defmodule Hologram.CompilerTest do
       ]
     end
 
-    test "lists the MFAs of the pages to rebuild and keeps the rest", %{
+    test "names the pages to rebuild and keeps the rest", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       mfas_by_page: mfas_by_page,
       page_modules: page_modules,
       pages_plt: pages_plt,
@@ -2707,20 +2837,18 @@ defmodule Hologram.CompilerTest do
         partition_pages_to_rebuild(
           page_modules,
           call_graph_without_runtime_mfas,
-          component_modules,
           pages_plt: pages_plt,
           reaching_modules: MapSet.new([reaching_page]),
           static_dir: static_dir
         )
 
-      assert Enum.map(rebuilt, &elem(&1, 0)) == [reaching_page]
+      assert rebuilt == [reaching_page]
       assert length(kept) == length(page_modules) - 1
       refute reaching_page in Enum.map(kept, &elem(&1, 0))
     end
 
     test "keeps every page when nothing reaches them", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
@@ -2729,7 +2857,6 @@ defmodule Hologram.CompilerTest do
                partition_pages_to_rebuild(
                  page_modules,
                  call_graph_without_runtime_mfas,
-                 component_modules,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
                  static_dir: static_dir
@@ -2740,32 +2867,29 @@ defmodule Hologram.CompilerTest do
 
     test "rebuilds the pending pages although nothing reaches them", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       mfas_by_page: mfas_by_page,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
     } do
-      [{pending_page, pending_page_mfas} | _rest] = mfas_by_page
+      [{pending_page, _mfas} | _rest] = mfas_by_page
 
       {rebuilt, kept} =
         partition_pages_to_rebuild(
           page_modules,
           call_graph_without_runtime_mfas,
-          component_modules,
           pages_plt: pages_plt,
           pending_pages: MapSet.new([pending_page]),
           reaching_modules: MapSet.new(),
           static_dir: static_dir
         )
 
-      assert rebuilt == [{pending_page, pending_page_mfas}]
+      assert rebuilt == [pending_page]
       assert length(kept) == length(page_modules) - 1
     end
 
     test "relisting keeps the pages whose MFAs are unchanged", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
@@ -2774,7 +2898,6 @@ defmodule Hologram.CompilerTest do
                partition_pages_to_rebuild(
                  page_modules,
                  call_graph_without_runtime_mfas,
-                 component_modules,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
                  relist_all?: true,
@@ -2786,7 +2909,6 @@ defmodule Hologram.CompilerTest do
 
     test "relisting rebuilds a page whose MFAs moved", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       mfas_by_page: mfas_by_page,
       page_modules: page_modules,
       pages_plt: pages_plt,
@@ -2807,20 +2929,18 @@ defmodule Hologram.CompilerTest do
         partition_pages_to_rebuild(
           page_modules,
           call_graph_without_runtime_mfas,
-          component_modules,
           pages_plt: pages_plt,
           reaching_modules: MapSet.new(),
           relist_all?: true,
           static_dir: static_dir
         )
 
-      assert rebuilt == [{moved_page, moved_page_mfas}]
+      assert rebuilt == [moved_page]
       refute moved_page in Enum.map(kept, &elem(&1, 0))
     end
 
     test "rebuild_all? rebuilds every page", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
-      component_modules: component_modules,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
@@ -2829,14 +2949,13 @@ defmodule Hologram.CompilerTest do
                partition_pages_to_rebuild(
                  page_modules,
                  call_graph_without_runtime_mfas,
-                 component_modules,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
                  rebuild_all?: true,
                  static_dir: static_dir
                )
 
-      assert length(rebuilt) == length(page_modules)
+      assert Enum.sort(rebuilt) == Enum.sort(page_modules)
     end
   end
 

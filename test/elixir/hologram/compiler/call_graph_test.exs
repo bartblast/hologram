@@ -93,18 +93,9 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   defp list_page_mfas_with_analysis(call_graph, page_module) do
-    graph = CallGraph.get_graph(call_graph)
-    templatables = [page_module | Reflection.list_components()]
-
-    server_callback_analysis_by_templatable =
-      server_callback_analysis_by_templatable(graph, templatables, module_info_plt_fixture())
-
-    list_page_mfas(
-      graph,
-      page_module,
-      server_callback_analysis_by_templatable,
-      CallGraph.module_info_plt(call_graph)
-    )
+    call_graph
+    |> CallGraph.get_graph()
+    |> list_page_mfas(page_module, PLT.start(), CallGraph.module_info_plt(call_graph))
   end
 
   # The module info PLT of the fixture app, started once per test run in setup_all (whose
@@ -1948,6 +1939,54 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "results are sorted", %{page_module_22_mfas: result} do
       assert result == Enum.sort(result)
     end
+
+    test "computes and keeps the analyses of the templatables the PLT does not hold", %{
+      module_info_plt: module_info_plt
+    } do
+      call_graph =
+        [module_info_plt: module_info_plt]
+        |> start()
+        |> build(IR.for_module(Module14))
+        |> build(IR.for_module(Module15))
+        |> build(IR.for_module(Module16))
+
+      graph = CallGraph.get_graph(call_graph)
+      analyses = PLT.start()
+
+      list_page_mfas(graph, Module14, analyses, module_info_plt)
+
+      expected =
+        server_callback_analysis_by_templatable(graph, [Module14, Module15], module_info_plt)
+
+      assert PLT.get(analyses, Module14) == {:ok, expected[Module14]}
+      assert PLT.get(analyses, Module15) == {:ok, expected[Module15]}
+    end
+
+    test "reads a kept analysis instead of computing one", %{module_info_plt: module_info_plt} do
+      call_graph =
+        [module_info_plt: module_info_plt]
+        |> start()
+        |> build(IR.for_module(Module14))
+        |> build(IR.for_module(Module15))
+        |> build(IR.for_module(Module16))
+
+      # No walk of Module14's server callbacks finds this MFA, so it is listed only when the
+      # kept analysis is read.
+      kept_analysis = %{
+        dispatch_types: MapSet.new(),
+        reflection_mfas: [{Module16, :kept_analysis_marker, 0}],
+        server_referenced_components: []
+      }
+
+      analyses = PLT.start(items: [{Module14, kept_analysis}])
+
+      result =
+        call_graph
+        |> CallGraph.get_graph()
+        |> list_page_mfas(Module14, analyses, module_info_plt)
+
+      assert {Module16, :kept_analysis_marker, 0} in result
+    end
   end
 
   test "list_runtime_entry_mfas/0" do
@@ -2256,6 +2295,18 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "results are sorted", %{runtime_mfas: result} do
       assert result == Enum.sort(result)
+    end
+
+    # The analyses PLT is linked to the caller while it runs, so a PLT left running would stay
+    # among the caller's links.
+    test "stops the analyses PLT it starts", %{full_call_graph: call_graph} do
+      {:links, links_before} = Process.info(self(), :links)
+
+      list_runtime_mfas(call_graph, Reflection.list_pages())
+
+      {:links, links_after} = Process.info(self(), :links)
+
+      assert MapSet.new(links_after) == MapSet.new(links_before)
     end
   end
 
@@ -2864,19 +2915,54 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "remove_runtime_mfas!/2", %{ir_plt: ir_plt} do
-    call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
+  describe "remove_runtime_mfas!/2" do
+    test "removes the runtime MFAs and keeps the rest", %{ir_plt: ir_plt} do
+      call_graph = Compiler.build_call_graph(ir_plt)
+      runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
 
-    CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
+      CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 
-    CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
+      CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
-    assert CallGraph.has_edge?(call_graph, :my_vertex_1, :my_vertex_2)
+      assert CallGraph.has_edge?(call_graph, :my_vertex_1, :my_vertex_2)
 
-    Enum.each(runtime_mfas, fn mfa ->
-      refute CallGraph.has_vertex?(call_graph, mfa)
-    end)
+      Enum.each(runtime_mfas, fn mfa ->
+        refute CallGraph.has_vertex?(call_graph, mfa)
+      end)
+    end
+
+    test "gives the graph removing the vertices gives", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      expected =
+        full_call_graph
+        |> CallGraph.get_graph()
+        |> Digraph.remove_vertices(runtime_mfas)
+
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> CallGraph.get_graph()
+
+      assert runtime_mfas != []
+      assert result == expected
+    end
+
+    test "leaves no empty neighbour map", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> CallGraph.get_graph()
+
+      assert Enum.all?(graph.outgoing_edges, fn {_vertex, targets} -> map_size(targets) > 0 end)
+      assert Enum.all?(graph.incoming_edges, fn {_vertex, sources} -> map_size(sources) > 0 end)
+    end
   end
 
   test "remove_vertex/2", %{empty_call_graph: call_graph} do
