@@ -121,6 +121,36 @@ defmodule Hologram.Commons.ETSTest do
     end
   end
 
+  describe "keys/2" do
+    test "keys whose value matches the pattern", %{table_ref: table_ref} do
+      :ets.insert(table_ref, {:my_key_3, :my_value_1})
+
+      sorted_keys =
+        table_ref
+        |> keys(:my_value_1)
+        |> Enum.sort()
+
+      assert sorted_keys == [:my_key_1, :my_key_3]
+    end
+
+    test "map pattern matches values holding the given keys", %{table_ref: table_ref} do
+      :ets.insert(table_ref, {:my_key_3, %{a: 1, b: 2}})
+      :ets.insert(table_ref, {:my_key_4, %{a: 1}})
+      :ets.insert(table_ref, {:my_key_5, %{a: 2, b: 2}})
+
+      sorted_keys =
+        table_ref
+        |> keys(%{a: 1})
+        |> Enum.sort()
+
+      assert sorted_keys == [:my_key_3, :my_key_4]
+    end
+
+    test "no value matches the pattern", %{table_ref: table_ref} do
+      assert keys(table_ref, :my_value_3) == []
+    end
+  end
+
   describe "member?/2" do
     test "key exists", %{table_ref: table_ref} do
       assert member?(table_ref, :my_key_2)
