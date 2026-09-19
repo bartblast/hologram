@@ -2562,6 +2562,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
     end
 
+    test "adds protocol dispatch edges when a protocol and its implementation are added together",
+         %{empty_call_graph: call_graph} do
+      ir_plt =
+        PLT.start(
+          items: [
+            {Protocol1, IR.for_module(Protocol1)},
+            {Protocol1.Integer, IR.for_module(Protocol1.Integer)}
+          ]
+        )
+
+      diff = %{
+        added_modules: [Protocol1, Protocol1.Integer],
+        removed_modules: [],
+        edited_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert has_edge?(call_graph, {Protocol1, :my_fun, 1}, {Protocol1.Integer, :__impl__, 1})
+      assert has_edge?(call_graph, {Protocol1, :my_fun, 1}, {Protocol1.Integer, :my_fun, 1})
+    end
+
     test "updates modules", %{empty_call_graph: call_graph} do
       module_9_ir = IR.for_module(Module9)
       module_10_ir = IR.for_module(Module10)

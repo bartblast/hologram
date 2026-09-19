@@ -1893,13 +1893,18 @@ defmodule Hologram.Compiler.CallGraph do
   # module itself (e.g. Enumerable) is unchanged and not re-processed by patch. Its
   # dispatch edges remain stale. This function re-runs add_protocol_call_graph_edges
   # for each affected protocol so dispatch edges reflect the current set of implementations.
-  # Removed modules are excluded because add_protocol_call_graph_edges auto-creates vertices,
-  # which would re-introduce vertices that remove_module_vertices already cleaned up.
+  # A protocol among the added or edited modules was just built, with its edges taken from
+  # the same PLT, so it is skipped. Removed modules are excluded because
+  # add_protocol_call_graph_edges auto-creates vertices, which would re-introduce vertices
+  # that remove_module_vertices already cleaned up.
   defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
+    built_modules = MapSet.new(added_or_edited_modules)
+
     added_or_edited_modules
     |> Enum.filter(&module_flag?(call_graph, &1, :protocol_implementation?))
     |> Enum.map(&implemented_protocol(&1, call_graph.module_info_plt))
     |> Enum.uniq()
+    |> Enum.reject(&MapSet.member?(built_modules, &1))
     |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
   end
 
