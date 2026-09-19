@@ -1482,7 +1482,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp add_protocol_call_graph_edges(call_graph, module) do
     funs = protocol_functions(module, call_graph.module_info_plt)
-    impls = Reflection.list_protocol_implementations(module)
+    impls = Reflection.list_protocol_implementations(module, call_graph.module_info_plt)
 
     edges =
       for impl <- impls,
