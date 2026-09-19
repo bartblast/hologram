@@ -621,32 +621,9 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the list of modules that are implementations of the given protocol.
-  """
-  @spec list_protocol_implementations(module) :: list(module)
-  def list_protocol_implementations(protocol) do
-    paths =
-      Enum.reduce(list_loaded_otp_apps(), [], fn app, acc ->
-        case :code.lib_dir(app) do
-          {:error, :bad_name} ->
-            acc
-
-          path ->
-            [Path.join(path, "ebin") | acc]
-        end
-      end)
-
-    protocol
-    |> Protocol.extract_impls(paths)
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    |> Enum.map(&Module.concat(protocol, &1))
-  end
-
-  @doc """
-  Returns the modules the given module info PLT records as implementations of the given protocol:
-  the answer of list_protocol_implementations/1 taken from the PLT, without listing any directory or
-  reading any BEAM. An implementation whose `__impl__(:protocol)` is not a literal has no protocol in
-  the PLT and is not listed.
+  Returns the modules the given module info PLT records as implementations of the given protocol,
+  without listing any directory or reading any BEAM. An implementation whose `__impl__(:protocol)` is
+  not a literal has no protocol in the PLT and is not listed.
   """
   @spec list_protocol_implementations(module, PLT.t()) :: list(module)
   def list_protocol_implementations(protocol, module_info_plt) do

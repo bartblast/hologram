@@ -974,13 +974,6 @@ defmodule Hologram.ReflectionTest do
     refute Hologram.Compiler.Context in result
   end
 
-  test "list_protocol_implementations" do
-    result = list_protocol_implementations(String.Chars)
-
-    assert String.Chars.Atom in result
-    assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
-  end
-
   describe "list_protocol_implementations/2" do
     setup do
       module_info_plt =
