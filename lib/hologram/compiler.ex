@@ -843,8 +843,11 @@ defmodule Hologram.Compiler do
   graph's graph with the page tasks (see `CallGraph.with_shared_graph/2`) and the server callback
   analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/4`
   against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
+  With no page, the graph is not read: a graph still being rebuilt is not waited for.
   """
   @spec list_mfas_by_page([module], CallGraph.t()) :: [{module, [mfa]}]
+  def list_mfas_by_page([], _call_graph), do: []
+
   def list_mfas_by_page(page_modules, call_graph) do
     module_info_plt = CallGraph.module_info_plt(call_graph)
     analyses = PLT.start()

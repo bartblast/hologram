@@ -237,8 +237,6 @@ defmodule Mix.Tasks.Compile.Hologram do
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
 
-      mfas_by_page = Compiler.list_mfas_by_page(pages_to_rebuild, call_graph_for_pages)
-
       # Pending until their bundles are built, so that the pages this compile does not get to are
       # rebuilt by the next one, whether or not its own edit reaches them.
       Cache.put_pending_pages(pages_to_rebuild)
@@ -249,12 +247,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         MapSet.new(old_page_states, fn {page_module, _page_state} -> page_module end)
 
       # A page to rebuild that no compile has built has no state to take its modules from, which is
-      # every page on a build into an empty build dir or on the first compile in a VM, so its own
-      # MFA list stands in for one.
+      # every page on a build into an empty build dir or on the first compile in a VM, so it is
+      # listed here, before the prune, and its own MFA list stands in for one; its batch reuses the
+      # list. The pages with a state, every page a live-reload save rebuilds, are listed with their
+      # batches.
       unrecorded_mfas_by_page =
-        Enum.reject(mfas_by_page, fn {page_module, _mfas} ->
-          MapSet.member?(recorded_pages, page_module)
-        end)
+        pages_to_rebuild
+        |> Enum.reject(&MapSet.member?(recorded_pages, &1))
+        |> Compiler.list_mfas_by_page(call_graph_for_pages)
 
       # The modules each page reaches: as its last built state recorded them, or as this compile
       # lists them for a page that has no state.
@@ -268,7 +268,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # What an earlier compile kept that no page, the runtime or a templatable reaches any more is
       # dropped first, encodings included. A page rebuilt reads mostly what its old state names, and
-      # the IR it reads for the first time is built right after. The IR of a page with no state is
+      # the IR it reads for the first time is built with its batch. The IR of a page with no state is
       # kept too: on a build into an empty build dir the diff has just built the IR of every module,
       # which pruning it would only have the pages build again. A kept page renders no entry file
       # this time, but its IR stays, so that a later compile that does rebuild it finds the IR it
@@ -283,13 +283,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.prune_ir_plt(ir_plt, kept_modules)
 
-      ir_modules =
-        mfas_by_page
-        |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
-        |> Enum.concat(runtime_mfas)
-        |> Compiler.list_ir_modules(new_module_info_plt)
-
-      Compiler.build_missing_ir!(ir_plt, ir_modules)
+      # The runtime entry file is rendered before the batches, so the IR it reads is built here;
+      # each batch builds its pages' before rendering theirs.
+      runtime_ir_modules = Compiler.list_ir_modules(runtime_mfas, new_module_info_plt)
+      Compiler.build_missing_ir!(ir_plt, runtime_ir_modules)
 
       # Filled by the entry file renderers as they go, and kept between compiles (see
       # Hologram.Compiler.Cache): each reachable function's JavaScript is produced once and read back
@@ -387,15 +384,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       links = Compiler.list_page_links(modules_by_page, page_modules)
 
       batch_context = %{
+        # The server callback analyses the batches compute, each templatable's once, whichever
+        # batch reaches it first. Stopped with the supervisor.
+        analyses: PLT.start(supervisor: sup),
         app_versions: app_versions,
         async_mfas: async_mfas,
+        call_graph: call_graph_for_pages,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         ir_plt: ir_plt,
         links: links,
-        mfas_by_page: Map.new(mfas_by_page),
+        listed_mfas_by_page: Map.new(unrecorded_mfas_by_page),
+        module_info_plt: new_module_info_plt,
         old_runtime_bundle_info: cache.runtime && cache.runtime.bundle_info,
         opts: opts,
+        read_graph: nil,
         runtime_js_binding_modules: runtime_js_binding_modules,
         runtime_mfas: runtime_mfas,
         supervisor: sup
@@ -403,7 +406,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       dump_page_digest_plt(bundles, batch_context)
 
-      remaining_pages = MapSet.new(mfas_by_page, fn {page_module, _mfas} -> page_module end)
+      remaining_pages = MapSet.new(pages_to_rebuild)
 
       bundles =
         build_batches(remaining_pages, runtime_entry_files_info, bundles, batch_context)
@@ -442,20 +445,21 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # Builds the pages still to rebuild in the batches the :next_batch option asks for, and the runtime
-  # with the first one, and returns the bundles the page digest PLT names once the batches stop: the
-  # ones built, and for the pages the batches did not get to, the ones they had. The runtime is built
-  # even when the first answer is :stop, since the pages kept and the pages built both load it.
+  # The pages graph is shared with the batches once, and only when a page is left to list: the
+  # runtime alone reads no page's reach, and a page listed before the batches has its list already.
+  # So a compile with nothing to rebuild neither waits for the pages graph nor copies it.
   defp build_batches(remaining_pages, runtime_entry_files_info, bundles, context) do
-    case next_batch(remaining_pages, context) do
-      :stop ->
-        bundle_batch([], runtime_entry_files_info, bundles, context)
-
-      page_modules ->
-        new_bundles = bundle_batch(page_modules, runtime_entry_files_info, bundles, context)
-        new_remaining_pages = MapSet.difference(remaining_pages, MapSet.new(page_modules))
-
-        build_batches(new_remaining_pages, [], new_bundles, context)
+    if Enum.all?(remaining_pages, &Map.has_key?(context.listed_mfas_by_page, &1)) do
+      build_page_batches(remaining_pages, runtime_entry_files_info, bundles, context)
+    else
+      CallGraph.with_shared_graph(context.call_graph, fn read_graph ->
+        build_page_batches(
+          remaining_pages,
+          runtime_entry_files_info,
+          bundles,
+          %{context | read_graph: read_graph}
+        )
+      end)
     end
   end
 
@@ -481,13 +485,30 @@ defmodule Mix.Tasks.Compile.Hologram do
     )
   end
 
+  # Builds the pages still to rebuild in the batches the :next_batch option asks for, and the runtime
+  # with the first one, and returns the bundles the page digest PLT names once the batches stop: the
+  # ones built, and for the pages the batches did not get to, the ones they had. The runtime is built
+  # even when the first answer is :stop, since the pages kept and the pages built both load it.
+  defp build_page_batches(remaining_pages, runtime_entry_files_info, bundles, context) do
+    case next_batch(remaining_pages, context) do
+      :stop ->
+        bundle_batch([], runtime_entry_files_info, bundles, context)
+
+      page_modules ->
+        new_bundles = bundle_batch(page_modules, runtime_entry_files_info, bundles, context)
+        new_remaining_pages = MapSet.difference(remaining_pages, MapSet.new(page_modules))
+
+        build_page_batches(new_remaining_pages, [], new_bundles, context)
+    end
+  end
+
   # Builds the given pages, and the runtime when its entry file is given, and records them: their
   # states in the cache, the page digest PLT that names them, and the pages no longer pending. Then
   # the :bundles_built option is told what was built, the runtime first.
   defp bundle_batch([], [], bundles, _context), do: bundles
 
   defp bundle_batch(page_modules, runtime_entry_files_info, bundles, context) do
-    batch_mfas_by_page = Enum.map(page_modules, &{&1, Map.fetch!(context.mfas_by_page, &1)})
+    batch_mfas_by_page = list_batch_mfas(page_modules, context)
 
     page_entry_files_info =
       batch_mfas_by_page
@@ -503,7 +524,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     built_bundles_info =
       Compiler.bundle(runtime_entry_files_info ++ page_entry_files_info, context.opts)
 
-    keep_built_bundles(built_bundles_info, context)
+    keep_built_bundles(built_bundles_info, Map.new(batch_mfas_by_page), context)
 
     new_bundles = put_built_bundles_info(bundles, built_bundles_info, context)
     dump_page_digest_plt(new_bundles, context)
@@ -567,10 +588,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # Records what a batch built, so that the next compile can reuse the bundles of the pages an edit
   # does not reach: a state per page bundle it wrote, and the runtime's inputs with its bundle.
-  defp keep_built_bundles(built_bundles_info, context) do
+  defp keep_built_bundles(built_bundles_info, mfas_by_page, context) do
     Enum.each(built_bundles_info, fn
       %{bundle_name: "page", entry_name: page_module} = bundle_info ->
-        mfas = context.mfas_by_page[page_module]
+        mfas = mfas_by_page[page_module]
 
         Cache.put_page(page_module, %{
           bundle_info: bundle_info,
@@ -677,6 +698,33 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp language_server_build?(opts) do
     path_components = Path.split(opts[:build_dir])
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
+  end
+
+  # A batch's pages are listed here rather than before the first batch, so the open tab's page is
+  # bundled as soon as its own list is done; a page listed before the batches, one with no state,
+  # reuses that list. The IR the pages' entry files read is built right after, what an earlier
+  # compile kept being there already. A batch of the runtime alone lists nothing.
+  defp list_batch_mfas([], _context), do: []
+
+  defp list_batch_mfas(page_modules, context) do
+    {listed_pages, unlisted_pages} =
+      Enum.split_with(page_modules, &Map.has_key?(context.listed_mfas_by_page, &1))
+
+    listed_mfas_by_page = Enum.map(listed_pages, &{&1, context.listed_mfas_by_page[&1]})
+
+    mfas_by_page =
+      unlisted_pages
+      |> Compiler.list_mfas_by_page(context.read_graph, context.analyses, context.module_info_plt)
+      |> Enum.concat(listed_mfas_by_page)
+
+    ir_modules =
+      mfas_by_page
+      |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
+      |> Compiler.list_ir_modules(context.module_info_plt)
+
+    Compiler.build_missing_ir!(context.ir_plt, ir_modules)
+
+    mfas_by_page
   end
 
   # The states of the pages to rebuild that an earlier compile built. Each still serves its bundle

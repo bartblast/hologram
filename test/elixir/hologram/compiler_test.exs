@@ -2354,6 +2354,17 @@ defmodule Hologram.CompilerTest do
 
       assert MapSet.new(links_after) == MapSet.new(links_before)
     end
+
+    test "lists nothing and reads no graph for no pages", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas
+    } do
+      count =
+        count_calls({CallGraph, :with_shared_graph, 2}, fn ->
+          assert list_mfas_by_page([], call_graph_without_runtime_mfas) == []
+        end)
+
+      assert count == 0
+    end
   end
 
   describe "list_mfas_by_page/4" do
