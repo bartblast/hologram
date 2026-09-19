@@ -2915,19 +2915,54 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "remove_runtime_mfas!/2", %{ir_plt: ir_plt} do
-    call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
+  describe "remove_runtime_mfas!/2" do
+    test "removes the runtime MFAs and keeps the rest", %{ir_plt: ir_plt} do
+      call_graph = Compiler.build_call_graph(ir_plt)
+      runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
 
-    CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
+      CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 
-    CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
+      CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
-    assert CallGraph.has_edge?(call_graph, :my_vertex_1, :my_vertex_2)
+      assert CallGraph.has_edge?(call_graph, :my_vertex_1, :my_vertex_2)
 
-    Enum.each(runtime_mfas, fn mfa ->
-      refute CallGraph.has_vertex?(call_graph, mfa)
-    end)
+      Enum.each(runtime_mfas, fn mfa ->
+        refute CallGraph.has_vertex?(call_graph, mfa)
+      end)
+    end
+
+    test "gives the graph removing the vertices gives", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      expected =
+        full_call_graph
+        |> CallGraph.get_graph()
+        |> Digraph.remove_vertices(runtime_mfas)
+
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> CallGraph.get_graph()
+
+      assert runtime_mfas != []
+      assert result == expected
+    end
+
+    test "leaves no empty neighbour map", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> CallGraph.get_graph()
+
+      assert Enum.all?(graph.outgoing_edges, fn {_vertex, targets} -> map_size(targets) > 0 end)
+      assert Enum.all?(graph.incoming_edges, fn {_vertex, sources} -> map_size(sources) > 0 end)
+    end
   end
 
   test "remove_vertex/2", %{empty_call_graph: call_graph} do
