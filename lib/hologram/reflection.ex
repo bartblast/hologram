@@ -643,6 +643,17 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the modules the given module info PLT records as implementations of the given protocol:
+  the answer of list_protocol_implementations/1 taken from the PLT, without listing any directory or
+  reading any BEAM. An implementation whose `__impl__(:protocol)` is not a literal has no protocol in
+  the PLT and is not listed.
+  """
+  @spec list_protocol_implementations(module, PLT.t()) :: list(module)
+  def list_protocol_implementations(protocol, module_info_plt) do
+    PLT.keys(module_info_plt, %{implemented_protocol: protocol})
+  end
+
+  @doc """
   Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   """

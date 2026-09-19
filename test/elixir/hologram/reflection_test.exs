@@ -3,6 +3,7 @@ defmodule Hologram.ReflectionTest do
   import Hologram.Reflection
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.Test.Fixtures.Reflection.Module1
   alias Hologram.Test.Fixtures.Reflection.Module2
   alias Hologram.Test.Fixtures.Reflection.Module3
@@ -978,6 +979,51 @@ defmodule Hologram.ReflectionTest do
 
     assert String.Chars.Atom in result
     assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
+  end
+
+  describe "list_protocol_implementations/2" do
+    setup do
+      module_info_plt =
+        PLT.start(
+          items: [
+            {String.Chars.Atom,
+             %{protocol_implementation?: true, implemented_protocol: String.Chars}},
+            {String.Chars.Integer,
+             %{protocol_implementation?: true, implemented_protocol: String.Chars}},
+            {Enumerable.List,
+             %{protocol_implementation?: true, implemented_protocol: Enumerable}},
+            {Calendar.ISO, %{protocol_implementation?: false, implemented_protocol: nil}},
+            {String.Chars, %{protocol?: true}}
+          ]
+        )
+
+      [module_info_plt: module_info_plt]
+    end
+
+    test "modules the PLT records as implementations of the protocol", %{
+      module_info_plt: module_info_plt
+    } do
+      sorted_impls =
+        String.Chars
+        |> list_protocol_implementations(module_info_plt)
+        |> Enum.sort()
+
+      assert sorted_impls == [String.Chars.Atom, String.Chars.Integer]
+    end
+
+    test "protocol the PLT records no implementation of", %{module_info_plt: module_info_plt} do
+      assert list_protocol_implementations(Inspect, module_info_plt) == []
+    end
+
+    test "the fixture app's PLT lists its implementation" do
+      module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
+
+      result = list_protocol_implementations(String.Chars, module_info_plt)
+
+      assert String.Chars.Atom in result
+      assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
+      refute Enumerable.List in result
+    end
   end
 
   test "list_std_lib_elixir_modules/0" do
