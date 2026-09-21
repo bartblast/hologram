@@ -459,6 +459,15 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:bandit, {:rst_stream, ...}}" do
+    test "halts" do
+      conn = prepared_test_conn()
+      send(self(), {:bandit, {:rst_stream, 8}})
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil)
+    end
+  end
+
   describe "process_message/4 on {:broadcast_action, ...}" do
     test "emits one bundled event: broadcast chunk carrying all matching cids" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"

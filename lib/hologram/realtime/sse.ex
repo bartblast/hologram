@@ -159,6 +159,12 @@ defmodule Hologram.Realtime.SSE do
 
         {:cont, conn}
 
+      # Bandit delivers a client's HTTP/2 stream reset to the stream's process, which is
+      # this one. Without this clause the catch-all below swallows it and the stream lives
+      # on until a heartbeat write fails.
+      {:bandit, {:rst_stream, _error_code}} ->
+        {:halt, conn}
+
       {:broadcast_action, channel, action_name, params, excluded_identities} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
