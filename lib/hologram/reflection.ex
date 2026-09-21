@@ -816,6 +816,21 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like protocol_implementation/1, but answered from the given module info PLT when it holds the
+  module, without touching the module's code path or loading it. The PLT records nil for an
+  implementation whose `__impl__(:protocol)` is not a literal, as list_protocol_implementations/2
+  treats it. A nil PLT, or a module the PLT does not hold, is decided the protocol_implementation/1
+  way.
+  """
+  @spec protocol_implementation(module, PLT.t() | nil) :: module | nil
+  def protocol_implementation(module, module_info_plt) do
+    case module_info_value(module_info_plt, module, :implemented_protocol) do
+      {:ok, protocol} -> protocol
+      :error -> protocol_implementation(module)
+    end
+  end
+
+  @doc """
   Returns true if the given module is a protocol implementation, or false otherwise.
   """
   @spec protocol_implementation?(module) :: boolean
@@ -1077,12 +1092,22 @@ defmodule Hologram.Reflection do
 
   # The value of a boolean flag in the module info PLT entry of the given term, or :error when there
   # is no PLT, no entry, or the entry has no such flag (a dump written before the flag existed).
-  defp module_info_flag(nil, _term, _flag), do: :error
-
   defp module_info_flag(module_info_plt, term, flag) do
-    case PLT.get(module_info_plt, term) do
-      {:ok, %{^flag => value}} when is_boolean(value) -> {:ok, value}
+    case module_info_value(module_info_plt, term, flag) do
+      {:ok, value} when is_boolean(value) -> {:ok, value}
       _no_flag -> :error
+    end
+  end
+
+  # The value under the given key in the module info PLT entry of the given term, nil included, or
+  # :error when there is no PLT, no entry, or the entry has no such key (a dump written before the
+  # key existed).
+  defp module_info_value(nil, _term, _key), do: :error
+
+  defp module_info_value(module_info_plt, term, key) do
+    case PLT.get(module_info_plt, term) do
+      {:ok, %{^key => value}} -> {:ok, value}
+      _no_key -> :error
     end
   end
 
