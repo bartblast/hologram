@@ -123,6 +123,15 @@ defmodule HologramClusterTests.Proxy do
     upstreams
   end
 
+  # The listener is linked and exits are trapped, so its death arrives here. The proxy
+  # can't serve without it, so it stops too, and its supervisor restarts both.
+  @impl GenServer
+  def handle_info({:EXIT, listener_pid, reason}, %{listener_pid: listener_pid} = state) do
+    {:stop, reason, %{state | listener_pid: nil}}
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
+
   @impl GenServer
   def init(opts) do
     # The listener is linked, so it would already die with this server. Exits are
@@ -145,6 +154,8 @@ defmodule HologramClusterTests.Proxy do
   end
 
   @impl GenServer
+  def terminate(_reason, %{listener_pid: nil}), do: :ok
+
   def terminate(_reason, %{listener_pid: listener_pid}) do
     Supervisor.stop(listener_pid)
   end
