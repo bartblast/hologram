@@ -114,6 +114,14 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  defp narrow_diff_fixture(added_modules, edited_modules, removed_modules) do
+    %{
+      added_modules: added_modules,
+      edited_modules: edited_modules,
+      removed_modules: removed_modules
+    }
+  end
+
   defp page_entry_mfas(page_module, layout_module) do
     [
       {page_module, :__layout_module__, 0},
@@ -2468,6 +2476,101 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert has_vertex?(call_graph, {Module16, :my_fun_16a, 2})
       refute Module16 in modules(call_graph)
+    end
+  end
+
+  describe "narrow_diff/2" do
+    setup do
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(NarrowDiff.Page, %{page?: true})
+        |> PLT.put(NarrowDiff.Caller, %{broadcast_caller?: true})
+        |> PLT.put(NarrowDiff.HeldImpl, %{
+          protocol_implementation?: true,
+          implemented_protocol: NarrowDiff.HeldProtocol
+        })
+        |> PLT.put(NarrowDiff.OtherImpl, %{
+          protocol_implementation?: true,
+          implemented_protocol: NarrowDiff.OtherProtocol
+        })
+        |> PLT.put(NarrowDiff.Held, %{})
+        |> PLT.put(NarrowDiff.Other, %{})
+
+      call_graph =
+        start(
+          modules: MapSet.new([NarrowDiff.Held, NarrowDiff.HeldProtocol]),
+          module_info_plt: module_info_plt
+        )
+
+      [call_graph: call_graph]
+    end
+
+    test "keeps every removed module", %{call_graph: call_graph} do
+      diff = narrow_diff_fixture([], [], [NarrowDiff.Held, NarrowDiff.Other])
+
+      assert narrow_diff(call_graph, diff) == diff
+    end
+
+    test "keeps an edited module the graph holds", %{call_graph: call_graph} do
+      diff = narrow_diff_fixture([], [NarrowDiff.Held], [])
+
+      assert narrow_diff(call_graph, diff) == diff
+    end
+
+    test "drops an edited module the graph does not hold", %{call_graph: call_graph} do
+      diff = narrow_diff_fixture([], [NarrowDiff.Other], [])
+
+      assert narrow_diff(call_graph, diff) == narrow_diff_fixture([], [], [])
+    end
+
+    test "drops an added module outside the reach", %{call_graph: call_graph} do
+      diff = narrow_diff_fixture([NarrowDiff.Other], [], [])
+
+      assert narrow_diff(call_graph, diff) == narrow_diff_fixture([], [], [])
+    end
+
+    test "keeps an added or edited page", %{call_graph: call_graph} do
+      diff = narrow_diff_fixture([NarrowDiff.Page], [NarrowDiff.Page], [])
+
+      assert narrow_diff(call_graph, diff) == diff
+    end
+
+    test "keeps an added or edited broadcast caller", %{call_graph: call_graph} do
+      diff = narrow_diff_fixture([NarrowDiff.Caller], [NarrowDiff.Caller], [])
+
+      assert narrow_diff(call_graph, diff) == diff
+    end
+
+    test "keeps an added or edited implementation of a protocol the graph holds", %{
+      call_graph: call_graph
+    } do
+      diff = narrow_diff_fixture([NarrowDiff.HeldImpl], [NarrowDiff.HeldImpl], [])
+
+      assert narrow_diff(call_graph, diff) == diff
+    end
+
+    test "drops an implementation of a protocol the graph does not hold", %{
+      call_graph: call_graph
+    } do
+      diff = narrow_diff_fixture([NarrowDiff.OtherImpl], [NarrowDiff.OtherImpl], [])
+
+      assert narrow_diff(call_graph, diff) == narrow_diff_fixture([], [], [])
+    end
+
+    test "keeps the order of the given lists", %{call_graph: call_graph} do
+      diff =
+        narrow_diff_fixture(
+          [NarrowDiff.Page, NarrowDiff.Other, NarrowDiff.Caller],
+          [NarrowDiff.HeldImpl, NarrowDiff.Other, NarrowDiff.Held],
+          []
+        )
+
+      assert narrow_diff(call_graph, diff) ==
+               narrow_diff_fixture(
+                 [NarrowDiff.Page, NarrowDiff.Caller],
+                 [NarrowDiff.HeldImpl, NarrowDiff.Held],
+                 []
+               )
     end
   end
 

@@ -1113,6 +1113,37 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Narrows a module digests diff to the modules the graph holds or must come to hold. The graph is
+  built for the modules the pages, the runtime and the broadcast callers reach, so an added or edited
+  module outside that reach has no vertices to patch and no IR to build. Kept: every removed module;
+  an edited module among the graph's modules (see modules/1); an added or edited page or broadcast
+  caller, which the walk that grows the graph starts from, since a new page or a module that starts
+  broadcasting is reached by nobody else; and an added or edited implementation of a protocol the
+  graph holds, so that patch/3 refreshes the protocol's dispatch edges with it whether or not its
+  type is reached yet, since implementation candidates are read from those edges.
+  """
+  @spec narrow_diff(t, %{
+          added_modules: [module],
+          edited_modules: [module],
+          removed_modules: [module]
+        }) :: %{added_modules: [module], edited_modules: [module], removed_modules: [module]}
+  def narrow_diff(%{module_info_plt: module_info_plt} = call_graph, diff) do
+    modules = modules(call_graph)
+
+    graph_module? = fn module ->
+      MapSet.member?(modules, module) or flag?(module_info_plt, module, :page?) or
+        flag?(module_info_plt, module, :broadcast_caller?) or
+        implementation_of_graph_protocol?(module, modules, module_info_plt)
+    end
+
+    %{
+      diff
+      | added_modules: Enum.filter(diff.added_modules, graph_module?),
+        edited_modules: Enum.filter(diff.edited_modules, graph_module?)
+    }
+  end
+
+  @doc """
   Given a diff of changes, updates the call graph
   by deleting the graph paths of modules that have been removed,
   rebuilding the graph paths of modules that have been edited,
@@ -1677,6 +1708,13 @@ defmodule Hologram.Compiler.CallGraph do
   # Compiler.validate_page_modules/2 before any traversal, so calling the module is right.
   defp implementation_for(impl, module_info_plt) do
     fact(module_info_plt, impl, :implementation_for) || impl.__impl__(:for)
+  end
+
+  # The flag comes first: implemented_protocol/2 asks the module when the PLT has no literal, which
+  # only an implementation can answer.
+  defp implementation_of_graph_protocol?(module, graph_modules, module_info_plt) do
+    flag?(module_info_plt, module, :protocol_implementation?) and
+      MapSet.member?(graph_modules, implemented_protocol(module, module_info_plt))
   end
 
   defp implemented_protocol(impl, module_info_plt) do
