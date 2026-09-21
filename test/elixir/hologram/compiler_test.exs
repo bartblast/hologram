@@ -62,10 +62,16 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  # Runs the function with call counts on the one-argument protocol and JS import checks, which
-  # consult a module's code path, and returns its result with the number of such checks.
+  # Runs the function with call counts on the one-argument protocol, protocol implementation and
+  # JS import checks, which consult a module's code path, and returns its result with the number
+  # of such checks.
   defp count_module_self_checks(fun) do
-    mfas = [{Reflection, :protocol?, 1}, {Reflection, :js_imports?, 1}]
+    mfas = [
+      {Reflection, :protocol?, 1},
+      {Reflection, :protocol_implementation, 1},
+      {Reflection, :js_imports?, 1}
+    ]
+
     Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
 
     try do
@@ -595,7 +601,7 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    test "asks no module whether it is a protocol or declares JS imports when given the module info PLT",
+    test "asks no module whether it is a protocol or an implementation, or declares JS imports, when given the module info PLT",
          %{
            encode_plt: encode_plt,
            graph: graph,
@@ -888,20 +894,13 @@ defmodule Hologram.CompilerTest do
       [encode_plt: PLT.start()]
     end
 
-    test "asks no module whether it is a protocol or declares JS imports when given the module info PLT",
+    test "asks no module whether it is a protocol or an implementation, or declares JS imports, when given the module info PLT",
          %{
            encode_plt: encode_plt,
            ir_plt: ir_plt,
            module_info_plt: module_info_plt,
            runtime_mfas: runtime_mfas
          } do
-      # prune_module_def/2 still asks each rendered protocol module itself, on the protocol path.
-      rendered_protocols =
-        runtime_mfas
-        |> Enum.map(fn {module, _function, _arity} -> module end)
-        |> Enum.uniq()
-        |> Enum.count(&Reflection.protocol?/1)
-
       {without_plt, checks_without_plt} =
         count_module_self_checks(fn ->
           build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
@@ -917,7 +916,7 @@ defmodule Hologram.CompilerTest do
 
       assert with_plt == without_plt
       assert checks_without_plt > 0
-      assert checks_with_plt == rendered_protocols
+      assert checks_with_plt == 0
     end
 
     test "renders reachable function defs", %{
@@ -3190,7 +3189,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "prune_module_def/2" do
+  test "prune_module_def/4" do
     module_def_ir = IR.for_module(Module8)
 
     module_def_ir_fixture = %{
@@ -3202,12 +3201,14 @@ defmodule Hologram.CompilerTest do
         }
     }
 
-    reachable_mfas = [
+    module_mfas = [
       {Module8, :fun_2, 2},
       {Module8, :fun_3, 1}
     ]
 
-    assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
+    pruned = prune_module_def(module_def_ir_fixture, module_mfas, MapSet.new([Module8]), nil)
+
+    assert pruned == %IR.ModuleDefinition{
              module: %IR.AtomType{value: Module8},
              body: %IR.Block{
                expressions: [
@@ -3266,22 +3267,49 @@ defmodule Hologram.CompilerTest do
            }
   end
 
-  test "prune_module_def/2 prunes protocol dispatcher clauses to included implementations" do
-    reachable_mfas = [
+  test "prune_module_def/4 asks no module when the module info PLT holds them", %{
+    module_info_plt: module_info_plt
+  } do
+    module_mfas = [
+      {String.Chars, :impl_for, 1},
+      {String.Chars, :struct_impl_for, 1},
+      {String.Chars, :to_string, 1}
+    ]
+
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom, Calendar.ISO])
+    module_def_ir = IR.for_module(String.Chars)
+
+    {without_plt, checks_without_plt} =
+      count_module_self_checks(fn ->
+        prune_module_def(module_def_ir, module_mfas, reachable_modules, nil)
+      end)
+
+    {with_plt, checks_with_plt} =
+      count_module_self_checks(fn ->
+        prune_module_def(module_def_ir, module_mfas, reachable_modules, module_info_plt)
+      end)
+
+    assert with_plt == without_plt
+    assert checks_without_plt > 0
+    assert checks_with_plt == 0
+  end
+
+  test "prune_module_def/4 prunes protocol dispatcher clauses to included implementations", %{
+    module_info_plt: module_info_plt
+  } do
+    module_mfas = [
       {String.Chars, :impl_for, 1},
       {String.Chars, :impl_for!, 1},
       {String.Chars, :struct_impl_for, 1},
-      {String.Chars, :to_string, 1},
-      {String.Chars.Atom, :__impl__, 1},
-      {String.Chars.Atom, :to_string, 1},
-      {String.Chars.URI, :__impl__, 1},
-      {String.Chars.URI, :to_string, 1}
+      {String.Chars, :to_string, 1}
     ]
+
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom, String.Chars.URI])
 
     js =
       String.Chars
       |> IR.for_module()
-      |> prune_module_def(reachable_mfas)
+      |> prune_module_def(module_mfas, reachable_modules, module_info_plt)
       |> Encoder.encode_ir(%Context{module: String.Chars, async_mfas: MapSet.new()})
 
     assert String.contains?(

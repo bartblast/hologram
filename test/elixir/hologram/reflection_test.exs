@@ -1282,6 +1282,38 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "protocol_implementation/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{implemented_protocol: String.Chars})
+
+      assert protocol_implementation(Aaa.Bbb, module_info_plt) == String.Chars
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Enumerable.Function, %{implemented_protocol: nil})
+
+      assert protocol_implementation(Enumerable.Function, module_info_plt) == nil
+    end
+
+    test "module the PLT does not hold is decided the protocol_implementation/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert protocol_implementation(Enumerable.Function, module_info_plt) == Enumerable
+      assert protocol_implementation(Calendar.ISO, module_info_plt) == nil
+    end
+
+    test "nil PLT decides the protocol_implementation/1 way" do
+      assert protocol_implementation(Enumerable.Function, nil) == Enumerable
+      assert protocol_implementation(Calendar.ISO, nil) == nil
+    end
+  end
+
   describe "protocol_implementation?/1" do
     test "module that implements a protocol" do
       assert protocol_implementation?(Enumerable.Function)

@@ -1128,29 +1128,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Keeps only those IR expressions that are function definitions of the given reachable MFAs.
-  For protocol modules, additionally drops the consolidated impl_for/1 and struct_impl_for/1
-  clauses that return implementations not included in the given reachable MFAs.
+  Keeps only those IR expressions that are function definitions of the given reachable MFAs of
+  the module. For protocol modules, additionally drops the consolidated impl_for/1 and
+  struct_impl_for/1 clauses that return implementations not among the given reachable modules.
+  Which modules are protocols and implementations is answered from the given module info PLT
+  (nil to ask the modules), so no module is loaded to prune a dispatcher.
   """
-  @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
-  def prune_module_def(module_def_ir, reachable_mfas) do
+  @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa), MapSet.t(module), PLT.t() | nil) ::
+          IR.ModuleDefinition.t()
+  def prune_module_def(module_def_ir, module_mfas, reachable_modules, module_info_plt) do
     module = module_def_ir.module.value
-
-    module_reachable_mfas =
-      reachable_mfas
-      |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
-      |> MapSet.new()
+    module_mfas = MapSet.new(module_mfas)
 
     function_defs =
       module_def_ir.body.expressions
       |> Enum.filter(fn
         %IR.FunctionDefinition{name: function, arity: arity} ->
-          MapSet.member?(module_reachable_mfas, {module, function, arity})
+          MapSet.member?(module_mfas, {module, function, arity})
 
         _fallback ->
           false
       end)
-      |> maybe_prune_protocol_dispatcher_function_defs(module, reachable_mfas)
+      |> maybe_prune_protocol_dispatcher_function_defs(module, reachable_modules, module_info_plt)
 
     %IR.ModuleDefinition{
       module: module_def_ir.module,
@@ -1395,7 +1394,7 @@ defmodule Hologram.Compiler do
     Enum.flat_map(fun_arities, fn {function, arity} ->
       case PLT.get(encode_plt, {module, function, arity}) do
         # A reachable MFA with no definition in the module IR renders nothing, which is what
-        # prune_module_def/2 has always done with it.
+        # prune_module_def/4 does with it.
         {:ok, nil} ->
           []
 
@@ -1478,31 +1477,39 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  defp included_protocol_implementations(reachable_mfas, protocol) do
-    reachable_mfas
-    |> Enum.map(fn {module, _function, _arity} -> module end)
-    |> Enum.uniq()
-    |> Enum.filter(&(Reflection.protocol_implementation(&1) == protocol))
+  defp included_protocol_implementations(reachable_modules, protocol, module_info_plt) do
+    reachable_modules
+    |> Enum.filter(&(Reflection.protocol_implementation(&1, module_info_plt) == protocol))
     |> MapSet.new()
   end
 
+  # The catch-all clause returns nil and every included implementation ships in the bundle, so
+  # only a clause naming another module needs the module info PLT to say whether it is an
+  # implementation of this protocol (dropped) or something else (kept).
   defp keep_protocol_dispatcher_function_def?(
          %IR.FunctionDefinition{name: function, arity: 1, clause: clause},
          protocol,
-         included_impls
+         included_impls,
+         module_info_plt
        )
        when function in [:impl_for, :struct_impl_for] do
     case clause do
       %IR.FunctionClause{body: %IR.Block{expressions: [%IR.AtomType{value: value}]}} ->
-        Reflection.protocol_implementation(value) != protocol or
-          MapSet.member?(included_impls, value)
+        is_nil(value) or MapSet.member?(included_impls, value) or
+          Reflection.protocol_implementation(value, module_info_plt) != protocol
 
       _clause ->
         true
     end
   end
 
-  defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
+  defp keep_protocol_dispatcher_function_def?(
+         _function_def,
+         _protocol,
+         _included_impls,
+         _module_info_plt
+       ),
+       do: true
 
   # nil when the page must be rebuilt, its kept state otherwise.
   defp keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir) do
@@ -1548,13 +1555,19 @@ defmodule Hologram.Compiler do
   # Consolidated protocol dispatchers list every loaded implementation. Keep only
   # clauses for implementations that ship in the same bundle, so dispatch on other
   # types falls through to the catch-all clause and raises Protocol.UndefinedError.
-  defp maybe_prune_protocol_dispatcher_function_defs(function_defs, module, reachable_mfas) do
-    if Reflection.protocol?(module) do
-      included_impls = included_protocol_implementations(reachable_mfas, module)
+  defp maybe_prune_protocol_dispatcher_function_defs(
+         function_defs,
+         module,
+         reachable_modules,
+         module_info_plt
+       ) do
+    if Reflection.protocol?(module, module_info_plt) do
+      included_impls =
+        included_protocol_implementations(reachable_modules, module, module_info_plt)
 
       Enum.filter(
         function_defs,
-        &keep_protocol_dispatcher_function_def?(&1, module, included_impls)
+        &keep_protocol_dispatcher_function_def?(&1, module, included_impls, module_info_plt)
       )
     else
       function_defs
@@ -1760,15 +1773,20 @@ defmodule Hologram.Compiler do
   # sort below; the order within a module comes from IR.aggregate_module_funs/1 on the protocol
   # path and from the sort in render_module_function_defs/7 on the cached one.
   defp render_elixir_function_defs(mfas, ir_plt, encode_plt, async_mfas, module_info_plt) do
-    mfas
-    |> filter_elixir_mfas(ir_plt)
-    |> group_mfas_by_module()
-    |> Enum.sort()
+    mfas_by_module =
+      mfas
+      |> filter_elixir_mfas(ir_plt)
+      |> group_mfas_by_module()
+      |> Enum.sort()
+
+    reachable_modules = MapSet.new(mfas_by_module, fn {module, _module_mfas} -> module end)
+
+    mfas_by_module
     |> TaskUtils.map_concurrently(fn {module, module_mfas} ->
       render_module_function_defs(
         module,
         module_mfas,
-        mfas,
+        reachable_modules,
         ir_plt,
         encode_plt,
         async_mfas,
@@ -1821,15 +1839,15 @@ defmodule Hologram.Compiler do
   end
 
   # A protocol's dispatcher functions are selected against the whole reachable set, in
-  # maybe_prune_protocol_dispatcher_function_defs/3, so their JavaScript depends on the entry
+  # maybe_prune_protocol_dispatcher_function_defs/4, so their JavaScript depends on the entry
   # file being built and cannot be keyed by MFA alone. Every other module's functions encode
   # the same wherever they are reached from, so each is encoded once per compile in the common
-  # case, and never differently. The module info PLT answers whether a module is a protocol, so a
-  # module that is not loaded is not asked once per entry file.
+  # case, and never differently. The module info PLT answers whether a module is a protocol and
+  # which protocol a module implements, so no module is asked, or loaded, once per entry file.
   defp render_module_function_defs(
          module,
          module_mfas,
-         mfas,
+         reachable_modules,
          ir_plt,
          encode_plt,
          async_mfas,
@@ -1840,7 +1858,7 @@ defmodule Hologram.Compiler do
     if Reflection.protocol?(module, module_info_plt) do
       ir_plt
       |> PLT.get!(module)
-      |> prune_module_def(mfas)
+      |> prune_module_def(module_mfas, reachable_modules, module_info_plt)
       |> Encoder.encode_ir(context)
     else
       module_mfas
