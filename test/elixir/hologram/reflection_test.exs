@@ -150,6 +150,7 @@ defmodule Hologram.ReflectionTest do
                exception?: false,
                ecto_schema?: false,
                js_imports?: false,
+               broadcast_caller?: false,
                source_path: source_path,
                layout_module: nil,
                route: nil,
@@ -166,6 +167,12 @@ defmodule Hologram.ReflectionTest do
       module = Hologram.Test.Fixtures.Compiler.Module12
 
       assert %{js_imports?: true} = beam_info(:code.which(module))
+    end
+
+    test "module calling a broadcast function" do
+      module = Hologram.Test.Fixtures.Controller.Module6
+
+      assert %{broadcast_caller?: true} = beam_info(:code.which(module))
     end
 
     test "source path is the one the loaded module reports" do
@@ -385,6 +392,14 @@ defmodule Hologram.ReflectionTest do
 
       assert beam_source(module) == beam_path
     end
+  end
+
+  test "broadcast_mfas/0" do
+    result = broadcast_mfas()
+
+    assert result == Enum.sort(result)
+    assert {Hologram.Component, :put_broadcast, 3} in result
+    assert {Hologram.Realtime, :broadcast_action, 2} in result
   end
 
   test "build_dir/0" do
