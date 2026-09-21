@@ -626,6 +626,18 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Deletes the IR of the given modules from the IR PLT and returns the PLT. The compile task calls it
+  with the removed and edited modules of a compile: a removed module's IR is not read again, and an
+  edited module's is built again from its new beam, with `build_missing_ir!/2`, by whatever reads it
+  in this compile or a later one.
+  """
+  @spec delete_module_ir(PLT.t(), [module]) :: PLT.t()
+  def delete_module_ir(ir_plt, modules) do
+    TaskUtils.map_concurrently(modules, &PLT.delete(ir_plt, &1))
+    ir_plt
+  end
+
+  @doc """
   Compares two module info PLTs by digest and returns the added, removed, and edited modules lists.
   An entry whose mtime or size moved but whose digest did not is not an edit.
   """
@@ -1052,30 +1064,6 @@ defmodule Hologram.Compiler do
     else
       {pages_to_rebuild, kept_pages}
     end
-  end
-
-  @doc """
-  Given a module digests diff, updates the IR persistent lookup table (PLT)
-  by deleting entries for modules that have been removed,
-  rebuilding the IR of modules that have been edited,
-  and adding the IR of new modules.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/patch_ir_plt!_2/README.md
-  """
-  @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
-  def patch_ir_plt!(ir_plt, module_digests_diff) do
-    # TODO: Remove this flag and the argument it feeds to rebuild_ir_plt_entry!/3
-    # when resolve_beam_source/2 goes (see the removal note there).
-    umbrella? = Reflection.umbrella?()
-
-    TaskUtils.map_concurrently(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
-
-    TaskUtils.map_concurrently(
-      module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
-      &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
-    )
-
-    ir_plt
   end
 
   @doc """
@@ -1719,16 +1707,6 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
-  defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
-    # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
-    # with :code.which/1, which is exactly the stale path that yielded nil here.
-    if beam_source = resolve_beam_source(module, umbrella?) do
-      PLT.put(ir_plt, module, IR.for_module(module, beam_source))
-    end
-  end
-
-  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
-  # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
     # No beam: not a module of this project.
     if beam_source = resolve_beam_source(module, umbrella?) do
@@ -1925,9 +1903,9 @@ defmodule Hologram.Compiler do
   # pointing at purged consolidated beams. That means this function,
   # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
   # them by then), plus unwinding the umbrella? flag threaded through
-  # build_ir_plt/1, build_module_info_plt!/3, patch_ir_plt!/2,
-  # rebuild_ir_plt_entry!/3 and rebuild_module_info_plt_entry!/5 - their
-  # bodies go back to resolving the beam path with :code.which/1 directly.
+  # build_ir_plt/1, build_module_info_plt!/3 and
+  # rebuild_module_info_plt_entry!/5 - their bodies go back to resolving the
+  # beam path with :code.which/1 directly.
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
   defp resolve_beam_source(module, false) do

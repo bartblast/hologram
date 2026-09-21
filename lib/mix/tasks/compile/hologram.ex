@@ -167,7 +167,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_digests_diff =
         Compiler.diff_module_info_plts(old_module_info_plt, new_module_info_plt)
 
-      ir_plt = Compiler.patch_ir_plt!(cache.ir_plt, module_digests_diff)
+      ir_plt =
+        Compiler.delete_module_ir(
+          cache.ir_plt,
+          module_digests_diff.removed_modules ++ module_digests_diff.edited_modules
+        )
+
+      Compiler.build_missing_ir!(
+        ir_plt,
+        module_digests_diff.edited_modules ++ module_digests_diff.added_modules
+      )
 
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
