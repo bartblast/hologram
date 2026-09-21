@@ -8,8 +8,6 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
-  alias Hologram.Component
-  alias Hologram.Realtime
   alias Hologram.Reflection
 
   defstruct pid: nil, module_info_plt: nil
@@ -34,21 +32,6 @@ defmodule Hologram.Compiler.CallGraph do
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
   @dialyzer {:no_opaque, {:start_reachable_state, 4}}
-
-  # Functions that broadcast action params from arbitrary server code to connected clients.
-  # The Component helpers queue a broadcast on the server struct, which the framework
-  # flushes after the handler returns - they reach the same audience as the immediate
-  # Realtime functions, so their callers are analysed the same way.
-  @broadcast_mfas [
-    {Component, :put_broadcast, 3},
-    {Component, :put_broadcast, 4},
-    {Component, :put_broadcast_except, 4},
-    {Component, :put_broadcast_except, 5},
-    {Realtime, :broadcast_action, 2},
-    {Realtime, :broadcast_action, 3},
-    {Realtime, :broadcast_action_except, 3},
-    {Realtime, :broadcast_action_except, 4}
-  ]
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -586,7 +569,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec broadcast_caller_analysis(Digraph.t(), PLT.t() | nil) :: broadcast_caller_analysis
   def broadcast_caller_analysis(graph, module_info_plt) do
     caller_vertices =
-      for broadcast_mfa <- @broadcast_mfas,
+      for broadcast_mfa <- Reflection.broadcast_mfas(),
           {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
         caller_vertex
       end
