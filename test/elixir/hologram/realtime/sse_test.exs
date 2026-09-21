@@ -9,6 +9,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Test.Fixtures.Realtime.SSE.Module1
 
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
@@ -1048,6 +1049,15 @@ defmodule Hologram.Realtime.SSETest do
       Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
+    end
+  end
+
+  describe "process_message/4 on a message the adapter closes on" do
+    test "halts" do
+      conn = prepared_test_conn()
+      send(self(), :goodbye)
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil, adapter: Module1)
     end
   end
 

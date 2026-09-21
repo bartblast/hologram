@@ -579,6 +579,10 @@ defmodule HologramFeatureTests.RealtimeTest do
   end
 
   describe "subscriptions across reconnect" do
+    # TODO: remove once Bandit sends RST_STREAM for a killed HTTP/2 stream. The stream is killed
+    # and the client must reconnect, and over h2 on Bandit the browser never learns the stream
+    # ended, so the HTTPS job excludes this tag.
+    @tag :requires_stream_reset
     feature "restored after SSE reconnect with stored receipts", %{session: session} do
       session = visit(session, Page1)
 
@@ -594,6 +598,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       assert_text(session, css("#received"), "delivered after reconnect")
     end
 
+    # TODO: remove once Bandit sends RST_STREAM for a killed HTTP/2 stream. The stream is killed
+    # and the client must reconnect, and over h2 on Bandit the browser never learns the stream
+    # ended, so the HTTPS job excludes this tag.
+    @tag :requires_stream_reset
     feature "unsubscribe_all on an offline client takes effect on reconnect", %{
       session: session
     } do
@@ -626,6 +634,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       |> assert_text(css("#received-2"), "delivered")
     end
 
+    # TODO: remove once Bandit sends RST_STREAM for a killed HTTP/2 stream. The stream is killed
+    # and the client must reconnect, and over h2 on Bandit the browser never learns the stream
+    # ended, so the HTTPS job excludes this tag.
+    @tag :requires_stream_reset
     feature "reload fail-safe re-establishes the session when no receipt validates", %{
       session: session
     } do
@@ -653,6 +665,32 @@ defmodule HologramFeatureTests.RealtimeTest do
       Realtime.broadcast_action(@channel_1, :show, message: "delivered after reload")
 
       assert_text(session, css("#received"), "delivered after reload")
+    end
+  end
+
+  describe "subscriptions of a closed tab" do
+    feature "forgotten on the server as soon as the tab closes", %{session: session} do
+      session = visit(session, Page1)
+
+      instance_id = current_instance_id(session)
+      wait_for_connection(instance_id)
+
+      # A second tab keeps the browser up, and over HTTP/2 the connection it shares with
+      # this tab, so closing this tab ends only its own stream. Navigating away instead
+      # would prove nothing: the back/forward cache keeps a left page's stream open.
+      [original_tab] = window_handles(session)
+      execute_script(session, "window.open('/external', '_blank')")
+      [other_tab] = window_handles(session) -- [original_tab]
+
+      session
+      |> focus_window(original_tab)
+      |> close_window()
+      |> focus_window(other_tab)
+
+      # Without a way to notice the tab closing, only the stream's first heartbeat does,
+      # 15 s after the stream attached. 5 s is policy: far above the milliseconds noticing
+      # takes, far below that first heartbeat.
+      wait_for_no_connection(instance_id, 5_000)
     end
   end
 

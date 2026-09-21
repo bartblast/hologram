@@ -6,6 +6,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE.Adapters
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
@@ -111,6 +112,8 @@ defmodule Hologram.Realtime.SSE do
 
     receipts_refresh_interval_ms =
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
+
+    adapter = Keyword.get(opts, :adapter, Adapters.Passive)
 
     receive do
       {:add_sub_receipts, receipts} ->
@@ -250,8 +253,13 @@ defmodule Hologram.Realtime.SSE do
         Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
         {:cont, conn}
 
-      _msg ->
-        {:cont, conn}
+      # Whatever the pump doesn't recognise goes to the server's adapter, which is the only
+      # part that knows how a departed client shows up here.
+      message ->
+        case adapter.handle_message(message) do
+          :closed -> {:halt, conn}
+          :ignore -> {:cont, conn}
+        end
     end
   end
 
@@ -287,7 +295,10 @@ defmodule Hologram.Realtime.SSE do
         schedule_heartbeat(heartbeat_interval_ms)
         schedule_receipts_refresh(receipts_refresh_interval_ms)
 
+        adapter = adapter_for(conn)
+
         message_pump_opts = [
+          adapter: adapter,
           heartbeat_interval_ms: heartbeat_interval_ms,
           receipts_refresh_interval_ms: receipts_refresh_interval_ms
         ]
@@ -304,6 +315,7 @@ defmodule Hologram.Realtime.SSE do
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
         |> prepare()
+        |> watch_client(adapter)
         |> message_pump(session_id, user_id, message_pump_opts)
 
       :error ->
@@ -450,6 +462,12 @@ defmodule Hologram.Realtime.SSE do
 
     conn
   end
+
+  # The server-specific half of the stream, picked from the conn so nothing needs
+  # configuring. Bandit is matched by name only - Hologram doesn't depend on it.
+  defp adapter_for(%Plug.Conn{adapter: {Bandit.Adapter, _state}}), do: Adapters.Bandit
+
+  defp adapter_for(_conn), do: Adapters.Passive
 
   defp claimed_identity(conn) do
     {
@@ -613,5 +631,10 @@ defmodule Hologram.Realtime.SSE do
 
   defp schedule_receipts_refresh(interval_ms) do
     Process.send_after(self(), :refresh_receipts, interval_ms)
+  end
+
+  defp watch_client(conn, adapter) do
+    :ok = adapter.watch(conn)
+    conn
   end
 end
