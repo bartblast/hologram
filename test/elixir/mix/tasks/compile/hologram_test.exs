@@ -208,12 +208,32 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_runtime_bundle(opts)
   end
 
+  # Takes the module out of the kept call graph, its reach and the IR PLT, as a compile whose diff
+  # removed it would, while its beam stays: the next compile that walks to it builds it again.
+  defp take_out_of_graph(module) do
+    %{call_graph: kept_call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+
+    module_info_plt = PLT.start(items: Map.to_list(module_infos))
+    call_graph = %{kept_call_graph | module_info_plt: module_info_plt}
+    diff = %{added_modules: [], edited_modules: [], removed_modules: [module]}
+
+    CallGraph.patch(call_graph, ir_plt, diff)
+    assert CallGraph.build_reach(call_graph, diff, fn _modules -> :ok end) == []
+    PLT.delete(ir_plt, module)
+
+    refute module in CallGraph.modules(call_graph)
+  end
+
   defp test_call_graph(opts) do
     call_graph_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
     assert File.exists?(call_graph_dump_path)
 
     call_graph = CallGraph.start()
     assert CallGraph.load(call_graph, call_graph_dump_path) == :ok
+
+    # The graph holds the modules the pages reach, and not the rest.
+    assert Module1 in CallGraph.modules(call_graph)
+    refute @unreached_module in CallGraph.modules(call_graph)
 
     assert CallGraph.has_vertex?(call_graph, Module2)
 
@@ -658,13 +678,72 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert num_editable_protocols > 0
     end
 
-    test "a run into a fresh build dir dumps the whole call graph", %{opts: opts} do
+    test "a run into a fresh build dir dumps the call graph of what the pages reach", %{
+      opts: opts
+    } do
       run(opts)
 
       fresh_build_dir_opts = Keyword.put(opts, :build_dir, setup_empty_build_dir())
       run(fresh_build_dir_opts)
 
       test_call_graph(fresh_build_dir_opts)
+    end
+
+    test "a run into an empty build dir holds only the reached modules in the graph", %{
+      opts: opts
+    } do
+      Cache.reset()
+      run(Keyword.put(opts, :build_dir, setup_empty_build_dir()))
+
+      %{call_graph: call_graph, module_infos: module_infos} = Cache.get()
+      graph_modules = CallGraph.modules(call_graph)
+
+      assert Module1 in graph_modules
+      assert Module2 in graph_modules
+      refute @unreached_module in graph_modules
+      refute CallGraph.has_vertex?(call_graph, {@unreached_module, :my_fun_1, 0})
+      assert MapSet.size(graph_modules) < map_size(module_infos)
+    end
+
+    test "a run with no changes does not walk the graph", %{opts: opts} do
+      run(opts)
+
+      Code.ensure_loaded!(CallGraph)
+
+      assert count_calls({CallGraph, :build_reach, 3}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold builds no IR", %{opts: opts} do
+      run(opts)
+
+      assert @unreached_module in Cache.get().editable_modules
+
+      fake_edit(@unreached_module)
+
+      Code.ensure_loaded!(IR)
+      count = count_calls({IR, :for_module, 2}, fn -> run(opts) end)
+
+      # The edit was seen: the digest read from the beam replaced the faked one.
+      assert Cache.get().module_infos[@unreached_module].digest != "edited"
+
+      assert count == 0
+      refute PLT.member?(Cache.get().ir_plt, @unreached_module)
+      refute @unreached_module in CallGraph.modules(Cache.get().call_graph)
+    end
+
+    test "an edit that starts reaching a module builds it", %{opts: opts} do
+      run(opts)
+
+      take_out_of_graph(Module2)
+      fake_edit(Module1)
+
+      run(opts)
+
+      %{call_graph: call_graph, ir_plt: ir_plt} = Cache.get()
+
+      assert Module2 in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {Module2, :template, 0})
+      assert PLT.member?(ir_plt, Module2)
     end
 
     test "a run with no changes rebuilds no page", %{opts: opts} do
@@ -1017,7 +1096,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Code.ensure_loaded!(IR)
       count = count_calls({IR, :for_module, 2}, fn -> run(fresh_build_dir_opts) end)
 
-      assert count <= map_size(load_module_info_items(fresh_build_dir_opts))
+      # Fewer than the modules it knows: the IR of the modules nothing reaches is never built.
+      assert count < map_size(load_module_info_items(fresh_build_dir_opts))
       test_page_bundles(fresh_build_dir_opts)
     end
 
@@ -1456,6 +1536,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
 
       assert Cache.get().app_versions == app_versions
+    end
+
+    test "a run whose walk builds a module rebuilds the app versions", %{opts: opts} do
+      run(opts)
+
+      take_out_of_graph(Module2)
+      fake_edit(Module1)
+
+      assert count_calls({Compiler, :build_app_versions, 1}, fn -> run(opts) end) == 1
     end
 
     test "the kept app versions are the ones a full compile finds", %{opts: opts} do
