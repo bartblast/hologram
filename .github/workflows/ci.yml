@@ -523,8 +523,10 @@ jobs:
       # Step: Execute the feature tests that touch the SSE stream, over HTTP/2. The rest of
       # the suite doesn't touch the transport and runs over HTTP/1.1 in feature_tests. The
       # codebase checks run there too, so this job repeats none of them.
+      # Tests tagged requires_stream_reset kill the stream and wait for the client to reconnect,
+      # which Bandit doesn't let happen over HTTP/2 yet - see the tag in realtime_test.exs.
       - name: Run feature tests app Elixir tests over HTTPS
-        run: mix test --warnings-as-errors test/realtime_test.exs test/commands_test.exs
+        run: mix test --warnings-as-errors --exclude requires_stream_reset test/realtime_test.exs test/commands_test.exs
 
       # Step: Archive the browser screenshots of tests that failed.
       - name: Archive fail screenshots
