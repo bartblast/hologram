@@ -41,6 +41,7 @@ describe("Sse", () => {
 
   function stubHandshakeResponse({
     handshakeId = "test-handshake-id",
+    heartbeatIntervalMs = 15_000,
     refreshedReceipts = Type.list(),
     ok = true,
     status = 200,
@@ -50,6 +51,7 @@ describe("Sse", () => {
       status,
       json: async () => ({
         handshakeId,
+        heartbeatIntervalMs,
         refreshedReceipts: "encoded-refreshed-receipts",
       }),
     });
@@ -69,6 +71,8 @@ describe("Sse", () => {
     ComponentRegistry.clear();
 
     Sse.eventSource = null;
+    Sse.heartbeatIntervalMs = null;
+    Sse.heartbeatTimer = null;
     Sse.reconnectAttempts = 0;
 
     SubscriptionReceiptRegistry.entries.clear();
@@ -225,6 +229,14 @@ describe("Sse", () => {
       assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
     });
 
+    it("stores the heartbeat interval the handshake announced", async () => {
+      stubHandshakeResponse({heartbeatIntervalMs: 1_000});
+
+      await Sse.connect();
+
+      assert.strictEqual(Sse.heartbeatIntervalMs, 1_000);
+    });
+
     it("does not open an EventSource when the handshake POST returns a non-2xx", async () => {
       stubHandshakeResponse({ok: false, status: 401});
 
@@ -338,7 +350,7 @@ describe("Sse", () => {
       await Sse.connect();
       Sse.eventSource.onerror({type: "error"});
 
-      sinon.assert.calledWithExactly(loggerDebugStub, "SSE error: error");
+      sinon.assert.calledWithExactly(loggerDebugStub, "SSE stream lost: error");
     });
 
     it("closes the failed EventSource", async () => {
@@ -494,7 +506,85 @@ describe("Sse", () => {
     });
   });
 
+  // Browsers never surface a stream that died without being closed, so the client
+  // keeps its own clock on the heartbeat.
+  describe("heartbeat watchdog", () => {
+    let clock;
+    let loggerDebugStub;
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+      loggerDebugStub = sinon.stub(Logger, "debug");
+      stubHandshakeResponse({heartbeatIntervalMs: 1_000});
+    });
+
+    it("ends the stream once the timeout passes with no heartbeat", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
+    it("is cancelled when the browser reports the error first", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+      Sse.eventSource.onerror({type: "error"});
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS * 2);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
+    it("leaves the stream alone until the timeout has fully elapsed", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS - 1);
+
+      sinon.assert.notCalled(mockEventSource.close);
+    });
+
+    it("pushes the deadline on every heartbeat", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      clock.tick(1_500);
+      mockEventSource.listeners.heartbeat({});
+      clock.tick(1_500);
+
+      sinon.assert.notCalled(mockEventSource.close);
+
+      clock.tick(500);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
+    it("reconnects the way a browser-reported error does", async () => {
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
+
+      sinon.assert.calledWith(globalRegistrySetSpy, "sseConnected?", false);
+      assert.strictEqual(Sse.reconnectAttempts, 1);
+
+      sinon.assert.calledWithExactly(
+        loggerDebugStub,
+        "SSE stream lost: heartbeat timeout",
+      );
+    });
+  });
+
   describe("onopen", () => {
+    // Opening arms the heartbeat watchdog. A fake clock keeps it from outliving the test.
+    beforeEach(() => {
+      sinon.useFakeTimers();
+    });
+
     it("flips the sseConnected? signal to true on the global registry", async () => {
       const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
 

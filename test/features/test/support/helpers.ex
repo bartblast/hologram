@@ -353,6 +353,26 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Shortens the SSE heartbeat for this browser's next stream to `interval_ms`, then
+  returns the `session` so the helper can be piped.
+
+  A stream that dies without closing is only noticed by the client's heartbeat
+  watchdog, two intervals after the last heartbeat. At the production interval that
+  is longer than the wait budget, so a test that kills the stream and waits for the
+  reconnect asks for a shorter one.
+
+  Scoped by cookie, so concurrently running test files are unaffected. Navigates
+  to a blank page first, since a cookie cannot be set before the browser holds a
+  document.
+  """
+  @spec simulate_fast_sse_heartbeat(Wallaby.Session.t(), pos_integer) :: Wallaby.Session.t()
+  def simulate_fast_sse_heartbeat(session, interval_ms) do
+    session
+    |> visit("/external")
+    |> Browser.set_cookie(SSE.heartbeat_interval_cookie(), to_string(interval_ms))
+  end
+
+  @doc """
   Arms a delay on every page bundle this browser fetches from now on, then
   returns the `session` so the helper can be piped.
 

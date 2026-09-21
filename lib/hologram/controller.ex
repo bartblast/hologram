@@ -10,6 +10,7 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Router.PageModuleResolver
@@ -524,6 +525,7 @@ defmodule Hologram.Controller do
         conn
         |> Controller.json(%{
           handshakeId: handshake_id,
+          heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
           refreshedReceipts: encoded_refreshed_receipts
         })
         |> Plug.Conn.halt()

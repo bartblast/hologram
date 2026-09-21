@@ -13,6 +13,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Router.SearchTree
@@ -159,7 +160,7 @@ defmodule Hologram.ControllerTest do
     ]
   end
 
-  defp post_handshake(instance_id, session_data, receipts \\ []) do
+  defp post_handshake(instance_id, session_data, receipts \\ [], cookies \\ []) do
     parsed_json =
       instance_id
       |> handshake_request_body(receipts)
@@ -169,8 +170,15 @@ defmodule Hologram.ControllerTest do
     :post
     |> Plug.Test.conn("/hologram/sse/handshake", "")
     |> Plug.Test.init_test_session(session_data)
+    |> put_req_cookies(cookies)
     |> Map.put(:body_params, %{"_json" => parsed_json})
     |> handle_sse_handshake_request()
+  end
+
+  defp put_req_cookies(conn, cookies) do
+    Enum.reduce(cookies, conn, fn {name, value}, acc ->
+      Plug.Test.put_req_cookie(acc, name, value)
+    end)
   end
 
   defp render_page_with_instance(page_module, instance_id, client_claimed_sub_keys \\ []) do
@@ -2286,6 +2294,25 @@ defmodule Hologram.ControllerTest do
 
       assert {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
       assert {:ok, _info} = UUID.info(handshake_id)
+    end
+
+    test "returns the heartbeat interval the stream will use" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert {:ok, %{"heartbeatIntervalMs" => interval_ms}} = Jason.decode(conn.resp_body)
+      assert is_integer(interval_ms)
+      assert interval_ms > 0
+    end
+
+    test "returns the seam's heartbeat interval when the cookie is set" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      session_data = %{hologram_session_id: "test-session-id"}
+      cookies = [{SSE.heartbeat_interval_cookie(), "1000"}]
+      conn = post_handshake("test-instance-id", session_data, [], cookies)
+
+      assert {:ok, %{"heartbeatIntervalMs" => 1000}} = Jason.decode(conn.resp_body)
     end
 
     test "returns 401 when the session has no Hologram session_id" do

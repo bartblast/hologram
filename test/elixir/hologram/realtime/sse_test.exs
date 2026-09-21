@@ -189,6 +189,12 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_heartbeat_envelope/0" do
+    test "builds a heartbeat event with an empty data line" do
+      assert encode_heartbeat_envelope() == "event: heartbeat\ndata:\n\n"
+    end
+  end
+
   describe "encode_refresh_sub_receipts_envelope/2" do
     test "wraps the receipts list in a refresh_sub_receipts SSE event envelope" do
       receipts = [{:notifications, "c1", "token-a"}]
@@ -196,6 +202,58 @@ defmodule Hologram.Realtime.SSETest do
 
       assert encode_refresh_sub_receipts_envelope(42, receipts) ==
                "event: refresh_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
+    end
+  end
+
+  describe "heartbeat_interval_ms/1" do
+    test "returns the default when the seams are not enabled" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.put_req_cookie(heartbeat_interval_cookie(), "1000")
+
+      interval_ms = heartbeat_interval_ms(conn)
+
+      assert is_integer(interval_ms)
+      assert interval_ms > 1000
+    end
+
+    test "returns the cookie value when the seams are enabled" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.put_req_cookie(heartbeat_interval_cookie(), "1000")
+
+      assert heartbeat_interval_ms(conn) == 1000
+    end
+
+    test "returns the default when the seams are enabled and the cookie is absent" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      conn = Plug.Test.conn(:get, "/")
+      interval_ms = heartbeat_interval_ms(conn)
+
+      assert is_integer(interval_ms)
+      assert interval_ms > 1000
+    end
+
+    test "returns the default when the seams are enabled and the cookie is not a positive integer" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.put_req_cookie(heartbeat_interval_cookie(), "0")
+
+      interval_ms = heartbeat_interval_ms(conn)
+
+      assert is_integer(interval_ms)
+      assert interval_ms > 1000
     end
   end
 
@@ -768,13 +826,13 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "process_message/4 on :heartbeat" do
-    test "writes an SSE comment line" do
+    test "writes a heartbeat event" do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      assert updated_conn.resp_body == ":\n\n"
+      assert updated_conn.resp_body == "event: heartbeat\ndata:\n\n"
     end
 
     test "schedules the next heartbeat after handling one" do
@@ -1409,8 +1467,8 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     test "applies an announce message published before the connection attaches" do
-      Application.put_env(:hologram, :__sse_attach_delay_enabled__, true)
-      on_exit(fn -> Application.delete_env(:hologram, :__sse_attach_delay_enabled__) end)
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
 
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
