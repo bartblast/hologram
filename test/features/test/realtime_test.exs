@@ -668,6 +668,32 @@ defmodule HologramFeatureTests.RealtimeTest do
     end
   end
 
+  describe "subscriptions of a closed tab" do
+    feature "forgotten on the server as soon as the tab closes", %{session: session} do
+      session = visit(session, Page1)
+
+      instance_id = current_instance_id(session)
+      wait_for_connection(instance_id)
+
+      # A second tab keeps the browser up, and over HTTP/2 the connection it shares with
+      # this tab, so closing this tab ends only its own stream. Navigating away instead
+      # would prove nothing: the back/forward cache keeps a left page's stream open.
+      [original_tab] = window_handles(session)
+      execute_script(session, "window.open('/external', '_blank')")
+      [other_tab] = window_handles(session) -- [original_tab]
+
+      session
+      |> focus_window(original_tab)
+      |> close_window()
+      |> focus_window(other_tab)
+
+      # Without a way to notice the tab closing, only the stream's first heartbeat does,
+      # 15 s after the stream attached. 5 s is policy: far above the milliseconds noticing
+      # takes, far below that first heartbeat.
+      wait_for_no_connection(instance_id, 5_000)
+    end
+  end
+
   describe "subscriptions across identity changes" do
     feature "logout drops user-authorized subscriptions in place", %{session: session} do
       # Page9 subscribes to @channel_1 while logged in, so the binding is
