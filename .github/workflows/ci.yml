@@ -692,6 +692,161 @@ jobs:
         with:
           name: cluster-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/cluster/tmp/screenshots
+  cowboy_tests:
+    runs-on: ubuntu-latest
+    name: Cowboy Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    defaults:
+      run:
+        working-directory: test/cowboy
+    strategy:
+      fail-fast: false
+      # Specify the Elixir and OTP versions to use when building
+      # and running the workflow steps.
+      matrix:
+        elixir:
+          # Run cowboy tests on latest pinned stable Elixir version only
+          - "1.20.0"
+        otp:
+          # Run cowboy tests on latest pinned stable OTP version only
+          - "29.0"
+        node:
+          # Run cowboy tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### COWBOY TESTS APP CHECKS ###
+
+      # Step: Define how to cache the cowboy tests app Elixir dependencies.
+      - name: Cache cowboy tests app Elixir deps
+        id: cache-cowboy-tests-app-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-cowboy-tests-app-elixir-deps
+        with:
+          path: test/cowboy/deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/cowboy/mix.lock') }}
+
+      # Step: Define how to cache the cowboy tests app Elixir build.
+      - name: Cache cowboy tests app Elixir build
+        id: cache-cowboy-tests-app-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-cowboy-tests-app-elixir-build
+        with:
+          path: test/cowboy/_build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/cowboy/mix.lock') }}
+
+      # Step: Download cowboy tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download cowboy tests app Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
+          command: cd test/cowboy && mix deps.get
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the cowboy tests app project treating any warnings as errors.
+      - name: Check cowboy tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if cowboy tests app mix.lock has any unused dependencies.
+      - name: Check cowboy tests app unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any cowboy tests app Elixir dependencies which have been marked as retired.
+      - name: Check cowboy tests app retired Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix hex.audit
+
+      # Step: Check that the cowboy tests app Elixir code has already been formatted.
+      - name: Check cowboy tests app Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Run cowboy tests app Elixir static code analysis with Credo.
+      - name: Run cowboy tests app Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Restore cowboy tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore cowboy tests app Dialyzer PLT cache
+        id: restore-cowboy-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-cowboy-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/cowboy/mix.lock') }}
+          path: |
+            test/cowboy/priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create cowboy tests app Dialyzer PLTs if no cache was found.
+      - name: Create cowboy tests app Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-cowboy-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save cowboy tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save cowboy tests app Dialyzer PLT cache
+        id: save-cowboy-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-cowboy-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-cowboy-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/cowboy/mix.lock') }}
+          path: |
+            test/cowboy/priv/plts
+
+      # Step: Run cowboy tests app Elixir static code analysis with Dialyzer.
+      - name: Run cowboy tests app Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all cowboy tests app test scripts have valid file names.
+      - name: Check cowboy tests app test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.test.check_file_names test
+
+      # Step: Execute cowboy tests app Elixir tests.
+      - name: Run cowboy tests app Elixir tests
+        run: mix test --warnings-as-errors
+
+      # Step: Archive the browser screenshots of tests that failed.
+      - name: Archive fail screenshots
+        # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cowboy-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/cowboy/tmp/screenshots
   umbrella_tests:
     runs-on: ubuntu-latest
     name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
