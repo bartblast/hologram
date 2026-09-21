@@ -165,6 +165,55 @@ defmodule Hologram.Compiler.CallGraphTest do
     {String.to_atom(module), String.to_atom(fun), String.to_integer(arity)}
   end
 
+  # A templatable whose init/3 calls a protocol function and creates a TypeA struct. The protocol has
+  # an implementation for TypeA, which creates a TypeB struct, and one for TypeC, which no reached
+  # code names, which creates a TypeD struct.
+  defp reflection_walk_fixture do
+    graph =
+      Digraph.new()
+      |> Digraph.add_edge({ReflectionWalk.Tpl, :init, 3}, {ReflectionWalk.Proto, :fun, 1})
+      |> Digraph.add_edge({ReflectionWalk.Tpl, :init, 3}, {ReflectionWalk.TypeA, :__struct__, 0})
+      |> Digraph.add_edge(
+        {ReflectionWalk.Proto, :fun, 1},
+        {ReflectionWalk.Proto.TypeA, :__impl__, 1}
+      )
+      |> Digraph.add_edge({ReflectionWalk.Proto, :fun, 1}, {ReflectionWalk.Proto.TypeA, :fun, 1})
+      |> Digraph.add_edge(
+        {ReflectionWalk.Proto.TypeA, :fun, 1},
+        {ReflectionWalk.TypeB, :__struct__, 0}
+      )
+      |> Digraph.add_edge(
+        {ReflectionWalk.Proto, :fun, 1},
+        {ReflectionWalk.Proto.TypeC, :__impl__, 1}
+      )
+      |> Digraph.add_edge({ReflectionWalk.Proto, :fun, 1}, {ReflectionWalk.Proto.TypeC, :fun, 1})
+      |> Digraph.add_edge(
+        {ReflectionWalk.Proto.TypeC, :fun, 1},
+        {ReflectionWalk.TypeD, :__struct__, 0}
+      )
+
+    module_info_plt =
+      PLT.start()
+      |> PLT.put(ReflectionWalk.Tpl, %{})
+      |> PLT.put(ReflectionWalk.Proto, %{protocol?: true, protocol_functions: [fun: 1]})
+      |> PLT.put(ReflectionWalk.Proto.TypeA, %{
+        protocol_implementation?: true,
+        implementation_for: ReflectionWalk.TypeA,
+        implemented_protocol: ReflectionWalk.Proto
+      })
+      |> PLT.put(ReflectionWalk.Proto.TypeC, %{
+        protocol_implementation?: true,
+        implementation_for: ReflectionWalk.TypeC,
+        implemented_protocol: ReflectionWalk.Proto
+      })
+      |> PLT.put(ReflectionWalk.TypeA, %{struct?: true})
+      |> PLT.put(ReflectionWalk.TypeB, %{struct?: true})
+      |> PLT.put(ReflectionWalk.TypeC, %{struct?: true})
+      |> PLT.put(ReflectionWalk.TypeD, %{struct?: true})
+
+    {graph, module_info_plt}
+  end
+
   setup_all do
     module_info_plt = module_info_plt_fixture()
     ir_plt = Compiler.build_ir_plt()
@@ -3305,6 +3354,24 @@ defmodule Hologram.Compiler.CallGraphTest do
         server_callback_analysis_by_templatable(graph, [Module2], module_info_plt_fixture())
 
       assert result[Module2].reflection_mfas == [{Module5, :__schema__, 1}]
+    end
+
+    test "collects reflection MFAs through an implementation of a type init/3 names" do
+      {graph, module_info_plt} = reflection_walk_fixture()
+
+      result =
+        server_callback_analysis_by_templatable(graph, [ReflectionWalk.Tpl], module_info_plt)
+
+      assert {ReflectionWalk.TypeB, :__struct__, 0} in result[ReflectionWalk.Tpl].reflection_mfas
+    end
+
+    test "doesn't collect reflection MFAs reachable only through an implementation of a type init/3 doesn't name" do
+      {graph, module_info_plt} = reflection_walk_fixture()
+
+      result =
+        server_callback_analysis_by_templatable(graph, [ReflectionWalk.Tpl], module_info_plt)
+
+      refute {ReflectionWalk.TypeD, :__struct__, 0} in result[ReflectionWalk.Tpl].reflection_mfas
     end
 
     test "doesn't collect reflection MFAs reachable only from command/3" do

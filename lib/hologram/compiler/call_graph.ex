@@ -1319,8 +1319,9 @@ defmodule Hologram.Compiler.CallGraph do
   Returns the server callback analysis of each given templatable module: the
   protocol dispatch types that can appear in its server-executed code (code
   reachable from its init/3 and command/3 callbacks), the reflection MFAs
-  reachable from its init/3, and the component modules referenced in its
-  server-executed code.
+  reachable from its init/3, with protocol implementations entered only for
+  the types that code names (see reachable_mfas/4), and the component modules
+  referenced in its server-executed code.
   Templatables are analyzed sequentially, since spawning a task per templatable
   would copy the whole graph into each task process, which costs far more than
   the traversals themselves.
@@ -1343,7 +1344,8 @@ defmodule Hologram.Compiler.CallGraph do
 
       analysis = %{
         dispatch_types: protocol_dispatch_types(server_vertices, module_info_plt),
-        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph),
+        reflection_mfas:
+          list_reflection_mfas_reachable_from_server_init(templatable, graph, module_info_plt),
         server_referenced_components:
           extract_component_module_vertices(server_vertices, module_info_plt)
       }
@@ -1729,9 +1731,13 @@ defmodule Hologram.Compiler.CallGraph do
     fact(module_info_plt, page_module, :layout_module) || page_module.__layout_module__()
   end
 
-  defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
+  # Walks with the rules of the page listings (see reachable_mfas/4): a protocol implementation is
+  # entered only for a type the reached code names. Following every dispatch edge instead would enter
+  # every implementation the graph holds, and the graph holds the modules the pages reach, so the
+  # result would depend on which implementations earlier compiles happened to build.
+  defp list_reflection_mfas_reachable_from_server_init(templatable, graph, module_info_plt) do
     graph
-    |> Digraph.reachable([{templetable, :init, 3}])
+    |> reachable_mfas([{templatable, :init, 3}], MapSet.new(), module_info_plt)
     |> Enum.filter(fn mfa ->
       case mfa do
         {_module, :__changeset__, 0} -> true
@@ -1739,7 +1745,7 @@ defmodule Hologram.Compiler.CallGraph do
         {_module, :__schema__, 2} -> true
         {_module, :__struct__, 0} -> true
         {_module, :__struct__, 1} -> true
-        _falback -> false
+        _fallback -> false
       end
     end)
   end
