@@ -9,6 +9,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Test.Fixtures.Realtime.SSE.Module1
 
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
@@ -456,15 +457,6 @@ defmodule Hologram.Realtime.SSETest do
 
       assert SubscriptionRegistry.bindings_of(instance_id) == nil
       refute_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, _result}
-    end
-  end
-
-  describe "process_message/4 on {:bandit, {:rst_stream, ...}}" do
-    test "halts" do
-      conn = prepared_test_conn()
-      send(self(), {:bandit, {:rst_stream, 8}})
-
-      assert {:halt, ^conn} = process_message(conn, nil, nil)
     end
   end
 
@@ -1044,26 +1036,6 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "process_message/4 on {:tcp, ...}" do
-    test "halts and hands the message back to the socket's owner" do
-      conn = prepared_test_conn()
-      send(self(), {:tcp, :dummy_socket, "stray bytes"})
-
-      assert {:halt, ^conn} = process_message(conn, nil, nil)
-      assert_received {:tcp, :dummy_socket, "stray bytes"}
-    end
-  end
-
-  describe "process_message/4 on {:tcp_closed, ...}" do
-    test "halts and hands the message back to the socket's owner" do
-      conn = prepared_test_conn()
-      send(self(), {:tcp_closed, :dummy_socket})
-
-      assert {:halt, ^conn} = process_message(conn, nil, nil)
-      assert_received {:tcp_closed, :dummy_socket}
-    end
-  end
-
   describe "process_message/4 on {:unsub, ...}" do
     test "unsubscribes from the channel's PubSub topic" do
       conn = prepared_test_conn()
@@ -1077,6 +1049,15 @@ defmodule Hologram.Realtime.SSETest do
       Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
+    end
+  end
+
+  describe "process_message/4 on a message the adapter closes on" do
+    test "halts" do
+      conn = prepared_test_conn()
+      send(self(), :goodbye)
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil, adapter: Module1)
     end
   end
 
@@ -1632,38 +1613,6 @@ defmodule Hologram.Realtime.SSETest do
       refute_receive :hi_instance
       refute_receive :hi_session
       refute_receive :hi_user
-    end
-  end
-
-  describe "watch_socket/1" do
-    test "arms the socket of a Bandit HTTP/1 connection, so a client close reaches the pump" do
-      {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, ip: {127, 0, 0, 1}])
-      {:ok, port} = :inet.port(listen_socket)
-      {:ok, client_socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false])
-      {:ok, server_socket} = :gen_tcp.accept(listen_socket)
-
-      adapter_state = %{
-        transport: %{
-          __struct__: Bandit.HTTP1.Socket,
-          socket: %{socket: server_socket, transport_module: :inet}
-        }
-      }
-
-      conn = %Plug.Conn{adapter: {Bandit.Adapter, adapter_state}}
-
-      assert watch_socket(conn) == conn
-
-      :ok = :gen_tcp.close(client_socket)
-
-      assert_receive {:tcp_closed, ^server_socket}, 1_000
-
-      :gen_tcp.close(listen_socket)
-    end
-
-    test "leaves any other connection untouched" do
-      conn = Plug.Test.conn(:get, "/")
-
-      assert watch_socket(conn) == conn
     end
   end
 end

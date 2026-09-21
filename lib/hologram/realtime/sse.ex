@@ -6,6 +6,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE.Adapters
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
@@ -112,6 +113,8 @@ defmodule Hologram.Realtime.SSE do
     receipts_refresh_interval_ms =
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
 
+    adapter = Keyword.get(opts, :adapter, Adapters.Passive)
+
     receive do
       {:add_sub_receipts, receipts} ->
         id = System.unique_integer([:positive, :monotonic])
@@ -158,12 +161,6 @@ defmodule Hologram.Realtime.SSE do
         end
 
         {:cont, conn}
-
-      # Bandit delivers a client's HTTP/2 stream reset to the stream's process, which is
-      # this one. Without this clause the catch-all below swallows it and the stream lives
-      # on until a heartbeat write fails.
-      {:bandit, {:rst_stream, _error_code}} ->
-        {:halt, conn}
 
       {:broadcast_action, channel, action_name, params, excluded_identities} ->
         conn = Plug.Conn.fetch_query_params(conn)
@@ -256,25 +253,13 @@ defmodule Hologram.Realtime.SSE do
         Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
         {:cont, conn}
 
-      # Under Bandit over HTTP/1.1 the pump watches its own socket (see watch_socket/1), so
-      # a closed tab arrives here rather than waiting for a heartbeat write to fail. The
-      # message is handed back before halting: Thousand Island owns the socket and ends the
-      # connection on this message, and without it would hold the dead connection open
-      # until its read timeout.
-      {closed, _socket} = message when closed in [:ssl_closed, :tcp_closed] ->
-        send(self(), message)
-        {:halt, conn}
-
-      # Anything else from the socket ends the stream too. An SSE client sends nothing once
-      # the stream is open, so bytes or an error here mean the connection is no longer one.
-      # Handed back for the same reason, and so that bytes start the connection's next
-      # request rather than being lost.
-      {event, _socket, _payload} = message when event in [:ssl, :ssl_error, :tcp, :tcp_error] ->
-        send(self(), message)
-        {:halt, conn}
-
-      _msg ->
-        {:cont, conn}
+      # Whatever the pump doesn't recognise goes to the server's adapter, which is the only
+      # part that knows how a departed client shows up here.
+      message ->
+        case adapter.handle_message(message) do
+          :closed -> {:halt, conn}
+          :ignore -> {:cont, conn}
+        end
     end
   end
 
@@ -310,7 +295,10 @@ defmodule Hologram.Realtime.SSE do
         schedule_heartbeat(heartbeat_interval_ms)
         schedule_receipts_refresh(receipts_refresh_interval_ms)
 
+        adapter = adapter_for(conn)
+
         message_pump_opts = [
+          adapter: adapter,
           heartbeat_interval_ms: heartbeat_interval_ms,
           receipts_refresh_interval_ms: receipts_refresh_interval_ms
         ]
@@ -327,7 +315,7 @@ defmodule Hologram.Realtime.SSE do
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
         |> prepare()
-        |> watch_socket()
+        |> watch_client(adapter)
         |> message_pump(session_id, user_id, message_pump_opts)
 
       :error ->
@@ -475,33 +463,11 @@ defmodule Hologram.Realtime.SSE do
     conn
   end
 
-  # Public so tests can arm a socket without entering the blocking message-pump loop.
-  #
-  # Bandit runs the plug in the process that owns the connection and reads nothing from the
-  # socket while it runs, so over HTTP/1.1 a closed tab goes unnoticed until a heartbeat
-  # write fails. Asking for the socket's next event makes the close arrive in the pump's
-  # mailbox instead. Matched by shape because Hologram doesn't depend on Bandit - any other
-  # adapter or protocol falls through untouched, and so would a Bandit that reshapes these
-  # internals, back to noticing through the heartbeat.
-  @doc false
-  @spec watch_socket(Plug.Conn.t()) :: Plug.Conn.t()
-  def watch_socket(
-        %Plug.Conn{
-          adapter:
-            {Bandit.Adapter,
-             %{
-               transport: %{
-                 __struct__: Bandit.HTTP1.Socket,
-                 socket: %{socket: raw_socket, transport_module: transport_module}
-               }
-             }}
-        } = conn
-      ) do
-    transport_module.setopts(raw_socket, active: :once)
-    conn
-  end
+  # The server-specific half of the stream, picked from the conn so nothing needs
+  # configuring. Bandit is matched by name only - Hologram doesn't depend on it.
+  defp adapter_for(%Plug.Conn{adapter: {Bandit.Adapter, _state}}), do: Adapters.Bandit
 
-  def watch_socket(conn), do: conn
+  defp adapter_for(_conn), do: Adapters.Passive
 
   defp claimed_identity(conn) do
     {
@@ -665,5 +631,10 @@ defmodule Hologram.Realtime.SSE do
 
   defp schedule_receipts_refresh(interval_ms) do
     Process.send_after(self(), :refresh_receipts, interval_ms)
+  end
+
+  defp watch_client(conn, adapter) do
+    :ok = adapter.watch(conn)
+    conn
   end
 end
