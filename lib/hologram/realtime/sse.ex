@@ -257,13 +257,20 @@ defmodule Hologram.Realtime.SSE do
         {:cont, conn}
 
       # Under Bandit over HTTP/1.1 the pump watches its own socket (see watch_socket/1), so
-      # a closed tab arrives here rather than waiting for a heartbeat write to fail.
-      {closed, _socket} when closed in [:ssl_closed, :tcp_closed] ->
+      # a closed tab arrives here rather than waiting for a heartbeat write to fail. The
+      # message is handed back before halting: Thousand Island owns the socket and ends the
+      # connection on this message, and without it would hold the dead connection open
+      # until its read timeout.
+      {closed, _socket} = message when closed in [:ssl_closed, :tcp_closed] ->
+        send(self(), message)
         {:halt, conn}
 
       # Anything else from the socket ends the stream too. An SSE client sends nothing once
       # the stream is open, so bytes or an error here mean the connection is no longer one.
-      {event, _socket, _payload} when event in [:ssl, :ssl_error, :tcp, :tcp_error] ->
+      # Handed back for the same reason, and so that bytes start the connection's next
+      # request rather than being lost.
+      {event, _socket, _payload} = message when event in [:ssl, :ssl_error, :tcp, :tcp_error] ->
+        send(self(), message)
         {:halt, conn}
 
       _msg ->

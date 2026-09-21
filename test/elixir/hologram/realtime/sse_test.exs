@@ -1045,20 +1045,22 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "process_message/4 on {:tcp, ...}" do
-    test "halts" do
+    test "halts and hands the message back to the socket's owner" do
       conn = prepared_test_conn()
       send(self(), {:tcp, :dummy_socket, "stray bytes"})
 
       assert {:halt, ^conn} = process_message(conn, nil, nil)
+      assert_received {:tcp, :dummy_socket, "stray bytes"}
     end
   end
 
   describe "process_message/4 on {:tcp_closed, ...}" do
-    test "halts" do
+    test "halts and hands the message back to the socket's owner" do
       conn = prepared_test_conn()
       send(self(), {:tcp_closed, :dummy_socket})
 
       assert {:halt, ^conn} = process_message(conn, nil, nil)
+      assert_received {:tcp_closed, :dummy_socket}
     end
   end
 
