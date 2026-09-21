@@ -1,7 +1,6 @@
 import Config
 
 config :hologram_cowboy_tests, HologramCowboyTestsWeb.Endpoint,
-  adapter: Bandit.PhoenixAdapter,
   pubsub_server: HologramCowboyTests.PubSub,
   render_errors: [
     formats: [json: HologramCowboyTestsWeb.ErrorJSON],
