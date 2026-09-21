@@ -349,7 +349,7 @@ describe("Sse", () => {
       await Sse.connect();
       Sse.eventSource.onerror({type: "error"});
 
-      sinon.assert.calledWithExactly(loggerDebugStub, "SSE error: error");
+      sinon.assert.calledWithExactly(loggerDebugStub, "SSE stream lost: error");
     });
 
     it("closes the failed EventSource", async () => {

@@ -168,18 +168,24 @@ export default class Sse {
       // No retry cap: the receipt-expiry path inside `connect()` handles the
       // "give up and reload" case organically once stored receipts age out.
       $.eventSource.onerror = (event) => {
-        clearTimeout($.stabilityTimer);
-
-        Logger.debug(`SSE error: ${event.type}`);
-        GlobalRegistry.set("sseConnected?", false);
-        $.eventSource.close();
-
-        $.scheduleReconnect();
+        $.handleStreamLoss(event.type);
       };
     } catch (error) {
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
     }
+  }
+
+  // A stream is over whether the browser reported it or the heartbeat watchdog did:
+  // stop trusting it, close it, and re-run the handshake protocol after a backoff.
+  static handleStreamLoss(reason) {
+    clearTimeout($.stabilityTimer);
+
+    Logger.debug(`SSE stream lost: ${reason}`);
+    GlobalRegistry.set("sseConnected?", false);
+    $.eventSource.close();
+
+    $.scheduleReconnect();
   }
 
   // Bump the failure counter and re-run the handshake protocol from scratch
