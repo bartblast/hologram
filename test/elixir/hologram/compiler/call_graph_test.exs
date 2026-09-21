@@ -165,6 +165,121 @@ defmodule Hologram.Compiler.CallGraphTest do
     {String.to_atom(module), String.to_atom(fun), String.to_integer(arity)}
   end
 
+  # Builds the given modules into the call graph, from reach_ir/2.
+  defp reach_build(call_graph, modules, built_modules) do
+    Enum.each(built_modules, &build(call_graph, reach_ir(modules, &1)))
+  end
+
+  defp reach_callee_ir({module, function, arity}) do
+    %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: module},
+      function: function,
+      args: List.duplicate(%IR.IntegerType{value: 0}, arity)
+    }
+  end
+
+  defp reach_callee_ir(module), do: %IR.AtomType{value: module}
+
+  # A call graph built the way the compile task builds one into an empty build dir: the roots (the
+  # pages and the broadcast callers) first, then the walk. Returns the call graph and the modules
+  # the walk built.
+  defp reach_cold(modules, roots) do
+    call_graph = start(module_info_plt: reach_module_info_plt(modules))
+    reach_build(call_graph, modules, roots)
+
+    built_modules =
+      build_reach(
+        call_graph,
+        narrow_diff_fixture(roots, [], []),
+        &reach_build(call_graph, modules, &1)
+      )
+
+    {call_graph, built_modules}
+  end
+
+  # The graph every module of the given ones builds, which the walk's graph must answer every
+  # listing the same as.
+  defp reach_full(modules) do
+    call_graph = start(module_info_plt: reach_module_info_plt(modules))
+    reach_build(call_graph, modules, Map.keys(modules))
+    call_graph
+  end
+
+  # The IR of a module of reach_modules/0: a function definition per given function, whose body
+  # calls the given functions and names the given modules.
+  defp reach_ir(modules, module) do
+    {_info, functions} = Map.fetch!(modules, module)
+
+    function_defs =
+      Enum.map(functions, fn {name, arity, callees} ->
+        %IR.FunctionDefinition{
+          name: name,
+          arity: arity,
+          visibility: :public,
+          clause: Enum.map(callees, &reach_callee_ir/1)
+        }
+      end)
+
+    %IR.ModuleDefinition{
+      module: %IR.AtomType{value: module},
+      body: %IR.Block{expressions: function_defs}
+    }
+  end
+
+  defp reach_module_info_plt(modules) do
+    Enum.reduce(modules, PLT.start(), fn {module, {info, _functions}}, plt ->
+      PLT.put(plt, module, info)
+    end)
+  end
+
+  # A small app for the walk: a page whose template calls a protocol function and creates a TypeA
+  # struct, and whose init/3 names a component and a plain module; the protocol's implementations for
+  # TypeA (reached) and TypeB (not reached); a broadcast caller with one broadcasting function and one
+  # that doesn't broadcast; and modules only the unwalked code reaches.
+  defp reach_modules do
+    %{
+      ReachTest.Caller =>
+        {%{broadcast_caller?: true},
+         [
+           {:notify, 0, [{Realtime, :broadcast_action, 2}, {ReachTest.CallerHelper, :fun, 0}]},
+           {:other, 0, [{ReachTest.Unreached, :fun, 0}]}
+         ]},
+      ReachTest.CallerHelper => {%{}, [{:fun, 0, []}]},
+      ReachTest.ImplHelper => {%{}, [{:fun, 0, []}]},
+      ReachTest.Late => {%{}, [{:fun, 0, []}]},
+      ReachTest.Layout => {%{component?: true}, [{:template, 0, []}]},
+      ReachTest.Named =>
+        {%{component?: true}, [{:template, 0, [{ReachTest.NamedHelper, :fun, 0}]}]},
+      ReachTest.NamedHelper => {%{}, [{:fun, 0, []}]},
+      ReachTest.Page =>
+        {%{page?: true, layout_module: ReachTest.Layout},
+         [
+           {:init, 3, [{ReachTest.Server, :load, 0}]},
+           {:template, 0, [{ReachTest.Proto, :fun, 1}, {ReachTest.TypeA, :__struct__, 0}]}
+         ]},
+      ReachTest.Plain => {%{}, [{:fun, 0, [{ReachTest.Unreached, :fun, 0}]}]},
+      ReachTest.Proto => {%{protocol?: true, protocol_functions: [fun: 1]}, [{:fun, 1, []}]},
+      ReachTest.Proto.TypeA =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeA,
+           implemented_protocol: ReachTest.Proto
+         }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.ImplHelper, :fun, 0}]}]},
+      ReachTest.Proto.TypeB =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeB,
+           implemented_protocol: ReachTest.Proto
+         }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.Unreached, :fun, 0}]}]},
+      ReachTest.Server => {%{}, [{:load, 0, [ReachTest.Named, ReachTest.Plain]}]},
+      ReachTest.TypeA => {%{struct?: true}, [{:__struct__, 0, []}]},
+      ReachTest.TypeB => {%{struct?: true}, [{:__struct__, 0, []}]},
+      ReachTest.Unreached => {%{}, [{:fun, 0, []}]}
+    }
+  end
+
+  defp reach_state(%{pid: pid}), do: Agent.get(pid, & &1.reach)
+
   # A templatable whose init/3 calls a protocol function and creates a TypeA struct. The protocol has
   # an implementation for TypeA, which creates a TypeB struct, and one for TypeC, which no reached
   # code names, which creates a TypeD struct.
@@ -1411,6 +1526,213 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  describe "build_reach/3" do
+    test "the walk's graph lists every fixture page and the runtime as the full graph does", %{
+      full_call_graph: full_call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      runtime_mfas: full_runtime_mfas
+    } do
+      pages = Reflection.list_pages()
+      broadcast_callers = PLT.keys(module_info_plt, %{broadcast_caller?: true})
+      roots = Enum.uniq(pages ++ broadcast_callers)
+
+      call_graph = start(module_info_plt: module_info_plt)
+      Enum.each(roots, &build_for_module(call_graph, ir_plt, &1))
+      add_non_discoverable_edges(call_graph)
+
+      build_reach(call_graph, narrow_diff_fixture(roots, [], []), fn modules ->
+        Enum.each(modules, &build_for_module(call_graph, ir_plt, &1))
+      end)
+
+      assert list_runtime_mfas(call_graph, pages) == full_runtime_mfas
+
+      graph = get_graph(call_graph)
+      full_graph = get_graph(full_call_graph)
+
+      for page <- pages do
+        assert list_page_mfas(graph, page, PLT.start(), module_info_plt) ==
+                 list_page_mfas(full_graph, page, PLT.start(), module_info_plt)
+      end
+
+      reached_modules = modules(call_graph)
+      all_modules = modules(full_call_graph)
+
+      assert MapSet.size(reached_modules) < MapSet.size(all_modules)
+    end
+
+    test "the walk's graph lists the page and the runtime as the full graph does" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+      full_call_graph = reach_full(modules)
+      module_info_plt = call_graph.module_info_plt
+
+      assert list_page_mfas(get_graph(call_graph), ReachTest.Page, PLT.start(), module_info_plt) ==
+               list_page_mfas(
+                 get_graph(full_call_graph),
+                 ReachTest.Page,
+                 PLT.start(),
+                 module_info_plt
+               )
+
+      assert list_runtime_mfas(call_graph, [ReachTest.Page]) ==
+               list_runtime_mfas(full_call_graph, [ReachTest.Page])
+    end
+
+    test "builds what the pages, their server callbacks and the broadcast callers reach" do
+      {call_graph, built_modules} =
+        reach_cold(reach_modules(), [ReachTest.Page, ReachTest.Caller])
+
+      assert Enum.sort(built_modules) ==
+               Enum.sort([
+                 ReachTest.CallerHelper,
+                 ReachTest.ImplHelper,
+                 ReachTest.Layout,
+                 ReachTest.Named,
+                 ReachTest.NamedHelper,
+                 ReachTest.Proto,
+                 ReachTest.Proto.TypeA,
+                 ReachTest.Server,
+                 ReachTest.TypeA
+               ])
+
+      assert modules(call_graph) ==
+               MapSet.new([ReachTest.Caller, ReachTest.Page | built_modules])
+    end
+
+    test "doesn't build an implementation whose type is not reached" do
+      {call_graph, _built_modules} =
+        reach_cold(reach_modules(), [ReachTest.Page, ReachTest.Caller])
+
+      refute ReachTest.Proto.TypeB in modules(call_graph)
+    end
+
+    test "doesn't build a plain module named only as a value" do
+      {call_graph, _built_modules} =
+        reach_cold(reach_modules(), [ReachTest.Page, ReachTest.Caller])
+
+      refute ReachTest.Plain in modules(call_graph)
+      refute ReachTest.Unreached in modules(call_graph)
+    end
+
+    test "builds nothing on a walk with an empty diff" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+      reach = reach_state(call_graph)
+
+      diff = narrow_diff_fixture([], [], [])
+
+      assert build_reach(call_graph, diff, &reach_build(call_graph, modules, &1)) == []
+      assert reach_state(call_graph) == reach
+    end
+
+    test "an edited module is walked again from its reached functions" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      edited_modules =
+        Map.put(
+          modules,
+          ReachTest.Server,
+          {%{}, [{:load, 0, [ReachTest.Named, ReachTest.Plain, {ReachTest.Late, :fun, 0}]}]}
+        )
+
+      ir_plt = PLT.put(PLT.start(), ReachTest.Server, reach_ir(edited_modules, ReachTest.Server))
+      diff = narrow_diff_fixture([], [ReachTest.Server], [])
+      patch(call_graph, ir_plt, diff)
+
+      assert build_reach(call_graph, diff, &reach_build(call_graph, edited_modules, &1)) ==
+               [ReachTest.Late]
+
+      {cold_call_graph, _built_modules} =
+        reach_cold(edited_modules, [ReachTest.Page, ReachTest.Caller])
+
+      cold_modules = modules(cold_call_graph)
+      warm_modules = modules(call_graph)
+
+      assert MapSet.subset?(cold_modules, warm_modules)
+
+      assert MapSet.subset?(
+               reach_state(cold_call_graph).reached_vertices,
+               reach_state(call_graph).reached_vertices
+             )
+    end
+
+    test "an added page is walked from its entries" do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Page2,
+          {%{page?: true, layout_module: ReachTest.Layout},
+           [{:template, 0, [{ReachTest.Late, :fun, 0}]}]}
+        )
+
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      PLT.put(call_graph.module_info_plt, ReachTest.Page2, elem(modules[ReachTest.Page2], 0))
+      ir_plt = PLT.put(PLT.start(), ReachTest.Page2, reach_ir(modules, ReachTest.Page2))
+      diff = narrow_diff_fixture([ReachTest.Page2], [], [])
+      patch(call_graph, ir_plt, diff)
+
+      assert build_reach(call_graph, diff, &reach_build(call_graph, modules, &1)) ==
+               [ReachTest.Late]
+    end
+
+    test "an added implementation of a reached type is walked from its protocol's reached functions" do
+      modules = reach_modules()
+      {impl_info, _functions} = modules[ReachTest.Proto.TypeA]
+      modules_before = Map.delete(modules, ReachTest.Proto.TypeA)
+
+      {call_graph, built_modules} =
+        reach_cold(modules_before, [ReachTest.Page, ReachTest.Caller])
+
+      refute ReachTest.ImplHelper in built_modules
+
+      PLT.put(call_graph.module_info_plt, ReachTest.Proto.TypeA, impl_info)
+
+      ir_plt =
+        PLT.put(PLT.start(), ReachTest.Proto.TypeA, reach_ir(modules, ReachTest.Proto.TypeA))
+
+      diff = narrow_diff_fixture([ReachTest.Proto.TypeA], [], [])
+      patch(call_graph, ir_plt, diff)
+
+      assert build_reach(call_graph, diff, &reach_build(call_graph, modules, &1)) ==
+               [ReachTest.ImplHelper]
+    end
+
+    test "a removed module's reached functions are forgotten" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      assert {ReachTest.NamedHelper, :fun, 0} in reach_state(call_graph).reached_vertices
+
+      diff = narrow_diff_fixture([], [], [ReachTest.NamedHelper])
+      patch(call_graph, PLT.start(), diff)
+
+      assert build_reach(call_graph, diff, &reach_build(call_graph, modules, &1)) == []
+      refute {ReachTest.NamedHelper, :fun, 0} in reach_state(call_graph).reached_vertices
+    end
+
+    test "the reach survives a dump and a load" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "build_reach_3"])
+      clean_dir(dump_dir)
+      dump_path = Path.join(dump_dir, Reflection.call_graph_dump_file_name())
+      dump(call_graph, dump_path)
+
+      loaded_call_graph = start(module_info_plt: call_graph.module_info_plt)
+      assert load(loaded_call_graph, dump_path) == :ok
+      assert reach_state(loaded_call_graph) == reach_state(call_graph)
+
+      diff = narrow_diff_fixture([], [], [])
+
+      assert build_reach(loaded_call_graph, diff, &reach_build(loaded_call_graph, modules, &1)) ==
+               []
+    end
+  end
+
   test "clone/1", %{full_call_graph: call_graph} do
     call_graph = %{call_graph | module_info_plt: PLT.start()}
 
@@ -1441,7 +1763,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       [dump_path: Path.join(dump_dir, Reflection.call_graph_dump_file_name())]
     end
 
-    test "writes the graph and its modules, tagged with the dump version", %{
+    test "writes the graph, its modules and its reach, tagged with the dump version", %{
       dump_path: dump_path,
       empty_call_graph: call_graph
     } do
@@ -1457,7 +1779,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> File.read!()
         |> SerializationUtils.deserialize()
 
-      assert deserialized_state == {1, %{graph: graph, modules: MapSet.new()}}
+      assert {2, %{graph: ^graph, modules: modules, reach: reach}} = deserialized_state
+      assert modules == MapSet.new()
+      assert reach == reach_state(call_graph)
     end
 
     test "writes the modules built into the graph", %{
@@ -1468,7 +1792,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> build(IR.for_module(Module9))
       |> dump(dump_path)
 
-      {1, %{modules: modules}} =
+      {2, %{modules: modules}} =
         dump_path
         |> File.read!()
         |> SerializationUtils.deserialize()

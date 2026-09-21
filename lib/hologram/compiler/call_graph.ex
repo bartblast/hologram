@@ -10,7 +10,8 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
-  # The agent holds the graph and the modules whose definitions were built into it (see modules/1).
+  # The agent holds the graph, the modules whose definitions were built into it (see modules/1), and
+  # what the walk that grows it reached (see build_reach/3).
   defstruct pid: nil, module_info_plt: nil
 
   @type t :: %CallGraph{pid: pid, module_info_plt: PLT.t() | nil}
@@ -22,6 +23,15 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type edge :: {vertex, vertex}
 
+  # What the walk of build_reach/3 reached: the state expand_reachable_state/4 works on, and the
+  # templatables whose client entries and server callbacks it walked.
+  @type reach :: %{
+          pending_impl_candidates: [{module, [vertex]}],
+          reached_vertices: MapSet.t(vertex),
+          templatables: MapSet.t(module),
+          types: MapSet.t(module)
+        }
+
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
           reflection_mfas: [mfa],
@@ -32,7 +42,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
-  @dialyzer {:no_opaque, {:start_reachable_state, 4}}
+  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 4}]}
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -53,7 +63,7 @@ defmodule Hologram.Compiler.CallGraph do
   # The version of what dump/2 writes. Bump it whenever the shape of the agent's state changes: a
   # dump of another version is not loaded (see load/2), and the compile starts cold. A dump written
   # before the version existed holds a bare graph, which counts as version 0.
-  @dump_version 1
+  @dump_version 2
 
   # Edges for dynamic dispatch: the caller reads the callee module from data
   # (e.g. a struct's calendar field), so static IR analysis can't see the
@@ -471,6 +481,12 @@ defmodule Hologram.Compiler.CallGraph do
     {:re, :import, 1}
   ]
 
+  # The module flags under which build/3 gives a module's own vertex edges (to its template, its
+  # struct functions and the like); a module's body holds nothing else that adds edges from its
+  # vertex. A module named only as a value, whose vertex the walk of build_reach/3 reaches, is built
+  # when it has one of them: otherwise building it would add no edge to that vertex.
+  @module_vertex_edge_flags [:component?, :ecto_schema?, :exception?, :page?, :struct?]
+
   @doc """
   Adds an edge between two vertices in the call graph.
   Automatically adds vertices if they don't exist.
@@ -758,13 +774,50 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns a clone of the given call graph, with its modules.
+  Grows the graph until it holds every module the pages, the runtime and the broadcast callers
+  reach, and returns the modules it asked to build, in the order asked.
+
+  The walk follows edges with the rules of reachable_mfas/4 (protocol functions opaque, an
+  implementation entered once its type is reached), over one type set for the whole app, and adds
+  what the listings add: the dispatch helpers of the reached protocol functions, and the module
+  vertex and server callbacks of every component it reaches. It runs in rounds: a round walks the
+  graph as it is, and the reached functions and module vertices of modules the graph holds no
+  definition of, which the module info PLT knows, are what `build_modules` is called with. Those
+  are walked again in the next round, with their calls in place. When a round asks for no module,
+  the graph holds everything every listing of the compile can reach.
+
+  What the walk reached is kept in the agent, and dumped with the graph, so the walk starts from
+  what the given diff (narrowed, see narrow_diff/2, and already patched in) replaced: the reached
+  functions of the edited modules, walked again; the entries of the added and edited pages and
+  broadcast callers; the reached functions of the protocol of an added or edited implementation,
+  whose dispatch edges the patch refreshed; and the runtime entries not reached yet. A removed
+  module's reached functions are forgotten. On an empty reach, every page and broadcast caller is
+  in the diff as added, which makes it a walk of the whole app.
+  """
+  @spec build_reach(t, map, ([module] -> any)) :: [module]
+  def build_reach(%{pid: pid, module_info_plt: module_info_plt} = call_graph, diff, build_modules) do
+    entries =
+      Agent.get_and_update(
+        pid,
+        fn state ->
+          {entries, reach} = reach_entries(state, diff, module_info_plt)
+          {entries, %{state | reach: reach}}
+        end,
+        :infinity
+      )
+
+    build_reach_rounds(call_graph, entries, build_modules, [])
+  end
+
+  @doc """
+  Returns a clone of the given call graph, with its modules. The clone starts with nothing reached
+  (see build_reach/3): it is a graph to list from, not one to grow.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/clone_1/README.md
   """
   @spec clone(t, T.opts()) :: t
   def clone(%{pid: pid} = call_graph, opts \\ []) do
-    %{graph: graph, modules: modules} = Agent.get(pid, & &1, :infinity)
+    {graph, modules} = Agent.get(pid, &{&1.graph, &1.modules}, :infinity)
 
     opts
     |> Keyword.put(:graph, graph)
@@ -774,8 +827,8 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Serializes the call graph, its modules included, and writes it to a file, tagged with the dump
-  version that load/2 checks.
+  Serializes the call graph, its modules and what the walk of build_reach/3 reached included, and
+  writes it to a file, tagged with the dump version that load/2 checks.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/dump_2/README.md
   """
@@ -1058,9 +1111,9 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Loads the graph and its modules from the given dump file and returns :ok, or returns :error and
-  leaves the call graph as it is when the dump was written with another dump version (see dump/2),
-  such as one written before the version existed.
+  Loads the graph, its modules and its reach from the given dump file and returns :ok, or returns
+  :error and leaves the call graph as it is when the dump was written with another dump version (see
+  dump/2), such as one written before the version existed.
   """
   @spec load(t, String.t()) :: :ok | :error
   def load(%{pid: pid}, dump_path) do
@@ -1181,12 +1234,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec protocol_dispatch_dependency_vertices(Digraph.t(), [vertex], PLT.t() | nil) :: [vertex]
   def protocol_dispatch_dependency_vertices(graph, vertices, module_info_plt) do
     helper_entry_vertices =
-      for vertex <- vertices,
-          protocol_function_mfa?(vertex, module_info_plt),
-          {_source_vertex, target_vertex} <- Digraph.outgoing_edges(graph, vertex),
-          protocol_dispatch_helper_mfa?(vertex, target_vertex, module_info_plt) do
-        target_vertex
-      end
+      protocol_dispatch_helper_entry_vertices(graph, vertices, module_info_plt)
 
     Digraph.reachable(graph, helper_entry_vertices,
       opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
@@ -1400,12 +1448,18 @@ defmodule Hologram.Compiler.CallGraph do
     * `:module_info_plt` - the module info PLT (see `Hologram.Compiler.build_module_info_plt!/3`)
       the graph answers module questions from; defaults to none, under which every module fact is false.
     * `:modules` - the modules whose definitions the graph holds (see `modules/1`); defaults to none.
+    * `:reach` - what the walk of `build_reach/3` reached on the graph; defaults to nothing.
     * `:supervisor` - a `DynamicSupervisor` to start the agent under as a `:temporary` child;
       when omitted the agent is linked to the calling process.
   """
   @spec start(T.opts()) :: t
   def start(opts \\ []) do
-    state = %{graph: opts[:graph] || Digraph.new(), modules: opts[:modules] || MapSet.new()}
+    state = %{
+      graph: opts[:graph] || Digraph.new(),
+      modules: opts[:modules] || MapSet.new(),
+      reach: opts[:reach] || empty_reach()
+    }
+
     module_info_plt = opts[:module_info_plt]
 
     {:ok, pid} =
@@ -1549,10 +1603,51 @@ defmodule Hologram.Compiler.CallGraph do
     page_mfas ++ added_mfas
   end
 
-  # Runs protocol-aware reachability rounds until no new implementations become
-  # reachable. Each round traverses only vertices not yet in the state, extends the
-  # dispatch types only from the newly reached vertices, and evaluates only the new
-  # implementation candidates plus the pending ones against the grown type set.
+  # A broadcast caller's functions that call a broadcast function, which broadcast_caller_analysis/2
+  # walks from.
+  defp broadcast_caller_entries(graph, module, module_info_plt) do
+    if flag?(module_info_plt, module, :broadcast_caller?) do
+      for broadcast_mfa <- Reflection.broadcast_mfas(),
+          {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa),
+          vertex_module(caller_vertex) == module,
+          uniq: true do
+        caller_vertex
+      end
+    else
+      []
+    end
+  end
+
+  # Walks a round, builds the modules it asks for, and goes on until a round asks for none.
+  defp build_reach_rounds(call_graph, entries, build_modules, built_modules) do
+    %{pid: pid, module_info_plt: module_info_plt} = call_graph
+
+    {frontier_modules, next_entries} =
+      Agent.get_and_update(pid, &walk_reach(&1, entries, module_info_plt), :infinity)
+
+    if frontier_modules == [] do
+      built_modules
+    else
+      build_modules.(frontier_modules)
+
+      build_reach_rounds(
+        call_graph,
+        next_entries,
+        build_modules,
+        built_modules ++ frontier_modules
+      )
+    end
+  end
+
+  defp empty_reach do
+    %{
+      pending_impl_candidates: [],
+      reached_vertices: MapSet.new(),
+      templatables: MapSet.new(),
+      types: MapSet.new(@built_in_protocol_types)
+    }
+  end
+
   # An Elixir-named module exists when the module info PLT has an entry for it (one ETS lookup);
   # an Erlang-named one is asked the usual way, and those are the handful of stdlib modules the
   # VM has loaded already.
@@ -1564,6 +1659,56 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
+  # Walks from the given entries with the rules of expand_reachable_state/4, then from what the
+  # listings add to what that reached: the dispatch helpers of the reached protocol functions, and
+  # the module vertex and server callbacks of each component reached for the first time. Returns the
+  # grown reach and the entries that are not vertices of the graph (a function of a module not built
+  # yet, or one no module defines).
+  defp expand_reach(graph, reach, entries, module_info_plt) do
+    expanded_reach = expand_reachable_state(graph, reach, entries, module_info_plt)
+
+    new_vertices =
+      expanded_reach.reached_vertices
+      |> MapSet.difference(reach.reached_vertices)
+      |> MapSet.to_list()
+
+    new_templatables =
+      new_vertices
+      |> Enum.map(&vertex_module/1)
+      |> Enum.uniq()
+      |> Enum.filter(
+        &(flag?(module_info_plt, &1, :component?) and not MapSet.member?(reach.templatables, &1))
+      )
+
+    new_reach = %{
+      expanded_reach
+      | pending_impl_candidates: Enum.uniq(expanded_reach.pending_impl_candidates),
+        templatables: MapSet.union(reach.templatables, MapSet.new(new_templatables))
+    }
+
+    missing_entries = Enum.reject(entries, &Digraph.has_vertex?(graph, &1))
+
+    more_entries =
+      graph
+      |> protocol_dispatch_helper_entry_vertices(new_vertices, module_info_plt)
+      |> Enum.concat(Enum.flat_map(new_templatables, &templatable_entries/1))
+      |> Enum.reject(&MapSet.member?(new_reach.reached_vertices, &1))
+      |> Enum.uniq()
+
+    if more_entries == [] do
+      {new_reach, missing_entries}
+    else
+      {final_reach, more_missing_entries} =
+        expand_reach(graph, new_reach, more_entries, module_info_plt)
+
+      {final_reach, missing_entries ++ more_missing_entries}
+    end
+  end
+
+  # Runs protocol-aware reachability rounds until no new implementations become
+  # reachable. Each round traverses only vertices not yet in the state, extends the
+  # dispatch types only from the newly reached vertices, and evaluates only the new
+  # implementation candidates plus the pending ones against the grown type set.
   defp expand_reachable_state(graph, state, entry_vertices, module_info_plt) do
     new_vertices =
       Digraph.reachable(graph, entry_vertices,
@@ -1701,6 +1846,35 @@ defmodule Hologram.Compiler.CallGraph do
       {module, _function, _arity} -> existing_module?(module, module_info_plt)
       _module_vertex -> false
     end)
+  end
+
+  # Whether a reached vertex needs its module built before its edges are complete: a function of a
+  # module the graph holds no definition of and the module info PLT knows (an Erlang module has no
+  # IR, a module the PLT does not know has no beam), or the vertex of such a module when building it
+  # would give that vertex edges.
+  defp frontier_vertex?({module, _function, _arity}, graph_modules, module_info_plt) do
+    unbuilt_module?(module, graph_modules, module_info_plt)
+  end
+
+  defp frontier_vertex?(module, graph_modules, module_info_plt) do
+    unbuilt_module?(module, graph_modules, module_info_plt) and
+      Enum.any?(@module_vertex_edge_flags, &flag?(module_info_plt, module, &1))
+  end
+
+  # The reached functions of the protocol an added or edited implementation implements, walked
+  # again so that the dispatch edges the patch refreshed are read as implementation candidates.
+  defp implementation_entries(module, graph_modules, reach, module_info_plt) do
+    if implementation_of_graph_protocol?(module, graph_modules, module_info_plt) do
+      protocol = implemented_protocol(module, module_info_plt)
+
+      for {function, arity} <- protocol_functions(protocol, module_info_plt),
+          vertex = {protocol, function, arity},
+          MapSet.member?(reach.reached_vertices, vertex) do
+        vertex
+      end
+    else
+      []
+    end
   end
 
   # The four facts the traversal used to get by calling the module, each with that call as the
@@ -1847,8 +2021,27 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
+  # What the walk starts from for an added or edited module, by kind; nothing for a module of no
+  # such kind, whose changed calls are walked again from its reached functions (see reach_entries/3).
+  defp module_entries(module, state, module_info_plt) do
+    %{graph: graph, modules: graph_modules, reach: reach} = state
+
+    page_entries(module, module_info_plt) ++
+      broadcast_caller_entries(graph, module, module_info_plt) ++
+      implementation_entries(module, graph_modules, reach, module_info_plt)
+  end
+
   defp module_flag?(%CallGraph{module_info_plt: module_info_plt}, module, flag) do
     flag?(module_info_plt, module, flag)
+  end
+
+  # A page's client entries (its own and its layout's) and its server callbacks.
+  defp page_entries(module, module_info_plt) do
+    if flag?(module_info_plt, module, :page?) do
+      list_page_entry_mfas(module, module_info_plt) ++ server_entries(module)
+    else
+      []
+    end
   end
 
   # Moves pending implementation candidates whose target type has become reachable
@@ -1871,6 +2064,17 @@ defmodule Hologram.Compiler.CallGraph do
       new_state
     else
       expand_reachable_state(graph, new_state, impl_entry_vertices, module_info_plt)
+    end
+  end
+
+  # The same-module dispatch helpers (impl_for/1, impl_for!/1 and the like) the given protocol
+  # function vertices call.
+  defp protocol_dispatch_helper_entry_vertices(graph, vertices, module_info_plt) do
+    for vertex <- vertices,
+        protocol_function_mfa?(vertex, module_info_plt),
+        {_source_vertex, target_vertex} <- Digraph.outgoing_edges(graph, vertex),
+        protocol_dispatch_helper_mfa?(vertex, target_vertex, module_info_plt) do
+      target_vertex
     end
   end
 
@@ -1932,6 +2136,50 @@ defmodule Hologram.Compiler.CallGraph do
       _vertex, acc ->
         acc
     end)
+  end
+
+  # The entries a walk starts from after a patch with the given diff, and the reach it starts with:
+  # the reached vertices of the removed and edited modules are forgotten, those of the edited ones
+  # walked again, since the patch gave them their new calls. So are the templatables among them,
+  # which the walk finds again through those vertices, reaching the server callbacks and client
+  # entries they may have gained. Every entry is taken out of the reach, so that it is walked with
+  # its edges as they are now.
+  defp reach_entries(%{reach: reach} = state, diff, module_info_plt) do
+    replaced_modules = MapSet.new(diff.removed_modules ++ diff.edited_modules)
+    edited_modules = MapSet.new(diff.edited_modules)
+
+    {replaced_vertices, kept_vertex_list} =
+      Enum.split_with(
+        reach.reached_vertices,
+        &MapSet.member?(replaced_modules, vertex_module(&1))
+      )
+
+    reentries = Enum.filter(replaced_vertices, &MapSet.member?(edited_modules, vertex_module(&1)))
+    kept_vertices = MapSet.new(kept_vertex_list)
+
+    runtime_entries = Enum.reject(list_runtime_entry_mfas(), &MapSet.member?(kept_vertices, &1))
+
+    kind_entries =
+      Enum.flat_map(
+        diff.added_modules ++ diff.edited_modules,
+        &module_entries(&1, state, module_info_plt)
+      )
+
+    entries = Enum.uniq(runtime_entries ++ reentries ++ kind_entries)
+
+    pending_impl_candidates =
+      Enum.reject(reach.pending_impl_candidates, fn {impl, _impl_entry_vertices} ->
+        impl in diff.removed_modules
+      end)
+
+    new_reach = %{
+      reach
+      | pending_impl_candidates: pending_impl_candidates,
+        reached_vertices: MapSet.difference(kept_vertices, MapSet.new(entries)),
+        templatables: MapSet.difference(reach.templatables, replaced_modules)
+    }
+
+    {entries, new_reach}
   end
 
   # Runs the function on the agent's graph inside the agent, so that only its result is copied out.
@@ -2022,6 +2270,8 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
+  defp server_entries(module), do: [{module, :command, 3}, {module, :init, 3}]
+
   # Runs the protocol-aware fixpoint from the given entry vertices and returns the
   # resulting state: the reached vertex set, the accumulated dispatch types, and the
   # implementation candidates whose target types are not reachable yet.
@@ -2040,8 +2290,57 @@ defmodule Hologram.Compiler.CallGraph do
     expand_reachable_state(graph, state, entry_vertices, module_info_plt)
   end
 
-  # Replaces the agent's graph with what the function makes of it, keeping the modules.
+  # A component's module vertex, which carries the edges to its client functions, and its server
+  # callbacks.
+  defp templatable_entries(module), do: [module | server_entries(module)]
+
+  defp unbuilt_module?(module, graph_modules, module_info_plt) do
+    not MapSet.member?(graph_modules, module) and PLT.member?(module_info_plt, module)
+  end
+
+  # Replaces the agent's graph with what the function makes of it, keeping the modules and the reach.
   defp update_graph(pid, fun) do
     Agent.cast(pid, fn state -> %{state | graph: fun.(state.graph)} end)
+  end
+
+  defp vertex_module({module, _function, _arity}), do: module
+  defp vertex_module(module), do: module
+
+  # One round of build_reach/3, run inside the agent: walks from the given entries, and returns the
+  # modules the reached vertices need built (see frontier_vertex?/3) with the entries of the next
+  # round: the reached vertices of those modules, taken out of the reach so that the next round walks
+  # them with their calls in place, and the entries that are functions of those modules. An entry
+  # that is no vertex of a module the graph holds is a function no module defines, and is dropped.
+  defp walk_reach(
+         %{graph: graph, modules: graph_modules, reach: reach} = state,
+         entries,
+         module_info_plt
+       ) do
+    {new_reach, missing_entries} = expand_reach(graph, reach, entries, module_info_plt)
+
+    frontier_vertices =
+      new_reach.reached_vertices
+      |> MapSet.difference(reach.reached_vertices)
+      |> Enum.filter(&frontier_vertex?(&1, graph_modules, module_info_plt))
+
+    frontier_modules =
+      frontier_vertices
+      |> Enum.concat(missing_entries)
+      |> Enum.map(&vertex_module/1)
+      |> Enum.filter(&unbuilt_module?(&1, graph_modules, module_info_plt))
+      |> Enum.uniq()
+
+    frontier_module_set = MapSet.new(frontier_modules)
+
+    pending_entries =
+      Enum.filter(missing_entries, &MapSet.member?(frontier_module_set, vertex_module(&1)))
+
+    next_reach = %{
+      new_reach
+      | reached_vertices:
+          MapSet.difference(new_reach.reached_vertices, MapSet.new(frontier_vertices))
+    }
+
+    {{frontier_modules, frontier_vertices ++ pending_entries}, %{state | reach: next_reach}}
   end
 end
