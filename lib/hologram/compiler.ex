@@ -351,6 +351,20 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Grows the call graph until it holds every module the pages, the runtime and the broadcast callers
+  reach (see `CallGraph.build_reach/3`), building the IR of each module the walk asks for into the IR
+  PLT first, and returns the modules built. The walk asks only for modules the graph's module info
+  PLT holds, so each has a beam to build IR from.
+  """
+  @spec build_reach!(CallGraph.t(), PLT.t(), map) :: [module]
+  def build_reach!(call_graph, ir_plt, graph_diff) do
+    CallGraph.build_reach(call_graph, graph_diff, fn modules ->
+      build_missing_ir!(ir_plt, modules)
+      TaskUtils.map_concurrently(modules, &CallGraph.build_for_module(call_graph, ir_plt, &1))
+    end)
+  end
+
+  @doc """
   Builds Hologram runtime JavaScript source code.
 
   ## Options

@@ -915,6 +915,68 @@ defmodule Hologram.CompilerTest do
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
   end
 
+  describe "build_reach!/3" do
+    setup %{module_info_plt: module_info_plt} do
+      page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+      call_graph = CallGraph.start(module_info_plt: module_info_plt)
+      ir_plt = build_missing_ir!(PLT.start(), [page])
+      CallGraph.build_for_module(call_graph, ir_plt, page)
+
+      diff = %{added_modules: [page], edited_modules: [], removed_modules: []}
+
+      [
+        built_modules: build_reach!(call_graph, ir_plt, diff),
+        call_graph: call_graph,
+        ir_plt: ir_plt
+      ]
+    end
+
+    test "builds the IR and the vertices of what the page reaches", %{
+      built_modules: built_modules,
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      layout = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
+
+      assert layout in built_modules
+      assert PLT.member?(ir_plt, layout)
+      assert layout in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {layout, :template, 0})
+    end
+
+    test "builds neither the IR nor the vertices of a module nothing reaches", %{
+      built_modules: built_modules,
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      unreached_module = Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+
+      refute unreached_module in built_modules
+      refute PLT.member?(ir_plt, unreached_module)
+      refute unreached_module in CallGraph.modules(call_graph)
+    end
+
+    test "builds the IR of exactly the modules it returns, besides the page", %{
+      built_modules: built_modules,
+      ir_plt: ir_plt
+    } do
+      page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+
+      ir_modules =
+        ir_plt
+        |> PLT.keys()
+        |> Enum.sort()
+
+      assert ir_modules == Enum.sort([page | built_modules])
+    end
+
+    test "builds nothing on a walk with an empty diff", %{call_graph: call_graph, ir_plt: ir_plt} do
+      diff = %{added_modules: [], edited_modules: [], removed_modules: []}
+
+      assert build_reach!(call_graph, ir_plt, diff) == []
+    end
+  end
+
   describe "build_runtime_js/6" do
     setup do
       on_exit(fn ->
