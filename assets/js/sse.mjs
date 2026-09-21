@@ -12,6 +12,14 @@ import Type from "./type.mjs";
 export default class Sse {
   static BASE_RECONNECT_DELAY = 250;
   static HANDSHAKE_PATH = "/hologram/sse/handshake";
+
+  // A stream with no heartbeat for this many intervals is dead. The real bound is one
+  // interval plus the heartbeat's delivery delay (network latency, and whatever the
+  // server's pump is writing ahead of it), and the delay is a property of the
+  // deployment, not of Hologram. Two is policy: the first heartbeat may be late, the
+  // second missing one is the verdict.
+  static HEARTBEAT_TIMEOUT_INTERVALS = 2;
+
   static MAX_RECONNECT_DELAY = 5_000;
   static RECONNECT_BACKOFF_FACTOR = 2;
   static RECONNECT_JITTER = 0.25;
@@ -33,6 +41,7 @@ export default class Sse {
 
   static eventSource = null;
   static heartbeatIntervalMs = null;
+  static heartbeatTimer = null;
   static reconnectAttempts = 0;
   static stabilityTimer = null;
 
@@ -49,6 +58,19 @@ export default class Sse {
     const jitterRange = baseDelay * $.RECONNECT_JITTER;
 
     return baseDelay + (Math.random() * 2 - 1) * jitterRange;
+  }
+
+  // Browsers never surface a dead stream that was not closed (a killed HTTP/2 stream
+  // on Bandit, a proxy dropping the upstream, a NAT forgetting the connection), so the
+  // client keeps its own clock: every heartbeat pushes the deadline, and a missed one
+  // ends the stream the way a browser-reported error does.
+  static armHeartbeatWatchdog() {
+    clearTimeout($.heartbeatTimer);
+
+    $.heartbeatTimer = setTimeout(
+      () => $.handleStreamLoss("heartbeat timeout"),
+      $.heartbeatIntervalMs * $.HEARTBEAT_TIMEOUT_INTERVALS,
+    );
   }
 
   static buildHandshakePayload() {
@@ -145,6 +167,10 @@ export default class Sse {
         App.subscriptionReceiptRegistry.purge(keys);
       });
 
+      $.eventSource.addEventListener("heartbeat", () => {
+        $.armHeartbeatWatchdog();
+      });
+
       $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
         const refreshed = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
@@ -152,6 +178,7 @@ export default class Sse {
 
       $.eventSource.onopen = () => {
         GlobalRegistry.set("sseConnected?", true);
+        $.armHeartbeatWatchdog();
 
         // Opening reports liveness. Clearing the failure count is a separate judgement
         // the stream has to earn by lasting, so one that opens and dies still counts as
@@ -179,6 +206,7 @@ export default class Sse {
   // A stream is over whether the browser reported it or the heartbeat watchdog did:
   // stop trusting it, close it, and re-run the handshake protocol after a backoff.
   static handleStreamLoss(reason) {
+    clearTimeout($.heartbeatTimer);
     clearTimeout($.stabilityTimer);
 
     Logger.debug(`SSE stream lost: ${reason}`);
