@@ -32,6 +32,7 @@ export default class Sse {
   static STABLE_CONNECTION_MS = 5_000;
 
   static eventSource = null;
+  static heartbeatIntervalMs = null;
   static reconnectAttempts = 0;
   static stabilityTimer = null;
 
@@ -78,8 +79,11 @@ export default class Sse {
         return;
       }
 
-      const {handshakeId, refreshedReceipts: encodedRefreshed} =
-        await response.json();
+      const {
+        handshakeId,
+        heartbeatIntervalMs,
+        refreshedReceipts: encodedRefreshed,
+      } = await response.json();
 
       const refreshed =
         Interpreter.evaluateJavaScriptExpression(encodedRefreshed);
@@ -90,6 +94,7 @@ export default class Sse {
       }
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
+      $.heartbeatIntervalMs = heartbeatIntervalMs;
 
       const params = new URLSearchParams({
         instance_id: App.instanceId,

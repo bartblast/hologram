@@ -41,6 +41,7 @@ describe("Sse", () => {
 
   function stubHandshakeResponse({
     handshakeId = "test-handshake-id",
+    heartbeatIntervalMs = 15_000,
     refreshedReceipts = Type.list(),
     ok = true,
     status = 200,
@@ -50,6 +51,7 @@ describe("Sse", () => {
       status,
       json: async () => ({
         handshakeId,
+        heartbeatIntervalMs,
         refreshedReceipts: "encoded-refreshed-receipts",
       }),
     });
@@ -69,6 +71,7 @@ describe("Sse", () => {
     ComponentRegistry.clear();
 
     Sse.eventSource = null;
+    Sse.heartbeatIntervalMs = null;
     Sse.reconnectAttempts = 0;
 
     SubscriptionReceiptRegistry.entries.clear();
@@ -223,6 +226,14 @@ describe("Sse", () => {
       await Sse.connect();
 
       assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
+    });
+
+    it("stores the heartbeat interval the handshake announced", async () => {
+      stubHandshakeResponse({heartbeatIntervalMs: 1_000});
+
+      await Sse.connect();
+
+      assert.strictEqual(Sse.heartbeatIntervalMs, 1_000);
     });
 
     it("does not open an EventSource when the handshake POST returns a non-2xx", async () => {
