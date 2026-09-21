@@ -579,12 +579,16 @@ defmodule HologramFeatureTests.RealtimeTest do
   end
 
   describe "subscriptions across reconnect" do
-    # TODO: remove once Bandit sends RST_STREAM for a killed HTTP/2 stream. The stream is killed
-    # and the client must reconnect, and over h2 on Bandit the browser never learns the stream
-    # ended, so the HTTPS job excludes this tag.
-    @tag :requires_stream_reset
+    # Over HTTP/1.1 the kill closes the socket and the browser reconnects at once. Over HTTP/2
+    # on Bandit the browser learns nothing, and only the client's heartbeat watchdog brings
+    # the reconnect, two intervals after the last heartbeat. 1 s keeps that inside the wait
+    # budget: anything above the heartbeat's local delivery jitter (milliseconds) and well
+    # below the 30 s wait behaves the same.
     feature "restored after SSE reconnect with stored receipts", %{session: session} do
-      session = visit(session, Page1)
+      session =
+        session
+        |> simulate_fast_sse_heartbeat(1_000)
+        |> visit(Page1)
 
       simulate_sse_disconnect(current_instance_id(session))
 
@@ -598,10 +602,6 @@ defmodule HologramFeatureTests.RealtimeTest do
       assert_text(session, css("#received"), "delivered after reconnect")
     end
 
-    # TODO: remove once Bandit sends RST_STREAM for a killed HTTP/2 stream. The stream is killed
-    # and the client must reconnect, and over h2 on Bandit the browser never learns the stream
-    # ended, so the HTTPS job excludes this tag.
-    @tag :requires_stream_reset
     feature "unsubscribe_all on an offline client takes effect on reconnect", %{
       session: session
     } do
@@ -609,7 +609,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       # only @channel_1 while the SSE is dead and assert that on reconnect the
       # @channel_1 receipt is rejected (no binding restored) while the @channel_2
       # receipt validates normally.
-      session = visit(session, Page2)
+      session =
+        session
+        |> simulate_fast_sse_heartbeat(1_000)
+        |> visit(Page2)
 
       instance_id = current_instance_id(session)
       simulate_sse_disconnect(instance_id)
@@ -634,10 +637,6 @@ defmodule HologramFeatureTests.RealtimeTest do
       |> assert_text(css("#received-2"), "delivered")
     end
 
-    # TODO: remove once Bandit sends RST_STREAM for a killed HTTP/2 stream. The stream is killed
-    # and the client must reconnect, and over h2 on Bandit the browser never learns the stream
-    # ended, so the HTTPS job excludes this tag.
-    @tag :requires_stream_reset
     feature "reload fail-safe re-establishes the session when no receipt validates", %{
       session: session
     } do
@@ -648,7 +647,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       # a full page reload - re-mounting under a fresh instance id and
       # re-subscribing from scratch (contrast the offline unsubscribe_all case
       # above, where a surviving channel keeps the in-place reconnect alive).
-      session = visit(session, Page1)
+      session =
+        session
+        |> simulate_fast_sse_heartbeat(1_000)
+        |> visit(Page1)
 
       instance_id = current_instance_id(session)
       simulate_sse_disconnect(instance_id)
