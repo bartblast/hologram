@@ -205,6 +205,58 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "heartbeat_interval_ms/1" do
+    test "returns the default when the seams are not enabled" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.put_req_cookie(heartbeat_interval_cookie(), "1000")
+
+      interval_ms = heartbeat_interval_ms(conn)
+
+      assert is_integer(interval_ms)
+      assert interval_ms > 1000
+    end
+
+    test "returns the cookie value when the seams are enabled" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.put_req_cookie(heartbeat_interval_cookie(), "1000")
+
+      assert heartbeat_interval_ms(conn) == 1000
+    end
+
+    test "returns the default when the seams are enabled and the cookie is absent" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      conn = Plug.Test.conn(:get, "/")
+      interval_ms = heartbeat_interval_ms(conn)
+
+      assert is_integer(interval_ms)
+      assert interval_ms > 1000
+    end
+
+    test "returns the default when the seams are enabled and the cookie is not a positive integer" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.put_req_cookie(heartbeat_interval_cookie(), "0")
+
+      interval_ms = heartbeat_interval_ms(conn)
+
+      assert is_integer(interval_ms)
+      assert interval_ms > 1000
+    end
+  end
+
   describe "prepare/1" do
     test "sets SSE response headers" do
       conn = Plug.Test.conn(:get, "/")
@@ -1415,8 +1467,8 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     test "applies an announce message published before the connection attaches" do
-      Application.put_env(:hologram, :__sse_attach_delay_enabled__, true)
-      on_exit(fn -> Application.delete_env(:hologram, :__sse_attach_delay_enabled__) end)
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
 
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
