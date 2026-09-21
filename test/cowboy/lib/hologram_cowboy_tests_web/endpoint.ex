@@ -26,5 +26,4 @@ defmodule HologramCowboyTestsWeb.Endpoint do
   plug Plug.Session, @session_options
 
   plug Hologram.Router
-  plug HologramCowboyTestsWeb.Router
 end
