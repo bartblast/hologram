@@ -4,10 +4,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
@@ -211,7 +213,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert File.exists?(call_graph_dump_path)
 
     call_graph = CallGraph.start()
-    CallGraph.load(call_graph, call_graph_dump_path)
+    assert CallGraph.load(call_graph, call_graph_dump_path) == :ok
 
     assert CallGraph.has_vertex?(call_graph, Module2)
 
@@ -1652,6 +1654,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       test_call_graph(opts)
+    end
+
+    test "a run whose build dir holds a call graph dump of another version rebuilds the graph", %{
+      opts: opts
+    } do
+      run(opts)
+
+      # A dump as a Hologram from before the dump version wrote it: the bare graph.
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.write!(SerializationUtils.serialize(Digraph.new()))
+
+      Cache.reset()
+
+      run(opts)
+
+      test_call_graph(opts)
+      test_page_bundles(opts)
     end
   end
 

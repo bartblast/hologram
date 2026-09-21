@@ -1362,37 +1362,62 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     refute call_graph_clone == call_graph
     assert get_graph(call_graph_clone) == get_graph(call_graph)
+    assert modules(call_graph_clone) == modules(call_graph)
+    assert Module9 in modules(call_graph_clone)
   end
 
-  test "dump/2", %{empty_call_graph: call_graph} do
-    dump_dir =
-      Path.join([
-        @tmp_dir,
-        "tests",
-        "compiler",
-        "call_graph",
-        "dump_2",
-        "nested_a",
-        "nested_b"
-      ])
+  describe "dump/2" do
+    setup do
+      dump_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "compiler",
+          "call_graph",
+          "dump_2",
+          "nested_a",
+          "nested_b"
+        ])
 
-    clean_dir(dump_dir)
+      clean_dir(dump_dir)
 
-    dump_path = Path.join(dump_dir, Reflection.call_graph_dump_file_name())
+      [dump_path: Path.join(dump_dir, Reflection.call_graph_dump_file_name())]
+    end
 
-    graph =
+    test "writes the graph and its modules, tagged with the dump version", %{
+      dump_path: dump_path,
+      empty_call_graph: call_graph
+    } do
+      graph =
+        call_graph
+        |> add_edge(:vertex_1, :vertex_2)
+        |> get_graph()
+
+      assert dump(call_graph, dump_path) == call_graph
+
+      deserialized_state =
+        dump_path
+        |> File.read!()
+        |> SerializationUtils.deserialize()
+
+      assert deserialized_state == {1, %{graph: graph, modules: MapSet.new()}}
+    end
+
+    test "writes the modules built into the graph", %{
+      dump_path: dump_path,
+      empty_call_graph: call_graph
+    } do
       call_graph
-      |> add_edge(:vertex_1, :vertex_2)
-      |> get_graph()
+      |> build(IR.for_module(Module9))
+      |> dump(dump_path)
 
-    assert dump(call_graph, dump_path) == call_graph
+      {1, %{modules: modules}} =
+        dump_path
+        |> File.read!()
+        |> SerializationUtils.deserialize()
 
-    deserialized_graph =
-      dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize()
-
-    assert deserialized_graph == graph
+      assert modules == MapSet.new([Module9])
+    end
   end
 
   test "edges/1", %{empty_call_graph: call_graph} do
@@ -2347,19 +2372,51 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "load/2", %{empty_call_graph: call_graph} do
-    add_edge(call_graph, :vertex_1, :vertex_2)
+  describe "load/2" do
+    setup do
+      dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "load_2"])
+      clean_dir(dump_dir)
 
-    dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "load_2"])
-    clean_dir(dump_dir)
+      [dump_path: Path.join(dump_dir, Reflection.call_graph_dump_file_name())]
+    end
 
-    dump_path = Path.join(dump_dir, Reflection.call_graph_dump_file_name())
-    dump(call_graph, dump_path)
+    test "loads the graph and the modules of a dump of this version", %{
+      dump_path: dump_path,
+      empty_call_graph: call_graph
+    } do
+      call_graph
+      |> add_edge(:vertex_1, :vertex_2)
+      |> build(IR.for_module(Module9))
+      |> dump(dump_path)
 
-    call_graph_2 = start()
+      call_graph_2 = start()
 
-    assert load(call_graph_2, dump_path) == call_graph_2
-    assert get_graph(call_graph_2) == get_graph(call_graph)
+      assert load(call_graph_2, dump_path) == :ok
+      assert get_graph(call_graph_2) == get_graph(call_graph)
+      assert modules(call_graph_2) == MapSet.new([Module9])
+    end
+
+    test "does not load a dump of another version", %{dump_path: dump_path} do
+      graph = Digraph.add_edge(Digraph.new(), :vertex_1, :vertex_2)
+      state = %{graph: graph, modules: MapSet.new([Module9])}
+      File.write!(dump_path, SerializationUtils.serialize({0, state}))
+
+      call_graph = start()
+
+      assert load(call_graph, dump_path) == :error
+      assert get_graph(call_graph) == Digraph.new()
+      assert modules(call_graph) == MapSet.new()
+    end
+
+    test "does not load a dump written before the dump version existed", %{dump_path: dump_path} do
+      graph = Digraph.add_edge(Digraph.new(), :vertex_1, :vertex_2)
+      File.write!(dump_path, SerializationUtils.serialize(graph))
+
+      call_graph = start()
+
+      assert load(call_graph, dump_path) == :error
+      assert get_graph(call_graph) == Digraph.new()
+    end
   end
 
   test "manually_ported_elixir_mfas/0" do
@@ -2368,34 +2425,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert is_list(result)
     assert {Kernel, :inspect, 1} in result
     assert {String, :upcase, 1} in result
-  end
-
-  describe "maybe_load/2" do
-    setup do
-      dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "maybe_load_2"])
-      clean_dir(dump_dir)
-
-      [dump_path: Path.join(dump_dir, Reflection.call_graph_dump_file_name())]
-    end
-
-    test "dump file exists", %{dump_path: dump_path} do
-      graph = Digraph.add_edge(Digraph.new(), :vertex_1, :vertex_2)
-
-      data = SerializationUtils.serialize(graph)
-      File.write!(dump_path, data)
-
-      call_graph = start()
-
-      assert maybe_load(call_graph, dump_path) == call_graph
-      assert get_graph(call_graph) == graph
-    end
-
-    test "dump file doesn't exist", %{dump_path: dump_path} do
-      call_graph = start()
-
-      assert maybe_load(call_graph, dump_path) == call_graph
-      assert get_graph(call_graph) == Digraph.new()
-    end
   end
 
   test "module_vertices/2", %{empty_call_graph: call_graph} do
@@ -2419,6 +2448,27 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert module_info_plt(start(module_info_plt: module_info_plt)) == module_info_plt
     assert module_info_plt(start()) == nil
+  end
+
+  describe "modules/1" do
+    test "empty at first", %{empty_call_graph: call_graph} do
+      assert modules(call_graph) == MapSet.new()
+    end
+
+    test "lists the modules whose definitions were built", %{empty_call_graph: call_graph} do
+      call_graph
+      |> build(IR.for_module(Module9))
+      |> build(IR.for_module(Module10))
+
+      assert modules(call_graph) == MapSet.new([Module9, Module10])
+    end
+
+    test "leaves out a module only named by a call", %{empty_call_graph: call_graph} do
+      build(call_graph, IR.for_module(Module14))
+
+      assert has_vertex?(call_graph, {Module16, :my_fun_16a, 2})
+      refute Module16 in modules(call_graph)
+    end
   end
 
   describe "patch/3" do
@@ -2633,6 +2683,38 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "forgets a removed module", %{empty_call_graph: call_graph} do
+      call_graph
+      |> build(IR.for_module(Module9))
+      |> build(IR.for_module(Module10))
+
+      diff = %{added_modules: [], removed_modules: [Module9], edited_modules: []}
+      patch(call_graph, PLT.start(), diff)
+
+      assert modules(call_graph) == MapSet.new([Module10])
+    end
+
+    test "keeps an edited module", %{empty_call_graph: call_graph} do
+      module_9_ir = IR.for_module(Module9)
+      ir_plt = PLT.put(PLT.start(), Module9, module_9_ir)
+
+      build(call_graph, module_9_ir)
+
+      diff = %{added_modules: [], removed_modules: [], edited_modules: [Module9]}
+      patch(call_graph, ir_plt, diff)
+
+      assert modules(call_graph) == MapSet.new([Module9])
+    end
+
+    test "records an added module", %{empty_call_graph: call_graph} do
+      ir_plt = PLT.put(PLT.start(), Module9, IR.for_module(Module9))
+
+      diff = %{added_modules: [Module9], removed_modules: [], edited_modules: []}
+      patch(call_graph, ir_plt, diff)
+
+      assert modules(call_graph) == MapSet.new([Module9])
+    end
+
     test "patching again with the same diff gives the same graph", %{empty_call_graph: call_graph} do
       ir_plt =
         PLT.start()
@@ -2760,10 +2842,12 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "put_graph", %{empty_call_graph: call_graph} do
+    build(call_graph, IR.for_module(Module9))
     graph = Digraph.add_edge(Digraph.new(), :vertex_3, :vertex_4)
 
     assert put_graph(call_graph, graph) == call_graph
     assert get_graph(call_graph) == graph
+    assert modules(call_graph) == MapSet.new([Module9])
   end
 
   describe "reachable_mfas/4" do
@@ -3258,17 +3342,27 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   describe "start/1" do
     test "default graph opt" do
-      assert %CallGraph{pid: pid} = start()
+      assert %CallGraph{pid: pid} = call_graph = start()
       assert is_pid(pid)
-      assert Agent.get(pid, & &1) == Digraph.new()
+      assert get_graph(call_graph) == Digraph.new()
     end
 
     test "graph opt specified" do
       graph = Digraph.add_vertex(Digraph.new(), :my_vertex)
 
-      assert %CallGraph{pid: pid} = start(graph: graph)
+      assert %CallGraph{pid: pid} = call_graph = start(graph: graph)
       assert is_pid(pid)
-      assert Agent.get(pid, & &1) == graph
+      assert get_graph(call_graph) == graph
+    end
+
+    test "default modules opt" do
+      assert modules(start()) == MapSet.new()
+    end
+
+    test "modules opt specified" do
+      modules = MapSet.new([Module9])
+
+      assert modules(start(modules: modules)) == modules
     end
 
     test "default module_info_plt opt" do

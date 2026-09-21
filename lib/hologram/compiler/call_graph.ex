@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  # The agent holds the graph and the modules whose definitions were built into it (see modules/1).
   defstruct pid: nil, module_info_plt: nil
 
   @type t :: %CallGraph{pid: pid, module_info_plt: PLT.t() | nil}
@@ -48,6 +49,11 @@ defmodule Hologram.Compiler.CallGraph do
     Reference,
     Tuple
   ]
+
+  # The version of what dump/2 writes. Bump it whenever the shape of the agent's state changes: a
+  # dump of another version is not loaded (see load/2), and the compile starts cold. A dump written
+  # before the version existed holds a bare graph, which counts as version 0.
+  @dump_version 1
 
   # Edges for dynamic dispatch: the caller reads the callee module from data
   # (e.g. a struct's calendar field), so static IR analysis can't see the
@@ -471,7 +477,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_edge(t, vertex, vertex) :: t
   def add_edge(%{pid: pid} = call_graph, from_vertex, to_vertex) do
-    Agent.cast(pid, &Digraph.add_edge(&1, from_vertex, to_vertex))
+    update_graph(pid, &Digraph.add_edge(&1, from_vertex, to_vertex))
     call_graph
   end
 
@@ -481,7 +487,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_edges(t, [edge]) :: t
   def add_edges(%{pid: pid} = call_graph, edges) do
-    Agent.cast(pid, &Digraph.add_edges(&1, edges))
+    update_graph(pid, &Digraph.add_edges(&1, edges))
     call_graph
   end
 
@@ -496,7 +502,7 @@ defmodule Hologram.Compiler.CallGraph do
     client_runtime_edges =
       Enum.flat_map(@edges_used_by_client_runtime, fn {_mechanism, edges} -> edges end)
 
-    Agent.cast(pid, fn graph ->
+    update_graph(pid, fn graph ->
       graph
       |> Digraph.add_edges(client_runtime_edges)
       |> Digraph.add_edges(@dynamic_dispatch_edges)
@@ -511,7 +517,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_vertex(t, vertex) :: t
   def add_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.cast(pid, &Digraph.add_vertex(&1, vertex))
+    update_graph(pid, &Digraph.add_vertex(&1, vertex))
     call_graph
   end
 
@@ -631,6 +637,7 @@ defmodule Hologram.Compiler.CallGraph do
         _from_vertex
       ) do
     call_graph
+    |> put_module(module)
     |> maybe_add_templatable_call_graph_edges(module)
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
@@ -751,31 +758,31 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns a clone of the given call graph.
+  Returns a clone of the given call graph, with its modules.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/clone_1/README.md
   """
   @spec clone(t, T.opts()) :: t
-  def clone(call_graph, opts \\ []) do
-    graph = get_graph(call_graph)
+  def clone(%{pid: pid} = call_graph, opts \\ []) do
+    %{graph: graph, modules: modules} = Agent.get(pid, & &1, :infinity)
 
     opts
     |> Keyword.put(:graph, graph)
+    |> Keyword.put(:modules, modules)
     |> Keyword.put(:module_info_plt, call_graph.module_info_plt)
     |> start()
   end
 
   @doc """
-  Serializes the call graph and writes it to a file.
+  Serializes the call graph, its modules included, and writes it to a file, tagged with the dump
+  version that load/2 checks.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/dump_2/README.md
   """
   @spec dump(t, String.t()) :: t
-  def dump(call_graph, path) do
-    data =
-      call_graph
-      |> get_graph()
-      |> SerializationUtils.serialize()
+  def dump(%{pid: pid} = call_graph, path) do
+    state = Agent.get(pid, & &1, :infinity)
+    data = SerializationUtils.serialize({@dump_version, state})
 
     path
     |> Path.dirname()
@@ -791,7 +798,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec edges(t) :: [edge]
   def edges(%{pid: pid}) do
-    Agent.get(pid, &Digraph.edges/1, :infinity)
+    read_graph(pid, &Digraph.edges/1)
   end
 
   @doc """
@@ -806,7 +813,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec get_graph(t) :: Digraph.t()
   def get_graph(%{pid: pid}) do
-    Agent.get(pid, & &1, :infinity)
+    read_graph(pid, & &1)
   end
 
   @doc """
@@ -814,7 +821,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec has_edge?(t, vertex, vertex) :: boolean
   def has_edge?(%{pid: pid}, from_vertex, to_vertex) do
-    Agent.get(pid, &Digraph.has_edge?(&1, from_vertex, to_vertex), :infinity)
+    read_graph(pid, &Digraph.has_edge?(&1, from_vertex, to_vertex))
   end
 
   @doc """
@@ -822,7 +829,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec has_vertex?(t, vertex) :: boolean
   def has_vertex?(%{pid: pid}, vertex) do
-    Agent.get(pid, &Digraph.has_vertex?(&1, vertex), :infinity)
+    read_graph(pid, &Digraph.has_vertex?(&1, vertex))
   end
 
   @doc """
@@ -1051,16 +1058,22 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Loads the graph from the given dump file.
+  Loads the graph and its modules from the given dump file and returns :ok, or returns :error and
+  leaves the call graph as it is when the dump was written with another dump version (see dump/2),
+  such as one written before the version existed.
   """
-  @spec load(t, String.t()) :: t
-  def load(call_graph, dump_path) do
-    graph =
-      dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize(true)
+  @spec load(t, String.t()) :: :ok | :error
+  def load(%{pid: pid}, dump_path) do
+    case dump_path
+         |> File.read!()
+         |> SerializationUtils.deserialize(true) do
+      {@dump_version, state} ->
+        Agent.cast(pid, fn _state -> state end)
+        :ok
 
-    put_graph(call_graph, graph)
+      _other_version ->
+        :error
+    end
   end
 
   @doc """
@@ -1068,18 +1081,6 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec manually_ported_elixir_mfas :: [mfa]
   def manually_ported_elixir_mfas, do: @manually_ported_elixir_mfas
-
-  @doc """
-  Loads the graph from the given dump file if the file exists.
-  """
-  @spec maybe_load(t, String.t()) :: t
-  def maybe_load(call_graph, dump_path) do
-    if File.exists?(dump_path) do
-      load(call_graph, dump_path)
-    else
-      call_graph
-    end
-  end
 
   @doc """
   Returns the module info PLT the call graph was started with, or nil.
@@ -1099,6 +1100,16 @@ defmodule Hologram.Compiler.CallGraph do
       {^module, _fun, _arity} -> true
       _fallback -> false
     end)
+  end
+
+  @doc """
+  Returns the modules whose definitions were built into the graph (see build/3): the graph holds a
+  vertex per function of each and their calls as edges. A module named only by a call or an alias
+  in another module's function has vertices too, but is not among them.
+  """
+  @spec modules(t) :: MapSet.t(module)
+  def modules(%{pid: pid}) do
+    Agent.get(pid, & &1.modules, :infinity)
   end
 
   @doc """
@@ -1166,11 +1177,11 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Replace the state of underlying Agent process with the given graph.
+  Replaces the graph of the underlying Agent process with the given graph, keeping the modules.
   """
   @spec put_graph(t, Digraph.t()) :: t
   def put_graph(%{pid: pid} = call_graph, graph) do
-    Agent.cast(pid, fn _state -> graph end)
+    update_graph(pid, fn _graph -> graph end)
     call_graph
   end
 
@@ -1237,7 +1248,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_runtime_mfas!(t, [mfa]) :: t
   def remove_runtime_mfas!(%{pid: pid} = call_graph, runtime_mfas) do
-    Agent.cast(
+    update_graph(
       pid,
       fn graph ->
         runtime_mfas_map_set = MapSet.new(runtime_mfas)
@@ -1258,7 +1269,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_vertex(t, vertex) :: t
   def remove_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.cast(pid, &Digraph.remove_vertex(&1, vertex))
+    update_graph(pid, &Digraph.remove_vertex(&1, vertex))
     call_graph
   end
 
@@ -1269,7 +1280,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_vertices(t, [vertex]) :: t
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
-    Agent.cast(pid, &Digraph.remove_vertices(&1, vertices))
+    update_graph(pid, &Digraph.remove_vertices(&1, vertices))
     call_graph
   end
 
@@ -1336,7 +1347,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec sorted_edges(t) :: [edge]
   def sorted_edges(%{pid: pid}) do
-    Agent.get(pid, &Digraph.sorted_edges/1, :infinity)
+    read_graph(pid, &Digraph.sorted_edges/1)
   end
 
   @doc """
@@ -1344,7 +1355,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec sorted_vertices(t) :: [vertex]
   def sorted_vertices(%{pid: pid}) do
-    Agent.get(pid, &Digraph.sorted_vertices/1, :infinity)
+    read_graph(pid, &Digraph.sorted_vertices/1)
   end
 
   @doc """
@@ -1355,24 +1366,25 @@ defmodule Hologram.Compiler.CallGraph do
     * `:graph` - the initial `Digraph` to seed the agent with; defaults to an empty graph.
     * `:module_info_plt` - the module info PLT (see `Hologram.Compiler.build_module_info_plt!/3`)
       the graph answers module questions from; defaults to none, under which every module fact is false.
+    * `:modules` - the modules whose definitions the graph holds (see `modules/1`); defaults to none.
     * `:supervisor` - a `DynamicSupervisor` to start the agent under as a `:temporary` child;
       when omitted the agent is linked to the calling process.
   """
   @spec start(T.opts()) :: t
   def start(opts \\ []) do
-    graph = opts[:graph] || Digraph.new()
+    state = %{graph: opts[:graph] || Digraph.new(), modules: opts[:modules] || MapSet.new()}
     module_info_plt = opts[:module_info_plt]
 
     {:ok, pid} =
       case opts[:supervisor] do
         nil ->
-          Agent.start_link(fn -> graph end)
+          Agent.start_link(fn -> state end)
 
         sup ->
           child_spec = %{
             id: :call_graph,
             restart: :temporary,
-            start: {Agent, :start_link, [fn -> graph end]}
+            start: {Agent, :start_link, [fn -> state end]}
           }
 
           DynamicSupervisor.start_child(sup, child_spec)
@@ -1416,7 +1428,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec vertices(t) :: [vertex]
   def vertices(%{pid: pid}) do
-    Agent.get(pid, &Digraph.vertices/1, :infinity)
+    read_graph(pid, &Digraph.vertices/1)
   end
 
   @doc """
@@ -1434,7 +1446,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     # The put runs in the Agent, so the graph goes from the Agent's heap straight into the
     # shared area, and the caller never holds a copy.
-    Agent.get(pid, &:persistent_term.put(key, &1), :infinity)
+    read_graph(pid, &:persistent_term.put(key, &1))
 
     try do
       fun.(fn -> :persistent_term.get(key) end)
@@ -1672,7 +1684,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp incoming_edges(%{pid: pid}, vertex) do
-    Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
+    read_graph(pid, &Digraph.incoming_edges(&1, vertex))
   end
 
   defp layout_module(page_module, module_info_plt) do
@@ -1859,6 +1871,12 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp protocol_metadata_mfa?(_vertex, _module_infos), do: false
 
+  # Records the module as one whose definition is built into the graph (see modules/1).
+  defp put_module(%{pid: pid} = call_graph, module) do
+    Agent.cast(pid, fn state -> %{state | modules: MapSet.put(state.modules, module)} end)
+    call_graph
+  end
+
   defp put_protocol_dispatch_types(types, vertices, module_info_plt) do
     Enum.reduce(vertices, types, fn
       module, acc when is_atom(module) ->
@@ -1870,6 +1888,11 @@ defmodule Hologram.Compiler.CallGraph do
       _vertex, acc ->
         acc
     end)
+  end
+
+  # Runs the function on the agent's graph inside the agent, so that only its result is copied out.
+  defp read_graph(pid, fun) do
+    Agent.get(pid, &fun.(&1.graph), :infinity)
   end
 
   # When modules that are protocol implementations are added or edited, the protocol
@@ -1917,8 +1940,10 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  defp remove_module_vertices(call_graph, module) do
+  defp remove_module_vertices(%{pid: pid} = call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
+    Agent.cast(pid, fn state -> %{state | modules: MapSet.delete(state.modules, module)} end)
+    call_graph
   end
 
   # Resolves an error_info map key to an atom: an absent key resolves to the
@@ -1969,5 +1994,10 @@ defmodule Hologram.Compiler.CallGraph do
     }
 
     expand_reachable_state(graph, state, entry_vertices, module_info_plt)
+  end
+
+  # Replaces the agent's graph with what the function makes of it, keeping the modules.
+  defp update_graph(pid, fun) do
+    Agent.cast(pid, fn state -> %{state | graph: fun.(state.graph)} end)
   end
 end

@@ -752,18 +752,18 @@ defmodule Mix.Tasks.Compile.Hologram do
 
         # The two dumps are written together at the end of a compile, so a module info dump
         # without a graph dump is not a before picture: diffing against it would report no changes
-        # and leave the empty graph with nothing to patch. Without the graph dump every module
-        # counts as added, so the IR PLT and the graph are built in full.
+        # and leave the empty graph with nothing to patch. Neither is a graph dump of another dump
+        # version, which the graph does not load (see CallGraph.load/2). Without a graph dump
+        # every module counts as added, so the IR PLT and the graph are built in full.
         {module_info_plt, dumped_at} =
-          if File.exists?(call_graph_dump_path) do
-            CallGraph.load(cache.call_graph, call_graph_dump_path)
-
+          with true <- File.exists?(call_graph_dump_path),
+               :ok <- CallGraph.load(cache.call_graph, call_graph_dump_path) do
             {plt, _dump_path, dumped_at} =
               Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
 
             {plt, dumped_at}
           else
-            {PLT.start(supervisor: sup), nil}
+            _no_usable_dump -> {PLT.start(supervisor: sup), nil}
           end
 
         {cache, module_info_plt, dumped_at}
