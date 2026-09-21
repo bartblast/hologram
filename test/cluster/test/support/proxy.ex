@@ -16,8 +16,6 @@ defmodule HologramClusterTests.Proxy do
 
   use GenServer
 
-  @cowboy_ref :hologram_cluster_tests_proxy
-
   @log_table :hologram_cluster_tests_proxy_log
 
   @route_cookie "hologram_cluster_tests_route"
@@ -125,10 +123,20 @@ defmodule HologramClusterTests.Proxy do
     upstreams
   end
 
+  # The listener is linked and exits are trapped, so its death arrives here. The proxy
+  # can't serve without it, so it stops too, and its supervisor restarts both.
+  @impl GenServer
+  def handle_info({:EXIT, listener_pid, reason}, %{listener_pid: listener_pid} = state) do
+    {:stop, reason, %{state | listener_pid: nil}}
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
+
   @impl GenServer
   def init(opts) do
-    # Without trapping exits a supervisor shutdown skips terminate/2, and the HTTP
-    # listener would outlive this server and collide with the next start.
+    # The listener is linked, so it would already die with this server. Exits are
+    # trapped so terminate/2 still runs and stops it synchronously - the next start
+    # binds the same port, and an asynchronous teardown races it.
     Process.flag(:trap_exit, true)
 
     :ets.new(@log_table, [:set, :public, :named_table])
@@ -139,18 +147,17 @@ defmodule HologramClusterTests.Proxy do
 
     proxy_port = Application.fetch_env!(:hologram_cluster_tests, :proxy_port)
 
-    {:ok, _cowboy_pid} =
-      Plug.Cowboy.http(HologramClusterTests.Proxy.Forwarder, [],
-        port: proxy_port,
-        ref: @cowboy_ref
-      )
+    {:ok, listener_pid} =
+      Bandit.start_link(plug: HologramClusterTests.Proxy.Forwarder, port: proxy_port)
 
-    {:ok, %{}}
+    {:ok, %{listener_pid: listener_pid}}
   end
 
   @impl GenServer
-  def terminate(_reason, _state) do
-    Plug.Cowboy.shutdown(@cowboy_ref)
+  def terminate(_reason, %{listener_pid: nil}), do: :ok
+
+  def terminate(_reason, %{listener_pid: listener_pid}) do
+    Supervisor.stop(listener_pid)
   end
 
   defp round_robin(upstreams) do

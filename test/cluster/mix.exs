@@ -20,6 +20,7 @@ defmodule HologramClusterTests.MixProject do
 
   defp deps do
     [
+      {:bandit, "~> 1.5"},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
@@ -28,7 +29,6 @@ defmodule HologramClusterTests.MixProject do
       {:jason, "~> 1.0"},
       {:mint, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
-      {:plug_cowboy, "~> 2.0"},
       {:wallaby, "~> 0.30", only: :test}
     ]
   end
@@ -56,16 +56,6 @@ defmodule HologramClusterTests.MixProject do
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
-      # TODO: drop these entries once a patched cowlib is registered - the audit itself
-      # says when that has happened, printing that an entry no longer matches any
-      # advisory and can be removed.
-      #
-      # cowlib reaches the build only through the Wallaby test-server stack
-      # (plug_cowboy -> cowboy -> cowlib), and no cowlib version is registered as patched
-      # for these three, so even 2.20.0 is still flagged - it ships the cow_link fix, but
-      # the advisory's Hex range has no fixed version. Response splitting is mitigated by
-      # cowboy's CR/LF header validation, and nothing in the stack calls cow_link:link/1.
-      hex: [ignore_advisories: ["EEF-CVE-2026-43966", "EEF-CVE-2026-43969", "EEF-CVE-2026-43971"]],
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       version: "0.1.0"

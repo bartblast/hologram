@@ -579,8 +579,16 @@ defmodule HologramFeatureTests.RealtimeTest do
   end
 
   describe "subscriptions across reconnect" do
+    # Over HTTP/1.1 the kill closes the socket and the browser reconnects at once. Over HTTP/2
+    # on Bandit the browser learns nothing, and only the client's heartbeat watchdog brings
+    # the reconnect, two intervals after the last heartbeat. 1 s keeps that inside the wait
+    # budget: anything above the heartbeat's local delivery jitter (milliseconds) and well
+    # below the 30 s wait behaves the same.
     feature "restored after SSE reconnect with stored receipts", %{session: session} do
-      session = visit(session, Page1)
+      session =
+        session
+        |> simulate_fast_sse_heartbeat(1_000)
+        |> visit(Page1)
 
       simulate_sse_disconnect(current_instance_id(session))
 
@@ -601,7 +609,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       # only @channel_1 while the SSE is dead and assert that on reconnect the
       # @channel_1 receipt is rejected (no binding restored) while the @channel_2
       # receipt validates normally.
-      session = visit(session, Page2)
+      session =
+        session
+        |> simulate_fast_sse_heartbeat(1_000)
+        |> visit(Page2)
 
       instance_id = current_instance_id(session)
       simulate_sse_disconnect(instance_id)
@@ -636,7 +647,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       # a full page reload - re-mounting under a fresh instance id and
       # re-subscribing from scratch (contrast the offline unsubscribe_all case
       # above, where a surviving channel keeps the in-place reconnect alive).
-      session = visit(session, Page1)
+      session =
+        session
+        |> simulate_fast_sse_heartbeat(1_000)
+        |> visit(Page1)
 
       instance_id = current_instance_id(session)
       simulate_sse_disconnect(instance_id)
@@ -653,6 +667,32 @@ defmodule HologramFeatureTests.RealtimeTest do
       Realtime.broadcast_action(@channel_1, :show, message: "delivered after reload")
 
       assert_text(session, css("#received"), "delivered after reload")
+    end
+  end
+
+  describe "subscriptions of a closed tab" do
+    feature "forgotten on the server as soon as the tab closes", %{session: session} do
+      session = visit(session, Page1)
+
+      instance_id = current_instance_id(session)
+      wait_for_connection(instance_id)
+
+      # A second tab keeps the browser up, and over HTTP/2 the connection it shares with
+      # this tab, so closing this tab ends only its own stream. Navigating away instead
+      # would prove nothing: the back/forward cache keeps a left page's stream open.
+      [original_tab] = window_handles(session)
+      execute_script(session, "window.open('/external', '_blank')")
+      [other_tab] = window_handles(session) -- [original_tab]
+
+      session
+      |> focus_window(original_tab)
+      |> close_window()
+      |> focus_window(other_tab)
+
+      # Without a way to notice the tab closing, only the stream's first heartbeat does,
+      # 15 s after the stream attached. 5 s is policy: far above the milliseconds noticing
+      # takes, far below that first heartbeat.
+      wait_for_no_connection(instance_id, 5_000)
     end
   end
 

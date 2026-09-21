@@ -353,6 +353,26 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Shortens the SSE heartbeat for this browser's next stream to `interval_ms`, then
+  returns the `session` so the helper can be piped.
+
+  A stream that dies without closing is only noticed by the client's heartbeat
+  watchdog, two intervals after the last heartbeat. At the production interval that
+  is longer than the wait budget, so a test that kills the stream and waits for the
+  reconnect asks for a shorter one.
+
+  Scoped by cookie, so concurrently running test files are unaffected. Navigates
+  to a blank page first, since a cookie cannot be set before the browser holds a
+  document.
+  """
+  @spec simulate_fast_sse_heartbeat(Wallaby.Session.t(), pos_integer) :: Wallaby.Session.t()
+  def simulate_fast_sse_heartbeat(session, interval_ms) do
+    session
+    |> visit("/external")
+    |> Browser.set_cookie(SSE.heartbeat_interval_cookie(), to_string(interval_ms))
+  end
+
+  @doc """
   Arms a delay on every page bundle this browser fetches from now on, then
   returns the `session` so the helper can be piped.
 
@@ -474,6 +494,54 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until the registry holds a connection for `instance_id`, then returns
+  `instance_id`. Raises if none appears within `@max_wait_time`.
+
+  Scoped to one instance, unlike `wait_for_subscription/5`, which counts every
+  connection holding a channel and so can be satisfied by another tab.
+  """
+  def wait_for_connection(instance_id, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      connection?(instance_id) ->
+        instance_id
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for a connection for instance #{inspect(instance_id)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_connection(instance_id, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until the registry no longer holds a connection for `instance_id`, then
+  returns `instance_id`. Raises if the connection is still there after `max_wait_ms`.
+
+  Takes its own limit rather than `@max_wait_time`, because a test using it asserts
+  how soon the connection goes, not only that it does.
+  """
+  def wait_for_no_connection(instance_id, max_wait_ms, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      !connection?(instance_id) ->
+        instance_id
+
+      current_time() - start_time > max_wait_ms ->
+        raise Wallaby.ExpectationNotMetError,
+              "Connection for instance #{inspect(instance_id)} still registered after #{max_wait_ms} ms"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_no_connection(instance_id, max_wait_ms, start_time)
+    end
+  end
+
+  @doc """
   Blocks until no `SubscriptionRegistry` entry holds a subscription on `channel`,
   then returns the `session` so the helper can be piped. Pass a `cid` to narrow
   the wait to a single `{channel, cid}` binding - needed to gate a single-cid
@@ -565,6 +633,10 @@ defmodule HologramFeatureTests.Helpers do
       {n, count} when n < count -> {:ok, [Enum.at(elements, n)]}
       {_n, _count} -> {:error, {:not_found, elements}}
     end
+  end
+
+  defp connection?(instance_id) do
+    :ets.member(SubscriptionRegistry.ets_table_name(), instance_id)
   end
 
   defp current_time do

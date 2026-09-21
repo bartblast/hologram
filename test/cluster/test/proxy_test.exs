@@ -54,12 +54,9 @@ defmodule HologramClusterTests.ProxyTest do
 
   setup do
     for port <- [@stub_port_1, @stub_port_2] do
-      # Stub listener names form a bounded set (one per stub port), so runtime atom
-      # creation is safe here.
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      ref = :"stub_upstream_#{port}"
-      {:ok, _pid} = Plug.Cowboy.http(StubUpstream, port, port: port, ref: ref)
-      on_exit(fn -> Plug.Cowboy.shutdown(ref) end)
+      start_supervised!({Bandit, plug: {StubUpstream, port}, port: port},
+        id: {:stub_upstream, port}
+      )
     end
 
     start_supervised!({Proxy, upstreams: [@stub_port_1, @stub_port_2]})
