@@ -17,9 +17,9 @@ config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
 #     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
 #     -keyout priv/cert/selfsigned_key.pem -out priv/cert/selfsigned.pem
 #
-# phx.gen.cert encodes the sha256WithRSAEncryption algorithm identifier without the NULL
-# parameters RFC 4055 requires. OpenSSL and curl accept that, Chrome's BoringSSL does
-# not: it answers the certificate with a fatal decode error and every page load fails.
+# phx.gen.cert leaves out the NULL parameters of the public key's rsaEncryption algorithm
+# identifier, which RFC 3279 requires. OpenSSL and curl accept that, Chrome's BoringSSL
+# does not: it rejects the key with a fatal decode error and every page load fails.
 if System.get_env("HOLOGRAM_FEATURE_TESTS_HTTPS") do
   config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
     https: [
