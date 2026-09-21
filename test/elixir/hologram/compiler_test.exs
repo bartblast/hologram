@@ -895,7 +895,7 @@ defmodule Hologram.CompilerTest do
            module_info_plt: module_info_plt,
            runtime_mfas: runtime_mfas
          } do
-      # prune_module_def/2 still asks each rendered protocol module itself, on the protocol path.
+      # prune_module_def/3 still asks each rendered protocol module itself, on the protocol path.
       rendered_protocols =
         runtime_mfas
         |> Enum.map(fn {module, _function, _arity} -> module end)
@@ -3190,7 +3190,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "prune_module_def/2" do
+  test "prune_module_def/3" do
     module_def_ir = IR.for_module(Module8)
 
     module_def_ir_fixture = %{
@@ -3202,12 +3202,14 @@ defmodule Hologram.CompilerTest do
         }
     }
 
-    reachable_mfas = [
+    module_mfas = [
       {Module8, :fun_2, 2},
       {Module8, :fun_3, 1}
     ]
 
-    assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
+    pruned = prune_module_def(module_def_ir_fixture, module_mfas, MapSet.new([Module8]))
+
+    assert pruned == %IR.ModuleDefinition{
              module: %IR.AtomType{value: Module8},
              body: %IR.Block{
                expressions: [
@@ -3266,22 +3268,20 @@ defmodule Hologram.CompilerTest do
            }
   end
 
-  test "prune_module_def/2 prunes protocol dispatcher clauses to included implementations" do
-    reachable_mfas = [
+  test "prune_module_def/3 prunes protocol dispatcher clauses to included implementations" do
+    module_mfas = [
       {String.Chars, :impl_for, 1},
       {String.Chars, :impl_for!, 1},
       {String.Chars, :struct_impl_for, 1},
-      {String.Chars, :to_string, 1},
-      {String.Chars.Atom, :__impl__, 1},
-      {String.Chars.Atom, :to_string, 1},
-      {String.Chars.URI, :__impl__, 1},
-      {String.Chars.URI, :to_string, 1}
+      {String.Chars, :to_string, 1}
     ]
+
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom, String.Chars.URI])
 
     js =
       String.Chars
       |> IR.for_module()
-      |> prune_module_def(reachable_mfas)
+      |> prune_module_def(module_mfas, reachable_modules)
       |> Encoder.encode_ir(%Context{module: String.Chars, async_mfas: MapSet.new()})
 
     assert String.contains?(
