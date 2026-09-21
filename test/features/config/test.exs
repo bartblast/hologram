@@ -35,9 +35,11 @@ end
 
 config :logger, level: :warning
 
-# Lets a feature test hold the SSE attach open via cookie, so a boot-time command can
-# reach the server before the connection exists. Never enabled outside the test env.
-config :hologram, :__sse_attach_delay_enabled__, true
+# Lets a feature test drive the SSE stream's test seams via cookies: hold the attach open,
+# so a boot-time command can reach the server before the connection exists, and shorten
+# the heartbeat, so a silent stream's reconnect fits the wait budget. Never enabled
+# outside the test env.
+config :hologram, :__sse_test_seams_enabled__, true
 
 config :wallaby,
   chromedriver: [
