@@ -189,6 +189,12 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_heartbeat_envelope/0" do
+    test "builds a heartbeat event with an empty data line" do
+      assert encode_heartbeat_envelope() == "event: heartbeat\ndata:\n\n"
+    end
+  end
+
   describe "encode_refresh_sub_receipts_envelope/2" do
     test "wraps the receipts list in a refresh_sub_receipts SSE event envelope" do
       receipts = [{:notifications, "c1", "token-a"}]
@@ -768,13 +774,13 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "process_message/4 on :heartbeat" do
-    test "writes an SSE comment line" do
+    test "writes a heartbeat event" do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      assert updated_conn.resp_body == ":\n\n"
+      assert updated_conn.resp_body == "event: heartbeat\ndata:\n\n"
     end
 
     test "schedules the next heartbeat after handling one" do

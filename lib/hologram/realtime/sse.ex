@@ -75,6 +75,15 @@ defmodule Hologram.Realtime.SSE do
   end
 
   @doc """
+  Builds the SSE event-stream chunk for a `heartbeat` event: an `event:` line and
+  an empty `data:` line. The data line is what makes browsers dispatch the event -
+  the SSE parser discards an event with no data, and never surfaces a comment to
+  JavaScript at all.
+  """
+  @spec encode_heartbeat_envelope() :: String.t()
+  def encode_heartbeat_envelope, do: "event: heartbeat\ndata:\n\n"
+
+  @doc """
   Builds the SSE event-stream chunk for a `refresh_sub_receipts` event: the
   standard `event:`/`id:`/`data:` framing with the given id and the encoded
   list of `{channel, cid, token}` triples as the data payload.
@@ -198,7 +207,7 @@ defmodule Hologram.Realtime.SSE do
         drop_keys_and_emit(conn, instance_id, keys)
 
       :heartbeat ->
-        case Plug.Conn.chunk(conn, ":\n\n") do
+        case Plug.Conn.chunk(conn, encode_heartbeat_envelope()) do
           {:ok, conn} ->
             schedule_heartbeat(heartbeat_interval_ms)
             {:cont, conn}
@@ -269,8 +278,9 @@ defmodule Hologram.Realtime.SSE do
 
   ## Options
 
-    * `:heartbeat_interval_ms` - milliseconds between proxy-keep-alive comment
-      writes. Defaults to `15_000`.
+    * `:heartbeat_interval_ms` - milliseconds between heartbeat events. A proxy
+      keep-alive on the server side, and the client's proof that the stream is
+      alive. Defaults to `15_000`.
   """
   @spec stream(Plug.Conn.t(), keyword) :: Plug.Conn.t()
   def stream(conn, opts \\ []) do
