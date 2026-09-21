@@ -6,9 +6,20 @@ config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
 
 # HOLOGRAM_FEATURE_TESTS_HTTPS serves the same app over TLS, where Chrome negotiates
 # HTTP/2 - Bandit offers it over TLS by default. Tests touching the SSE stream then run
-# against Bandit's other protocol, whose stream lifecycle is unlike HTTP/1.1's. The cert
-# is a test-only self-signed pair. Endpoint.url/0 follows the listener, and Wallaby
-# follows Endpoint.url/0, so nothing else changes.
+# against Bandit's other protocol, whose stream lifecycle is unlike HTTP/1.1's.
+# Endpoint.url/0 follows the listener, and Wallaby follows Endpoint.url/0, so nothing
+# else changes.
+#
+# The cert is a test-only self-signed pair made with OpenSSL, not `mix phx.gen.cert`:
+#
+#   openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
+#     -subj "/O=Hologram feature tests/CN=localhost" \
+#     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+#     -keyout priv/cert/selfsigned_key.pem -out priv/cert/selfsigned.pem
+#
+# phx.gen.cert encodes the sha256WithRSAEncryption algorithm identifier without the NULL
+# parameters RFC 4055 requires. OpenSSL and curl accept that, Chrome's BoringSSL does
+# not: it answers the certificate with a fatal decode error and every page load fails.
 if System.get_env("HOLOGRAM_FEATURE_TESTS_HTTPS") do
   config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
     https: [
