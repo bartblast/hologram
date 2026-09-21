@@ -256,6 +256,16 @@ defmodule Hologram.Realtime.SSE do
         Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
         {:cont, conn}
 
+      # Under Bandit over HTTP/1.1 the pump watches its own socket (see watch_socket/1), so
+      # a closed tab arrives here rather than waiting for a heartbeat write to fail.
+      {closed, _socket} when closed in [:ssl_closed, :tcp_closed] ->
+        {:halt, conn}
+
+      # Anything else from the socket ends the stream too. An SSE client sends nothing once
+      # the stream is open, so bytes or an error here mean the connection is no longer one.
+      {event, _socket, _payload} when event in [:ssl, :ssl_error, :tcp, :tcp_error] ->
+        {:halt, conn}
+
       _msg ->
         {:cont, conn}
     end
@@ -310,6 +320,7 @@ defmodule Hologram.Realtime.SSE do
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
         |> prepare()
+        |> watch_socket()
         |> message_pump(session_id, user_id, message_pump_opts)
 
       :error ->
@@ -456,6 +467,34 @@ defmodule Hologram.Realtime.SSE do
 
     conn
   end
+
+  # Public so tests can arm a socket without entering the blocking message-pump loop.
+  #
+  # Bandit runs the plug in the process that owns the connection and reads nothing from the
+  # socket while it runs, so over HTTP/1.1 a closed tab goes unnoticed until a heartbeat
+  # write fails. Asking for the socket's next event makes the close arrive in the pump's
+  # mailbox instead. Matched by shape because Hologram doesn't depend on Bandit - any other
+  # adapter or protocol falls through untouched, and so would a Bandit that reshapes these
+  # internals, back to noticing through the heartbeat.
+  @doc false
+  @spec watch_socket(Plug.Conn.t()) :: Plug.Conn.t()
+  def watch_socket(
+        %Plug.Conn{
+          adapter:
+            {Bandit.Adapter,
+             %{
+               transport: %{
+                 __struct__: Bandit.HTTP1.Socket,
+                 socket: %{socket: raw_socket, transport_module: transport_module}
+               }
+             }}
+        } = conn
+      ) do
+    transport_module.setopts(raw_socket, active: :once)
+    conn
+  end
+
+  def watch_socket(conn), do: conn
 
   defp claimed_identity(conn) do
     {

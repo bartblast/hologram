@@ -1044,6 +1044,24 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:tcp, ...}" do
+    test "halts" do
+      conn = prepared_test_conn()
+      send(self(), {:tcp, :dummy_socket, "stray bytes"})
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil)
+    end
+  end
+
+  describe "process_message/4 on {:tcp_closed, ...}" do
+    test "halts" do
+      conn = prepared_test_conn()
+      send(self(), {:tcp_closed, :dummy_socket})
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil)
+    end
+  end
+
   describe "process_message/4 on {:unsub, ...}" do
     test "unsubscribes from the channel's PubSub topic" do
       conn = prepared_test_conn()
@@ -1612,6 +1630,38 @@ defmodule Hologram.Realtime.SSETest do
       refute_receive :hi_instance
       refute_receive :hi_session
       refute_receive :hi_user
+    end
+  end
+
+  describe "watch_socket/1" do
+    test "arms the socket of a Bandit HTTP/1 connection, so a client close reaches the pump" do
+      {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, ip: {127, 0, 0, 1}])
+      {:ok, port} = :inet.port(listen_socket)
+      {:ok, client_socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false])
+      {:ok, server_socket} = :gen_tcp.accept(listen_socket)
+
+      adapter_state = %{
+        transport: %{
+          __struct__: Bandit.HTTP1.Socket,
+          socket: %{socket: server_socket, transport_module: :inet}
+        }
+      }
+
+      conn = %Plug.Conn{adapter: {Bandit.Adapter, adapter_state}}
+
+      assert watch_socket(conn) == conn
+
+      :ok = :gen_tcp.close(client_socket)
+
+      assert_receive {:tcp_closed, ^server_socket}, 1_000
+
+      :gen_tcp.close(listen_socket)
+    end
+
+    test "leaves any other connection untouched" do
+      conn = Plug.Test.conn(:get, "/")
+
+      assert watch_socket(conn) == conn
     end
   end
 end
