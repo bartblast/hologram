@@ -131,6 +131,11 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  # No `connection` header: HTTP/2 forbids connection-specific header fields and treats a
+  # response carrying one as malformed, which WebKit enforces by dropping the stream. The
+  # header buys nothing where it is legal either, since HTTP/1.1 keeps connections alive by
+  # default and the adapter writes the header itself when a version needs it spelled out.
+  #
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
   @doc false
@@ -138,7 +143,6 @@ defmodule Hologram.Realtime.SSE do
   def prepare(conn) do
     conn
     |> Plug.Conn.put_resp_header("cache-control", "no-cache")
-    |> Plug.Conn.put_resp_header("connection", "keep-alive")
     |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
     |> Plug.Conn.send_chunked(200)
   end
