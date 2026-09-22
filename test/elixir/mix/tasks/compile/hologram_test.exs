@@ -600,7 +600,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       full_scan_mfa = {Compiler, :build_module_info_plt!, 3}
-      warm_scan_mfa = {Compiler, :update_module_info_plt!, 5}
+      warm_scan_mfa = {Compiler, :patch_module_info_plt!, 5}
 
       Enum.each([full_scan_mfa, warm_scan_mfa], &:erlang.trace_pattern(&1, true, [:call_count]))
 
@@ -733,8 +733,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       num_editable_protocols =
         Enum.count(editable_modules, fn module -> module_infos[module].protocol? end)
 
-      # The function a beam is checked through, which is private, so its local calls are counted.
-      mfa = {Compiler, :put_module_info_plt_entry!, 5}
+      # The function a beam is checked against its entry through, which is private, so its local
+      # calls are counted.
+      mfa = {Compiler, :reusable_module_info, 4}
       :erlang.trace_pattern(mfa, true, [:local, :call_count])
 
       try do
@@ -1880,6 +1881,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # The IR prune reads the IR PLT's keys and forget_removed_pages/2 the page states'; the encode
     # PLT's keys are not read, since the IR prune drops nothing and no module was removed.
+    # One copy is left, the page digest PLT's, which PLT.dump/2 reads out to write it. The module
+    # infos are neither copied into a PLT of the compile's nor out of one, for the diff or the cache.
+    test "a run with no changes copies no module info", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({PLT, :get_all, 1}, fn -> run(opts) end) == 1
+    end
+
     test "a run with no changes reads no key of the encode PLT", %{opts: opts} do
       run(opts)
 

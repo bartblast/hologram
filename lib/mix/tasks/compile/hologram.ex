@@ -140,7 +140,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # can rewrite, are the before picture. The IR PLT holds the IR this compile reads, no more:
       # the modules the graph patch rebuilds first, then the ones the walk reaches, then the rest
       # once the graph says what is reachable.
-      {cache, old_module_info_plt, module_info_dumped_at, kept_module_infos} =
+      {cache, old_module_info_plt, module_info_dumped_at} =
         load_before_state(build_dir, call_graph_dump_path, sup)
 
       # Listed with the scan, so that the modules kept as editable and the module infos kept with
@@ -154,18 +154,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Map.new()
         |> Tracer.take()
 
-      new_module_info_plt =
+      {new_module_info_plt, module_digests_diff, infos_changed?} =
         build_module_info_plt(
-          cache.editable_modules,
+          cache,
           old_module_info_plt,
           module_info_dumped_at,
           editable_beams,
           compiled_modules,
           sup
         )
-
-      module_digests_diff =
-        Compiler.diff_module_info_plts(old_module_info_plt, new_module_info_plt)
 
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
@@ -376,12 +373,10 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{"runtime", runtime_entry_file_path, "runtime"}]
         end
 
-      module_infos = PLT.get_all(new_module_info_plt)
-
-      dump_before_picture(cache, module_infos, call_graph, new_module_info_plt,
+      dump_before_picture(cache, call_graph, new_module_info_plt,
         call_graph_dump_path: call_graph_dump_path,
         graph_unchanged?: graph_unchanged?,
-        kept_module_infos: kept_module_infos,
+        infos_changed?: infos_changed?,
         module_info_plt_dump_path: module_info_plt_dump_path
       )
 
@@ -392,10 +387,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       # that a compile that fails there leaves this picture, and the next compile rebuilds the pages
       # it left pending.
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-
-      cache.module_info_plt
-      |> PLT.reset()
-      |> PLT.put(Map.to_list(module_infos))
 
       Cache.put_module_infos(module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
@@ -512,26 +503,44 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # A cold compile reads every module against the dump; a warm one reads the modules the compiler
-  # reported among the beams a save can rewrite, and copies the rest of the kept entries (see
-  # Hologram.Compiler.update_module_info_plt!/5). The cache holds the editable modules only between
-  # two finished compiles, so nil means cold.
-  defp build_module_info_plt(nil, old_plt, dumped_at, _editable_beams, _compiled_modules, sup) do
-    Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
-  end
-
+  # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
+  # whether any entry changed. A cold compile reads every module against the dump, diffs the two
+  # PLTs and copies the result into the cache's PLT, once. A warm one brings the cache's PLT in line
+  # in place, reading the modules the compiler reported among the beams a save can rewrite, and
+  # takes the diff from that scan (see Hologram.Compiler.patch_module_info_plt!/5). The cache holds
+  # the editable modules only between two finished compiles, so nil means cold.
   defp build_module_info_plt(
-         editable_modules,
+         %{editable_modules: nil} = cache,
          old_plt,
          dumped_at,
-         editable_beams,
-         compiled_modules,
+         _editable_beams,
+         _compiled_modules,
          sup
        ) do
-    Compiler.update_module_info_plt!(old_plt, dumped_at, editable_modules, editable_beams,
-      compiled_modules: compiled_modules,
-      supervisor: sup
-    )
+    new_plt = Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
+    module_digests_diff = Compiler.diff_module_info_plts(old_plt, new_plt)
+
+    new_items =
+      new_plt
+      |> PLT.get_all()
+      |> Map.to_list()
+
+    PLT.put(cache.module_info_plt, new_items)
+
+    {cache.module_info_plt, module_digests_diff, true}
+  end
+
+  defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
+    {module_digests_diff, infos_changed?} =
+      Compiler.patch_module_info_plt!(
+        cache.module_info_plt,
+        dumped_at,
+        cache.editable_modules,
+        editable_beams,
+        compiled_modules
+      )
+
+    {cache.module_info_plt, module_digests_diff, infos_changed?}
   end
 
   # Built once per VM when client stack traces are on, then patched with each compile's diff. Nothing
@@ -635,18 +644,18 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The call graph and the module infos are the before picture of the next VM's first compile (see
   # load_before_state/3). While both dumps on disk are the ones this VM wrote (the module info dump's
   # mtime is the kept one), the graph dump describes this graph when the graph is unchanged, and the
-  # module info dump these infos when they equal the kept ones; each is written only when it would
+  # module info dump these infos when the scan changed no entry; each is written only when it would
   # say something else. The graph changes only with the infos, so a graph dump is never written
   # without the module info dump. Another VM's dump written meanwhile (the mtime moved), or a deleted
   # graph dump, is written over. The first compile in a VM has no dump time kept, so it writes both.
-  defp dump_before_picture(cache, module_infos, call_graph, module_info_plt, opts) do
+  defp dump_before_picture(cache, call_graph, module_info_plt, opts) do
     own_dumps? = own_dumps?(cache, opts[:module_info_plt_dump_path])
 
     if not (opts[:graph_unchanged?] and own_dumps? and File.exists?(opts[:call_graph_dump_path])) do
       CallGraph.dump(call_graph, opts[:call_graph_dump_path])
     end
 
-    if not (module_infos == opts[:kept_module_infos] and own_dumps?) do
+    if opts[:infos_changed?] or not own_dumps? do
       PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
     end
   end
@@ -905,8 +914,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.list_runtime_mfas(call_graph, page_modules)
   end
 
-  # Returns the cache, the module info PLT to diff against, the dump time the module info reuse guard
-  # takes, and the kept module infos (nil without them), which the dumps are compared against. The
+  # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which
+  # the scan brings in line in place) and the dump time the module info reuse guard takes. The
   # kept module infos are the proof that the kept IR PLT and call graph are exactly in line with
   # them, whatever another VM wrote to the build dir since, and they are trusted only between two
   # finished compiles (the cache keeps the editable modules then). Without them (the first compile
@@ -936,19 +945,16 @@ defmodule Mix.Tasks.Compile.Hologram do
             _no_usable_dump -> {PLT.start(supervisor: sup), nil}
           end
 
-        {cache, module_info_plt, dumped_at, nil}
+        {cache, module_info_plt, dumped_at}
 
       cache ->
-        kept_module_infos = PLT.get_all(cache.module_info_plt)
-        module_info_plt = PLT.start(items: Map.to_list(kept_module_infos), supervisor: sup)
-
         # Cleared before anything is patched in place: a compile that dies mid-patch can leave the
-        # kept graph without edges that only its callers would rebuild, so the next compile must
-        # start from the dumps rather than from a half-patched graph. The infos are put back last,
-        # after the dumps.
+        # kept graph without edges that only its callers would rebuild, and the kept infos half
+        # scanned, so the next compile must start from the dumps rather than from a half-patched
+        # graph. The infos are marked as kept again last, after the dumps.
         :ok = Cache.clear_module_infos()
 
-        {cache, module_info_plt, cache.dumped_at, kept_module_infos}
+        {cache, cache.module_info_plt, cache.dumped_at}
     end
   end
 
