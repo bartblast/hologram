@@ -1756,17 +1756,67 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_edit(Module1)
       run(opts)
 
-      %{ir_plt: ir_plt, module_infos: module_infos, template_modules: template_modules} =
-        Cache.get()
+      %{module_infos: module_infos, template_modules: template_modules} = Cache.get()
 
       module_info_plt = PLT.start(items: Map.to_list(module_infos))
 
       templatable_modules =
         Compiler.list_pages(module_info_plt) ++ Compiler.list_components(module_info_plt)
 
+      # The kept IR PLT holds no IR of a component no page reaches, so the full validation builds
+      # its own.
+      ir_plt = PLT.start()
+      Compiler.build_missing_ir!(ir_plt, templatable_modules)
+
       assert template_modules == Compiler.validate_prop_usages(templatable_modules, ir_plt)
 
+      PLT.stop(ir_plt)
       PLT.stop(module_info_plt)
+    end
+
+    test "keeps no IR of a component no page reaches", %{opts: opts} do
+      run(opts)
+
+      %{ir_plt: ir_plt, pages_plt: pages_plt, runtime: runtime, module_infos: module_infos} =
+        Cache.get()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+      components = Compiler.list_components(module_info_plt)
+      PLT.stop(module_info_plt)
+
+      reached_modules =
+        pages_plt
+        |> PLT.get_all()
+        |> Enum.reduce(MapSet.new(), fn {_page_module, page_state}, acc ->
+          MapSet.union(acc, page_state.modules)
+        end)
+        |> MapSet.union(MapSet.new(runtime.mfas, fn {module, _function, _arity} -> module end))
+
+      unreached_components = Enum.reject(components, &MapSet.member?(reached_modules, &1))
+      # The test build compiles every fixture component, and most are rendered by no page.
+      assert unreached_components != []
+      refute Enum.any?(unreached_components, &PLT.member?(ir_plt, &1))
+    end
+
+    test "an edit of a component a page reaches keeps its IR", %{opts: opts} do
+      run(opts)
+
+      %{editable_modules: editable_modules, pages_plt: pages_plt, module_infos: module_infos} =
+        Cache.get()
+
+      component_module =
+        pages_plt
+        |> PLT.get_all()
+        |> Enum.flat_map(fn {_page_module, page_state} -> MapSet.to_list(page_state.modules) end)
+        |> Enum.find(fn module ->
+          MapSet.member?(editable_modules, module) and
+            match?(%{component?: true}, module_infos[module])
+        end)
+
+      fake_edit(component_module)
+      run(opts)
+
+      assert PLT.member?(Cache.get().ir_plt, component_module)
     end
 
     test "a run after a reset starts from the build dir", %{opts: opts} do

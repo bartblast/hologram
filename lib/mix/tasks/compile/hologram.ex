@@ -303,20 +303,16 @@ defmodule Mix.Tasks.Compile.Hologram do
             {page_module, page_state_modules(mfas)}
           end)
 
-      # What an earlier compile kept that no page, the runtime or a templatable reaches any more is
-      # dropped first, encodings included. A page rebuilt reads mostly what its old state names, and
-      # the IR it reads for the first time is built with its batch. The IR of a page with no state is
-      # kept too: on a build into an empty build dir the diff has just built the IR of every module,
-      # which pruning it would only have the pages build again. A kept page renders no entry file
-      # this time, but its IR stays, so that a later compile that does rebuild it finds the IR it
-      # reads.
+      # What an earlier compile kept that no page or the runtime reaches any more is dropped first,
+      # encodings included. A component no page reaches keeps no IR: the prop usage validation builds
+      # it when it checks the component (see validate_prop_usages/4). A page rebuilt reads mostly what
+      # its old state names, and the IR it reads for the first time is built with its batch. The IR of
+      # a page with no state is kept too: on a build into an empty build dir the diff has just built
+      # the IR of every module, which pruning it would only have the pages build again. A kept page
+      # renders no entry file this time, but its IR stays, so that a later compile that does rebuild
+      # it finds the IR it reads.
       kept_modules =
-        Compiler.list_kept_modules(
-          runtime_mfas,
-          modules_by_page,
-          templatable_modules,
-          new_module_info_plt
-        )
+        Compiler.list_kept_modules(runtime_mfas, modules_by_page, new_module_info_plt)
 
       Compiler.prune_ir_plt(ir_plt, kept_modules)
 

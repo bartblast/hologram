@@ -2355,25 +2355,19 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_kept_modules/4" do
+  describe "list_kept_modules/3" do
     setup do
       [module_info_plt: small_module_info_plt()]
     end
 
     test "lists the modules of the runtime MFAs", %{module_info_plt: module_info_plt} do
-      modules = list_kept_modules([{Module1, :fun_1, 0}], [], [], module_info_plt)
+      modules = list_kept_modules([{Module1, :fun_1, 0}], [], module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
     end
 
     test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
-      assert list_kept_modules([], [], [], module_info_plt) == [Hologram.JS]
-    end
-
-    test "lists the templatables", %{module_info_plt: module_info_plt} do
-      modules = list_kept_modules([], [], [Module11, Module12], module_info_plt)
-
-      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module11, Module12])
+      assert list_kept_modules([], [], module_info_plt) == [Hologram.JS]
     end
 
     test "lists the modules the pages reach", %{module_info_plt: module_info_plt} do
@@ -2382,7 +2376,7 @@ defmodule Hologram.CompilerTest do
         {Module12, MapSet.new([Module2, Module3])}
       ]
 
-      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+      modules = list_kept_modules([], modules_by_page, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1, Module2, Module3])
     end
@@ -2392,7 +2386,7 @@ defmodule Hologram.CompilerTest do
     } do
       modules_by_page = [{Module11, MapSet.new([Module1, Module4, :lists])}]
 
-      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+      modules = list_kept_modules([], modules_by_page, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
     end
@@ -2400,8 +2394,7 @@ defmodule Hologram.CompilerTest do
     test "lists each module once", %{module_info_plt: module_info_plt} do
       modules_by_page = [{Module11, MapSet.new([Module1])}]
 
-      modules =
-        list_kept_modules([{Module1, :fun_1, 0}], modules_by_page, [Module1], module_info_plt)
+      modules = list_kept_modules([{Module1, :fun_1, 0}], modules_by_page, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
     end

@@ -846,13 +846,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists the modules whose IR and function encodings a compile keeps: the modules the runtime entry file
-  reads (see `list_ir_modules/2`), the modules each page reaches, and the templatables (whose templates the
-  prop usage validation reads), each once. A page's modules are given as the `MapSet` of the modules of its
-  reachable MFAs, as a page state keeps it. Only the modules the module info PLT holds are listed, since
-  the IR PLT is built for those alone.
+  reads (see `list_ir_modules/2`) and the modules each page reaches, each once. A page's modules are
+  given as the `MapSet` of the modules of its reachable MFAs, as a page state keeps it, so they include
+  the page itself: every page is kept, and a component no page reaches is not. Only the modules the
+  module info PLT holds are listed, since the IR PLT is built for those alone.
   """
-  @spec list_kept_modules([mfa], [{module, MapSet.t(module)}], [module], PLT.t()) :: [module]
-  def list_kept_modules(runtime_mfas, modules_by_page, templatable_modules, module_info_plt) do
+  @spec list_kept_modules([mfa], [{module, MapSet.t(module)}], PLT.t()) :: [module]
+  def list_kept_modules(runtime_mfas, modules_by_page, module_info_plt) do
     page_reached_modules =
       modules_by_page
       |> Enum.reduce(MapSet.new(), fn {_page_module, modules}, acc ->
@@ -863,7 +863,6 @@ defmodule Hologram.Compiler do
     runtime_mfas
     |> list_ir_modules(module_info_plt)
     |> Enum.concat(page_reached_modules)
-    |> Enum.concat(templatable_modules)
     |> Enum.uniq()
   end
 
