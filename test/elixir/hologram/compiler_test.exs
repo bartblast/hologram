@@ -3178,6 +3178,253 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "patch_module_info_plt!/5" do
+    setup do
+      [empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []}]
+    end
+
+    test "leaves the entry of a module the compiler did not report", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Hologram.Reflection)
+
+      # Its mtime moved, so a check of the beam would read it.
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {empty_diff, false}
+      assert PLT.get!(plt, Hologram.Reflection) == old_info
+    end
+
+    test "reads a compiled module and reports an edit when its digest moved", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Hologram.Reflection)
+
+      plt =
+        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | digest: 1})
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reports no change for a compiled module whose beam reads as its entry", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Hologram.Reflection)
+      plt = PLT.put(PLT.start(), Hologram.Reflection, Reflection.beam_info(beam_path))
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert result == {empty_diff, false}
+    end
+
+    test "reports a change but no edit when only the mtime moved", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Hologram.Reflection)
+
+      plt =
+        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | mtime: 0})
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert result == {empty_diff, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "adds a beam that has no entry", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Hologram.Reflection)
+      plt = PLT.start()
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new(),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {%{empty_diff | added_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "removes an editable module whose beam is gone", %{empty_diff: empty_diff} do
+      plt = PLT.put(PLT.start(), :removed_module, %{digest: "removed"})
+
+      result = patch_module_info_plt!(plt, nil, MapSet.new([:removed_module]), [], MapSet.new())
+
+      assert result == {%{empty_diff | removed_modules: [:removed_module]}, true}
+      assert PLT.get(plt, :removed_module) == :error
+    end
+
+    test "checks a module that left the listing while the VM still has its beam", %{
+      empty_diff: empty_diff
+    } do
+      # A consolidated protocol whose directory is off the code path for a moment is listed nowhere,
+      # yet the VM loads it from another beam.
+      beam_path = :code.which(Hologram.Reflection)
+
+      plt =
+        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | digest: 1})
+
+      result =
+        patch_module_info_plt!(plt, nil, MapSet.new([Hologram.Reflection]), [], MapSet.new())
+
+      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "removes a module that left the listing when the path the VM names has no file", %{
+      empty_diff: empty_diff
+    } do
+      module = Hologram.Test.Fixtures.Compiler.PatchModuleInfoPlt.InMemoryModule
+      Code.compile_string("defmodule #{inspect(module)} do end")
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      # A module compiled in memory: the VM names an empty path for it.
+      assert :code.which(module) == []
+
+      plt = PLT.put(PLT.start(), module, %{digest: 1})
+
+      result = patch_module_info_plt!(plt, nil, MapSet.new([module]), [], MapSet.new())
+
+      assert result == {%{empty_diff | removed_modules: [module]}, true}
+      assert PLT.get(plt, module) == :error
+    end
+
+    test "checks the beam of a protocol the compiler did not report", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Enumerable)
+
+      plt =
+        PLT.put(PLT.start(), Enumerable, %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0})
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Enumerable]),
+          [{Enumerable, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {%{empty_diff | edited_modules: [Enumerable]}, true}
+      assert PLT.get!(plt, Enumerable) == Reflection.beam_info(beam_path)
+    end
+
+    test "reuses the entry of a protocol whose beam is untouched and older than the dump", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Enumerable)
+      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
+      plt = PLT.put(PLT.start(), Enumerable, old_info)
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          mtime + 1,
+          MapSet.new([Enumerable]),
+          [{Enumerable, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {empty_diff, false}
+      assert PLT.get!(plt, Enumerable) == old_info
+    end
+
+    test "leaves the same entries as the scan into a new PLT and finds the same diff" do
+      reflection_path = :code.which(Hologram.Reflection)
+      compiler_path = :code.which(Hologram.Compiler)
+      enumerable_path = :code.which(Enumerable)
+
+      old_plt =
+        PLT.put(PLT.start(), [
+          # Not editable.
+          {Enum, %{digest: "kept"}},
+          # Editable, not reported, mtime moved: left as it is.
+          {Hologram.Reflection, %{Reflection.beam_info(reflection_path) | digest: 1, mtime: 0}},
+          # Reported: read again.
+          {Hologram.Compiler, %{Reflection.beam_info(compiler_path) | digest: 1}},
+          # A protocol not reported, mtime moved: read again.
+          {Enumerable, %{Reflection.beam_info(enumerable_path) | digest: 1, mtime: 0}},
+          # Editable, no beam: removed.
+          {:removed_module, %{digest: "removed"}}
+        ])
+
+      editable_modules =
+        MapSet.new([Hologram.Reflection, Hologram.Compiler, Enumerable, :removed_module])
+
+      editable_beams = [
+        {Hologram.Reflection, reflection_path},
+        {Hologram.Compiler, compiler_path},
+        {Enumerable, enumerable_path},
+        # No entry: added.
+        {Hologram.Commons.PLT, :code.which(Hologram.Commons.PLT)}
+      ]
+
+      compiled_modules = MapSet.new([Hologram.Compiler])
+
+      new_plt =
+        update_module_info_plt!(old_plt, nil, editable_modules, editable_beams,
+          compiled_modules: compiled_modules
+        )
+
+      patched_plt = PLT.clone(old_plt)
+
+      {diff, changed?} =
+        patch_module_info_plt!(
+          patched_plt,
+          nil,
+          editable_modules,
+          editable_beams,
+          compiled_modules
+        )
+
+      expected_diff =
+        old_plt
+        |> diff_module_info_plts(new_plt)
+        |> Map.new(fn {key, modules} -> {key, Enum.sort(modules)} end)
+
+      assert PLT.get_all(patched_plt) == PLT.get_all(new_plt)
+      assert diff == expected_diff
+      assert changed?
+    end
+  end
+
   describe "patch_module_metadata/3" do
     setup do
       module_info_plt =

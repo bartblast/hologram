@@ -1112,6 +1112,46 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Brings the module info PLT of the last finished compile in this VM in line with the beams now, in
+  place, and returns what changed: the module digests diff (as `diff_module_info_plts/2` returns it,
+  each list sorted) and whether any entry changed at all (an entry whose mtime moved but whose
+  digest did not is changed, but no edit). The entries are read, reused or looked up as
+  `update_module_info_plt!/5` does with `:compiled_modules`; the entries it would copy are left where
+  they are, which is what makes a compile that changed nothing cheap.
+  """
+  @spec patch_module_info_plt!(
+          PLT.t(),
+          non_neg_integer | nil,
+          MapSet.t(module),
+          list({module, charlist}),
+          MapSet.t(module)
+        ) :: {map, boolean}
+  def patch_module_info_plt!(plt, dumped_at, editable_modules, editable_beams, compiled_modules) do
+    beam_results =
+      TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
+        patch_module_info_plt_entry!(plt, module, beam_path, dumped_at, compiled_modules)
+      end)
+
+    listed_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
+    umbrella? = Reflection.umbrella?()
+
+    vanished_results =
+      editable_modules
+      |> MapSet.difference(listed_modules)
+      |> Enum.map(&patch_vanished_module_info!(plt, &1, dumped_at, umbrella?))
+
+    results = beam_results ++ vanished_results
+
+    diff = %{
+      added_modules: list_results(results, :added),
+      edited_modules: list_results(results, :edited),
+      removed_modules: list_results(results, :removed)
+    }
+
+    {diff, Enum.any?(results, &(&1 != :kept))}
+  end
+
+  @doc """
   Returns the kept module metadata (see `build_module_metadata/1`) brought in line with the module
   digests diff: the entries of the removed and edited modules dropped, the entries of the added and
   edited modules built from the module info PLT, as `build_module_metadata/1` builds them. An entry
@@ -1501,6 +1541,13 @@ defmodule Hologram.Compiler do
     PLT.member?(encode_plt, {module, function, arity})
   end
 
+  defp get_module_info(plt, module) do
+    case PLT.get(plt, module) do
+      {:ok, info} -> info
+      :error -> nil
+    end
+  end
+
   defp get_package_json_digest(assets_dir) do
     assets_dir
     |> Path.join("package.json")
@@ -1584,6 +1631,16 @@ defmodule Hologram.Compiler do
   defp list_modules_where(module_info_plt, flag) do
     module_info_plt
     |> PLT.keys(%{flag => true})
+    |> Enum.sort()
+  end
+
+  # The modules of the given kind among the results of patch_module_info_plt_entry!/5, sorted.
+  defp list_results(results, kind) do
+    results
+    |> Enum.flat_map(fn
+      {^kind, module} -> [module]
+      _other -> []
+    end)
     |> Enum.sort()
   end
 
@@ -1699,6 +1756,44 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  # A compiled module is read. The entry of any other module is left as it is, unless it is a
+  # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
+  # and a beam with no entry, is checked against its mtime and size first.
+  defp patch_module_info_plt_entry!(plt, module, beam_path, dumped_at, compiled_modules) do
+    old_info = get_module_info(plt, module)
+
+    cond do
+      MapSet.member?(compiled_modules, module) ->
+        put_compared_module_info(plt, module, old_info, Reflection.beam_info(beam_path))
+
+      match?(%{protocol?: false}, old_info) ->
+        :kept
+
+      true ->
+        new_info =
+          reusable_module_info(module, beam_path, plt, dumped_at) ||
+            Reflection.beam_info(beam_path)
+
+        put_compared_module_info(plt, module, old_info, new_info)
+    end
+  end
+
+  # A module that left the listing without its beam being deleted, as the full scan would see it. A
+  # path the VM still names for a module whose file is gone, or for one compiled in memory, has
+  # nothing to read, so the module loses its entry, as a deleted one.
+  defp patch_vanished_module_info!(plt, module, dumped_at, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
+    old_info = get_module_info(plt, module)
+
+    new_info =
+      if beam_source && (is_binary(beam_source) or File.regular?(beam_source)) do
+        reusable_module_info(module, beam_source, plt, dumped_at) ||
+          Reflection.beam_info(beam_source)
+      end
+
+    put_compared_module_info(plt, module, old_info, new_info)
+  end
+
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author
   # declared with prop/3, so they are not props as far as a usage is concerned.
   defp prop_entries(props) do
@@ -1739,6 +1834,28 @@ defmodule Hologram.Compiler do
   defp static_prop_value(_value_dom), do: :unknown
 
   # Read gives nil: not an Elixir module.
+  # Puts the new entry in place of the old one and says what that was: an addition, an edit (another
+  # digest), a touch (the same digest, another mtime or size), a removal (a beam that no longer reads
+  # as an Elixir module, or none), or nothing.
+  defp put_compared_module_info(_plt, _module, nil, nil), do: :kept
+
+  defp put_compared_module_info(plt, module, _old_info, nil) do
+    PLT.delete(plt, module)
+    {:removed, module}
+  end
+
+  defp put_compared_module_info(_plt, _module, info, info), do: :kept
+
+  defp put_compared_module_info(plt, module, old_info, new_info) do
+    PLT.put(plt, module, new_info)
+
+    cond do
+      old_info == nil -> {:added, module}
+      old_info.digest != new_info.digest -> {:edited, module}
+      true -> {:touched, module}
+    end
+  end
+
   defp put_module_info(new_plt, module, info) do
     if info, do: PLT.put(new_plt, module, info)
   end
