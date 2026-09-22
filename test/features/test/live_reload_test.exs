@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.LiveReloadTest do
 
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.PLT
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias HologramFeatureTests.LiveReload.Page1
   alias HologramFeatureTests.LiveReload.Page2
 
@@ -17,6 +18,11 @@ defmodule HologramFeatureTests.LiveReloadTest do
     Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", message)
   end
 
+  defp bundle_static_path(page_module, digest) do
+    static_dir = Application.app_dir(:hologram_feature_tests, "priv/static")
+    Path.join(static_dir, RouterHelpers.page_bundle_path(page_module, digest))
+  end
+
   # Serves the page under another digest, as the server does once a live reload has rebuilt it:
   # its bundle is copied under the new digest (same code, a new name) and the registry names the
   # copy. Both are undone when the test exits.
@@ -26,14 +32,11 @@ defmodule HologramFeatureTests.LiveReloadTest do
 
     old_digest = PageDigestRegistry.lookup(page_module)
 
-    new_digest =
-      16
-      |> :crypto.strong_rand_bytes()
-      |> Base.encode16(case: :lower)
+    # 5 random bytes encode to 8 chars of esbuild's base32 alphabet, the shape of a real digest.
+    new_digest = 5 |> :crypto.strong_rand_bytes() |> Base.encode32()
 
-    static_dir = Application.app_dir(:hologram_feature_tests, "priv/static/hologram")
-    old_bundle_path = Path.join(static_dir, "page-#{old_digest}.js")
-    new_bundle_path = Path.join(static_dir, "page-#{new_digest}.js")
+    old_bundle_path = bundle_static_path(page_module, old_digest)
+    new_bundle_path = bundle_static_path(page_module, new_digest)
 
     File.cp!(old_bundle_path, new_bundle_path)
     File.cp!(old_bundle_path <> ".map", new_bundle_path <> ".map")
