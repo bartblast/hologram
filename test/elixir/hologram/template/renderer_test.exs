@@ -1748,6 +1748,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
+                        {Hologram.Runtime, :page_module} => Module39,
                         {Hologram.Runtime, :page_mounted?} => true,
                         {:my_scope, :my_key} => 123
                       }
@@ -1777,6 +1778,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
+                        {Hologram.Runtime, :page_module} => Module46,
                         {Hologram.Runtime, :page_mounted?} => true,
                         {:my_scope, :my_key} => 123
                       }
@@ -1806,6 +1808,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
+                        {Hologram.Runtime, :page_module} => Module40,
                         {Hologram.Runtime, :page_mounted?} => true,
                         {:my_scope, :my_key} => 123
                       }
@@ -1835,6 +1838,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
+                        {Hologram.Runtime, :page_module} => Module43,
                         {Hologram.Runtime, :page_mounted?} => true
                       }
                     }
@@ -1863,6 +1867,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
+                        {Hologram.Runtime, :page_module} => Module45,
                         {Hologram.Runtime, :page_mounted?} => true
                       }
                     }
@@ -1980,6 +1985,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_28_digest,
+                        {Hologram.Runtime, :page_module} => Module28,
                         {Hologram.Runtime, :page_mounted?} => true
                       },
                       state: %{state_1: "value_1", state_2: "value_2"}
@@ -2009,6 +2015,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :instance_id} => @instance_id,
                         {Hologram.Runtime, :page_digest} => :dummy_module_29_digest,
+                        {Hologram.Runtime, :page_module} => Module29,
                         {Hologram.Runtime, :page_mounted?} => true
                       }
                     }
@@ -2114,7 +2121,7 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module48, @params, @server, @opts)
 
       expected =
-        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
+        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_module")]), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
 
       assert String.contains?(html, expected)
     end
