@@ -1990,6 +1990,18 @@ defmodule Hologram.Compiler.CallGraphTest do
                MapSet.new([:module_1, :module_2, :module_3, :module_4, :module_7])
     end
 
+    test "given no module, returns the empty set", %{empty_call_graph: call_graph} do
+      assert list_modules_reaching(call_graph, []) == MapSet.new()
+    end
+
+    test "given no module, does not read the graph" do
+      # A read of a stopped call graph exits, so the call returns only if it reads nothing.
+      call_graph = CallGraph.start()
+      CallGraph.stop(call_graph)
+
+      assert list_modules_reaching(call_graph, []) == MapSet.new()
+    end
+
     test "doesn't follow outgoing edges", %{empty_call_graph: call_graph} do
       assert list_modules_reaching(call_graph, [:module_2]) ==
                MapSet.new([:module_1, :module_2])

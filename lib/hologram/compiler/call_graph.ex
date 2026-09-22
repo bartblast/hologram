@@ -909,10 +909,15 @@ defmodule Hologram.Compiler.CallGraph do
   given modules included. The compile task uses it, before the graph is patched, to find the pages
   and components a change to those modules can affect: every way a page's bundle depends on a module
   is a path in the graph from a vertex of the page, or of a component it renders, to that module.
+  Given no module, it returns the empty set without reading the graph.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_modules_reaching_2/README.md
   """
   @spec list_modules_reaching(t, [module]) :: MapSet.t(module)
+  # Built from the argument: an empty MapSet literal is inlined, and Dialyzer then rejects the result
+  # where a caller passes it on to a MapSet function.
+  def list_modules_reaching(_call_graph, [] = modules), do: MapSet.new(modules)
+
   def list_modules_reaching(call_graph, modules) do
     graph = get_graph(call_graph)
     target_modules = MapSet.new(modules)
