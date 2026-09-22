@@ -2002,6 +2002,42 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert list_modules_reaching(call_graph, []) == MapSet.new()
     end
 
+    test "does not copy the graph out of the agent", %{empty_call_graph: call_graph} do
+      test_pid = self()
+
+      # The walk runs in a process of its own, traced with this one as the tracer (a process cannot
+      # be its own tracer), so a concurrent test's calls are not seen. The copy, if there were one,
+      # would happen in the walking process rather than in the agent.
+      walker =
+        spawn_link(fn ->
+          receive do
+            :walk ->
+              send(test_pid, {:reaching_modules, list_modules_reaching(call_graph, [:module_3])})
+          end
+
+          # Kept alive until the tracing is turned off, which a dead process would refuse.
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      :erlang.trace_pattern({CallGraph, :get_graph, 1}, true, [:local])
+      :erlang.trace(walker, true, [:call])
+
+      try do
+        send(walker, :walk)
+
+        assert_receive {:reaching_modules, reaching_modules}
+
+        assert reaching_modules == MapSet.new([:module_1, :module_2, :module_3, :module_4])
+        refute_receive {:trace, ^walker, :call, {CallGraph, :get_graph, _args}}, 200
+      after
+        :erlang.trace(walker, false, [:call])
+        :erlang.trace_pattern({CallGraph, :get_graph, 1}, false, [:local])
+        send(walker, :stop)
+      end
+    end
+
     test "doesn't follow outgoing edges", %{empty_call_graph: call_graph} do
       assert list_modules_reaching(call_graph, [:module_2]) ==
                MapSet.new([:module_1, :module_2])

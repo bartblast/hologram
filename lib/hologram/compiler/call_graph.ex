@@ -911,6 +911,10 @@ defmodule Hologram.Compiler.CallGraph do
   is a path in the graph from a vertex of the page, or of a component it renders, to that module.
   Given no module, it returns the empty set without reading the graph.
 
+  The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
+  is a traversal of the graph and reads of the module info PLT, and a raise inside the agent would
+  take the kept graph down with it.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_modules_reaching_2/README.md
   """
   @spec list_modules_reaching(t, [module]) :: MapSet.t(module)
@@ -919,35 +923,12 @@ defmodule Hologram.Compiler.CallGraph do
   def list_modules_reaching(_call_graph, [] = modules), do: MapSet.new(modules)
 
   def list_modules_reaching(call_graph, modules) do
-    graph = get_graph(call_graph)
     target_modules = MapSet.new(modules)
 
-    # One pass over the vertices rather than a scan per module: the graph holds a vertex per
-    # function of the app.
-    target_vertices =
-      graph
-      |> Digraph.vertices()
-      |> Enum.filter(fn
-        {module, _function, _arity} -> MapSet.member?(target_modules, module)
-        module_vertex -> MapSet.member?(target_modules, module_vertex)
-      end)
-
-    protocol_function_mfa? = &protocol_function_mfa?(&1, call_graph.module_info_plt)
-
-    graph
-    |> Digraph.reaching(target_vertices, opaque_vertex?: protocol_function_mfa?)
-    # A protocol's dispatch function is where the reverse walk stops, and it is dropped with the
-    # walk: a page that calls the protocol carries only the implementations of its own types, and
-    # it holds each of those modules in its kept modules, so the pages an edited implementation
-    # affects are found by that intersection rather than through the dispatch edges. Editing a
-    # protocol module itself still reaches its callers, since the target modules are unioned back in.
-    |> Enum.reject(protocol_function_mfa?)
-    |> Enum.map(fn
-      {module, _function, _arity} -> module
-      module_vertex -> module_vertex
-    end)
-    |> MapSet.new()
-    |> MapSet.union(target_modules)
+    read_graph(
+      call_graph.pid,
+      &list_modules_reaching_in_graph(&1, target_modules, call_graph.module_info_plt)
+    )
   end
 
   @doc """
@@ -1908,6 +1889,35 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp layout_module(page_module, module_info_plt) do
     fact(module_info_plt, page_module, :layout_module) || page_module.__layout_module__()
+  end
+
+  defp list_modules_reaching_in_graph(graph, target_modules, module_info_plt) do
+    # One pass over the vertices rather than a scan per module: the graph holds a vertex per
+    # function of the app.
+    target_vertices =
+      graph
+      |> Digraph.vertices()
+      |> Enum.filter(fn
+        {module, _function, _arity} -> MapSet.member?(target_modules, module)
+        module_vertex -> MapSet.member?(target_modules, module_vertex)
+      end)
+
+    protocol_function_mfa? = &protocol_function_mfa?(&1, module_info_plt)
+
+    graph
+    |> Digraph.reaching(target_vertices, opaque_vertex?: protocol_function_mfa?)
+    # A protocol's dispatch function is where the reverse walk stops, and it is dropped with the
+    # walk: a page that calls the protocol carries only the implementations of its own types, and
+    # it holds each of those modules in its kept modules, so the pages an edited implementation
+    # affects are found by that intersection rather than through the dispatch edges. Editing a
+    # protocol module itself still reaches its callers, since the target modules are unioned back in.
+    |> Enum.reject(protocol_function_mfa?)
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module_vertex -> module_vertex
+    end)
+    |> MapSet.new()
+    |> MapSet.union(target_modules)
   end
 
   # Walks with the rules of the page listings (see reachable_mfas/4): a protocol implementation is
