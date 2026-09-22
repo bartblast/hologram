@@ -890,18 +890,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   Must be called on the original call graph before `remove_manually_ported_mfas/1`
   strips the `Task.await/1` vertex.
+
+  The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
+  is a traversal of the graph, and a raise inside the agent would take the kept graph down with it.
   """
   @spec list_async_mfas(t) :: MapSet.t(mfa)
   def list_async_mfas(call_graph) do
-    graph = get_graph(call_graph)
-
-    graph
-    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
-    # Excludes bare module atom vertices, keeping only MFA tuples.
-    # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
-    # the result is only used for MapSet.member? lookups against already-included MFAs.
-    |> Enum.filter(&is_tuple/1)
-    |> MapSet.new()
+    read_graph(call_graph.pid, &list_async_mfas_in_graph/1)
   end
 
   @doc """
@@ -1889,6 +1884,16 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp layout_module(page_module, module_info_plt) do
     fact(module_info_plt, page_module, :layout_module) || page_module.__layout_module__()
+  end
+
+  defp list_async_mfas_in_graph(graph) do
+    graph
+    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
+    # Excludes bare module atom vertices, keeping only MFA tuples.
+    # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
+    # the result is only used for MapSet.member? lookups against already-included MFAs.
+    |> Enum.filter(&is_tuple/1)
+    |> MapSet.new()
   end
 
   defp list_modules_reaching_in_graph(graph, target_modules, module_info_plt) do
