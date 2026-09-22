@@ -85,6 +85,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert delete_page(Module1) == :ok
       assert PLT.get(get().pages_plt, Module1) == :error
+      assert PLT.get(get().page_mfas_plt, Module1) == :error
     end
 
     test "a page that was never kept" do
@@ -138,6 +139,7 @@ defmodule Hologram.Compiler.CacheTest do
                ir_plt: %PLT{} = ir_plt,
                module_info_plt: %PLT{} = module_info_plt,
                module_metadata: nil,
+               page_mfas_plt: %PLT{} = page_mfas_plt,
                pages_plt: %PLT{} = pages_plt,
                pending_pages: pending_pages,
                runtime: nil,
@@ -150,6 +152,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(encode_plt) == []
       assert PLT.keys(ir_plt) == []
       assert PLT.keys(module_info_plt) == []
+      assert PLT.keys(page_mfas_plt) == []
       assert PLT.keys(pages_plt) == []
     end
 
@@ -159,6 +162,7 @@ defmodule Hologram.Compiler.CacheTest do
         encode_plt: encode_plt,
         ir_plt: ir_plt,
         module_info_plt: module_info_plt,
+        page_mfas_plt: page_mfas_plt,
         pages_plt: pages_plt
       } = get()
 
@@ -167,6 +171,7 @@ defmodule Hologram.Compiler.CacheTest do
                encode_plt: ^encode_plt,
                ir_plt: ^ir_plt,
                module_info_plt: ^module_info_plt,
+               page_mfas_plt: ^page_mfas_plt,
                pages_plt: ^pages_plt
              } = get()
     end
@@ -222,6 +227,7 @@ defmodule Hologram.Compiler.CacheTest do
 
     assert put_page(Module1, page_state) == :ok
     assert PLT.get(get().pages_plt, Module1) == {:ok, page_state}
+    assert PLT.get(get().page_mfas_plt, Module1) == {:ok, page_state.mfas}
   end
 
   test "put_pending_pages/1" do
@@ -317,8 +323,8 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and forgets the app versions, the module metadata, the runtime and the template modules" do
-      old_pages_plt = get().pages_plt
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime and the template modules" do
+      %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
@@ -336,14 +342,18 @@ defmodule Hologram.Compiler.CacheTest do
       %{
         app_versions: app_versions,
         module_metadata: module_metadata,
+        page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
         runtime: runtime,
         template_modules: template_modules
       } = get()
 
       refute Process.alive?(old_pages_plt.pid)
+      refute Process.alive?(old_page_mfas_plt.pid)
       assert new_pages_plt.table_ref != old_pages_plt.table_ref
+      assert new_page_mfas_plt.table_ref != old_page_mfas_plt.table_ref
       assert PLT.keys(new_pages_plt) == []
+      assert PLT.keys(new_page_mfas_plt) == []
       assert app_versions == nil
       assert module_metadata == nil
       assert runtime == nil
@@ -357,6 +367,7 @@ defmodule Hologram.Compiler.CacheTest do
       encode_plt: encode_plt,
       ir_plt: ir_plt,
       module_info_plt: module_info_plt,
+      page_mfas_plt: page_mfas_plt,
       pages_plt: pages_plt
     } = get()
 
@@ -366,6 +377,7 @@ defmodule Hologram.Compiler.CacheTest do
     refute Process.alive?(encode_plt.pid)
     refute Process.alive?(ir_plt.pid)
     refute Process.alive?(module_info_plt.pid)
+    refute Process.alive?(page_mfas_plt.pid)
     refute Process.alive?(pages_plt.pid)
     assert :ets.whereis(Tracer) == :undefined
   end

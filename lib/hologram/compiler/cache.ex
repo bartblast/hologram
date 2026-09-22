@@ -50,6 +50,7 @@ defmodule Hologram.Compiler.Cache do
           ir_plt: PLT.t(),
           module_info_plt: PLT.t(),
           module_metadata: %{module => %{app: atom | nil, file: String.t()}} | nil,
+          page_mfas_plt: PLT.t(),
           pages_plt: PLT.t(),
           pending_pages: MapSet.t(module),
           runtime: runtime_state | nil,
@@ -89,10 +90,12 @@ defmodule Hologram.Compiler.Cache do
   Returns the kept call graph, IR PLT, encode PLT and page states, the encoding inputs, the pending
   pages, the application versions, the module info PLT of the last finished compile with the mtime
   of the module info dump it wrote and the modules whose beams a save can rewrite, what the runtime
-  bundle was built from, the stack trace metadata of every module, and the modules each template
-  uses (the dump time, the editable modules, the encoding inputs, the module metadata, the runtime
-  state and the template modules are nil when no compile has finished in this VM, and the module
-  info PLT's entries are then not to be trusted). Starts the cache on first use.
+  bundle was built from, the stack trace metadata of every module, the MFA list of each page (apart
+  from the rest of its state, since only a relisting after a change of the runtime's MFAs reads it),
+  and the modules each template uses (the dump time, the editable modules, the encoding inputs, the
+  module metadata, the runtime state and the template modules are nil when no compile has finished
+  in this VM, and the module info PLT's entries are then not to be trusted). Starts the cache on
+  first use.
   """
   @spec get() :: t
   def get do
@@ -105,6 +108,7 @@ defmodule Hologram.Compiler.Cache do
   end
 
   def handle_call({:delete_page, page_module}, _from, state) do
+    PLT.delete(state.page_mfas_plt, page_module)
     PLT.delete(state.pages_plt, page_module)
     {:reply, :ok, state}
   end
@@ -135,6 +139,7 @@ defmodule Hologram.Compiler.Cache do
   end
 
   def handle_call({:put_page, page_module, page_state}, _from, state) do
+    PLT.put(state.page_mfas_plt, page_module, page_state.mfas)
     PLT.put(state.pages_plt, page_module, page_state)
     {:reply, :ok, state}
   end
@@ -215,9 +220,10 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Keeps a page's reachable MFAs, their modules and the info of the bundle built from them, so that the
-  next compile can reuse that bundle when nothing the page reaches has changed. Put right after the
-  bundle is written, so the state and the file on disk go together.
+  Keeps a page's reachable MFAs, their modules and the info of the bundle built from them, so that
+  the next compile can reuse that bundle when nothing the page reaches has changed. The MFAs go into
+  a PLT of their own as well, which the page partition reads only when the runtime's MFAs changed.
+  Put right after the bundle is written, so the state and the file on disk go together.
   """
   @spec put_page(module, page_state) :: :ok
   def put_page(page_module, page_state) do
@@ -255,7 +261,8 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Replaces the kept call graph, module info PLT, IR PLT, encode PLT and page states with empty ones
+  Replaces the kept call graph, module info PLT, IR PLT, encode PLT, page states and page MFA lists
+  with empty ones
   and forgets the kept dump time, editable modules, encoding inputs, module metadata, pending pages,
   application versions, runtime state and template modules, so the next compile starts from the
   build dir, as the first one in the VM does.
@@ -285,6 +292,7 @@ defmodule Hologram.Compiler.Cache do
       ir_plt: PLT.start(),
       module_info_plt: PLT.start(),
       module_metadata: nil,
+      page_mfas_plt: PLT.start(),
       pages_plt: PLT.start(),
       pending_pages: MapSet.new(),
       runtime: nil,
@@ -304,6 +312,7 @@ defmodule Hologram.Compiler.Cache do
     PLT.stop(state.encode_plt)
     PLT.stop(state.ir_plt)
     PLT.stop(state.module_info_plt)
+    PLT.stop(state.page_mfas_plt)
     PLT.stop(state.pages_plt)
   end
 end
