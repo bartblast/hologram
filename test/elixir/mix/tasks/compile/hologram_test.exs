@@ -830,13 +830,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "changed async MFAs empty the kept encodings", %{opts: opts} do
       run(opts)
-      put_pending_kept_pages(1)
 
-      %{encoding_inputs: encoding_inputs} = Cache.get()
+      %{encode_plt: encode_plt, encoding_inputs: encoding_inputs} = Cache.get()
       async_mfas = MapSet.put(encoding_inputs.async_mfas, {Module1, :fun_1, 0})
       Cache.put_encoding_inputs(%{encoding_inputs | async_mfas: async_mfas})
 
-      assert count_calls(@encode_function_mfa, fn -> run(opts) end) > 0
+      # The async MFAs are walked again only when the graph changes, so the page is edited. The
+      # marker belongs to a module the edit does not touch and the compile keeps, so only emptying
+      # the whole PLT drops it.
+      fake_edit(Module1)
+      PLT.put(encode_plt, {Module2, :marker, 0}, "marker")
+
+      run(opts)
+
+      assert PLT.get(encode_plt, {Module2, :marker, 0}) == :error
     end
 
     test "a changed client stacktraces setting empties the kept encodings", %{opts: opts} do
@@ -1557,6 +1564,37 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert warm_app_versions == Cache.get().app_versions
       assert warm_app_versions != []
+    end
+
+    test "a run with no changes walks no async MFAs", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :list_async_mfas, 1}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold walks no async MFAs", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :list_async_mfas, 1}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page walks the async MFAs again", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :list_async_mfas, 1}, fn -> run(opts) end) == 1
+    end
+
+    test "the kept async MFAs are the ones a walk finds", %{opts: opts} do
+      run(opts)
+      run(opts)
+
+      %{call_graph: call_graph, encoding_inputs: encoding_inputs} = Cache.get()
+
+      assert encoding_inputs.async_mfas == CallGraph.list_async_mfas(call_graph)
     end
 
     test "a run after a reset starts from the build dir", %{opts: opts} do

@@ -207,17 +207,18 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> CallGraph.patch(ir_plt, graph_diff)
       |> CallGraph.add_non_discoverable_edges()
 
+      # Nothing patched and nothing walked: the graph is the one the last finished compile ended with,
+      # so what that compile derived from the graph alone still holds.
+      graph_unchanged? =
+        graph_diff == %{added_modules: [], edited_modules: [], removed_modules: []}
+
       # Grows the graph by the modules the patched functions start reaching, their IR included. A
       # compile whose patch touched nothing the graph holds reaches nothing new and does not walk.
       built_modules =
-        if graph_diff == %{added_modules: [], edited_modules: [], removed_modules: []} do
-          []
-        else
-          Compiler.build_reach!(call_graph, ir_plt, graph_diff)
-        end
+        if graph_unchanged?, do: [], else: Compiler.build_reach!(call_graph, ir_plt, graph_diff)
 
       # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
-      async_mfas = CallGraph.list_async_mfas(call_graph)
+      async_mfas = list_async_mfas(cache.encoding_inputs, call_graph, graph_unchanged?)
 
       call_graph_for_runtime =
         call_graph
@@ -731,6 +732,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp language_server_build?(opts) do
     path_components = Path.split(opts[:build_dir])
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
+  end
+
+  # The async MFAs are a walk of the graph, so a compile that left the graph as it was finds the ones
+  # the last finished compile kept with its encoding inputs. The first compile in a VM has none kept.
+  defp list_async_mfas(%{async_mfas: async_mfas}, _call_graph, true), do: async_mfas
+
+  defp list_async_mfas(_kept_inputs, call_graph, _graph_unchanged?) do
+    CallGraph.list_async_mfas(call_graph)
   end
 
   # A batch's pages are listed here rather than before the first batch, so the open tab's page is
