@@ -56,6 +56,15 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{encode_plt: ^encode_plt, encoding_inputs: ^encoding_inputs} = get()
       assert PLT.get(encode_plt, {Module1, :fun_1, 0}) == {:ok, "js"}
     end
+
+    test "keeps the template modules" do
+      template_modules = %{Module1 => MapSet.new([Module2])}
+      put_template_modules(template_modules)
+
+      clear_module_infos()
+
+      assert get().template_modules == template_modules
+    end
   end
 
   describe "delete_page/2" do
@@ -118,7 +127,8 @@ defmodule Hologram.Compiler.CacheTest do
                module_infos: nil,
                pages_plt: %PLT{} = pages_plt,
                pending_pages: pending_pages,
-               runtime: nil
+               runtime: nil,
+               template_modules: nil
              } = get()
 
       assert pending_pages == MapSet.new()
@@ -205,6 +215,13 @@ defmodule Hologram.Compiler.CacheTest do
     assert %{runtime: ^runtime_state} = get()
   end
 
+  test "put_template_modules/1" do
+    template_modules = %{Module1 => MapSet.new([Module2]), Module2 => MapSet.new()}
+
+    assert put_template_modules(template_modules) == :ok
+    assert %{template_modules: ^template_modules} = get()
+  end
+
   describe "reset/0" do
     test "stops the kept call graph and starts an empty one" do
       old_call_graph = get().call_graph
@@ -263,9 +280,10 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and forgets the app versions and the runtime" do
+    test "stops the kept page states and forgets the app versions, the runtime and the template modules" do
       old_pages_plt = get().pages_plt
       put_app_versions(hologram: "1.0.0")
+      put_template_modules(%{Module1 => MapSet.new()})
       put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
 
       put_runtime(%{
@@ -277,13 +295,19 @@ defmodule Hologram.Compiler.CacheTest do
 
       reset()
 
-      %{app_versions: app_versions, pages_plt: new_pages_plt, runtime: runtime} = get()
+      %{
+        app_versions: app_versions,
+        pages_plt: new_pages_plt,
+        runtime: runtime,
+        template_modules: template_modules
+      } = get()
 
       refute Process.alive?(old_pages_plt.pid)
       assert new_pages_plt.table_ref != old_pages_plt.table_ref
       assert PLT.keys(new_pages_plt) == []
       assert app_versions == nil
       assert runtime == nil
+      assert template_modules == nil
     end
   end
 
