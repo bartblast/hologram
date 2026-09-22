@@ -57,6 +57,15 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.get(encode_plt, {Module1, :fun_1, 0}) == {:ok, "js"}
     end
 
+    test "keeps the module metadata" do
+      module_metadata = %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}
+      put_module_metadata(module_metadata)
+
+      clear_module_infos()
+
+      assert get().module_metadata == module_metadata
+    end
+
     test "keeps the template modules" do
       template_modules = %{Module1 => MapSet.new([Module2])}
       put_template_modules(template_modules)
@@ -125,6 +134,7 @@ defmodule Hologram.Compiler.CacheTest do
                encoding_inputs: nil,
                ir_plt: %PLT{} = ir_plt,
                module_infos: nil,
+               module_metadata: nil,
                pages_plt: %PLT{} = pages_plt,
                pending_pages: pending_pages,
                runtime: nil,
@@ -183,6 +193,17 @@ defmodule Hologram.Compiler.CacheTest do
 
     assert %{dumped_at: 123, editable_modules: ^editable_modules, module_infos: ^module_infos} =
              get()
+  end
+
+  test "put_module_metadata/1" do
+    module_metadata = %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}
+
+    assert put_module_metadata(module_metadata) == :ok
+    assert %{module_metadata: ^module_metadata} = get()
+
+    put_module_metadata(nil)
+
+    assert get().module_metadata == nil
   end
 
   test "put_page/2" do
@@ -280,9 +301,10 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and forgets the app versions, the runtime and the template modules" do
+    test "stops the kept page states and forgets the app versions, the module metadata, the runtime and the template modules" do
       old_pages_plt = get().pages_plt
       put_app_versions(hologram: "1.0.0")
+      put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
       put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
 
@@ -297,6 +319,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       %{
         app_versions: app_versions,
+        module_metadata: module_metadata,
         pages_plt: new_pages_plt,
         runtime: runtime,
         template_modules: template_modules
@@ -306,6 +329,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert new_pages_plt.table_ref != old_pages_plt.table_ref
       assert PLT.keys(new_pages_plt) == []
       assert app_versions == nil
+      assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil
     end

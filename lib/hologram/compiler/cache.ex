@@ -15,9 +15,10 @@ defmodule Hologram.Compiler.Cache do
   # reaches, with the pages a compile set out to build and has not built yet, so that the next
   # compile rebuilds them whether or not its own edit reaches them. So are the modules each
   # page's and component's template uses, so that a compile validates only the templates its
-  # edit can affect. Started on first use and not linked to the caller, so it outlives the compile
-  # that started it. A compile that finds no module infos here starts from the build dir, so
-  # nothing depends on the cache for correctness.
+  # edit can affect, and each module's stack trace metadata, so that a compile rebuilds only the
+  # entries of the modules it changed. Started on first use and not linked to the caller, so it
+  # outlives the compile that started it. A compile that finds no module infos here starts from
+  # the build dir, so nothing depends on the cache for correctness.
   # The cache also registers Hologram.Compiler.Tracer when it starts, and owns its table: the
   # modules the tracer records are only of use to a compile that has the kept state to apply them
   # to, so the two live and die together.
@@ -48,6 +49,7 @@ defmodule Hologram.Compiler.Cache do
           encoding_inputs: encoding_inputs | nil,
           ir_plt: PLT.t(),
           module_infos: %{module => map} | nil,
+          module_metadata: %{module => %{app: atom | nil, file: String.t()}} | nil,
           pages_plt: PLT.t(),
           pending_pages: MapSet.t(module),
           runtime: runtime_state | nil,
@@ -56,9 +58,10 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Forgets the kept module infos, dump time and editable modules while keeping the IR PLT, the encode
-  PLT, the encoding inputs, the template modules and the call graph, so that the next compile starts
-  from the build dir. The compile task calls it before it changes the kept state in place: a compile
-  that dies mid-way must not leave a half-patched graph that the next compile would trust.
+  PLT, the encoding inputs, the module metadata, the template modules and the call graph, so that the
+  next compile starts from the build dir. The compile task calls it before it changes the kept state
+  in place: a compile that dies mid-way must not leave a half-patched graph that the next compile
+  would trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -85,9 +88,10 @@ defmodule Hologram.Compiler.Cache do
   Returns the kept call graph, IR PLT, encode PLT and page states, the encoding inputs, the pending
   pages, the application versions, the module infos of the last finished compile with the mtime of
   the module info dump it wrote and the modules whose beams a save can rewrite, what the runtime
-  bundle was built from, and the modules each template uses (the module infos, the editable
-  modules, the encoding inputs, the runtime state and the template modules are nil when no compile
-  has finished in this VM). Starts the cache on first use.
+  bundle was built from, the stack trace metadata of every module, and the modules each template
+  uses (the module infos, the editable modules, the encoding inputs, the module metadata, the
+  runtime state and the template modules are nil when no compile has finished in this VM). Starts
+  the cache on first use.
   """
   @spec get() :: t
   def get do
@@ -129,6 +133,10 @@ defmodule Hologram.Compiler.Cache do
          editable_modules: editable_modules,
          module_infos: module_infos
      }}
+  end
+
+  def handle_call({:put_module_metadata, module_metadata}, _from, state) do
+    {:reply, :ok, %{state | module_metadata: module_metadata}}
   end
 
   def handle_call({:put_page, page_module, page_state}, _from, state) do
@@ -200,6 +208,16 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
+  Keeps the stack trace metadata of every module, as `Hologram.Compiler.build_module_metadata/1`
+  builds it, so that a compile builds again only the entries of the modules its edit touched. nil
+  when client stack traces are off, since the bundles register no metadata then.
+  """
+  @spec put_module_metadata(%{module => %{app: atom | nil, file: String.t()}} | nil) :: :ok
+  def put_module_metadata(module_metadata) do
+    GenServer.call(server(), {:put_module_metadata, module_metadata})
+  end
+
+  @doc """
   Keeps a page's reachable MFAs, their modules and the info of the bundle built from them, so that the
   next compile can reuse that bundle when nothing the page reaches has changed. Put right after the
   bundle is written, so the state and the file on disk go together.
@@ -241,9 +259,9 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Replaces the kept call graph, IR PLT, encode PLT and page states with empty ones and forgets the
-  kept module infos, dump time, editable modules, encoding inputs, pending pages, application
-  versions, runtime state and template modules, so the next compile starts from the build dir, as
-  the first one in the VM does.
+  kept module infos, dump time, editable modules, encoding inputs, module metadata, pending pages,
+  application versions, runtime state and template modules, so the next compile starts from the
+  build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -269,6 +287,7 @@ defmodule Hologram.Compiler.Cache do
       encoding_inputs: nil,
       ir_plt: PLT.start(),
       module_infos: nil,
+      module_metadata: nil,
       pages_plt: PLT.start(),
       pending_pages: MapSet.new(),
       runtime: nil,
