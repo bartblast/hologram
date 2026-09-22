@@ -31,11 +31,14 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module29
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module30
+  alias Hologram.Test.Fixtures.Compiler.Module31
   alias Hologram.Test.Fixtures.Compiler.Module32
   alias Hologram.Test.Fixtures.Compiler.Module34
+  alias Hologram.Test.Fixtures.Compiler.Module35
   alias Hologram.Test.Fixtures.Compiler.Module36
   alias Hologram.Test.Fixtures.Compiler.Module37
   alias Hologram.Test.Fixtures.Compiler.Module38
+  alias Hologram.Test.Fixtures.Compiler.Module39
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module40
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -3570,7 +3573,7 @@ defmodule Hologram.CompilerTest do
     test "doesn't raise when every required prop is written at the usage" do
       plt = PLT.put(PLT.start(), Module32, IR.for_module(Module32))
 
-      assert validate_prop_usages([Module32], plt) == :ok
+      assert validate_prop_usages([Module32], plt) == %{Module32 => MapSet.new([Module31])}
     end
 
     test "raises when a required prop is missing from the usage" do
@@ -3596,13 +3599,13 @@ defmodule Hologram.CompilerTest do
     test "doesn't raise when the usage carries a spread" do
       plt = PLT.put(PLT.start(), Module34, IR.for_module(Module34))
 
-      assert validate_prop_usages([Module34], plt) == :ok
+      assert validate_prop_usages([Module34], plt) == %{Module34 => MapSet.new([Module31])}
     end
 
     test "doesn't raise when the required prop is sourced from context" do
       plt = PLT.put(PLT.start(), Module36, IR.for_module(Module36))
 
-      assert validate_prop_usages([Module36], plt) == :ok
+      assert validate_prop_usages([Module36], plt) == %{Module36 => MapSet.new([Module35])}
     end
 
     # A component node is an ordinary 4-tuple, so code outside the template can hold one without any
@@ -3610,17 +3613,30 @@ defmodule Hologram.CompilerTest do
     test "ignores a component tuple returned by a non-template function" do
       plt = PLT.put(PLT.start(), Module40, IR.for_module(Module40))
 
-      assert validate_prop_usages([Module40], plt) == :ok
+      # Nor is it counted among the modules the template uses.
+      assert validate_prop_usages([Module40], plt) == %{Module40 => MapSet.new()}
     end
 
     test "skips modules that are not in the IR PLT" do
-      assert validate_prop_usages([Module32], PLT.start()) == :ok
+      assert validate_prop_usages([Module32], PLT.start()) == %{Module32 => MapSet.new()}
+    end
+
+    test "returns the modules each given template uses" do
+      plt =
+        PLT.start()
+        |> PLT.put(Module32, IR.for_module(Module32))
+        |> PLT.put(Module38, IR.for_module(Module38))
+
+      assert validate_prop_usages([Module32, Module38], plt) == %{
+               Module32 => MapSet.new([Module31]),
+               Module38 => MapSet.new([Module37])
+             }
     end
 
     test "doesn't raise when a written value is in the prop's :values list" do
       plt = PLT.put(PLT.start(), Module38, IR.for_module(Module38))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module37])}
     end
 
     test "raises when a literal expression value is not in the prop's :values list" do
@@ -3708,7 +3724,7 @@ defmodule Hologram.CompilerTest do
 
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module39])}
     end
 
     # One expression anywhere inside makes the whole composite unknowable until it runs.
@@ -3721,7 +3737,7 @@ defmodule Hologram.CompilerTest do
 
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module39])}
     end
 
     test "doesn't raise when the value is not known at compile time" do
@@ -3733,7 +3749,7 @@ defmodule Hologram.CompilerTest do
 
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module37])}
     end
   end
 

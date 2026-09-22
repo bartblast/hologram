@@ -1273,14 +1273,25 @@ defmodule Hologram.Compiler do
   never written at the usage. Those cases, along with dynamic tags, are left to the renderers.
 
   Modules missing from the IR PLT are skipped - a module without a BEAM source has no IR to walk.
+
+  Returns, for each given module, the modules its template uses as components, whether or not they
+  are components: with its own template, all its result depends on. A skipped module uses none.
   """
-  @spec validate_prop_usages(list(module), PLT.t()) :: :ok
+  @spec validate_prop_usages(list(module), PLT.t()) :: %{module => MapSet.t(module)}
   def validate_prop_usages(modules, ir_plt) do
-    Enum.each(modules, fn module ->
-      case PLT.get(ir_plt, module) do
-        {:ok, ir} -> validate_module_prop_usages(module, ir)
-        _fallback -> :ok
-      end
+    Map.new(modules, fn module ->
+      usages =
+        case PLT.get(ir_plt, module) do
+          {:ok, ir} -> validate_module_prop_usages(module, ir)
+          :error -> []
+        end
+
+      used_modules =
+        MapSet.new(usages, fn {component_module, _prop_entries, _has_spread?} ->
+          component_module
+        end)
+
+      {module, used_modules}
     end)
   end
 
@@ -2000,10 +2011,14 @@ defmodule Hologram.Compiler do
   end
 
   defp validate_module_prop_usages(module, ir) do
-    ir
-    |> template_ir()
-    |> list_component_usages()
-    |> Enum.each(&validate_prop_usage(&1, module))
+    usages =
+      ir
+      |> template_ir()
+      |> list_component_usages()
+
+    Enum.each(usages, &validate_prop_usage(&1, module))
+
+    usages
   end
 
   defp templatable_info?(info), do: info.page? or info.component?
