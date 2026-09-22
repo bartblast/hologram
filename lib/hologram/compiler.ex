@@ -1165,6 +1165,22 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Whether the module digests diff holds a page or a component: added or edited ones by the new
+  module info PLT's flags, removed ones by their last entries (`removed_infos`, module to info),
+  since a removed module has no new entry. Prop usages are validated only then, since a usage's
+  validity depends on the template that holds it and the props of the component it uses, which live
+  in those modules' beams alone.
+  """
+  @spec templatable_changed?(map, %{module => map}, PLT.t()) :: boolean
+  def templatable_changed?(module_digests_diff, removed_infos, new_module_info_plt) do
+    Enum.any?(removed_infos, fn {_module, info} -> templatable_info?(info) end) or
+      Enum.any?(
+        module_digests_diff.added_modules ++ module_digests_diff.edited_modules,
+        &templatable_info?(PLT.get!(new_module_info_plt, &1))
+      )
+  end
+
+  @doc """
   Builds the module info PLT of a live-reload compile from `old_plt`, the PLT of the last finished compile
   in this VM. The entries of the modules that were not among the editable beams then (`editable_modules`)
   are copied: nothing rewrites those beams while the VM runs. The editable beams now (`editable_beams`,
@@ -1989,6 +2005,8 @@ defmodule Hologram.Compiler do
     |> list_component_usages()
     |> Enum.each(&validate_prop_usage(&1, module))
   end
+
+  defp templatable_info?(info), do: info.page? or info.component?
 
   # Only the template's own DOM is validated. A component node is an ordinary 4-tuple, so code
   # elsewhere in the module - a helper building DOM by hand, a fixture - can hold one without any

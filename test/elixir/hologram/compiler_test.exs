@@ -3349,6 +3349,64 @@ defmodule Hologram.CompilerTest do
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
   end
 
+  describe "templatable_changed?/3" do
+    setup do
+      module_info_plt =
+        PLT.start(
+          items: [
+            {:page, %{page?: true, component?: false}},
+            {:component, %{page?: false, component?: true}},
+            {:plain, %{page?: false, component?: false}}
+          ]
+        )
+
+      [
+        empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []},
+        module_info_plt: module_info_plt
+      ]
+    end
+
+    test "an added page", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      assert templatable_changed?(%{diff | added_modules: [:plain, :page]}, %{}, module_info_plt)
+    end
+
+    test "an edited component", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      assert templatable_changed?(%{diff | edited_modules: [:component]}, %{}, module_info_plt)
+    end
+
+    test "a removed page", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      removed_infos = %{removed_page: %{page?: true, component?: false}}
+
+      assert templatable_changed?(
+               %{diff | removed_modules: [:removed_page]},
+               removed_infos,
+               module_info_plt
+             )
+    end
+
+    test "a removed plain module", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      removed_infos = %{removed_plain: %{page?: false, component?: false}}
+
+      refute templatable_changed?(
+               %{diff | removed_modules: [:removed_plain]},
+               removed_infos,
+               module_info_plt
+             )
+    end
+
+    test "an edited plain module", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      refute templatable_changed?(%{diff | edited_modules: [:plain]}, %{}, module_info_plt)
+    end
+
+    test "an added plain module", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      refute templatable_changed?(%{diff | added_modules: [:plain]}, %{}, module_info_plt)
+    end
+
+    test "no change", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      refute templatable_changed?(diff, %{}, module_info_plt)
+    end
+  end
+
   describe "update_module_info_plt!/5" do
     test "copies the entries of the modules that are not editable" do
       old_plt = PLT.put(PLT.start(), Enum, %{digest: "kept"})
