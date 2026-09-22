@@ -15,12 +15,28 @@ defmodule Hologram.Reflection do
     :exception?,
     :ecto_schema?,
     :js_imports?,
+    :broadcast_caller?,
     :source_path,
     :layout_module,
     :route,
     :protocol_functions,
     :implementation_for,
     :implemented_protocol
+  ]
+
+  # Functions that broadcast action params from arbitrary server code to connected clients.
+  # The Component helpers queue a broadcast on the server struct, which the framework
+  # flushes after the handler returns - they reach the same audience as the immediate
+  # Realtime functions, so their callers are analysed the same way.
+  @broadcast_mfas [
+    {Hologram.Component, :put_broadcast, 3},
+    {Hologram.Component, :put_broadcast, 4},
+    {Hologram.Component, :put_broadcast_except, 4},
+    {Hologram.Component, :put_broadcast_except, 5},
+    {Hologram.Realtime, :broadcast_action, 2},
+    {Hologram.Realtime, :broadcast_action, 3},
+    {Hologram.Realtime, :broadcast_action_except, 3},
+    {Hologram.Realtime, :broadcast_action_except, 4}
   ]
 
   @call_graph_dump_file_name "call_graph.bin"
@@ -69,6 +85,8 @@ defmodule Hologram.Reflection do
   `__protocol__(:functions)`, `__impl__(:for)` and `__impl__(:protocol)` return them as literals. They
   are nil for every other kind of module, and nil when the function is missing or returns something
   that is not a literal.
+  `broadcast_caller?` says whether the module calls one of the broadcast functions (see
+  `broadcast_mfas/0`), read from the BEAM's import table, which lists every remote function it calls.
   The route is recorded as written: a route built at runtime (with interpolation, say) is nil here, and
   `Hologram.Compiler.validate_page_modules/2` checks that every page has a route and that it is a string.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
@@ -90,6 +108,7 @@ defmodule Hologram.Reflection do
         exception?: false,
         ecto_schema?: false,
         js_imports?: false,
+        broadcast_caller?: false,
         source_path: "/path/to/lib/my_page.ex",
         layout_module: MyLayout,
         route: "/my-page",
@@ -114,6 +133,7 @@ defmodule Hologram.Reflection do
             exception?: boolean,
             ecto_schema?: boolean,
             js_imports?: boolean,
+            broadcast_caller?: boolean,
             source_path: String.t() | nil,
             layout_module: module | nil,
             route: term,
@@ -129,8 +149,14 @@ defmodule Hologram.Reflection do
     # size with the old digest, and that entry would be reused as long as the file stood still.
     {mtime, size} = beam_mtime_and_size(beam_source)
 
-    {:ok, {_module, [{:exports, exports}, {~c"Dbgi", dbgi_chunk}, {:compile_info, compile_info}]}} =
-      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info])
+    {:ok,
+     {_module,
+      [
+        {:exports, exports},
+        {~c"Dbgi", dbgi_chunk},
+        {:compile_info, compile_info},
+        {:imports, imports}
+      ]}} = :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info, :imports])
 
     if {:__info__, 1} in exports do
       page? = {:__is_hologram_page__, 0} in exports
@@ -158,6 +184,7 @@ defmodule Hologram.Reflection do
         exception?: {:exception, 1} in exports and {:message, 1} in exports,
         ecto_schema?: {:__schema__, 1} in exports and {:__changeset__, 0} in exports,
         js_imports?: {:__js_imports__, 0} in exports,
+        broadcast_caller?: Enum.any?(@broadcast_mfas, &(&1 in imports)),
         source_path: compile_info_source(compile_info),
         layout_module: literal_return(definitions, :__layout_module__, []),
         route: literal_return(definitions, :__route__, []),
@@ -204,6 +231,14 @@ defmodule Hologram.Reflection do
         beam_path
     end
   end
+
+  @doc """
+  Returns the functions that broadcast action params from server code to connected clients. The
+  compiler treats their callers as entry points: a broadcast can reach any connected client, so what
+  its caller's code creates and names is app-wide.
+  """
+  @spec broadcast_mfas() :: [mfa]
+  def broadcast_mfas, do: @broadcast_mfas
 
   @doc """
   Returns the build directory path.

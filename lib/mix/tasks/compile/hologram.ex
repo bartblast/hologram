@@ -138,8 +138,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       # The IR PLT and the call graph are kept between compiles (see Hologram.Compiler.Cache), and
       # the module infos they were last brought in line with, with the modules whose beams a save
       # can rewrite, are the before picture. The IR PLT holds the IR this compile reads, no more:
-      # the modules of the diff first, for the graph patch, then the rest once the graph says what
-      # is reachable.
+      # the modules the graph patch rebuilds first, then the ones the walk reaches, then the rest
+      # once the graph says what is reachable.
       {cache, old_module_info_plt, module_info_dumped_at} =
         load_before_state(build_dir, call_graph_dump_path, sup)
 
@@ -167,8 +167,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_digests_diff =
         Compiler.diff_module_info_plts(old_module_info_plt, new_module_info_plt)
 
-      ir_plt = Compiler.patch_ir_plt!(cache.ir_plt, module_digests_diff)
-
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
 
@@ -182,9 +180,41 @@ defmodule Mix.Tasks.Compile.Hologram do
           module_digests_diff.removed_modules ++ module_digests_diff.edited_modules
         )
 
+      # The walk below starts from the pages and reads each page's layout.
+      page_modules = Compiler.list_pages(new_module_info_plt)
+      Compiler.validate_page_modules(page_modules, new_module_info_plt)
+
+      # The IR of every removed and edited module is dropped, whether or not the graph holds the
+      # module: the IR PLT keeps the templatables' IR between compiles, and an edited component no
+      # page reaches is read again by the prop usage validation. The IR this compile reads is built
+      # as it is asked for: the modules the patch rebuilds first, then the ones the walk reaches,
+      # then the templatables and what the entry files read.
+      ir_plt =
+        Compiler.delete_module_ir(
+          cache.ir_plt,
+          module_digests_diff.removed_modules ++ module_digests_diff.edited_modules
+        )
+
+      # The graph holds the modules the pages, the runtime and the broadcast callers reach, no more
+      # (see Hologram.Compiler.build_reach!/3), so only the modules of the diff it holds or must
+      # come to hold are patched. On a build into an empty build dir those are the pages and the
+      # broadcast callers, from which the walk grows the graph.
+      graph_diff = CallGraph.narrow_diff(call_graph, module_digests_diff)
+
+      Compiler.build_missing_ir!(ir_plt, graph_diff.edited_modules ++ graph_diff.added_modules)
+
       call_graph
-      |> CallGraph.patch(ir_plt, module_digests_diff)
+      |> CallGraph.patch(ir_plt, graph_diff)
       |> CallGraph.add_non_discoverable_edges()
+
+      # Grows the graph by the modules the patched functions start reaching, their IR included. A
+      # compile whose patch touched nothing the graph holds reaches nothing new and does not walk.
+      built_modules =
+        if graph_diff == %{added_modules: [], edited_modules: [], removed_modules: []} do
+          []
+        else
+          Compiler.build_reach!(call_graph, ir_plt, graph_diff)
+        end
 
       # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
       async_mfas = CallGraph.list_async_mfas(call_graph)
@@ -197,11 +227,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
         |> CallGraph.remove_manually_ported_mfas()
 
-      page_modules = Compiler.list_pages(new_module_info_plt)
       component_modules = Compiler.list_components(new_module_info_plt)
-
-      Compiler.validate_page_modules(page_modules, new_module_info_plt)
-
       templatable_modules = page_modules ++ component_modules
       Compiler.build_missing_ir!(ir_plt, templatable_modules)
 
@@ -215,7 +241,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well.
       app_versions =
-        build_app_versions(cache.app_versions, call_graph_for_runtime, module_digests_diff)
+        build_app_versions(
+          cache.app_versions,
+          call_graph_for_runtime,
+          module_digests_diff,
+          built_modules
+        )
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
@@ -432,13 +463,15 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The versions of the applications the graph reaches, kept between compiles: an ordinary save edits
   # the project's own modules, which can move neither the set of applications the graph reaches nor
-  # any of their versions (see Hologram.Compiler.app_versions_changed?/2).
-  defp build_app_versions(nil, call_graph, _module_digests_diff) do
+  # any of their versions (see Hologram.Compiler.app_versions_changed?/2). Unless the walk built
+  # modules into the graph: one of them can belong to an application the graph did not reach before.
+  defp build_app_versions(nil, call_graph, _module_digests_diff, _built_modules) do
     Compiler.build_app_versions(call_graph)
   end
 
-  defp build_app_versions(kept_app_versions, call_graph, module_digests_diff) do
-    if Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app()) do
+  defp build_app_versions(kept_app_versions, call_graph, module_digests_diff, built_modules) do
+    if built_modules != [] or
+         Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app()) do
       Compiler.build_app_versions(call_graph)
     else
       kept_app_versions
@@ -752,18 +785,19 @@ defmodule Mix.Tasks.Compile.Hologram do
 
         # The two dumps are written together at the end of a compile, so a module info dump
         # without a graph dump is not a before picture: diffing against it would report no changes
-        # and leave the empty graph with nothing to patch. Without the graph dump every module
-        # counts as added, so the IR PLT and the graph are built in full.
+        # and leave the empty graph with nothing to patch. Neither is a graph dump of another dump
+        # version, which the graph does not load (see CallGraph.load/2). Without a graph dump
+        # every module counts as added, of which the pages and the broadcast callers are patched
+        # in, and the graph is grown from them (see Hologram.Compiler.build_reach!/3).
         {module_info_plt, dumped_at} =
-          if File.exists?(call_graph_dump_path) do
-            CallGraph.load(cache.call_graph, call_graph_dump_path)
-
+          with true <- File.exists?(call_graph_dump_path),
+               :ok <- CallGraph.load(cache.call_graph, call_graph_dump_path) do
             {plt, _dump_path, dumped_at} =
               Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
 
             {plt, dumped_at}
           else
-            {PLT.start(supervisor: sup), nil}
+            _no_usable_dump -> {PLT.start(supervisor: sup), nil}
           end
 
         {cache, module_info_plt, dumped_at}
