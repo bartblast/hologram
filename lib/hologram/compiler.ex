@@ -1156,19 +1156,21 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Deletes from the IR PLT the entries of modules not in the given list, and returns the PLT. Reads the keys
-  only, never the values: the table can hold gigabytes.
+  Deletes from the IR PLT the entries of modules not in the given list, and returns the modules it
+  deleted. Reads the keys only, never the values: the table can hold gigabytes.
   """
-  @spec prune_ir_plt(PLT.t(), [module]) :: PLT.t()
+  @spec prune_ir_plt(PLT.t(), [module]) :: [module]
   def prune_ir_plt(ir_plt, modules) do
     kept_modules = MapSet.new(modules)
 
-    ir_plt
-    |> PLT.keys()
-    |> Enum.reject(&MapSet.member?(kept_modules, &1))
-    |> Enum.each(&PLT.delete(ir_plt, &1))
+    dropped_modules =
+      ir_plt
+      |> PLT.keys()
+      |> Enum.reject(&MapSet.member?(kept_modules, &1))
 
-    ir_plt
+    Enum.each(dropped_modules, &PLT.delete(ir_plt, &1))
+
+    dropped_modules
   end
 
   @doc """

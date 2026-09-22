@@ -3313,8 +3313,14 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(ir_plt, Module4) == :error
     end
 
-    test "returns the PLT", %{ir_plt: ir_plt} do
-      assert prune_ir_plt(ir_plt, [Module1]) == ir_plt
+    test "returns the modules it deleted", %{ir_plt: ir_plt} do
+      dropped_modules = prune_ir_plt(ir_plt, [Module1])
+
+      assert Enum.sort(dropped_modules) == [Module2, Module3]
+    end
+
+    test "returns no module when every module is kept", %{ir_plt: ir_plt} do
+      assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
     end
   end
 
