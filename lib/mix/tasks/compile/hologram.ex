@@ -721,11 +721,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       %{bundle_name: "page", entry_name: page_module} = bundle_info ->
         mfas = mfas_by_page[page_module]
 
-        Cache.put_page(page_module, %{
-          bundle_info: bundle_info,
-          mfas: mfas,
-          modules: page_state_modules(mfas)
-        })
+        Cache.put_page(
+          page_module,
+          %{bundle_info: bundle_info, modules: page_state_modules(mfas)},
+          mfas
+        )
 
       %{bundle_name: "runtime"} = bundle_info ->
         Cache.put_runtime(%{

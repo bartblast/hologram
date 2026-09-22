@@ -81,7 +81,7 @@ defmodule Hologram.Compiler.CacheTest do
 
   describe "delete_page/2" do
     test "forgets a kept page" do
-      put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
+      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
 
       assert delete_page(Module1) == :ok
       assert PLT.get(get().pages_plt, Module1) == :error
@@ -218,16 +218,13 @@ defmodule Hologram.Compiler.CacheTest do
     assert get().module_metadata == nil
   end
 
-  test "put_page/2" do
-    page_state = %{
-      mfas: [{Module1, :fun_1, 0}],
-      modules: MapSet.new([Module1]),
-      bundle_info: %{digest: "a"}
-    }
+  test "put_page/3" do
+    page_state = %{bundle_info: %{digest: "a"}, modules: MapSet.new([Module1])}
+    mfas = [{Module1, :fun_1, 0}]
 
-    assert put_page(Module1, page_state) == :ok
+    assert put_page(Module1, page_state, mfas) == :ok
     assert PLT.get(get().pages_plt, Module1) == {:ok, page_state}
-    assert PLT.get(get().page_mfas_plt, Module1) == {:ok, page_state.mfas}
+    assert PLT.get(get().page_mfas_plt, Module1) == {:ok, mfas}
   end
 
   test "put_pending_pages/1" do
@@ -328,7 +325,7 @@ defmodule Hologram.Compiler.CacheTest do
       put_app_versions(hologram: "1.0.0")
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
-      put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
+      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
 
       put_runtime(%{
         app_versions: [],

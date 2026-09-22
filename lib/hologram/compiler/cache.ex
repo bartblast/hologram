@@ -31,7 +31,7 @@ defmodule Hologram.Compiler.Cache do
 
   @type encoding_inputs :: %{async_mfas: MapSet.t(mfa), client_stacktraces?: boolean}
 
-  @type page_state :: %{mfas: [mfa], modules: MapSet.t(module), bundle_info: map}
+  @type page_state :: %{bundle_info: map, modules: MapSet.t(module)}
 
   @type runtime_state :: %{
           app_versions: keyword(String.t()),
@@ -138,8 +138,8 @@ defmodule Hologram.Compiler.Cache do
     {:reply, :ok, %{state | module_metadata: module_metadata}}
   end
 
-  def handle_call({:put_page, page_module, page_state}, _from, state) do
-    PLT.put(state.page_mfas_plt, page_module, page_state.mfas)
+  def handle_call({:put_page, page_module, page_state, mfas}, _from, state) do
+    PLT.put(state.page_mfas_plt, page_module, mfas)
     PLT.put(state.pages_plt, page_module, page_state)
     {:reply, :ok, state}
   end
@@ -220,14 +220,15 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Keeps a page's reachable MFAs, their modules and the info of the bundle built from them, so that
-  the next compile can reuse that bundle when nothing the page reaches has changed. The MFAs go into
-  a PLT of their own as well, which the page partition reads only when the runtime's MFAs changed.
-  Put right after the bundle is written, so the state and the file on disk go together.
+  Keeps the modules a page reaches and the info of the bundle built from them, so that the next
+  compile can reuse that bundle when nothing the page reaches has changed, and the page's reachable
+  MFAs in a PLT of their own, which the page partition reads only when the runtime's MFAs changed:
+  the per-compile partition copies the state of every page, and the MFAs are the bulk of it. Put
+  right after the bundle is written, so the state and the file on disk go together.
   """
-  @spec put_page(module, page_state) :: :ok
-  def put_page(page_module, page_state) do
-    GenServer.call(server(), {:put_page, page_module, page_state})
+  @spec put_page(module, page_state, [mfa]) :: :ok
+  def put_page(page_module, page_state, mfas) do
+    GenServer.call(server(), {:put_page, page_module, page_state, mfas})
   end
 
   @doc """

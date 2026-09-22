@@ -3030,7 +3030,6 @@ defmodule Hologram.CompilerTest do
             static_bundle_path: bundle_path,
             static_source_map_path: bundle_path <> ".map"
           },
-          mfas: mfas,
           modules: MapSet.new(mfas, &elem(&1, 0))
         })
 

@@ -1439,17 +1439,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
       File.write!(bundle_path, "bundle")
       File.write!(source_map_path, "map")
 
-      Cache.put_page(:gone_page, %{
-        bundle_info: %{
-          bundle_name: "page",
-          digest: digest,
-          entry_name: :gone_page,
-          static_bundle_path: bundle_path,
-          static_source_map_path: source_map_path
+      Cache.put_page(
+        :gone_page,
+        %{
+          bundle_info: %{
+            bundle_name: "page",
+            digest: digest,
+            entry_name: :gone_page,
+            static_bundle_path: bundle_path,
+            static_source_map_path: source_map_path
+          },
+          modules: MapSet.new()
         },
-        mfas: [],
-        modules: MapSet.new()
-      })
+        []
+      )
 
       run(opts)
 
@@ -1883,6 +1886,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # PLT's keys are not read, since the IR prune drops nothing and no module was removed.
     # One copy is left, the page digest PLT's, which PLT.dump/2 reads out to write it. The module
     # infos are neither copied into a PLT of the compile's nor out of one, for the diff or the cache.
+    test "a kept page state holds no MFA list", %{opts: opts} do
+      run(opts)
+
+      %{page_mfas_plt: page_mfas_plt, pages_plt: pages_plt} = cache_state()
+      page_states = PLT.get_all(pages_plt)
+
+      assert map_size(page_states) > 0
+
+      Enum.each(page_states, fn {page_module, page_state} ->
+        assert Enum.sort(Map.keys(page_state)) == [:bundle_info, :modules]
+        assert {:ok, [_mfa | _rest]} = PLT.get(page_mfas_plt, page_module)
+      end)
+    end
+
     test "a run with no changes copies no module info", %{opts: opts} do
       run(opts)
 
