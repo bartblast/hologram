@@ -70,6 +70,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
+  # How many times the call graph and a PLT are dumped while the given function runs.
+  defp count_dumps(fun) do
+    mfas = [{CallGraph, :dump, 2}, {PLT, :dump, 2}]
+    Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+    try do
+      fun.()
+
+      Enum.map(mfas, fn mfa ->
+        {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+        count
+      end)
+    after
+      Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+    end
+  end
+
   # How many templates are validated while the given function runs: each goes through a private
   # function once, whose local calls are counted.
   defp count_validated_templates(fun) do
@@ -1819,6 +1836,58 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert PLT.member?(Cache.get().ir_plt, component_module)
     end
 
+    # The page digest PLT is dumped on every run, so one PLT dump is always counted.
+    test "a run with no changes writes neither the call graph nor the module infos", %{
+      opts: opts
+    } do
+      run(opts)
+
+      module_info_dump_path =
+        Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+
+      stat_before = File.stat!(module_info_dump_path, time: :posix)
+
+      assert count_dumps(fn -> run(opts) end) == [0, 1]
+
+      stat_after = File.stat!(module_info_dump_path, time: :posix)
+      assert {stat_after.mtime, stat_after.size} == {stat_before.mtime, stat_before.size}
+    end
+
+    test "an edit of a module no page reaches writes the call graph and the module infos", %{
+      opts: opts
+    } do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 2]
+    end
+
+    test "a run with no changes writes both dumps when the module info dump was rewritten", %{
+      opts: opts
+    } do
+      run(opts)
+
+      module_info_dump_path =
+        Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+
+      File.touch!(module_info_dump_path, System.os_time(:second) - 10)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 2]
+    end
+
+    test "a run with no changes writes both dumps when the call graph dump is gone", %{
+      opts: opts
+    } do
+      run(opts)
+
+      call_graph_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
+      File.rm!(call_graph_dump_path)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 2]
+      assert File.exists?(call_graph_dump_path)
+    end
+
     test "a run after a reset starts from the build dir", %{opts: opts} do
       run(opts)
       Cache.reset()
@@ -1873,10 +1942,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
       # in place and only then raises, which is the shape of a compile that dies after changing
-      # what the cache keeps.
+      # what the cache keeps. The page is edited, since a run that changes nothing writes no dump.
       blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
       File.rm!(blocked_dump_path)
       File.mkdir!(blocked_dump_path)
+      on_exit(fn -> File.rmdir(blocked_dump_path) end)
+      fake_edit(Module1)
 
       assert_raise File.Error, fn -> run(opts) end
       assert Cache.get().module_infos == nil

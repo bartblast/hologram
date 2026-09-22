@@ -373,8 +373,12 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{"runtime", runtime_entry_file_path, "runtime"}]
         end
 
-      CallGraph.dump(call_graph, call_graph_dump_path)
-      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
+      module_infos = PLT.get_all(new_module_info_plt)
+
+      dump_before_picture(cache, module_infos, call_graph, new_module_info_plt,
+        call_graph_dump_path: call_graph_dump_path,
+        module_info_plt_dump_path: module_info_plt_dump_path
+      )
 
       # The dump time is kept with the infos, since the reuse guard compares them against it (see
       # Hologram.Compiler.Cache). After everything that patches the IR PLT and the call graph, so
@@ -383,7 +387,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       # that a compile that fails there leaves this picture, and the next compile rebuilds the pages
       # it left pending.
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-      module_infos = PLT.get_all(new_module_info_plt)
       Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
       Cache.put_encoding_inputs(encoding_inputs)
@@ -619,6 +622,17 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  # The call graph and the module infos are the before picture of the next VM's first compile (see
+  # load_before_state/3), so they are written together or not at all. A compile that leaves the infos
+  # as the kept ones leaves the graph as it was too, and the dumps this VM wrote hold both already.
+  # Another VM's dump written meanwhile (the mtime moved), or a deleted graph dump, is written over.
+  defp dump_before_picture(cache, module_infos, call_graph, module_info_plt, dump_paths) do
+    if not dumps_current?(cache, module_infos, dump_paths) do
+      CallGraph.dump(call_graph, dump_paths[:call_graph_dump_path])
+      PLT.dump(module_info_plt, dump_paths[:module_info_plt_dump_path])
+    end
+  end
+
   # The page digest PLT is dumped after every batch, so that the build dir names the bundles on disk
   # whenever the batches stop.
   defp dump_page_digest_plt(bundles, context) do
@@ -631,6 +645,13 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     PLT.stop(page_digest_plt)
+  end
+
+  # The first compile in a VM has no infos kept, so it writes.
+  defp dumps_current?(cache, module_infos, dump_paths) do
+    module_infos == cache.module_infos and
+      Compiler.module_info_dumped_at(dump_paths[:module_info_plt_dump_path]) == cache.dumped_at and
+      File.exists?(dump_paths[:call_graph_dump_path])
   end
 
   # The pages graph of a compile that kept the runtime's MFAs, made once a page is left to rebuild.
