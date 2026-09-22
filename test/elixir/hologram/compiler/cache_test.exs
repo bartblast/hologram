@@ -17,11 +17,14 @@ defmodule Hologram.Compiler.CacheTest do
   end
 
   describe "clear_module_infos/0" do
-    test "forgets the module infos, the dump time and the editable modules" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123, MapSet.new([Module1]))
+    test "forgets the dump time and the editable modules, and keeps the module infos" do
+      %{module_info_plt: module_info_plt} = get()
+      PLT.put(module_info_plt, Module1, %{digest: "a"})
+      put_module_infos(123, MapSet.new([Module1]))
 
       assert clear_module_infos() == :ok
-      assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
+      assert %{dumped_at: nil, editable_modules: nil, module_info_plt: ^module_info_plt} = get()
+      assert PLT.get(module_info_plt, Module1) == {:ok, %{digest: "a"}}
     end
 
     test "keeps the pending pages" do
@@ -133,7 +136,7 @@ defmodule Hologram.Compiler.CacheTest do
                encode_plt: %PLT{} = encode_plt,
                encoding_inputs: nil,
                ir_plt: %PLT{} = ir_plt,
-               module_infos: nil,
+               module_info_plt: %PLT{} = module_info_plt,
                module_metadata: nil,
                pages_plt: %PLT{} = pages_plt,
                pending_pages: pending_pages,
@@ -146,17 +149,24 @@ defmodule Hologram.Compiler.CacheTest do
       assert CallGraph.vertices(call_graph) == []
       assert PLT.keys(encode_plt) == []
       assert PLT.keys(ir_plt) == []
+      assert PLT.keys(module_info_plt) == []
       assert PLT.keys(pages_plt) == []
     end
 
     test "returns the same call graph and PLTs on every call" do
-      %{call_graph: call_graph, encode_plt: encode_plt, ir_plt: ir_plt, pages_plt: pages_plt} =
-        get()
+      %{
+        call_graph: call_graph,
+        encode_plt: encode_plt,
+        ir_plt: ir_plt,
+        module_info_plt: module_info_plt,
+        pages_plt: pages_plt
+      } = get()
 
       assert %{
                call_graph: ^call_graph,
                encode_plt: ^encode_plt,
                ir_plt: ^ir_plt,
+               module_info_plt: ^module_info_plt,
                pages_plt: ^pages_plt
              } = get()
     end
@@ -185,14 +195,11 @@ defmodule Hologram.Compiler.CacheTest do
     assert %{encoding_inputs: ^encoding_inputs} = get()
   end
 
-  test "put_module_infos/3" do
-    module_infos = %{Module1 => %{digest: "a"}}
+  test "put_module_infos/2" do
     editable_modules = MapSet.new([Module1])
 
-    assert put_module_infos(module_infos, 123, editable_modules) == :ok
-
-    assert %{dumped_at: 123, editable_modules: ^editable_modules, module_infos: ^module_infos} =
-             get()
+    assert put_module_infos(123, editable_modules) == :ok
+    assert %{dumped_at: 123, editable_modules: ^editable_modules} = get()
   end
 
   test "put_module_metadata/1" do
@@ -285,12 +292,21 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_ir_plt) == []
     end
 
-    test "forgets the module infos, the dump time and the editable modules" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123, MapSet.new([Module1]))
+    test "stops the kept module info PLT and starts an empty one, and forgets the dump time and the editable modules" do
+      old_module_info_plt = get().module_info_plt
+      PLT.put(old_module_info_plt, Module1, %{digest: "a"})
+      put_module_infos(123, MapSet.new([Module1]))
 
       reset()
 
-      assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_info_plt: new_plt} =
+        get()
+
+      refute Process.alive?(old_module_info_plt.pid)
+      assert new_plt.table_ref != old_module_info_plt.table_ref
+      assert PLT.keys(new_plt) == []
+      assert dumped_at == nil
+      assert editable_modules == nil
     end
 
     test "forgets the pending pages" do
@@ -336,14 +352,20 @@ defmodule Hologram.Compiler.CacheTest do
   end
 
   test "terminate/2" do
-    %{call_graph: call_graph, encode_plt: encode_plt, ir_plt: ir_plt, pages_plt: pages_plt} =
-      get()
+    %{
+      call_graph: call_graph,
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      pages_plt: pages_plt
+    } = get()
 
     GenServer.stop(Cache)
 
     refute Process.alive?(call_graph.pid)
     refute Process.alive?(encode_plt.pid)
     refute Process.alive?(ir_plt.pid)
+    refute Process.alive?(module_info_plt.pid)
     refute Process.alive?(pages_plt.pid)
     assert :ets.whereis(Tracer) == :undefined
   end

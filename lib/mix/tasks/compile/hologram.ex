@@ -140,7 +140,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # can rewrite, are the before picture. The IR PLT holds the IR this compile reads, no more:
       # the modules the graph patch rebuilds first, then the ones the walk reaches, then the rest
       # once the graph says what is reachable.
-      {cache, old_module_info_plt, module_info_dumped_at} =
+      {cache, old_module_info_plt, module_info_dumped_at, kept_module_infos} =
         load_before_state(build_dir, call_graph_dump_path, sup)
 
       # Listed with the scan, so that the modules kept as editable and the module infos kept with
@@ -381,6 +381,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       dump_before_picture(cache, module_infos, call_graph, new_module_info_plt,
         call_graph_dump_path: call_graph_dump_path,
         graph_unchanged?: graph_unchanged?,
+        kept_module_infos: kept_module_infos,
         module_info_plt_dump_path: module_info_plt_dump_path
       )
 
@@ -391,7 +392,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # that a compile that fails there leaves this picture, and the next compile rebuilds the pages
       # it left pending.
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
+
+      cache.module_info_plt
+      |> PLT.reset()
+      |> PLT.put(Map.to_list(module_infos))
+
+      Cache.put_module_infos(module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
       Cache.put_encoding_inputs(encoding_inputs)
       Cache.put_module_metadata(module_metadata)
@@ -640,7 +646,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       CallGraph.dump(call_graph, opts[:call_graph_dump_path])
     end
 
-    if not (module_infos == cache.module_infos and own_dumps?) do
+    if not (module_infos == opts[:kept_module_infos] and own_dumps?) do
       PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
     end
   end
@@ -899,24 +905,26 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.list_runtime_mfas(call_graph, page_modules)
   end
 
-  # Returns the cache, the module info PLT to diff against, and the dump time the module info reuse
-  # guard takes. The kept module infos are the proof that the kept IR PLT and call graph are exactly
-  # in line with them, whatever another VM wrote to the build dir since, and they exist only between
-  # two finished compiles. Without them (the first compile in a VM, or after a failed one) the cache
-  # is emptied and the build dir is the before picture: the graph comes from its dump and the module
-  # info dump written next to it says what changed.
+  # Returns the cache, the module info PLT to diff against, the dump time the module info reuse guard
+  # takes, and the kept module infos (nil without them), which the dumps are compared against. The
+  # kept module infos are the proof that the kept IR PLT and call graph are exactly in line with
+  # them, whatever another VM wrote to the build dir since, and they are trusted only between two
+  # finished compiles (the cache keeps the editable modules then). Without them (the first compile
+  # in a VM, or after a failed one) the cache is emptied and the build dir is the before picture:
+  # the graph comes from its dump and the module info dump written next to it says what changed.
   defp load_before_state(build_dir, call_graph_dump_path, sup) do
     case Cache.get() do
-      %{module_infos: nil} ->
+      %{editable_modules: nil} ->
         :ok = Cache.reset()
         cache = Cache.get()
 
-        # The two dumps are written together at the end of a compile, so a module info dump
-        # without a graph dump is not a before picture: diffing against it would report no changes
-        # and leave the empty graph with nothing to patch. Neither is a graph dump of another dump
-        # version, which the graph does not load (see CallGraph.load/2). Without a graph dump
-        # every module counts as added, of which the pages and the broadcast callers are patched
-        # in, and the graph is grown from them (see Hologram.Compiler.build_reach!/3).
+        # The two dumps are one before picture, and the graph dump is never written without the
+        # module info dump, so a module info dump without a graph dump is not a before picture:
+        # diffing against it would report no changes and leave the empty graph with nothing to
+        # patch. Neither is a graph dump of another dump version, which the graph does not load (see
+        # CallGraph.load/2). Without a graph dump every module counts as added, of which the pages
+        # and the broadcast callers are patched in, and the graph is grown from them (see
+        # Hologram.Compiler.build_reach!/3).
         {module_info_plt, dumped_at} =
           with true <- File.exists?(call_graph_dump_path),
                :ok <- CallGraph.load(cache.call_graph, call_graph_dump_path) do
@@ -928,11 +936,11 @@ defmodule Mix.Tasks.Compile.Hologram do
             _no_usable_dump -> {PLT.start(supervisor: sup), nil}
           end
 
-        {cache, module_info_plt, dumped_at}
+        {cache, module_info_plt, dumped_at, nil}
 
       cache ->
-        items = Map.to_list(cache.module_infos)
-        module_info_plt = PLT.start(items: items, supervisor: sup)
+        kept_module_infos = PLT.get_all(cache.module_info_plt)
+        module_info_plt = PLT.start(items: Map.to_list(kept_module_infos), supervisor: sup)
 
         # Cleared before anything is patched in place: a compile that dies mid-patch can leave the
         # kept graph without edges that only its callers would rebuild, so the next compile must
@@ -940,7 +948,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         # after the dumps.
         :ok = Cache.clear_module_infos()
 
-        {cache, module_info_plt, cache.dumped_at}
+        {cache, module_info_plt, cache.dumped_at, kept_module_infos}
     end
   end
 
