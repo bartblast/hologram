@@ -2634,6 +2634,92 @@ defmodule Hologram.CompilerTest do
     assert list_pages(plt) == [Module11, Module2]
   end
 
+  describe "list_templatables_to_validate/3" do
+    setup do
+      [
+        empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []},
+        template_modules: %{
+          page_1: MapSet.new([:component_1]),
+          page_2: MapSet.new([:component_2]),
+          component_1: MapSet.new(),
+          component_2: MapSet.new()
+        },
+        templatable_modules: [:component_1, :component_2, :page_1, :page_2]
+      ]
+    end
+
+    test "lists every templatable when no validation is kept", %{
+      empty_diff: diff,
+      templatable_modules: templatable_modules
+    } do
+      assert list_templatables_to_validate(templatable_modules, diff, nil) == templatable_modules
+    end
+
+    test "lists none with no change", context do
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               context.empty_diff,
+               context.template_modules
+             ) == []
+    end
+
+    test "lists an edited templatable", context do
+      diff = %{context.empty_diff | edited_modules: [:page_2]}
+
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               diff,
+               context.template_modules
+             ) == [:page_2]
+    end
+
+    test "lists an added templatable", context do
+      templatable_modules = [:page_3 | context.templatable_modules]
+      diff = %{context.empty_diff | added_modules: [:page_3]}
+
+      assert list_templatables_to_validate(templatable_modules, diff, context.template_modules) ==
+               [:page_3]
+    end
+
+    test "lists an edited component and the templatables whose template uses it, not the others",
+         context do
+      diff = %{context.empty_diff | edited_modules: [:component_1]}
+
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               diff,
+               context.template_modules
+             ) == [:component_1, :page_1]
+    end
+
+    test "lists a templatable whose template uses a removed module", context do
+      templatable_modules = context.templatable_modules -- [:component_2]
+      diff = %{context.empty_diff | removed_modules: [:component_2]}
+
+      assert list_templatables_to_validate(templatable_modules, diff, context.template_modules) ==
+               [:page_2]
+    end
+
+    # A usage of a module that did not exist when the template was last validated.
+    test "lists a templatable whose template uses an added module", context do
+      template_modules = %{context.template_modules | page_2: MapSet.new([:component_3])}
+      diff = %{context.empty_diff | added_modules: [:component_3]}
+
+      assert list_templatables_to_validate(context.templatable_modules, diff, template_modules) ==
+               [:page_2]
+    end
+
+    test "lists none when the edited module is used by no template", context do
+      diff = %{context.empty_diff | edited_modules: [:plain_module]}
+
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               diff,
+               context.template_modules
+             ) == []
+    end
+  end
+
   describe "maybe_install_js_deps/1" do
     setup do
       setup_js_deps_test("maybe_install_js_deps_1")
@@ -3350,64 +3436,6 @@ defmodule Hologram.CompilerTest do
 
     refute String.contains?(js, "Elixir.String.Chars.Version")
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
-  end
-
-  describe "templatable_changed?/3" do
-    setup do
-      module_info_plt =
-        PLT.start(
-          items: [
-            {:page, %{page?: true, component?: false}},
-            {:component, %{page?: false, component?: true}},
-            {:plain, %{page?: false, component?: false}}
-          ]
-        )
-
-      [
-        empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []},
-        module_info_plt: module_info_plt
-      ]
-    end
-
-    test "an added page", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      assert templatable_changed?(%{diff | added_modules: [:plain, :page]}, %{}, module_info_plt)
-    end
-
-    test "an edited component", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      assert templatable_changed?(%{diff | edited_modules: [:component]}, %{}, module_info_plt)
-    end
-
-    test "a removed page", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      removed_infos = %{removed_page: %{page?: true, component?: false}}
-
-      assert templatable_changed?(
-               %{diff | removed_modules: [:removed_page]},
-               removed_infos,
-               module_info_plt
-             )
-    end
-
-    test "a removed plain module", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      removed_infos = %{removed_plain: %{page?: false, component?: false}}
-
-      refute templatable_changed?(
-               %{diff | removed_modules: [:removed_plain]},
-               removed_infos,
-               module_info_plt
-             )
-    end
-
-    test "an edited plain module", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      refute templatable_changed?(%{diff | edited_modules: [:plain]}, %{}, module_info_plt)
-    end
-
-    test "an added plain module", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      refute templatable_changed?(%{diff | added_modules: [:plain]}, %{}, module_info_plt)
-    end
-
-    test "no change", %{empty_diff: diff, module_info_plt: module_info_plt} do
-      refute templatable_changed?(diff, %{}, module_info_plt)
-    end
   end
 
   describe "update_module_info_plt!/5" do

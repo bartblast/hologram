@@ -943,6 +943,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the templatables whose prop usages a compile validates: every one when no earlier validation
+  is kept (`template_modules` nil), else the ones the module digests diff added or edited, and the
+  ones whose template uses an added, edited or removed module, as `template_modules` (each
+  templatable's used modules, from `validate_prop_usages/2`) records them. A usage's validity
+  depends on its template and on the used component's props, which live in those modules' beams
+  alone.
+  """
+  @spec list_templatables_to_validate([module], map, %{module => MapSet.t(module)} | nil) ::
+          [module]
+  def list_templatables_to_validate(templatable_modules, _module_digests_diff, nil) do
+    templatable_modules
+  end
+
+  def list_templatables_to_validate(templatable_modules, module_digests_diff, template_modules) do
+    changed_modules =
+      MapSet.new(
+        module_digests_diff.added_modules ++
+          module_digests_diff.edited_modules ++ module_digests_diff.removed_modules
+      )
+
+    Enum.filter(templatable_modules, fn module ->
+      MapSet.member?(changed_modules, module) or
+        not MapSet.disjoint?(template_modules[module], changed_modules)
+    end)
+  end
+
+  @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps_2/README.md
@@ -1165,22 +1192,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Whether the module digests diff holds a page or a component: added or edited ones by the new
-  module info PLT's flags, removed ones by their last entries (`removed_infos`, module to info),
-  since a removed module has no new entry. Prop usages are validated only then, since a usage's
-  validity depends on the template that holds it and the props of the component it uses, which live
-  in those modules' beams alone.
-  """
-  @spec templatable_changed?(map, %{module => map}, PLT.t()) :: boolean
-  def templatable_changed?(module_digests_diff, removed_infos, new_module_info_plt) do
-    Enum.any?(removed_infos, fn {_module, info} -> templatable_info?(info) end) or
-      Enum.any?(
-        module_digests_diff.added_modules ++ module_digests_diff.edited_modules,
-        &templatable_info?(PLT.get!(new_module_info_plt, &1))
-      )
-  end
-
-  @doc """
   Builds the module info PLT of a live-reload compile from `old_plt`, the PLT of the last finished compile
   in this VM. The entries of the modules that were not among the editable beams then (`editable_modules`)
   are copied: nothing rewrites those beams while the VM runs. The editable beams now (`editable_beams`,
@@ -1275,7 +1286,8 @@ defmodule Hologram.Compiler do
   Modules missing from the IR PLT are skipped - a module without a BEAM source has no IR to walk.
 
   Returns, for each given module, the modules its template uses as components, whether or not they
-  are components: with its own template, all its result depends on. A skipped module uses none.
+  are components: with its own template, all its result depends on (see
+  `list_templatables_to_validate/3`). A skipped module uses none.
   """
   @spec validate_prop_usages(list(module), PLT.t()) :: %{module => MapSet.t(module)}
   def validate_prop_usages(modules, ir_plt) do
@@ -2020,8 +2032,6 @@ defmodule Hologram.Compiler do
 
     usages
   end
-
-  defp templatable_info?(info), do: info.page? or info.component?
 
   # Only the template's own DOM is validated. A component node is an ordinary 4-tuple, so code
   # elsewhere in the module - a helper building DOM by hand, a fixture - can hold one without any
