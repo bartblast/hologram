@@ -625,9 +625,11 @@ defmodule Hologram.Compiler do
   @doc """
   Deletes from the encode PLT the entries of the given modules' functions, and returns the PLT. A
   module's functions are encoded again from its IR once it was edited, and are gone with it once it
-  was removed. Reads the keys only, never the values.
+  was removed. Reads the keys only, never the values. Given no module, it reads nothing.
   """
   @spec delete_module_encodings(PLT.t(), [module]) :: PLT.t()
+  def delete_module_encodings(encode_plt, []), do: encode_plt
+
   def delete_module_encodings(encode_plt, modules) do
     dropped_modules = MapSet.new(modules)
 

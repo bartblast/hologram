@@ -1787,6 +1787,13 @@ defmodule Hologram.CompilerTest do
     test "returns the PLT", %{encode_plt: encode_plt} do
       assert delete_module_encodings(encode_plt, [Module1]) == encode_plt
     end
+
+    test "given no module, reads no key and keeps every entry", %{encode_plt: encode_plt} do
+      count = count_calls({PLT, :keys, 1}, fn -> delete_module_encodings(encode_plt, []) end)
+
+      assert count == 0
+      assert PLT.size(encode_plt) == 4
+    end
   end
 
   describe "delete_module_ir/2" do
