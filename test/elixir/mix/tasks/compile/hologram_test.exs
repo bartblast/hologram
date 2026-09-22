@@ -2026,7 +2026,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "module metadata" do
     setup do
-      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      # Reset on the way out too: a test here can leave a faked entry in the kept module infos.
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_stacktraces)
+        Cache.reset()
+      end)
+
       :ok
     end
 
@@ -2073,6 +2078,42 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert count_builds.(false) == 0
       assert count_builds.(true) == 1
+    end
+
+    test "a run with no changes builds no module metadata", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      Cache.reset()
+      run(opts)
+
+      assert count_calls({Compiler, :build_module_metadata, 1}, fn -> run(opts) end) == 0
+    end
+
+    test "the kept module metadata after an edit is the one a full build finds", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      Cache.reset()
+      run(opts)
+      fake_edit(Module1)
+      run(opts)
+
+      %{module_infos: module_infos, module_metadata: module_metadata} = Cache.get()
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+
+      assert module_metadata == Compiler.build_module_metadata(module_info_plt)
+
+      PLT.stop(module_info_plt)
+    end
+
+    test "turning client stack traces off forgets the module metadata", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      Cache.reset()
+      run(opts)
+
+      assert Cache.get().module_metadata != nil
+
+      Application.put_env(:hologram, :client_stacktraces, false)
+      run(opts)
+
+      assert Cache.get().module_metadata == nil
     end
   end
 

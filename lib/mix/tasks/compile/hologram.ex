@@ -338,11 +338,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # The stack trace metadata of every module, which the bundles look up instead of asking the
       # VM about each module once per bundle. Built only when client stack traces are on, since the
-      # bundles register no metadata otherwise.
+      # bundles register no metadata otherwise. Kept between compiles and patched with the diff, since
+      # an entry moves only with its module's beam.
       module_metadata =
-        if Hologram.client_stacktraces?() do
-          Compiler.build_module_metadata(new_module_info_plt)
-        end
+        build_module_metadata(cache.module_metadata, module_digests_diff, new_module_info_plt)
 
       entry_file_opts =
         Keyword.merge(opts,
@@ -388,6 +387,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
       Cache.put_encoding_inputs(encoding_inputs)
+      Cache.put_module_metadata(module_metadata)
       Cache.put_template_modules(template_modules)
 
       # The kept runtime state describes the bundle this compile replaces. A compile that fails
@@ -519,6 +519,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       compiled_modules: compiled_modules,
       supervisor: sup
     )
+  end
+
+  # Built once per VM when client stack traces are on, then patched with each compile's diff. Nothing
+  # kept, or stack traces just turned on: built in full.
+  defp build_module_metadata(kept_metadata, module_digests_diff, module_info_plt) do
+    cond do
+      not Hologram.client_stacktraces?() ->
+        nil
+
+      kept_metadata == nil ->
+        Compiler.build_module_metadata(module_info_plt)
+
+      true ->
+        Compiler.patch_module_metadata(kept_metadata, module_digests_diff, module_info_plt)
+    end
   end
 
   # Builds the pages still to rebuild in the batches the :next_batch option asks for, and the runtime
