@@ -149,7 +149,7 @@ export default class Client {
   }
 
   // Covered in feature tests
-  static fetchPageBundlePath(pageModule, onSuccess, onFail) {
+  static fetchPageDigest(pageModule, onSuccess, onFail) {
     const opts = {
       onSuccess,
       onError: onFail,
@@ -157,7 +157,7 @@ export default class Client {
       timeout: Config.clientFetchTimeoutMs,
     };
 
-    return Connection.sendRequest("page_bundle_path", pageModule, opts);
+    return Connection.sendRequest("page_digest", pageModule, opts);
   }
 
   // Covered in feature tests

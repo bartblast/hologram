@@ -1361,8 +1361,11 @@ describe("Hologram", () => {
       children,
     ];
 
+    const bundlePath = (pageDigest) =>
+      `/hologram/page-Hologram.Test.Fixtures.Module7-${pageDigest}.js`;
+
     const wireBundleScript = (pageDigest) =>
-      wireElement("script", ["src", `/hologram/page-${pageDigest}.js`]);
+      wireElement("script", ["src", bundlePath(pageDigest)]);
 
     // What the server sends: the whole document, the page's own bundle script included.
     const treeFor = (pageDigest, bodyText) => [
@@ -1392,9 +1395,7 @@ describe("Hologram", () => {
     });
 
     const bundleScript = (pageDigest) =>
-      document.head.querySelector(
-        `script[src="/hologram/page-${pageDigest}.js"]`,
-      );
+      document.head.querySelector(`script[src="${bundlePath(pageDigest)}"]`);
 
     // The page a navigation patches against, which on a document load is the render mirrored
     // onto what the server sent.
@@ -1969,7 +1970,7 @@ describe("Hologram", () => {
         assert.throws(
           () => script.onerror(),
           HologramRuntimeError,
-          "Failed to load page bundle: /hologram/page-eee.js",
+          `Failed to load page bundle: ${bundlePath("eee")}`,
         );
       });
 
@@ -1991,7 +1992,7 @@ describe("Hologram", () => {
           assert.throws(
             () => bundleScript("hhh").onerror(),
             HologramRuntimeError,
-            "Failed to load page bundle: /hologram/page-hhh.js",
+            `Failed to load page bundle: ${bundlePath("hhh")}`,
           );
 
           Hologram.scheduleAction(
