@@ -1030,65 +1030,18 @@ defmodule Hologram.Compiler.CallGraph do
   Lists MFAs required by the runtime JS script of an app with the given pages,
   including the client MFAs of components referenced in broadcast caller code.
 
+  The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
+  is a traversal of the graph and reads of the module info PLT. The analyses PLT it starts is
+  started from the agent and stopped there too, before it returns.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
   """
   @spec list_runtime_mfas(t, [module]) :: [mfa]
   def list_runtime_mfas(call_graph, pages) do
-    entry_mfas = list_runtime_entry_mfas()
-    graph = get_graph(call_graph)
-    module_info_plt = call_graph.module_info_plt
-
-    # A component module referenced in broadcast caller code can be delivered to any
-    # connected page as a runtime value (e.g. in broadcast action params) and render
-    # as a dynamic tag there, so its client code goes into the runtime bundle, which
-    # every page loads.
-    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
-
-    app_types =
-      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt)
-
-    entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
-    initial_state = start_reachable_state(graph, entry_vertices, app_types, module_info_plt)
-    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-
-    initial_templatables =
-      Enum.uniq(
-        broadcast_caller_analysis.referenced_components ++
-          extract_uniq_components(initial_mfas, module_info_plt)
-      )
-
-    # The same server-referenced component expansion as in list_page_mfas/4, so chains
-    # like a broadcast-referenced component whose own server callbacks reference
-    # further components end up in the runtime bundle too. The runtime lists against a PLT
-    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
-    # taken on the graph that still holds the runtime's functions, so they must not mix
-    # with the pages'.
-    analyses = PLT.start()
-
-    {expanded_state, templatables} =
-      expand_reachable_state_with_server_referenced_components(
-        graph,
-        initial_state,
-        initial_templatables,
-        analyses,
-        module_info_plt
-      )
-
-    server_types =
-      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
-        MapSet.union(acc, analysis.dispatch_types)
-      end)
-
-    PLT.stop(analyses)
-
-    final_state =
-      expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
-
-    graph
-    |> finalize_reachable_mfas(final_state, module_info_plt)
-    |> reject_hex_mfas()
-    |> Enum.sort()
+    read_graph(
+      call_graph.pid,
+      &list_runtime_mfas_in_graph(&1, pages, call_graph.module_info_plt)
+    )
   end
 
   @doc """
@@ -1942,6 +1895,62 @@ defmodule Hologram.Compiler.CallGraph do
         _fallback -> false
       end
     end)
+  end
+
+  defp list_runtime_mfas_in_graph(graph, pages, module_info_plt) do
+    entry_mfas = list_runtime_entry_mfas()
+
+    # A component module referenced in broadcast caller code can be delivered to any
+    # connected page as a runtime value (e.g. in broadcast action params) and render
+    # as a dynamic tag there, so its client code goes into the runtime bundle, which
+    # every page loads.
+    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
+
+    app_types =
+      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt)
+
+    entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
+    initial_state = start_reachable_state(graph, entry_vertices, app_types, module_info_plt)
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
+
+    initial_templatables =
+      Enum.uniq(
+        broadcast_caller_analysis.referenced_components ++
+          extract_uniq_components(initial_mfas, module_info_plt)
+      )
+
+    # The same server-referenced component expansion as in list_page_mfas/4, so chains
+    # like a broadcast-referenced component whose own server callbacks reference
+    # further components end up in the runtime bundle too. The runtime lists against a PLT
+    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
+    # taken on the graph that still holds the runtime's functions, so they must not mix
+    # with the pages'.
+    analyses = PLT.start()
+
+    {expanded_state, templatables} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        analyses,
+        module_info_plt
+      )
+
+    server_types =
+      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
+        MapSet.union(acc, analysis.dispatch_types)
+      end)
+
+    PLT.stop(analyses)
+
+    final_state =
+      expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
+
+    graph
+    |> finalize_reachable_mfas(final_state, module_info_plt)
+    |> reject_hex_mfas()
+    |> Enum.sort()
   end
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do

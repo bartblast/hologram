@@ -98,7 +98,8 @@ defmodule Hologram.Compiler.CallGraphTest do
     try do
       send(walker, :run)
 
-      assert_receive {:result, result}
+      # A walk of the whole graph takes longer than the default wait.
+      assert_receive {:result, result}, 30_000
 
       # Trace messages arrive asynchronously, so this waits rather than reading the mailbox as it is.
       refute_receive {:trace, ^walker, :call, {CallGraph, :get_graph, _args}}, 200
@@ -2804,16 +2805,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == Enum.sort(result)
     end
 
-    # The analyses PLT is linked to the caller while it runs, so a PLT left running would stay
-    # among the caller's links.
+    # The analyses PLT is started from the agent, since the walk runs there, and is linked to it
+    # while it runs, so a PLT left running would stay among the agent's links.
     test "stops the analyses PLT it starts", %{full_call_graph: call_graph} do
-      {:links, links_before} = Process.info(self(), :links)
+      {:links, links_before} = Process.info(call_graph.pid, :links)
 
       list_runtime_mfas(call_graph, Reflection.list_pages())
 
-      {:links, links_after} = Process.info(self(), :links)
+      {:links, links_after} = Process.info(call_graph.pid, :links)
 
       assert MapSet.new(links_after) == MapSet.new(links_before)
+    end
+
+    test "does not copy the graph out of the agent", %{
+      full_call_graph: call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      walked_mfas =
+        call_without_copying_graph(fn ->
+          list_runtime_mfas(call_graph, Reflection.list_pages())
+        end)
+
+      assert walked_mfas == runtime_mfas
     end
   end
 
