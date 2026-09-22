@@ -220,6 +220,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
       async_mfas = list_async_mfas(cache.encoding_inputs, call_graph, graph_unchanged?)
 
+      runtime_kept? = runtime_kept?(cache.runtime, graph_unchanged?, module_digests_diff)
+
       call_graph_for_runtime =
         call_graph
         |> CallGraph.clone(supervisor: sup)
@@ -237,10 +239,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # no deadlock when a component renders itself.
       Compiler.validate_prop_usages(templatable_modules, ir_plt)
 
-      runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
+      runtime_mfas =
+        list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
 
       # Derived before the graph is split into runtime and page parts, so that the
-      # applications reached from pages are named as well.
+      # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
+      # the walk built nothing then, and no dependency was edited.
       app_versions =
         build_app_versions(
           cache.app_versions,
@@ -718,6 +722,17 @@ defmodule Mix.Tasks.Compile.Hologram do
     kept_runtime.js_binding_modules != js_binding_modules
   end
 
+  # The runtime's MFAs and the app versions are derived from the graph alone, so a compile that left
+  # the graph as it was keeps them, unless a dependency outside the graph was edited, which can move
+  # a version (see Hologram.Compiler.app_versions_changed?/2). With no runtime state kept (the first
+  # compile in a VM, or one after a compile that failed while bundling) they are listed again.
+  defp runtime_kept?(nil, _graph_unchanged?, _module_digests_diff), do: false
+
+  defp runtime_kept?(_kept_runtime, graph_unchanged?, module_digests_diff) do
+    graph_unchanged? and
+      not Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app())
+  end
+
   defp runtime_mfas_changed?(nil, _runtime_mfas), do: false
 
   defp runtime_mfas_changed?(kept_runtime, runtime_mfas) do
@@ -778,6 +793,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         :error -> []
       end
     end)
+  end
+
+  # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)
+  # finds the ones the runtime bundle on disk was built from.
+  defp list_runtime_mfas(kept_runtime, _call_graph, _page_modules, true), do: kept_runtime.mfas
+
+  defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, false) do
+    CallGraph.list_runtime_mfas(call_graph, page_modules)
   end
 
   # Returns the cache, the module info PLT to diff against, and the dump time the module info reuse

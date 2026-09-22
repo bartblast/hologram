@@ -1597,6 +1597,51 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert encoding_inputs.async_mfas == CallGraph.list_async_mfas(call_graph)
     end
 
+    test "a run with no changes lists no runtime MFAs", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold lists no runtime MFAs", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page lists the runtime MFAs again", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 1
+    end
+
+    test "the kept runtime MFAs are the ones a walk finds", %{opts: opts} do
+      run(opts)
+      run(opts)
+
+      %{call_graph: kept_call_graph, module_infos: module_infos, runtime: runtime} = Cache.get()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+      kept_call_graph_with_infos = %{kept_call_graph | module_info_plt: module_info_plt}
+
+      # The runtime is listed on a copy of the graph without the manually ported MFAs.
+      call_graph =
+        kept_call_graph_with_infos
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      pages = Compiler.list_pages(module_info_plt)
+
+      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph, pages)
+
+      CallGraph.stop(call_graph)
+      PLT.stop(module_info_plt)
+    end
+
     test "a run after a reset starts from the build dir", %{opts: opts} do
       run(opts)
       Cache.reset()
