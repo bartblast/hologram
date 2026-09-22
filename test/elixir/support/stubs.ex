@@ -202,13 +202,14 @@ defmodule Hologram.Test.Stubs do
     file_3d_path = dir_3 <> "/page-66666666666666666666666666666666.js"
     file_3e_path = dir_3 <> "/page-66666666666666666666666666666666.js.map"
     file_3f_path = dir_3 <> "/test_file_10.css"
+    file_3g_path = dir_3 <> "/test_file_11-DOWNLOAD.css"
 
     dir_4 = static_dir <> "/hologram"
-    file_4a_path = dir_4 <> "/page-77777777777777777777777777777777.js"
-    file_4b_path = dir_4 <> "/page-77777777777777777777777777777777.js.map"
-    file_4c_path = dir_4 <> "/page-88888888888888888888888888888888.js"
-    file_4d_path = dir_4 <> "/page-88888888888888888888888888888888.js.map"
-    file_4e_path = dir_4 <> "/runtime-00000000000000000000000000000000.js"
+    file_4a_path = dir_4 <> "/page-Elixir.MyPage1-BBBBBBBB.js"
+    file_4b_path = dir_4 <> "/page-Elixir.MyPage1-BBBBBBBB.js.map"
+    file_4c_path = dir_4 <> "/page-Elixir.MyPage2-CCCCCCCC.js"
+    file_4d_path = dir_4 <> "/page-Elixir.MyPage2-CCCCCCCC.js.map"
+    file_4e_path = dir_4 <> "/runtime-AAAAAAAA.js"
     file_4f_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
 
     File.mkdir_p!(dir_2)
@@ -227,6 +228,7 @@ defmodule Hologram.Test.Stubs do
       file_3d_path,
       file_3e_path,
       file_3f_path,
+      file_3g_path,
       file_4a_path,
       file_4b_path,
       file_4c_path,
@@ -250,8 +252,9 @@ defmodule Hologram.Test.Stubs do
         "test_dir_3/test_file_5.css" =>
           "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
         "test_dir_3/test_file_10.css" => "/test_dir_3/test_file_10.css",
+        "test_dir_3/test_file_11-DOWNLOAD.css" => "/test_dir_3/test_file_11-DOWNLOAD.css",
         "test_dir_3/page.js" => "/test_dir_3/page-66666666666666666666666666666666.js",
-        "hologram/runtime.js" => "/hologram/runtime-00000000000000000000000000000000.js",
+        "hologram/runtime.js" => "/hologram/runtime-AAAAAAAA.js",
         "hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
       }
     ]

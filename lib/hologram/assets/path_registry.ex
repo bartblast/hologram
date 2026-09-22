@@ -110,6 +110,20 @@ defmodule Hologram.Assets.PathRegistry do
     Reflection.otp_app_static_dir()
   end
 
+  # A digest suffix is the 32 hex chars of an MD5, as `mix phx.digest` writes it, anywhere in the
+  # static dir, or the 8 chars of esbuild's content hash, which the Hologram compiler names its
+  # bundles with, only in the hologram dir. Anywhere else a name such as `arrow-DOWNLOAD.svg` would
+  # be taken for a digested `arrow.svg`. The MD5 form is tried first, so a compiler bundle that
+  # `mix phx.digest` digested again is read as it was before.
+  defp digest_suffix_regexes(static_dir) do
+    escaped_static_dir = Regex.escape(static_dir)
+
+    [
+      ~r"#{escaped_static_dir}/(.+)\-([0-9a-f]{32})(.+)$",
+      ~r"#{escaped_static_dir}/(hologram/[^/]+)\-([A-Z2-7]{8})(\.[^/]+)$"
+    ]
+  end
+
   defp find_assets(static_dir) do
     static_files = FileUtils.list_files_recursively(static_dir)
 
@@ -126,10 +140,10 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   defp find_assets_with_digest_suffix(static_dir, static_files) do
-    regex = static_file_path_with_digest_suffix_regex(static_dir)
+    regexes = digest_suffix_regexes(static_dir)
 
     static_files
-    |> Stream.map(&Regex.run(regex, &1))
+    |> Stream.map(&match_digest_suffix(regexes, &1))
     |> Stream.filter(& &1)
     |> Stream.map(&List.to_tuple/1)
     |> stream_reject_page_bundles()
@@ -139,10 +153,10 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   defp find_assets_without_digest_suffix(static_dir, static_files) do
-    regex = static_file_path_with_digest_suffix_regex(static_dir)
+    regexes = digest_suffix_regexes(static_dir)
 
     static_files
-    |> Enum.reject(&Regex.run(regex, &1))
+    |> Enum.reject(&match_digest_suffix(regexes, &1))
     |> Enum.map(fn absolute_file_path ->
       relative_file_path = String.replace_prefix(absolute_file_path, "#{static_dir}/", "")
       {relative_file_path, "/#{relative_file_path}"}
@@ -153,14 +167,14 @@ defmodule Hologram.Assets.PathRegistry do
     Application.get_env(:hologram, :asset_path_registry_impl, __MODULE__)
   end
 
+  defp match_digest_suffix(regexes, file_path) do
+    Enum.find_value(regexes, &Regex.run(&1, file_path))
+  end
+
   defp populate(ets_table_name) do
     impl().static_dir()
     |> find_assets()
     |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
-  end
-
-  defp static_file_path_with_digest_suffix_regex(static_dir) do
-    ~r"#{Regex.escape(static_dir)}/(.+)\-([0-9a-f]{32})(.+)$"
   end
 
   defp stream_build_asset_entries(file_infos) do
@@ -169,9 +183,10 @@ defmodule Hologram.Assets.PathRegistry do
     end)
   end
 
+  # A page bundle's name carries its page module: hologram/page-<module>-<hash>.js.
   defp stream_reject_page_bundles(file_infos) do
     Stream.reject(file_infos, fn {_file_path, prefix, _digest, _suffix} ->
-      prefix == "hologram/page"
+      String.starts_with?(prefix, "hologram/page-")
     end)
   end
 
