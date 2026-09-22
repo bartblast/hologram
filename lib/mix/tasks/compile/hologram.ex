@@ -154,18 +154,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Map.new()
         |> Tracer.take()
 
-      new_module_info_plt =
+      {new_module_info_plt, module_digests_diff, infos_changed?} =
         build_module_info_plt(
-          cache.editable_modules,
+          cache,
           old_module_info_plt,
           module_info_dumped_at,
           editable_beams,
           compiled_modules,
           sup
         )
-
-      module_digests_diff =
-        Compiler.diff_module_info_plts(old_module_info_plt, new_module_info_plt)
 
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
@@ -207,39 +204,40 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> CallGraph.patch(ir_plt, graph_diff)
       |> CallGraph.add_non_discoverable_edges()
 
+      # Nothing patched and nothing walked: the graph is the one the last finished compile ended with,
+      # so what that compile derived from the graph alone still holds.
+      graph_unchanged? =
+        graph_diff == %{added_modules: [], edited_modules: [], removed_modules: []}
+
       # Grows the graph by the modules the patched functions start reaching, their IR included. A
       # compile whose patch touched nothing the graph holds reaches nothing new and does not walk.
       built_modules =
-        if graph_diff == %{added_modules: [], edited_modules: [], removed_modules: []} do
-          []
-        else
-          Compiler.build_reach!(call_graph, ir_plt, graph_diff)
-        end
+        if graph_unchanged?, do: [], else: Compiler.build_reach!(call_graph, ir_plt, graph_diff)
 
       # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
-      async_mfas = CallGraph.list_async_mfas(call_graph)
+      async_mfas = list_async_mfas(cache.encoding_inputs, call_graph, graph_unchanged?)
 
-      call_graph_for_runtime =
-        call_graph
-        |> CallGraph.clone(supervisor: sup)
-        # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
-        # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
-        # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
-        |> CallGraph.remove_manually_ported_mfas()
+      runtime_kept? = runtime_kept?(cache.runtime, graph_unchanged?, module_digests_diff)
+
+      call_graph_for_runtime = build_runtime_graph(call_graph, runtime_kept?, sup)
 
       component_modules = Compiler.list_components(new_module_info_plt)
       templatable_modules = page_modules ++ component_modules
-      Compiler.build_missing_ir!(ir_plt, templatable_modules)
 
-      # Runs here rather than in each module's own compilation: every module is compiled by now, so
-      # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
-      # no deadlock when a component renders itself.
-      Compiler.validate_prop_usages(templatable_modules, ir_plt)
+      template_modules =
+        validate_prop_usages(
+          templatable_modules,
+          module_digests_diff,
+          cache.template_modules,
+          ir_plt
+        )
 
-      runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
+      runtime_mfas =
+        list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
 
       # Derived before the graph is split into runtime and page parts, so that the
-      # applications reached from pages are named as well.
+      # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
+      # the walk built nothing then, and no dependency was edited.
       app_versions =
         build_app_versions(
           cache.app_versions,
@@ -248,7 +246,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           built_modules
         )
 
-      call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+      call_graph_for_pages = build_pages_graph(call_graph_for_runtime, runtime_mfas)
 
       # Every page loads the runtime script, so the JS bindings it registers are available
       # app-wide. A page bundle registering them again would only bundle a second copy of the
@@ -260,6 +258,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          page_mfas_plt: cache.page_mfas_plt,
           pages_plt: cache.pages_plt,
           pending_pages: cache.pending_pages,
           reaching_modules: reaching_modules,
@@ -267,6 +266,11 @@ defmodule Mix.Tasks.Compile.Hologram do
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
+
+      # A compile that kept the runtime's MFAs has no pages graph yet: it relists no kept page, so it
+      # needs one only for pages to rebuild, and one that rebuilds none makes none.
+      call_graph_for_pages =
+        ensure_pages_graph(call_graph_for_pages, call_graph, runtime_mfas, pages_to_rebuild, sup)
 
       # Pending until their bundles are built, so that the pages this compile does not get to are
       # rebuilt by the next one, whether or not its own edit reaches them.
@@ -297,22 +301,19 @@ defmodule Mix.Tasks.Compile.Hologram do
             {page_module, page_state_modules(mfas)}
           end)
 
-      # What an earlier compile kept that no page, the runtime or a templatable reaches any more is
-      # dropped first, encodings included. A page rebuilt reads mostly what its old state names, and
-      # the IR it reads for the first time is built with its batch. The IR of a page with no state is
-      # kept too: on a build into an empty build dir the diff has just built the IR of every module,
-      # which pruning it would only have the pages build again. A kept page renders no entry file
-      # this time, but its IR stays, so that a later compile that does rebuild it finds the IR it
-      # reads.
+      # What an earlier compile kept that no page or the runtime reaches any more is dropped first,
+      # encodings included: the encodings go with the modules this prune drops and with the removed
+      # modules, whose IR was deleted before it. A component no page reaches keeps no IR: the prop
+      # usage validation builds it when it checks the component (see validate_prop_usages/4). A page
+      # rebuilt reads mostly what its old state names, and the IR it reads for the first time is
+      # built with its batch. The IR of a page with no state is kept too: on a build into an empty
+      # build dir the diff has just built the IR of every module, which pruning it would only have
+      # the pages build again. A kept page renders no entry file this time, but its IR stays, so
+      # that a later compile that does rebuild it finds the IR it reads.
       kept_modules =
-        Compiler.list_kept_modules(
-          runtime_mfas,
-          modules_by_page,
-          templatable_modules,
-          new_module_info_plt
-        )
+        Compiler.list_kept_modules(runtime_mfas, modules_by_page, new_module_info_plt)
 
-      Compiler.prune_ir_plt(ir_plt, kept_modules)
+      dropped_modules = Compiler.prune_ir_plt(ir_plt, kept_modules)
 
       # The runtime entry file is rendered before the batches, so the IR it reads is built here;
       # each batch builds its pages' before rendering theirs.
@@ -332,15 +333,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       encode_plt =
         cache.encode_plt
         |> patch_encode_plt(cache.encoding_inputs, encoding_inputs, module_digests_diff)
-        |> Compiler.prune_encode_plt(kept_modules)
+        |> Compiler.delete_module_encodings(
+          dropped_modules ++ module_digests_diff.removed_modules
+        )
 
       # The stack trace metadata of every module, which the bundles look up instead of asking the
       # VM about each module once per bundle. Built only when client stack traces are on, since the
-      # bundles register no metadata otherwise.
+      # bundles register no metadata otherwise. Kept between compiles and patched with the diff, since
+      # an entry moves only with its module's beam.
       module_metadata =
-        if Hologram.client_stacktraces?() do
-          Compiler.build_module_metadata(new_module_info_plt)
-        end
+        build_module_metadata(cache.module_metadata, module_digests_diff, new_module_info_plt)
 
       entry_file_opts =
         Keyword.merge(opts,
@@ -372,8 +374,12 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{"runtime", runtime_entry_file_path, "runtime"}]
         end
 
-      CallGraph.dump(call_graph, call_graph_dump_path)
-      PLT.dump(new_module_info_plt, module_info_plt_dump_path)
+      dump_before_picture(cache, call_graph, new_module_info_plt,
+        call_graph_dump_path: call_graph_dump_path,
+        graph_unchanged?: graph_unchanged?,
+        infos_changed?: infos_changed?,
+        module_info_plt_dump_path: module_info_plt_dump_path
+      )
 
       # The dump time is kept with the infos, since the reuse guard compares them against it (see
       # Hologram.Compiler.Cache). After everything that patches the IR PLT and the call graph, so
@@ -382,10 +388,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # that a compile that fails there leaves this picture, and the next compile rebuilds the pages
       # it left pending.
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
-      module_infos = PLT.get_all(new_module_info_plt)
-      Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
+
+      Cache.put_module_infos(module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
       Cache.put_encoding_inputs(encoding_inputs)
+      Cache.put_module_metadata(module_metadata)
+      Cache.put_template_modules(template_modules)
 
       # The kept runtime state describes the bundle this compile replaces. A compile that fails
       # during the bundling leaves the next one diffing against the infos just kept, which show no
@@ -496,26 +504,59 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # A cold compile reads every module against the dump; a warm one reads the modules the compiler
-  # reported among the beams a save can rewrite, and copies the rest of the kept entries (see
-  # Hologram.Compiler.update_module_info_plt!/5). The cache holds the editable modules only between
-  # two finished compiles, so nil means cold.
-  defp build_module_info_plt(nil, old_plt, dumped_at, _editable_beams, _compiled_modules, sup) do
-    Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
-  end
-
+  # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
+  # whether any entry changed. A cold compile reads every module against the dump, diffs the two
+  # PLTs and copies the result into the cache's PLT, once. A warm one brings the cache's PLT in line
+  # in place, reading the modules the compiler reported among the beams a save can rewrite, and
+  # takes the diff from that scan (see Hologram.Compiler.patch_module_info_plt!/5). The cache holds
+  # the editable modules only between two finished compiles, so nil means cold.
   defp build_module_info_plt(
-         editable_modules,
+         %{editable_modules: nil} = cache,
          old_plt,
          dumped_at,
-         editable_beams,
-         compiled_modules,
+         _editable_beams,
+         _compiled_modules,
          sup
        ) do
-    Compiler.update_module_info_plt!(old_plt, dumped_at, editable_modules, editable_beams,
-      compiled_modules: compiled_modules,
-      supervisor: sup
-    )
+    new_plt = Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
+    module_digests_diff = Compiler.diff_module_info_plts(old_plt, new_plt)
+
+    new_items =
+      new_plt
+      |> PLT.get_all()
+      |> Map.to_list()
+
+    PLT.put(cache.module_info_plt, new_items)
+
+    {cache.module_info_plt, module_digests_diff, true}
+  end
+
+  defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
+    {module_digests_diff, infos_changed?} =
+      Compiler.patch_module_info_plt!(
+        cache.module_info_plt,
+        dumped_at,
+        cache.editable_modules,
+        editable_beams,
+        compiled_modules
+      )
+
+    {cache.module_info_plt, module_digests_diff, infos_changed?}
+  end
+
+  # Built once per VM when client stack traces are on, then patched with each compile's diff. Nothing
+  # kept, or stack traces just turned on: built in full.
+  defp build_module_metadata(kept_metadata, module_digests_diff, module_info_plt) do
+    cond do
+      not Hologram.client_stacktraces?() ->
+        nil
+
+      kept_metadata == nil ->
+        Compiler.build_module_metadata(module_info_plt)
+
+      true ->
+        Compiler.patch_module_metadata(kept_metadata, module_digests_diff, module_info_plt)
+    end
   end
 
   # Builds the pages still to rebuild in the batches the :next_batch option asks for, and the runtime
@@ -533,6 +574,28 @@ defmodule Mix.Tasks.Compile.Hologram do
 
         build_page_batches(new_remaining_pages, [], new_bundles, context)
     end
+  end
+
+  # The graph the pages are listed on: the runtime's copy without the runtime's MFAs, since every page
+  # leaves out what the runtime bundle carries. None while there is no runtime copy (see
+  # build_runtime_graph/3 and ensure_pages_graph/5).
+  defp build_pages_graph(nil, _runtime_mfas), do: nil
+
+  defp build_pages_graph(call_graph_for_runtime, runtime_mfas) do
+    CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+  end
+
+  # The copy of the graph the runtime's MFAs are listed on, without the manually ported MFAs. None
+  # when the runtime's MFAs are kept (see runtime_kept?/3): nothing lists them then.
+  defp build_runtime_graph(_call_graph, true, _sup), do: nil
+
+  defp build_runtime_graph(call_graph, false, sup) do
+    call_graph
+    |> CallGraph.clone(supervisor: sup)
+    # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
+    # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
+    # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
+    |> CallGraph.remove_manually_ported_mfas()
   end
 
   # Builds the given pages, and the runtime when its entry file is given, and records them: their
@@ -579,6 +642,25 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  # The call graph and the module infos are the before picture of the next VM's first compile (see
+  # load_before_state/3). While both dumps on disk are the ones this VM wrote (the module info dump's
+  # mtime is the kept one), the graph dump describes this graph when the graph is unchanged, and the
+  # module info dump these infos when the scan changed no entry; each is written only when it would
+  # say something else. The graph changes only with the infos, so a graph dump is never written
+  # without the module info dump. Another VM's dump written meanwhile (the mtime moved), or a deleted
+  # graph dump, is written over. The first compile in a VM has no dump time kept, so it writes both.
+  defp dump_before_picture(cache, call_graph, module_info_plt, opts) do
+    own_dumps? = own_dumps?(cache, opts[:module_info_plt_dump_path])
+
+    if not (opts[:graph_unchanged?] and own_dumps? and File.exists?(opts[:call_graph_dump_path])) do
+      CallGraph.dump(call_graph, opts[:call_graph_dump_path])
+    end
+
+    if opts[:infos_changed?] or not own_dumps? do
+      PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
+    end
+  end
+
   # The page digest PLT is dumped after every batch, so that the build dir names the bundles on disk
   # whenever the batches stop.
   defp dump_page_digest_plt(bundles, context) do
@@ -591,6 +673,19 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     PLT.stop(page_digest_plt)
+  end
+
+  # The pages graph of a compile that kept the runtime's MFAs, made once a page is left to rebuild.
+  defp ensure_pages_graph(nil, _call_graph, _runtime_mfas, [], _sup), do: nil
+
+  defp ensure_pages_graph(nil, call_graph, runtime_mfas, _pages_to_rebuild, sup) do
+    call_graph
+    |> build_runtime_graph(false, sup)
+    |> build_pages_graph(runtime_mfas)
+  end
+
+  defp ensure_pages_graph(call_graph_for_pages, _call_graph, _runtime_mfas, _pages, _sup) do
+    call_graph_for_pages
   end
 
   # No state for a page that no longer exists, whose bundle the artifact cleanup deletes.
@@ -626,11 +721,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       %{bundle_name: "page", entry_name: page_module} = bundle_info ->
         mfas = mfas_by_page[page_module]
 
-        Cache.put_page(page_module, %{
-          bundle_info: bundle_info,
-          mfas: mfas,
-          modules: page_state_modules(mfas)
-        })
+        Cache.put_page(
+          page_module,
+          %{bundle_info: bundle_info, modules: page_state_modules(mfas)},
+          mfas
+        )
 
       %{bundle_name: "runtime"} = bundle_info ->
         Cache.put_runtime(%{
@@ -659,6 +754,23 @@ defmodule Mix.Tasks.Compile.Hologram do
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path) and
       File.exists?(kept_runtime.bundle_info.static_source_map_path)
+  end
+
+  # The first compile in a VM validated every templatable. A later one updates the kept entries with
+  # the ones it validated, and drops the entries of modules that are no longer templatables (removed,
+  # or edited into something else).
+  defp keep_template_modules(nil, _templatable_modules, validated_template_modules) do
+    validated_template_modules
+  end
+
+  defp keep_template_modules(
+         kept_template_modules,
+         templatable_modules,
+         validated_template_modules
+       ) do
+    kept_template_modules
+    |> Map.take(templatable_modules)
+    |> Map.merge(validated_template_modules)
   end
 
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
@@ -692,6 +804,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  # Whether the module info dump on disk is the one this VM wrote last: its mtime is the kept one.
+  defp own_dumps?(cache, module_info_plt_dump_path) do
+    Compiler.module_info_dumped_at(module_info_plt_dump_path) == cache.dumped_at
+  end
+
   defp page_state_modules(mfas) do
     mfas
     |> Enum.map(fn {module, _function, _arity} -> module end)
@@ -699,10 +816,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # With the inputs unchanged, the edited modules' encodings are dropped and the rest are kept; a
-  # removed module's go with the prune that follows, since its IR is not kept. Changed inputs, or
-  # none kept (a cold compile), empty the PLT: a change in the async MFAs can change the JavaScript
-  # of functions in modules the edit did not touch, the callers of a function that starts or stops
-  # awaiting, so everything is encoded again for that one compile.
+  # removed module's go with the delete that follows, with the modules the IR prune drops. Changed
+  # inputs, or none kept (a cold compile), empty the PLT: a change in the async MFAs can change the
+  # JavaScript of functions in modules the edit did not touch, the callers of a function that starts
+  # or stops awaiting, so everything is encoded again for that one compile.
   defp patch_encode_plt(encode_plt, kept_inputs, inputs, module_digests_diff) do
     if kept_inputs == inputs do
       Compiler.delete_module_encodings(encode_plt, module_digests_diff.edited_modules)
@@ -715,6 +832,17 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp runtime_js_bindings_changed?(kept_runtime, js_binding_modules) do
     kept_runtime.js_binding_modules != js_binding_modules
+  end
+
+  # The runtime's MFAs and the app versions are derived from the graph alone, so a compile that left
+  # the graph as it was keeps them, unless a dependency outside the graph was edited, which can move
+  # a version (see Hologram.Compiler.app_versions_changed?/2). With no runtime state kept (the first
+  # compile in a VM, or one after a compile that failed while bundling) they are listed again.
+  defp runtime_kept?(nil, _graph_unchanged?, _module_digests_diff), do: false
+
+  defp runtime_kept?(_kept_runtime, graph_unchanged?, module_digests_diff) do
+    graph_unchanged? and
+      not Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app())
   end
 
   defp runtime_mfas_changed?(nil, _runtime_mfas), do: false
@@ -731,6 +859,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp language_server_build?(opts) do
     path_components = Path.split(opts[:build_dir])
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
+  end
+
+  # The async MFAs are a walk of the graph, so a compile that left the graph as it was finds the ones
+  # the last finished compile kept with its encoding inputs. The first compile in a VM has none kept.
+  defp list_async_mfas(%{async_mfas: async_mfas}, _call_graph, true), do: async_mfas
+
+  defp list_async_mfas(_kept_inputs, call_graph, _graph_unchanged?) do
+    CallGraph.list_async_mfas(call_graph)
   end
 
   # A batch's pages are listed here rather than before the first batch, so the open tab's page is
@@ -771,24 +907,34 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # Returns the cache, the module info PLT to diff against, and the dump time the module info reuse
-  # guard takes. The kept module infos are the proof that the kept IR PLT and call graph are exactly
-  # in line with them, whatever another VM wrote to the build dir since, and they exist only between
-  # two finished compiles. Without them (the first compile in a VM, or after a failed one) the cache
-  # is emptied and the build dir is the before picture: the graph comes from its dump and the module
-  # info dump written next to it says what changed.
+  # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)
+  # finds the ones the runtime bundle on disk was built from.
+  defp list_runtime_mfas(kept_runtime, _call_graph, _page_modules, true), do: kept_runtime.mfas
+
+  defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, false) do
+    CallGraph.list_runtime_mfas(call_graph, page_modules)
+  end
+
+  # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which
+  # the scan brings in line in place) and the dump time the module info reuse guard takes. The
+  # kept module infos are the proof that the kept IR PLT and call graph are exactly in line with
+  # them, whatever another VM wrote to the build dir since, and they are trusted only between two
+  # finished compiles (the cache keeps the editable modules then). Without them (the first compile
+  # in a VM, or after a failed one) the cache is emptied and the build dir is the before picture:
+  # the graph comes from its dump and the module info dump written next to it says what changed.
   defp load_before_state(build_dir, call_graph_dump_path, sup) do
     case Cache.get() do
-      %{module_infos: nil} ->
+      %{editable_modules: nil} ->
         :ok = Cache.reset()
         cache = Cache.get()
 
-        # The two dumps are written together at the end of a compile, so a module info dump
-        # without a graph dump is not a before picture: diffing against it would report no changes
-        # and leave the empty graph with nothing to patch. Neither is a graph dump of another dump
-        # version, which the graph does not load (see CallGraph.load/2). Without a graph dump
-        # every module counts as added, of which the pages and the broadcast callers are patched
-        # in, and the graph is grown from them (see Hologram.Compiler.build_reach!/3).
+        # The two dumps are one before picture, and the graph dump is never written without the
+        # module info dump, so a module info dump without a graph dump is not a before picture:
+        # diffing against it would report no changes and leave the empty graph with nothing to
+        # patch. Neither is a graph dump of another dump version, which the graph does not load (see
+        # CallGraph.load/2). Without a graph dump every module counts as added, of which the pages
+        # and the broadcast callers are patched in, and the graph is grown from them (see
+        # Hologram.Compiler.build_reach!/3).
         {module_info_plt, dumped_at} =
           with true <- File.exists?(call_graph_dump_path),
                :ok <- CallGraph.load(cache.call_graph, call_graph_dump_path) do
@@ -803,16 +949,13 @@ defmodule Mix.Tasks.Compile.Hologram do
         {cache, module_info_plt, dumped_at}
 
       cache ->
-        items = Map.to_list(cache.module_infos)
-        module_info_plt = PLT.start(items: items, supervisor: sup)
-
         # Cleared before anything is patched in place: a compile that dies mid-patch can leave the
-        # kept graph without edges that only its callers would rebuild, so the next compile must
-        # start from the dumps rather than from a half-patched graph. The infos are put back last,
-        # after the dumps.
+        # kept graph without edges that only its callers would rebuild, and the kept infos half
+        # scanned, so the next compile must start from the dumps rather than from a half-patched
+        # graph. The infos are marked as kept again last, after the dumps.
         :ok = Cache.clear_module_infos()
 
-        {cache, module_info_plt, cache.dumped_at}
+        {cache, cache.module_info_plt, cache.dumped_at}
     end
   end
 
@@ -1005,6 +1148,31 @@ defmodule Mix.Tasks.Compile.Hologram do
       :error ->
         remove_lock_file_with_invalid_os_pid(lock_path)
     end
+  end
+
+  # Runs here rather than in each module's own compilation: every module is compiled by now, so a
+  # used component's __props__/0 is simply callable, with no compile-time dependency on it and no
+  # deadlock when a component renders itself. Only the templates an edit can affect are validated
+  # (see Hologram.Compiler.list_templatables_to_validate/3), and the IR of the ones no page reaches is
+  # built for that alone. Returns the modules each templatable's template uses, kept for the next
+  # compile.
+  defp validate_prop_usages(
+         templatable_modules,
+         module_digests_diff,
+         kept_template_modules,
+         ir_plt
+       ) do
+    modules_to_validate =
+      Compiler.list_templatables_to_validate(
+        templatable_modules,
+        module_digests_diff,
+        kept_template_modules
+      )
+
+    Compiler.build_missing_ir!(ir_plt, modules_to_validate)
+    validated_template_modules = Compiler.validate_prop_usages(modules_to_validate, ir_plt)
+
+    keep_template_modules(kept_template_modules, templatable_modules, validated_template_modules)
   end
 
   defp with_lock(lock_path, fun) do

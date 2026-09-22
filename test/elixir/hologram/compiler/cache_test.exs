@@ -17,11 +17,14 @@ defmodule Hologram.Compiler.CacheTest do
   end
 
   describe "clear_module_infos/0" do
-    test "forgets the module infos, the dump time and the editable modules" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123, MapSet.new([Module1]))
+    test "forgets the dump time and the editable modules, and keeps the module infos" do
+      %{module_info_plt: module_info_plt} = get()
+      PLT.put(module_info_plt, Module1, %{digest: "a"})
+      put_module_infos(123, MapSet.new([Module1]))
 
       assert clear_module_infos() == :ok
-      assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
+      assert %{dumped_at: nil, editable_modules: nil, module_info_plt: ^module_info_plt} = get()
+      assert PLT.get(module_info_plt, Module1) == {:ok, %{digest: "a"}}
     end
 
     test "keeps the pending pages" do
@@ -56,14 +59,33 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{encode_plt: ^encode_plt, encoding_inputs: ^encoding_inputs} = get()
       assert PLT.get(encode_plt, {Module1, :fun_1, 0}) == {:ok, "js"}
     end
+
+    test "keeps the module metadata" do
+      module_metadata = %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}
+      put_module_metadata(module_metadata)
+
+      clear_module_infos()
+
+      assert get().module_metadata == module_metadata
+    end
+
+    test "keeps the template modules" do
+      template_modules = %{Module1 => MapSet.new([Module2])}
+      put_template_modules(template_modules)
+
+      clear_module_infos()
+
+      assert get().template_modules == template_modules
+    end
   end
 
   describe "delete_page/2" do
     test "forgets a kept page" do
-      put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
+      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
 
       assert delete_page(Module1) == :ok
       assert PLT.get(get().pages_plt, Module1) == :error
+      assert PLT.get(get().page_mfas_plt, Module1) == :error
     end
 
     test "a page that was never kept" do
@@ -115,10 +137,13 @@ defmodule Hologram.Compiler.CacheTest do
                encode_plt: %PLT{} = encode_plt,
                encoding_inputs: nil,
                ir_plt: %PLT{} = ir_plt,
-               module_infos: nil,
+               module_info_plt: %PLT{} = module_info_plt,
+               module_metadata: nil,
+               page_mfas_plt: %PLT{} = page_mfas_plt,
                pages_plt: %PLT{} = pages_plt,
                pending_pages: pending_pages,
-               runtime: nil
+               runtime: nil,
+               template_modules: nil
              } = get()
 
       assert pending_pages == MapSet.new()
@@ -126,17 +151,27 @@ defmodule Hologram.Compiler.CacheTest do
       assert CallGraph.vertices(call_graph) == []
       assert PLT.keys(encode_plt) == []
       assert PLT.keys(ir_plt) == []
+      assert PLT.keys(module_info_plt) == []
+      assert PLT.keys(page_mfas_plt) == []
       assert PLT.keys(pages_plt) == []
     end
 
     test "returns the same call graph and PLTs on every call" do
-      %{call_graph: call_graph, encode_plt: encode_plt, ir_plt: ir_plt, pages_plt: pages_plt} =
-        get()
+      %{
+        call_graph: call_graph,
+        encode_plt: encode_plt,
+        ir_plt: ir_plt,
+        module_info_plt: module_info_plt,
+        page_mfas_plt: page_mfas_plt,
+        pages_plt: pages_plt
+      } = get()
 
       assert %{
                call_graph: ^call_graph,
                encode_plt: ^encode_plt,
                ir_plt: ^ir_plt,
+               module_info_plt: ^module_info_plt,
+               page_mfas_plt: ^page_mfas_plt,
                pages_plt: ^pages_plt
              } = get()
     end
@@ -165,25 +200,31 @@ defmodule Hologram.Compiler.CacheTest do
     assert %{encoding_inputs: ^encoding_inputs} = get()
   end
 
-  test "put_module_infos/3" do
-    module_infos = %{Module1 => %{digest: "a"}}
+  test "put_module_infos/2" do
     editable_modules = MapSet.new([Module1])
 
-    assert put_module_infos(module_infos, 123, editable_modules) == :ok
-
-    assert %{dumped_at: 123, editable_modules: ^editable_modules, module_infos: ^module_infos} =
-             get()
+    assert put_module_infos(123, editable_modules) == :ok
+    assert %{dumped_at: 123, editable_modules: ^editable_modules} = get()
   end
 
-  test "put_page/2" do
-    page_state = %{
-      mfas: [{Module1, :fun_1, 0}],
-      modules: MapSet.new([Module1]),
-      bundle_info: %{digest: "a"}
-    }
+  test "put_module_metadata/1" do
+    module_metadata = %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}
 
-    assert put_page(Module1, page_state) == :ok
+    assert put_module_metadata(module_metadata) == :ok
+    assert %{module_metadata: ^module_metadata} = get()
+
+    put_module_metadata(nil)
+
+    assert get().module_metadata == nil
+  end
+
+  test "put_page/3" do
+    page_state = %{bundle_info: %{digest: "a"}, modules: MapSet.new([Module1])}
+    mfas = [{Module1, :fun_1, 0}]
+
+    assert put_page(Module1, page_state, mfas) == :ok
     assert PLT.get(get().pages_plt, Module1) == {:ok, page_state}
+    assert PLT.get(get().page_mfas_plt, Module1) == {:ok, mfas}
   end
 
   test "put_pending_pages/1" do
@@ -203,6 +244,13 @@ defmodule Hologram.Compiler.CacheTest do
 
     assert put_runtime(runtime_state) == :ok
     assert %{runtime: ^runtime_state} = get()
+  end
+
+  test "put_template_modules/1" do
+    template_modules = %{Module1 => MapSet.new([Module2]), Module2 => MapSet.new()}
+
+    assert put_template_modules(template_modules) == :ok
+    assert %{template_modules: ^template_modules} = get()
   end
 
   describe "reset/0" do
@@ -247,12 +295,21 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_ir_plt) == []
     end
 
-    test "forgets the module infos, the dump time and the editable modules" do
-      put_module_infos(%{Module1 => %{digest: "a"}}, 123, MapSet.new([Module1]))
+    test "stops the kept module info PLT and starts an empty one, and forgets the dump time and the editable modules" do
+      old_module_info_plt = get().module_info_plt
+      PLT.put(old_module_info_plt, Module1, %{digest: "a"})
+      put_module_infos(123, MapSet.new([Module1]))
 
       reset()
 
-      assert %{dumped_at: nil, editable_modules: nil, module_infos: nil} = get()
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_info_plt: new_plt} =
+        get()
+
+      refute Process.alive?(old_module_info_plt.pid)
+      assert new_plt.table_ref != old_module_info_plt.table_ref
+      assert PLT.keys(new_plt) == []
+      assert dumped_at == nil
+      assert editable_modules == nil
     end
 
     test "forgets the pending pages" do
@@ -263,10 +320,12 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and forgets the app versions and the runtime" do
-      old_pages_plt = get().pages_plt
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime and the template modules" do
+      %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
-      put_page(Module1, %{mfas: [], modules: MapSet.new(), bundle_info: %{digest: "a"}})
+      put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
+      put_template_modules(%{Module1 => MapSet.new()})
+      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
 
       put_runtime(%{
         app_versions: [],
@@ -277,25 +336,45 @@ defmodule Hologram.Compiler.CacheTest do
 
       reset()
 
-      %{app_versions: app_versions, pages_plt: new_pages_plt, runtime: runtime} = get()
+      %{
+        app_versions: app_versions,
+        module_metadata: module_metadata,
+        page_mfas_plt: new_page_mfas_plt,
+        pages_plt: new_pages_plt,
+        runtime: runtime,
+        template_modules: template_modules
+      } = get()
 
       refute Process.alive?(old_pages_plt.pid)
+      refute Process.alive?(old_page_mfas_plt.pid)
       assert new_pages_plt.table_ref != old_pages_plt.table_ref
+      assert new_page_mfas_plt.table_ref != old_page_mfas_plt.table_ref
       assert PLT.keys(new_pages_plt) == []
+      assert PLT.keys(new_page_mfas_plt) == []
       assert app_versions == nil
+      assert module_metadata == nil
       assert runtime == nil
+      assert template_modules == nil
     end
   end
 
   test "terminate/2" do
-    %{call_graph: call_graph, encode_plt: encode_plt, ir_plt: ir_plt, pages_plt: pages_plt} =
-      get()
+    %{
+      call_graph: call_graph,
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      page_mfas_plt: page_mfas_plt,
+      pages_plt: pages_plt
+    } = get()
 
     GenServer.stop(Cache)
 
     refute Process.alive?(call_graph.pid)
     refute Process.alive?(encode_plt.pid)
     refute Process.alive?(ir_plt.pid)
+    refute Process.alive?(module_info_plt.pid)
+    refute Process.alive?(page_mfas_plt.pid)
     refute Process.alive?(pages_plt.pid)
     assert :ets.whereis(Tracer) == :undefined
   end

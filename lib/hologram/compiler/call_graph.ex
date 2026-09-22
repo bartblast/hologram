@@ -890,18 +890,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   Must be called on the original call graph before `remove_manually_ported_mfas/1`
   strips the `Task.await/1` vertex.
+
+  The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
+  is a traversal of the graph, and a raise inside the agent would take the kept graph down with it.
   """
   @spec list_async_mfas(t) :: MapSet.t(mfa)
   def list_async_mfas(call_graph) do
-    graph = get_graph(call_graph)
-
-    graph
-    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
-    # Excludes bare module atom vertices, keeping only MFA tuples.
-    # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
-    # the result is only used for MapSet.member? lookups against already-included MFAs.
-    |> Enum.filter(&is_tuple/1)
-    |> MapSet.new()
+    read_graph(call_graph.pid, &list_async_mfas_in_graph/1)
   end
 
   @doc """
@@ -909,40 +904,26 @@ defmodule Hologram.Compiler.CallGraph do
   given modules included. The compile task uses it, before the graph is patched, to find the pages
   and components a change to those modules can affect: every way a page's bundle depends on a module
   is a path in the graph from a vertex of the page, or of a component it renders, to that module.
+  Given no module, it returns the empty set without reading the graph.
+
+  The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
+  is a traversal of the graph and reads of the module info PLT, and a raise inside the agent would
+  take the kept graph down with it.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_modules_reaching_2/README.md
   """
   @spec list_modules_reaching(t, [module]) :: MapSet.t(module)
+  # Built from the argument: an empty MapSet literal is inlined, and Dialyzer then rejects the result
+  # where a caller passes it on to a MapSet function.
+  def list_modules_reaching(_call_graph, [] = modules), do: MapSet.new(modules)
+
   def list_modules_reaching(call_graph, modules) do
-    graph = get_graph(call_graph)
     target_modules = MapSet.new(modules)
 
-    # One pass over the vertices rather than a scan per module: the graph holds a vertex per
-    # function of the app.
-    target_vertices =
-      graph
-      |> Digraph.vertices()
-      |> Enum.filter(fn
-        {module, _function, _arity} -> MapSet.member?(target_modules, module)
-        module_vertex -> MapSet.member?(target_modules, module_vertex)
-      end)
-
-    protocol_function_mfa? = &protocol_function_mfa?(&1, call_graph.module_info_plt)
-
-    graph
-    |> Digraph.reaching(target_vertices, opaque_vertex?: protocol_function_mfa?)
-    # A protocol's dispatch function is where the reverse walk stops, and it is dropped with the
-    # walk: a page that calls the protocol carries only the implementations of its own types, and
-    # it holds each of those modules in its kept modules, so the pages an edited implementation
-    # affects are found by that intersection rather than through the dispatch edges. Editing a
-    # protocol module itself still reaches its callers, since the target modules are unioned back in.
-    |> Enum.reject(protocol_function_mfa?)
-    |> Enum.map(fn
-      {module, _function, _arity} -> module
-      module_vertex -> module_vertex
-    end)
-    |> MapSet.new()
-    |> MapSet.union(target_modules)
+    read_graph(
+      call_graph.pid,
+      &list_modules_reaching_in_graph(&1, target_modules, call_graph.module_info_plt)
+    )
   end
 
   @doc """
@@ -1049,65 +1030,18 @@ defmodule Hologram.Compiler.CallGraph do
   Lists MFAs required by the runtime JS script of an app with the given pages,
   including the client MFAs of components referenced in broadcast caller code.
 
+  The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
+  is a traversal of the graph and reads of the module info PLT. The analyses PLT it starts is
+  started from the agent and stopped there too, before it returns.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
   """
   @spec list_runtime_mfas(t, [module]) :: [mfa]
   def list_runtime_mfas(call_graph, pages) do
-    entry_mfas = list_runtime_entry_mfas()
-    graph = get_graph(call_graph)
-    module_info_plt = call_graph.module_info_plt
-
-    # A component module referenced in broadcast caller code can be delivered to any
-    # connected page as a runtime value (e.g. in broadcast action params) and render
-    # as a dynamic tag there, so its client code goes into the runtime bundle, which
-    # every page loads.
-    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
-
-    app_types =
-      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt)
-
-    entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
-    initial_state = start_reachable_state(graph, entry_vertices, app_types, module_info_plt)
-    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-
-    initial_templatables =
-      Enum.uniq(
-        broadcast_caller_analysis.referenced_components ++
-          extract_uniq_components(initial_mfas, module_info_plt)
-      )
-
-    # The same server-referenced component expansion as in list_page_mfas/4, so chains
-    # like a broadcast-referenced component whose own server callbacks reference
-    # further components end up in the runtime bundle too. The runtime lists against a PLT
-    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
-    # taken on the graph that still holds the runtime's functions, so they must not mix
-    # with the pages'.
-    analyses = PLT.start()
-
-    {expanded_state, templatables} =
-      expand_reachable_state_with_server_referenced_components(
-        graph,
-        initial_state,
-        initial_templatables,
-        analyses,
-        module_info_plt
-      )
-
-    server_types =
-      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
-        MapSet.union(acc, analysis.dispatch_types)
-      end)
-
-    PLT.stop(analyses)
-
-    final_state =
-      expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
-
-    graph
-    |> finalize_reachable_mfas(final_state, module_info_plt)
-    |> reject_hex_mfas()
-    |> Enum.sort()
+    read_graph(
+      call_graph.pid,
+      &list_runtime_mfas_in_graph(&1, pages, call_graph.module_info_plt)
+    )
   end
 
   @doc """
@@ -1905,6 +1839,45 @@ defmodule Hologram.Compiler.CallGraph do
     fact(module_info_plt, page_module, :layout_module) || page_module.__layout_module__()
   end
 
+  defp list_async_mfas_in_graph(graph) do
+    graph
+    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
+    # Excludes bare module atom vertices, keeping only MFA tuples.
+    # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
+    # the result is only used for MapSet.member? lookups against already-included MFAs.
+    |> Enum.filter(&is_tuple/1)
+    |> MapSet.new()
+  end
+
+  defp list_modules_reaching_in_graph(graph, target_modules, module_info_plt) do
+    # One pass over the vertices rather than a scan per module: the graph holds a vertex per
+    # function of the app.
+    target_vertices =
+      graph
+      |> Digraph.vertices()
+      |> Enum.filter(fn
+        {module, _function, _arity} -> MapSet.member?(target_modules, module)
+        module_vertex -> MapSet.member?(target_modules, module_vertex)
+      end)
+
+    protocol_function_mfa? = &protocol_function_mfa?(&1, module_info_plt)
+
+    graph
+    |> Digraph.reaching(target_vertices, opaque_vertex?: protocol_function_mfa?)
+    # A protocol's dispatch function is where the reverse walk stops, and it is dropped with the
+    # walk: a page that calls the protocol carries only the implementations of its own types, and
+    # it holds each of those modules in its kept modules, so the pages an edited implementation
+    # affects are found by that intersection rather than through the dispatch edges. Editing a
+    # protocol module itself still reaches its callers, since the target modules are unioned back in.
+    |> Enum.reject(protocol_function_mfa?)
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module_vertex -> module_vertex
+    end)
+    |> MapSet.new()
+    |> MapSet.union(target_modules)
+  end
+
   # Walks with the rules of the page listings (see reachable_mfas/4): a protocol implementation is
   # entered only for a type the reached code names. Following every dispatch edge instead would enter
   # every implementation the graph holds, and the graph holds the modules the pages reach, so the
@@ -1922,6 +1895,62 @@ defmodule Hologram.Compiler.CallGraph do
         _fallback -> false
       end
     end)
+  end
+
+  defp list_runtime_mfas_in_graph(graph, pages, module_info_plt) do
+    entry_mfas = list_runtime_entry_mfas()
+
+    # A component module referenced in broadcast caller code can be delivered to any
+    # connected page as a runtime value (e.g. in broadcast action params) and render
+    # as a dynamic tag there, so its client code goes into the runtime bundle, which
+    # every page loads.
+    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
+
+    app_types =
+      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt)
+
+    entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
+    initial_state = start_reachable_state(graph, entry_vertices, app_types, module_info_plt)
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
+
+    initial_templatables =
+      Enum.uniq(
+        broadcast_caller_analysis.referenced_components ++
+          extract_uniq_components(initial_mfas, module_info_plt)
+      )
+
+    # The same server-referenced component expansion as in list_page_mfas/4, so chains
+    # like a broadcast-referenced component whose own server callbacks reference
+    # further components end up in the runtime bundle too. The runtime lists against a PLT
+    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
+    # taken on the graph that still holds the runtime's functions, so they must not mix
+    # with the pages'.
+    analyses = PLT.start()
+
+    {expanded_state, templatables} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        analyses,
+        module_info_plt
+      )
+
+    server_types =
+      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
+        MapSet.union(acc, analysis.dispatch_types)
+      end)
+
+    PLT.stop(analyses)
+
+    final_state =
+      expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
+
+    graph
+    |> finalize_reachable_mfas(final_state, module_info_plt)
+    |> reject_hex_mfas()
+    |> Enum.sort()
   end
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do

@@ -625,9 +625,11 @@ defmodule Hologram.Compiler do
   @doc """
   Deletes from the encode PLT the entries of the given modules' functions, and returns the PLT. A
   module's functions are encoded again from its IR once it was edited, and are gone with it once it
-  was removed. Reads the keys only, never the values.
+  was removed. Reads the keys only, never the values. Given no module, it reads nothing.
   """
   @spec delete_module_encodings(PLT.t(), [module]) :: PLT.t()
+  def delete_module_encodings(encode_plt, []), do: encode_plt
+
   def delete_module_encodings(encode_plt, modules) do
     dropped_modules = MapSet.new(modules)
 
@@ -844,13 +846,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists the modules whose IR and function encodings a compile keeps: the modules the runtime entry file
-  reads (see `list_ir_modules/2`), the modules each page reaches, and the templatables (whose templates the
-  prop usage validation reads), each once. A page's modules are given as the `MapSet` of the modules of its
-  reachable MFAs, as a page state keeps it. Only the modules the module info PLT holds are listed, since
-  the IR PLT is built for those alone.
+  reads (see `list_ir_modules/2`) and the modules each page reaches, each once. A page's modules are
+  given as the `MapSet` of the modules of its reachable MFAs, as a page state keeps it, so they include
+  the page itself: every page is kept, and a component no page reaches is not. Only the modules the
+  module info PLT holds are listed, since the IR PLT is built for those alone.
   """
-  @spec list_kept_modules([mfa], [{module, MapSet.t(module)}], [module], PLT.t()) :: [module]
-  def list_kept_modules(runtime_mfas, modules_by_page, templatable_modules, module_info_plt) do
+  @spec list_kept_modules([mfa], [{module, MapSet.t(module)}], PLT.t()) :: [module]
+  def list_kept_modules(runtime_mfas, modules_by_page, module_info_plt) do
     page_reached_modules =
       modules_by_page
       |> Enum.reduce(MapSet.new(), fn {_page_module, modules}, acc ->
@@ -861,7 +863,6 @@ defmodule Hologram.Compiler do
     runtime_mfas
     |> list_ir_modules(module_info_plt)
     |> Enum.concat(page_reached_modules)
-    |> Enum.concat(templatable_modules)
     |> Enum.uniq()
   end
 
@@ -870,9 +871,10 @@ defmodule Hologram.Compiler do
   graph's graph with the page tasks (see `CallGraph.with_shared_graph/2`) and the server callback
   analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/4`
   against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
-  With no page, the graph is not read: a graph still being rebuilt is not waited for.
+  With no page, the graph is not read: a graph still being rebuilt is not waited for. A caller
+  with no graph to give (see the compile task's pages graph) passes nil with no page.
   """
-  @spec list_mfas_by_page([module], CallGraph.t()) :: [{module, [mfa]}]
+  @spec list_mfas_by_page([module], CallGraph.t() | nil) :: [{module, [mfa]}]
   def list_mfas_by_page([], _call_graph), do: []
 
   def list_mfas_by_page(page_modules, call_graph) do
@@ -937,6 +939,33 @@ defmodule Hologram.Compiler do
   @spec list_pages(PLT.t()) :: list(module)
   def list_pages(module_info_plt) do
     list_modules_where(module_info_plt, :page?)
+  end
+
+  @doc """
+  Lists the templatables whose prop usages a compile validates: every one when no earlier validation
+  is kept (`template_modules` nil), else the ones the module digests diff added or edited, and the
+  ones whose template uses an added, edited or removed module, as `template_modules` (each
+  templatable's used modules, from `validate_prop_usages/2`) records them. A usage's validity
+  depends on its template and on the used component's props, which live in those modules' beams
+  alone.
+  """
+  @spec list_templatables_to_validate([module], map, %{module => MapSet.t(module)} | nil) ::
+          [module]
+  def list_templatables_to_validate(templatable_modules, _module_digests_diff, nil) do
+    templatable_modules
+  end
+
+  def list_templatables_to_validate(templatable_modules, module_digests_diff, template_modules) do
+    changed_modules =
+      MapSet.new(
+        module_digests_diff.added_modules ++
+          module_digests_diff.edited_modules ++ module_digests_diff.removed_modules
+      )
+
+    Enum.filter(templatable_modules, fn module ->
+      MapSet.member?(changed_modules, module) or
+        not MapSet.disjoint?(template_modules[module], changed_modules)
+    end)
   end
 
   @doc """
@@ -1041,6 +1070,8 @@ defmodule Hologram.Compiler do
   Options:
 
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
+    * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
+      `:relist_all?`.
     * `:pending_pages` - the pages an earlier compile left unbuilt (see
       `Hologram.Compiler.Cache.put_pending_pages/1`); they are rebuilt whether or not the edit reaches
       them. Defaults to none.
@@ -1055,8 +1086,10 @@ defmodule Hologram.Compiler do
       again with their batch: few pages move, and a page's list is taken when the page is built.
     * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
       those imports out, which their MFA lists do not show, so every page is rebuilt.
+
+  The call graph is read only with `:relist_all?`, so a caller that passes it false may pass nil.
   """
-  @spec partition_pages_to_rebuild([module], CallGraph.t(), T.opts()) ::
+  @spec partition_pages_to_rebuild([module], CallGraph.t() | nil, T.opts()) ::
           {[module], [{module, map}]}
   def partition_pages_to_rebuild(page_modules, call_graph, opts) do
     {pages_to_rebuild, kept_pages} =
@@ -1073,7 +1106,9 @@ defmodule Hologram.Compiler do
       end
 
     if opts[:relist_all?] do
-      {moved_pages, still_kept_pages} = relist_kept_pages(kept_pages, call_graph)
+      {moved_pages, still_kept_pages} =
+        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt])
+
       {pages_to_rebuild ++ moved_pages, still_kept_pages}
     else
       {pages_to_rebuild, kept_pages}
@@ -1081,36 +1116,97 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Deletes from the encode PLT the entries of the functions of modules not in the given list, and
-  returns the PLT: the encodings kept are those of the modules whose IR is kept (see
-  `prune_ir_plt/2`). Reads the keys only, never the values.
+  Brings the module info PLT of the last finished compile in this VM in line with the beams now, in
+  place, and returns what changed: the module digests diff (as `diff_module_info_plts/2` returns it,
+  each list sorted) and whether any entry changed at all (an entry whose mtime moved but whose
+  digest did not is changed, but no edit).
+
+  A module the compiler reported since the last compile (`compiled_modules`, see
+  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. The entry of any other module
+  is left where it is, unless it is a protocol's, whose consolidated beam a new implementation
+  rewrites without a compile, or there is none; that one is checked against the entry's mtime and
+  size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the last compile
+  wrote. A module of `editable_modules` that is not among `editable_beams` now is looked up as
+  `build_module_info_plt!/3` looks up every module, and loses its entry only when the VM has no beam
+  for it: a deleted module is purged, while a consolidated protocol whose directory is off the code
+  path for a moment (Phoenix's reloader takes it off while it recompiles) keeps its entry. Leaving
+  the entries a scan into a new PLT would copy is what makes a compile that changed nothing cheap.
   """
-  @spec prune_encode_plt(PLT.t(), [module]) :: PLT.t()
-  def prune_encode_plt(encode_plt, modules) do
-    kept_modules = MapSet.new(modules)
+  @spec patch_module_info_plt!(
+          PLT.t(),
+          non_neg_integer | nil,
+          MapSet.t(module),
+          list({module, charlist}),
+          MapSet.t(module)
+        ) :: {map, boolean}
+  def patch_module_info_plt!(plt, dumped_at, editable_modules, editable_beams, compiled_modules) do
+    beam_results =
+      TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
+        patch_module_info_plt_entry!(plt, module, beam_path, dumped_at, compiled_modules)
+      end)
 
-    encode_plt
-    |> PLT.keys()
-    |> Enum.reject(fn {module, _function, _arity} -> MapSet.member?(kept_modules, module) end)
-    |> Enum.each(&PLT.delete(encode_plt, &1))
+    listed_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
+    umbrella? = Reflection.umbrella?()
 
-    encode_plt
+    vanished_results =
+      editable_modules
+      |> MapSet.difference(listed_modules)
+      |> Enum.map(&patch_vanished_module_info!(plt, &1, dumped_at, umbrella?))
+
+    results = beam_results ++ vanished_results
+
+    diff = %{
+      added_modules: list_results(results, :added),
+      edited_modules: list_results(results, :edited),
+      removed_modules: list_results(results, :removed)
+    }
+
+    {diff, Enum.any?(results, &(&1 != :kept))}
   end
 
   @doc """
-  Deletes from the IR PLT the entries of modules not in the given list, and returns the PLT. Reads the keys
-  only, never the values: the table can hold gigabytes.
+  Returns the kept module metadata (see `build_module_metadata/1`) brought in line with the module
+  digests diff: the entries of the removed and edited modules dropped, the entries of the added and
+  edited modules built from the module info PLT, as `build_module_metadata/1` builds them. An entry
+  depends on its module's beam alone, since the application tables it names do not move within a VM.
   """
-  @spec prune_ir_plt(PLT.t(), [module]) :: PLT.t()
+  @spec patch_module_metadata(%{module => map}, map, PLT.t()) :: %{module => map}
+  def patch_module_metadata(module_metadata, module_digests_diff, module_info_plt) do
+    root_dir = Reflection.root_dir()
+
+    rebuilt_entries =
+      for module <- module_digests_diff.added_modules ++ module_digests_diff.edited_modules,
+          {:ok, %{source_path: source_path}} when is_binary(source_path) <-
+            [PLT.get(module_info_plt, module)],
+          into: %{} do
+        {module,
+         %{
+           app: module_application(module),
+           file: Reflection.relative_source_path(source_path, root_dir)
+         }}
+      end
+
+    module_metadata
+    |> Map.drop(module_digests_diff.removed_modules ++ module_digests_diff.edited_modules)
+    |> Map.merge(rebuilt_entries)
+  end
+
+  @doc """
+  Deletes from the IR PLT the entries of modules not in the given list, and returns the modules it
+  deleted. Reads the keys only, never the values: the table can hold gigabytes.
+  """
+  @spec prune_ir_plt(PLT.t(), [module]) :: [module]
   def prune_ir_plt(ir_plt, modules) do
     kept_modules = MapSet.new(modules)
 
-    ir_plt
-    |> PLT.keys()
-    |> Enum.reject(&MapSet.member?(kept_modules, &1))
-    |> Enum.each(&PLT.delete(ir_plt, &1))
+    dropped_modules =
+      ir_plt
+      |> PLT.keys()
+      |> Enum.reject(&MapSet.member?(kept_modules, &1))
 
-    ir_plt
+    Enum.each(dropped_modules, &PLT.delete(ir_plt, &1))
+
+    dropped_modules
   end
 
   @doc """
@@ -1160,62 +1256,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the module info PLT of a live-reload compile from `old_plt`, the PLT of the last finished compile
-  in this VM. The entries of the modules that were not among the editable beams then (`editable_modules`)
-  are copied: nothing rewrites those beams while the VM runs. The editable beams now (`editable_beams`,
-  `{module, beam_path}` pairs from `Hologram.Reflection.list_editable_beams/0`) are read, or their entry is
-  reused under the same guard as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the
-  last compile wrote. A module of `editable_modules` that is not among the beams now is looked up as
-  `build_module_info_plt!/3` looks up every module, and gets no entry only when the VM has no beam for it: a
-  deleted module is purged, while a consolidated protocol whose directory is off the code path for a moment
-  (Phoenix's reloader takes it off while it recompiles) still has one.
-
-  With `:compiled_modules`, the modules the compiler reported since the last compile whose beams hold what
-  it produced (see `Hologram.Compiler.Tracer.take/1`), an editable beam is handled without a stat: a
-  compiled module's beam is read, whatever its entry's mtime and size say; the entry of a module the
-  compiler did not report is copied, unless it is a protocol's, whose consolidated beam is rewritten
-  without a compile, or there is none, in which case the beam is checked as without the option.
-  """
-  @spec update_module_info_plt!(
-          PLT.t(),
-          non_neg_integer | nil,
-          MapSet.t(module),
-          list({module, charlist}),
-          T.opts()
-        ) :: PLT.t()
-  def update_module_info_plt!(old_plt, dumped_at, editable_modules, editable_beams, opts \\ []) do
-    {compiled_modules, opts} = Keyword.pop(opts, :compiled_modules)
-    new_plt = PLT.start(opts)
-
-    kept_items =
-      old_plt
-      |> PLT.get_all()
-      |> Enum.reject(fn {module, _info} -> MapSet.member?(editable_modules, module) end)
-
-    PLT.put(new_plt, kept_items)
-
-    TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
-      update_module_info_plt_entry!(
-        new_plt,
-        module,
-        beam_path,
-        old_plt,
-        dumped_at,
-        compiled_modules
-      )
-    end)
-
-    listed_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
-    umbrella? = Reflection.umbrella?()
-
-    editable_modules
-    |> MapSet.difference(listed_modules)
-    |> Enum.each(&put_vanished_module_info!(new_plt, &1, old_plt, dumped_at, umbrella?))
-
-    new_plt
-  end
-
-  @doc """
   Whether the bundle the given bundle info describes can still be served from the given static dir:
   it was written there, and both the bundle and its source map are on disk. A build dir can lose
   bundles to another build env sharing the static dir, and the info names one static dir, so reusing
@@ -1252,14 +1292,26 @@ defmodule Hologram.Compiler do
   never written at the usage. Those cases, along with dynamic tags, are left to the renderers.
 
   Modules missing from the IR PLT are skipped - a module without a BEAM source has no IR to walk.
+
+  Returns, for each given module, the modules its template uses as components, whether or not they
+  are components: with its own template, all its result depends on (see
+  `list_templatables_to_validate/3`). A skipped module uses none.
   """
-  @spec validate_prop_usages(list(module), PLT.t()) :: :ok
+  @spec validate_prop_usages(list(module), PLT.t()) :: %{module => MapSet.t(module)}
   def validate_prop_usages(modules, ir_plt) do
-    Enum.each(modules, fn module ->
-      case PLT.get(ir_plt, module) do
-        {:ok, ir} -> validate_module_prop_usages(module, ir)
-        _fallback -> :ok
-      end
+    Map.new(modules, fn module ->
+      usages =
+        case PLT.get(ir_plt, module) do
+          {:ok, ir} -> validate_module_prop_usages(module, ir)
+          :error -> []
+        end
+
+      used_modules =
+        MapSet.new(usages, fn {component_module, _prop_entries, _has_spread?} ->
+          component_module
+        end)
+
+      {module, used_modules}
     end)
   end
 
@@ -1446,6 +1498,13 @@ defmodule Hologram.Compiler do
     PLT.member?(encode_plt, {module, function, arity})
   end
 
+  defp get_module_info(plt, module) do
+    case PLT.get(plt, module) do
+      {:ok, info} -> info
+      :error -> nil
+    end
+  end
+
   defp get_package_json_digest(assets_dir) do
     assets_dir
     |> Path.join("package.json")
@@ -1525,11 +1584,20 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Filtered in the table, so no info is copied out of it.
   defp list_modules_where(module_info_plt, flag) do
     module_info_plt
-    |> PLT.get_all()
-    |> Enum.filter(fn {_module, info} -> info[flag] end)
-    |> Enum.map(fn {module, _info} -> module end)
+    |> PLT.keys(%{flag => true})
+    |> Enum.sort()
+  end
+
+  # The modules of the given kind among the results of patch_module_info_plt_entry!/5, sorted.
+  defp list_results(results, kind) do
+    results
+    |> Enum.flat_map(fn
+      {^kind, module} -> [module]
+      _other -> []
+    end)
     |> Enum.sort()
   end
 
@@ -1637,6 +1705,52 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
+  # The application Reflection.list_module_applications/0 names for the module: the first loaded
+  # application, in the same order, whose modules list it.
+  defp module_application(module) do
+    Enum.find_value(Application.loaded_applications(), fn {app, _description, _version} ->
+      if module in List.wrap(Application.spec(app, :modules)), do: app
+    end)
+  end
+
+  # A compiled module is read. The entry of any other module is left as it is, unless it is a
+  # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
+  # and a beam with no entry, is checked against its mtime and size first.
+  defp patch_module_info_plt_entry!(plt, module, beam_path, dumped_at, compiled_modules) do
+    old_info = get_module_info(plt, module)
+
+    cond do
+      MapSet.member?(compiled_modules, module) ->
+        put_compared_module_info(plt, module, old_info, Reflection.beam_info(beam_path))
+
+      match?(%{protocol?: false}, old_info) ->
+        :kept
+
+      true ->
+        new_info =
+          reusable_module_info(module, beam_path, plt, dumped_at) ||
+            Reflection.beam_info(beam_path)
+
+        put_compared_module_info(plt, module, old_info, new_info)
+    end
+  end
+
+  # A module that left the listing without its beam being deleted, as the full scan would see it. A
+  # path the VM still names for a module whose file is gone, or for one compiled in memory, has
+  # nothing to read, so the module loses its entry, as a deleted one.
+  defp patch_vanished_module_info!(plt, module, dumped_at, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
+    old_info = get_module_info(plt, module)
+
+    new_info =
+      if beam_source && (is_binary(beam_source) or File.regular?(beam_source)) do
+        reusable_module_info(module, beam_source, plt, dumped_at) ||
+          Reflection.beam_info(beam_source)
+      end
+
+    put_compared_module_info(plt, module, old_info, new_info)
+  end
+
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author
   # declared with prop/3, so they are not props as far as a usage is concerned.
   defp prop_entries(props) do
@@ -1677,6 +1791,28 @@ defmodule Hologram.Compiler do
   defp static_prop_value(_value_dom), do: :unknown
 
   # Read gives nil: not an Elixir module.
+  # Puts the new entry in place of the old one and says what that was: an addition, an edit (another
+  # digest), a touch (the same digest, another mtime or size), a removal (a beam that no longer reads
+  # as an Elixir module, or none), or nothing.
+  defp put_compared_module_info(_plt, _module, nil, nil), do: :kept
+
+  defp put_compared_module_info(plt, module, _old_info, nil) do
+    PLT.delete(plt, module)
+    {:removed, module}
+  end
+
+  defp put_compared_module_info(_plt, _module, info, info), do: :kept
+
+  defp put_compared_module_info(plt, module, old_info, new_info) do
+    PLT.put(plt, module, new_info)
+
+    cond do
+      old_info == nil -> {:added, module}
+      old_info.digest != new_info.digest -> {:edited, module}
+      true -> {:touched, module}
+    end
+  end
+
   defp put_module_info(new_plt, module, info) do
     if info, do: PLT.put(new_plt, module, info)
   end
@@ -1690,19 +1826,9 @@ defmodule Hologram.Compiler do
     put_module_info(new_plt, module, info)
   end
 
-  # A module that left the listing without its beam being deleted, as the full scan would see it. A
-  # path the VM still names for a module whose file is gone, or for one compiled in memory, has
-  # nothing to read, so the module gets no entry, as a deleted one.
-  defp put_vanished_module_info!(new_plt, module, old_plt, dumped_at, umbrella?) do
-    beam_source = resolve_beam_source(module, umbrella?)
-
-    if beam_source && (is_binary(beam_source) or File.regular?(beam_source)) do
-      put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
-    end
-  end
-
-  # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states.
-  defp relist_kept_pages(kept_pages, call_graph) do
+  # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
+  # page's MFAs as its bundle was built from them are read from the page MFAs PLT.
+  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt) do
     mfas_by_kept_page =
       kept_pages
       |> Enum.map(fn {page_module, _page_state} -> page_module end)
@@ -1710,8 +1836,8 @@ defmodule Hologram.Compiler do
       |> Map.new()
 
     {changed_pages, unchanged_pages} =
-      Enum.split_with(kept_pages, fn {page_module, page_state} ->
-        mfas_by_kept_page[page_module] != page_state.mfas
+      Enum.split_with(kept_pages, fn {page_module, _page_state} ->
+        mfas_by_kept_page[page_module] != PLT.get!(page_mfas_plt, page_module)
       end)
 
     moved_pages = Enum.map(changed_pages, fn {page_module, _page_state} -> page_module end)
@@ -1950,39 +2076,15 @@ defmodule Hologram.Compiler do
 
   defp reusable_module_info(_module, _beam_source, _old_plt, _dumped_at), do: nil
 
-  defp update_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at, nil) do
-    put_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at)
-  end
-
-  # A compiled module is read. The kept entry of any other module is copied, unless it is a
-  # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
-  # and a beam with no kept entry, is checked as without the compiled modules.
-  defp update_module_info_plt_entry!(
-         new_plt,
-         module,
-         beam_path,
-         old_plt,
-         dumped_at,
-         compiled_modules
-       ) do
-    if MapSet.member?(compiled_modules, module) do
-      put_module_info(new_plt, module, Reflection.beam_info(beam_path))
-    else
-      case PLT.get(old_plt, module) do
-        {:ok, %{protocol?: false} = info} ->
-          PLT.put(new_plt, module, info)
-
-        _protocol_or_no_entry ->
-          put_module_info_plt_entry!(new_plt, module, beam_path, old_plt, dumped_at)
-      end
-    end
-  end
-
   defp validate_module_prop_usages(module, ir) do
-    ir
-    |> template_ir()
-    |> list_component_usages()
-    |> Enum.each(&validate_prop_usage(&1, module))
+    usages =
+      ir
+      |> template_ir()
+      |> list_component_usages()
+
+    Enum.each(usages, &validate_prop_usage(&1, module))
+
+    usages
   end
 
   # Only the template's own DOM is validated. A component node is an ordinary 4-tuple, so code

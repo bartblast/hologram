@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.Tracer do
 
   # Records the bytecode of every module the Elixir compiler compiles in this VM, so that a
   # live-reload compile takes its edited and added modules from here instead of checking every beam
-  # of the project (see Hologram.Compiler.update_module_info_plt!/5). Hologram.Compiler.Cache
+  # of the project (see Hologram.Compiler.patch_module_info_plt!/5). Hologram.Compiler.Cache
   # registers it when the cache starts, before the first scan in the VM, and owns the table, so the
   # records live exactly as long as the kept state they are for: without the cache the next compile
   # is cold and scans everything.

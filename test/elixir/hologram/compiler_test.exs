@@ -31,11 +31,14 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module29
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module30
+  alias Hologram.Test.Fixtures.Compiler.Module31
   alias Hologram.Test.Fixtures.Compiler.Module32
   alias Hologram.Test.Fixtures.Compiler.Module34
+  alias Hologram.Test.Fixtures.Compiler.Module35
   alias Hologram.Test.Fixtures.Compiler.Module36
   alias Hologram.Test.Fixtures.Compiler.Module37
   alias Hologram.Test.Fixtures.Compiler.Module38
+  alias Hologram.Test.Fixtures.Compiler.Module39
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module40
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -1787,6 +1790,13 @@ defmodule Hologram.CompilerTest do
     test "returns the PLT", %{encode_plt: encode_plt} do
       assert delete_module_encodings(encode_plt, [Module1]) == encode_plt
     end
+
+    test "given no module, reads no key and keeps every entry", %{encode_plt: encode_plt} do
+      count = count_calls({PLT, :keys, 1}, fn -> delete_module_encodings(encode_plt, []) end)
+
+      assert count == 0
+      assert PLT.size(encode_plt) == 4
+    end
   end
 
   describe "delete_module_ir/2" do
@@ -2266,6 +2276,7 @@ defmodule Hologram.CompilerTest do
       |> PLT.put(Module11, info.(false, true))
 
     assert list_components(plt) == [Module11, Module3]
+    assert count_calls({PLT, :get_all, 1}, fn -> list_components(plt) end) == 0
   end
 
   describe "list_ir_modules/2" do
@@ -2345,25 +2356,19 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_kept_modules/4" do
+  describe "list_kept_modules/3" do
     setup do
       [module_info_plt: small_module_info_plt()]
     end
 
     test "lists the modules of the runtime MFAs", %{module_info_plt: module_info_plt} do
-      modules = list_kept_modules([{Module1, :fun_1, 0}], [], [], module_info_plt)
+      modules = list_kept_modules([{Module1, :fun_1, 0}], [], module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Module1, Hologram.JS])
     end
 
     test "lists the modules of the manually ported MFAs", %{module_info_plt: module_info_plt} do
-      assert list_kept_modules([], [], [], module_info_plt) == [Hologram.JS]
-    end
-
-    test "lists the templatables", %{module_info_plt: module_info_plt} do
-      modules = list_kept_modules([], [], [Module11, Module12], module_info_plt)
-
-      assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module11, Module12])
+      assert list_kept_modules([], [], module_info_plt) == [Hologram.JS]
     end
 
     test "lists the modules the pages reach", %{module_info_plt: module_info_plt} do
@@ -2372,7 +2377,7 @@ defmodule Hologram.CompilerTest do
         {Module12, MapSet.new([Module2, Module3])}
       ]
 
-      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+      modules = list_kept_modules([], modules_by_page, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1, Module2, Module3])
     end
@@ -2382,7 +2387,7 @@ defmodule Hologram.CompilerTest do
     } do
       modules_by_page = [{Module11, MapSet.new([Module1, Module4, :lists])}]
 
-      modules = list_kept_modules([], modules_by_page, [], module_info_plt)
+      modules = list_kept_modules([], modules_by_page, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
     end
@@ -2390,8 +2395,7 @@ defmodule Hologram.CompilerTest do
     test "lists each module once", %{module_info_plt: module_info_plt} do
       modules_by_page = [{Module11, MapSet.new([Module1])}]
 
-      modules =
-        list_kept_modules([{Module1, :fun_1, 0}], modules_by_page, [Module1], module_info_plt)
+      modules = list_kept_modules([{Module1, :fun_1, 0}], modules_by_page, module_info_plt)
 
       assert Enum.sort(modules) == Enum.sort([Hologram.JS, Module1])
     end
@@ -2622,6 +2626,93 @@ defmodule Hologram.CompilerTest do
       |> PLT.put(Module11, info.(true, false))
 
     assert list_pages(plt) == [Module11, Module2]
+    assert count_calls({PLT, :get_all, 1}, fn -> list_pages(plt) end) == 0
+  end
+
+  describe "list_templatables_to_validate/3" do
+    setup do
+      [
+        empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []},
+        template_modules: %{
+          page_1: MapSet.new([:component_1]),
+          page_2: MapSet.new([:component_2]),
+          component_1: MapSet.new(),
+          component_2: MapSet.new()
+        },
+        templatable_modules: [:component_1, :component_2, :page_1, :page_2]
+      ]
+    end
+
+    test "lists every templatable when no validation is kept", %{
+      empty_diff: diff,
+      templatable_modules: templatable_modules
+    } do
+      assert list_templatables_to_validate(templatable_modules, diff, nil) == templatable_modules
+    end
+
+    test "lists none with no change", context do
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               context.empty_diff,
+               context.template_modules
+             ) == []
+    end
+
+    test "lists an edited templatable", context do
+      diff = %{context.empty_diff | edited_modules: [:page_2]}
+
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               diff,
+               context.template_modules
+             ) == [:page_2]
+    end
+
+    test "lists an added templatable", context do
+      templatable_modules = [:page_3 | context.templatable_modules]
+      diff = %{context.empty_diff | added_modules: [:page_3]}
+
+      assert list_templatables_to_validate(templatable_modules, diff, context.template_modules) ==
+               [:page_3]
+    end
+
+    test "lists an edited component and the templatables whose template uses it, not the others",
+         context do
+      diff = %{context.empty_diff | edited_modules: [:component_1]}
+
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               diff,
+               context.template_modules
+             ) == [:component_1, :page_1]
+    end
+
+    test "lists a templatable whose template uses a removed module", context do
+      templatable_modules = context.templatable_modules -- [:component_2]
+      diff = %{context.empty_diff | removed_modules: [:component_2]}
+
+      assert list_templatables_to_validate(templatable_modules, diff, context.template_modules) ==
+               [:page_2]
+    end
+
+    # A usage of a module that did not exist when the template was last validated.
+    test "lists a templatable whose template uses an added module", context do
+      template_modules = %{context.template_modules | page_2: MapSet.new([:component_3])}
+      diff = %{context.empty_diff | added_modules: [:component_3]}
+
+      assert list_templatables_to_validate(context.templatable_modules, diff, template_modules) ==
+               [:page_2]
+    end
+
+    test "lists none when the edited module is used by no template", context do
+      diff = %{context.empty_diff | edited_modules: [:plain_module]}
+
+      assert list_templatables_to_validate(
+               context.templatable_modules,
+               diff,
+               context.template_modules
+             ) == []
+    end
   end
 
   describe "maybe_install_js_deps/1" do
@@ -2931,6 +3022,7 @@ defmodule Hologram.CompilerTest do
       static_dir = test_tmp_dir
 
       pages_plt = PLT.start()
+      page_mfas_plt = PLT.start()
 
       Enum.each(mfas_by_page, fn {page_module, mfas} ->
         PLT.put(pages_plt, page_module, %{
@@ -2938,14 +3030,16 @@ defmodule Hologram.CompilerTest do
             static_bundle_path: bundle_path,
             static_source_map_path: bundle_path <> ".map"
           },
-          mfas: mfas,
           modules: MapSet.new(mfas, &elem(&1, 0))
         })
+
+        PLT.put(page_mfas_plt, page_module, mfas)
       end)
 
       [
         call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
         mfas_by_page: mfas_by_page,
+        page_mfas_plt: page_mfas_plt,
         page_modules: page_modules,
         pages_plt: pages_plt,
         static_dir: static_dir
@@ -3018,6 +3112,7 @@ defmodule Hologram.CompilerTest do
 
     test "relisting keeps the pages whose MFAs are unchanged", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_mfas_plt: page_mfas_plt,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
@@ -3026,6 +3121,7 @@ defmodule Hologram.CompilerTest do
                partition_pages_to_rebuild(
                  page_modules,
                  call_graph_without_runtime_mfas,
+                 page_mfas_plt: page_mfas_plt,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
                  relist_all?: true,
@@ -3038,25 +3134,21 @@ defmodule Hologram.CompilerTest do
     test "relisting rebuilds a page whose MFAs moved", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       mfas_by_page: mfas_by_page,
+      page_mfas_plt: page_mfas_plt,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
     } do
       [{moved_page, moved_page_mfas} | _rest] = mfas_by_page
 
-      PLT.put(pages_plt, moved_page, %{
-        bundle_info: %{
-          static_bundle_path: Path.join(static_dir, "page-kept.js"),
-          static_source_map_path: Path.join(static_dir, "page-kept.js.map")
-        },
-        mfas: tl(moved_page_mfas),
-        modules: MapSet.new(moved_page_mfas, &elem(&1, 0))
-      })
+      # The page MFAs PLT decides, not the list in the page state, which is left as the setup put it.
+      PLT.put(page_mfas_plt, moved_page, tl(moved_page_mfas))
 
       {rebuilt, kept} =
         partition_pages_to_rebuild(
           page_modules,
           call_graph_without_runtime_mfas,
+          page_mfas_plt: page_mfas_plt,
           pages_plt: pages_plt,
           reaching_modules: MapSet.new(),
           relist_all?: true,
@@ -3087,35 +3179,325 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "prune_encode_plt/2" do
+  describe "patch_module_info_plt!/5" do
     setup do
-      encode_plt =
-        PLT.start()
-        |> PLT.put({Module1, :fun_1, 0}, "js_1_1")
-        |> PLT.put({Module1, :fun_2, 1}, "js_1_2")
-        |> PLT.put({Module2, :fun_1, 0}, nil)
-        |> PLT.put({Module3, :fun_1, 0}, "js_3_1")
-
-      [encode_plt: encode_plt]
+      [empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []}]
     end
 
-    test "deletes the entries of the modules not in the list", %{encode_plt: encode_plt} do
-      prune_encode_plt(encode_plt, [Module1, Module3])
+    test "leaves the entry of a module the compiler did not report", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Hologram.Reflection)
 
-      assert PLT.get(encode_plt, {Module2, :fun_1, 0}) == :error
+      # Its mtime moved, so a check of the beam would read it.
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {empty_diff, false}
+      assert PLT.get!(plt, Hologram.Reflection) == old_info
     end
 
-    test "keeps the entries of the listed modules", %{encode_plt: encode_plt} do
-      prune_encode_plt(encode_plt, [Module1, Module3, Module4])
+    test "reads a compiled module and reports an edit when its digest moved", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Hologram.Reflection)
 
-      assert PLT.get(encode_plt, {Module1, :fun_1, 0}) == {:ok, "js_1_1"}
-      assert PLT.get(encode_plt, {Module1, :fun_2, 1}) == {:ok, "js_1_2"}
-      assert PLT.get(encode_plt, {Module3, :fun_1, 0}) == {:ok, "js_3_1"}
-      assert PLT.size(encode_plt) == 3
+      plt =
+        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | digest: 1})
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
     end
 
-    test "returns the PLT", %{encode_plt: encode_plt} do
-      assert prune_encode_plt(encode_plt, [Module1]) == encode_plt
+    test "reports no change for a compiled module whose beam reads as its entry", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Hologram.Reflection)
+      plt = PLT.put(PLT.start(), Hologram.Reflection, Reflection.beam_info(beam_path))
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert result == {empty_diff, false}
+    end
+
+    test "reports a change but no edit when only the mtime moved", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Hologram.Reflection)
+
+      plt =
+        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | mtime: 0})
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert result == {empty_diff, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "adds a beam that has no entry", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Hologram.Reflection)
+      plt = PLT.start()
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new(),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {%{empty_diff | added_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "removes an editable module whose beam is gone", %{empty_diff: empty_diff} do
+      plt = PLT.put(PLT.start(), :removed_module, %{digest: "removed"})
+
+      result = patch_module_info_plt!(plt, nil, MapSet.new([:removed_module]), [], MapSet.new())
+
+      assert result == {%{empty_diff | removed_modules: [:removed_module]}, true}
+      assert PLT.get(plt, :removed_module) == :error
+    end
+
+    test "checks a module that left the listing while the VM still has its beam", %{
+      empty_diff: empty_diff
+    } do
+      # A consolidated protocol whose directory is off the code path for a moment is listed nowhere,
+      # yet the VM loads it from another beam.
+      beam_path = :code.which(Hologram.Reflection)
+
+      plt =
+        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | digest: 1})
+
+      result =
+        patch_module_info_plt!(plt, nil, MapSet.new([Hologram.Reflection]), [], MapSet.new())
+
+      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "removes a module that left the listing when the path the VM names has no file", %{
+      empty_diff: empty_diff
+    } do
+      module = Hologram.Test.Fixtures.Compiler.PatchModuleInfoPlt.InMemoryModule
+      Code.compile_string("defmodule #{inspect(module)} do end")
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      # A module compiled in memory: the VM names an empty path for it.
+      assert :code.which(module) == []
+
+      plt = PLT.put(PLT.start(), module, %{digest: 1})
+
+      result = patch_module_info_plt!(plt, nil, MapSet.new([module]), [], MapSet.new())
+
+      assert result == {%{empty_diff | removed_modules: [module]}, true}
+      assert PLT.get(plt, module) == :error
+    end
+
+    test "checks the beam of a protocol the compiler did not report", %{empty_diff: empty_diff} do
+      beam_path = :code.which(Enumerable)
+
+      plt =
+        PLT.put(PLT.start(), Enumerable, %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0})
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Enumerable]),
+          [{Enumerable, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {%{empty_diff | edited_modules: [Enumerable]}, true}
+      assert PLT.get!(plt, Enumerable) == Reflection.beam_info(beam_path)
+    end
+
+    test "reuses the entry of a protocol whose beam is untouched and older than the dump", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Enumerable)
+      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
+      plt = PLT.put(PLT.start(), Enumerable, old_info)
+
+      result =
+        patch_module_info_plt!(
+          plt,
+          mtime + 1,
+          MapSet.new([Enumerable]),
+          [{Enumerable, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {empty_diff, false}
+      assert PLT.get!(plt, Enumerable) == old_info
+    end
+
+    test "leaves every entry as the beams and the reported modules say, and finds the diff" do
+      reflection_path = :code.which(Hologram.Reflection)
+      compiler_path = :code.which(Hologram.Compiler)
+      enumerable_path = :code.which(Enumerable)
+
+      plt_path = :code.which(Hologram.Commons.PLT)
+      kept_reflection_info = %{Reflection.beam_info(reflection_path) | digest: 1, mtime: 0}
+
+      plt =
+        PLT.put(PLT.start(), [
+          # Not editable.
+          {Enum, %{digest: "kept"}},
+          # Editable, not reported, mtime moved: left as it is.
+          {Hologram.Reflection, kept_reflection_info},
+          # Reported: read again.
+          {Hologram.Compiler, %{Reflection.beam_info(compiler_path) | digest: 1}},
+          # A protocol not reported, mtime moved: read again.
+          {Enumerable, %{Reflection.beam_info(enumerable_path) | digest: 1, mtime: 0}},
+          # Editable, no beam: removed.
+          {:removed_module, %{digest: "removed"}}
+        ])
+
+      editable_modules =
+        MapSet.new([Hologram.Reflection, Hologram.Compiler, Enumerable, :removed_module])
+
+      editable_beams = [
+        {Hologram.Reflection, reflection_path},
+        {Hologram.Compiler, compiler_path},
+        {Enumerable, enumerable_path},
+        # No entry: added.
+        {Hologram.Commons.PLT, plt_path}
+      ]
+
+      compiled_modules = MapSet.new([Hologram.Compiler])
+
+      {diff, changed?} =
+        patch_module_info_plt!(plt, nil, editable_modules, editable_beams, compiled_modules)
+
+      assert PLT.get_all(plt) == %{
+               Enum => %{digest: "kept"},
+               Hologram.Reflection => kept_reflection_info,
+               Hologram.Compiler => Reflection.beam_info(compiler_path),
+               Enumerable => Reflection.beam_info(enumerable_path),
+               Hologram.Commons.PLT => Reflection.beam_info(plt_path)
+             }
+
+      assert diff == %{
+               added_modules: [Hologram.Commons.PLT],
+               edited_modules: [Enumerable, Hologram.Compiler],
+               removed_modules: [:removed_module]
+             }
+
+      assert changed?
+    end
+  end
+
+  describe "patch_module_metadata/3" do
+    setup do
+      module_info_plt =
+        PLT.put(PLT.start(), [
+          {Enum, %{source_path: Reflection.source_path(Enum)}},
+          {Hologram.Compiler, %{source_path: Reflection.source_path(Hologram.Compiler)}},
+          {Hologram.Reflection, %{source_path: Reflection.source_path(Hologram.Reflection)}}
+        ])
+
+      [
+        empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []},
+        module_info_plt: module_info_plt
+      ]
+    end
+
+    test "drops the entries of removed and edited modules and builds the entries of added and edited ones",
+         %{empty_diff: diff, module_info_plt: module_info_plt} do
+      module_metadata = %{
+        Aaa.Bbb => %{app: nil, file: "bbb.ex"},
+        Enum => %{app: :elixir, file: "lib/enum.ex"},
+        Hologram.Reflection => %{app: :stale, file: "stale.ex"}
+      }
+
+      diff = %{
+        diff
+        | added_modules: [Hologram.Compiler],
+          edited_modules: [Hologram.Reflection],
+          removed_modules: [Aaa.Bbb]
+      }
+
+      assert patch_module_metadata(module_metadata, diff, module_info_plt) == %{
+               Enum => %{app: :elixir, file: "lib/enum.ex"},
+               Hologram.Compiler => %{app: :hologram, file: "lib/hologram/compiler.ex"},
+               Hologram.Reflection => %{app: :hologram, file: "lib/hologram/reflection.ex"}
+             }
+    end
+
+    test "a patched map equals a rebuilt one", %{
+      empty_diff: diff,
+      module_info_plt: module_info_plt
+    } do
+      rebuilt_metadata = build_module_metadata(module_info_plt)
+      stale_metadata = Map.put(rebuilt_metadata, Hologram.Reflection, %{app: nil, file: "a.ex"})
+      diff = %{diff | edited_modules: [Hologram.Reflection]}
+
+      assert patch_module_metadata(stale_metadata, diff, module_info_plt) == rebuilt_metadata
+    end
+
+    test "an empty diff changes nothing", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      module_metadata = %{Enum => %{app: :stale, file: "stale.ex"}}
+
+      assert patch_module_metadata(module_metadata, diff, module_info_plt) == module_metadata
+    end
+
+    test "names the application the full build names", %{empty_diff: diff} do
+      # Every 25th module of the loaded applications, with a made-up source path: only the
+      # application is compared.
+      modules =
+        Reflection.list_module_applications()
+        |> Map.keys()
+        |> Enum.sort()
+        |> Enum.take_every(25)
+
+      module_info_plt = PLT.put(PLT.start(), Enum.map(modules, &{&1, %{source_path: "/x/y.ex"}}))
+      diff = %{diff | added_modules: modules}
+
+      assert patch_module_metadata(%{}, diff, module_info_plt) ==
+               build_module_metadata(module_info_plt)
+    end
+
+    test "an added module without a source path gets no entry", %{empty_diff: diff} do
+      module_info_plt = PLT.put(PLT.start(), Aaa.Bbb, %{source_path: nil})
+      diff = %{diff | added_modules: [Aaa.Bbb]}
+
+      assert patch_module_metadata(%{}, diff, module_info_plt) == %{}
     end
   end
 
@@ -3144,8 +3526,14 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(ir_plt, Module4) == :error
     end
 
-    test "returns the PLT", %{ir_plt: ir_plt} do
-      assert prune_ir_plt(ir_plt, [Module1]) == ir_plt
+    test "returns the modules it deleted", %{ir_plt: ir_plt} do
+      dropped_modules = prune_ir_plt(ir_plt, [Module1])
+
+      assert Enum.sort(dropped_modules) == [Module2, Module3]
+    end
+
+    test "returns no module when every module is kept", %{ir_plt: ir_plt} do
+      assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
     end
   end
 
@@ -3342,170 +3730,11 @@ defmodule Hologram.CompilerTest do
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
   end
 
-  describe "update_module_info_plt!/5" do
-    test "copies the entries of the modules that are not editable" do
-      old_plt = PLT.put(PLT.start(), Enum, %{digest: "kept"})
-
-      plt = update_module_info_plt!(old_plt, nil, MapSet.new(), [])
-
-      assert PLT.get!(plt, Enum) == %{digest: "kept"}
-    end
-
-    test "reads an editable beam that has no entry" do
-      beam_path = :code.which(Hologram.Reflection)
-
-      plt =
-        update_module_info_plt!(PLT.start(), nil, MapSet.new(), [
-          {Hologram.Reflection, beam_path}
-        ])
-
-      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
-    end
-
-    test "reuses the entry of an editable beam that is untouched and older than the dump" do
-      beam_path = :code.which(Hologram.Reflection)
-      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, page?: true}
-      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
-
-      plt =
-        update_module_info_plt!(old_plt, mtime + 1, MapSet.new([Hologram.Reflection]), [
-          {Hologram.Reflection, beam_path}
-        ])
-
-      assert PLT.get!(plt, Hologram.Reflection) == old_info
-    end
-
-    test "reads an editable beam whose entry does not match its file" do
-      beam_path = :code.which(Hologram.Reflection)
-      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: mtime - 1}
-      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
-
-      plt =
-        update_module_info_plt!(old_plt, mtime + 1, MapSet.new([Hologram.Reflection]), [
-          {Hologram.Reflection, beam_path}
-        ])
-
-      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
-    end
-
-    test "drops the entry of an editable module whose beam is gone" do
-      old_plt = PLT.put(PLT.start(), :removed_module, %{digest: "removed"})
-
-      plt = update_module_info_plt!(old_plt, nil, MapSet.new([:removed_module]), [])
-
-      assert PLT.get(plt, :removed_module) == :error
-    end
-
-    test "keeps a module that left the listing while the VM still has its beam" do
-      # A consolidated protocol whose directory is off the code path for a moment is listed nowhere,
-      # yet the VM loads it from another beam.
-      beam_path = :code.which(Hologram.Reflection)
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
-      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
-
-      plt = update_module_info_plt!(old_plt, nil, MapSet.new([Hologram.Reflection]), [])
-
-      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
-    end
-
-    test "drops a module that left the listing when the path the VM names has no file" do
-      module = Hologram.Test.Fixtures.Compiler.UpdateModuleInfoPlt.InMemoryModule
-      Code.compile_string("defmodule #{inspect(module)} do end")
-
-      on_exit(fn ->
-        :code.purge(module)
-        :code.delete(module)
-      end)
-
-      # A module compiled in memory: the VM names an empty path for it.
-      assert :code.which(module) == []
-
-      old_plt = PLT.put(PLT.start(), module, %{digest: 1})
-
-      plt = update_module_info_plt!(old_plt, nil, MapSet.new([module]), [])
-
-      assert PLT.get(plt, module) == :error
-    end
-
-    test "reads the beam of a compiled module whatever its entry says" do
-      beam_path = :code.which(Hologram.Reflection)
-      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
-
-      # Untouched and older than the dump, so a check of the beam would reuse it.
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
-      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
-
-      plt =
-        update_module_info_plt!(
-          old_plt,
-          mtime + 1,
-          MapSet.new([Hologram.Reflection]),
-          [{Hologram.Reflection, beam_path}],
-          compiled_modules: MapSet.new([Hologram.Reflection])
-        )
-
-      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
-    end
-
-    test "copies the entry of an editable module the compiler did not report" do
-      beam_path = :code.which(Hologram.Reflection)
-
-      # Its mtime moved, so a check of the beam would read it.
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
-      old_plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
-
-      plt =
-        update_module_info_plt!(
-          old_plt,
-          nil,
-          MapSet.new([Hologram.Reflection]),
-          [{Hologram.Reflection, beam_path}],
-          compiled_modules: MapSet.new()
-        )
-
-      assert PLT.get!(plt, Hologram.Reflection) == old_info
-    end
-
-    test "checks the beam of a protocol the compiler did not report" do
-      beam_path = :code.which(Enumerable)
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
-      old_plt = PLT.put(PLT.start(), Enumerable, old_info)
-
-      plt =
-        update_module_info_plt!(
-          old_plt,
-          nil,
-          MapSet.new([Enumerable]),
-          [{Enumerable, beam_path}],
-          compiled_modules: MapSet.new()
-        )
-
-      assert PLT.get!(plt, Enumerable) == Reflection.beam_info(beam_path)
-    end
-
-    test "checks an editable beam that has no entry when the compiler did not report it" do
-      beam_path = :code.which(Hologram.Reflection)
-
-      plt =
-        update_module_info_plt!(
-          PLT.start(),
-          nil,
-          MapSet.new(),
-          [{Hologram.Reflection, beam_path}],
-          compiled_modules: MapSet.new()
-        )
-
-      assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
-    end
-  end
-
   describe "validate_prop_usages/2" do
     test "doesn't raise when every required prop is written at the usage" do
       plt = PLT.put(PLT.start(), Module32, IR.for_module(Module32))
 
-      assert validate_prop_usages([Module32], plt) == :ok
+      assert validate_prop_usages([Module32], plt) == %{Module32 => MapSet.new([Module31])}
     end
 
     test "raises when a required prop is missing from the usage" do
@@ -3531,13 +3760,13 @@ defmodule Hologram.CompilerTest do
     test "doesn't raise when the usage carries a spread" do
       plt = PLT.put(PLT.start(), Module34, IR.for_module(Module34))
 
-      assert validate_prop_usages([Module34], plt) == :ok
+      assert validate_prop_usages([Module34], plt) == %{Module34 => MapSet.new([Module31])}
     end
 
     test "doesn't raise when the required prop is sourced from context" do
       plt = PLT.put(PLT.start(), Module36, IR.for_module(Module36))
 
-      assert validate_prop_usages([Module36], plt) == :ok
+      assert validate_prop_usages([Module36], plt) == %{Module36 => MapSet.new([Module35])}
     end
 
     # A component node is an ordinary 4-tuple, so code outside the template can hold one without any
@@ -3545,17 +3774,30 @@ defmodule Hologram.CompilerTest do
     test "ignores a component tuple returned by a non-template function" do
       plt = PLT.put(PLT.start(), Module40, IR.for_module(Module40))
 
-      assert validate_prop_usages([Module40], plt) == :ok
+      # Nor is it counted among the modules the template uses.
+      assert validate_prop_usages([Module40], plt) == %{Module40 => MapSet.new()}
     end
 
     test "skips modules that are not in the IR PLT" do
-      assert validate_prop_usages([Module32], PLT.start()) == :ok
+      assert validate_prop_usages([Module32], PLT.start()) == %{Module32 => MapSet.new()}
+    end
+
+    test "returns the modules each given template uses" do
+      plt =
+        PLT.start()
+        |> PLT.put(Module32, IR.for_module(Module32))
+        |> PLT.put(Module38, IR.for_module(Module38))
+
+      assert validate_prop_usages([Module32, Module38], plt) == %{
+               Module32 => MapSet.new([Module31]),
+               Module38 => MapSet.new([Module37])
+             }
     end
 
     test "doesn't raise when a written value is in the prop's :values list" do
       plt = PLT.put(PLT.start(), Module38, IR.for_module(Module38))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module37])}
     end
 
     test "raises when a literal expression value is not in the prop's :values list" do
@@ -3643,7 +3885,7 @@ defmodule Hologram.CompilerTest do
 
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module39])}
     end
 
     # One expression anywhere inside makes the whole composite unknowable until it runs.
@@ -3656,7 +3898,7 @@ defmodule Hologram.CompilerTest do
 
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module39])}
     end
 
     test "doesn't raise when the value is not known at compile time" do
@@ -3668,7 +3910,7 @@ defmodule Hologram.CompilerTest do
 
       plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
-      assert validate_prop_usages([Module38], plt) == :ok
+      assert validate_prop_usages([Module38], plt) == %{Module38 => MapSet.new([Module37])}
     end
   end
 

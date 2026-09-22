@@ -48,6 +48,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
+  # The cache's state with the kept module infos as a map, nil while they are untrusted (no editable
+  # modules kept), as the tests read them.
+  defp cache_state do
+    state = Cache.get()
+    module_infos = if state.editable_modules, do: PLT.get_all(state.module_info_plt)
+
+    Map.put(state, :module_infos, module_infos)
+  end
+
   # How many times the function is called, in any process, while the given function runs.
   defp count_calls(mfa, fun) do
     :erlang.trace_pattern(mfa, true, [:call_count])
@@ -61,6 +70,37 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # How many times the call graph and the module info PLT are dumped while the given function runs.
+  # PLT.dump/2 also writes the page digest PLT, once before the batches and once after each, through
+  # a private function whose local calls are counted and taken off.
+  defp count_dumps(fun) do
+    counted = [
+      {CallGraph, :dump, 2, [:call_count]},
+      {PLT, :dump, 2, [:call_count]},
+      {Mix.Tasks.Compile.Hologram, :dump_page_digest_plt, 2, [:local, :call_count]}
+    ]
+
+    Enum.each(counted, fn {module, function, arity, flags} ->
+      :erlang.trace_pattern({module, function, arity}, true, flags)
+    end)
+
+    try do
+      fun.()
+
+      [call_graph_dumps, plt_dumps, page_digest_dumps] =
+        Enum.map(counted, fn {module, function, arity, _flags} ->
+          {:call_count, count} = :erlang.trace_info({module, function, arity}, :call_count)
+          count
+        end)
+
+      [call_graph_dumps, plt_dumps - page_digest_dumps]
+    after
+      Enum.each(counted, fn {module, function, arity, flags} ->
+        :erlang.trace_pattern({module, function, arity}, false, flags)
+      end)
+    end
+  end
+
   defp count_plt_processes do
     Enum.count(Process.list(), fn pid ->
       case Process.info(pid, :dictionary) do
@@ -70,22 +110,37 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
+  # How many templates are validated while the given function runs: each goes through a private
+  # function once, whose local calls are counted.
+  defp count_validated_templates(fun) do
+    mfa = {Compiler, :validate_module_prop_usages, 2}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
   # Fakes an edit of the module in the kept state: the compiler reports it, so its beam is read, and
   # the digest read differs from the kept one.
   defp fake_edit(module) do
     %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
-      Cache.get()
+      cache_state()
 
     report_compiled(module)
     edited_info = %{module_infos[module] | digest: "edited"}
-    Cache.put_module_infos(%{module_infos | module => edited_info}, dumped_at, editable_modules)
+    put_kept_module_infos(%{module_infos | module => edited_info}, dumped_at, editable_modules)
   end
 
   # A module the kept runtime carries whose beam a save can rewrite, since only such a beam is
   # rechecked, so that a fake edit of it is seen.
   defp find_editable_runtime_module do
     %{editable_modules: editable_modules, module_infos: module_infos, runtime: runtime} =
-      Cache.get()
+      cache_state()
 
     Enum.find_value(runtime.mfas, fn {module, _function, _arity} ->
       if MapSet.member?(editable_modules, module) and Map.has_key?(module_infos, module),
@@ -139,10 +194,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.get_all(plt)
   end
 
+  # Replaces the kept module infos with the given ones and marks them as the before picture.
+  defp put_kept_module_infos(module_infos, dumped_at, editable_modules) do
+    %{module_info_plt: module_info_plt} = Cache.get()
+
+    module_info_plt
+    |> PLT.reset()
+    |> PLT.put(Map.to_list(module_infos))
+
+    Cache.put_module_infos(dumped_at, editable_modules)
+  end
+
   # Makes the first kept pages by name pending, so that a run rebuilds them with no edit, and
   # returns them.
   defp put_pending_kept_pages(count) do
-    %{pages_plt: pages_plt} = Cache.get()
+    %{pages_plt: pages_plt} = cache_state()
 
     page_modules =
       pages_plt
@@ -211,7 +277,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # Takes the module out of the kept call graph, its reach and the IR PLT, as a compile whose diff
   # removed it would, while its beam stays: the next compile that walks to it builds it again.
   defp take_out_of_graph(module) do
-    %{call_graph: kept_call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+    %{call_graph: kept_call_graph, ir_plt: ir_plt, module_infos: module_infos} = cache_state()
 
     module_info_plt = PLT.start(items: Map.to_list(module_infos))
     call_graph = %{kept_call_graph | module_info_plt: module_info_plt}
@@ -448,14 +514,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "the second run keeps what the first run built", %{opts: opts} do
       run(opts)
-      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = cache_state()
 
       assert module_infos == load_module_info_items(opts)
 
       run(opts)
 
       assert %{call_graph: ^call_graph, ir_plt: ^ir_plt, module_infos: module_infos} =
-               Cache.get()
+               cache_state()
 
       assert module_infos == load_module_info_items(opts)
     end
@@ -463,7 +529,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "keeps the modules whose beams a save can rewrite", %{opts: opts} do
       run(opts)
 
-      editable_modules = Cache.get().editable_modules
+      editable_modules = cache_state().editable_modules
 
       assert editable_modules ==
                MapSet.new(Reflection.list_editable_beams(), fn {module, _beam_path} -> module end)
@@ -476,7 +542,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     } do
       run(opts)
 
-      ir_modules = PLT.keys(Cache.get().ir_plt)
+      ir_modules = PLT.keys(cache_state().ir_plt)
 
       assert Module1 in ir_modules
       assert Module2 in ir_modules
@@ -491,7 +557,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         ir_plt: ir_plt,
         module_infos: module_infos
-      } = Cache.get()
+      } = cache_state()
 
       PLT.put(ir_plt, Module1, :stale)
 
@@ -499,7 +565,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       report_compiled(Module1)
       edited_info = %{module_infos[Module1] | digest: "edited"}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | Module1 => edited_info},
         dumped_at,
         editable_modules
@@ -534,7 +600,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       full_scan_mfa = {Compiler, :build_module_info_plt!, 3}
-      warm_scan_mfa = {Compiler, :update_module_info_plt!, 5}
+      warm_scan_mfa = {Compiler, :patch_module_info_plt!, 5}
 
       Enum.each([full_scan_mfa, warm_scan_mfa], &:erlang.trace_pattern(&1, true, [:call_count]))
 
@@ -551,7 +617,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
-    test "a removed module loses its IR entry and its call graph vertices", %{opts: opts} do
+    test "a removed module loses its IR entry, its encodings and its call graph vertices", %{
+      opts: opts
+    } do
       run(opts)
 
       %{
@@ -560,22 +628,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         ir_plt: ir_plt,
         module_infos: module_infos
-      } = Cache.get()
+      } = cache_state()
 
       removed_vertex = {:removed_module, :fun, 0}
 
       PLT.put(ir_plt, :removed_module, :ir)
+      PLT.put(cache_state().encode_plt, {:removed_module, :fun, 0}, "js")
       CallGraph.add_vertex(call_graph, removed_vertex)
       assert CallGraph.has_vertex?(call_graph, removed_vertex)
 
       module_infos
       |> Map.put(:removed_module, %{digest: "removed"})
-      |> Cache.put_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
 
       run(opts)
 
       assert PLT.get(ir_plt, :removed_module) == :error
       refute CallGraph.has_vertex?(call_graph, removed_vertex)
+      assert PLT.get(cache_state().encode_plt, {:removed_module, :fun, 0}) == :error
     end
 
     test "copies the kept entries of the modules outside the editable applications", %{
@@ -584,12 +654,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
-        Cache.get()
+        cache_state()
 
       # A library's beam is not rewritten while the VM runs, so its kept entry is taken as it is:
       # the mtime faked here would make a check of the beam read it, and no page is rebuilt for it.
       kept_info = %{module_infos[Enum] | digest: "kept", mtime: 0}
-      Cache.put_module_infos(%{module_infos | Enum => kept_info}, dumped_at, editable_modules)
+      put_kept_module_infos(%{module_infos | Enum => kept_info}, dumped_at, editable_modules)
 
       mfa = {Compiler, :bundle, 4}
       :erlang.trace_pattern(mfa, true, [:call_count])
@@ -602,7 +672,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().module_infos[Enum] == kept_info
+      assert cache_state().module_infos[Enum] == kept_info
     end
 
     test "picks up a module added to an editable application", %{opts: opts} do
@@ -613,18 +683,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         ir_plt: ir_plt,
         module_infos: module_infos
-      } = Cache.get()
+      } = cache_state()
 
       # The state of a compile that ran before the module existed.
       PLT.delete(ir_plt, Module1)
 
       module_infos
       |> Map.delete(Module1)
-      |> Cache.put_module_infos(dumped_at, editable_modules)
+      |> put_kept_module_infos(dumped_at, editable_modules)
 
       run(opts)
 
-      assert Cache.get().module_infos[Module1] == module_infos[Module1]
+      assert cache_state().module_infos[Module1] == module_infos[Module1]
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
@@ -634,12 +704,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
-        Cache.get()
+        cache_state()
 
       # The mtime faked here would make a check of the beam read it, so a kept digest shows that
       # the beam was not checked, and no page is rebuilt for it.
       kept_info = %{module_infos[Module2] | digest: "kept", mtime: 0}
-      Cache.put_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
+      put_kept_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
 
       mfa = {Compiler, :bundle, 4}
       :erlang.trace_pattern(mfa, true, [:call_count])
@@ -652,19 +722,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().module_infos[Module2] == kept_info
+      assert cache_state().module_infos[Module2] == kept_info
     end
 
     test "a run with no changes checks only the beams of the protocols", %{opts: opts} do
       run(opts)
 
-      %{editable_modules: editable_modules, module_infos: module_infos} = Cache.get()
+      %{editable_modules: editable_modules, module_infos: module_infos} = cache_state()
 
       num_editable_protocols =
         Enum.count(editable_modules, fn module -> module_infos[module].protocol? end)
 
-      # The function a beam is checked through, which is private, so its local calls are counted.
-      mfa = {Compiler, :put_module_info_plt_entry!, 5}
+      # The function a beam is checked against its entry through, which is private, so its local
+      # calls are counted.
+      mfa = {Compiler, :reusable_module_info, 4}
       :erlang.trace_pattern(mfa, true, [:local, :call_count])
 
       try do
@@ -695,7 +766,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       run(Keyword.put(opts, :build_dir, setup_empty_build_dir()))
 
-      %{call_graph: call_graph, module_infos: module_infos} = Cache.get()
+      %{call_graph: call_graph, module_infos: module_infos} = cache_state()
       graph_modules = CallGraph.modules(call_graph)
 
       assert Module1 in graph_modules
@@ -716,7 +787,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "an edit of a module the graph does not hold builds no IR", %{opts: opts} do
       run(opts)
 
-      assert @unreached_module in Cache.get().editable_modules
+      assert @unreached_module in cache_state().editable_modules
 
       fake_edit(@unreached_module)
 
@@ -724,11 +795,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       count = count_calls({IR, :for_module, 2}, fn -> run(opts) end)
 
       # The edit was seen: the digest read from the beam replaced the faked one.
-      assert Cache.get().module_infos[@unreached_module].digest != "edited"
+      assert cache_state().module_infos[@unreached_module].digest != "edited"
 
       assert count == 0
-      refute PLT.member?(Cache.get().ir_plt, @unreached_module)
-      refute @unreached_module in CallGraph.modules(Cache.get().call_graph)
+      refute PLT.member?(cache_state().ir_plt, @unreached_module)
+      refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end
 
     test "an edit that starts reaching a module builds it", %{opts: opts} do
@@ -739,7 +810,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(opts)
 
-      %{call_graph: call_graph, ir_plt: ir_plt} = Cache.get()
+      %{call_graph: call_graph, ir_plt: ir_plt} = cache_state()
 
       assert Module2 in CallGraph.modules(call_graph)
       assert CallGraph.has_vertex?(call_graph, {Module2, :template, 0})
@@ -779,7 +850,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().pending_pages == MapSet.new()
+      assert cache_state().pending_pages == MapSet.new()
       test_page_bundles(opts)
     end
 
@@ -798,7 +869,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       kept_count = count_calls(@encode_function_mfa, fn -> run(opts) end)
 
       fake_edit(Module2)
-      %{encode_plt: encode_plt} = Cache.get()
+      %{encode_plt: encode_plt} = cache_state()
       PLT.reset(encode_plt)
       scratch_count = count_calls(@encode_function_mfa, fn -> run(opts) end)
 
@@ -815,13 +886,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         encode_plt: encode_plt,
         module_infos: module_infos
-      } = Cache.get()
+      } = cache_state()
 
       PLT.put(encode_plt, {:removed_module, :fun, 0}, "js")
 
       module_infos
       |> Map.put(:removed_module, %{digest: "removed"})
-      |> Cache.put_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
 
       run(opts)
 
@@ -830,20 +901,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "changed async MFAs empty the kept encodings", %{opts: opts} do
       run(opts)
-      put_pending_kept_pages(1)
 
-      %{encoding_inputs: encoding_inputs} = Cache.get()
+      %{encode_plt: encode_plt, encoding_inputs: encoding_inputs} = cache_state()
       async_mfas = MapSet.put(encoding_inputs.async_mfas, {Module1, :fun_1, 0})
       Cache.put_encoding_inputs(%{encoding_inputs | async_mfas: async_mfas})
 
-      assert count_calls(@encode_function_mfa, fn -> run(opts) end) > 0
+      # The async MFAs are walked again only when the graph changes, so the page is edited. The
+      # marker belongs to a module the edit does not touch and the compile keeps, so only emptying
+      # the whole PLT drops it.
+      fake_edit(Module1)
+      PLT.put(encode_plt, {Module2, :marker, 0}, "marker")
+
+      run(opts)
+
+      assert PLT.get(encode_plt, {Module2, :marker, 0}) == :error
     end
 
     test "a changed client stacktraces setting empties the kept encodings", %{opts: opts} do
       run(opts)
       put_pending_kept_pages(1)
 
-      %{encoding_inputs: encoding_inputs} = Cache.get()
+      %{encoding_inputs: encoding_inputs} = cache_state()
       stacktraces? = not encoding_inputs.client_stacktraces?
       Cache.put_encoding_inputs(%{encoding_inputs | client_stacktraces?: stacktraces?})
 
@@ -854,7 +932,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       assert %{async_mfas: %MapSet{}, client_stacktraces?: stacktraces?} =
-               Cache.get().encoding_inputs
+               cache_state().encoding_inputs
 
       assert stacktraces? == Hologram.client_stacktraces?()
     end
@@ -862,7 +940,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "keeps the encodings of the modules whose IR it keeps, no others", %{opts: opts} do
       run(opts)
 
-      %{encode_plt: encode_plt, ir_plt: ir_plt} = Cache.get()
+      %{encode_plt: encode_plt, ir_plt: ir_plt} = cache_state()
+
+      # As an earlier compile would have left them, had a page reached the module then: a module's
+      # functions are encoded only from its IR.
+      PLT.put(ir_plt, @unreached_module, :ir)
       PLT.put(encode_plt, {@unreached_module, :fun_1, 0}, "js")
 
       run(opts)
@@ -894,7 +976,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().pending_pages == MapSet.new()
+      assert cache_state().pending_pages == MapSet.new()
     end
 
     test "asks for the pages to build in batches", %{opts: opts} do
@@ -930,7 +1012,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert Enum.all?(built, fn {_built, num_digests} -> num_digests == @num_pages end)
 
-      assert Cache.get().pending_pages == MapSet.new()
+      assert cache_state().pending_pages == MapSet.new()
       test_page_bundles(opts)
     end
 
@@ -939,7 +1021,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       old_digests = load_page_digest_items(opts)
 
-      %{pages_plt: pages_plt} = Cache.get()
+      %{pages_plt: pages_plt} = cache_state()
       old_pages = PLT.get_all(pages_plt)
 
       affected_pages = put_pending_kept_pages(3)
@@ -953,7 +1035,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(Keyword.put(opts, :next_batch, next_batch))
 
-      assert Cache.get().pending_pages == not_built_pages
+      assert cache_state().pending_pages == not_built_pages
 
       assert Enum.all?(not_built_pages, fn page_module ->
                File.exists?(old_pages[page_module].bundle_info.static_bundle_path)
@@ -980,7 +1062,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().pending_pages == MapSet.new()
+      assert cache_state().pending_pages == MapSet.new()
     end
 
     test "the runtime is built with the first batch", %{opts: opts} do
@@ -996,7 +1078,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # Whether the runtime is kept and its bundle on disk when a batch is reported.
       bundles_built = fn built ->
-        runtime = Cache.get().runtime
+        runtime = cache_state().runtime
 
         record_built.(
           {built, runtime != nil and File.exists?(runtime.bundle_info.static_bundle_path)}
@@ -1028,7 +1110,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       )
 
       assert recorded_built.() == [[:runtime]]
-      assert MapSet.member?(Cache.get().pending_pages, Module1)
+      assert MapSet.member?(cache_state().pending_pages, Module1)
       test_runtime_bundle(opts)
     end
 
@@ -1201,7 +1283,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         |> put_pending_kept_pages()
         |> MapSet.to_list()
 
-      %{pages_plt: pages_plt} = Cache.get()
+      %{pages_plt: pages_plt} = cache_state()
       {:ok, page_state} = PLT.get(pages_plt, page_module)
       File.rm!(page_state.bundle_info.static_bundle_path)
 
@@ -1222,7 +1304,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         |> put_pending_kept_pages()
         |> MapSet.to_list()
 
-      %{pages_plt: pages_plt} = Cache.get()
+      %{pages_plt: pages_plt} = cache_state()
       {:ok, page_state} = PLT.get(pages_plt, page_module)
       File.rm!(page_state.bundle_info.static_source_map_path)
 
@@ -1255,7 +1337,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         module_infos: module_infos,
         pages_plt: pages_plt
-      } = Cache.get()
+      } = cache_state()
 
       pages_reaching_module_2 =
         pages_plt
@@ -1268,7 +1350,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       report_compiled(Module2)
       edited_info = %{module_infos[Module2] | digest: "edited"}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | Module2 => edited_info},
         dumped_at,
         editable_modules
@@ -1299,7 +1381,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       kept_bundle_paths =
-        Cache.get().pages_plt
+        cache_state().pages_plt
         |> PLT.get_all()
         |> Enum.reject(fn {_page_module, page_state} ->
           MapSet.member?(page_state.modules, Module2)
@@ -1309,12 +1391,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
         end)
 
       %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
-        Cache.get()
+        cache_state()
 
       report_compiled(Module2)
       edited_info = %{module_infos[Module2] | digest: "edited"}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | Module2 => edited_info},
         dumped_at,
         editable_modules
@@ -1330,7 +1412,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "rebuilds a page whose kept bundle is gone", %{opts: opts} do
       run(opts)
 
-      {:ok, page_state} = PLT.get(Cache.get().pages_plt, Module1)
+      {:ok, page_state} = PLT.get(cache_state().pages_plt, Module1)
       File.rm!(page_state.bundle_info.static_bundle_path)
 
       mfa = {Compiler, :bundle, 4}
@@ -1357,21 +1439,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
       File.write!(bundle_path, "bundle")
       File.write!(source_map_path, "map")
 
-      Cache.put_page(:gone_page, %{
-        bundle_info: %{
-          bundle_name: "page",
-          digest: digest,
-          entry_name: :gone_page,
-          static_bundle_path: bundle_path,
-          static_source_map_path: source_map_path
+      Cache.put_page(
+        :gone_page,
+        %{
+          bundle_info: %{
+            bundle_name: "page",
+            digest: digest,
+            entry_name: :gone_page,
+            static_bundle_path: bundle_path,
+            static_source_map_path: source_map_path
+          },
+          modules: MapSet.new()
         },
-        mfas: [],
-        modules: MapSet.new()
-      })
+        []
+      )
 
       run(opts)
 
-      assert PLT.get(Cache.get().pages_plt, :gone_page) == :error
+      assert PLT.get(cache_state().pages_plt, :gone_page) == :error
       refute File.exists?(bundle_path)
       refute File.exists?(source_map_path)
     end
@@ -1384,7 +1469,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         module_infos: module_infos,
         runtime: runtime
-      } = Cache.get()
+      } = cache_state()
 
       # Only a beam a save can rewrite is rechecked, so the fake edit must be of such a module.
       runtime_module =
@@ -1396,7 +1481,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       report_compiled(runtime_module)
       edited_info = %{module_infos[runtime_module] | digest: "edited"}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | runtime_module => edited_info},
         dumped_at,
         editable_modules
@@ -1415,14 +1500,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().runtime.mfas == runtime.mfas
+      assert cache_state().runtime.mfas == runtime.mfas
       test_runtime_bundle(opts)
     end
 
     test "rebundles the runtime when its bundle is gone", %{opts: opts} do
       run(opts)
 
-      runtime = Cache.get().runtime
+      runtime = cache_state().runtime
       File.rm!(runtime.bundle_info.static_bundle_path)
 
       mfa = {Compiler, :bundle, 4}
@@ -1436,14 +1521,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert File.exists?(Cache.get().runtime.bundle_info.static_bundle_path)
+      assert File.exists?(cache_state().runtime.bundle_info.static_bundle_path)
       test_runtime_bundle(opts)
     end
 
     test "rebundles the runtime when its source map is gone", %{opts: opts} do
       run(opts)
 
-      runtime = Cache.get().runtime
+      runtime = cache_state().runtime
       File.rm!(runtime.bundle_info.static_source_map_path)
 
       mfa = {Compiler, :bundle, 4}
@@ -1505,7 +1590,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         dumped_at: dumped_at,
         editable_modules: editable_modules,
         module_infos: module_infos
-      } = Cache.get()
+      } = cache_state()
 
       # Only a beam a save can rewrite is rechecked, and of those the consolidated protocols belong
       # to other applications.
@@ -1518,7 +1603,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       edited_info = %{module_infos[other_app_module] | digest: "edited", mtime: 0}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | other_app_module => edited_info},
         dumped_at,
         editable_modules
@@ -1535,7 +1620,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().app_versions == app_versions
+      assert cache_state().app_versions == app_versions
     end
 
     test "a run whose walk builds a module rebuilds the app versions", %{opts: opts} do
@@ -1550,13 +1635,336 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "the kept app versions are the ones a full compile finds", %{opts: opts} do
       run(opts)
       run(opts)
-      warm_app_versions = Cache.get().app_versions
+      warm_app_versions = cache_state().app_versions
 
       Cache.reset()
       run(opts)
 
-      assert warm_app_versions == Cache.get().app_versions
+      assert warm_app_versions == cache_state().app_versions
       assert warm_app_versions != []
+    end
+
+    test "a run with no changes walks no async MFAs", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :list_async_mfas, 1}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold walks no async MFAs", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :list_async_mfas, 1}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page walks the async MFAs again", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :list_async_mfas, 1}, fn -> run(opts) end) == 1
+    end
+
+    test "the kept async MFAs are the ones a walk finds", %{opts: opts} do
+      run(opts)
+      run(opts)
+
+      %{call_graph: call_graph, encoding_inputs: encoding_inputs} = cache_state()
+
+      assert encoding_inputs.async_mfas == CallGraph.list_async_mfas(call_graph)
+    end
+
+    test "a run with no changes lists no runtime MFAs", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold lists no runtime MFAs", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page lists the runtime MFAs again", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 1
+    end
+
+    test "the kept runtime MFAs are the ones a walk finds", %{opts: opts} do
+      run(opts)
+      run(opts)
+
+      %{call_graph: kept_call_graph, module_infos: module_infos, runtime: runtime} = cache_state()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+      kept_call_graph_with_infos = %{kept_call_graph | module_info_plt: module_info_plt}
+
+      # The runtime is listed on a copy of the graph without the manually ported MFAs.
+      call_graph =
+        kept_call_graph_with_infos
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      pages = Compiler.list_pages(module_info_plt)
+
+      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph, pages)
+
+      CallGraph.stop(call_graph)
+      PLT.stop(module_info_plt)
+    end
+
+    test "a run with no changes copies no call graph", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold copies no call graph", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "a run that rebuilds a pending page copies the call graph once", %{opts: opts} do
+      run(opts)
+
+      pending_pages = put_pending_kept_pages(1)
+      [page_module] = MapSet.to_list(pending_pages)
+
+      {record_built, recorded_built} = record_calls()
+
+      count =
+        count_calls({CallGraph, :clone, 2}, fn ->
+          run(Keyword.put(opts, :bundles_built, record_built))
+        end)
+
+      assert count == 1
+      assert recorded_built.() == [[page_module]]
+    end
+
+    test "an edit of a page copies the call graph once", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 1
+    end
+
+    test "a run with no changes validates no template", %{opts: opts} do
+      run(opts)
+
+      assert count_validated_templates(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module no template uses validates no template", %{opts: opts} do
+      run(opts)
+
+      refute Enum.any?(cache_state().template_modules, fn {_templatable, used_modules} ->
+               MapSet.member?(used_modules, @unreached_module)
+             end)
+
+      fake_edit(@unreached_module)
+
+      assert count_validated_templates(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page validates the page and the templates that use it", %{opts: opts} do
+      run(opts)
+
+      num_users =
+        Enum.count(cache_state().template_modules, fn {_templatable, used_modules} ->
+          MapSet.member?(used_modules, Module1)
+        end)
+
+      fake_edit(Module1)
+
+      assert count_validated_templates(fn -> run(opts) end) == 1 + num_users
+    end
+
+    test "an edit of a component validates it and the templates that use it", %{opts: opts} do
+      run(opts)
+
+      %{editable_modules: editable_modules, template_modules: template_modules} = cache_state()
+
+      # A component some template uses, whose beam a save can rewrite.
+      component_module =
+        template_modules
+        |> Enum.flat_map(fn {_templatable, used_modules} -> MapSet.to_list(used_modules) end)
+        |> Enum.find(fn module ->
+          Map.has_key?(template_modules, module) and MapSet.member?(editable_modules, module)
+        end)
+
+      num_users =
+        Enum.count(template_modules, fn {_templatable, used_modules} ->
+          MapSet.member?(used_modules, component_module)
+        end)
+
+      fake_edit(component_module)
+
+      assert num_users > 0
+      assert count_validated_templates(fn -> run(opts) end) == 1 + num_users
+    end
+
+    test "the kept template modules are the ones a full validation finds", %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+      run(opts)
+
+      %{module_infos: module_infos, template_modules: template_modules} = cache_state()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+
+      templatable_modules =
+        Compiler.list_pages(module_info_plt) ++ Compiler.list_components(module_info_plt)
+
+      # The kept IR PLT holds no IR of a component no page reaches, so the full validation builds
+      # its own.
+      ir_plt = PLT.start()
+      Compiler.build_missing_ir!(ir_plt, templatable_modules)
+
+      assert template_modules == Compiler.validate_prop_usages(templatable_modules, ir_plt)
+
+      PLT.stop(ir_plt)
+      PLT.stop(module_info_plt)
+    end
+
+    test "keeps no IR of a component no page reaches", %{opts: opts} do
+      run(opts)
+
+      %{ir_plt: ir_plt, pages_plt: pages_plt, runtime: runtime, module_infos: module_infos} =
+        cache_state()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+      components = Compiler.list_components(module_info_plt)
+      PLT.stop(module_info_plt)
+
+      reached_modules =
+        pages_plt
+        |> PLT.get_all()
+        |> Enum.reduce(MapSet.new(), fn {_page_module, page_state}, acc ->
+          MapSet.union(acc, page_state.modules)
+        end)
+        |> MapSet.union(MapSet.new(runtime.mfas, fn {module, _function, _arity} -> module end))
+
+      unreached_components = Enum.reject(components, &MapSet.member?(reached_modules, &1))
+      # The test build compiles every fixture component, and most are rendered by no page.
+      assert unreached_components != []
+      refute Enum.any?(unreached_components, &PLT.member?(ir_plt, &1))
+    end
+
+    test "an edit of a component a page reaches keeps its IR", %{opts: opts} do
+      run(opts)
+
+      %{editable_modules: editable_modules, pages_plt: pages_plt, module_infos: module_infos} =
+        cache_state()
+
+      component_module =
+        pages_plt
+        |> PLT.get_all()
+        |> Enum.flat_map(fn {_page_module, page_state} -> MapSet.to_list(page_state.modules) end)
+        |> Enum.find(fn module ->
+          MapSet.member?(editable_modules, module) and
+            match?(%{component?: true}, module_infos[module])
+        end)
+
+      fake_edit(component_module)
+      run(opts)
+
+      assert PLT.member?(cache_state().ir_plt, component_module)
+    end
+
+    # The IR prune reads the IR PLT's keys and forget_removed_pages/2 the page states'; the encode
+    # PLT's keys are not read, since the IR prune drops nothing and no module was removed.
+    # One copy is left, the page digest PLT's, which PLT.dump/2 reads out to write it. The module
+    # infos are neither copied into a PLT of the compile's nor out of one, for the diff or the cache.
+    test "a kept page state holds no MFA list", %{opts: opts} do
+      run(opts)
+
+      %{page_mfas_plt: page_mfas_plt, pages_plt: pages_plt} = cache_state()
+      page_states = PLT.get_all(pages_plt)
+
+      assert map_size(page_states) > 0
+
+      Enum.each(page_states, fn {page_module, page_state} ->
+        assert Enum.sort(Map.keys(page_state)) == [:bundle_info, :modules]
+        assert {:ok, [_mfa | _rest]} = PLT.get(page_mfas_plt, page_module)
+      end)
+    end
+
+    test "a run with no changes copies no module info", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({PLT, :get_all, 1}, fn -> run(opts) end) == 1
+    end
+
+    test "a run with no changes reads no key of the encode PLT", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({PLT, :keys, 1}, fn -> run(opts) end) == 2
+    end
+
+    test "a run with no changes writes neither the call graph nor the module infos", %{
+      opts: opts
+    } do
+      run(opts)
+
+      module_info_dump_path =
+        Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+
+      stat_before = File.stat!(module_info_dump_path, time: :posix)
+
+      assert count_dumps(fn -> run(opts) end) == [0, 0]
+
+      stat_after = File.stat!(module_info_dump_path, time: :posix)
+      assert {stat_after.mtime, stat_after.size} == {stat_before.mtime, stat_before.size}
+    end
+
+    test "an edit of a module no page reaches writes the module infos only", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_dumps(fn -> run(opts) end) == [0, 1]
+    end
+
+    test "an edit of a page writes the call graph and the module infos", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a run with no changes writes both dumps when the module info dump was rewritten", %{
+      opts: opts
+    } do
+      run(opts)
+
+      module_info_dump_path =
+        Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+
+      File.touch!(module_info_dump_path, System.os_time(:second) - 10)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a run with no changes writes the call graph dump again when it is gone", %{opts: opts} do
+      run(opts)
+
+      call_graph_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
+      File.rm!(call_graph_dump_path)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 0]
+      assert File.exists?(call_graph_dump_path)
     end
 
     test "a run after a reset starts from the build dir", %{opts: opts} do
@@ -1574,7 +1982,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = Cache.get()
+      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = cache_state()
 
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
       assert CallGraph.has_vertex?(call_graph, Module2)
@@ -1584,7 +1992,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "reuses the kept module infos against the time the kept compile wrote", %{opts: opts} do
       run(opts)
 
-      %{editable_modules: editable_modules, module_infos: module_infos} = Cache.get()
+      %{editable_modules: editable_modules, module_infos: module_infos} = cache_state()
 
       # A consolidated protocol, whose beam a new implementation rewrites without a compile, so it
       # is checked against its entry on every compile rather than taken from the compiler.
@@ -1594,7 +2002,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # entry cannot be reused, since a beam rewritten during that second matches on mtime and size
       # and still differs. A dump time read from disk can belong to a later compile by another VM,
       # which would make the guard trust the entry below and miss the edit it carries.
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | Enumerable => %{protocol_info | digest: "stale"}},
         protocol_info.mtime,
         editable_modules
@@ -1605,7 +2013,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(opts)
 
-      assert is_integer(Cache.get().module_infos[Enumerable].digest)
+      assert is_integer(cache_state().module_infos[Enumerable].digest)
     end
 
     test "a run that fails leaves the next one cold", %{opts: opts} do
@@ -1613,19 +2021,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
       # in place and only then raises, which is the shape of a compile that dies after changing
-      # what the cache keeps.
+      # what the cache keeps. The page is edited, since a run that changes nothing writes no dump.
       blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
       File.rm!(blocked_dump_path)
       File.mkdir!(blocked_dump_path)
+      on_exit(fn -> File.rmdir(blocked_dump_path) end)
+      fake_edit(Module1)
 
       assert_raise File.Error, fn -> run(opts) end
-      assert Cache.get().module_infos == nil
+      assert cache_state().module_infos == nil
 
       File.rmdir!(blocked_dump_path)
 
       run(opts)
 
-      assert Cache.get().module_infos == load_module_info_items(opts)
+      assert cache_state().module_infos == load_module_info_items(opts)
       test_call_graph(opts)
     end
 
@@ -1639,7 +2049,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         module_infos: module_infos,
         pages_plt: pages_plt
-      } = Cache.get()
+      } = cache_state()
 
       pages_reaching_module_2 =
         pages_plt
@@ -1652,7 +2062,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       report_compiled(Module2)
       edited_info = %{module_infos[Module2] | digest: "edited"}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | Module2 => edited_info},
         dumped_at,
         editable_modules
@@ -1663,8 +2073,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
 
-      assert Cache.get().module_infos == load_module_info_items(opts)
-      assert Cache.get().pending_pages == pages_reaching_module_2
+      assert cache_state().module_infos == load_module_info_items(opts)
+      assert cache_state().pending_pages == pages_reaching_module_2
 
       mfa = {Compiler, :bundle, 4}
       :erlang.trace_pattern(mfa, true, [:call_count])
@@ -1679,7 +2089,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
 
       assert MapSet.size(pages_reaching_module_2) > 0
-      assert Cache.get().pending_pages == MapSet.new()
+      assert cache_state().pending_pages == MapSet.new()
       test_page_bundles(opts)
     end
 
@@ -1693,7 +2103,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules: editable_modules,
         module_infos: module_infos,
         runtime: runtime
-      } = Cache.get()
+      } = cache_state()
 
       # Only a beam a save can rewrite is rechecked, so the fake edit must be of such a module.
       runtime_module =
@@ -1705,7 +2115,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       report_compiled(runtime_module)
       edited_info = %{module_infos[runtime_module] | digest: "edited"}
 
-      Cache.put_module_infos(
+      put_kept_module_infos(
         %{module_infos | runtime_module => edited_info},
         dumped_at,
         editable_modules
@@ -1727,7 +2137,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      assert Cache.get().runtime.mfas == runtime.mfas
+      assert cache_state().runtime.mfas == runtime.mfas
       test_runtime_bundle(opts)
     end
 
@@ -1766,7 +2176,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "module metadata" do
     setup do
-      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      # Reset on the way out too: a test here can leave a faked entry in the kept module infos.
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_stacktraces)
+        Cache.reset()
+      end)
+
       :ok
     end
 
@@ -1814,13 +2229,49 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_builds.(false) == 0
       assert count_builds.(true) == 1
     end
+
+    test "a run with no changes builds no module metadata", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      Cache.reset()
+      run(opts)
+
+      assert count_calls({Compiler, :build_module_metadata, 1}, fn -> run(opts) end) == 0
+    end
+
+    test "the kept module metadata after an edit is the one a full build finds", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      Cache.reset()
+      run(opts)
+      fake_edit(Module1)
+      run(opts)
+
+      %{module_infos: module_infos, module_metadata: module_metadata} = cache_state()
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+
+      assert module_metadata == Compiler.build_module_metadata(module_info_plt)
+
+      PLT.stop(module_info_plt)
+    end
+
+    test "turning client stack traces off forgets the module metadata", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      Cache.reset()
+      run(opts)
+
+      assert cache_state().module_metadata != nil
+
+      Application.put_env(:hologram, :client_stacktraces, false)
+      run(opts)
+
+      assert cache_state().module_metadata == nil
+    end
   end
 
   test "stops the processes it spawns once compilation finishes", %{opts: initial_opts} do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
 
     # The cache's own PLT lives on after the run, so it is started before the count.
-    Cache.get()
+    cache_state()
 
     before_count = count_plt_processes()
     run(opts)

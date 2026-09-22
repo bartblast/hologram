@@ -74,6 +74,44 @@ defmodule Hologram.Compiler.CallGraphTest do
   # The Erlang functions each ported module calls, taken from the "Deps" comment
   # every port carries under its End marker. The comment is what a port author
   # writes down, so it is the statement the edge table has to answer to.
+  # Runs the function in a process of its own, traced with this one as the tracer (a process cannot
+  # be its own tracer), checks that CallGraph.get_graph/1 was not called there, and returns its
+  # result. A walk that copied the graph out would copy it in that process, not in the agent.
+  defp call_without_copying_graph(fun) do
+    test_pid = self()
+
+    walker =
+      spawn_link(fn ->
+        receive do
+          :run -> send(test_pid, {:result, fun.()})
+        end
+
+        # Kept alive until the tracing is turned off, which a dead process would refuse.
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+    :erlang.trace_pattern({CallGraph, :get_graph, 1}, true, [:local])
+    :erlang.trace(walker, true, [:call])
+
+    try do
+      send(walker, :run)
+
+      # A walk of the whole graph takes longer than the default wait.
+      assert_receive {:result, result}, 30_000
+
+      # Trace messages arrive asynchronously, so this waits rather than reading the mailbox as it is.
+      refute_receive {:trace, ^walker, :call, {CallGraph, :get_graph, _args}}, 200
+
+      result
+    after
+      :erlang.trace(walker, false, [:call])
+      :erlang.trace_pattern({CallGraph, :get_graph, 1}, false, [:local])
+      send(walker, :stop)
+    end
+  end
+
   defp list_declared_erlang_deps do
     [@erlang_js_dir, "*.mjs"]
     |> Path.join()
@@ -1937,6 +1975,14 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == MapSet.new([{OtherModule, :fetch_data, 1}, {Task, :await, 1}])
     end
+
+    test "does not copy the graph out of the agent" do
+      call_graph = add_edge(start(), {MyModule, :action, 3}, {Task, :await, 1})
+
+      async_mfas = call_without_copying_graph(fn -> list_async_mfas(call_graph) end)
+
+      assert async_mfas == MapSet.new([{MyModule, :action, 3}, {Task, :await, 1}])
+    end
   end
 
   describe "list_page_entry_mfas/2" do
@@ -1988,6 +2034,25 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "includes a given module that has no vertices", %{empty_call_graph: call_graph} do
       assert list_modules_reaching(call_graph, [:module_3, :module_7]) ==
                MapSet.new([:module_1, :module_2, :module_3, :module_4, :module_7])
+    end
+
+    test "given no module, returns the empty set", %{empty_call_graph: call_graph} do
+      assert list_modules_reaching(call_graph, []) == MapSet.new()
+    end
+
+    test "given no module, does not read the graph" do
+      # A read of a stopped call graph exits, so the call returns only if it reads nothing.
+      call_graph = CallGraph.start()
+      CallGraph.stop(call_graph)
+
+      assert list_modules_reaching(call_graph, []) == MapSet.new()
+    end
+
+    test "does not copy the graph out of the agent", %{empty_call_graph: call_graph} do
+      reaching_modules =
+        call_without_copying_graph(fn -> list_modules_reaching(call_graph, [:module_3]) end)
+
+      assert reaching_modules == MapSet.new([:module_1, :module_2, :module_3, :module_4])
     end
 
     test "doesn't follow outgoing edges", %{empty_call_graph: call_graph} do
@@ -2740,16 +2805,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == Enum.sort(result)
     end
 
-    # The analyses PLT is linked to the caller while it runs, so a PLT left running would stay
-    # among the caller's links.
+    # The analyses PLT is started from the agent, since the walk runs there, and is linked to it
+    # while it runs, so a PLT left running would stay among the agent's links.
     test "stops the analyses PLT it starts", %{full_call_graph: call_graph} do
-      {:links, links_before} = Process.info(self(), :links)
+      {:links, links_before} = Process.info(call_graph.pid, :links)
 
       list_runtime_mfas(call_graph, Reflection.list_pages())
 
-      {:links, links_after} = Process.info(self(), :links)
+      {:links, links_after} = Process.info(call_graph.pid, :links)
 
       assert MapSet.new(links_after) == MapSet.new(links_before)
+    end
+
+    test "does not copy the graph out of the agent", %{
+      full_call_graph: call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      walked_mfas =
+        call_without_copying_graph(fn ->
+          list_runtime_mfas(call_graph, Reflection.list_pages())
+        end)
+
+      assert walked_mfas == runtime_mfas
     end
   end
 
