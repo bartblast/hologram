@@ -6,6 +6,7 @@ defmodule Hologram.UI.Runtime do
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
   prop :instance_id, :string, from_context: {Hologram.Runtime, :instance_id}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
+  prop :page_module, :module, from_context: {Hologram.Runtime, :page_module}
   prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
 
   @impl Component
@@ -50,7 +51,7 @@ defmodule Hologram.UI.Runtime do
     {/if}
 
     {%if !@page_mounted?}
-      <script async src={RouterHelpers.page_bundle_path(@page_digest)}></script>
+      <script async src={RouterHelpers.page_bundle_path(@page_module, @page_digest)}></script>
     {/if}
     """
   end

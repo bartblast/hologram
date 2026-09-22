@@ -7,7 +7,6 @@ defmodule Hologram.Runtime.Connection do
   @behaviour WebSock
 
   alias Hologram.Assets.PageDigestRegistry
-  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Runtime.Deserializer
 
   @type state :: %{plug_conn: Plug.Conn.t()}
@@ -74,13 +73,8 @@ defmodule Hologram.Runtime.Connection do
 
   # defp gproc_context(_env), do: :g
 
-  defp handle_message("page_bundle_path", page_module, connection_state) do
-    page_bundle_path =
-      page_module
-      |> PageDigestRegistry.lookup()
-      |> RouterHelpers.page_bundle_path()
-
-    {"reply", page_bundle_path, connection_state}
+  defp handle_message("page_digest", page_module, connection_state) do
+    {"reply", PageDigestRegistry.lookup(page_module), connection_state}
   end
 
   defp handle_message("ping", nil, connection_state) do

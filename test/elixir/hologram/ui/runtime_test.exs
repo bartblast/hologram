@@ -21,6 +21,7 @@ defmodule Hologram.UI.RuntimeTest do
         {Hologram.Runtime, :initial_page?} => false,
         {Hologram.Runtime, :instance_id} => "test-instance-id-abcde",
         {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
+        {Hologram.Runtime, :page_module} => MyPage,
         {Hologram.Runtime, :page_mounted?} => false
       }
     ]
@@ -124,12 +125,12 @@ defmodule Hologram.UI.RuntimeTest do
            )
   end
 
-  test "page_digest prop", %{context: context} do
+  test "page bundle script", %{context: context} do
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(
              markup,
-             ~s'<script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js">'
+             ~s'<script async src="/hologram/page-MyPage-102790adb6c3b1956db310be523a7693.js">'
            )
   end
 end
