@@ -1595,11 +1595,10 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Filtered in the table, so no info is copied out of it.
   defp list_modules_where(module_info_plt, flag) do
     module_info_plt
-    |> PLT.get_all()
-    |> Enum.filter(fn {_module, info} -> info[flag] end)
-    |> Enum.map(fn {module, _info} -> module end)
+    |> PLT.keys(%{flag => true})
     |> Enum.sort()
   end
 

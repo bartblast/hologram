@@ -2276,6 +2276,7 @@ defmodule Hologram.CompilerTest do
       |> PLT.put(Module11, info.(false, true))
 
     assert list_components(plt) == [Module11, Module3]
+    assert count_calls({PLT, :get_all, 1}, fn -> list_components(plt) end) == 0
   end
 
   describe "list_ir_modules/2" do
@@ -2625,6 +2626,7 @@ defmodule Hologram.CompilerTest do
       |> PLT.put(Module11, info.(true, false))
 
     assert list_pages(plt) == [Module11, Module2]
+    assert count_calls({PLT, :get_all, 1}, fn -> list_pages(plt) end) == 0
   end
 
   describe "list_templatables_to_validate/3" do
