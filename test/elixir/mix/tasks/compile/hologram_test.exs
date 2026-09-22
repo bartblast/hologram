@@ -70,6 +70,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
+  # How many templates are validated while the given function runs: each goes through a private
+  # function once, whose local calls are counted.
+  defp count_validated_templates(fun) do
+    mfa = {Compiler, :validate_module_prop_usages, 2}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
   # Fakes an edit of the module in the kept state: the compiler reports it, so its beam is read, and
   # the digest read differs from the kept one.
   defp fake_edit(module) do
@@ -1679,6 +1694,79 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_edit(Module1)
 
       assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 1
+    end
+
+    test "a run with no changes validates no template", %{opts: opts} do
+      run(opts)
+
+      assert count_validated_templates(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module no template uses validates no template", %{opts: opts} do
+      run(opts)
+
+      refute Enum.any?(Cache.get().template_modules, fn {_templatable, used_modules} ->
+               MapSet.member?(used_modules, @unreached_module)
+             end)
+
+      fake_edit(@unreached_module)
+
+      assert count_validated_templates(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page validates the page and the templates that use it", %{opts: opts} do
+      run(opts)
+
+      num_users =
+        Enum.count(Cache.get().template_modules, fn {_templatable, used_modules} ->
+          MapSet.member?(used_modules, Module1)
+        end)
+
+      fake_edit(Module1)
+
+      assert count_validated_templates(fn -> run(opts) end) == 1 + num_users
+    end
+
+    test "an edit of a component validates it and the templates that use it", %{opts: opts} do
+      run(opts)
+
+      %{editable_modules: editable_modules, template_modules: template_modules} = Cache.get()
+
+      # A component some template uses, whose beam a save can rewrite.
+      component_module =
+        template_modules
+        |> Enum.flat_map(fn {_templatable, used_modules} -> MapSet.to_list(used_modules) end)
+        |> Enum.find(fn module ->
+          Map.has_key?(template_modules, module) and MapSet.member?(editable_modules, module)
+        end)
+
+      num_users =
+        Enum.count(template_modules, fn {_templatable, used_modules} ->
+          MapSet.member?(used_modules, component_module)
+        end)
+
+      fake_edit(component_module)
+
+      assert num_users > 0
+      assert count_validated_templates(fn -> run(opts) end) == 1 + num_users
+    end
+
+    test "the kept template modules are the ones a full validation finds", %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+      run(opts)
+
+      %{ir_plt: ir_plt, module_infos: module_infos, template_modules: template_modules} =
+        Cache.get()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+
+      templatable_modules =
+        Compiler.list_pages(module_info_plt) ++ Compiler.list_components(module_info_plt)
+
+      assert template_modules == Compiler.validate_prop_usages(templatable_modules, ir_plt)
+
+      PLT.stop(module_info_plt)
     end
 
     test "a run after a reset starts from the build dir", %{opts: opts} do

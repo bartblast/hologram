@@ -226,12 +226,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       component_modules = Compiler.list_components(new_module_info_plt)
       templatable_modules = page_modules ++ component_modules
-      Compiler.build_missing_ir!(ir_plt, templatable_modules)
 
-      # Runs here rather than in each module's own compilation: every module is compiled by now, so
-      # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
-      # no deadlock when a component renders itself.
-      Compiler.validate_prop_usages(templatable_modules, ir_plt)
+      template_modules =
+        validate_prop_usages(
+          templatable_modules,
+          module_digests_diff,
+          cache.template_modules,
+          ir_plt
+        )
 
       runtime_mfas =
         list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
@@ -390,6 +392,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_module_infos(module_infos, module_info_dumped_at, editable_modules)
       Cache.put_app_versions(app_versions)
       Cache.put_encoding_inputs(encoding_inputs)
+      Cache.put_template_modules(template_modules)
 
       # The kept runtime state describes the bundle this compile replaces. A compile that fails
       # during the bundling leaves the next one diffing against the infos just kept, which show no
@@ -698,6 +701,23 @@ defmodule Mix.Tasks.Compile.Hologram do
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path) and
       File.exists?(kept_runtime.bundle_info.static_source_map_path)
+  end
+
+  # The first compile in a VM validated every templatable. A later one updates the kept entries with
+  # the ones it validated, and drops the entries of modules that are no longer templatables (removed,
+  # or edited into something else).
+  defp keep_template_modules(nil, _templatable_modules, validated_template_modules) do
+    validated_template_modules
+  end
+
+  defp keep_template_modules(
+         kept_template_modules,
+         templatable_modules,
+         validated_template_modules
+       ) do
+    kept_template_modules
+    |> Map.take(templatable_modules)
+    |> Map.merge(validated_template_modules)
   end
 
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
@@ -1071,6 +1091,31 @@ defmodule Mix.Tasks.Compile.Hologram do
       :error ->
         remove_lock_file_with_invalid_os_pid(lock_path)
     end
+  end
+
+  # Runs here rather than in each module's own compilation: every module is compiled by now, so a
+  # used component's __props__/0 is simply callable, with no compile-time dependency on it and no
+  # deadlock when a component renders itself. Only the templates an edit can affect are validated
+  # (see Hologram.Compiler.list_templatables_to_validate/3), and the IR of the ones no page reaches is
+  # built for that alone. Returns the modules each templatable's template uses, kept for the next
+  # compile.
+  defp validate_prop_usages(
+         templatable_modules,
+         module_digests_diff,
+         kept_template_modules,
+         ir_plt
+       ) do
+    modules_to_validate =
+      Compiler.list_templatables_to_validate(
+        templatable_modules,
+        module_digests_diff,
+        kept_template_modules
+      )
+
+    Compiler.build_missing_ir!(ir_plt, modules_to_validate)
+    validated_template_modules = Compiler.validate_prop_usages(modules_to_validate, ir_plt)
+
+    keep_template_modules(kept_template_modules, templatable_modules, validated_template_modules)
   end
 
   defp with_lock(lock_path, fun) do
