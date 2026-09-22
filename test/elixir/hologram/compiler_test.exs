@@ -3022,6 +3022,7 @@ defmodule Hologram.CompilerTest do
       static_dir = test_tmp_dir
 
       pages_plt = PLT.start()
+      page_mfas_plt = PLT.start()
 
       Enum.each(mfas_by_page, fn {page_module, mfas} ->
         PLT.put(pages_plt, page_module, %{
@@ -3032,11 +3033,14 @@ defmodule Hologram.CompilerTest do
           mfas: mfas,
           modules: MapSet.new(mfas, &elem(&1, 0))
         })
+
+        PLT.put(page_mfas_plt, page_module, mfas)
       end)
 
       [
         call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
         mfas_by_page: mfas_by_page,
+        page_mfas_plt: page_mfas_plt,
         page_modules: page_modules,
         pages_plt: pages_plt,
         static_dir: static_dir
@@ -3109,6 +3113,7 @@ defmodule Hologram.CompilerTest do
 
     test "relisting keeps the pages whose MFAs are unchanged", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_mfas_plt: page_mfas_plt,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
@@ -3117,6 +3122,7 @@ defmodule Hologram.CompilerTest do
                partition_pages_to_rebuild(
                  page_modules,
                  call_graph_without_runtime_mfas,
+                 page_mfas_plt: page_mfas_plt,
                  pages_plt: pages_plt,
                  reaching_modules: MapSet.new(),
                  relist_all?: true,
@@ -3129,25 +3135,21 @@ defmodule Hologram.CompilerTest do
     test "relisting rebuilds a page whose MFAs moved", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       mfas_by_page: mfas_by_page,
+      page_mfas_plt: page_mfas_plt,
       page_modules: page_modules,
       pages_plt: pages_plt,
       static_dir: static_dir
     } do
       [{moved_page, moved_page_mfas} | _rest] = mfas_by_page
 
-      PLT.put(pages_plt, moved_page, %{
-        bundle_info: %{
-          static_bundle_path: Path.join(static_dir, "page-kept.js"),
-          static_source_map_path: Path.join(static_dir, "page-kept.js.map")
-        },
-        mfas: tl(moved_page_mfas),
-        modules: MapSet.new(moved_page_mfas, &elem(&1, 0))
-      })
+      # The page MFAs PLT decides, not the list in the page state, which is left as the setup put it.
+      PLT.put(page_mfas_plt, moved_page, tl(moved_page_mfas))
 
       {rebuilt, kept} =
         partition_pages_to_rebuild(
           page_modules,
           call_graph_without_runtime_mfas,
+          page_mfas_plt: page_mfas_plt,
           pages_plt: pages_plt,
           reaching_modules: MapSet.new(),
           relist_all?: true,

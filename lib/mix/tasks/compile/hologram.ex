@@ -258,6 +258,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          page_mfas_plt: cache.page_mfas_plt,
           pages_plt: cache.pages_plt,
           pending_pages: cache.pending_pages,
           reaching_modules: reaching_modules,

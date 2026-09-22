@@ -1070,6 +1070,8 @@ defmodule Hologram.Compiler do
   Options:
 
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
+    * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
+      `:relist_all?`.
     * `:pending_pages` - the pages an earlier compile left unbuilt (see
       `Hologram.Compiler.Cache.put_pending_pages/1`); they are rebuilt whether or not the edit reaches
       them. Defaults to none.
@@ -1104,7 +1106,9 @@ defmodule Hologram.Compiler do
       end
 
     if opts[:relist_all?] do
-      {moved_pages, still_kept_pages} = relist_kept_pages(kept_pages, call_graph)
+      {moved_pages, still_kept_pages} =
+        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt])
+
       {pages_to_rebuild ++ moved_pages, still_kept_pages}
     else
       {pages_to_rebuild, kept_pages}
@@ -1822,8 +1826,9 @@ defmodule Hologram.Compiler do
     put_module_info(new_plt, module, info)
   end
 
-  # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states.
-  defp relist_kept_pages(kept_pages, call_graph) do
+  # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
+  # page's MFAs as its bundle was built from them are read from the page MFAs PLT.
+  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt) do
     mfas_by_kept_page =
       kept_pages
       |> Enum.map(fn {page_module, _page_state} -> page_module end)
@@ -1831,8 +1836,8 @@ defmodule Hologram.Compiler do
       |> Map.new()
 
     {changed_pages, unchanged_pages} =
-      Enum.split_with(kept_pages, fn {page_module, page_state} ->
-        mfas_by_kept_page[page_module] != page_state.mfas
+      Enum.split_with(kept_pages, fn {page_module, _page_state} ->
+        mfas_by_kept_page[page_module] != PLT.get!(page_mfas_plt, page_module)
       end)
 
     moved_pages = Enum.map(changed_pages, fn {page_module, _page_state} -> page_module end)
