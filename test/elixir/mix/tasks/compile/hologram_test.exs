@@ -70,20 +70,34 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
-  # How many times the call graph and a PLT are dumped while the given function runs.
+  # How many times the call graph and the module info PLT are dumped while the given function runs.
+  # PLT.dump/2 also writes the page digest PLT, once before the batches and once after each, through
+  # a private function whose local calls are counted and taken off.
   defp count_dumps(fun) do
-    mfas = [{CallGraph, :dump, 2}, {PLT, :dump, 2}]
-    Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+    counted = [
+      {CallGraph, :dump, 2, [:call_count]},
+      {PLT, :dump, 2, [:call_count]},
+      {Mix.Tasks.Compile.Hologram, :dump_page_digest_plt, 2, [:local, :call_count]}
+    ]
+
+    Enum.each(counted, fn {module, function, arity, flags} ->
+      :erlang.trace_pattern({module, function, arity}, true, flags)
+    end)
 
     try do
       fun.()
 
-      Enum.map(mfas, fn mfa ->
-        {:call_count, count} = :erlang.trace_info(mfa, :call_count)
-        count
-      end)
+      [call_graph_dumps, plt_dumps, page_digest_dumps] =
+        Enum.map(counted, fn {module, function, arity, _flags} ->
+          {:call_count, count} = :erlang.trace_info({module, function, arity}, :call_count)
+          count
+        end)
+
+      [call_graph_dumps, plt_dumps - page_digest_dumps]
     after
-      Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+      Enum.each(counted, fn {module, function, arity, flags} ->
+        :erlang.trace_pattern({module, function, arity}, false, flags)
+      end)
     end
   end
 
@@ -1836,7 +1850,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert PLT.member?(Cache.get().ir_plt, component_module)
     end
 
-    # The page digest PLT is dumped on every run, so one PLT dump is always counted.
     test "a run with no changes writes neither the call graph nor the module infos", %{
       opts: opts
     } do
@@ -1847,20 +1860,26 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       stat_before = File.stat!(module_info_dump_path, time: :posix)
 
-      assert count_dumps(fn -> run(opts) end) == [0, 1]
+      assert count_dumps(fn -> run(opts) end) == [0, 0]
 
       stat_after = File.stat!(module_info_dump_path, time: :posix)
       assert {stat_after.mtime, stat_after.size} == {stat_before.mtime, stat_before.size}
     end
 
-    test "an edit of a module no page reaches writes the call graph and the module infos", %{
-      opts: opts
-    } do
+    test "an edit of a module no page reaches writes the module infos only", %{opts: opts} do
       run(opts)
 
       fake_edit(@unreached_module)
 
-      assert count_dumps(fn -> run(opts) end) == [1, 2]
+      assert count_dumps(fn -> run(opts) end) == [0, 1]
+    end
+
+    test "an edit of a page writes the call graph and the module infos", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
     end
 
     test "a run with no changes writes both dumps when the module info dump was rewritten", %{
@@ -1873,18 +1892,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       File.touch!(module_info_dump_path, System.os_time(:second) - 10)
 
-      assert count_dumps(fn -> run(opts) end) == [1, 2]
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
     end
 
-    test "a run with no changes writes both dumps when the call graph dump is gone", %{
-      opts: opts
-    } do
+    test "a run with no changes writes the call graph dump again when it is gone", %{opts: opts} do
       run(opts)
 
       call_graph_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
       File.rm!(call_graph_dump_path)
 
-      assert count_dumps(fn -> run(opts) end) == [1, 2]
+      assert count_dumps(fn -> run(opts) end) == [1, 0]
       assert File.exists?(call_graph_dump_path)
     end
 

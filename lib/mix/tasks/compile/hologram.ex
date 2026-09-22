@@ -377,6 +377,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       dump_before_picture(cache, module_infos, call_graph, new_module_info_plt,
         call_graph_dump_path: call_graph_dump_path,
+        graph_unchanged?: graph_unchanged?,
         module_info_plt_dump_path: module_info_plt_dump_path
       )
 
@@ -623,13 +624,21 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The call graph and the module infos are the before picture of the next VM's first compile (see
-  # load_before_state/3), so they are written together or not at all. A compile that leaves the infos
-  # as the kept ones leaves the graph as it was too, and the dumps this VM wrote hold both already.
-  # Another VM's dump written meanwhile (the mtime moved), or a deleted graph dump, is written over.
-  defp dump_before_picture(cache, module_infos, call_graph, module_info_plt, dump_paths) do
-    if not dumps_current?(cache, module_infos, dump_paths) do
-      CallGraph.dump(call_graph, dump_paths[:call_graph_dump_path])
-      PLT.dump(module_info_plt, dump_paths[:module_info_plt_dump_path])
+  # load_before_state/3). While both dumps on disk are the ones this VM wrote (the module info dump's
+  # mtime is the kept one), the graph dump describes this graph when the graph is unchanged, and the
+  # module info dump these infos when they equal the kept ones; each is written only when it would
+  # say something else. The graph changes only with the infos, so a graph dump is never written
+  # without the module info dump. Another VM's dump written meanwhile (the mtime moved), or a deleted
+  # graph dump, is written over. The first compile in a VM has no dump time kept, so it writes both.
+  defp dump_before_picture(cache, module_infos, call_graph, module_info_plt, opts) do
+    own_dumps? = own_dumps?(cache, opts[:module_info_plt_dump_path])
+
+    if not (opts[:graph_unchanged?] and own_dumps? and File.exists?(opts[:call_graph_dump_path])) do
+      CallGraph.dump(call_graph, opts[:call_graph_dump_path])
+    end
+
+    if not (module_infos == cache.module_infos and own_dumps?) do
+      PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
     end
   end
 
@@ -645,13 +654,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     PLT.stop(page_digest_plt)
-  end
-
-  # The first compile in a VM has no infos kept, so it writes.
-  defp dumps_current?(cache, module_infos, dump_paths) do
-    module_infos == cache.module_infos and
-      Compiler.module_info_dumped_at(dump_paths[:module_info_plt_dump_path]) == cache.dumped_at and
-      File.exists?(dump_paths[:call_graph_dump_path])
   end
 
   # The pages graph of a compile that kept the runtime's MFAs, made once a page is left to rebuild.
@@ -781,6 +783,11 @@ defmodule Mix.Tasks.Compile.Hologram do
         remove_replaced_bundle(context.old_runtime_bundle_info, bundle_info)
         %{acc | runtime: bundle_info}
     end)
+  end
+
+  # Whether the module info dump on disk is the one this VM wrote last: its mtime is the kept one.
+  defp own_dumps?(cache, module_info_plt_dump_path) do
+    Compiler.module_info_dumped_at(module_info_plt_dump_path) == cache.dumped_at
   end
 
   defp page_state_modules(mfas) do
