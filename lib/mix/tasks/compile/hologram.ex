@@ -222,13 +222,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       runtime_kept? = runtime_kept?(cache.runtime, graph_unchanged?, module_digests_diff)
 
-      call_graph_for_runtime =
-        call_graph
-        |> CallGraph.clone(supervisor: sup)
-        # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
-        # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
-        # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
-        |> CallGraph.remove_manually_ported_mfas()
+      call_graph_for_runtime = build_runtime_graph(call_graph, runtime_kept?, sup)
 
       component_modules = Compiler.list_components(new_module_info_plt)
       templatable_modules = page_modules ++ component_modules
@@ -253,7 +247,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           built_modules
         )
 
-      call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+      call_graph_for_pages = build_pages_graph(call_graph_for_runtime, runtime_mfas)
 
       # Every page loads the runtime script, so the JS bindings it registers are available
       # app-wide. A page bundle registering them again would only bundle a second copy of the
@@ -272,6 +266,11 @@ defmodule Mix.Tasks.Compile.Hologram do
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
           relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
         )
+
+      # A compile that kept the runtime's MFAs has no pages graph yet: it relists no kept page, so it
+      # needs one only for pages to rebuild, and one that rebuilds none makes none.
+      call_graph_for_pages =
+        ensure_pages_graph(call_graph_for_pages, call_graph, runtime_mfas, pages_to_rebuild, sup)
 
       # Pending until their bundles are built, so that the pages this compile does not get to are
       # rebuilt by the next one, whether or not its own edit reaches them.
@@ -540,6 +539,28 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The graph the pages are listed on: the runtime's copy without the runtime's MFAs, since every page
+  # leaves out what the runtime bundle carries. None while there is no runtime copy (see
+  # build_runtime_graph/3 and ensure_pages_graph/5).
+  defp build_pages_graph(nil, _runtime_mfas), do: nil
+
+  defp build_pages_graph(call_graph_for_runtime, runtime_mfas) do
+    CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+  end
+
+  # The copy of the graph the runtime's MFAs are listed on, without the manually ported MFAs. None
+  # when the runtime's MFAs are kept (see runtime_kept?/3): nothing lists them then.
+  defp build_runtime_graph(_call_graph, true, _sup), do: nil
+
+  defp build_runtime_graph(call_graph, false, sup) do
+    call_graph
+    |> CallGraph.clone(supervisor: sup)
+    # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
+    # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
+    # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
+    |> CallGraph.remove_manually_ported_mfas()
+  end
+
   # Builds the given pages, and the runtime when its entry file is given, and records them: their
   # states in the cache, the page digest PLT that names them, and the pages no longer pending. Then
   # the :bundles_built option is told what was built, the runtime first.
@@ -596,6 +617,19 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     PLT.stop(page_digest_plt)
+  end
+
+  # The pages graph of a compile that kept the runtime's MFAs, made once a page is left to rebuild.
+  defp ensure_pages_graph(nil, _call_graph, _runtime_mfas, [], _sup), do: nil
+
+  defp ensure_pages_graph(nil, call_graph, runtime_mfas, _pages_to_rebuild, sup) do
+    call_graph
+    |> build_runtime_graph(false, sup)
+    |> build_pages_graph(runtime_mfas)
+  end
+
+  defp ensure_pages_graph(call_graph_for_pages, _call_graph, _runtime_mfas, _pages, _sup) do
+    call_graph_for_pages
   end
 
   # No state for a page that no longer exists, whose bundle the artifact cleanup deletes.

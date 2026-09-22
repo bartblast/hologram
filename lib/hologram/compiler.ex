@@ -872,9 +872,10 @@ defmodule Hologram.Compiler do
   graph's graph with the page tasks (see `CallGraph.with_shared_graph/2`) and the server callback
   analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/4`
   against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
-  With no page, the graph is not read: a graph still being rebuilt is not waited for.
+  With no page, the graph is not read: a graph still being rebuilt is not waited for. A caller
+  with no graph to give (see the compile task's pages graph) passes nil with no page.
   """
-  @spec list_mfas_by_page([module], CallGraph.t()) :: [{module, [mfa]}]
+  @spec list_mfas_by_page([module], CallGraph.t() | nil) :: [{module, [mfa]}]
   def list_mfas_by_page([], _call_graph), do: []
 
   def list_mfas_by_page(page_modules, call_graph) do
@@ -1057,8 +1058,10 @@ defmodule Hologram.Compiler do
       again with their batch: few pages move, and a page's list is taken when the page is built.
     * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
       those imports out, which their MFA lists do not show, so every page is rebuilt.
+
+  The call graph is read only with `:relist_all?`, so a caller that passes it false may pass nil.
   """
-  @spec partition_pages_to_rebuild([module], CallGraph.t(), T.opts()) ::
+  @spec partition_pages_to_rebuild([module], CallGraph.t() | nil, T.opts()) ::
           {[module], [{module, map}]}
   def partition_pages_to_rebuild(page_modules, call_graph, opts) do
     {pages_to_rebuild, kept_pages} =

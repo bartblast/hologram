@@ -1642,6 +1642,45 @@ defmodule Mix.Tasks.Compile.HologramTest do
       PLT.stop(module_info_plt)
     end
 
+    test "a run with no changes copies no call graph", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module the graph does not hold copies no call graph", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "a run that rebuilds a pending page copies the call graph once", %{opts: opts} do
+      run(opts)
+
+      pending_pages = put_pending_kept_pages(1)
+      [page_module] = MapSet.to_list(pending_pages)
+
+      {record_built, recorded_built} = record_calls()
+
+      count =
+        count_calls({CallGraph, :clone, 2}, fn ->
+          run(Keyword.put(opts, :bundles_built, record_built))
+        end)
+
+      assert count == 1
+      assert recorded_built.() == [[page_module]]
+    end
+
+    test "an edit of a page copies the call graph once", %{opts: opts} do
+      run(opts)
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 1
+    end
+
     test "a run after a reset starts from the build dir", %{opts: opts} do
       run(opts)
       Cache.reset()
