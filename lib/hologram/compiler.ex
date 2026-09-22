@@ -2,6 +2,7 @@ defmodule Hologram.Compiler do
   @moduledoc false
 
   alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.StringUtils
@@ -248,16 +249,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds page digest PLT, where the keys represent page modules,
-  and the values are hex digests of their corresponding JavaScript bundles.
+  and the values are the digests of their JavaScript bundles (esbuild's content hashes).
   """
   @spec build_page_digest_plt(list(map), T.opts()) :: {PLT.t(), T.file_path()}
   def build_page_digest_plt(bundle_info, opts) do
     page_digest_plt_items =
-      bundle_info
-      |> Enum.reject(fn %{entry_name: entry_name} -> entry_name == "runtime" end)
-      |> Enum.reduce([], fn %{entry_name: page_module, digest: digest}, acc ->
-        [{page_module, digest} | acc]
-      end)
+      for %{bundle_name: "page", entry_name: page_module, digest: digest} <- bundle_info,
+          do: {page_module, digest}
 
     page_digest_plt = PLT.start(items: page_digest_plt_items, supervisor: opts[:supervisor])
 
@@ -454,13 +452,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Bundles multiple entry files.
-  Includes the source maps of the output files.
-  The output files' and source maps' file names contain hex digest.
+  Bundles multiple entry files, each as `bundle/4` does. An entry is given as
+  `{entry_name, entry_file_path, bundle_name}`, the entry name `nil` for a bundle name with a single
+  entry.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
   """
-  @spec bundle(list({term, T.file_path(), String.t()}), T.opts()) :: list(map)
+  @spec bundle(list({module | nil, T.file_path(), String.t()}), T.opts()) :: list(map)
   def bundle(entry_files_info, opts) do
     TaskUtils.map_concurrently(entry_files_info, fn {entry_name, entry_file_path, bundle_name} ->
       bundle(entry_name, entry_file_path, bundle_name, opts)
@@ -468,21 +466,30 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Bundles the given entry file.
-  Includes the source map of the output file.
-  The output file and source map file names contain hex digest.
+  Bundles the given entry file with esbuild, which names the output `<bundle_name>-<hash>.js` and
+  its source map `<bundle_name>-<hash>.js.map` by the content hash, with the entry name, a module
+  written without its `Elixir.` prefix, between the bundle name and the hash when one is given: a
+  bundle name shared by many entries (the page bundles) needs it to tell them apart, one with a
+  single entry (the runtime) does not. The returned digest is the hash.
   """
-  @spec bundle(term, T.file_path(), String.t(), T.opts()) :: map
+  @spec bundle(module | nil, T.file_path(), String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
   def bundle(entry_name, entry_file_path, bundle_name, opts) do
-    output_bundle_path = Path.join(opts[:tmp_dir], "#{entry_name}.output.js")
+    # esbuild names the bundle and its source map by their content hash and writes the source map
+    # comment to match, so neither file is read back or rewritten. Each bundle gets its own output
+    # dir: the name is only known once esbuild has run, so the dir is listed for it, and it is
+    # recreated so that a bundle left there by a run that failed the size check is not listed too.
+    output_name = bundle_output_name(bundle_name, entry_name)
+    output_dir = Path.join(opts[:tmp_dir], "#{output_name}.output")
+    FileUtils.recreate_dir(output_dir)
 
     esbuild_cmd = [
-      entry_file_path,
+      "#{output_name}=#{entry_file_path}",
       "--bundle",
+      "--entry-names=[name]-[hash]",
       "--log-level=warning",
       "--minify",
-      "--outfile=#{output_bundle_path}",
+      "--outdir=#{output_dir}",
       "--sourcemap",
       "--sources-content=true",
       "--target=es2021"
@@ -516,37 +523,32 @@ defmodule Hologram.Compiler do
           "esbuild bundler failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
     end
 
-    maybe_ensure_bundle_within_size_limit!(entry_name, output_bundle_path)
+    [bundle_file_name] =
+      output_dir
+      |> File.ls!()
+      |> Enum.filter(&String.ends_with?(&1, ".js"))
+
+    output_bundle_path = Path.join(output_dir, bundle_file_name)
+
+    maybe_ensure_bundle_within_size_limit!(output_name, output_bundle_path)
 
     digest =
-      output_bundle_path
-      |> File.read!()
-      |> CryptographicUtils.digest(:md5, :hex)
+      bundle_file_name
+      |> Path.basename(".js")
+      |> String.replace_prefix("#{output_name}-", "")
 
-    static_bundle_path_with_digest = Path.join(opts[:static_dir], "#{bundle_name}-#{digest}.js")
+    static_bundle_path = Path.join(opts[:static_dir], bundle_file_name)
+    static_source_map_path = static_bundle_path <> ".map"
 
-    output_source_map_path = output_bundle_path <> ".map"
-    static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
-
-    File.rename!(output_bundle_path, static_bundle_path_with_digest)
-    File.rename!(output_source_map_path, static_source_map_path_with_digest)
-
-    js_with_replaced_source_map_url =
-      static_bundle_path_with_digest
-      |> File.read!()
-      |> String.replace(
-        "//# sourceMappingURL=#{entry_name}.output.js.map",
-        "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
-      )
-
-    File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
+    File.rename!(output_bundle_path, static_bundle_path)
+    File.rename!(output_bundle_path <> ".map", static_source_map_path)
 
     %{
       bundle_name: bundle_name,
       digest: digest,
       entry_name: entry_name,
-      static_bundle_path: static_bundle_path_with_digest,
-      static_source_map_path: static_source_map_path_with_digest
+      static_bundle_path: static_bundle_path,
+      static_source_map_path: static_source_map_path
     }
   end
 
@@ -1313,6 +1315,15 @@ defmodule Hologram.Compiler do
 
       {module, used_modules}
     end)
+  end
+
+  # An entry name, a module, tells apart the entries bundled under one bundle name (the pages), so
+  # it goes into the file name, without its Elixir prefix like the entry file name; a bundle name
+  # with a single entry (the runtime) has none.
+  defp bundle_output_name(bundle_name, nil), do: bundle_name
+
+  defp bundle_output_name(bundle_name, entry_name) do
+    "#{bundle_name}-#{Reflection.module_name(entry_name)}"
   end
 
   # A component node is a 4-element tuple whose first element is the :component atom and whose
