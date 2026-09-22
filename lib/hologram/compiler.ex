@@ -1112,6 +1112,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the kept module metadata (see `build_module_metadata/1`) brought in line with the module
+  digests diff: the entries of the removed and edited modules dropped, the entries of the added and
+  edited modules built from the module info PLT, as `build_module_metadata/1` builds them. An entry
+  depends on its module's beam alone, since the application tables it names do not move within a VM.
+  """
+  @spec patch_module_metadata(%{module => map}, map, PLT.t()) :: %{module => map}
+  def patch_module_metadata(module_metadata, module_digests_diff, module_info_plt) do
+    root_dir = Reflection.root_dir()
+
+    rebuilt_entries =
+      for module <- module_digests_diff.added_modules ++ module_digests_diff.edited_modules,
+          {:ok, %{source_path: source_path}} when is_binary(source_path) <-
+            [PLT.get(module_info_plt, module)],
+          into: %{} do
+        {module,
+         %{
+           app: module_application(module),
+           file: Reflection.relative_source_path(source_path, root_dir)
+         }}
+      end
+
+    module_metadata
+    |> Map.drop(module_digests_diff.removed_modules ++ module_digests_diff.edited_modules)
+    |> Map.merge(rebuilt_entries)
+  end
+
+  @doc """
   Deletes from the encode PLT the entries of the functions of modules not in the given list, and
   returns the PLT: the encodings kept are those of the modules whose IR is kept (see
   `prune_ir_plt/2`). Reads the keys only, never the values.
@@ -1678,6 +1705,14 @@ defmodule Hologram.Compiler do
       opts[:required] && !opts[:from_context] && to_string(name) not in prop_names
     end)
     |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
+  # The application Reflection.list_module_applications/0 names for the module: the first loaded
+  # application, in the same order, whose modules list it.
+  defp module_application(module) do
+    Enum.find_value(Application.loaded_applications(), fn {app, _description, _version} ->
+      if module in List.wrap(Application.spec(app, :modules)), do: app
+    end)
   end
 
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author

@@ -3176,6 +3176,84 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "patch_module_metadata/3" do
+    setup do
+      module_info_plt =
+        PLT.put(PLT.start(), [
+          {Enum, %{source_path: Reflection.source_path(Enum)}},
+          {Hologram.Compiler, %{source_path: Reflection.source_path(Hologram.Compiler)}},
+          {Hologram.Reflection, %{source_path: Reflection.source_path(Hologram.Reflection)}}
+        ])
+
+      [
+        empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []},
+        module_info_plt: module_info_plt
+      ]
+    end
+
+    test "drops the entries of removed and edited modules and builds the entries of added and edited ones",
+         %{empty_diff: diff, module_info_plt: module_info_plt} do
+      module_metadata = %{
+        Aaa.Bbb => %{app: nil, file: "bbb.ex"},
+        Enum => %{app: :elixir, file: "lib/enum.ex"},
+        Hologram.Reflection => %{app: :stale, file: "stale.ex"}
+      }
+
+      diff = %{
+        diff
+        | added_modules: [Hologram.Compiler],
+          edited_modules: [Hologram.Reflection],
+          removed_modules: [Aaa.Bbb]
+      }
+
+      assert patch_module_metadata(module_metadata, diff, module_info_plt) == %{
+               Enum => %{app: :elixir, file: "lib/enum.ex"},
+               Hologram.Compiler => %{app: :hologram, file: "lib/hologram/compiler.ex"},
+               Hologram.Reflection => %{app: :hologram, file: "lib/hologram/reflection.ex"}
+             }
+    end
+
+    test "a patched map equals a rebuilt one", %{
+      empty_diff: diff,
+      module_info_plt: module_info_plt
+    } do
+      rebuilt_metadata = build_module_metadata(module_info_plt)
+      stale_metadata = Map.put(rebuilt_metadata, Hologram.Reflection, %{app: nil, file: "a.ex"})
+      diff = %{diff | edited_modules: [Hologram.Reflection]}
+
+      assert patch_module_metadata(stale_metadata, diff, module_info_plt) == rebuilt_metadata
+    end
+
+    test "an empty diff changes nothing", %{empty_diff: diff, module_info_plt: module_info_plt} do
+      module_metadata = %{Enum => %{app: :stale, file: "stale.ex"}}
+
+      assert patch_module_metadata(module_metadata, diff, module_info_plt) == module_metadata
+    end
+
+    test "names the application the full build names", %{empty_diff: diff} do
+      # Every 25th module of the loaded applications, with a made-up source path: only the
+      # application is compared.
+      modules =
+        Reflection.list_module_applications()
+        |> Map.keys()
+        |> Enum.sort()
+        |> Enum.take_every(25)
+
+      module_info_plt = PLT.put(PLT.start(), Enum.map(modules, &{&1, %{source_path: "/x/y.ex"}}))
+      diff = %{diff | added_modules: modules}
+
+      assert patch_module_metadata(%{}, diff, module_info_plt) ==
+               build_module_metadata(module_info_plt)
+    end
+
+    test "an added module without a source path gets no entry", %{empty_diff: diff} do
+      module_info_plt = PLT.put(PLT.start(), Aaa.Bbb, %{source_path: nil})
+      diff = %{diff | added_modules: [Aaa.Bbb]}
+
+      assert patch_module_metadata(%{}, diff, module_info_plt) == %{}
+    end
+  end
+
   describe "prune_encode_plt/2" do
     setup do
       encode_plt =
