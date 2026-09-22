@@ -3256,38 +3256,6 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "prune_encode_plt/2" do
-    setup do
-      encode_plt =
-        PLT.start()
-        |> PLT.put({Module1, :fun_1, 0}, "js_1_1")
-        |> PLT.put({Module1, :fun_2, 1}, "js_1_2")
-        |> PLT.put({Module2, :fun_1, 0}, nil)
-        |> PLT.put({Module3, :fun_1, 0}, "js_3_1")
-
-      [encode_plt: encode_plt]
-    end
-
-    test "deletes the entries of the modules not in the list", %{encode_plt: encode_plt} do
-      prune_encode_plt(encode_plt, [Module1, Module3])
-
-      assert PLT.get(encode_plt, {Module2, :fun_1, 0}) == :error
-    end
-
-    test "keeps the entries of the listed modules", %{encode_plt: encode_plt} do
-      prune_encode_plt(encode_plt, [Module1, Module3, Module4])
-
-      assert PLT.get(encode_plt, {Module1, :fun_1, 0}) == {:ok, "js_1_1"}
-      assert PLT.get(encode_plt, {Module1, :fun_2, 1}) == {:ok, "js_1_2"}
-      assert PLT.get(encode_plt, {Module3, :fun_1, 0}) == {:ok, "js_3_1"}
-      assert PLT.size(encode_plt) == 3
-    end
-
-    test "returns the PLT", %{encode_plt: encode_plt} do
-      assert prune_encode_plt(encode_plt, [Module1]) == encode_plt
-    end
-  end
-
   describe "prune_ir_plt/2" do
     setup do
       ir_plt =

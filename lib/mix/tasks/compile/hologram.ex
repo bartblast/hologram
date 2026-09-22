@@ -304,17 +304,18 @@ defmodule Mix.Tasks.Compile.Hologram do
           end)
 
       # What an earlier compile kept that no page or the runtime reaches any more is dropped first,
-      # encodings included. A component no page reaches keeps no IR: the prop usage validation builds
-      # it when it checks the component (see validate_prop_usages/4). A page rebuilt reads mostly what
-      # its old state names, and the IR it reads for the first time is built with its batch. The IR of
-      # a page with no state is kept too: on a build into an empty build dir the diff has just built
-      # the IR of every module, which pruning it would only have the pages build again. A kept page
-      # renders no entry file this time, but its IR stays, so that a later compile that does rebuild
-      # it finds the IR it reads.
+      # encodings included: the encodings go with the modules this prune drops and with the removed
+      # modules, whose IR was deleted before it. A component no page reaches keeps no IR: the prop
+      # usage validation builds it when it checks the component (see validate_prop_usages/4). A page
+      # rebuilt reads mostly what its old state names, and the IR it reads for the first time is
+      # built with its batch. The IR of a page with no state is kept too: on a build into an empty
+      # build dir the diff has just built the IR of every module, which pruning it would only have
+      # the pages build again. A kept page renders no entry file this time, but its IR stays, so
+      # that a later compile that does rebuild it finds the IR it reads.
       kept_modules =
         Compiler.list_kept_modules(runtime_mfas, modules_by_page, new_module_info_plt)
 
-      Compiler.prune_ir_plt(ir_plt, kept_modules)
+      dropped_modules = Compiler.prune_ir_plt(ir_plt, kept_modules)
 
       # The runtime entry file is rendered before the batches, so the IR it reads is built here;
       # each batch builds its pages' before rendering theirs.
@@ -334,7 +335,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       encode_plt =
         cache.encode_plt
         |> patch_encode_plt(cache.encoding_inputs, encoding_inputs, module_digests_diff)
-        |> Compiler.prune_encode_plt(kept_modules)
+        |> Compiler.delete_module_encodings(
+          dropped_modules ++ module_digests_diff.removed_modules
+        )
 
       # The stack trace metadata of every module, which the bundles look up instead of asking the
       # VM about each module once per bundle. Built only when client stack traces are on, since the
@@ -797,10 +800,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # With the inputs unchanged, the edited modules' encodings are dropped and the rest are kept; a
-  # removed module's go with the prune that follows, since its IR is not kept. Changed inputs, or
-  # none kept (a cold compile), empty the PLT: a change in the async MFAs can change the JavaScript
-  # of functions in modules the edit did not touch, the callers of a function that starts or stops
-  # awaiting, so everything is encoded again for that one compile.
+  # removed module's go with the delete that follows, with the modules the IR prune drops. Changed
+  # inputs, or none kept (a cold compile), empty the PLT: a change in the async MFAs can change the
+  # JavaScript of functions in modules the edit did not touch, the callers of a function that starts
+  # or stops awaiting, so everything is encoded again for that one compile.
   defp patch_encode_plt(encode_plt, kept_inputs, inputs, module_digests_diff) do
     if kept_inputs == inputs do
       Compiler.delete_module_encodings(encode_plt, module_digests_diff.edited_modules)

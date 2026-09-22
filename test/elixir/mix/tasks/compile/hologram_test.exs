@@ -597,7 +597,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
-    test "a removed module loses its IR entry and its call graph vertices", %{opts: opts} do
+    test "a removed module loses its IR entry, its encodings and its call graph vertices", %{
+      opts: opts
+    } do
       run(opts)
 
       %{
@@ -611,6 +613,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       removed_vertex = {:removed_module, :fun, 0}
 
       PLT.put(ir_plt, :removed_module, :ir)
+      PLT.put(Cache.get().encode_plt, {:removed_module, :fun, 0}, "js")
       CallGraph.add_vertex(call_graph, removed_vertex)
       assert CallGraph.has_vertex?(call_graph, removed_vertex)
 
@@ -622,6 +625,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert PLT.get(ir_plt, :removed_module) == :error
       refute CallGraph.has_vertex?(call_graph, removed_vertex)
+      assert PLT.get(Cache.get().encode_plt, {:removed_module, :fun, 0}) == :error
     end
 
     test "copies the kept entries of the modules outside the editable applications", %{
@@ -916,6 +920,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       %{encode_plt: encode_plt, ir_plt: ir_plt} = Cache.get()
+
+      # As an earlier compile would have left them, had a page reached the module then: a module's
+      # functions are encoded only from its IR.
+      PLT.put(ir_plt, @unreached_module, :ir)
       PLT.put(encode_plt, {@unreached_module, :fun_1, 0}, "js")
 
       run(opts)
@@ -1848,6 +1856,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       assert PLT.member?(Cache.get().ir_plt, component_module)
+    end
+
+    # The IR prune reads the IR PLT's keys and forget_removed_pages/2 the page states'; the encode
+    # PLT's keys are not read, since the IR prune drops nothing and no module was removed.
+    test "a run with no changes reads no key of the encode PLT", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({PLT, :keys, 1}, fn -> run(opts) end) == 2
     end
 
     test "a run with no changes writes neither the call graph nor the module infos", %{
