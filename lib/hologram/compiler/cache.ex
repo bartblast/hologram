@@ -9,9 +9,9 @@ defmodule Hologram.Compiler.Cache do
   # edited. The module infos of the last finished compile are kept with them, in a PLT, with the
   # mtime of the dump that compile wrote and the modules whose beams a save can rewrite: they are
   # the picture both were brought in line with, so the next compile diffs against them rather than
-  # against the dump on disk, which another VM sharing the build dir may have rewritten. What each page and the
-  # runtime were built from is kept too, so that a compile rebuilds only the pages an edit
-  # reaches, with the pages a compile set out to build and has not built yet, so that the next
+  # against the dump on disk, which another VM sharing the build dir may have rewritten. What each
+  # page and the runtime were built from is kept too, so that a compile rebuilds only the pages an
+  # edit reaches, with the pages a compile set out to build and has not built yet, so that the next
   # compile rebuilds them whether or not its own edit reaches them. So are the modules each
   # page's and component's template uses, so that a compile validates only the templates its
   # edit can affect, and each module's stack trace metadata, so that a compile rebuilds only the
@@ -60,9 +60,9 @@ defmodule Hologram.Compiler.Cache do
   Forgets the dump time and the editable modules, which marks the kept module infos as untrusted,
   while keeping the module info PLT's entries, the IR PLT, the encode PLT, the encoding inputs, the
   module metadata, the template modules and the call graph, so that the next compile starts from
-  the build dir. The compile task calls it before it changes the kept state
-  in place: a compile that dies mid-way must not leave a half-patched graph that the next compile
-  would trust.
+  the build dir. The compile task calls it before it changes the kept state in place: a compile that
+  dies mid-way must not leave a half-patched graph or half-scanned infos that the next compile would
+  trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -192,11 +192,12 @@ defmodule Hologram.Compiler.Cache do
   from the dump on disk can belong to a later compile by another VM, and would make the guard trust
   an entry it should re-read.
 
-  With them go the modules whose beams a save can rewrite, as `Hologram.Reflection.list_editable_beams/0`
-  listed them at that compile: the next compile rescans those and what the same directories hold then,
-  and copies every other entry (see `Hologram.Compiler.update_module_info_plt!/5`). Kept with the infos
-  because a module among them that has no beam any more was removed, which the infos alone cannot tell
-  from a dependency's module.
+  With them go the modules whose beams a save can rewrite, as
+  `Hologram.Reflection.list_editable_beams/0` listed them at that compile: the next compile rescans
+  those and what the same directories hold then, and leaves every other entry as it is (see
+  `Hologram.Compiler.patch_module_info_plt!/5`). Kept with the infos because a module among them
+  that has no beam any more was removed, which the infos alone cannot tell from a dependency's
+  module.
   """
   @spec put_module_infos(non_neg_integer, MapSet.t(module)) :: :ok
   def put_module_infos(dumped_at, editable_modules) do
