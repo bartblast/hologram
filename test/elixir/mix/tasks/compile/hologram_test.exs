@@ -61,19 +61,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Map.put(state, :module_infos, module_infos)
   end
 
-  # How many times the function is called, in any process, while the given function runs.
-  defp count_calls(mfa, fun) do
-    :erlang.trace_pattern(mfa, true, [:call_count])
-
-    try do
-      fun.()
-      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
-      count
-    after
-      :erlang.trace_pattern(mfa, false, [:call_count])
-    end
-  end
-
   # How many times the compile state dump is written while the given function runs: each write goes
   # through a private function of the cache, whose local calls are counted.
   defp count_compile_state_writes(fun) do

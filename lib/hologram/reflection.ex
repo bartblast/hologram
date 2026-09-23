@@ -2,6 +2,7 @@ defmodule Hologram.Reflection do
   @moduledoc false
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.TaskUtils
 
   @beam_info_keys [
     :digest,
@@ -478,13 +479,18 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists Elixir modules which are Hologram components and that belong to any of the OTP apps in the project.
+  Lists the Hologram component modules of the loaded OTP applications used by the project (except
+  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_component__/0`. The beams are read, not loaded, and the code server is not asked about
+  any module.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_components_0/README.md
   """
   @spec list_components() :: list(module)
   def list_components do
-    Enum.filter(list_elixir_modules(), &component?/1)
+    project_apps()
+    |> list_modules_exporting(:__is_hologram_component__, 0)
+    |> Enum.sort()
   end
 
   @doc """
@@ -495,11 +501,7 @@ defmodule Hologram.Reflection do
   """
   @spec list_candidate_modules() :: list(module)
   def list_candidate_modules do
-    Application.ensure_loaded(otp_app())
-
-    list_loaded_otp_apps()
-    |> Kernel.--([:hex])
-    |> list_candidate_modules()
+    list_candidate_modules(project_apps())
   end
 
   @doc """
@@ -593,30 +595,27 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
-  Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
-  The project OTP application is included.
+  Lists the Elixir modules of the loaded OTP applications used by the project (except :hex), the project
+  OTP application included, from the beams in each application's ebin directory (see list_elixir_modules/1).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/reflection/list_elixir_modules_0/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_elixir_modules_0/README.md
   """
   @spec list_elixir_modules() :: list(module)
   def list_elixir_modules do
-    Application.ensure_loaded(otp_app())
-
-    list_loaded_otp_apps()
-    |> Kernel.--([:hex])
-    |> list_elixir_modules()
+    list_elixir_modules(project_apps())
   end
 
   @doc """
-  Lists Elixir modules belonging to the given OTP apps.
-  Elixir modules listed in @ignored_modules module attribute and Erlang modules are filtered out.
+  Lists the Elixir modules of the given OTP apps: the modules whose beam in an app's ebin directory
+  exports `__info__/1`, which the Elixir compiler gives every Elixir module and an Erlang module with an
+  Elixir-style name lacks. Modules listed in @ignored_modules module attribute are left out. The beams
+  are read, not loaded, and the code server is not asked about any module.
   """
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
     apps
-    |> list_candidate_modules()
-    |> Enum.filter(&elixir_module?/1)
+    |> list_modules_exporting(:__info__, 1)
+    |> Kernel.--(@ignored_modules)
   end
 
   @doc """
@@ -656,13 +655,18 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists Elixir modules which are Hologram pages and that belong to any of the OTP apps in the project.
+  Lists the Hologram page modules of the loaded OTP applications used by the project (except :hex),
+  sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_page__/0`. The beams are read, not loaded, and the code server is not asked about any
+  module.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/reflection/list_pages_0/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_pages_0/README.md
   """
   @spec list_pages() :: list(module)
   def list_pages do
-    Enum.filter(list_elixir_modules(), &page?/1)
+    project_apps()
+    |> list_modules_exporting(:__is_hologram_page__, 0)
+    |> Enum.sort()
   end
 
   @doc """
@@ -676,8 +680,8 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
-  Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
+  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc., from the beams in
+  the :elixir application's ebin directory (see list_elixir_modules/1).
   """
   @spec list_std_lib_elixir_modules() :: list(module)
   def list_std_lib_elixir_modules do
@@ -1028,13 +1032,8 @@ defmodule Hologram.Reflection do
   # The export table in the beam is what the VM installs on load, so reading it
   # from the file answers the same question as function_exported?/3 would after
   # loading, without loading.
-  # A beam that cannot be read (removed after :code.which/1 found it, or not a beam) exports
-  # nothing, which is what Code.ensure_loaded/1 made of it before this read replaced it.
   defp beam_exports_function?(beam_path, function, arity) do
-    case :beam_lib.chunks(beam_path, [:exports]) do
-      {:ok, {_module, [{:exports, exports}]}} -> {function, arity} in exports
-      {:error, :beam_lib, _reason} -> false
-    end
+    module_exporting(beam_path, function, arity) != nil
   end
 
   defp compile_info_source(compile_info) do
@@ -1098,6 +1097,22 @@ defmodule Hologram.Reflection do
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
   end
 
+  # The paths of the Elixir-named beams in the given OTP application's ebin directory, as charlists
+  # (what :beam_lib takes as a file name; a binary would be read as beam contents). An application
+  # with no lib dir has none.
+  defp list_app_elixir_beam_paths(app) do
+    case :code.lib_dir(app) do
+      {:error, :bad_name} ->
+        []
+
+      lib_dir ->
+        [lib_dir, "ebin", "Elixir.*.beam"]
+        |> Path.join()
+        |> Path.wildcard()
+        |> Enum.map(&String.to_charlist/1)
+    end
+  end
+
   # A beam can belong to a module that is not loaded yet, whose name is not an atom yet.
   # sobelow_skip ["DOS.StringToAtom"]
   defp list_beams_in_dir(dir) do
@@ -1116,6 +1131,18 @@ defmodule Hologram.Reflection do
     |> Enum.filter(fn {module, _beam_path} -> alias?(module) end)
   end
 
+  # The modules of the given OTP applications whose beam exports the given function, from the
+  # Elixir-named beams in each application's ebin directory, in directory order. Each beam's export
+  # table is read from the file, in concurrent tasks, and the module name is taken from the beam: no
+  # module is loaded, no name is turned into an atom, and the code server is asked once per
+  # application (for its lib dir), not per module.
+  defp list_modules_exporting(apps, function, arity) do
+    apps
+    |> Enum.flat_map(&list_app_elixir_beam_paths/1)
+    |> TaskUtils.map_concurrently(&module_exporting(&1, function, arity))
+    |> Enum.reject(&is_nil/1)
+  end
+
   # The value returned by the clause of the named function that takes exactly the given literal
   # arguments and has no guard, when that value is a literal; nil when there is no such clause or
   # the clause computes its value. The body is the quoted form of the literal, and a binary built
@@ -1132,6 +1159,15 @@ defmodule Hologram.Reflection do
       value
     else
       _no_literal -> nil
+    end
+  end
+
+  # The module of the beam at the given path when its export table has the function, else nil. A
+  # beam that cannot be read (removed after it was found, or not a beam) exports nothing.
+  defp module_exporting(beam_path, function, arity) do
+    case :beam_lib.chunks(beam_path, [:exports]) do
+      {:ok, {module, [{:exports, exports}]}} -> if {function, arity} in exports, do: module
+      {:error, :beam_lib, _reason} -> nil
     end
   end
 
@@ -1211,5 +1247,11 @@ defmodule Hologram.Reflection do
     |> Enum.find_value(fn {key, value} ->
       if value && phoenix_endpoint?(key), do: key
     end)
+  end
+
+  # The loaded OTP applications used by the project, the project's own included and :hex left out.
+  defp project_apps do
+    Application.ensure_loaded(otp_app())
+    list_loaded_otp_apps() -- [:hex]
   end
 end

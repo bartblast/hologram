@@ -119,6 +119,23 @@ defmodule Hologram.ReflectionTest do
     write_unloaded_beam(module, tmp_subdir, bytecode)
   end
 
+  # Compiles the module, unloads it, and leaves its beam in the given application's ebin directory
+  # only, so that a listing of that application's beams finds it while the VM does not hold it.
+  defp write_unloaded_module_to_ebin(module, app, body) do
+    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
+    :code.purge(module)
+    :code.delete(module)
+
+    beam_path = Path.join([:code.lib_dir(app), "ebin", "#{module}.beam"])
+    File.write!(beam_path, bytecode)
+
+    on_exit(fn ->
+      File.rm!(beam_path)
+      :code.purge(module)
+      :code.delete(module)
+    end)
+  end
+
   describe "alias?/1" do
     test "atom which is an alias" do
       assert alias?(Calendar.ISO)
@@ -752,14 +769,35 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_components/0" do
-    result = list_components()
+  describe "list_components/0" do
+    test "lists the component modules of the loaded applications, sorted by name" do
+      result = list_components()
 
-    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
-    assert Module3 in result
+      assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
+      assert Module3 in result
 
-    refute Hologram.Compiler.Context in result
-    refute Module2 in result
+      refute Hologram.Compiler.Context in result
+      refute Module2 in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a component whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.ComponentInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, """
+      use Hologram.Component
+      @impl Component
+      def template, do: ~HOLO"ComponentInEbinOnly template"
+      """)
+
+      assert module in list_components()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_components/0) == 0
+    end
   end
 
   describe "list_ebin_modules/1" do
@@ -849,20 +887,26 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_elixir_modules/0" do
-    result = list_elixir_modules()
+  describe "list_elixir_modules/0" do
+    test "lists the Elixir modules of the loaded applications" do
+      result = list_elixir_modules()
 
-    assert Calendar.ISO in result
-    assert Hologram.Template.Tokenizer in result
-    assert Mix.Tasks.Holo.Test.CheckFileNames in result
-    assert Sobelow.CI in result
-    assert Mix.Tasks.Sobelow in result
+      assert Calendar.ISO in result
+      assert Hologram.Template.Tokenizer in result
+      assert Mix.Tasks.Holo.Test.CheckFileNames in result
+      assert Sobelow.CI in result
+      assert Mix.Tasks.Sobelow in result
 
-    refute :elixir_map in result
-    refute :dialyzer in result
+      refute :elixir_map in result
+      refute :dialyzer in result
 
-    refute Enumerable.Atom in result
-    refute Kernel.SpecialForms in result
+      refute Enumerable.Atom in result
+      refute Kernel.SpecialForms in result
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_elixir_modules/0) == 0
+    end
   end
 
   describe "list_elixir_modules/1" do
@@ -882,67 +926,24 @@ defmodule Hologram.ReflectionTest do
       refute Kernel.SpecialForms in result
     end
 
-    # This test can't be async, because it manipulates global state
-    # (compiles modules and modifies the file system)
-    test "includes newly compiled module found in ebin but not in Application.spec" do
-      module_name = random_module()
+    test "includes a module found in ebin but not in Application.spec, without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.ModuleInEbinOnly
+      write_unloaded_module_to_ebin(module, :hologram, "def test_function, do: :test_value")
 
-      module_source = """
-      defmodule #{module_name} do
-        def test_function do
-          :test_value
-        end
-      end
-      """
+      refute module in Application.spec(:hologram, :modules)
 
-      hologram_ebin_path =
-        :hologram
-        |> :code.lib_dir()
-        |> Path.join("ebin")
+      assert module in list_elixir_modules([:hologram])
+      assert :code.is_loaded(module) == false
+    end
 
-      beam_file_path = Path.join(hologram_ebin_path, "#{module_name}.beam")
+    test "excludes an Erlang module with an Elixir-style name found in ebin" do
+      {module, bytecode} = compile_elixir_named_erlang_module()
+      beam_path = Path.join([:code.lib_dir(:hologram), "ebin", "#{module}.beam"])
+      File.write!(beam_path, bytecode)
 
-      try do
-        [{^module_name, beam_binary}] = Code.compile_string(module_source)
+      on_exit(fn -> File.rm!(beam_path) end)
 
-        # This simulates a newly compiled module that exists in ebin
-        # but hasn't been added to Application.spec yet
-        File.write!(beam_file_path, beam_binary)
-
-        assert Code.ensure_loaded(module_name) == {:module, module_name}
-        assert module_name.test_function() == :test_value
-
-        current_spec_modules =
-          :hologram
-          |> Application.spec()
-          |> Keyword.get(:modules, [])
-
-        # Verify our module is NOT in Application.spec
-        refute module_name in current_spec_modules
-
-        ebin_modules = list_ebin_modules(:hologram)
-
-        # Verify our module IS found by list_ebin_modules/1
-        assert module_name in ebin_modules
-
-        # Now test the actual list_elixir_modules/1 functionality...
-
-        # Ensure we're actually in test environment
-        assert Hologram.env() == :test
-
-        result = list_elixir_modules([:hologram])
-
-        assert module_name in result
-      after
-        # Clean up...
-
-        if File.exists?(beam_file_path) do
-          File.rm!(beam_file_path)
-        end
-
-        :code.purge(module_name)
-        :code.delete(module_name)
-      end
+      refute module in list_elixir_modules([:hologram])
     end
   end
 
@@ -980,17 +981,40 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_pages/0" do
-    result = list_pages()
+  describe "list_pages/0" do
+    test "lists the page modules of the loaded applications, sorted by name" do
+      result = list_pages()
 
-    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
-    assert Hologram.Test.Fixtures.Reflection.Module2 in result
-    assert Hologram.Test.Fixtures.Reflection.Module6 in result
-    assert Hologram.Test.Fixtures.Page.Module1 in result
+      assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
+      assert Hologram.Test.Fixtures.Reflection.Module2 in result
+      assert Hologram.Test.Fixtures.Reflection.Module6 in result
+      assert Hologram.Test.Fixtures.Page.Module1 in result
 
-    refute Hologram.Test.Fixtures.Compiler.Module6 in result
-    refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
-    refute Hologram.Compiler.Context in result
+      refute Hologram.Test.Fixtures.Compiler.Module6 in result
+      refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
+      refute Hologram.Compiler.Context in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a page whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.PageInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, """
+      use Hologram.Page
+      route "/hologram-test-fixtures-reflection-page-in-ebin-only"
+      layout Hologram.Test.Fixtures.LayoutFixture
+      @impl Page
+      def template, do: ~HOLO"PageInEbinOnly template"
+      """)
+
+      assert module in list_pages()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_pages/0) == 0
+    end
   end
 
   describe "list_protocol_implementations/2" do

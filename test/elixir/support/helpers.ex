@@ -93,6 +93,22 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns how many times the given function is called, in any process, while the given function runs.
+  """
+  @spec count_calls(mfa, (-> any)) :: non_neg_integer
+  def count_calls(mfa, fun) do
+    :erlang.trace_pattern(mfa, true, [:call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:call_count])
+    end
+  end
+
+  @doc """
   Encodes the given Elixir source code to JavaScript.
   """
   @spec encode_code(String.t(), Context.t()) :: String.t()
