@@ -15,7 +15,6 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPaths do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
-  alias Hologram.Reflection
 
   @requirements ["app.config"]
 
@@ -47,7 +46,12 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPaths do
   end
 
   defp remove_runtime_mfas(call_graph) do
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
+    page_modules =
+      call_graph
+      |> CallGraph.module_info_plt()
+      |> Compiler.list_pages()
+
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
     CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
   end
 end
