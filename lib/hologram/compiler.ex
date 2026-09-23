@@ -495,7 +495,7 @@ defmodule Hologram.Compiler do
 
     const startTime = PerformanceTimer.start();
 
-    globalThis.Hologram.config = #{render_client_config()};
+    globalThis.Hologram.config = #{client_config()};
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -608,6 +608,22 @@ defmodule Hologram.Compiler do
       static_bundle_path: static_bundle_path,
       static_source_map_path: static_source_map_path
     }
+  end
+
+  @doc """
+  Returns the client config the runtime bundle sets as `globalThis.Hologram.config`: whether the
+  error overlay is on, whether live reload is (it runs in dev only, and in test, so that the feature
+  tests can drive it, as the SSE stream's live reload subscription does), and whether client stack
+  traces are. `liveReload` lets the client load a page afresh when it holds that page's code in an
+  older version (see live_reload.mjs). The runtime bundle carries it as written here, so the
+  compile task keeps a runtime bundle only while this is what it was built with.
+  """
+  @spec client_config() :: String.t()
+  def client_config do
+    live_reload? = Hologram.env() in [:dev, :test]
+
+    "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
+      "stacktraces: #{Hologram.client_stacktraces?()}}"
   end
 
   @doc """
@@ -2053,16 +2069,6 @@ defmodule Hologram.Compiler do
     else
       ""
     end
-  end
-
-  # liveReload lets the client load a page afresh when it holds that page's code in an older
-  # version (see live_reload.mjs). Live reload runs in dev only, and test is included so that the
-  # feature tests can drive it, as the SSE stream's live reload subscription does.
-  defp render_client_config do
-    live_reload? = Hologram.env() in [:dev, :test]
-
-    "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
-      "stacktraces: #{Hologram.client_stacktraces?()}}"
   end
 
   # Functions are listed by module, then function name, then arity. The module order is the

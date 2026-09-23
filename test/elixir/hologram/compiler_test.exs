@@ -1860,6 +1860,54 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "client_config/0" do
+    setup do
+      hologram_env = System.get_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_error_overlay)
+        Application.delete_env(:hologram, :client_stacktraces)
+
+        if hologram_env,
+          do: System.put_env("HOLOGRAM_ENV", hologram_env),
+          else: System.delete_env("HOLOGRAM_ENV")
+      end)
+    end
+
+    test "names the error overlay, live reload and client stack traces settings" do
+      Application.put_env(:hologram, :client_error_overlay, true)
+      Application.put_env(:hologram, :client_stacktraces, false)
+      System.put_env("HOLOGRAM_ENV", "test")
+
+      assert client_config() == "{errorOverlay: true, liveReload: true, stacktraces: false}"
+    end
+
+    test "moves with the error overlay setting" do
+      Application.put_env(:hologram, :client_error_overlay, true)
+      overlay_on = client_config()
+
+      Application.put_env(:hologram, :client_error_overlay, false)
+
+      assert client_config() != overlay_on
+      assert client_config() =~ "errorOverlay: false"
+    end
+
+    test "turns live reload off outside dev and test" do
+      System.put_env("HOLOGRAM_ENV", "prod")
+
+      assert client_config() =~ "liveReload: false"
+    end
+
+    test "is what the runtime bundle sets as the client config", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], js_dir: @js_dir)
+
+      assert String.contains?(js, "globalThis.Hologram.config = #{client_config()};")
+    end
+  end
+
   describe "create_page_entry_files/6" do
     setup %{
       call_graph: call_graph,
