@@ -54,7 +54,7 @@ defmodule Hologram.Runtime.ConnectionTest do
   end
 
   describe "handle_in/2" do
-    test "handles page_bundle_path message" do
+    test "handles page_digest message" do
       setup_page_digest_registry(PageDigestRegistryStub)
 
       test_digest = "12345678901234567890123456789012"
@@ -66,16 +66,15 @@ defmodule Hologram.Runtime.ConnectionTest do
         test_digest
       )
 
-      # Message format: ["page_bundle_path", payload, correlation_id]
+      # Message format: ["page_digest", payload, correlation_id]
       # Payload format: [serialization_protocol_version, serialized_data]
       serialized_module = "aElixir.Hologram.Test.Fixtures.Runtime.Connection.Module2"
       payload = [2, serialized_module]
-      message = ["page_bundle_path", payload, correlation_id]
+      message = ["page_digest", payload, correlation_id]
       encoded_message = Jason.encode!(message)
 
-      # Expected response format: ["reply", page_bundle_path, correlation_id]
-      expected_page_bundle_path = "/hologram/page-#{test_digest}.js"
-      expected_response_data = ["reply", expected_page_bundle_path, correlation_id]
+      # Expected response format: ["reply", page_digest, correlation_id]
+      expected_response_data = ["reply", test_digest, correlation_id]
       expected_response = Jason.encode!(expected_response_data)
 
       assert handle_in({encoded_message, [opcode: :text]}, @state) ==

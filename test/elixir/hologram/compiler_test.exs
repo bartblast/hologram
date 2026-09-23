@@ -896,14 +896,17 @@ defmodule Hologram.CompilerTest do
 
     bundle_info = [
       %{
+        bundle_name: "page",
         digest: "my-digest-1",
         entry_name: MyPage1
       },
       %{
+        bundle_name: "runtime",
         digest: "my-digest-2",
-        entry_name: "runtime"
+        entry_name: nil
       },
       %{
+        bundle_name: "page",
         digest: "my-digest-3",
         entry_name: MyPage2
       }
@@ -1380,77 +1383,75 @@ defmodule Hologram.CompilerTest do
 
     entry_files_info = [
       {MyPage, entry_file_path_1, "page"},
-      {"runtime", entry_file_path_2, "runtime"}
+      {nil, entry_file_path_2, "runtime"}
     ]
 
-    expected_static_bundle_path_1 =
-      Path.join(opts[:static_dir], "page-936cdd48d87d4ecd5720ad33b7fb4b7c.js")
-
-    expected_static_source_map_path_1 = "#{expected_static_bundle_path_1}.map"
-
-    expected_static_bundle_path_2 =
-      Path.join(opts[:static_dir], "runtime-52169d07278b312ea39145c3b94c0203.js")
-
-    expected_static_source_map_path_2 = "#{expected_static_bundle_path_2}.map"
-
-    assert bundle(entry_files_info, opts) == [
+    assert [
              %{
-               digest: "936cdd48d87d4ecd5720ad33b7fb4b7c",
-               entry_name: MyPage,
                bundle_name: "page",
-               static_bundle_path: expected_static_bundle_path_1,
-               static_source_map_path: expected_static_source_map_path_1
+               digest: digest_1,
+               entry_name: MyPage,
+               static_bundle_path: static_bundle_path_1,
+               static_source_map_path: static_source_map_path_1
              },
              %{
-               digest: "52169d07278b312ea39145c3b94c0203",
-               entry_name: "runtime",
                bundle_name: "runtime",
-               static_bundle_path: expected_static_bundle_path_2,
-               static_source_map_path: expected_static_source_map_path_2
+               digest: digest_2,
+               entry_name: nil,
+               static_bundle_path: static_bundle_path_2,
+               static_source_map_path: static_source_map_path_2
              }
-           ]
+           ] = bundle(entry_files_info, opts)
+
+    assert digest_1 =~ ~r/^[A-Z2-7]{8}$/
+    assert digest_2 =~ ~r/^[A-Z2-7]{8}$/
+
+    assert static_bundle_path_1 == Path.join(opts[:static_dir], "page-MyPage-#{digest_1}.js")
+    assert static_source_map_path_1 == "#{static_bundle_path_1}.map"
+    assert static_bundle_path_2 == Path.join(opts[:static_dir], "runtime-#{digest_2}.js")
+    assert static_source_map_path_2 == "#{static_bundle_path_2}.map"
 
     expected_bundle_js_1 =
       normalize_newlines("""
       (()=>{var o=111;})();
-      //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
+      //# sourceMappingURL=page-MyPage-#{digest_1}.js.map
       """)
 
-    assert File.read!(expected_static_bundle_path_1) == expected_bundle_js_1
+    assert File.read!(static_bundle_path_1) == expected_bundle_js_1
 
     expected_bundle_js_2 =
       normalize_newlines("""
       (()=>{var o=222;})();
-      //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
+      //# sourceMappingURL=runtime-#{digest_2}.js.map
       """)
 
-    assert File.read!(expected_static_bundle_path_2) == expected_bundle_js_2
+    assert File.read!(static_bundle_path_2) == expected_bundle_js_2
 
     expected_source_map_js_1 =
       normalize_newlines("""
       {
         "version": 3,
-        "sources": ["MyPage.entry.js"],
+        "sources": ["../MyPage.entry.js"],
         "sourcesContent": ["export const myVar = 111;\\n"],
         "mappings": "MAAO,IAAMA,EAAQ",
         "names": ["myVar"]
       }
       """)
 
-    assert File.read!(expected_static_source_map_path_1) == expected_source_map_js_1
+    assert File.read!(static_source_map_path_1) == expected_source_map_js_1
 
     expected_source_map_js_2 =
       normalize_newlines("""
       {
         "version": 3,
-        "sources": ["runtime.entry.js"],
+        "sources": ["../runtime.entry.js"],
         "sourcesContent": ["export const myVar = 222;\\n"],
         "mappings": "MAAO,IAAMA,EAAQ",
         "names": ["myVar"]
       }
       """)
 
-    assert File.read!(expected_static_source_map_path_2) == expected_source_map_js_2
+    assert File.read!(static_source_map_path_2) == expected_source_map_js_2
   end
 
   describe "bundle/4" do
@@ -1473,39 +1474,123 @@ defmodule Hologram.CompilerTest do
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write(entry_file_path, "export const myVar = 123;\n")
 
-      expected_static_bundle_path =
-        Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
-
-      expected_static_source_map_path = "#{expected_static_bundle_path}.map"
-
-      assert bundle(MyPage, entry_file_path, "my_bundle_name", opts) == %{
+      assert %{
                bundle_name: "my_bundle_name",
-               digest: "76f1f092f95a34da067e35caad5e3317",
+               digest: digest,
                entry_name: MyPage,
-               static_bundle_path: expected_static_bundle_path,
-               static_source_map_path: expected_static_source_map_path
-             }
+               static_bundle_path: static_bundle_path,
+               static_source_map_path: static_source_map_path
+             } = bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+
+      assert digest =~ ~r/^[A-Z2-7]{8}$/
+
+      assert static_bundle_path ==
+               Path.join(opts[:static_dir], "my_bundle_name-MyPage-#{digest}.js")
+
+      assert static_source_map_path == "#{static_bundle_path}.map"
 
       expected_bundle_js =
         normalize_newlines("""
         (()=>{var o=123;})();
-        //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
+        //# sourceMappingURL=my_bundle_name-MyPage-#{digest}.js.map
         """)
 
-      assert File.read!(expected_static_bundle_path) == expected_bundle_js
+      assert File.read!(static_bundle_path) == expected_bundle_js
 
       expected_source_map_js =
         normalize_newlines("""
         {
           "version": 3,
-          "sources": ["MyPage.entry.js"],
+          "sources": ["../MyPage.entry.js"],
           "sourcesContent": ["export const myVar = 123;\\n"],
           "mappings": "MAAO,IAAMA,EAAQ",
           "names": ["myVar"]
         }
         """)
 
-      assert File.read!(expected_static_source_map_path) == expected_source_map_js
+      assert File.read!(static_source_map_path) == expected_source_map_js
+    end
+
+    test "no entry name" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_no_entry_name"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "runtime.entry.js")
+      File.write(entry_file_path, "export const myVar = 123;\n")
+
+      assert %{digest: digest, entry_name: nil, static_bundle_path: static_bundle_path} =
+               bundle(nil, entry_file_path, "my_bundle_name", opts)
+
+      assert digest =~ ~r/^[A-Z2-7]{8}$/
+      assert static_bundle_path == Path.join(opts[:static_dir], "my_bundle_name-#{digest}.js")
+
+      assert File.read!(static_bundle_path) =~
+               "//# sourceMappingURL=my_bundle_name-#{digest}.js.map"
+    end
+
+    test "the same entry file bundles to the same digest" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_same_digest"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write(entry_file_path, "export const myVar = 123;\n")
+
+      assert %{digest: digest} = bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+      assert %{digest: ^digest} = bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+    end
+
+    test "a bundle left in the output dir by an earlier run is not picked up" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_stale_output"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write(entry_file_path, "export const myVar = 123;\n")
+
+      output_dir = Path.join(tmp_dir, "my_bundle_name-MyPage.output")
+      File.mkdir_p!(output_dir)
+      stale_bundle_path = Path.join(output_dir, "my_bundle_name-MyPage-STALE222.js")
+      File.write!(stale_bundle_path, "stale")
+
+      assert %{digest: digest} = bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+
+      assert digest != "STALE222"
+      assert File.ls!(output_dir) == []
     end
 
     test "invalid entry file" do

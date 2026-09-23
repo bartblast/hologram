@@ -344,7 +344,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp test_page_bundles(opts) do
     num_page_bundles =
       opts[:static_dir]
-      |> Path.join("page-????????????????????????????????.js")
+      |> Path.join("page-*-????????.js")
       |> Path.wildcard()
       |> Enum.count()
 
@@ -352,7 +352,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     num_page_source_maps =
       opts[:static_dir]
-      |> Path.join("page-????????????????????????????????.js.map")
+      |> Path.join("page-*-????????.js.map")
       |> Path.wildcard()
       |> Enum.count()
 
@@ -371,13 +371,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert map_size(page_digest_items) == @num_pages
 
-    assert page_digest_items[Module1] =~ ~r/^[0-9a-f]{32}$/
+    assert page_digest_items[Module1] =~ ~r/^[A-Z2-7]{8}$/
   end
 
   defp test_runtime_bundle(opts) do
     num_runtime_bundles =
       opts[:static_dir]
-      |> Path.join("runtime-????????????????????????????????.js")
+      |> Path.join("runtime-????????.js")
       |> Path.wildcard()
       |> Enum.count()
 
@@ -385,7 +385,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     num_runtime_source_maps =
       opts[:static_dir]
-      |> Path.join("runtime-????????????????????????????????.js.map")
+      |> Path.join("runtime-????????.js.map")
       |> Path.wildcard()
       |> Enum.count()
 
@@ -1433,8 +1433,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "forgets the state and the bundle of a page that no longer exists", %{opts: opts} do
       run(opts)
 
-      digest = String.duplicate("a", 32)
-      bundle_path = Path.join(opts[:static_dir], "page-#{digest}.js")
+      digest = "AAAAAAAA"
+      bundle_path = Path.join(opts[:static_dir], "page-gone_page-#{digest}.js")
       source_map_path = bundle_path <> ".map"
       File.write!(bundle_path, "bundle")
       File.write!(source_map_path, "map")
@@ -2198,7 +2198,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
         Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
       )
 
-      bundle_path = Path.join(opts[:static_dir], "page-#{PLT.get!(page_digest_plt, Module1)}.js")
+      bundle_path =
+        Path.join(
+          opts[:static_dir],
+          "page-#{Reflection.module_name(Module1)}-#{PLT.get!(page_digest_plt, Module1)}.js"
+        )
+
       bundle = File.read!(bundle_path)
 
       assert String.contains?(bundle, "registerModuleMetadata")

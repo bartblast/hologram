@@ -49,6 +49,17 @@ defmodule Hologram.Assets.PathRegistryTest do
                {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
     end
 
+    test "asset exists, has esbuild content hash suffix, in hologram dir" do
+      assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-AAAAAAAA.js"}
+    end
+
+    test "asset exists, has esbuild content hash-like suffix, outside hologram dir" do
+      assert lookup("test_dir_3/test_file_11-DOWNLOAD.css") ==
+               {:ok, "/test_dir_3/test_file_11-DOWNLOAD.css"}
+
+      assert lookup("test_dir_3/test_file_11.css") == :error
+    end
+
     test "asset exists, doesn't have digest suffix" do
       assert lookup("test_dir_3/test_file_10.css") ==
                {:ok, "/test_dir_3/test_file_10.css"}
@@ -56,6 +67,11 @@ defmodule Hologram.Assets.PathRegistryTest do
 
     test "asset doesn't exist" do
       assert lookup("invalid_file.css") == :error
+    end
+
+    test "page bundle named by esbuild" do
+      assert lookup("hologram/page-Elixir.MyPage1.js") == :error
+      assert lookup("hologram/page-Elixir.MyPage1-BBBBBBBB.js") == :error
     end
   end
 

@@ -371,7 +371,7 @@ defmodule Mix.Tasks.Compile.Hologram do
               entry_file_opts
             )
 
-          [{"runtime", runtime_entry_file_path, "runtime"}]
+          [{nil, runtime_entry_file_path, "runtime"}]
         end
 
       dump_before_picture(cache, call_graph, new_module_info_plt,

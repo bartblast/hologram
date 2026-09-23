@@ -942,9 +942,8 @@ export default class Hologram {
   // memory but absent from the document would run it a second time.
   //
   // The document is the one just built from the tree, so it is edited in place.
-  static #dropPageBundleScript(virtualDocument, pageDigest) {
-    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
-    const key = `__hologramScript__:${$.#pageBundlePath(pageDigest)}`;
+  static #dropPageBundleScript(virtualDocument, pageModule, pageDigest) {
+    const key = `__hologramScript__:${$.#pageBundlePath(pageModule, pageDigest)}`;
 
     const headVnode = virtualDocument.children.find(
       (childVnode) => childVnode?.sel === "head",
@@ -1112,15 +1111,15 @@ export default class Hologram {
     // fetch says nothing about the navigation now in flight.
     const epoch = Math.max($.domEpoch, $.registryEpoch);
 
-    await Client.fetchPageBundlePath(
+    await Client.fetchPageDigest(
       Hologram.#pageModule,
-      (resp) => {
-        LiveReload.recordPageBundle(
-          Hologram.#pageModule,
-          $.#pageDigestFromBundlePath(resp),
-        );
+      (pageDigest) => {
+        LiveReload.recordPageBundle(Hologram.#pageModule, pageDigest);
 
-        $.#loadPageBundle(resp, epoch);
+        $.#loadPageBundle(
+          $.#pageBundlePath(Hologram.#pageModule, pageDigest),
+          epoch,
+        );
       },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
@@ -1276,11 +1275,7 @@ export default class Hologram {
     let currentPageDigest;
 
     try {
-      const pageBundlePath = await Client.fetchPageBundlePath(
-        pageSnapshot.pageModule,
-      );
-
-      currentPageDigest = $.#pageDigestFromBundlePath(pageBundlePath);
+      currentPageDigest = await Client.fetchPageDigest(pageSnapshot.pageModule);
     } catch {
       return false;
     }
@@ -1440,14 +1435,9 @@ export default class Hologram {
     }
   }
 
-  // Mirrors Hologram.Router.Helpers.page_bundle_path/1
-  static #pageBundlePath(pageDigest) {
-    return `/hologram/page-${pageDigest}.js`;
-  }
-
-  // The inverse of #pageBundlePath.
-  static #pageDigestFromBundlePath(pageBundlePath) {
-    return pageBundlePath.slice("/hologram/page-".length, -".js".length);
+  // Mirrors Hologram.Router.Helpers.page_bundle_path/2
+  static #pageBundlePath(pageModule, pageDigest) {
+    return `/hologram/page-${Interpreter.moduleExName(pageModule)}-${pageDigest}.js`;
   }
 
   static #pageSnapshotKey(historyId) {
@@ -1533,7 +1523,7 @@ export default class Hologram {
     // until this frame's work ends.
     if (!isPageModuleRegistered) {
       globalThis.Hologram.pageScriptLoaded = false;
-      $.#loadPageBundle($.#pageBundlePath(payload.pageDigest));
+      $.#loadPageBundle($.#pageBundlePath(pageModule, payload.pageDigest));
     }
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
@@ -1558,7 +1548,7 @@ export default class Hologram {
     const tree = Renderer.decodeTree(payload.tree);
     const newVirtualDocument = Renderer.renderTree(tree);
 
-    $.#dropPageBundleScript(newVirtualDocument, payload.pageDigest);
+    $.#dropPageBundleScript(newVirtualDocument, pageModule, payload.pageDigest);
 
     Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,

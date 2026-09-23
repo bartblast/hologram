@@ -307,6 +307,7 @@ defmodule Hologram.Template.Renderer do
       page_component_struct
       |> put_initial_page_flag_context(initial_page?)
       |> put_page_digest_context(page_digest)
+      |> put_page_module_context(page_module)
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
       |> maybe_put_instance_id_context(opts, initial_page?)
@@ -1003,6 +1004,14 @@ defmodule Hologram.Template.Renderer do
       page_component_struct,
       {Hologram.Runtime, :page_digest},
       page_digest
+    )
+  end
+
+  defp put_page_module_context(page_component_struct, page_module) do
+    Component.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :page_module},
+      page_module
     )
   end
 
