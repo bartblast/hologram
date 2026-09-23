@@ -54,6 +54,7 @@ defmodule Hologram.Compiler.Cache do
   @type runtime_state :: %{
           app_versions: keyword(String.t()),
           bundle_info: map,
+          client_config: String.t(),
           js_binding_modules: MapSet.t(module),
           mfas: [mfa]
         }

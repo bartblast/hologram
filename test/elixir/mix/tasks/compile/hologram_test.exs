@@ -1781,6 +1781,41 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert compile_state.js_import_digests == js_import_digests
     end
 
+    test "rebuilds the runtime alone when the client config it sets changed", %{opts: opts} do
+      on_exit(fn -> Application.delete_env(:hologram, :client_error_overlay) end)
+      run(opts)
+
+      Application.put_env(:hologram, :client_error_overlay, not Hologram.client_error_overlay?())
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "a new VM rebuilds the runtime alone when the client config it sets changed", %{
+      opts: opts
+    } do
+      on_exit(fn -> Application.delete_env(:hologram, :client_error_overlay) end)
+      run(opts)
+      Cache.reset()
+
+      Application.put_env(:hologram, :client_error_overlay, not Hologram.client_error_overlay?())
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "keeps the client config the runtime bundle was built with", %{opts: opts} do
+      run(opts)
+
+      assert cache_state().runtime.client_config == Compiler.client_config()
+    end
+
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do
       run(opts)
 

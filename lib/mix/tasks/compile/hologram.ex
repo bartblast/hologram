@@ -389,10 +389,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # The runtime bundle is kept like a page's: rebuilt when its inputs differ from the ones it
-      # was built from, when a module it carries was edited, or when its file is gone.
+      # was built from, when a module it carries was edited, or when its file is gone. The client
+      # config it sets is one of its inputs (see Hologram.Compiler.client_config/0): the pages carry
+      # none of it.
+      client_config = Compiler.client_config()
+
       runtime_entry_files_info =
         if keep_runtime_bundle?(cache.runtime, reaching_modules,
              app_versions: app_versions,
+             client_config: client_config,
              js_binding_modules: runtime_js_binding_modules,
              js_sources_unchanged?: runtime_js_importers == [],
              mfas: runtime_mfas,
@@ -483,6 +488,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         app_versions: app_versions,
         async_mfas: async_mfas,
         call_graph: call_graph_for_pages,
+        client_config: client_config,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         ir_plt: ir_plt,
@@ -804,6 +810,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         Cache.put_runtime(%{
           app_versions: context.app_versions,
           bundle_info: bundle_info,
+          client_config: context.client_config,
           js_binding_modules: context.runtime_js_binding_modules,
           mfas: context.runtime_mfas
         })
@@ -837,8 +844,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
   # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
   # rebuilt too when the imported JavaScript of a module whose bindings it registers changed, which
-  # it inlines. Both of its files are required, since nothing else in the compile would recreate a
-  # missing source map.
+  # it inlines, and when the client config it sets differs from this compile's. Both of its files
+  # are required, since nothing else in the compile would recreate a missing source map.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -848,6 +855,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       inputs[:js_binding_modules],
       inputs[:app_versions]
     ) and
+      kept_runtime.client_config == inputs[:client_config] and
       inputs[:js_sources_unchanged?] and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
