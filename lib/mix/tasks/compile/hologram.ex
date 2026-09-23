@@ -164,6 +164,13 @@ defmodule Mix.Tasks.Compile.Hologram do
           sup
         )
 
+      # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
+      # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
+      # anything reads them, so every page and the runtime are built again (see
+      # Hologram.Compiler.Cache.forget_bundles/0).
+      bundle_inputs = Compiler.build_bundle_inputs(new_module_info_plt, opts)
+      cache = keep_bundle_inputs(cache, bundle_inputs)
+
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
 
@@ -735,6 +742,28 @@ defmodule Mix.Tasks.Compile.Hologram do
           mfas: context.runtime_mfas
         })
     end)
+  end
+
+  # The kept bundles stay while the inputs are the ones they were built with. No inputs kept means no
+  # bundles kept either (the first compile in a VM). The cache's PLTs are emptied in place, so the
+  # snapshot's references hold; the fields the cache forgets are forgotten in the snapshot too.
+  defp keep_bundle_inputs(%{bundle_inputs: kept_bundle_inputs} = cache, bundle_inputs)
+       when kept_bundle_inputs in [nil, bundle_inputs] do
+    Cache.put_bundle_inputs(bundle_inputs)
+    cache
+  end
+
+  defp keep_bundle_inputs(cache, bundle_inputs) do
+    Cache.forget_bundles()
+    Cache.put_bundle_inputs(bundle_inputs)
+
+    %{
+      cache
+      | encoding_inputs: nil,
+        pending_pages: MapSet.new(),
+        runtime: nil,
+        template_modules: nil
+    }
   end
 
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,

@@ -1377,6 +1377,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_page_bundles(opts)
     end
 
+    test "keeps the bundle inputs", %{opts: opts} do
+      run(opts)
+
+      %{bundle_inputs: bundle_inputs, module_info_plt: module_info_plt} = cache_state()
+
+      assert bundle_inputs == Compiler.build_bundle_inputs(module_info_plt, opts)
+    end
+
+    test "a run with unchanged bundle inputs builds no bundle", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds every page and the runtime when the client stack traces setting changed", %{
+      opts: opts
+    } do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      run(opts)
+
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert cache_state().bundle_inputs.client_stacktraces? == Hologram.client_stacktraces?()
+      test_page_bundles(opts)
+      test_runtime_bundle(opts)
+    end
+
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do
       run(opts)
 
