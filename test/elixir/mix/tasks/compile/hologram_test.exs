@@ -1536,6 +1536,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(opts)
     end
 
+    test "a new VM with nothing changed builds no IR", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      Code.ensure_loaded!(IR)
+
+      assert count_calls({IR, :for_module, 2}, fn -> run(opts) end) == 0
+    end
+
     test "a new VM with nothing changed encodes nothing", %{opts: opts} do
       run(opts)
       Cache.reset()

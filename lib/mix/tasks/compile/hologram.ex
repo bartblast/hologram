@@ -356,11 +356,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       dropped_modules = Compiler.prune_ir_plt(ir_plt, kept_modules)
 
-      # The runtime entry file is rendered before the batches, so the IR it reads is built here;
-      # each batch builds its pages' before rendering theirs.
-      runtime_ir_modules = Compiler.list_ir_modules(runtime_mfas, new_module_info_plt)
-      Compiler.build_missing_ir!(ir_plt, runtime_ir_modules)
-
       # Filled by the entry file renderers as they go, and kept between compiles (see
       # Hologram.Compiler.Cache): each reachable function's JavaScript is produced once and read back
       # by every entry file that needs it, in this compile and the next ones. What a function's
@@ -403,6 +398,13 @@ defmodule Mix.Tasks.Compile.Hologram do
            ) do
           []
         else
+          # The runtime entry file is rendered before the batches, so the IR it reads is built here,
+          # and only here: a kept runtime reads none. Each batch builds its pages' before rendering
+          # theirs.
+          runtime_mfas
+          |> Compiler.list_ir_modules(new_module_info_plt)
+          |> then(&Compiler.build_missing_ir!(ir_plt, &1))
+
           runtime_entry_file_path =
             Compiler.create_runtime_entry_file(
               runtime_mfas,
