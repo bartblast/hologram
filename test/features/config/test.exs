@@ -49,6 +49,11 @@ config :wallaby,
         args: [
           "--disable-background-timer-throttling",
           "--disable-dev-shm-usage",
+          # A fresh profile asks Google for the time at startup, and the reply rebuilds the
+          # certificate verifier, which drops every HTTP/2 session with
+          # ERR_CERT_VERIFIER_CHANGED. That killed the first page load of a test now and
+          # then in the HTTPS job, where Chrome speaks HTTP/2.
+          "--disable-features=NetworkTimeServiceQuerying",
           "--disable-gpu",
           "--fullscreen",
           "--headless",

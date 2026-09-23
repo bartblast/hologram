@@ -87,6 +87,16 @@ defmodule Hologram.Test.FeatureHelpers do
     Browser.execute_script(session, script, [], &IO.inspect/1)
   end
 
+  defp raise_page_mounting_timeout(session, expected_page, mounted_page) do
+    Browser.execute_script(session, "return document.body.innerText;", [], fn page_text ->
+      page_text_start = String.slice(page_text, 0, 500)
+
+      raise Wallaby.ExpectationNotMetError,
+            "Timed out waiting for page mounting, expected #{inspect(expected_page)}, " <>
+              "mounted #{inspect(mounted_page)}, page text: #{inspect(page_text_start)}"
+    end)
+  end
+
   defp timed_out?(start_time) do
     current_time() - start_time > max_wait_time()
   end
@@ -100,9 +110,7 @@ defmodule Hologram.Test.FeatureHelpers do
           :ok
 
         timed_out?(start_time) ->
-          raise Wallaby.ExpectationNotMetError,
-                "Timed out waiting for page mounting, expected #{inspect(expected_page)}, " <>
-                  "mounted #{inspect(mounted_page)}"
+          raise_page_mounting_timeout(session, expected_page, mounted_page)
 
         true ->
           maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
