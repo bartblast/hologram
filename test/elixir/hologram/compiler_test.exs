@@ -78,19 +78,6 @@ defmodule Hologram.CompilerTest do
     js_inputs
   end
 
-  # How many times the function is called, in any process, while the given function runs.
-  defp count_calls(mfa, fun) do
-    :erlang.trace_pattern(mfa, true, [:call_count])
-
-    try do
-      fun.()
-      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
-      count
-    after
-      :erlang.trace_pattern(mfa, false, [:call_count])
-    end
-  end
-
   # Runs the function with call counts on the one-argument protocol, protocol implementation and
   # JS import checks, which consult a module's code path, and returns its result with the number
   # of such checks.
