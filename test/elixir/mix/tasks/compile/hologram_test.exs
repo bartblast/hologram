@@ -15,6 +15,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
 
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
   @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
@@ -35,6 +37,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
+
+  @compile_fixtures_dir Path.join([@fixtures_dir, "mix", "tasks", "compile", "hologram"])
 
   # A function's JavaScript is produced by one call of this, however it is reached.
   @encode_function_mfa {Hologram.Compiler.Encoder, :encode_elixir_function, 6}
@@ -451,6 +455,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # Helper function to wait for lock file to appear and return its content
+  # Appends a comment to one of this file's fixtures while the function runs, and restores it after:
+  # the file's content moves, its meaning does not.
+  defp with_edited_fixture(file_name, fun) do
+    path = Path.join(@compile_fixtures_dir, file_name)
+    content = File.read!(path)
+    File.write!(path, content <> "\n// edited\n")
+
+    try do
+      fun.()
+    after
+      File.write!(path, content)
+    end
+  end
+
   defp wait_for_lock_file(lock_path, timeout_ms, end_time \\ nil) do
     end_time = end_time || System.system_time(:millisecond) + timeout_ms
 
@@ -1642,6 +1660,86 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
       test_page_bundles(opts)
+    end
+
+    test "rebuilds the page reaching a module whose imported JavaScript changed", %{opts: opts} do
+      run(opts)
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+      test_page_bundles(opts)
+    end
+
+    test "a new VM rebuilds the page reaching a module whose imported JavaScript changed", %{
+      opts: opts
+    } do
+      run(opts)
+      Cache.reset()
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds the page again once an edit of its imported JavaScript is undone", %{
+      opts: opts
+    } do
+      run(opts)
+      with_edited_fixture("js_fixture.mjs", fn -> run(opts) end)
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[Module3]]
+    end
+
+    test "rebuilds the runtime alone when imported JavaScript it registers changed", %{
+      opts: opts
+    } do
+      run(opts)
+      assert MapSet.member?(cache_state().runtime.js_binding_modules, Module5)
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("runtime_js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "a new VM rebuilds the runtime alone when imported JavaScript it registers changed", %{
+      opts: opts
+    } do
+      run(opts)
+      Cache.reset()
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("runtime_js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "keeps the imported JavaScript digests", %{opts: opts} do
+      run(opts)
+
+      %{js_import_digests: js_import_digests, module_info_plt: module_info_plt} = cache_state()
+      {1, compile_state} = load_compile_state_dump(opts)
+
+      assert js_import_digests == Compiler.build_js_import_digests(module_info_plt)
+      assert Map.has_key?(js_import_digests, Path.join(@compile_fixtures_dir, "js_fixture.mjs"))
+      assert compile_state.js_import_digests == js_import_digests
     end
 
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do

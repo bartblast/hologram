@@ -139,6 +139,13 @@ defmodule Hologram.CompilerTest do
     }
   end
 
+  # The runtime's MFAs without the ones of modules that declare JS imports: the test build's runtime
+  # carries a component that does (see Mix.Tasks.Compile.HologramTest), which a test that sets out
+  # the imports itself leaves out.
+  defp reject_js_import_mfas(mfas) do
+    Enum.reject(mfas, fn {module, _function, _arity} -> Reflection.js_imports?(module) end)
+  end
+
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
     assets_dir = Path.join(test_tmp_dir, "assets")
@@ -1524,7 +1531,9 @@ defmodule Hologram.CompilerTest do
     end
 
     test "no JS imports", %{encode_plt: encode_plt, ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+      mfas = reject_js_import_mfas(runtime_mfas)
+
+      js = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       refute String.contains?(js, "import {")
       refute String.contains?(js, "registerJsBindings")
@@ -1535,7 +1544,8 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      mfas = runtime_mfas ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+      mfas =
+        reject_js_import_mfas(runtime_mfas) ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
 
       js = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
