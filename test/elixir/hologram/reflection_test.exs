@@ -119,6 +119,23 @@ defmodule Hologram.ReflectionTest do
     write_unloaded_beam(module, tmp_subdir, bytecode)
   end
 
+  # Compiles the module, unloads it, and leaves its beam in the given application's ebin directory
+  # only, so that a listing of that application's beams finds it while the VM does not hold it.
+  defp write_unloaded_module_to_ebin(module, app, body) do
+    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
+    :code.purge(module)
+    :code.delete(module)
+
+    beam_path = Path.join([:code.lib_dir(app), "ebin", "#{module}.beam"])
+    File.write!(beam_path, bytecode)
+
+    on_exit(fn ->
+      File.rm!(beam_path)
+      :code.purge(module)
+      :code.delete(module)
+    end)
+  end
+
   describe "alias?/1" do
     test "atom which is an alias" do
       assert alias?(Calendar.ISO)
@@ -980,17 +997,40 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_pages/0" do
-    result = list_pages()
+  describe "list_pages/0" do
+    test "lists the page modules of the loaded applications, sorted by name" do
+      result = list_pages()
 
-    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
-    assert Hologram.Test.Fixtures.Reflection.Module2 in result
-    assert Hologram.Test.Fixtures.Reflection.Module6 in result
-    assert Hologram.Test.Fixtures.Page.Module1 in result
+      assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
+      assert Hologram.Test.Fixtures.Reflection.Module2 in result
+      assert Hologram.Test.Fixtures.Reflection.Module6 in result
+      assert Hologram.Test.Fixtures.Page.Module1 in result
 
-    refute Hologram.Test.Fixtures.Compiler.Module6 in result
-    refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
-    refute Hologram.Compiler.Context in result
+      refute Hologram.Test.Fixtures.Compiler.Module6 in result
+      refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
+      refute Hologram.Compiler.Context in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a page whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.PageInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, """
+      use Hologram.Page
+      route "/hologram-test-fixtures-reflection-page-in-ebin-only"
+      layout Hologram.Test.Fixtures.LayoutFixture
+      @impl Page
+      def template, do: ~HOLO"PageInEbinOnly template"
+      """)
+
+      assert module in list_pages()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_pages/0) == 0
+    end
   end
 
   describe "list_protocol_implementations/2" do
