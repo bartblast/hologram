@@ -77,6 +77,15 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert get().template_modules == template_modules
     end
+
+    test "keeps the bundle inputs" do
+      bundle_inputs = %{client_stacktraces?: true, package_json_digest: "a"}
+      put_bundle_inputs(bundle_inputs)
+
+      clear_module_infos()
+
+      assert get().bundle_inputs == bundle_inputs
+    end
   end
 
   describe "delete_page/2" do
@@ -131,6 +140,7 @@ defmodule Hologram.Compiler.CacheTest do
 
     test "returns empty kept state at first" do
       assert %{
+               bundle_inputs: nil,
                call_graph: %CallGraph{} = call_graph,
                dumped_at: nil,
                editable_modules: nil,
@@ -188,6 +198,18 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert Process.alive?(cache_pid)
     end
+  end
+
+  test "put_bundle_inputs/1" do
+    bundle_inputs = %{
+      client_stacktraces?: true,
+      hologram_modules: [{Module1, 123}],
+      js_sources: [{"hologram.mjs", 456, 789}],
+      package_json_digest: "a"
+    }
+
+    assert put_bundle_inputs(bundle_inputs) == :ok
+    assert %{bundle_inputs: ^bundle_inputs} = get()
   end
 
   test "put_encoding_inputs/1" do
@@ -320,9 +342,10 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime and the template modules" do
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules and the bundle inputs" do
       %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
+      put_bundle_inputs(%{client_stacktraces?: true})
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
       put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
@@ -338,6 +361,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       %{
         app_versions: app_versions,
+        bundle_inputs: bundle_inputs,
         module_metadata: module_metadata,
         page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
@@ -352,6 +376,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_pages_plt) == []
       assert PLT.keys(new_page_mfas_plt) == []
       assert app_versions == nil
+      assert bundle_inputs == nil
       assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil
