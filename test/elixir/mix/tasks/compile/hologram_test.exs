@@ -1779,7 +1779,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "keeps the files every kept bundle read", %{opts: opts} do
       run(opts)
 
-      %{js_inputs: js_inputs, runtime: runtime} = cache_state()
+      %{js_input_paths: js_input_paths, pages_plt: pages_plt, runtime: runtime} = cache_state()
+      {:ok, page_state} = PLT.get(pages_plt, Module3)
       {1, compile_state} = load_compile_state_dump(opts)
 
       fixture_paths =
@@ -1788,9 +1789,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
           &Path.join(@compile_fixtures_dir, &1)
         )
 
-      assert Enum.all?(fixture_paths, &match?({:digest, _digest}, js_inputs[&1]))
-      assert Map.keys(runtime.bundle_info.js_inputs) == [List.last(fixture_paths)]
-      assert compile_state.js_inputs == js_inputs
+      [page_fixture_path, helper_fixture_path, runtime_fixture_path] = fixture_paths
+
+      assert Enum.all?(fixture_paths, &MapSet.member?(js_input_paths, &1))
+      assert {:digest, _digest} = page_state.bundle_info.js_inputs[page_fixture_path]
+      assert {:digest, _digest} = page_state.bundle_info.js_inputs[helper_fixture_path]
+      assert Map.keys(runtime.bundle_info.js_inputs) == [runtime_fixture_path]
+      assert compile_state.js_input_paths == js_input_paths
     end
 
     test "rebuilds the page whose imported JavaScript imports an edited file", %{opts: opts} do
@@ -1805,7 +1810,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_page_bundles(opts)
     end
 
-    test "rebuilds a page that read an older content of a file than the kept list holds", %{
+    test "rebuilds a page that read an older content of a file than another kept bundle", %{
       opts: opts
     } do
       run(opts)
@@ -1813,8 +1818,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       {record_built, recorded_built} = record_calls()
 
       with_edited_fixture("js_fixture.mjs", fn ->
-        # Another bundle read the edited file, so the kept list holds its fingerprint now, while the
-        # page still holds the fingerprint of the content its bundle was built from.
+        # Another bundle read the edited file, so its record holds the fingerprint now, while the page
+        # still holds the fingerprint of the content its bundle was built from.
         %{runtime: runtime} = cache_state()
         fingerprints = Compiler.fingerprint_js_inputs([path], nil)
 
@@ -1822,10 +1827,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
         |> update_in([:bundle_info, :js_inputs], &Map.merge(&1, fingerprints))
         |> Cache.put_runtime()
 
-        # A check against the kept list alone would find nothing changed.
-        %{js_inputs: kept_js_inputs, pages_plt: pages_plt} = cache_state()
+        # A check against the newest record alone would find nothing changed.
+        %{pages_plt: pages_plt, runtime: kept_runtime} = cache_state()
         {:ok, page_state} = PLT.get(pages_plt, Module3)
-        assert kept_js_inputs[path] == fingerprints[path]
+        assert kept_runtime.bundle_info.js_inputs[path] == fingerprints[path]
         assert page_state.bundle_info.js_inputs[path] != fingerprints[path]
 
         run(Keyword.put(opts, :bundles_built, record_built))

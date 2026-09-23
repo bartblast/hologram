@@ -23,7 +23,6 @@ defmodule Hologram.Compiler.CacheTest do
     put_app_versions(hologram: "1.0.0")
     put_bundle_inputs(%{client_stacktraces?: true})
     put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
-    put_js_import_digests(%{"/app/assets/js/helpers.mjs" => 123})
     put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
 
     put_page(
@@ -55,7 +54,6 @@ defmodule Hologram.Compiler.CacheTest do
       fn -> put_app_versions(hologram: "1.0.0") end,
       fn -> put_bundle_inputs(%{client_stacktraces?: true}) end,
       fn -> put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true}) end,
-      fn -> put_js_import_digests(%{"/app/assets/js/helpers.mjs" => 123}) end,
       fn -> put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}) end,
       fn -> put_pending_pages([Module1]) end,
       fn ->
@@ -158,15 +156,6 @@ defmodule Hologram.Compiler.CacheTest do
       clear_module_infos()
 
       assert get().bundle_inputs == bundle_inputs
-    end
-
-    test "keeps the imported JavaScript digests" do
-      js_import_digests = %{"/app/assets/js/helpers.mjs" => 123}
-      put_js_import_digests(js_import_digests)
-
-      clear_module_infos()
-
-      assert get().js_import_digests == js_import_digests
     end
   end
 
@@ -309,11 +298,8 @@ defmodule Hologram.Compiler.CacheTest do
                   app_versions: [hologram: "1.0.0"],
                   bundle_inputs: %{client_stacktraces?: true},
                   encoding_inputs: %{async_mfas: MapSet.new(), client_stacktraces?: true},
-                  js_import_digests: %{"/app/assets/js/helpers.mjs" => 123},
-                  js_inputs: %{
-                    "/app/assets/js/page.mjs" => {:digest, 1},
-                    "/app/assets/js/runtime.mjs" => {:digest, 2}
-                  },
+                  js_input_paths:
+                    MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"]),
                   module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
                   pages: %{
                     Module1 => %{
@@ -411,9 +397,8 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(pages_plt) == []
     end
 
-    test "forgets the pending pages, the runtime, the template modules, the encoding inputs and the imported JavaScript digests" do
+    test "forgets the pending pages, the runtime, the template modules and the encoding inputs" do
       put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
-      put_js_import_digests(%{"/app/assets/js/helpers.mjs" => 123})
       put_pending_pages([Module1])
       put_template_modules(%{Module1 => MapSet.new()})
 
@@ -426,8 +411,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       forget_bundles()
 
-      assert %{encoding_inputs: nil, js_import_digests: nil, runtime: nil, template_modules: nil} =
-               get()
+      assert %{encoding_inputs: nil, runtime: nil, template_modules: nil} = get()
 
       assert get().pending_pages == MapSet.new()
     end
@@ -493,7 +477,6 @@ defmodule Hologram.Compiler.CacheTest do
                encode_plt: %PLT{} = encode_plt,
                encoding_inputs: nil,
                ir_plt: %PLT{} = ir_plt,
-               js_import_digests: nil,
                module_info_plt: %PLT{} = module_info_plt,
                module_metadata: nil,
                page_mfas_plt: %PLT{} = page_mfas_plt,
@@ -547,39 +530,39 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
-  describe "js_inputs" do
+  describe "js_input_paths" do
     test "is empty at first" do
-      assert get().js_inputs == %{}
+      assert get().js_input_paths == MapSet.new()
     end
 
-    test "gets the files a kept page's bundle read" do
+    test "gets the paths of the files a kept page's bundle read" do
       put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
       put_page(Module2, page_state_reading(%{"/app/b.mjs" => {:digest, 2}}), [])
 
-      assert get().js_inputs == %{"/app/a.mjs" => {:digest, 1}, "/app/b.mjs" => {:digest, 2}}
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs", "/app/b.mjs"])
     end
 
-    test "gets the files the kept runtime's bundle read" do
+    test "gets the paths of the files the kept runtime's bundle read" do
       put_runtime(runtime_state_reading(%{"/app/runtime.mjs" => {:digest, 3}}))
 
-      assert get().js_inputs == %{"/app/runtime.mjs" => {:digest, 3}}
+      assert get().js_input_paths == MapSet.new(["/app/runtime.mjs"])
     end
 
-    test "takes a file's fingerprint from the bundle that read it last" do
+    test "holds a path two bundles read once" do
       put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
       put_page(Module2, page_state_reading(%{"/app/a.mjs" => {:digest, 2}}), [])
 
-      assert get().js_inputs == %{"/app/a.mjs" => {:digest, 2}}
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs"])
     end
 
-    test "keeps the files when the runtime is forgotten" do
+    test "keeps the paths when the runtime is forgotten" do
       put_runtime(runtime_state_reading(%{"/app/runtime.mjs" => {:digest, 3}}))
       put_runtime(nil)
 
-      assert get().js_inputs == %{"/app/runtime.mjs" => {:digest, 3}}
+      assert get().js_input_paths == MapSet.new(["/app/runtime.mjs"])
     end
 
-    test "marks the compile state as changed when a file joins" do
+    test "marks the compile state as changed when a path joins" do
       dump_path = Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "js_inputs.bin"])
       put_runtime(runtime_state_reading(%{}))
       dump_compile_state(dump_path, false)
@@ -594,7 +577,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       forget_bundles()
 
-      assert get().js_inputs == %{}
+      assert get().js_input_paths == MapSet.new()
     end
 
     test "is kept by clear_module_infos/0" do
@@ -602,7 +585,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       clear_module_infos()
 
-      assert get().js_inputs == %{"/app/a.mjs" => {:digest, 1}}
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs"])
     end
 
     test "is emptied by reset/0" do
@@ -610,7 +593,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       reset()
 
-      assert get().js_inputs == %{}
+      assert get().js_input_paths == MapSet.new()
     end
   end
 
@@ -635,11 +618,7 @@ defmodule Hologram.Compiler.CacheTest do
                app_versions: [hologram: "1.0.0"],
                bundle_inputs: %{client_stacktraces?: true},
                encoding_inputs: %{async_mfas: async_mfas, client_stacktraces?: true},
-               js_import_digests: %{"/app/assets/js/helpers.mjs" => 123},
-               js_inputs: %{
-                 "/app/assets/js/page.mjs" => {:digest, 1},
-                 "/app/assets/js/runtime.mjs" => {:digest, 2}
-               },
+               js_input_paths: js_input_paths,
                module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
                pages_plt: pages_plt,
                pending_pages: pending_pages,
@@ -656,6 +635,10 @@ defmodule Hologram.Compiler.CacheTest do
              } = get()
 
       assert async_mfas == MapSet.new()
+
+      assert js_input_paths ==
+               MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"])
+
       assert js_binding_modules == MapSet.new()
       assert pending_pages == MapSet.new([Module2])
       assert template_modules == %{Module1 => MapSet.new()}
@@ -735,13 +718,6 @@ defmodule Hologram.Compiler.CacheTest do
 
     assert put_encoding_inputs(encoding_inputs) == :ok
     assert %{encoding_inputs: ^encoding_inputs} = get()
-  end
-
-  test "put_js_import_digests/1" do
-    js_import_digests = %{"/app/assets/js/helpers.mjs" => 123}
-
-    assert put_js_import_digests(js_import_digests) == :ok
-    assert %{js_import_digests: ^js_import_digests} = get()
   end
 
   test "put_module_infos/2" do
@@ -864,11 +840,10 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules, the bundle inputs and the imported JavaScript digests, and marks the compile state as unchanged" do
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules and the bundle inputs, and marks the compile state as unchanged" do
       %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
       put_bundle_inputs(%{client_stacktraces?: true})
-      put_js_import_digests(%{"/app/assets/js/helpers.mjs" => 123})
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
       put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
@@ -886,7 +861,6 @@ defmodule Hologram.Compiler.CacheTest do
         app_versions: app_versions,
         bundle_inputs: bundle_inputs,
         compile_state_changed?: compile_state_changed?,
-        js_import_digests: js_import_digests,
         module_metadata: module_metadata,
         page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
@@ -903,7 +877,6 @@ defmodule Hologram.Compiler.CacheTest do
       assert app_versions == nil
       assert bundle_inputs == nil
       refute compile_state_changed?
-      assert js_import_digests == nil
       assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil

@@ -196,8 +196,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Fingerprinted once, and each kept bundle compared on its own record, so that a bundle that
       # read an older content of a file than another is rebuilt too.
       js_fingerprints =
-        cache.js_inputs
-        |> Map.keys()
+        cache.js_input_paths
+        |> MapSet.to_list()
         |> Compiler.fingerprint_js_inputs(nil)
 
       # The graph answers module questions from the module info PLT of the compile at hand.
@@ -827,7 +827,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{
       cache
       | encoding_inputs: nil,
-        js_inputs: %{},
+        js_input_paths: MapSet.new(),
         pending_pages: MapSet.new(),
         runtime: nil,
         template_modules: nil

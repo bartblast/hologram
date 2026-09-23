@@ -20,7 +20,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module18
   alias Hologram.Test.Fixtures.Compiler.Module19
   alias Hologram.Test.Fixtures.Compiler.Module2
-  alias Hologram.Test.Fixtures.Compiler.Module20
   alias Hologram.Test.Fixtures.Compiler.Module21
   alias Hologram.Test.Fixtures.Compiler.Module22
   alias Hologram.Test.Fixtures.Compiler.Module23
@@ -42,7 +41,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module39
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module40
-  alias Hologram.Test.Fixtures.Compiler.Module41
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
@@ -52,8 +50,6 @@ defmodule Hologram.CompilerTest do
   @erlang_js_dir Path.join(@js_dir, "erlang")
 
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
-  @js_fixture_1_path Path.join(@fixtures_compiler_dir, "js_fixture_1.mjs")
-  @js_fixture_2_path Path.join(@fixtures_compiler_dir, "js_fixture_2.mjs")
   @tmp_dir Reflection.tmp_dir()
 
   # Bundles an entry file that runs the given JavaScript, in a tmp dir of the given name, with a
@@ -127,23 +123,6 @@ defmodule Hologram.CompilerTest do
   # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
   # a compiled module carries it. Built by hand rather than taken from a fixture module, because a
   # fixture with a deliberately invalid usage would fail the compile.hologram Mix task tests.
-  # A module info PLT flagging the fixtures that import JavaScript: two that import one file
-  # (Module18, Module20), one that imports another (Module22), one that imports a package no
-  # node_modules dir holds (Module12) and one that imports two installed packages and a file that
-  # does not exist (Module41). Module1 imports nothing.
-  defp js_importers_module_info_plt do
-    PLT.start(
-      items: [
-        {Module1, %{js_imports?: false}},
-        {Module12, %{js_imports?: true}},
-        {Module18, %{js_imports?: true}},
-        {Module20, %{js_imports?: true}},
-        {Module22, %{js_imports?: true}},
-        {Module41, %{js_imports?: true}}
-      ]
-    )
-  end
-
   defp module_ir_with_template(dom_ir) do
     # The module field is left unset - the message names the module validate_prop_usages/2 was given,
     # not the one recorded in the IR.
@@ -899,51 +878,6 @@ defmodule Hologram.CompilerTest do
                PLT.get(plt, Module1)
 
       PLT.stop(plt)
-    end
-  end
-
-  describe "build_js_import_digests/1" do
-    setup do
-      [module_info_plt: js_importers_module_info_plt()]
-    end
-
-    test "digests each imported file and each imported package's package.json, by content", %{
-      module_info_plt: module_info_plt
-    } do
-      paths = [
-        @js_fixture_1_path,
-        @js_fixture_2_path,
-        Path.join([@assets_dir, "node_modules", "@sinonjs", "fake-timers", "package.json"]),
-        Path.join([@assets_dir, "node_modules", "lodash", "package.json"])
-      ]
-
-      expected = Map.new(paths, &{&1, :erlang.phash2(File.read!(&1))})
-
-      assert build_js_import_digests(module_info_plt) == expected
-    end
-
-    test "leaves out a package no node_modules dir holds", %{module_info_plt: module_info_plt} do
-      paths =
-        module_info_plt
-        |> build_js_import_digests()
-        |> Map.keys()
-
-      refute Enum.any?(paths, &String.contains?(&1, "chart.js"))
-    end
-
-    test "leaves out an imported file that does not exist", %{module_info_plt: module_info_plt} do
-      paths =
-        module_info_plt
-        |> build_js_import_digests()
-        |> Map.keys()
-
-      refute Enum.any?(paths, &String.ends_with?(&1, "missing_js_fixture.mjs"))
-    end
-
-    test "asks only the modules the module info PLT flags as importers" do
-      module_info_plt = PLT.start(items: [{Module18, %{js_imports?: false}}])
-
-      assert build_js_import_digests(module_info_plt) == %{}
     end
   end
 
@@ -2775,62 +2709,6 @@ defmodule Hologram.CompilerTest do
 
     test "no recorded input" do
       refute js_inputs_changed?(%{}, %{})
-    end
-  end
-
-  describe "list_changed_js_importers/3" do
-    setup do
-      module_info_plt = js_importers_module_info_plt()
-
-      [digests: build_js_import_digests(module_info_plt), module_info_plt: module_info_plt]
-    end
-
-    test "a changed file lists its importers", %{
-      digests: digests,
-      module_info_plt: module_info_plt
-    } do
-      kept_digests = Map.update!(digests, @js_fixture_1_path, &(&1 + 1))
-
-      assert list_changed_js_importers(kept_digests, digests, module_info_plt) == [
-               Module18,
-               Module20
-             ]
-    end
-
-    test "a changed package lists its importers", %{
-      digests: digests,
-      module_info_plt: module_info_plt
-    } do
-      package_json_path = Path.join([@assets_dir, "node_modules", "lodash", "package.json"])
-      kept_digests = Map.update!(digests, package_json_path, &(&1 + 1))
-
-      assert list_changed_js_importers(kept_digests, digests, module_info_plt) == [Module41]
-    end
-
-    test "a source only the kept digests have lists its importers", %{
-      digests: digests,
-      module_info_plt: module_info_plt
-    } do
-      new_digests = Map.delete(digests, @js_fixture_2_path)
-
-      assert list_changed_js_importers(digests, new_digests, module_info_plt) == [Module22]
-    end
-
-    test "a source only the new digests have lists its importers", %{
-      digests: digests,
-      module_info_plt: module_info_plt
-    } do
-      kept_digests = Map.delete(digests, @js_fixture_2_path)
-
-      assert list_changed_js_importers(kept_digests, digests, module_info_plt) == [Module22]
-    end
-
-    test "unchanged digests list nobody", %{digests: digests, module_info_plt: module_info_plt} do
-      assert list_changed_js_importers(digests, digests, module_info_plt) == []
-    end
-
-    test "no kept digests list nobody", %{digests: digests, module_info_plt: module_info_plt} do
-      assert list_changed_js_importers(nil, digests, module_info_plt) == []
     end
   end
 
