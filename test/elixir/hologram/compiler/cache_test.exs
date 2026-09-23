@@ -37,6 +37,26 @@ defmodule Hologram.Compiler.CacheTest do
     put_template_modules(%{Module1 => MapSet.new()})
   end
 
+  # One put per field the compile state dump holds, each with a value the empty cache does not hold.
+  defp put_new_values do
+    [
+      fn -> put_app_versions(hologram: "1.0.0") end,
+      fn -> put_bundle_inputs(%{client_stacktraces?: true}) end,
+      fn -> put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true}) end,
+      fn -> put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}) end,
+      fn -> put_pending_pages([Module1]) end,
+      fn ->
+        put_runtime(%{
+          app_versions: [],
+          bundle_info: %{},
+          js_binding_modules: MapSet.new(),
+          mfas: []
+        })
+      end,
+      fn -> put_template_modules(%{Module1 => MapSet.new()}) end
+    ]
+  end
+
   defp read_compile_state_dump(path) do
     path
     |> File.read!()
@@ -117,25 +137,93 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert get().bundle_inputs == bundle_inputs
     end
+  end
 
-    test "keeps the compile state last dumped" do
-      path =
-        Path.join([
-          Reflection.tmp_dir(),
-          "tests",
-          "compiler",
-          "cache",
-          "clear_module_infos_0.bin"
-        ])
+  describe "compile_state_changed?" do
+    setup do
+      dump_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "changed"])
+      clean_dir(dump_dir)
 
+      [path: Path.join(dump_dir, "compile_state.bin")]
+    end
+
+    test "is clear at first" do
+      refute get().compile_state_changed?
+    end
+
+    test "is set by a put of a value that differs from the kept one" do
+      Enum.each(put_new_values(), fn put ->
+        stop_cache()
+        put.()
+
+        assert get().compile_state_changed?
+      end)
+    end
+
+    test "is left clear by a put of the value already kept", %{path: path} do
+      Enum.each(put_new_values(), fn put -> put.() end)
+      dump_compile_state(path, false)
+
+      Enum.each(put_new_values(), fn put -> put.() end)
+
+      refute get().compile_state_changed?
+    end
+
+    test "is set by put_page/3", %{path: path} do
+      dump_compile_state(path, false)
+
+      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
+
+      assert get().compile_state_changed?
+    end
+
+    test "is set by delete_page/1", %{path: path} do
+      dump_compile_state(path, false)
+
+      delete_page(Module1)
+
+      assert get().compile_state_changed?
+    end
+
+    test "is set by delete_pending_pages/1 of a pending page", %{path: path} do
       put_pending_pages([Module1])
       dump_compile_state(path, false)
-      dumped_compile_state = get().dumped_compile_state
+
+      delete_pending_pages([Module1])
+
+      assert get().compile_state_changed?
+    end
+
+    test "is left clear by delete_pending_pages/1 of a page that is not pending", %{path: path} do
+      dump_compile_state(path, false)
+
+      delete_pending_pages([Module1])
+
+      refute get().compile_state_changed?
+    end
+
+    test "is set by forget_bundles/0", %{path: path} do
+      dump_compile_state(path, false)
+
+      forget_bundles()
+
+      assert get().compile_state_changed?
+    end
+
+    test "is left clear by put_module_infos/2", %{path: path} do
+      dump_compile_state(path, false)
+
+      put_module_infos(123, MapSet.new([Module1]))
+
+      refute get().compile_state_changed?
+    end
+
+    test "is kept by clear_module_infos/0" do
+      put_pending_pages([Module1])
 
       clear_module_infos()
 
-      assert get().dumped_compile_state == dumped_compile_state
-      assert dumped_compile_state != nil
+      assert get().compile_state_changed?
     end
   end
 
@@ -214,13 +302,12 @@ defmodule Hologram.Compiler.CacheTest do
       refute Map.has_key?(compile_state, :page_mfas)
     end
 
-    test "keeps the state it wrote", %{path: path} do
+    test "marks the compile state as unchanged", %{path: path} do
       put_full_state()
 
       dump_compile_state(path, false)
 
-      {1, compile_state} = read_compile_state_dump(path)
-      assert get().dumped_compile_state == compile_state
+      refute get().compile_state_changed?
     end
 
     test "writes nothing when the state is the one last written", %{path: path} do
@@ -255,7 +342,7 @@ defmodule Hologram.Compiler.CacheTest do
     test "creates the path's directory", %{path: path} do
       nested_path = Path.join([Path.dirname(path), "dir_1", "dir_2", "compile_state.bin"])
 
-      assert dump_compile_state(nested_path, false) == :written
+      assert dump_compile_state(nested_path, true) == :written
       assert File.exists?(nested_path)
     end
   end
@@ -352,8 +439,8 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{
                bundle_inputs: nil,
                call_graph: %CallGraph{} = call_graph,
+               compile_state_changed?: false,
                dumped_at: nil,
-               dumped_compile_state: nil,
                editable_modules: nil,
                encode_plt: %PLT{} = encode_plt,
                encoding_inputs: nil,
@@ -464,15 +551,14 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(get().page_mfas_plt) == []
     end
 
-    test "keeps the loaded state as the one on disk", %{path: path} do
+    test "marks the loaded state as unchanged", %{path: path} do
       put_full_state()
       dump_compile_state(path, false)
       stop_cache()
 
       load_compile_state(path)
 
-      {1, compile_state} = read_compile_state_dump(path)
-      assert get().dumped_compile_state == compile_state
+      refute get().compile_state_changed?
     end
 
     test "the next dump of an unchanged state writes nothing", %{path: path} do
@@ -494,7 +580,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert load_compile_state(path) == :error
 
-      assert %{dumped_compile_state: nil, pending_pages: pending_pages} = get()
+      assert %{compile_state_changed?: true, pending_pages: pending_pages} = get()
       assert pending_pages == MapSet.new([Module1])
     end
   end
@@ -641,7 +727,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules, the bundle inputs and the compile state last dumped" do
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules and the bundle inputs, and marks the compile state as unchanged" do
       %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
       put_bundle_inputs(%{client_stacktraces?: true})
@@ -656,16 +742,12 @@ defmodule Hologram.Compiler.CacheTest do
         mfas: []
       })
 
-      [Reflection.tmp_dir(), "tests", "compiler", "cache", "reset_0.bin"]
-      |> Path.join()
-      |> dump_compile_state(false)
-
       reset()
 
       %{
         app_versions: app_versions,
         bundle_inputs: bundle_inputs,
-        dumped_compile_state: dumped_compile_state,
+        compile_state_changed?: compile_state_changed?,
         module_metadata: module_metadata,
         page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
@@ -681,7 +763,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_page_mfas_plt) == []
       assert app_versions == nil
       assert bundle_inputs == nil
-      assert dumped_compile_state == nil
+      refute compile_state_changed?
       assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil
