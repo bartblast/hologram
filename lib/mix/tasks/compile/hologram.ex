@@ -191,33 +191,26 @@ defmodule Mix.Tasks.Compile.Hologram do
       bundle_inputs = Compiler.build_bundle_inputs(new_module_info_plt, opts)
       cache = keep_bundle_inputs(cache, bundle_inputs)
 
-      # The sources the imported JavaScript comes from, digested every compile: a bundle inlines
-      # them, and no beam moves when one is edited. An importer whose source changed is treated as
-      # edited for the bundles that carry it: the runtime's alone when the runtime registers its
-      # bindings (the pages skip those imports), otherwise the pages reaching it, through the reach
-      # below. Kept at once, as this compile's picture of the sources.
-      js_import_digests = Compiler.build_js_import_digests(new_module_info_plt)
-
-      {runtime_js_importers, page_js_importers} =
-        cache.js_import_digests
-        |> Compiler.list_changed_js_importers(js_import_digests, new_module_info_plt)
-        |> Enum.split_with(&runtime_js_binding_module?(cache.runtime, &1))
-
-      Cache.put_js_import_digests(js_import_digests)
+      # The files esbuild read for the kept bundles, beyond Hologram's own (see
+      # Hologram.Compiler.bundle/4): a bundle inlines them, and no beam moves when one is edited.
+      # Fingerprinted once, and each kept bundle compared on its own record, so that a bundle that
+      # read an older content of a file than another is rebuilt too.
+      js_fingerprints =
+        cache.js_inputs
+        |> Map.keys()
+        |> Compiler.fingerprint_js_inputs(nil)
 
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
 
       # Before the patch, while the removed and edited modules still have their vertices and their
       # callers: every way a page's bundle depends on a module is a path to that module, so the
-      # pages whose bundles can change are the ones these modules reach back to, and the ones the
-      # modules whose imported JavaScript changed reach back to, which no beam shows. Added modules
-      # need no walk of their own, since a new module is only reachable through an edited one.
+      # pages whose bundles can change are the ones these modules reach back to. Added modules need
+      # no walk of their own, since a new module is only reachable through an edited one.
       reaching_modules =
         CallGraph.list_modules_reaching(
           call_graph,
-          module_digests_diff.removed_modules ++
-            module_digests_diff.edited_modules ++ page_js_importers
+          module_digests_diff.removed_modules ++ module_digests_diff.edited_modules
         )
 
       # The walk below starts from the pages and reads each page's layout.
@@ -301,6 +294,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          js_fingerprints: js_fingerprints,
           page_mfas_plt: cache.page_mfas_plt,
           pages_plt: cache.pages_plt,
           pending_pages: cache.pending_pages,
@@ -399,7 +393,7 @@ defmodule Mix.Tasks.Compile.Hologram do
              app_versions: app_versions,
              client_config: client_config,
              js_binding_modules: runtime_js_binding_modules,
-             js_sources_unchanged?: runtime_js_importers == [],
+             js_fingerprints: js_fingerprints,
              mfas: runtime_mfas,
              static_dir: opts[:static_dir]
            ) do
@@ -833,7 +827,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{
       cache
       | encoding_inputs: nil,
-        js_import_digests: nil,
+        js_inputs: %{},
         pending_pages: MapSet.new(),
         runtime: nil,
         template_modules: nil
@@ -843,9 +837,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
   # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
-  # rebuilt too when the imported JavaScript of a module whose bindings it registers changed, which
-  # it inlines, and when the client config it sets differs from this compile's. Both of its files
-  # are required, since nothing else in the compile would recreate a missing source map.
+  # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
+  # and when the client config it sets differs from this compile's. Both of its files are required,
+  # since nothing else in the compile would recreate a missing source map.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -856,7 +850,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       inputs[:app_versions]
     ) and
       kept_runtime.client_config == inputs[:client_config] and
-      inputs[:js_sources_unchanged?] and
+      not Compiler.js_inputs_changed?(
+        kept_runtime.bundle_info.js_inputs,
+        inputs[:js_fingerprints]
+      ) and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path) and
@@ -935,14 +932,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     else
       PLT.reset(encode_plt)
     end
-  end
-
-  # Whether the kept runtime bundle registers the module's JS bindings (see runtime_js_binding_modules
-  # in compile/1). With no kept runtime, none does.
-  defp runtime_js_binding_module?(nil, _module), do: false
-
-  defp runtime_js_binding_module?(kept_runtime, module) do
-    MapSet.member?(kept_runtime.js_binding_modules, module)
   end
 
   defp runtime_js_bindings_changed?(nil, _js_binding_modules), do: false

@@ -2753,6 +2753,31 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "js_inputs_changed?/2" do
+    test "recorded inputs that match the files now" do
+      refute js_inputs_changed?(
+               %{"/app/a.mjs" => {:digest, 1}},
+               %{"/app/a.mjs" => {:digest, 1}, "/app/b.mjs" => {:digest, 2}}
+             )
+    end
+
+    test "a recorded input whose fingerprint moved" do
+      assert js_inputs_changed?(%{"/app/a.mjs" => {:digest, 1}}, %{"/app/a.mjs" => {:digest, 2}})
+    end
+
+    test "a recorded input the fingerprints now do not hold" do
+      assert js_inputs_changed?(%{"/app/a.mjs" => {:digest, 1}}, %{})
+    end
+
+    test "an input recorded as fresh never matches" do
+      assert js_inputs_changed?(%{"/app/a.mjs" => :fresh}, %{"/app/a.mjs" => {:digest, 1}})
+    end
+
+    test "no recorded input" do
+      refute js_inputs_changed?(%{}, %{})
+    end
+  end
+
   describe "list_changed_js_importers/3" do
     setup do
       module_info_plt = js_importers_module_info_plt()
@@ -3453,7 +3478,7 @@ defmodule Hologram.CompilerTest do
       ]
     end
 
-    test "a page whose bundle read a changed file is rebuilt", %{
+    test "a page whose recorded input no longer matches the files is rebuilt", %{
       bundle_path: bundle_path,
       page_state: page_state,
       pages_plt: pages_plt,
@@ -3466,14 +3491,14 @@ defmodule Hologram.CompilerTest do
       assert partition_affected_pages(
                [Module1],
                MapSet.new(),
-               MapSet.new(["/app/helpers.mjs"]),
+               %{"/app/helpers.mjs" => {:digest, 2}},
                MapSet.new(),
                pages_plt,
                static_dir
              ) == {[Module1], []}
     end
 
-    test "a page whose bundle read no changed file is kept", %{
+    test "a page whose recorded inputs match the files is kept", %{
       bundle_path: bundle_path,
       page_state: page_state,
       pages_plt: pages_plt,
@@ -3487,7 +3512,7 @@ defmodule Hologram.CompilerTest do
       assert partition_affected_pages(
                [Module1],
                MapSet.new(),
-               MapSet.new(["/app/other.mjs"]),
+               %{"/app/helpers.mjs" => {:digest, 1}, "/app/other.mjs" => {:digest, 3}},
                MapSet.new(),
                pages_plt,
                static_dir
@@ -3703,7 +3728,7 @@ defmodule Hologram.CompilerTest do
       ]
     end
 
-    test "rebuilds a page whose bundle read a changed file", %{
+    test "rebuilds a page whose recorded input no longer matches the files", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       mfas_by_page: mfas_by_page,
       page_modules: page_modules,
@@ -3719,7 +3744,7 @@ defmodule Hologram.CompilerTest do
         partition_pages_to_rebuild(
           page_modules,
           call_graph_without_runtime_mfas,
-          changed_js_inputs: MapSet.new(["/app/helpers.mjs"]),
+          js_fingerprints: %{"/app/helpers.mjs" => {:digest, 2}},
           pages_plt: pages_plt,
           reaching_modules: MapSet.new(),
           static_dir: static_dir

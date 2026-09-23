@@ -899,6 +899,22 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Whether a bundle's recorded inputs (see `bundle/4`) no longer match the files: any recorded file
+  whose fingerprint differs from its fingerprint now in `js_fingerprints` (see
+  `fingerprint_js_inputs/2`), or that `js_fingerprints` does not hold. Each bundle is compared on
+  its own record: two bundles can hold different fingerprints of one file, when it was saved
+  between the two builds, and only the one that read the old content is stale.
+  """
+  @spec js_inputs_changed?(%{String.t() => js_input_fingerprint}, %{
+          String.t() => js_input_fingerprint
+        }) :: boolean
+  def js_inputs_changed?(js_inputs, js_fingerprints) do
+    Enum.any?(js_inputs, fn {path, fingerprint} ->
+      Map.get(js_fingerprints, path) != fingerprint
+    end)
+  end
+
+  @doc """
   Lists the modules declaring `js_import` whose sources changed since the kept digests were taken:
   a source whose digest differs between the two maps, or that one of them has and the other has
   not (see `build_js_import_digests/1`). A bundle inlines the imported JavaScript and no beam moves
@@ -1166,10 +1182,11 @@ defmodule Hologram.Compiler do
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
   module), when the bundle its kept state describes or that bundle's source map is no longer on disk
   (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
-  belongs to a static dir other than the given one. A page whose bundle read one of
-  `changed_js_inputs` is rebuilt as well (see `bundle/4`): no beam moves when a JavaScript file a
-  bundle inlines is edited. A page in `pending_pages` is rebuilt too: an earlier compile set out to
-  build it and did not, so its kept bundle may predate an edit.
+  belongs to a static dir other than the given one. A page whose bundle's recorded inputs no longer
+  match `js_fingerprints`, the fingerprints of the files now, is rebuilt as well (see
+  `js_inputs_changed?/2`): no beam moves when a JavaScript file a bundle inlines is edited. A page
+  in `pending_pages` is rebuilt too: an earlier compile set out to build it and did not, so its kept
+  bundle may predate an edit.
 
   Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
   the pages were given.
@@ -1177,7 +1194,7 @@ defmodule Hologram.Compiler do
   @spec partition_affected_pages(
           [module],
           MapSet.t(module),
-          MapSet.t(String.t()),
+          %{String.t() => js_input_fingerprint},
           MapSet.t(module),
           PLT.t(),
           T.file_path()
@@ -1186,7 +1203,7 @@ defmodule Hologram.Compiler do
   def partition_affected_pages(
         page_modules,
         reaching_modules,
-        changed_js_inputs,
+        js_fingerprints,
         pending_pages,
         pages_plt,
         static_dir
@@ -1199,7 +1216,7 @@ defmodule Hologram.Compiler do
             pages_plt,
             page_module,
             reaching_modules,
-            changed_js_inputs,
+            js_fingerprints,
             pending_pages,
             static_dir
           )
@@ -1227,9 +1244,9 @@ defmodule Hologram.Compiler do
     * `:reaching_modules` - the modules that reach the changed ones, from
       `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/6` for
       what makes a page affected.
-    * `:changed_js_inputs` - the files the kept bundles read whose fingerprint moved (see
-      `bundle/4`), a `MapSet` of paths; a kept page whose bundle read one is rebuilt. Defaults to
-      none.
+    * `:js_fingerprints` - the fingerprints now of the files the kept bundles read (see
+      `fingerprint_js_inputs/2`); a kept page whose recorded inputs no longer match them is
+      rebuilt. Defaults to none, which only a page that recorded no input matches.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
     * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
       moved although nothing it reaches was edited: a function that joined the runtime's set leaves
@@ -1251,7 +1268,7 @@ defmodule Hologram.Compiler do
         partition_affected_pages(
           page_modules,
           opts[:reaching_modules],
-          Keyword.get(opts, :changed_js_inputs, MapSet.new()),
+          Keyword.get(opts, :js_fingerprints, %{}),
           Keyword.get(opts, :pending_pages, MapSet.new()),
           opts[:pages_plt],
           opts[:static_dir]
@@ -1772,21 +1789,18 @@ defmodule Hologram.Compiler do
     |> Path.join()
   end
 
-  # The changed files are few, so they are looked up in the page's record rather than the other way
-  # round.
   defp keepable_page_state(
          pages_plt,
          page_module,
          reaching_modules,
-         changed_js_inputs,
+         js_fingerprints,
          pending_pages,
          static_dir
        ) do
     with false <- MapSet.member?(pending_pages, page_module),
          {:ok, page_state} <- PLT.get(pages_plt, page_module),
          true <- MapSet.disjoint?(page_state.modules, reaching_modules),
-         false <-
-           Enum.any?(changed_js_inputs, &Map.has_key?(page_state.bundle_info.js_inputs, &1)),
+         false <- js_inputs_changed?(page_state.bundle_info.js_inputs, js_fingerprints),
          true <- usable_bundle?(page_state.bundle_info, static_dir) do
       page_state
     else
@@ -1805,13 +1819,22 @@ defmodule Hologram.Compiler do
   # The files esbuild read for a bundle, as its metafile lists them relative to the working dir,
   # with their fingerprints taken against the time esbuild started (see fingerprint_js_inputs/2).
   # The entry file (under the tmp dir), Hologram's own sources (under the js dir) and the packages
-  # they use (under Hologram's node_modules) are left out: the bundle inputs cover those for every
-  # bundle at once (see build_bundle_inputs/2).
+  # they use are left out: the bundle inputs cover those for every bundle at once (see
+  # build_bundle_inputs/2). esbuild resolves a package from the importing file's dir upwards, so
+  # Hologram's sources take theirs from the node_modules next to the js dir; the node_modules path
+  # opt names the same dir in an app, and is left out too.
   defp list_bundle_js_inputs(metafile_path, started_at, opts) do
     cwd = File.cwd!()
 
+    hologram_node_modules_dir =
+      if opts[:js_dir] do
+        opts[:js_dir]
+        |> Path.dirname()
+        |> Path.join("node_modules")
+      end
+
     left_out_dirs =
-      [opts[:tmp_dir], opts[:js_dir], opts[:node_modules_path]]
+      [opts[:tmp_dir], opts[:js_dir], hologram_node_modules_dir, opts[:node_modules_path]]
       |> Enum.reject(&is_nil/1)
       |> Enum.map(&Path.expand/1)
 

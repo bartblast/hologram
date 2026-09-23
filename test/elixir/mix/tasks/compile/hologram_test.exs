@@ -455,20 +455,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # Helper function to wait for lock file to appear and return its content
-  # Appends a comment to one of this file's fixtures while the function runs, and restores it after:
-  # the file's content moves, its meaning does not.
-  defp with_edited_fixture(file_name, fun) do
-    path = Path.join(@compile_fixtures_dir, file_name)
-    content = File.read!(path)
-    File.write!(path, content <> "\n// edited\n")
-
-    try do
-      fun.()
-    after
-      File.write!(path, content)
-    end
-  end
-
   defp wait_for_lock_file(lock_path, timeout_ms, end_time \\ nil) do
     end_time = end_time || System.system_time(:millisecond) + timeout_ms
 
@@ -488,6 +474,26 @@ defmodule Mix.Tasks.Compile.HologramTest do
     else
       Process.sleep(10)
       wait_for_lock_file(lock_path, timeout_ms, end_time)
+    end
+  end
+
+  # Appends a comment to one of this file's fixtures while the function runs, and restores it after:
+  # the file's content moves, its meaning does not. The file keeps its old mtime throughout, so that
+  # no bundle records it as written during the bundling (see Hologram.Compiler.bundle/4), whatever
+  # test runs next.
+  defp with_edited_fixture(file_name, fun) do
+    path = Path.join(@compile_fixtures_dir, file_name)
+    content = File.read!(path)
+    %File.Stat{mtime: mtime} = File.stat!(path, time: :posix)
+
+    File.write!(path, content <> "\n// edited\n")
+    File.touch!(path, mtime)
+
+    try do
+      fun.()
+    after
+      File.write!(path, content)
+      File.touch!(path, mtime)
     end
   end
 
@@ -1770,15 +1776,62 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(opts)
     end
 
-    test "keeps the imported JavaScript digests", %{opts: opts} do
+    test "keeps the files every kept bundle read", %{opts: opts} do
       run(opts)
 
-      %{js_import_digests: js_import_digests, module_info_plt: module_info_plt} = cache_state()
+      %{js_inputs: js_inputs, runtime: runtime} = cache_state()
       {1, compile_state} = load_compile_state_dump(opts)
 
-      assert js_import_digests == Compiler.build_js_import_digests(module_info_plt)
-      assert Map.has_key?(js_import_digests, Path.join(@compile_fixtures_dir, "js_fixture.mjs"))
-      assert compile_state.js_import_digests == js_import_digests
+      fixture_paths =
+        Enum.map(
+          ["js_fixture.mjs", "js_fixture_helper.mjs", "runtime_js_fixture.mjs"],
+          &Path.join(@compile_fixtures_dir, &1)
+        )
+
+      assert Enum.all?(fixture_paths, &match?({:digest, _digest}, js_inputs[&1]))
+      assert Map.keys(runtime.bundle_info.js_inputs) == [List.last(fixture_paths)]
+      assert compile_state.js_inputs == js_inputs
+    end
+
+    test "rebuilds the page whose imported JavaScript imports an edited file", %{opts: opts} do
+      run(opts)
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture_helper.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds a page that read an older content of a file than the kept list holds", %{
+      opts: opts
+    } do
+      run(opts)
+      path = Path.join(@compile_fixtures_dir, "js_fixture.mjs")
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture.mjs", fn ->
+        # Another bundle read the edited file, so the kept list holds its fingerprint now, while the
+        # page still holds the fingerprint of the content its bundle was built from.
+        %{runtime: runtime} = cache_state()
+        fingerprints = Compiler.fingerprint_js_inputs([path], nil)
+
+        runtime
+        |> update_in([:bundle_info, :js_inputs], &Map.merge(&1, fingerprints))
+        |> Cache.put_runtime()
+
+        # A check against the kept list alone would find nothing changed.
+        %{js_inputs: kept_js_inputs, pages_plt: pages_plt} = cache_state()
+        {:ok, page_state} = PLT.get(pages_plt, Module3)
+        assert kept_js_inputs[path] == fingerprints[path]
+        assert page_state.bundle_info.js_inputs[path] != fingerprints[path]
+
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
     end
 
     test "rebuilds the runtime alone when the client config it sets changed", %{opts: opts} do
