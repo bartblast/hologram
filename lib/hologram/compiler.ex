@@ -16,6 +16,9 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  @type js_input_fingerprint ::
+          {:digest, integer} | {:stat, non_neg_integer, non_neg_integer} | :fresh | :missing
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers. The module info PLT says which
@@ -791,6 +794,24 @@ defmodule Hologram.Compiler do
     end)
 
     :ok
+  end
+
+  @doc """
+  Returns the fingerprint of each given file, keyed by its path: `{:digest, digest}` of the content
+  for a file outside any `node_modules` dir (the app's own JavaScript, which the dev saves,
+  sometimes within the second of a compile), `{:stat, mtime, size}` for a file under one (packages
+  change on install, never within a second of a compile, and a bundle can read dozens of them),
+  `:fresh` for a file whose mtime is not older than `started_at` in posix seconds (it may have been
+  written after the reader that started then read it, so its record must never match; nil takes no
+  file as fresh) and `:missing` for a file that is not there. A bundle records the fingerprints of
+  the files esbuild read for it (see `bundle/4`), and the compile task compares them with the
+  fingerprints now to find the bundles to rebuild.
+  """
+  @spec fingerprint_js_inputs([String.t()], non_neg_integer | nil) :: %{
+          String.t() => js_input_fingerprint
+        }
+  def fingerprint_js_inputs(paths, started_at) do
+    Map.new(paths, &{&1, fingerprint_js_input(&1, started_at)})
   end
 
   @doc """
@@ -1607,6 +1628,28 @@ defmodule Hologram.Compiler do
     list_app_node_modules_dirs()
     |> Enum.map(&Path.join([&1, package_name, "package.json"]))
     |> Enum.find(&File.exists?/1)
+  end
+
+  defp fingerprint_js_input(path, started_at) do
+    case File.stat(path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} when is_integer(started_at) and mtime >= started_at ->
+        :fresh
+
+      {:ok, %File.Stat{mtime: mtime, size: size}} ->
+        if "node_modules" in Path.split(path) do
+          {:stat, mtime, size}
+        else
+          digest =
+            path
+            |> File.read!()
+            |> :erlang.phash2()
+
+          {:digest, digest}
+        end
+
+      {:error, _reason} ->
+        :missing
+    end
   end
 
   defp function_encoded?(encode_plt, module, {function, arity}) do

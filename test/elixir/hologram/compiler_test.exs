@@ -2356,6 +2356,73 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "fingerprint_js_inputs/2" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "fingerprint_js_inputs_2"])
+      clean_dir(test_tmp_dir)
+
+      app_path = Path.join(test_tmp_dir, "helpers.mjs")
+      File.write!(app_path, "export const a = 1;")
+
+      package_path = Path.join([test_tmp_dir, "node_modules", "lodash", "get.js"])
+
+      package_path
+      |> Path.dirname()
+      |> File.mkdir_p!()
+
+      File.write!(package_path, "module.exports = 2;")
+
+      [app_path: app_path, package_path: package_path, test_tmp_dir: test_tmp_dir]
+    end
+
+    test "digests the content of a file outside node_modules", %{app_path: app_path} do
+      assert fingerprint_js_inputs([app_path], nil) == %{
+               app_path => {:digest, :erlang.phash2("export const a = 1;")}
+             }
+    end
+
+    test "the digest moves with the content", %{app_path: app_path} do
+      %{^app_path => fingerprint} = fingerprint_js_inputs([app_path], nil)
+      File.write!(app_path, "export const a = 2;")
+
+      assert fingerprint_js_inputs([app_path], nil)[app_path] != fingerprint
+    end
+
+    test "takes the mtime and size of a file under node_modules", %{package_path: package_path} do
+      %File.Stat{mtime: mtime, size: size} = File.stat!(package_path, time: :posix)
+
+      assert fingerprint_js_inputs([package_path], nil) == %{package_path => {:stat, mtime, size}}
+    end
+
+    test "a file written since the given time is fresh", %{
+      app_path: app_path,
+      package_path: package_path
+    } do
+      %File.Stat{mtime: mtime} = File.stat!(app_path, time: :posix)
+
+      assert fingerprint_js_inputs([app_path, package_path], mtime) == %{
+               app_path => :fresh,
+               package_path => :fresh
+             }
+    end
+
+    test "a file written before the given time is not fresh", %{app_path: app_path} do
+      %File.Stat{mtime: mtime} = File.stat!(app_path, time: :posix)
+
+      assert %{^app_path => {:digest, _digest}} = fingerprint_js_inputs([app_path], mtime + 1)
+    end
+
+    test "a file that is not there is missing", %{test_tmp_dir: test_tmp_dir} do
+      path = Path.join(test_tmp_dir, "gone.mjs")
+
+      assert fingerprint_js_inputs([path], nil) == %{path => :missing}
+    end
+
+    test "no paths", _context do
+      assert fingerprint_js_inputs([], nil) == %{}
+    end
+  end
+
   describe "get_erlang_function_js/4" do
     test ":erlang module function that is implemented" do
       result = get_erlang_function_js(:erlang, :+, 2, @erlang_js_dir)
