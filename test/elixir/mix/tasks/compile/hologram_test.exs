@@ -2450,7 +2450,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       module_info_dump_path =
         Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
 
-      File.touch!(module_info_dump_path, System.os_time(:second) - 10)
+      %File.Stat{mtime: mtime} = File.stat!(module_info_dump_path, time: :posix)
+      File.touch!(module_info_dump_path, mtime - 10)
 
       assert count_dumps(fn -> run(opts) end) == [1, 1]
     end
