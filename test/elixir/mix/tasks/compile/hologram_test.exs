@@ -15,6 +15,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
 
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
   @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
@@ -35,6 +37,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
+
+  @compile_fixtures_dir Path.join([@fixtures_dir, "mix", "tasks", "compile", "hologram"])
 
   # A function's JavaScript is produced by one call of this, however it is reached.
   @encode_function_mfa {Hologram.Compiler.Encoder, :encode_elixir_function, 6}
@@ -70,6 +74,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # How many times the compile state dump is written while the given function runs: each write goes
+  # through a private function of the cache, whose local calls are counted.
+  defp count_compile_state_writes(fun) do
+    mfa = {Cache, :write_compile_state, 2}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
   # How many times the call graph and the module info PLT are dumped while the given function runs.
   # PLT.dump/2 also writes the page digest PLT, once before the batches and once after each, through
   # a private function whose local calls are counted and taken off.
@@ -99,6 +118,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern({module, function, arity}, false, flags)
       end)
     end
+  end
+
+  # How many kept pages reach the given module, as their states record it.
+  defp count_pages_reaching(module) do
+    cache_state().pages_plt
+    |> PLT.get_all()
+    |> Enum.count(fn {_page_module, page_state} -> MapSet.member?(page_state.modules, module) end)
   end
 
   defp count_plt_processes do
@@ -138,6 +164,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # A module the kept runtime carries whose beam a save can rewrite, since only such a beam is
   # rechecked, so that a fake edit of it is seen.
+  # Fakes an edit of the module since the dumps were written, as a new VM sees one: the module info
+  # dump gets a digest the beam does not have and an mtime the beam does not have, so the scan reads
+  # the beam again and finds a digest that differs from the dumped one.
+  defp fake_edit_in_dump(module, opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+    module_infos = load_module_info_items(opts)
+    info = module_infos[module]
+    edited_info = %{info | digest: "edited", mtime: info.mtime - 100}
+
+    plt = PLT.start(items: Map.to_list(%{module_infos | module => edited_info}))
+    PLT.dump(plt, dump_path)
+    PLT.stop(plt)
+  end
+
   defp find_editable_runtime_module do
     %{editable_modules: editable_modules, module_infos: module_infos, runtime: runtime} =
       cache_state()
@@ -146,6 +186,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
       if MapSet.member?(editable_modules, module) and Map.has_key?(module_infos, module),
         do: module
     end)
+  end
+
+  # Forgets what the last compile kept, in the VM and on disk: what the first compile in a fresh
+  # checkout finds. Cache.reset/0 alone is what the first compile in a new VM finds, the compile
+  # state dump next to the call graph dump.
+  defp forget_kept_state(opts) do
+    Cache.reset()
+
+    opts[:build_dir]
+    |> Path.join(Reflection.compile_state_dump_file_name())
+    |> File.rm()
+
+    :ok
   end
 
   defp generate_old_bundle(name, opts) do
@@ -174,6 +227,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   def handle_compiler_telemetry([:hologram, :compiler, :stop], _measurements, _metadata, tracker) do
     Agent.update(tracker, fn state -> %{state | current: state.current - 1} end)
+  end
+
+  defp load_compile_state_dump(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
+    assert File.exists?(dump_path)
+
+    dump_path
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
   end
 
   defp load_module_info_items(opts) do
@@ -415,6 +477,26 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # Appends a comment to one of this file's fixtures while the function runs, and restores it after:
+  # the file's content moves, its meaning does not. The file keeps its old mtime throughout, so that
+  # no bundle records it as written during the bundling (see Hologram.Compiler.bundle/4), whatever
+  # test runs next.
+  defp with_edited_fixture(file_name, fun) do
+    path = Path.join(@compile_fixtures_dir, file_name)
+    content = File.read!(path)
+    %File.Stat{mtime: mtime} = File.stat!(path, time: :posix)
+
+    File.write!(path, content <> "\n// edited\n")
+    File.touch!(path, mtime)
+
+    try do
+      fun.()
+    after
+      File.write!(path, content)
+      File.touch!(path, mtime)
+    end
+  end
+
   setup_all do
     original_hologram_start_flag = System.get_env("HOLOGRAM_START")
     System.put_env("HOLOGRAM_START", "1")
@@ -505,11 +587,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "kept compile state" do
-    setup do
+    setup %{opts: opts} do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
       # rereads, since the modules they are for are not reported as compiled.
       on_exit(&Cache.reset/0)
-      Cache.reset()
+      forget_kept_state(opts)
     end
 
     test "the second run keeps what the first run built", %{opts: opts} do
@@ -1155,7 +1237,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a page no compile has built links to the pages its listing names", %{opts: opts} do
       run(opts)
 
-      Cache.reset()
+      forget_kept_state(opts)
 
       {record_links, recorded_links} = record_calls()
 
@@ -1247,7 +1329,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no page states lists each page once", %{opts: opts} do
       run(opts)
-      Cache.reset()
+      forget_kept_state(opts)
 
       assert count_calls({CallGraph, :list_page_mfas, 4}, fn -> run(opts) end) == @num_pages
       test_page_bundles(opts)
@@ -1370,11 +1452,426 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert pages_reaching_module_2 < @num_pages
       partial_digests = load_page_digest_items(opts)
 
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert load_page_digest_items(opts) == partial_digests
       test_page_bundles(opts)
+    end
+
+    test "keeps the bundle inputs", %{opts: opts} do
+      run(opts)
+
+      %{bundle_inputs: bundle_inputs, module_info_plt: module_info_plt} = cache_state()
+
+      assert bundle_inputs == Compiler.build_bundle_inputs(module_info_plt, opts)
+    end
+
+    test "a run with unchanged bundle inputs builds no bundle", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds every page and the runtime when the client stack traces setting changed", %{
+      opts: opts
+    } do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      run(opts)
+
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert cache_state().bundle_inputs.client_stacktraces? == Hologram.client_stacktraces?()
+      test_page_bundles(opts)
+      test_runtime_bundle(opts)
+    end
+
+    test "dumps the compile state with the bundles it built", %{opts: opts} do
+      run(opts)
+
+      {1, compile_state} = load_compile_state_dump(opts)
+      state = cache_state()
+
+      assert compile_state.pages == PLT.get_all(state.pages_plt)
+      assert map_size(compile_state.pages) == @num_pages
+      assert compile_state.runtime == state.runtime
+      assert compile_state.runtime != nil
+      assert compile_state.pending_pages == MapSet.new()
+      assert compile_state.app_versions == state.app_versions
+      assert compile_state.bundle_inputs == state.bundle_inputs
+      assert compile_state.encoding_inputs == state.encoding_inputs
+      assert compile_state.module_metadata == state.module_metadata
+      assert compile_state.template_modules == state.template_modules
+    end
+
+    test "dumps the pages a stopped run left pending", %{opts: opts} do
+      run(opts)
+      pending_pages = put_pending_kept_pages(2)
+
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+
+      {1, compile_state} = load_compile_state_dump(opts)
+      assert compile_state.pending_pages == pending_pages
+    end
+
+    test "a run that changes nothing writes no compile state", %{opts: opts} do
+      run(opts)
+
+      assert count_compile_state_writes(fn -> run(opts) end) == 0
+    end
+
+    test "a run that rebuilds a page writes the compile state before and after its batches", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(Module2)
+
+      assert count_compile_state_writes(fn -> run(opts) end) == 2
+    end
+
+    test "a new VM with nothing changed bundles nothing", %{opts: opts} do
+      run(opts)
+      page_digests = load_page_digest_items(opts)
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      assert load_page_digest_items(opts) == page_digests
+      test_page_bundles(opts)
+      test_runtime_bundle(opts)
+    end
+
+    test "a new VM with nothing changed builds no IR", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      Code.ensure_loaded!(IR)
+
+      assert count_calls({IR, :for_module, 2}, fn -> run(opts) end) == 0
+    end
+
+    test "a new VM with nothing changed writes no dump", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_compile_state_writes(fn ->
+               assert count_dumps(fn -> run(opts) end) == [0, 0]
+             end) == 0
+    end
+
+    test "a new VM whose call graph dump is gone writes both dumps", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.rm!()
+
+      Cache.reset()
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a new VM whose module infos changed writes the module info dump", %{opts: opts} do
+      run(opts)
+      fake_edit_in_dump(Module2, opts)
+      Cache.reset()
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+      assert load_module_info_items(opts)[Module2].digest != "edited"
+    end
+
+    test "a new VM with nothing changed encodes nothing", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_calls(@encode_function_mfa, fn -> run(opts) end) == 0
+    end
+
+    test "a new VM with nothing changed lists no page and clones no graph", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      mfas = [
+        {CallGraph, :clone, 2},
+        {CallGraph, :list_page_mfas, 4},
+        {CallGraph, :list_runtime_mfas, 2}
+      ]
+
+      Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      try do
+        run(opts)
+
+        assert Enum.map(mfas, &:erlang.trace_info(&1, :call_count)) == [
+                 {:call_count, 0},
+                 {:call_count, 0},
+                 {:call_count, 0}
+               ]
+      after
+        Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+      end
+    end
+
+    test "a new VM with nothing changed validates no template", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_validated_templates(fn -> run(opts) end) == 0
+    end
+
+    test "a new VM with nothing changed keeps the runtime state and every page state it loaded",
+         %{
+           opts: opts
+         } do
+      run(opts)
+      %{runtime: runtime} = cache_state()
+      Cache.reset()
+
+      mfas = [{Cache, :put_page, 3}, {Cache, :put_runtime, 1}]
+      Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      try do
+        run(opts)
+
+        assert Enum.map(mfas, &:erlang.trace_info(&1, :call_count)) == [
+                 {:call_count, 0},
+                 {:call_count, 0}
+               ]
+      after
+        Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+      end
+
+      %{pages_plt: pages_plt, runtime: kept_runtime} = cache_state()
+
+      assert kept_runtime == runtime
+      assert length(PLT.keys(pages_plt)) == @num_pages
+    end
+
+    test "a new VM rebuilds the pages reaching a module edited since the dumps", %{opts: opts} do
+      run(opts)
+      pages_reaching_module_2 = count_pages_reaching(Module2)
+      fake_edit_in_dump(Module2, opts)
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      assert pages_reaching_module_2 < @num_pages
+      test_page_bundles(opts)
+    end
+
+    test "a new VM rebuilds the pages an earlier run left pending", %{opts: opts} do
+      run(opts)
+      pages_reaching_module_2 = count_pages_reaching(Module2)
+      fake_edit_in_dump(Module2, opts)
+      Cache.reset()
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      test_page_bundles(opts)
+    end
+
+    test "a new VM whose bundle inputs differ rebuilds every page and the runtime", %{
+      opts: opts
+    } do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      run(opts)
+      Cache.reset()
+
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      test_page_bundles(opts)
+    end
+
+    test "a compile state dump of another version is not loaded", %{opts: opts} do
+      run(opts)
+      dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
+      File.write!(dump_path, SerializationUtils.serialize({0, %{}}))
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert {1, _compile_state} = load_compile_state_dump(opts)
+    end
+
+    test "a compile state dump without a call graph dump is not loaded", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.rm!()
+
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds the page reaching a module whose imported JavaScript changed", %{opts: opts} do
+      run(opts)
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+      test_page_bundles(opts)
+    end
+
+    test "a new VM rebuilds the page reaching a module whose imported JavaScript changed", %{
+      opts: opts
+    } do
+      run(opts)
+      Cache.reset()
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds the page again once an edit of its imported JavaScript is undone", %{
+      opts: opts
+    } do
+      run(opts)
+      with_edited_fixture("js_fixture.mjs", fn -> run(opts) end)
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[Module3]]
+    end
+
+    test "rebuilds the runtime alone when imported JavaScript it registers changed", %{
+      opts: opts
+    } do
+      run(opts)
+      assert MapSet.member?(cache_state().runtime.js_binding_modules, Module5)
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("runtime_js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "a new VM rebuilds the runtime alone when imported JavaScript it registers changed", %{
+      opts: opts
+    } do
+      run(opts)
+      Cache.reset()
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("runtime_js_fixture.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "keeps the files every kept bundle read", %{opts: opts} do
+      run(opts)
+
+      %{js_input_paths: js_input_paths, pages_plt: pages_plt, runtime: runtime} = cache_state()
+      {:ok, page_state} = PLT.get(pages_plt, Module3)
+      {1, compile_state} = load_compile_state_dump(opts)
+
+      fixture_paths =
+        Enum.map(
+          ["js_fixture.mjs", "js_fixture_helper.mjs", "runtime_js_fixture.mjs"],
+          &Path.join(@compile_fixtures_dir, &1)
+        )
+
+      [page_fixture_path, helper_fixture_path, runtime_fixture_path] = fixture_paths
+
+      assert Enum.all?(fixture_paths, &MapSet.member?(js_input_paths, &1))
+      assert {:digest, _digest} = page_state.bundle_info.js_inputs[page_fixture_path]
+      assert {:digest, _digest} = page_state.bundle_info.js_inputs[helper_fixture_path]
+      assert Map.keys(runtime.bundle_info.js_inputs) == [runtime_fixture_path]
+      assert compile_state.js_input_paths == js_input_paths
+    end
+
+    test "rebuilds the page whose imported JavaScript imports an edited file", %{opts: opts} do
+      run(opts)
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture_helper.mjs", fn ->
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+      test_page_bundles(opts)
+    end
+
+    test "rebuilds a page that read an older content of a file than another kept bundle", %{
+      opts: opts
+    } do
+      run(opts)
+      path = Path.join(@compile_fixtures_dir, "js_fixture.mjs")
+      {record_built, recorded_built} = record_calls()
+
+      with_edited_fixture("js_fixture.mjs", fn ->
+        # Another bundle read the edited file, so its record holds the fingerprint now, while the page
+        # still holds the fingerprint of the content its bundle was built from.
+        %{runtime: runtime} = cache_state()
+        fingerprints = Compiler.fingerprint_js_inputs([path], nil)
+
+        runtime
+        |> update_in([:bundle_info, :js_inputs], &Map.merge(&1, fingerprints))
+        |> Cache.put_runtime()
+
+        # A check against the newest record alone would find nothing changed.
+        %{pages_plt: pages_plt, runtime: kept_runtime} = cache_state()
+        {:ok, page_state} = PLT.get(pages_plt, Module3)
+        assert kept_runtime.bundle_info.js_inputs[path] == fingerprints[path]
+        assert page_state.bundle_info.js_inputs[path] != fingerprints[path]
+
+        run(Keyword.put(opts, :bundles_built, record_built))
+      end)
+
+      assert recorded_built.() == [[Module3]]
+    end
+
+    test "rebuilds the runtime alone when the client config it sets changed", %{opts: opts} do
+      on_exit(fn -> Application.delete_env(:hologram, :client_error_overlay) end)
+      run(opts)
+
+      Application.put_env(:hologram, :client_error_overlay, not Hologram.client_error_overlay?())
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "a new VM rebuilds the runtime alone when the client config it sets changed", %{
+      opts: opts
+    } do
+      on_exit(fn -> Application.delete_env(:hologram, :client_error_overlay) end)
+      run(opts)
+      Cache.reset()
+
+      Application.put_env(:hologram, :client_error_overlay, not Hologram.client_error_overlay?())
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[:runtime]]
+      test_runtime_bundle(opts)
+    end
+
+    test "keeps the client config the runtime bundle was built with", %{opts: opts} do
+      run(opts)
+
+      assert cache_state().runtime.client_config == Compiler.client_config()
     end
 
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do
@@ -1446,6 +1943,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
             bundle_name: "page",
             digest: digest,
             entry_name: :gone_page,
+            js_inputs: %{},
             static_bundle_path: bundle_path,
             static_source_map_path: source_map_path
           },
@@ -1637,7 +2135,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       warm_app_versions = cache_state().app_versions
 
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert warm_app_versions == cache_state().app_versions
@@ -1952,7 +2450,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       module_info_dump_path =
         Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
 
-      File.touch!(module_info_dump_path, System.os_time(:second) - 10)
+      %File.Stat{mtime: mtime} = File.stat!(module_info_dump_path, time: :posix)
+      File.touch!(module_info_dump_path, mtime - 10)
 
       assert count_dumps(fn -> run(opts) end) == [1, 1]
     end
@@ -1982,9 +2481,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = cache_state()
+      %{call_graph: call_graph, module_infos: module_infos, pages_plt: pages_plt} = cache_state()
 
-      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
+      # The page's state comes from the compile state dump.
+      assert {:ok, %{bundle_info: %{}, modules: %MapSet{}}} = PLT.get(pages_plt, Module1)
       assert CallGraph.has_vertex?(call_graph, Module2)
       assert module_infos == load_module_info_items(opts)
     end
@@ -2022,13 +2522,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
       # in place and only then raises, which is the shape of a compile that dies after changing
       # what the cache keeps. The page is edited, since a run that changes nothing writes no dump.
+      # The dump is written to a file next to it and renamed over it, and the rename onto the
+      # directory fails.
       blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
       File.rm!(blocked_dump_path)
       File.mkdir!(blocked_dump_path)
       on_exit(fn -> File.rmdir(blocked_dump_path) end)
       fake_edit(Module1)
 
-      assert_raise File.Error, fn -> run(opts) end
+      assert_raise File.RenameError, fn -> run(opts) end
       assert cache_state().module_infos == nil
 
       File.rmdir!(blocked_dump_path)
@@ -2237,7 +2739,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no changes builds no module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert count_calls({Compiler, :build_module_metadata, 1}, fn -> run(opts) end) == 0
@@ -2245,7 +2747,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "the kept module metadata after an edit is the one a full build finds", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
       fake_edit(Module1)
       run(opts)
@@ -2260,7 +2762,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "turning client stack traces off forgets the module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert cache_state().module_metadata != nil

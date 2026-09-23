@@ -16,6 +16,9 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  @type js_input_fingerprint ::
+          {:digest, integer} | {:stat, non_neg_integer, non_neg_integer} | :fresh | :missing
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers. The module info PLT says which
@@ -113,6 +116,35 @@ defmodule Hologram.Compiler do
     |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
     |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
     |> Enum.sort()
+  end
+
+  @doc """
+  Returns what every bundle depends on besides the modules it carries: the client stack traces
+  setting (bundles built with it on register module metadata and app versions), the digests of
+  Hologram's own modules, the ones compiled from its lib dir, from the given module info PLT (the
+  encoder and the transformer decide what a module encodes to), the mtime and size of each of
+  Hologram's JavaScript sources under the `:js_dir` opt (esbuild copies them into every bundle) and
+  the digest of `package.json` in the `:assets_dir` opt (which pins esbuild). Two compiles whose
+  inputs are equal make the same bundle from the same modules; the compile task rebuilds every
+  bundle when the inputs differ from the ones its kept bundles were built with (see
+  `Hologram.Compiler.Cache.forget_bundles/0`).
+
+  The JavaScript sources are compared by mtime and size rather than by content: they belong to a
+  dependency, which changes with an upgrade or a fetch, never within a second of a compile.
+  """
+  @spec build_bundle_inputs(PLT.t(), T.opts()) :: %{
+          client_stacktraces?: boolean,
+          hologram_modules: [{module, integer}],
+          js_sources: [{String.t(), integer, non_neg_integer}],
+          package_json_digest: binary
+        }
+  def build_bundle_inputs(module_info_plt, opts) do
+    %{
+      client_stacktraces?: Hologram.client_stacktraces?(),
+      hologram_modules: list_hologram_module_digests(module_info_plt),
+      js_sources: list_js_sources(opts[:js_dir]),
+      package_json_digest: get_package_json_digest(opts[:assets_dir])
+    }
   end
 
   @doc """
@@ -437,7 +469,7 @@ defmodule Hologram.Compiler do
 
     const startTime = PerformanceTimer.start();
 
-    globalThis.Hologram.config = #{render_client_config()};
+    globalThis.Hologram.config = #{client_config()};
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -471,6 +503,11 @@ defmodule Hologram.Compiler do
   written without its `Elixir.` prefix, between the bundle name and the hash when one is given: a
   bundle name shared by many entries (the page bundles) needs it to tell them apart, one with a
   single entry (the runtime) does not. The returned digest is the hash.
+
+  The returned `js_inputs` are the files esbuild read for the bundle besides the entry file,
+  Hologram's own sources under the `:js_dir` opt and the packages under the `:node_modules_path`
+  opt, with their fingerprints (see `fingerprint_js_inputs/2`), taken against the time esbuild
+  started: a bundle inlines them, and a kept bundle whose files moved must be built again.
   """
   @spec bundle(module | nil, T.file_path(), String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
@@ -482,12 +519,14 @@ defmodule Hologram.Compiler do
     output_name = bundle_output_name(bundle_name, entry_name)
     output_dir = Path.join(opts[:tmp_dir], "#{output_name}.output")
     FileUtils.recreate_dir(output_dir)
+    metafile_path = Path.join(output_dir, "meta.json")
 
     esbuild_cmd = [
       "#{output_name}=#{entry_file_path}",
       "--bundle",
       "--entry-names=[name]-[hash]",
       "--log-level=warning",
+      "--metafile=#{metafile_path}",
       "--minify",
       "--outdir=#{output_dir}",
       "--sourcemap",
@@ -513,6 +552,10 @@ defmodule Hologram.Compiler do
       env: [{"NODE_PATH", node_path}],
       parallelism: true
     ]
+
+    # A file whose mtime is not older than this may have been written after esbuild read it (see
+    # list_bundle_js_inputs/3).
+    started_at = System.os_time(:second)
 
     {_exit_msg, exit_status} =
       SystemUtils.cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, esbuild_opts)
@@ -543,13 +586,35 @@ defmodule Hologram.Compiler do
     File.rename!(output_bundle_path, static_bundle_path)
     File.rename!(output_bundle_path <> ".map", static_source_map_path)
 
+    # Read once and removed, so that the output dir is left empty, as the bundle and its source map
+    # leave it.
+    js_inputs = list_bundle_js_inputs(metafile_path, started_at, opts)
+    File.rm!(metafile_path)
+
     %{
       bundle_name: bundle_name,
       digest: digest,
       entry_name: entry_name,
+      js_inputs: js_inputs,
       static_bundle_path: static_bundle_path,
       static_source_map_path: static_source_map_path
     }
+  end
+
+  @doc """
+  Returns the client config the runtime bundle sets as `globalThis.Hologram.config`: whether the
+  error overlay is on, whether live reload is (it runs in dev only, and in test, so that the feature
+  tests can drive it, as the SSE stream's live reload subscription does), and whether client stack
+  traces are. `liveReload` lets the client load a page afresh when it holds that page's code in an
+  older version (see live_reload.mjs). The runtime bundle carries it as written here, so the
+  compile task keeps a runtime bundle only while this is what it was built with.
+  """
+  @spec client_config() :: String.t()
+  def client_config do
+    live_reload? = Hologram.env() in [:dev, :test]
+
+    "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
+      "stacktraces: #{Hologram.client_stacktraces?()}}"
   end
 
   @doc """
@@ -720,6 +785,25 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the fingerprint of each given file, keyed by its path: `{:digest, digest}` of the content
+  for a file outside any `node_modules` dir (the app's own JavaScript, which the dev saves,
+  sometimes within the second of a compile), `{:stat, mtime, size}` for a file under one (packages
+  change on install, never within a second of a compile, and a bundle can read dozens of them),
+  `:fresh` for a file whose mtime is not older than `started_at` in posix seconds (it may have been
+  written after the reader that started then read it, so its record must never match; nil takes no
+  file as fresh) and `:missing` for a file that is not there or cannot be read (one removed between
+  its stat and its read included). A bundle records the fingerprints of the files esbuild read for
+  it (see `bundle/4`), and the compile task compares them with the fingerprints now to find the
+  bundles to rebuild.
+  """
+  @spec fingerprint_js_inputs([String.t()], non_neg_integer | nil) :: %{
+          String.t() => js_input_fingerprint
+        }
+  def fingerprint_js_inputs(paths, started_at) do
+    Map.new(paths, &{&1, fingerprint_js_input(&1, started_at)})
+  end
+
+  @doc """
   Extracts JavaScript source code for the given ported Erlang function.
 
   Returns the JavaScript function code if it exists in the corresponding .mjs file,
@@ -784,6 +868,22 @@ defmodule Hologram.Compiler do
     package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
 
     File.write!(package_json_digest_path, package_json_digest)
+  end
+
+  @doc """
+  Whether a bundle's recorded inputs (see `bundle/4`) no longer match the files: any recorded file
+  whose fingerprint differs from its fingerprint now in `js_fingerprints` (see
+  `fingerprint_js_inputs/2`), or that `js_fingerprints` does not hold. Each bundle is compared on
+  its own record: two bundles can hold different fingerprints of one file, when it was saved
+  between the two builds, and only the one that read the old content is stale.
+  """
+  @spec js_inputs_changed?(%{String.t() => js_input_fingerprint}, %{
+          String.t() => js_input_fingerprint
+        }) :: boolean
+  def js_inputs_changed?(js_inputs, js_fingerprints) do
+    Enum.any?(js_inputs, fn {path, fingerprint} ->
+      Map.get(js_fingerprints, path) != fingerprint
+    end)
   end
 
   @doc """
@@ -1030,8 +1130,11 @@ defmodule Hologram.Compiler do
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
   module), when the bundle its kept state describes or that bundle's source map is no longer on disk
   (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
-  belongs to a static dir other than the given one. A page in `pending_pages` is rebuilt too: an
-  earlier compile set out to build it and did not, so its kept bundle may predate an edit.
+  belongs to a static dir other than the given one. A page whose bundle's recorded inputs no longer
+  match `js_fingerprints`, the fingerprints of the files now, is rebuilt as well (see
+  `js_inputs_changed?/2`): no beam moves when a JavaScript file a bundle inlines is edited. A page
+  in `pending_pages` is rebuilt too: an earlier compile set out to build it and did not, so its kept
+  bundle may predate an edit.
 
   Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
   the pages were given.
@@ -1039,6 +1142,7 @@ defmodule Hologram.Compiler do
   @spec partition_affected_pages(
           [module],
           MapSet.t(module),
+          %{String.t() => js_input_fingerprint},
           MapSet.t(module),
           PLT.t(),
           T.file_path()
@@ -1047,6 +1151,7 @@ defmodule Hologram.Compiler do
   def partition_affected_pages(
         page_modules,
         reaching_modules,
+        js_fingerprints,
         pending_pages,
         pages_plt,
         static_dir
@@ -1055,7 +1160,14 @@ defmodule Hologram.Compiler do
       page_modules
       |> Enum.map(fn page_module ->
         page_state =
-          keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir)
+          keepable_page_state(
+            pages_plt,
+            page_module,
+            reaching_modules,
+            js_fingerprints,
+            pending_pages,
+            static_dir
+          )
 
         {page_module, page_state}
       end)
@@ -1073,13 +1185,16 @@ defmodule Hologram.Compiler do
 
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
     * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
-      `:relist_all?`.
+      `:relist_all?`. A kept page it has no list for is rebuilt then.
     * `:pending_pages` - the pages an earlier compile left unbuilt (see
       `Hologram.Compiler.Cache.put_pending_pages/1`); they are rebuilt whether or not the edit reaches
       them. Defaults to none.
     * `:reaching_modules` - the modules that reach the changed ones, from
-      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/5` for
+      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/6` for
       what makes a page affected.
+    * `:js_fingerprints` - the fingerprints now of the files the kept bundles read (see
+      `fingerprint_js_inputs/2`); a kept page whose recorded inputs no longer match them is
+      rebuilt. Defaults to none, which only a page that recorded no input matches.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
     * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
       moved although nothing it reaches was edited: a function that joined the runtime's set leaves
@@ -1101,6 +1216,7 @@ defmodule Hologram.Compiler do
         partition_affected_pages(
           page_modules,
           opts[:reaching_modules],
+          Keyword.get(opts, :js_fingerprints, %{}),
           Keyword.get(opts, :pending_pages, MapSet.new()),
           opts[:pages_plt],
           opts[:static_dir]
@@ -1396,6 +1512,13 @@ defmodule Hologram.Compiler do
     Enum.all?(Reflection.beam_info_keys(), &Map.has_key?(info, &1))
   end
 
+  defp digest_js_input(path) do
+    case File.read(path) do
+      {:ok, content} -> {:digest, :erlang.phash2(content)}
+      {:error, _reason} -> :missing
+    end
+  end
+
   defp edited_module?(old_infos, module, digest) do
     match?(%{digest: old_digest} when old_digest != digest, old_infos[module])
   end
@@ -1505,6 +1628,23 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  defp fingerprint_js_input(path, started_at) do
+    case File.stat(path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} when is_integer(started_at) and mtime >= started_at ->
+        :fresh
+
+      {:ok, %File.Stat{mtime: mtime, size: size}} ->
+        if "node_modules" in Path.split(path) do
+          {:stat, mtime, size}
+        else
+          digest_js_input(path)
+        end
+
+      {:error, _reason} ->
+        :missing
+    end
+  end
+
   defp function_encoded?(encode_plt, module, {function, arity}) do
     PLT.member?(encode_plt, {module, function, arity})
   end
@@ -1584,15 +1724,98 @@ defmodule Hologram.Compiler do
        do: true
 
   # nil when the page must be rebuilt, its kept state otherwise.
-  defp keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir) do
+  defp keepable_page_state(
+         pages_plt,
+         page_module,
+         reaching_modules,
+         js_fingerprints,
+         pending_pages,
+         static_dir
+       ) do
     with false <- MapSet.member?(pending_pages, page_module),
          {:ok, page_state} <- PLT.get(pages_plt, page_module),
          true <- MapSet.disjoint?(page_state.modules, reaching_modules),
+         false <- js_inputs_changed?(page_state.bundle_info.js_inputs, js_fingerprints),
          true <- usable_bundle?(page_state.bundle_info, static_dir) do
       page_state
     else
       _fallback -> nil
     end
+  end
+
+  # The files esbuild read for a bundle, as its metafile lists them relative to the working dir,
+  # with their fingerprints taken against the time esbuild started (see fingerprint_js_inputs/2).
+  # The entry file (under the tmp dir), Hologram's own sources (under the js dir) and the packages
+  # they use are left out: the bundle inputs cover those for every bundle at once (see
+  # build_bundle_inputs/2). esbuild resolves a package from the importing file's dir upwards, so
+  # Hologram's sources take theirs from the node_modules next to the js dir; the node_modules path
+  # opt names the same dir in an app, and is left out too.
+  defp list_bundle_js_inputs(metafile_path, started_at, opts) do
+    cwd = File.cwd!()
+
+    hologram_node_modules_dir =
+      if opts[:js_dir] do
+        opts[:js_dir]
+        |> Path.dirname()
+        |> Path.join("node_modules")
+      end
+
+    left_out_dirs =
+      [opts[:tmp_dir], opts[:js_dir], hologram_node_modules_dir, opts[:node_modules_path]]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&Path.expand/1)
+
+    metafile_path
+    |> File.read!()
+    |> JSON.decode!()
+    |> Map.fetch!("inputs")
+    |> Map.keys()
+    |> Enum.map(&Path.expand(&1, cwd))
+    |> Enum.reject(fn path -> Enum.any?(left_out_dirs, &(Path.relative_to(path, &1) != path)) end)
+    |> fingerprint_js_inputs(started_at)
+  end
+
+  # Hologram's own modules that the module info PLT holds, with their digests, sorted: the modules of
+  # the :hologram app whose source is in Hologram's lib dir, the dir the Hologram module itself was
+  # compiled from. Hologram's own tests compile their fixtures into the :hologram app too, and an
+  # edit of a fixture is an edit of an app module, not of Hologram.
+  defp list_hologram_module_digests(module_info_plt) do
+    Application.ensure_loaded(:hologram)
+
+    lib_dir =
+      :compile
+      |> Hologram.module_info()
+      |> Keyword.fetch!(:source)
+      |> to_string()
+      |> Path.dirname()
+
+    digests =
+      for module <- Application.spec(:hologram, :modules),
+          {:ok, %{digest: digest, source_path: source_path}} <- [PLT.get(module_info_plt, module)],
+          is_binary(source_path),
+          Path.relative_to(source_path, lib_dir) != source_path do
+        {module, digest}
+      end
+
+    Enum.sort(digests)
+  end
+
+  # Every regular file under the given dir, as its path relative to the dir with its mtime and size,
+  # sorted.
+  defp list_js_sources(js_dir) do
+    js_dir
+    |> Path.join("**/*")
+    |> Path.wildcard()
+    |> Enum.flat_map(fn path ->
+      case File.stat!(path, time: :posix) do
+        %File.Stat{type: :regular, mtime: mtime, size: size} ->
+          [{Path.relative_to(path, js_dir), mtime, size}]
+
+        _directory ->
+          []
+      end
+    end)
+    |> Enum.sort()
   end
 
   # Filtered in the table, so no info is copied out of it.
@@ -1838,7 +2061,9 @@ defmodule Hologram.Compiler do
   end
 
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
-  # page's MFAs as its bundle was built from them are read from the page MFAs PLT.
+  # page's MFAs as its bundle was built from them are read from the page MFAs PLT. A page with no
+  # list there counts as moved: its state was loaded from the compile state dump, which does not hold
+  # the lists (see Hologram.Compiler.Cache.dump_compile_state/2).
   defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt) do
     mfas_by_kept_page =
       kept_pages
@@ -1848,7 +2073,7 @@ defmodule Hologram.Compiler do
 
     {changed_pages, unchanged_pages} =
       Enum.split_with(kept_pages, fn {page_module, _page_state} ->
-        mfas_by_kept_page[page_module] != PLT.get!(page_mfas_plt, page_module)
+        PLT.get(page_mfas_plt, page_module) != {:ok, mfas_by_kept_page[page_module]}
       end)
 
     moved_pages = Enum.map(changed_pages, fn {page_module, _page_state} -> page_module end)
@@ -1886,16 +2111,6 @@ defmodule Hologram.Compiler do
     else
       ""
     end
-  end
-
-  # liveReload lets the client load a page afresh when it holds that page's code in an older
-  # version (see live_reload.mjs). Live reload runs in dev only, and test is included so that the
-  # feature tests can drive it, as the SSE stream's live reload subscription does.
-  defp render_client_config do
-    live_reload? = Hologram.env() in [:dev, :test]
-
-    "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
-      "stacktraces: #{Hologram.client_stacktraces?()}}"
   end
 
   # Functions are listed by module, then function name, then arity. The module order is the

@@ -41,6 +41,8 @@ defmodule Hologram.Reflection do
 
   @call_graph_dump_file_name "call_graph.bin"
 
+  @compile_state_dump_file_name "compile_state.bin"
+
   @compiler_lock_file_name "hologram_compiler.lock"
 
   @ignored_modules [Kernel.SpecialForms]
@@ -256,6 +258,14 @@ defmodule Hologram.Reflection do
   @spec call_graph_dump_file_name() :: String.t()
   def call_graph_dump_file_name do
     @call_graph_dump_file_name
+  end
+
+  @doc """
+  Returns the compile state dump file name.
+  """
+  @spec compile_state_dump_file_name() :: String.t()
+  def compile_state_dump_file_name do
+    @compile_state_dump_file_name
   end
 
   @doc "Returns Hologram compiler lock file name."

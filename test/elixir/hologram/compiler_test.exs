@@ -52,6 +52,32 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
 
+  # Bundles an entry file that runs the given JavaScript, in a tmp dir of the given name, with a
+  # js dir of its own, and returns the inputs the bundle recorded. Each file written through
+  # write_js_input/3 gets an mtime in the past, so that none counts as written during the bundling.
+  defp bundle_js_inputs(test_subdir, entry_js) do
+    node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+    test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
+
+    opts = [
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      js_dir: Path.join(test_tmp_dir, "hologram_js"),
+      node_modules_path: node_modules_path,
+      static_dir: Path.join(test_tmp_dir, "static"),
+      tmp_dir: Path.join(test_tmp_dir, "tmp")
+    ]
+
+    File.mkdir_p!(opts[:static_dir])
+    File.mkdir_p!(opts[:tmp_dir])
+
+    entry_file_path = Path.join(opts[:tmp_dir], "MyPage.entry.js")
+    File.write!(entry_file_path, entry_js)
+
+    %{js_inputs: js_inputs} = bundle(MyPage, entry_file_path, "page", opts)
+
+    js_inputs
+  end
+
   # How many times the function is called, in any process, while the given function runs.
   defp count_calls(mfa, fun) do
     :erlang.trace_pattern(mfa, true, [:call_count])
@@ -118,6 +144,13 @@ defmodule Hologram.CompilerTest do
     }
   end
 
+  # The runtime's MFAs without the ones of modules that declare JS imports: the test build's runtime
+  # carries a component that does (see Mix.Tasks.Compile.HologramTest), which a test that sets out
+  # the imports itself leaves out.
+  defp reject_js_import_mfas(mfas) do
+    Enum.reject(mfas, fn {module, _function, _arity} -> Reflection.js_imports?(module) end)
+  end
+
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
     assets_dir = Path.join(test_tmp_dir, "assets")
@@ -144,6 +177,19 @@ defmodule Hologram.CompilerTest do
     |> PLT.put(Module2, info)
     |> PLT.put(Module3, info)
     |> PLT.put(Hologram.JS, info)
+  end
+
+  defp write_js_input(test_tmp_dir, relative_path, content) do
+    path = Path.join(test_tmp_dir, relative_path)
+
+    path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    File.write!(path, content)
+    File.touch!(path, System.os_time(:second) - 10)
+
+    path
   end
 
   setup_all do
@@ -636,6 +682,134 @@ defmodule Hologram.CompilerTest do
       assert with_plt == without_plt
       assert checks_without_plt > 0
       assert checks_with_plt == 0
+    end
+  end
+
+  describe "build_bundle_inputs/2" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "build_bundle_inputs_2"])
+      assets_dir = Path.join(test_tmp_dir, "assets")
+      js_dir = Path.join(assets_dir, "js")
+
+      clean_dir(test_tmp_dir)
+      File.mkdir_p!(assets_dir)
+      File.cp_r!(@js_dir, js_dir)
+      package_json_path = Path.join(assets_dir, "package.json")
+
+      @assets_dir
+      |> Path.join("package.json")
+      |> File.cp!(package_json_path)
+
+      [opts: [assets_dir: assets_dir, js_dir: js_dir]]
+    end
+
+    test "names the client stack traces setting", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      assert build_bundle_inputs(module_info_plt, opts).client_stacktraces? == true
+
+      Application.put_env(:hologram, :client_stacktraces, false)
+      assert build_bundle_inputs(module_info_plt, opts).client_stacktraces? == false
+    end
+
+    test "lists Hologram's modules with their module info digests, sorted", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
+      hologram_app_modules = Application.spec(:hologram, :modules)
+
+      assert {Compiler, PLT.get!(module_info_plt, Compiler).digest} in hologram_modules
+      assert hologram_modules == Enum.sort(hologram_modules)
+
+      assert Enum.all?(hologram_modules, fn {module, _digest} ->
+               module in hologram_app_modules
+             end)
+    end
+
+    test "leaves out the :hologram app's modules compiled from outside Hologram's lib dir", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
+      hologram_module_names = Enum.map(hologram_modules, fn {module, _digest} -> module end)
+
+      # A test fixture, compiled into the :hologram app from test/elixir/support.
+      assert Module18 in Application.spec(:hologram, :modules)
+      assert PLT.member?(module_info_plt, Module18)
+      refute Module18 in hologram_module_names
+
+      assert Enum.all?(hologram_module_names, fn module ->
+               module_info_plt
+               |> PLT.get!(module)
+               |> Map.fetch!(:source_path)
+               |> String.starts_with?(Path.join(@root_dir, "lib"))
+             end)
+    end
+
+    test "lists every JavaScript source under the js dir with its mtime and size, sorted", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{js_sources: js_sources} = build_bundle_inputs(module_info_plt, opts)
+
+      file_paths =
+        opts[:js_dir]
+        |> Path.join("**/*")
+        |> Path.wildcard()
+        |> Enum.filter(&File.regular?/1)
+
+      %File.Stat{mtime: mtime, size: size} =
+        opts[:js_dir]
+        |> Path.join("hologram.mjs")
+        |> File.stat!(time: :posix)
+
+      assert {"hologram.mjs", mtime, size} in js_sources
+
+      assert Enum.any?(js_sources, fn {path, _mtime, _size} ->
+               String.starts_with?(path, "erlang/")
+             end)
+
+      assert length(js_sources) == length(file_paths)
+      assert js_sources == Enum.sort(js_sources)
+    end
+
+    test "leaves out directories", %{module_info_plt: module_info_plt, opts: opts} do
+      %{js_sources: js_sources} = build_bundle_inputs(module_info_plt, opts)
+
+      refute Enum.any?(js_sources, fn {path, _mtime, _size} -> path == "erlang" end)
+    end
+
+    test "changes when a JavaScript source changes", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      bundle_inputs = build_bundle_inputs(module_info_plt, opts)
+      js_source_path = Path.join(opts[:js_dir], "hologram.mjs")
+      File.write!(js_source_path, "\n", [:append])
+
+      assert build_bundle_inputs(module_info_plt, opts).js_sources != bundle_inputs.js_sources
+    end
+
+    test "changes when package.json changes", %{module_info_plt: module_info_plt, opts: opts} do
+      bundle_inputs = build_bundle_inputs(module_info_plt, opts)
+      package_json_path = Path.join(opts[:assets_dir], "package.json")
+      File.write!(package_json_path, "\n", [:append])
+
+      assert build_bundle_inputs(module_info_plt, opts).package_json_digest !=
+               bundle_inputs.package_json_digest
+    end
+
+    test "is equal for two calls with nothing changed", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      assert build_bundle_inputs(module_info_plt, opts) ==
+               build_bundle_inputs(module_info_plt, opts)
     end
   end
 
@@ -1330,7 +1504,9 @@ defmodule Hologram.CompilerTest do
     end
 
     test "no JS imports", %{encode_plt: encode_plt, ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      js = build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+      mfas = reject_js_import_mfas(runtime_mfas)
+
+      js = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
       refute String.contains?(js, "import {")
       refute String.contains?(js, "registerJsBindings")
@@ -1341,7 +1517,8 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      mfas = runtime_mfas ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+      mfas =
+        reject_js_import_mfas(runtime_mfas) ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
 
       js = build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
 
@@ -1653,6 +1830,157 @@ defmodule Hologram.CompilerTest do
 
       assert exception.message =~ "early warning system"
       assert File.ls!(opts[:static_dir]) == []
+    end
+
+    test "records no input for an entry file that imports nothing" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_no_inputs"])
+      clean_dir(test_tmp_dir)
+
+      assert bundle_js_inputs("bundle_4_no_inputs", "console.log(1);\n") == %{}
+    end
+
+    test "records the file the entry file imports, with a digest of its content" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_direct_input"])
+      clean_dir(test_tmp_dir)
+
+      path = write_js_input(test_tmp_dir, "app/helpers.mjs", "export const a = 1;\n")
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_direct_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{path => {:digest, :erlang.phash2("export const a = 1;\n")}}
+    end
+
+    test "records a file an imported file imports in turn" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_transitive_input"])
+      clean_dir(test_tmp_dir)
+
+      helper_path = write_js_input(test_tmp_dir, "app/helpers.mjs", "export const a = 1;\n")
+
+      wrapper_path =
+        write_js_input(
+          test_tmp_dir,
+          "app/wrapper.mjs",
+          ~s'import { a } from "./helpers.mjs";\nexport const b = a + 1;\n'
+        )
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_transitive_input",
+          ~s'import { b } from "#{wrapper_path}";\nconsole.log(b);\n'
+        )
+
+      recorded_paths =
+        js_inputs
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert recorded_paths == Enum.sort([helper_path, wrapper_path])
+      assert {:digest, _digest} = js_inputs[helper_path]
+    end
+
+    test "records a package file with its mtime and size" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_package_input"])
+      clean_dir(test_tmp_dir)
+
+      path =
+        write_js_input(
+          test_tmp_dir,
+          "app/node_modules/my_package/index.js",
+          "export const a = 1;\n"
+        )
+
+      %File.Stat{mtime: mtime, size: size} = File.stat!(path, time: :posix)
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_package_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{path => {:stat, mtime, size}}
+    end
+
+    test "leaves out the files under the js dir" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_js_dir_input"])
+      clean_dir(test_tmp_dir)
+
+      path = write_js_input(test_tmp_dir, "hologram_js/hologram.mjs", "export const a = 1;\n")
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_js_dir_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{}
+    end
+
+    test "records a file written after esbuild started as fresh" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_fresh_input"])
+      clean_dir(test_tmp_dir)
+
+      path = write_js_input(test_tmp_dir, "app/helpers.mjs", "export const a = 1;\n")
+      File.touch!(path, System.os_time(:second) + 10)
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_fresh_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{path => :fresh}
+    end
+  end
+
+  describe "client_config/0" do
+    setup do
+      hologram_env = System.get_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_error_overlay)
+        Application.delete_env(:hologram, :client_stacktraces)
+
+        if hologram_env,
+          do: System.put_env("HOLOGRAM_ENV", hologram_env),
+          else: System.delete_env("HOLOGRAM_ENV")
+      end)
+    end
+
+    test "names the error overlay, live reload and client stack traces settings" do
+      Application.put_env(:hologram, :client_error_overlay, true)
+      Application.put_env(:hologram, :client_stacktraces, false)
+      System.put_env("HOLOGRAM_ENV", "test")
+
+      assert client_config() == "{errorOverlay: true, liveReload: true, stacktraces: false}"
+    end
+
+    test "moves with the error overlay setting" do
+      Application.put_env(:hologram, :client_error_overlay, true)
+      overlay_on = client_config()
+
+      Application.put_env(:hologram, :client_error_overlay, false)
+
+      assert client_config() != overlay_on
+      assert client_config() =~ "errorOverlay: false"
+    end
+
+    test "turns live reload off outside dev and test" do
+      System.put_env("HOLOGRAM_ENV", "prod")
+
+      assert client_config() =~ "liveReload: false"
+    end
+
+    test "is what the runtime bundle sets as the client config", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], js_dir: @js_dir)
+
+      assert String.contains?(js, "globalThis.Hologram.config = #{client_config()};")
     end
   end
 
@@ -2104,6 +2432,80 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "fingerprint_js_inputs/2" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "fingerprint_js_inputs_2"])
+      clean_dir(test_tmp_dir)
+
+      app_path = Path.join(test_tmp_dir, "helpers.mjs")
+      File.write!(app_path, "export const a = 1;")
+
+      package_path = Path.join([test_tmp_dir, "node_modules", "lodash", "get.js"])
+
+      package_path
+      |> Path.dirname()
+      |> File.mkdir_p!()
+
+      File.write!(package_path, "module.exports = 2;")
+
+      [app_path: app_path, package_path: package_path, test_tmp_dir: test_tmp_dir]
+    end
+
+    test "digests the content of a file outside node_modules", %{app_path: app_path} do
+      assert fingerprint_js_inputs([app_path], nil) == %{
+               app_path => {:digest, :erlang.phash2("export const a = 1;")}
+             }
+    end
+
+    test "the digest moves with the content", %{app_path: app_path} do
+      %{^app_path => fingerprint} = fingerprint_js_inputs([app_path], nil)
+      File.write!(app_path, "export const a = 2;")
+
+      assert fingerprint_js_inputs([app_path], nil)[app_path] != fingerprint
+    end
+
+    test "takes the mtime and size of a file under node_modules", %{package_path: package_path} do
+      %File.Stat{mtime: mtime, size: size} = File.stat!(package_path, time: :posix)
+
+      assert fingerprint_js_inputs([package_path], nil) == %{package_path => {:stat, mtime, size}}
+    end
+
+    test "a file written since the given time is fresh", %{
+      app_path: app_path,
+      package_path: package_path
+    } do
+      %File.Stat{mtime: mtime} = File.stat!(app_path, time: :posix)
+
+      assert fingerprint_js_inputs([app_path, package_path], mtime) == %{
+               app_path => :fresh,
+               package_path => :fresh
+             }
+    end
+
+    test "a file written before the given time is not fresh", %{app_path: app_path} do
+      %File.Stat{mtime: mtime} = File.stat!(app_path, time: :posix)
+
+      assert %{^app_path => {:digest, _digest}} = fingerprint_js_inputs([app_path], mtime + 1)
+    end
+
+    test "a file that is not there is missing", %{test_tmp_dir: test_tmp_dir} do
+      path = Path.join(test_tmp_dir, "gone.mjs")
+
+      assert fingerprint_js_inputs([path], nil) == %{path => :missing}
+    end
+
+    test "a file that cannot be read is missing", %{test_tmp_dir: test_tmp_dir} do
+      path = Path.join(test_tmp_dir, "dir.mjs")
+      File.mkdir_p!(path)
+
+      assert fingerprint_js_inputs([path], nil) == %{path => :missing}
+    end
+
+    test "no paths", _context do
+      assert fingerprint_js_inputs([], nil) == %{}
+    end
+  end
+
   describe "get_erlang_function_js/4" do
     test ":erlang module function that is implemented" do
       result = get_erlang_function_js(:erlang, :+, 2, @erlang_js_dir)
@@ -2289,6 +2691,31 @@ defmodule Hologram.CompilerTest do
 
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       refute File.exists?(package_json_digest_path)
+    end
+  end
+
+  describe "js_inputs_changed?/2" do
+    test "recorded inputs that match the files now" do
+      refute js_inputs_changed?(
+               %{"/app/a.mjs" => {:digest, 1}},
+               %{"/app/a.mjs" => {:digest, 1}, "/app/b.mjs" => {:digest, 2}}
+             )
+    end
+
+    test "a recorded input whose fingerprint moved" do
+      assert js_inputs_changed?(%{"/app/a.mjs" => {:digest, 1}}, %{"/app/a.mjs" => {:digest, 2}})
+    end
+
+    test "a recorded input the fingerprints now do not hold" do
+      assert js_inputs_changed?(%{"/app/a.mjs" => {:digest, 1}}, %{})
+    end
+
+    test "an input recorded as fresh never matches" do
+      assert js_inputs_changed?(%{"/app/a.mjs" => :fresh}, %{"/app/a.mjs" => {:digest, 1}})
+    end
+
+    test "no recorded input" do
+      refute js_inputs_changed?(%{}, %{})
     end
   end
 
@@ -2905,9 +3332,9 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "partition_affected_pages/5" do
+  describe "partition_affected_pages/6" do
     setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_5"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_6"])
       clean_dir(test_tmp_dir)
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
@@ -2916,7 +3343,11 @@ defmodule Hologram.CompilerTest do
 
       page_state = fn modules, path ->
         %{
-          bundle_info: %{static_bundle_path: path, static_source_map_path: path <> ".map"},
+          bundle_info: %{
+            js_inputs: %{},
+            static_bundle_path: path,
+            static_source_map_path: path <> ".map"
+          },
           mfas: Enum.map(modules, &{&1, :fun_1, 0}),
           modules: MapSet.new(modules)
         }
@@ -2932,9 +3363,51 @@ defmodule Hologram.CompilerTest do
       ]
     end
 
+    test "a page whose recorded input no longer matches the files is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      state = page_state.([Module1], bundle_path)
+      js_inputs = %{"/app/helpers.mjs" => {:digest, 1}}
+      PLT.put(pages_plt, Module1, put_in(state.bundle_info.js_inputs, js_inputs))
+
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               %{"/app/helpers.mjs" => {:digest, 2}},
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) == {[Module1], []}
+    end
+
+    test "a page whose recorded inputs match the files is kept", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      state = page_state.([Module1], bundle_path)
+      js_inputs = %{"/app/helpers.mjs" => {:digest, 1}}
+      kept_state = put_in(state.bundle_info.js_inputs, js_inputs)
+      PLT.put(pages_plt, Module1, kept_state)
+
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               %{"/app/helpers.mjs" => {:digest, 1}, "/app/other.mjs" => {:digest, 3}},
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) == {[], [{Module1, kept_state}]}
+    end
+
     test "a page with no kept state is rebuilt", %{pages_plt: pages_plt, static_dir: static_dir} do
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new(),
                pages_plt,
@@ -2955,6 +3428,7 @@ defmodule Hologram.CompilerTest do
                [Module1],
                MapSet.new([Module2]),
                MapSet.new(),
+               MapSet.new(),
                pages_plt,
                static_dir
              ) ==
@@ -2974,6 +3448,7 @@ defmodule Hologram.CompilerTest do
                [Module1],
                MapSet.new([Module2]),
                MapSet.new(),
+               MapSet.new(),
                pages_plt,
                static_dir
              ) ==
@@ -2989,6 +3464,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new(),
                pages_plt,
@@ -3010,6 +3486,7 @@ defmodule Hologram.CompilerTest do
                [Module1],
                MapSet.new(),
                MapSet.new(),
+               MapSet.new(),
                pages_plt,
                static_dir
              ) ==
@@ -3025,6 +3502,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new(),
                pages_plt,
@@ -3047,6 +3525,7 @@ defmodule Hologram.CompilerTest do
                  [Module1, Module2, Module3, Module4],
                  MapSet.new(),
                  MapSet.new(),
+                 MapSet.new(),
                  pages_plt,
                  static_dir
                )
@@ -3062,6 +3541,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new([Module1]),
                pages_plt,
@@ -3080,6 +3560,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new([Module2]),
                pages_plt,
@@ -3112,6 +3593,7 @@ defmodule Hologram.CompilerTest do
       Enum.each(mfas_by_page, fn {page_module, mfas} ->
         PLT.put(pages_plt, page_module, %{
           bundle_info: %{
+            js_inputs: %{},
             static_bundle_path: bundle_path,
             static_source_map_path: bundle_path <> ".map"
           },
@@ -3129,6 +3611,32 @@ defmodule Hologram.CompilerTest do
         pages_plt: pages_plt,
         static_dir: static_dir
       ]
+    end
+
+    test "rebuilds a page whose recorded input no longer matches the files", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{page_module, _mfas} | _rest] = mfas_by_page
+      {:ok, state} = PLT.get(pages_plt, page_module)
+      js_inputs = %{"/app/helpers.mjs" => {:digest, 1}}
+      PLT.put(pages_plt, page_module, put_in(state.bundle_info.js_inputs, js_inputs))
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          js_fingerprints: %{"/app/helpers.mjs" => {:digest, 2}},
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new(),
+          static_dir: static_dir
+        )
+
+      assert rebuilt == [page_module]
+      assert length(kept) == length(page_modules) - 1
     end
 
     test "names the pages to rebuild and keeps the rest", %{
@@ -3214,6 +3722,34 @@ defmodule Hologram.CompilerTest do
                )
 
       assert length(kept) == length(page_modules)
+    end
+
+    test "relisting rebuilds a page with no MFA list", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      mfas_by_page: mfas_by_page,
+      page_mfas_plt: page_mfas_plt,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{listless_page, _mfas} | _rest] = mfas_by_page
+
+      # A page state loaded from the compile state dump comes without its MFA list.
+      PLT.delete(page_mfas_plt, listless_page)
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          page_mfas_plt: page_mfas_plt,
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new(),
+          relist_all?: true,
+          static_dir: static_dir
+        )
+
+      assert rebuilt == [listless_page]
+      assert length(kept) == length(page_modules) - 1
     end
 
     test "relisting rebuilds a page whose MFAs moved", %{

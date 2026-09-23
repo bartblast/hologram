@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler.CallGraph do
   @moduledoc false
 
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.TaskUtils
@@ -841,7 +842,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> Path.dirname()
     |> File.mkdir_p!()
 
-    File.write!(path, data)
+    FileUtils.write_atomically!(path, data)
 
     call_graph
   end

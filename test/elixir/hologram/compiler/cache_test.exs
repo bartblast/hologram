@@ -3,13 +3,84 @@ defmodule Hologram.Compiler.CacheTest do
   import Hologram.Compiler.Cache
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
+  alias Hologram.Reflection
 
   setup do
     stop_cache()
     on_exit(&stop_cache/0)
+  end
+
+  defp page_state_reading(js_inputs) do
+    %{bundle_info: %{digest: "a", js_inputs: js_inputs}, modules: MapSet.new()}
+  end
+
+  # Puts a value into every field the compile state dump holds.
+  defp put_full_state do
+    put_app_versions(hologram: "1.0.0")
+    put_bundle_inputs(%{client_stacktraces?: true})
+    put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
+    put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
+
+    put_page(
+      Module1,
+      %{
+        bundle_info: %{digest: "a", js_inputs: %{"/app/assets/js/page.mjs" => {:digest, 1}}},
+        modules: MapSet.new([Module1])
+      },
+      [
+        {Module1, :fun_1, 0}
+      ]
+    )
+
+    put_pending_pages([Module2])
+
+    put_runtime(%{
+      app_versions: [hologram: "1.0.0"],
+      bundle_info: %{digest: "b", js_inputs: %{"/app/assets/js/runtime.mjs" => {:digest, 2}}},
+      js_binding_modules: MapSet.new(),
+      mfas: [{Module1, :fun_1, 0}]
+    })
+
+    put_template_modules(%{Module1 => MapSet.new()})
+  end
+
+  # One put per field the compile state dump holds, each with a value the empty cache does not hold.
+  defp put_new_values do
+    [
+      fn -> put_app_versions(hologram: "1.0.0") end,
+      fn -> put_bundle_inputs(%{client_stacktraces?: true}) end,
+      fn -> put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true}) end,
+      fn -> put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}) end,
+      fn -> put_pending_pages([Module1]) end,
+      fn ->
+        put_runtime(%{
+          app_versions: [],
+          bundle_info: %{js_inputs: %{}},
+          js_binding_modules: MapSet.new(),
+          mfas: []
+        })
+      end,
+      fn -> put_template_modules(%{Module1 => MapSet.new()}) end
+    ]
+  end
+
+  defp read_compile_state_dump(path) do
+    path
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
+  end
+
+  defp runtime_state_reading(js_inputs) do
+    %{
+      app_versions: [],
+      bundle_info: %{digest: "b", js_inputs: js_inputs},
+      js_binding_modules: MapSet.new(),
+      mfas: []
+    }
   end
 
   defp stop_cache do
@@ -77,11 +148,108 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert get().template_modules == template_modules
     end
+
+    test "keeps the bundle inputs" do
+      bundle_inputs = %{client_stacktraces?: true, package_json_digest: "a"}
+      put_bundle_inputs(bundle_inputs)
+
+      clear_module_infos()
+
+      assert get().bundle_inputs == bundle_inputs
+    end
+  end
+
+  describe "compile_state_changed?" do
+    setup do
+      dump_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "changed"])
+      clean_dir(dump_dir)
+
+      [path: Path.join(dump_dir, "compile_state.bin")]
+    end
+
+    test "is clear at first" do
+      refute get().compile_state_changed?
+    end
+
+    test "is set by a put of a value that differs from the kept one" do
+      Enum.each(put_new_values(), fn put ->
+        stop_cache()
+        put.()
+
+        assert get().compile_state_changed?
+      end)
+    end
+
+    test "is left clear by a put of the value already kept", %{path: path} do
+      Enum.each(put_new_values(), fn put -> put.() end)
+      dump_compile_state(path, false)
+
+      Enum.each(put_new_values(), fn put -> put.() end)
+
+      refute get().compile_state_changed?
+    end
+
+    test "is set by put_page/3", %{path: path} do
+      dump_compile_state(path, false)
+
+      put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
+
+      assert get().compile_state_changed?
+    end
+
+    test "is set by delete_page/1", %{path: path} do
+      dump_compile_state(path, false)
+
+      delete_page(Module1)
+
+      assert get().compile_state_changed?
+    end
+
+    test "is set by delete_pending_pages/1 of a pending page", %{path: path} do
+      put_pending_pages([Module1])
+      dump_compile_state(path, false)
+
+      delete_pending_pages([Module1])
+
+      assert get().compile_state_changed?
+    end
+
+    test "is left clear by delete_pending_pages/1 of a page that is not pending", %{path: path} do
+      dump_compile_state(path, false)
+
+      delete_pending_pages([Module1])
+
+      refute get().compile_state_changed?
+    end
+
+    test "is set by forget_bundles/0", %{path: path} do
+      dump_compile_state(path, false)
+
+      forget_bundles()
+
+      assert get().compile_state_changed?
+    end
+
+    test "is left clear by put_module_infos/2", %{path: path} do
+      dump_compile_state(path, false)
+
+      put_module_infos(123, MapSet.new([Module1]))
+
+      refute get().compile_state_changed?
+    end
+
+    test "is kept by clear_module_infos/0" do
+      put_pending_pages([Module1])
+
+      clear_module_infos()
+
+      assert get().compile_state_changed?
+    end
   end
 
   describe "delete_page/2" do
     test "forgets a kept page" do
-      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
+      put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
 
       assert delete_page(Module1) == :ok
       assert PLT.get(get().pages_plt, Module1) == :error
@@ -109,6 +277,189 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
+  describe "dump_compile_state/2" do
+    setup do
+      dump_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "dump_compile_state_2"])
+
+      clean_dir(dump_dir)
+
+      [path: Path.join(dump_dir, "compile_state.bin")]
+    end
+
+    test "writes the kept state", %{path: path} do
+      put_full_state()
+
+      assert dump_compile_state(path, false) == :written
+
+      assert read_compile_state_dump(path) ==
+               {1,
+                %{
+                  app_versions: [hologram: "1.0.0"],
+                  bundle_inputs: %{client_stacktraces?: true},
+                  encoding_inputs: %{async_mfas: MapSet.new(), client_stacktraces?: true},
+                  js_input_paths:
+                    MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"]),
+                  module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
+                  pages: %{
+                    Module1 => %{
+                      bundle_info: %{
+                        digest: "a",
+                        js_inputs: %{"/app/assets/js/page.mjs" => {:digest, 1}}
+                      },
+                      modules: MapSet.new([Module1])
+                    }
+                  },
+                  pending_pages: MapSet.new([Module2]),
+                  runtime: %{
+                    app_versions: [hologram: "1.0.0"],
+                    bundle_info: %{
+                      digest: "b",
+                      js_inputs: %{"/app/assets/js/runtime.mjs" => {:digest, 2}}
+                    },
+                    js_binding_modules: MapSet.new(),
+                    mfas: [{Module1, :fun_1, 0}]
+                  },
+                  template_modules: %{Module1 => MapSet.new()}
+                }}
+    end
+
+    test "leaves out the page MFA lists", %{path: path} do
+      put_full_state()
+
+      dump_compile_state(path, false)
+
+      {1, compile_state} = read_compile_state_dump(path)
+      refute Map.has_key?(compile_state, :page_mfas)
+    end
+
+    test "marks the compile state as unchanged", %{path: path} do
+      put_full_state()
+
+      dump_compile_state(path, false)
+
+      refute get().compile_state_changed?
+    end
+
+    test "writes nothing when the state is the one last written", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      File.write!(path, "untouched")
+
+      assert dump_compile_state(path, false) == :unchanged
+      assert File.read!(path) == "untouched"
+    end
+
+    test "writes again when the state changed", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      put_pending_pages([Module3])
+
+      assert dump_compile_state(path, false) == :written
+
+      {1, compile_state} = read_compile_state_dump(path)
+      assert compile_state.pending_pages == MapSet.new([Module3])
+    end
+
+    test "writes when forced", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      File.write!(path, "stale")
+
+      assert dump_compile_state(path, true) == :written
+      assert {1, _compile_state} = read_compile_state_dump(path)
+    end
+
+    test "creates the path's directory", %{path: path} do
+      nested_path = Path.join([Path.dirname(path), "dir_1", "dir_2", "compile_state.bin"])
+
+      assert dump_compile_state(nested_path, true) == :written
+      assert File.exists?(nested_path)
+    end
+
+    test "replaces an earlier dump and leaves no temporary file", %{path: path} do
+      File.write!(path, "earlier dump")
+      put_full_state()
+
+      assert dump_compile_state(path, true) == :written
+
+      assert path
+             |> Path.dirname()
+             |> File.ls!() == ["compile_state.bin"]
+
+      assert {1, _compile_state} = read_compile_state_dump(path)
+    end
+  end
+
+  describe "forget_bundles/0" do
+    test "empties the page states, the MFA lists and the encode PLT, and keeps their processes" do
+      %{encode_plt: encode_plt, page_mfas_plt: page_mfas_plt, pages_plt: pages_plt} = get()
+      put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
+      PLT.put(encode_plt, {Module1, :fun_1, 0}, "js")
+
+      assert forget_bundles() == :ok
+
+      assert %{encode_plt: ^encode_plt, page_mfas_plt: ^page_mfas_plt, pages_plt: ^pages_plt} =
+               get()
+
+      assert Process.alive?(encode_plt.pid)
+      assert Process.alive?(page_mfas_plt.pid)
+      assert Process.alive?(pages_plt.pid)
+      assert PLT.keys(encode_plt) == []
+      assert PLT.keys(page_mfas_plt) == []
+      assert PLT.keys(pages_plt) == []
+    end
+
+    test "forgets the pending pages, the runtime, the template modules and the encoding inputs" do
+      put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
+      put_pending_pages([Module1])
+      put_template_modules(%{Module1 => MapSet.new()})
+
+      put_runtime(%{
+        app_versions: [],
+        bundle_info: %{js_inputs: %{}},
+        js_binding_modules: MapSet.new(),
+        mfas: []
+      })
+
+      forget_bundles()
+
+      assert %{encoding_inputs: nil, runtime: nil, template_modules: nil} = get()
+
+      assert get().pending_pages == MapSet.new()
+    end
+
+    test "keeps the call graph, the IR PLT, the module infos, the module metadata, the app versions and the bundle inputs" do
+      %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} = get()
+      CallGraph.add_vertex(call_graph, {Module1, :fun_1, 0})
+      PLT.put(ir_plt, Module1, :ir_1)
+      PLT.put(module_info_plt, Module1, %{digest: "a"})
+      put_module_infos(123, MapSet.new([Module1]))
+      put_app_versions(hologram: "1.0.0")
+      bundle_inputs = %{client_stacktraces?: true}
+      put_bundle_inputs(bundle_inputs)
+      module_metadata = %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}
+      put_module_metadata(module_metadata)
+
+      forget_bundles()
+
+      assert %{
+               app_versions: [hologram: "1.0.0"],
+               bundle_inputs: ^bundle_inputs,
+               call_graph: ^call_graph,
+               dumped_at: 123,
+               ir_plt: ^ir_plt,
+               module_info_plt: ^module_info_plt,
+               module_metadata: ^module_metadata
+             } = get()
+
+      assert CallGraph.has_vertex?(call_graph, {Module1, :fun_1, 0})
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+      assert PLT.get(module_info_plt, Module1) == {:ok, %{digest: "a"}}
+      assert get().editable_modules == MapSet.new([Module1])
+    end
+  end
+
   describe "get/0" do
     test "starts the cache on first use" do
       refute Process.whereis(Cache)
@@ -131,7 +482,9 @@ defmodule Hologram.Compiler.CacheTest do
 
     test "returns empty kept state at first" do
       assert %{
+               bundle_inputs: nil,
                call_graph: %CallGraph{} = call_graph,
+               compile_state_changed?: false,
                dumped_at: nil,
                editable_modules: nil,
                encode_plt: %PLT{} = encode_plt,
@@ -190,6 +543,186 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
+  describe "js_input_paths" do
+    test "is empty at first" do
+      assert get().js_input_paths == MapSet.new()
+    end
+
+    test "gets the paths of the files a kept page's bundle read" do
+      put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
+      put_page(Module2, page_state_reading(%{"/app/b.mjs" => {:digest, 2}}), [])
+
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs", "/app/b.mjs"])
+    end
+
+    test "gets the paths of the files the kept runtime's bundle read" do
+      put_runtime(runtime_state_reading(%{"/app/runtime.mjs" => {:digest, 3}}))
+
+      assert get().js_input_paths == MapSet.new(["/app/runtime.mjs"])
+    end
+
+    test "holds a path two bundles read once" do
+      put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
+      put_page(Module2, page_state_reading(%{"/app/a.mjs" => {:digest, 2}}), [])
+
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs"])
+    end
+
+    test "keeps the paths when the runtime is forgotten" do
+      put_runtime(runtime_state_reading(%{"/app/runtime.mjs" => {:digest, 3}}))
+      put_runtime(nil)
+
+      assert get().js_input_paths == MapSet.new(["/app/runtime.mjs"])
+    end
+
+    test "marks the compile state as changed when a path joins" do
+      dump_path = Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "js_inputs.bin"])
+      put_runtime(runtime_state_reading(%{}))
+      dump_compile_state(dump_path, false)
+
+      put_runtime(runtime_state_reading(%{"/app/runtime.mjs" => {:digest, 3}}))
+
+      assert get().compile_state_changed?
+    end
+
+    test "is emptied by forget_bundles/0" do
+      put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
+
+      forget_bundles()
+
+      assert get().js_input_paths == MapSet.new()
+    end
+
+    test "is kept by clear_module_infos/0" do
+      put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
+
+      clear_module_infos()
+
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs"])
+    end
+
+    test "is emptied by reset/0" do
+      put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
+
+      reset()
+
+      assert get().js_input_paths == MapSet.new()
+    end
+  end
+
+  describe "load_compile_state/1" do
+    setup do
+      dump_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "load_compile_state_1"])
+
+      clean_dir(dump_dir)
+
+      [path: Path.join(dump_dir, "compile_state.bin")]
+    end
+
+    test "loads what dump_compile_state/2 wrote", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+
+      assert load_compile_state(path) == :ok
+
+      assert %{
+               app_versions: [hologram: "1.0.0"],
+               bundle_inputs: %{client_stacktraces?: true},
+               encoding_inputs: %{async_mfas: async_mfas, client_stacktraces?: true},
+               js_input_paths: js_input_paths,
+               module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
+               pages_plt: pages_plt,
+               pending_pages: pending_pages,
+               runtime: %{
+                 app_versions: [hologram: "1.0.0"],
+                 bundle_info: %{
+                   digest: "b",
+                   js_inputs: %{"/app/assets/js/runtime.mjs" => {:digest, 2}}
+                 },
+                 js_binding_modules: js_binding_modules,
+                 mfas: [{Module1, :fun_1, 0}]
+               },
+               template_modules: template_modules
+             } = get()
+
+      assert async_mfas == MapSet.new()
+
+      assert js_input_paths ==
+               MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"])
+
+      assert js_binding_modules == MapSet.new()
+      assert pending_pages == MapSet.new([Module2])
+      assert template_modules == %{Module1 => MapSet.new()}
+
+      assert PLT.get_all(pages_plt) == %{
+               Module1 => %{
+                 bundle_info: %{
+                   digest: "a",
+                   js_inputs: %{"/app/assets/js/page.mjs" => {:digest, 1}}
+                 },
+                 modules: MapSet.new([Module1])
+               }
+             }
+    end
+
+    test "loads no page MFA lists", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+
+      load_compile_state(path)
+
+      assert PLT.keys(get().page_mfas_plt) == []
+    end
+
+    test "marks the loaded state as unchanged", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+
+      load_compile_state(path)
+
+      refute get().compile_state_changed?
+    end
+
+    test "the next dump of an unchanged state writes nothing", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+      load_compile_state(path)
+
+      assert dump_compile_state(path, false) == :unchanged
+    end
+
+    test "a dump of another version is not loaded", %{path: path} do
+      File.write!(
+        path,
+        SerializationUtils.serialize({0, %{pending_pages: MapSet.new([Module2])}})
+      )
+
+      put_pending_pages([Module1])
+
+      assert load_compile_state(path) == :error
+
+      assert %{compile_state_changed?: true, pending_pages: pending_pages} = get()
+      assert pending_pages == MapSet.new([Module1])
+    end
+  end
+
+  test "put_bundle_inputs/1" do
+    bundle_inputs = %{
+      client_stacktraces?: true,
+      hologram_modules: [{Module1, 123}],
+      js_sources: [{"hologram.mjs", 456, 789}],
+      package_json_digest: "a"
+    }
+
+    assert put_bundle_inputs(bundle_inputs) == :ok
+    assert %{bundle_inputs: ^bundle_inputs} = get()
+  end
+
   test "put_encoding_inputs/1" do
     encoding_inputs = %{
       async_mfas: MapSet.new([{Module1, :fun_1, 0}]),
@@ -219,7 +752,7 @@ defmodule Hologram.Compiler.CacheTest do
   end
 
   test "put_page/3" do
-    page_state = %{bundle_info: %{digest: "a"}, modules: MapSet.new([Module1])}
+    page_state = %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new([Module1])}
     mfas = [{Module1, :fun_1, 0}]
 
     assert put_page(Module1, page_state, mfas) == :ok
@@ -237,7 +770,7 @@ defmodule Hologram.Compiler.CacheTest do
   test "put_runtime/1" do
     runtime_state = %{
       app_versions: [hologram: "1.0.0"],
-      bundle_info: %{digest: "a"},
+      bundle_info: %{digest: "a", js_inputs: %{}},
       js_binding_modules: MapSet.new([Module1]),
       mfas: [{Module1, :fun_1, 0}]
     }
@@ -320,16 +853,17 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime and the template modules" do
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules and the bundle inputs, and marks the compile state as unchanged" do
       %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
+      put_bundle_inputs(%{client_stacktraces?: true})
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
-      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
+      put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
 
       put_runtime(%{
         app_versions: [],
-        bundle_info: %{},
+        bundle_info: %{js_inputs: %{}},
         js_binding_modules: MapSet.new(),
         mfas: []
       })
@@ -338,6 +872,8 @@ defmodule Hologram.Compiler.CacheTest do
 
       %{
         app_versions: app_versions,
+        bundle_inputs: bundle_inputs,
+        compile_state_changed?: compile_state_changed?,
         module_metadata: module_metadata,
         page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
@@ -352,6 +888,8 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(new_pages_plt) == []
       assert PLT.keys(new_page_mfas_plt) == []
       assert app_versions == nil
+      assert bundle_inputs == nil
+      refute compile_state_changed?
       assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil

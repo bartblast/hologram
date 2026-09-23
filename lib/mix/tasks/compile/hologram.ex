@@ -19,6 +19,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       with the page modules built, preceded by `:runtime` when the runtime bundle was built.
       Defaults to doing nothing.
 
+  ## Build dir
+
+  A compile leaves four files in the build dir, so that the first compile in the next VM (the next
+  `mix` command, say) reuses what this one built:
+
+    * the call graph dump and the module info dump - the before picture: the graph of what the
+      pages reach and the module infos it was brought in line with, which the next compile diffs
+      the beams against.
+
+    * the compile state dump - the after picture: what each page and the runtime bundle were built
+      from, the pages still to build and what the compile derived for the bundles. The next
+      compile keeps the bundles the diff does not reach.
+
+    * the page digest dump - the digest of each page's bundle, which the router serves.
+
   ## Telemetry
 
   Emits the following events around each compilation run, i.e. the critical
@@ -135,13 +150,18 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
 
+      compile_state_dump_path =
+        Path.join(build_dir, Reflection.compile_state_dump_file_name())
+
       # The IR PLT and the call graph are kept between compiles (see Hologram.Compiler.Cache), and
       # the module infos they were last brought in line with, with the modules whose beams a save
       # can rewrite, are the before picture. The IR PLT holds the IR this compile reads, no more:
       # the modules the graph patch rebuilds first, then the ones the walk reaches, then the rest
-      # once the graph says what is reachable.
-      {cache, old_module_info_plt, module_info_dumped_at} =
-        load_before_state(build_dir, call_graph_dump_path, sup)
+      # once the graph says what is reachable. The dump time is the mtime of the module info dump
+      # the before picture came from: the one this VM kept, or the one the first compile in a VM
+      # loaded.
+      {cache, old_module_info_plt, before_dumped_at} =
+        load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup)
 
       # Listed with the scan, so that the modules kept as editable and the module infos kept with
       # them describe the same moment.
@@ -158,11 +178,27 @@ defmodule Mix.Tasks.Compile.Hologram do
         build_module_info_plt(
           cache,
           old_module_info_plt,
-          module_info_dumped_at,
+          before_dumped_at,
           editable_beams,
           compiled_modules,
           sup
         )
+
+      # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
+      # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
+      # anything reads them, so every page and the runtime are built again (see
+      # Hologram.Compiler.Cache.forget_bundles/0).
+      bundle_inputs = Compiler.build_bundle_inputs(new_module_info_plt, opts)
+      cache = keep_bundle_inputs(cache, bundle_inputs)
+
+      # The files esbuild read for the kept bundles, beyond Hologram's own (see
+      # Hologram.Compiler.bundle/4): a bundle inlines them, and no beam moves when one is edited.
+      # Fingerprinted once, and each kept bundle compared on its own record, so that a bundle that
+      # read an older content of a file than another is rebuilt too.
+      js_fingerprints =
+        cache.js_input_paths
+        |> MapSet.to_list()
+        |> Compiler.fingerprint_js_inputs(nil)
 
       # The graph answers module questions from the module info PLT of the compile at hand.
       call_graph = %{cache.call_graph | module_info_plt: new_module_info_plt}
@@ -258,6 +294,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          js_fingerprints: js_fingerprints,
           page_mfas_plt: cache.page_mfas_plt,
           pages_plt: cache.pages_plt,
           pending_pages: cache.pending_pages,
@@ -315,11 +352,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       dropped_modules = Compiler.prune_ir_plt(ir_plt, kept_modules)
 
-      # The runtime entry file is rendered before the batches, so the IR it reads is built here;
-      # each batch builds its pages' before rendering theirs.
-      runtime_ir_modules = Compiler.list_ir_modules(runtime_mfas, new_module_info_plt)
-      Compiler.build_missing_ir!(ir_plt, runtime_ir_modules)
-
       # Filled by the entry file renderers as they go, and kept between compiles (see
       # Hologram.Compiler.Cache): each reachable function's JavaScript is produced once and read back
       # by every entry file that needs it, in this compile and the next ones. What a function's
@@ -351,16 +383,29 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # The runtime bundle is kept like a page's: rebuilt when its inputs differ from the ones it
-      # was built from, when a module it carries was edited, or when its file is gone.
+      # was built from, when a module it carries was edited, or when its file is gone. The client
+      # config it sets is one of its inputs (see Hologram.Compiler.client_config/0): the pages carry
+      # none of it.
+      client_config = Compiler.client_config()
+
       runtime_entry_files_info =
         if keep_runtime_bundle?(cache.runtime, reaching_modules,
              app_versions: app_versions,
+             client_config: client_config,
              js_binding_modules: runtime_js_binding_modules,
+             js_fingerprints: js_fingerprints,
              mfas: runtime_mfas,
              static_dir: opts[:static_dir]
            ) do
           []
         else
+          # The runtime entry file is rendered before the batches, so the IR it reads is built here,
+          # and only here: a kept runtime reads none. Each batch builds its pages' before rendering
+          # theirs.
+          runtime_mfas
+          |> Compiler.list_ir_modules(new_module_info_plt)
+          |> then(&Compiler.build_missing_ir!(ir_plt, &1))
+
           runtime_entry_file_path =
             Compiler.create_runtime_entry_file(
               runtime_mfas,
@@ -374,7 +419,24 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{nil, runtime_entry_file_path, "runtime"}]
         end
 
-      dump_before_picture(cache, call_graph, new_module_info_plt,
+      Cache.put_app_versions(app_versions)
+      Cache.put_encoding_inputs(encoding_inputs)
+      Cache.put_module_metadata(module_metadata)
+      Cache.put_template_modules(template_modules)
+
+      # The kept runtime state describes the bundle this compile replaces. A compile that fails
+      # during the bundling leaves the next one diffing against the infos kept below, which show no
+      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
+      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
+
+      # The after picture, for the first compile in the next VM: the bundles on disk, what they were
+      # built from, and the pages this compile is about to build, pending. Written before the before
+      # picture, so that a compile that dies between the two leaves the pending pages next to the
+      # infos they were computed from, or an older picture; either way the next compile rebuilds
+      # them. Written again once the batches are done.
+      dump_compile_state(before_dumped_at, compile_state_dump_path, module_info_plt_dump_path)
+
+      dump_before_picture(before_dumped_at, call_graph, new_module_info_plt,
         call_graph_dump_path: call_graph_dump_path,
         graph_unchanged?: graph_unchanged?,
         infos_changed?: infos_changed?,
@@ -390,15 +452,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
 
       Cache.put_module_infos(module_info_dumped_at, editable_modules)
-      Cache.put_app_versions(app_versions)
-      Cache.put_encoding_inputs(encoding_inputs)
-      Cache.put_module_metadata(module_metadata)
-      Cache.put_template_modules(template_modules)
-
-      # The kept runtime state describes the bundle this compile replaces. A compile that fails
-      # during the bundling leaves the next one diffing against the infos just kept, which show no
-      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
-      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
 
       old_build_static_artifacts =
         opts[:static_dir]
@@ -429,6 +482,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         app_versions: app_versions,
         async_mfas: async_mfas,
         call_graph: call_graph_for_pages,
+        client_config: client_config,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         ir_plt: ir_plt,
@@ -449,6 +503,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       bundles =
         build_batches(remaining_pages, runtime_entry_files_info, bundles, batch_context)
+
+      # The pages built are in their states now, and no longer pending. The module info dump on disk
+      # is the one this compile wrote or kept, so only a change of the state writes it.
+      dump_compile_state(
+        module_info_dumped_at,
+        compile_state_dump_path,
+        module_info_plt_dump_path
+      )
 
       # Whatever ended the batches, the static dir keeps the bundles the page digest PLT names, and
       # the runtime bundle.
@@ -506,10 +568,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
   # whether any entry changed. A cold compile reads every module against the dump, diffs the two
-  # PLTs and copies the result into the cache's PLT, once. A warm one brings the cache's PLT in line
-  # in place, reading the modules the compiler reported among the beams a save can rewrite, and
-  # takes the diff from that scan (see Hologram.Compiler.patch_module_info_plt!/5). The cache holds
-  # the editable modules only between two finished compiles, so nil means cold.
+  # PLTs, copies the result into the cache's PLT, once, and compares the two PLTs' entries. A warm
+  # one brings the cache's PLT in line in place, reading the modules the compiler reported among the
+  # beams a save can rewrite, and takes the diff from that scan (see
+  # Hologram.Compiler.patch_module_info_plt!/5). The cache holds the editable modules only between
+  # two finished compiles, so nil means cold.
   defp build_module_info_plt(
          %{editable_modules: nil} = cache,
          old_plt,
@@ -520,15 +583,13 @@ defmodule Mix.Tasks.Compile.Hologram do
        ) do
     new_plt = Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
     module_digests_diff = Compiler.diff_module_info_plts(old_plt, new_plt)
+    new_infos = PLT.get_all(new_plt)
 
-    new_items =
-      new_plt
-      |> PLT.get_all()
-      |> Map.to_list()
+    PLT.put(cache.module_info_plt, Map.to_list(new_infos))
 
-    PLT.put(cache.module_info_plt, new_items)
-
-    {cache.module_info_plt, module_digests_diff, true}
+    # An entry whose mtime moved but whose digest did not is a change the diff does not show, but
+    # the dump must record it, or the next scan reads that beam again.
+    {cache.module_info_plt, module_digests_diff, new_infos != PLT.get_all(old_plt)}
   end
 
   defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
@@ -643,14 +704,16 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The call graph and the module infos are the before picture of the next VM's first compile (see
-  # load_before_state/3). While both dumps on disk are the ones this VM wrote (the module info dump's
-  # mtime is the kept one), the graph dump describes this graph when the graph is unchanged, and the
-  # module info dump these infos when the scan changed no entry; each is written only when it would
-  # say something else. The graph changes only with the infos, so a graph dump is never written
-  # without the module info dump. Another VM's dump written meanwhile (the mtime moved), or a deleted
-  # graph dump, is written over. The first compile in a VM has no dump time kept, so it writes both.
-  defp dump_before_picture(cache, call_graph, module_info_plt, opts) do
-    own_dumps? = own_dumps?(cache, opts[:module_info_plt_dump_path])
+  # load_before_state/4). While both dumps on disk are the ones this VM wrote or loaded (the module
+  # info dump's mtime is the given one), the graph dump describes this graph when the graph is
+  # unchanged, and the module info dump these infos when the scan changed no entry; each is written
+  # only when it would say something else. The graph changes only with the infos, so a graph dump is
+  # never written without the module info dump. Another VM's dump written meanwhile (the mtime
+  # moved), or a deleted graph dump, is written over. The first compile in a VM loaded both under
+  # the compiler lock, so they are its own too; a build dir with no module info dump has none to
+  # own, and one with a module info dump but no graph dump loaded neither, so both are written then.
+  defp dump_before_picture(dumped_at, call_graph, module_info_plt, opts) do
+    own_dumps? = own_dumps?(dumped_at, opts[:module_info_plt_dump_path])
 
     if not (opts[:graph_unchanged?] and own_dumps? and File.exists?(opts[:call_graph_dump_path])) do
       CallGraph.dump(call_graph, opts[:call_graph_dump_path])
@@ -659,6 +722,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     if opts[:infos_changed?] or not own_dumps? do
       PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
     end
+  end
+
+  # The compile state is written when it moved since this VM last wrote or loaded it, and whenever
+  # the dumps on disk are not the given mtime's: another VM's compile state may be there (see
+  # own_dumps?/2).
+  defp dump_compile_state(dumped_at, compile_state_dump_path, module_info_plt_dump_path) do
+    Cache.dump_compile_state(
+      compile_state_dump_path,
+      not own_dumps?(dumped_at, module_info_plt_dump_path)
+    )
   end
 
   # The page digest PLT is dumped after every batch, so that the build dir names the bundles on disk
@@ -731,16 +804,42 @@ defmodule Mix.Tasks.Compile.Hologram do
         Cache.put_runtime(%{
           app_versions: context.app_versions,
           bundle_info: bundle_info,
+          client_config: context.client_config,
           js_binding_modules: context.runtime_js_binding_modules,
           mfas: context.runtime_mfas
         })
     end)
   end
 
+  # The kept bundles stay while the inputs are the ones they were built with. No inputs kept means no
+  # bundles kept either (the first compile in a VM). The cache's PLTs are emptied in place, so the
+  # snapshot's references hold; the fields the cache forgets are forgotten in the snapshot too.
+  defp keep_bundle_inputs(%{bundle_inputs: kept_bundle_inputs} = cache, bundle_inputs)
+       when kept_bundle_inputs in [nil, bundle_inputs] do
+    Cache.put_bundle_inputs(bundle_inputs)
+    cache
+  end
+
+  defp keep_bundle_inputs(cache, bundle_inputs) do
+    Cache.forget_bundles()
+    Cache.put_bundle_inputs(bundle_inputs)
+
+    %{
+      cache
+      | encoding_inputs: nil,
+        js_input_paths: MapSet.new(),
+        pending_pages: MapSet.new(),
+        runtime: nil,
+        template_modules: nil
+    }
+  end
+
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
-  # module of those MFAs was edited: its functions are in the bundle, so their code is too. Both of
-  # its files are required, since nothing else in the compile would recreate a missing source map.
+  # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
+  # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
+  # and when the client config it sets differs from this compile's. Both of its files are required,
+  # since nothing else in the compile would recreate a missing source map.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -750,6 +849,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       inputs[:js_binding_modules],
       inputs[:app_versions]
     ) and
+      kept_runtime.client_config == inputs[:client_config] and
+      not Compiler.js_inputs_changed?(
+        kept_runtime.bundle_info.js_inputs,
+        inputs[:js_fingerprints]
+      ) and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path) and
@@ -804,9 +908,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # Whether the module info dump on disk is the one this VM wrote last: its mtime is the kept one.
-  defp own_dumps?(cache, module_info_plt_dump_path) do
-    Compiler.module_info_dumped_at(module_info_plt_dump_path) == cache.dumped_at
+  # Whether the module info dump on disk is the one the given mtime belongs to: the one this VM
+  # wrote last, or the one the first compile in a VM loaded, under the compiler lock, so that
+  # nothing wrote it since. No dump and no mtime count as the same.
+  defp own_dumps?(dumped_at, module_info_plt_dump_path) do
+    Compiler.module_info_dumped_at(module_info_plt_dump_path) == dumped_at
   end
 
   defp page_state_modules(mfas) do
@@ -921,8 +1027,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   # them, whatever another VM wrote to the build dir since, and they are trusted only between two
   # finished compiles (the cache keeps the editable modules then). Without them (the first compile
   # in a VM, or after a failed one) the cache is emptied and the build dir is the before picture:
-  # the graph comes from its dump and the module info dump written next to it says what changed.
-  defp load_before_state(build_dir, call_graph_dump_path, sup) do
+  # the graph comes from its dump and the module info dump written next to it says what changed. The
+  # compile state dump next to them is the after picture, what the bundles on disk were built from.
+  defp load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup) do
     case Cache.get() do
       %{editable_modules: nil} ->
         :ok = Cache.reset()
@@ -938,6 +1045,12 @@ defmodule Mix.Tasks.Compile.Hologram do
         {module_info_plt, dumped_at} =
           with true <- File.exists?(call_graph_dump_path),
                :ok <- CallGraph.load(cache.call_graph, call_graph_dump_path) do
+            # The after picture of the compile that wrote the before picture: the bundles it left and
+            # what they were built from. Its page states are trusted only against the diff of these
+            # module infos, which is why it is loaded here and not with a module info dump alone. A
+            # dump of another version, or none, leaves every page to be built.
+            maybe_load_compile_state(compile_state_dump_path)
+
             {plt, _dump_path, dumped_at} =
               Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
 
@@ -946,7 +1059,8 @@ defmodule Mix.Tasks.Compile.Hologram do
             _no_usable_dump -> {PLT.start(supervisor: sup), nil}
           end
 
-        {cache, module_info_plt, dumped_at}
+        # Taken after the loads, so that the snapshot holds what was loaded.
+        {Cache.get(), module_info_plt, dumped_at}
 
       cache ->
         # Cleared before anything is patched in place: a compile that dies mid-patch can leave the
@@ -956,6 +1070,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         :ok = Cache.clear_module_infos()
 
         {cache, cache.module_info_plt, cache.dumped_at}
+    end
+  end
+
+  # A dump of another version is not loaded (see Hologram.Compiler.Cache.load_compile_state/1): the
+  # state stays empty, as it does with no dump.
+  defp maybe_load_compile_state(compile_state_dump_path) do
+    if File.exists?(compile_state_dump_path) do
+      Cache.load_compile_state(compile_state_dump_path)
     end
   end
 
