@@ -1885,6 +1885,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
             bundle_name: "page",
             digest: digest,
             entry_name: :gone_page,
+            js_inputs: %{},
             static_bundle_path: bundle_path,
             static_source_map_path: source_map_path
           },
