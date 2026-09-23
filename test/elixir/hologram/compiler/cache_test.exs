@@ -118,6 +118,74 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
+  describe "forget_bundles/0" do
+    test "empties the page states, the MFA lists and the encode PLT, and keeps their processes" do
+      %{encode_plt: encode_plt, page_mfas_plt: page_mfas_plt, pages_plt: pages_plt} = get()
+      put_page(Module1, %{bundle_info: %{digest: "a"}, modules: MapSet.new()}, [])
+      PLT.put(encode_plt, {Module1, :fun_1, 0}, "js")
+
+      assert forget_bundles() == :ok
+
+      assert %{encode_plt: ^encode_plt, page_mfas_plt: ^page_mfas_plt, pages_plt: ^pages_plt} =
+               get()
+
+      assert Process.alive?(encode_plt.pid)
+      assert Process.alive?(page_mfas_plt.pid)
+      assert Process.alive?(pages_plt.pid)
+      assert PLT.keys(encode_plt) == []
+      assert PLT.keys(page_mfas_plt) == []
+      assert PLT.keys(pages_plt) == []
+    end
+
+    test "forgets the pending pages, the runtime, the template modules and the encoding inputs" do
+      put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
+      put_pending_pages([Module1])
+      put_template_modules(%{Module1 => MapSet.new()})
+
+      put_runtime(%{
+        app_versions: [],
+        bundle_info: %{},
+        js_binding_modules: MapSet.new(),
+        mfas: []
+      })
+
+      forget_bundles()
+
+      assert %{encoding_inputs: nil, runtime: nil, template_modules: nil} = get()
+      assert get().pending_pages == MapSet.new()
+    end
+
+    test "keeps the call graph, the IR PLT, the module infos, the module metadata, the app versions and the bundle inputs" do
+      %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} = get()
+      CallGraph.add_vertex(call_graph, {Module1, :fun_1, 0})
+      PLT.put(ir_plt, Module1, :ir_1)
+      PLT.put(module_info_plt, Module1, %{digest: "a"})
+      put_module_infos(123, MapSet.new([Module1]))
+      put_app_versions(hologram: "1.0.0")
+      bundle_inputs = %{client_stacktraces?: true}
+      put_bundle_inputs(bundle_inputs)
+      module_metadata = %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}
+      put_module_metadata(module_metadata)
+
+      forget_bundles()
+
+      assert %{
+               app_versions: [hologram: "1.0.0"],
+               bundle_inputs: ^bundle_inputs,
+               call_graph: ^call_graph,
+               dumped_at: 123,
+               ir_plt: ^ir_plt,
+               module_info_plt: ^module_info_plt,
+               module_metadata: ^module_metadata
+             } = get()
+
+      assert CallGraph.has_vertex?(call_graph, {Module1, :fun_1, 0})
+      assert PLT.get(ir_plt, Module1) == {:ok, :ir_1}
+      assert PLT.get(module_info_plt, Module1) == {:ok, %{digest: "a"}}
+      assert get().editable_modules == MapSet.new([Module1])
+    end
+  end
+
   describe "get/0" do
     test "starts the cache on first use" do
       refute Process.whereis(Cache)

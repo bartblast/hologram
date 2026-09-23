@@ -90,6 +90,20 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
+  Forgets every kept bundle and what was derived for it: the page states and MFA lists, the pending
+  pages, the runtime state, the template modules, the encoding inputs and the encoded functions. The
+  call graph, the IR PLT, the module infos, the module metadata, the app versions and the bundle
+  inputs describe the modules, not the JavaScript made from them, and stay. The compile task calls
+  it when the bundle inputs changed (see `put_bundle_inputs/1`): the kept bundles were made by
+  another Hologram build, so every page and the runtime are built again, as on a fresh build dir.
+  The PLTs are emptied in place, so their references stay valid.
+  """
+  @spec forget_bundles() :: :ok
+  def forget_bundles do
+    GenServer.call(server(), :forget_bundles)
+  end
+
+  @doc """
   Returns the kept call graph, IR PLT, encode PLT and page states, the encoding inputs, the pending
   pages, the application versions, the module info PLT of the last finished compile with the mtime
   of the module info dump it wrote and the modules whose beams a save can rewrite, what the runtime
@@ -119,6 +133,22 @@ defmodule Hologram.Compiler.Cache do
   def handle_call({:delete_pending_pages, page_modules}, _from, state) do
     pending_pages = MapSet.difference(state.pending_pages, MapSet.new(page_modules))
     {:reply, :ok, %{state | pending_pages: pending_pages}}
+  end
+
+  def handle_call(:forget_bundles, _from, state) do
+    PLT.reset(state.encode_plt)
+    PLT.reset(state.page_mfas_plt)
+    PLT.reset(state.pages_plt)
+
+    new_state = %{
+      state
+      | encoding_inputs: nil,
+        pending_pages: MapSet.new(),
+        runtime: nil,
+        template_modules: nil
+    }
+
+    {:reply, :ok, new_state}
   end
 
   def handle_call(:get, _from, state) do
