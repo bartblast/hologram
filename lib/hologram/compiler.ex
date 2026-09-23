@@ -532,6 +532,11 @@ defmodule Hologram.Compiler do
   written without its `Elixir.` prefix, between the bundle name and the hash when one is given: a
   bundle name shared by many entries (the page bundles) needs it to tell them apart, one with a
   single entry (the runtime) does not. The returned digest is the hash.
+
+  The returned `js_inputs` are the files esbuild read for the bundle besides the entry file,
+  Hologram's own sources under the `:js_dir` opt and the packages under the `:node_modules_path`
+  opt, with their fingerprints (see `fingerprint_js_inputs/2`), taken against the time esbuild
+  started: a bundle inlines them, and a kept bundle whose files moved must be built again.
   """
   @spec bundle(module | nil, T.file_path(), String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
@@ -543,12 +548,14 @@ defmodule Hologram.Compiler do
     output_name = bundle_output_name(bundle_name, entry_name)
     output_dir = Path.join(opts[:tmp_dir], "#{output_name}.output")
     FileUtils.recreate_dir(output_dir)
+    metafile_path = Path.join(output_dir, "meta.json")
 
     esbuild_cmd = [
       "#{output_name}=#{entry_file_path}",
       "--bundle",
       "--entry-names=[name]-[hash]",
       "--log-level=warning",
+      "--metafile=#{metafile_path}",
       "--minify",
       "--outdir=#{output_dir}",
       "--sourcemap",
@@ -574,6 +581,10 @@ defmodule Hologram.Compiler do
       env: [{"NODE_PATH", node_path}],
       parallelism: true
     ]
+
+    # A file whose mtime is not older than this may have been written after esbuild read it (see
+    # list_bundle_js_inputs/3).
+    started_at = System.os_time(:second)
 
     {_exit_msg, exit_status} =
       SystemUtils.cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, esbuild_opts)
@@ -604,10 +615,16 @@ defmodule Hologram.Compiler do
     File.rename!(output_bundle_path, static_bundle_path)
     File.rename!(output_bundle_path <> ".map", static_source_map_path)
 
+    # Read once and removed, so that the output dir is left empty, as the bundle and its source map
+    # leave it.
+    js_inputs = list_bundle_js_inputs(metafile_path, started_at, opts)
+    File.rm!(metafile_path)
+
     %{
       bundle_name: bundle_name,
       digest: digest,
       entry_name: entry_name,
+      js_inputs: js_inputs,
       static_bundle_path: static_bundle_path,
       static_source_map_path: static_source_map_path
     }
@@ -1757,6 +1774,29 @@ defmodule Hologram.Compiler do
     [Reflection.root_dir(), Reflection.otp_app_dir()]
     |> Enum.uniq()
     |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
+  end
+
+  # The files esbuild read for a bundle, as its metafile lists them relative to the working dir,
+  # with their fingerprints taken against the time esbuild started (see fingerprint_js_inputs/2).
+  # The entry file (under the tmp dir), Hologram's own sources (under the js dir) and the packages
+  # they use (under Hologram's node_modules) are left out: the bundle inputs cover those for every
+  # bundle at once (see build_bundle_inputs/2).
+  defp list_bundle_js_inputs(metafile_path, started_at, opts) do
+    cwd = File.cwd!()
+
+    left_out_dirs =
+      [opts[:tmp_dir], opts[:js_dir], opts[:node_modules_path]]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&Path.expand/1)
+
+    metafile_path
+    |> File.read!()
+    |> JSON.decode!()
+    |> Map.fetch!("inputs")
+    |> Map.keys()
+    |> Enum.map(&Path.expand(&1, cwd))
+    |> Enum.reject(fn path -> Enum.any?(left_out_dirs, &(Path.relative_to(path, &1) != path)) end)
+    |> fingerprint_js_inputs(started_at)
   end
 
   # Hologram's own modules that the module info PLT holds, with their digests, sorted: the modules of

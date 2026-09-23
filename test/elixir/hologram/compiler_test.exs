@@ -56,6 +56,32 @@ defmodule Hologram.CompilerTest do
   @js_fixture_2_path Path.join(@fixtures_compiler_dir, "js_fixture_2.mjs")
   @tmp_dir Reflection.tmp_dir()
 
+  # Bundles an entry file that runs the given JavaScript, in a tmp dir of the given name, with a
+  # js dir of its own, and returns the inputs the bundle recorded. Each file written through
+  # write_js_input/3 gets an mtime in the past, so that none counts as written during the bundling.
+  defp bundle_js_inputs(test_subdir, entry_js) do
+    node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+    test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
+
+    opts = [
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      js_dir: Path.join(test_tmp_dir, "hologram_js"),
+      node_modules_path: node_modules_path,
+      static_dir: Path.join(test_tmp_dir, "static"),
+      tmp_dir: Path.join(test_tmp_dir, "tmp")
+    ]
+
+    File.mkdir_p!(opts[:static_dir])
+    File.mkdir_p!(opts[:tmp_dir])
+
+    entry_file_path = Path.join(opts[:tmp_dir], "MyPage.entry.js")
+    File.write!(entry_file_path, entry_js)
+
+    %{js_inputs: js_inputs} = bundle(MyPage, entry_file_path, "page", opts)
+
+    js_inputs
+  end
+
   # How many times the function is called, in any process, while the given function runs.
   defp count_calls(mfa, fun) do
     :erlang.trace_pattern(mfa, true, [:call_count])
@@ -172,6 +198,19 @@ defmodule Hologram.CompilerTest do
     |> PLT.put(Module2, info)
     |> PLT.put(Module3, info)
     |> PLT.put(Hologram.JS, info)
+  end
+
+  defp write_js_input(test_tmp_dir, relative_path, content) do
+    path = Path.join(test_tmp_dir, relative_path)
+
+    path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    File.write!(path, content)
+    File.touch!(path, System.os_time(:second) - 10)
+
+    path
   end
 
   setup_all do
@@ -1857,6 +1896,109 @@ defmodule Hologram.CompilerTest do
 
       assert exception.message =~ "early warning system"
       assert File.ls!(opts[:static_dir]) == []
+    end
+
+    test "records no input for an entry file that imports nothing" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_no_inputs"])
+      clean_dir(test_tmp_dir)
+
+      assert bundle_js_inputs("bundle_4_no_inputs", "console.log(1);\n") == %{}
+    end
+
+    test "records the file the entry file imports, with a digest of its content" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_direct_input"])
+      clean_dir(test_tmp_dir)
+
+      path = write_js_input(test_tmp_dir, "app/helpers.mjs", "export const a = 1;\n")
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_direct_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{path => {:digest, :erlang.phash2("export const a = 1;\n")}}
+    end
+
+    test "records a file an imported file imports in turn" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_transitive_input"])
+      clean_dir(test_tmp_dir)
+
+      helper_path = write_js_input(test_tmp_dir, "app/helpers.mjs", "export const a = 1;\n")
+
+      wrapper_path =
+        write_js_input(
+          test_tmp_dir,
+          "app/wrapper.mjs",
+          ~s'import { a } from "./helpers.mjs";\nexport const b = a + 1;\n'
+        )
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_transitive_input",
+          ~s'import { b } from "#{wrapper_path}";\nconsole.log(b);\n'
+        )
+
+      recorded_paths =
+        js_inputs
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert recorded_paths == Enum.sort([helper_path, wrapper_path])
+      assert {:digest, _digest} = js_inputs[helper_path]
+    end
+
+    test "records a package file with its mtime and size" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_package_input"])
+      clean_dir(test_tmp_dir)
+
+      path =
+        write_js_input(
+          test_tmp_dir,
+          "app/node_modules/my_package/index.js",
+          "export const a = 1;\n"
+        )
+
+      %File.Stat{mtime: mtime, size: size} = File.stat!(path, time: :posix)
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_package_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{path => {:stat, mtime, size}}
+    end
+
+    test "leaves out the files under the js dir" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_js_dir_input"])
+      clean_dir(test_tmp_dir)
+
+      path = write_js_input(test_tmp_dir, "hologram_js/hologram.mjs", "export const a = 1;\n")
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_js_dir_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{}
+    end
+
+    test "records a file written after esbuild started as fresh" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_fresh_input"])
+      clean_dir(test_tmp_dir)
+
+      path = write_js_input(test_tmp_dir, "app/helpers.mjs", "export const a = 1;\n")
+      File.touch!(path, System.os_time(:second) + 10)
+
+      js_inputs =
+        bundle_js_inputs(
+          "bundle_4_fresh_input",
+          ~s'import { a } from "#{path}";\nconsole.log(a);\n'
+        )
+
+      assert js_inputs == %{path => :fresh}
     end
   end
 
