@@ -83,6 +83,19 @@ defmodule Hologram.Commons.FileUtils do
   end
 
   @doc """
+  Writes content to a file so that the file is never seen cut short: the content goes to a
+  temporary file next to it, which is then renamed over it. A process killed during the write leaves
+  the old file, or none, never part of the new one. The parent directory must exist.
+  """
+  @spec write_atomically!(T.file_path(), iodata()) :: :ok
+  def write_atomically!(file_path, content) do
+    tmp_path = file_path <> ".tmp"
+
+    File.write!(tmp_path, content)
+    File.rename!(tmp_path, file_path)
+  end
+
+  @doc """
   Writes content to a file, creating parent directories as needed.
   """
   @spec write_p!(T.file_path(), iodata()) :: :ok
