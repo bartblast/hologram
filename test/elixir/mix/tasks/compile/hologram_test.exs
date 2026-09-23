@@ -2521,13 +2521,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # A directory where the call graph dump goes: the run patches the kept IR PLT and call graph
       # in place and only then raises, which is the shape of a compile that dies after changing
       # what the cache keeps. The page is edited, since a run that changes nothing writes no dump.
+      # The dump is written to a file next to it and renamed over it, and the rename onto the
+      # directory fails.
       blocked_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
       File.rm!(blocked_dump_path)
       File.mkdir!(blocked_dump_path)
       on_exit(fn -> File.rmdir(blocked_dump_path) end)
       fake_edit(Module1)
 
-      assert_raise File.Error, fn -> run(opts) end
+      assert_raise File.RenameError, fn -> run(opts) end
       assert cache_state().module_infos == nil
 
       File.rmdir!(blocked_dump_path)

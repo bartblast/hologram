@@ -376,6 +376,19 @@ defmodule Hologram.Compiler.CacheTest do
       assert dump_compile_state(nested_path, true) == :written
       assert File.exists?(nested_path)
     end
+
+    test "replaces an earlier dump and leaves no temporary file", %{path: path} do
+      File.write!(path, "earlier dump")
+      put_full_state()
+
+      assert dump_compile_state(path, true) == :written
+
+      assert path
+             |> Path.dirname()
+             |> File.ls!() == ["compile_state.bin"]
+
+      assert {1, _compile_state} = read_compile_state_dump(path)
+    end
   end
 
   describe "forget_bundles/0" do

@@ -27,6 +27,7 @@ defmodule Hologram.Compiler.Cache do
 
   use GenServer
 
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler.CallGraph
@@ -524,6 +525,6 @@ defmodule Hologram.Compiler.Cache do
     |> Path.dirname()
     |> File.mkdir_p!()
 
-    File.write!(path, data)
+    FileUtils.write_atomically!(path, data)
   end
 end
