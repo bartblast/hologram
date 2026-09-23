@@ -221,6 +221,35 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the digest of every JavaScript source the modules declaring `js_import` name, keyed by the
+  source's path: the file itself for a relative import (`Hologram.JS.js_import/2` resolved it to an
+  absolute path), and the `package.json` of the package for a bare name, under the first
+  `assets/node_modules` dir esbuild searches (the workspace root's, then the OTP app's) that holds
+  it, so that a package update counts as a change of the source. A source with no file is left out;
+  esbuild reports a missing import. The importers are read from the module info PLT's `js_imports?`
+  flag, so no other module is asked.
+
+  The digest is `:erlang.phash2/1` of the file's bytes, as `Hologram.Reflection.beam_info/1` digests
+  a beam. By content rather than by mtime and size: these files are few and small, and an app's own
+  file can be saved again within the second of the compile that recorded it, which an mtime cannot
+  tell apart (see `list_changed_js_importers/3`).
+  """
+  @spec build_js_import_digests(PLT.t()) :: %{String.t() => integer}
+  def build_js_import_digests(module_info_plt) do
+    module_info_plt
+    |> list_modules_where(:js_imports?)
+    |> Enum.flat_map(&list_js_import_sources/1)
+    |> Enum.uniq()
+    |> Enum.flat_map(fn path ->
+      case File.read(path) do
+        {:ok, content} -> [{path, :erlang.phash2(content)}]
+        {:error, _reason} -> []
+      end
+    end)
+    |> Map.new()
+  end
+
+  @doc """
   Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
   calls it for the modules it is about to read, once the call graph says which they are.
 
@@ -813,6 +842,30 @@ defmodule Hologram.Compiler do
     package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
 
     File.write!(package_json_digest_path, package_json_digest)
+  end
+
+  @doc """
+  Lists the modules declaring `js_import` whose sources changed since the kept digests were taken:
+  a source whose digest differs between the two maps, or that one of them has and the other has
+  not (see `build_js_import_digests/1`). A bundle inlines the imported JavaScript and no beam moves
+  when it is edited, so the bundles carrying these modules must be rebuilt. None when nothing is
+  kept (nil): the first compile has no kept bundles that could be stale.
+  """
+  @spec list_changed_js_importers(
+          %{String.t() => integer} | nil,
+          %{String.t() => integer},
+          PLT.t()
+        ) :: [module]
+  def list_changed_js_importers(nil, _digests, _module_info_plt), do: []
+
+  def list_changed_js_importers(kept_digests, digests, module_info_plt) do
+    module_info_plt
+    |> list_modules_where(:js_imports?)
+    |> Enum.filter(fn module ->
+      module
+      |> list_js_import_sources()
+      |> Enum.any?(&(Map.get(kept_digests, &1) != Map.get(digests, &1)))
+    end)
   end
 
   @doc """
@@ -1534,6 +1587,12 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  defp find_package_json(package_name) do
+    list_app_node_modules_dirs()
+    |> Enum.map(&Path.join([&1, package_name, "package.json"]))
+    |> Enum.find(&File.exists?/1)
+  end
+
   defp function_encoded?(encode_plt, module, {function, arity}) do
     PLT.member?(encode_plt, {module, function, arity})
   end
@@ -1613,6 +1672,15 @@ defmodule Hologram.Compiler do
        do: true
 
   # nil when the page must be rebuilt, its kept state otherwise.
+  defp js_import_package_name(from) do
+    segment_count = if String.starts_with?(from, "@"), do: 2, else: 1
+
+    from
+    |> Path.split()
+    |> Enum.take(segment_count)
+    |> Path.join()
+  end
+
   defp keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir) do
     with false <- MapSet.member?(pending_pages, page_module),
          {:ok, page_state} <- PLT.get(pages_plt, page_module),
@@ -1622,6 +1690,14 @@ defmodule Hologram.Compiler do
     else
       _fallback -> nil
     end
+  end
+
+  # The dirs esbuild resolves a bare import from (see bundle/4): the workspace root's and the OTP
+  # app's assets/node_modules, identical in a single-app project.
+  defp list_app_node_modules_dirs do
+    [Reflection.root_dir(), Reflection.otp_app_dir()]
+    |> Enum.uniq()
+    |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
   end
 
   # Hologram's own modules that the module info PLT holds, with their digests, sorted: the modules of
@@ -1647,6 +1723,23 @@ defmodule Hologram.Compiler do
       end
 
     Enum.sort(digests)
+  end
+
+  # The paths of a module's imported sources: a relative import is an absolute path already (see
+  # Hologram.JS.js_import/2), and a bare import names a package, whose package.json stands for it. A
+  # scoped package name (@scope/name) has two segments. A package no node_modules dir holds is left
+  # out.
+  defp list_js_import_sources(module) do
+    Enum.flat_map(module.__js_imports__(), fn %{from: from} ->
+      if Path.type(from) == :absolute do
+        [from]
+      else
+        from
+        |> js_import_package_name()
+        |> find_package_json()
+        |> List.wrap()
+      end
+    end)
   end
 
   # Every regular file under the given dir, as its path relative to the dir with its mtime and size,
