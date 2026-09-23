@@ -33,7 +33,10 @@ defmodule HologramFeatureTests.LiveReloadTest do
     old_digest = PageDigestRegistry.lookup(page_module)
 
     # 5 random bytes encode to 8 chars of esbuild's base32 alphabet, the shape of a real digest.
-    new_digest = 5 |> :crypto.strong_rand_bytes() |> Base.encode32()
+    new_digest =
+      5
+      |> :crypto.strong_rand_bytes()
+      |> Base.encode32()
 
     old_bundle_path = bundle_static_path(page_module, old_digest)
     new_bundle_path = bundle_static_path(page_module, new_digest)
