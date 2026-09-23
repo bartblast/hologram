@@ -1837,6 +1837,24 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert modules == MapSet.new([Module9])
     end
+
+    test "replaces an earlier dump and leaves no temporary file", %{
+      dump_path: dump_path,
+      empty_call_graph: call_graph
+    } do
+      File.write!(dump_path, "earlier dump")
+
+      dump(call_graph, dump_path)
+
+      assert dump_path
+             |> Path.dirname()
+             |> File.ls!() == [Path.basename(dump_path)]
+
+      assert {2, _state} =
+               dump_path
+               |> File.read!()
+               |> SerializationUtils.deserialize()
+    end
   end
 
   test "edges/1", %{empty_call_graph: call_graph} do
