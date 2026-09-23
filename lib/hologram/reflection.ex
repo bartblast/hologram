@@ -595,9 +595,8 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
-  Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
-  The project OTP application is included.
+  Lists the Elixir modules of the loaded OTP applications used by the project (except :hex), the project
+  OTP application included, from the beams in each application's ebin directory (see list_elixir_modules/1).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_elixir_modules_0/README.md
   """
@@ -607,14 +606,16 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists Elixir modules belonging to the given OTP apps.
-  Elixir modules listed in @ignored_modules module attribute and Erlang modules are filtered out.
+  Lists the Elixir modules of the given OTP apps: the modules whose beam in an app's ebin directory
+  exports `__info__/1`, which the Elixir compiler gives every Elixir module and an Erlang module with an
+  Elixir-style name lacks. Modules listed in @ignored_modules module attribute are left out. The beams
+  are read, not loaded, and the code server is not asked about any module.
   """
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
     apps
-    |> list_candidate_modules()
-    |> Enum.filter(&elixir_module?/1)
+    |> list_modules_exporting(:__info__, 1)
+    |> Kernel.--(@ignored_modules)
   end
 
   @doc """
@@ -679,8 +680,8 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
-  Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
+  Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc., from the beams in
+  the :elixir application's ebin directory (see list_elixir_modules/1).
   """
   @spec list_std_lib_elixir_modules() :: list(module)
   def list_std_lib_elixir_modules do
