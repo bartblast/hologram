@@ -3422,9 +3422,9 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "partition_affected_pages/5" do
+  describe "partition_affected_pages/6" do
     setup do
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_5"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_6"])
       clean_dir(test_tmp_dir)
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
@@ -3433,7 +3433,11 @@ defmodule Hologram.CompilerTest do
 
       page_state = fn modules, path ->
         %{
-          bundle_info: %{static_bundle_path: path, static_source_map_path: path <> ".map"},
+          bundle_info: %{
+            js_inputs: %{},
+            static_bundle_path: path,
+            static_source_map_path: path <> ".map"
+          },
           mfas: Enum.map(modules, &{&1, :fun_1, 0}),
           modules: MapSet.new(modules)
         }
@@ -3449,9 +3453,51 @@ defmodule Hologram.CompilerTest do
       ]
     end
 
+    test "a page whose bundle read a changed file is rebuilt", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      state = page_state.([Module1], bundle_path)
+      js_inputs = %{"/app/helpers.mjs" => {:digest, 1}}
+      PLT.put(pages_plt, Module1, put_in(state.bundle_info.js_inputs, js_inputs))
+
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new(["/app/helpers.mjs"]),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) == {[Module1], []}
+    end
+
+    test "a page whose bundle read no changed file is kept", %{
+      bundle_path: bundle_path,
+      page_state: page_state,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      state = page_state.([Module1], bundle_path)
+      js_inputs = %{"/app/helpers.mjs" => {:digest, 1}}
+      kept_state = put_in(state.bundle_info.js_inputs, js_inputs)
+      PLT.put(pages_plt, Module1, kept_state)
+
+      assert partition_affected_pages(
+               [Module1],
+               MapSet.new(),
+               MapSet.new(["/app/other.mjs"]),
+               MapSet.new(),
+               pages_plt,
+               static_dir
+             ) == {[], [{Module1, kept_state}]}
+    end
+
     test "a page with no kept state is rebuilt", %{pages_plt: pages_plt, static_dir: static_dir} do
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new(),
                pages_plt,
@@ -3472,6 +3518,7 @@ defmodule Hologram.CompilerTest do
                [Module1],
                MapSet.new([Module2]),
                MapSet.new(),
+               MapSet.new(),
                pages_plt,
                static_dir
              ) ==
@@ -3491,6 +3538,7 @@ defmodule Hologram.CompilerTest do
                [Module1],
                MapSet.new([Module2]),
                MapSet.new(),
+               MapSet.new(),
                pages_plt,
                static_dir
              ) ==
@@ -3506,6 +3554,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new(),
                pages_plt,
@@ -3527,6 +3576,7 @@ defmodule Hologram.CompilerTest do
                [Module1],
                MapSet.new(),
                MapSet.new(),
+               MapSet.new(),
                pages_plt,
                static_dir
              ) ==
@@ -3542,6 +3592,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new(),
                pages_plt,
@@ -3564,6 +3615,7 @@ defmodule Hologram.CompilerTest do
                  [Module1, Module2, Module3, Module4],
                  MapSet.new(),
                  MapSet.new(),
+                 MapSet.new(),
                  pages_plt,
                  static_dir
                )
@@ -3579,6 +3631,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new([Module1]),
                pages_plt,
@@ -3597,6 +3650,7 @@ defmodule Hologram.CompilerTest do
 
       assert partition_affected_pages(
                [Module1],
+               MapSet.new(),
                MapSet.new(),
                MapSet.new([Module2]),
                pages_plt,
@@ -3629,6 +3683,7 @@ defmodule Hologram.CompilerTest do
       Enum.each(mfas_by_page, fn {page_module, mfas} ->
         PLT.put(pages_plt, page_module, %{
           bundle_info: %{
+            js_inputs: %{},
             static_bundle_path: bundle_path,
             static_source_map_path: bundle_path <> ".map"
           },
@@ -3646,6 +3701,32 @@ defmodule Hologram.CompilerTest do
         pages_plt: pages_plt,
         static_dir: static_dir
       ]
+    end
+
+    test "rebuilds a page whose bundle read a changed file", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      mfas_by_page: mfas_by_page,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{page_module, _mfas} | _rest] = mfas_by_page
+      {:ok, state} = PLT.get(pages_plt, page_module)
+      js_inputs = %{"/app/helpers.mjs" => {:digest, 1}}
+      PLT.put(pages_plt, page_module, put_in(state.bundle_info.js_inputs, js_inputs))
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          changed_js_inputs: MapSet.new(["/app/helpers.mjs"]),
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new(),
+          static_dir: static_dir
+        )
+
+      assert rebuilt == [page_module]
+      assert length(kept) == length(page_modules) - 1
     end
 
     test "names the pages to rebuild and keeps the rest", %{

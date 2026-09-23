@@ -1166,8 +1166,10 @@ defmodule Hologram.Compiler do
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
   module), when the bundle its kept state describes or that bundle's source map is no longer on disk
   (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
-  belongs to a static dir other than the given one. A page in `pending_pages` is rebuilt too: an
-  earlier compile set out to build it and did not, so its kept bundle may predate an edit.
+  belongs to a static dir other than the given one. A page whose bundle read one of
+  `changed_js_inputs` is rebuilt as well (see `bundle/4`): no beam moves when a JavaScript file a
+  bundle inlines is edited. A page in `pending_pages` is rebuilt too: an earlier compile set out to
+  build it and did not, so its kept bundle may predate an edit.
 
   Returns `{pages_to_rebuild, kept_pages}`, where the kept pages carry their state, both in the order
   the pages were given.
@@ -1175,6 +1177,7 @@ defmodule Hologram.Compiler do
   @spec partition_affected_pages(
           [module],
           MapSet.t(module),
+          MapSet.t(String.t()),
           MapSet.t(module),
           PLT.t(),
           T.file_path()
@@ -1183,6 +1186,7 @@ defmodule Hologram.Compiler do
   def partition_affected_pages(
         page_modules,
         reaching_modules,
+        changed_js_inputs,
         pending_pages,
         pages_plt,
         static_dir
@@ -1191,7 +1195,14 @@ defmodule Hologram.Compiler do
       page_modules
       |> Enum.map(fn page_module ->
         page_state =
-          keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir)
+          keepable_page_state(
+            pages_plt,
+            page_module,
+            reaching_modules,
+            changed_js_inputs,
+            pending_pages,
+            static_dir
+          )
 
         {page_module, page_state}
       end)
@@ -1214,8 +1225,11 @@ defmodule Hologram.Compiler do
       `Hologram.Compiler.Cache.put_pending_pages/1`); they are rebuilt whether or not the edit reaches
       them. Defaults to none.
     * `:reaching_modules` - the modules that reach the changed ones, from
-      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/5` for
+      `Hologram.Compiler.CallGraph.list_modules_reaching/2`; see `partition_affected_pages/6` for
       what makes a page affected.
+    * `:changed_js_inputs` - the files the kept bundles read whose fingerprint moved (see
+      `bundle/4`), a `MapSet` of paths; a kept page whose bundle read one is rebuilt. Defaults to
+      none.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
     * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
       moved although nothing it reaches was edited: a function that joined the runtime's set leaves
@@ -1237,6 +1251,7 @@ defmodule Hologram.Compiler do
         partition_affected_pages(
           page_modules,
           opts[:reaching_modules],
+          Keyword.get(opts, :changed_js_inputs, MapSet.new()),
           Keyword.get(opts, :pending_pages, MapSet.new()),
           opts[:pages_plt],
           opts[:static_dir]
@@ -1757,10 +1772,21 @@ defmodule Hologram.Compiler do
     |> Path.join()
   end
 
-  defp keepable_page_state(pages_plt, page_module, reaching_modules, pending_pages, static_dir) do
+  # The changed files are few, so they are looked up in the page's record rather than the other way
+  # round.
+  defp keepable_page_state(
+         pages_plt,
+         page_module,
+         reaching_modules,
+         changed_js_inputs,
+         pending_pages,
+         static_dir
+       ) do
     with false <- MapSet.member?(pending_pages, page_module),
          {:ok, page_state} <- PLT.get(pages_plt, page_module),
          true <- MapSet.disjoint?(page_state.modules, reaching_modules),
+         false <-
+           Enum.any?(changed_js_inputs, &Map.has_key?(page_state.bundle_info.js_inputs, &1)),
          true <- usable_bundle?(page_state.bundle_info, static_dir) do
       page_state
     else
