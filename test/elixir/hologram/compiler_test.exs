@@ -2494,6 +2494,13 @@ defmodule Hologram.CompilerTest do
       assert fingerprint_js_inputs([path], nil) == %{path => :missing}
     end
 
+    test "a file that cannot be read is missing", %{test_tmp_dir: test_tmp_dir} do
+      path = Path.join(test_tmp_dir, "dir.mjs")
+      File.mkdir_p!(path)
+
+      assert fingerprint_js_inputs([path], nil) == %{path => :missing}
+    end
+
     test "no paths", _context do
       assert fingerprint_js_inputs([], nil) == %{}
     end

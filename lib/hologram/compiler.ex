@@ -791,9 +791,10 @@ defmodule Hologram.Compiler do
   change on install, never within a second of a compile, and a bundle can read dozens of them),
   `:fresh` for a file whose mtime is not older than `started_at` in posix seconds (it may have been
   written after the reader that started then read it, so its record must never match; nil takes no
-  file as fresh) and `:missing` for a file that is not there. A bundle records the fingerprints of
-  the files esbuild read for it (see `bundle/4`), and the compile task compares them with the
-  fingerprints now to find the bundles to rebuild.
+  file as fresh) and `:missing` for a file that is not there or cannot be read (one removed between
+  its stat and its read included). A bundle records the fingerprints of the files esbuild read for
+  it (see `bundle/4`), and the compile task compares them with the fingerprints now to find the
+  bundles to rebuild.
   """
   @spec fingerprint_js_inputs([String.t()], non_neg_integer | nil) :: %{
           String.t() => js_input_fingerprint
@@ -1511,6 +1512,13 @@ defmodule Hologram.Compiler do
     Enum.all?(Reflection.beam_info_keys(), &Map.has_key?(info, &1))
   end
 
+  defp digest_js_input(path) do
+    case File.read(path) do
+      {:ok, content} -> {:digest, :erlang.phash2(content)}
+      {:error, _reason} -> :missing
+    end
+  end
+
   defp edited_module?(old_infos, module, digest) do
     match?(%{digest: old_digest} when old_digest != digest, old_infos[module])
   end
@@ -1629,12 +1637,7 @@ defmodule Hologram.Compiler do
         if "node_modules" in Path.split(path) do
           {:stat, mtime, size}
         else
-          digest =
-            path
-            |> File.read!()
-            |> :erlang.phash2()
-
-          {:digest, digest}
+          digest_js_input(path)
         end
 
       {:error, _reason} ->
