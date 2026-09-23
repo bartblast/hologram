@@ -157,8 +157,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       # the module infos they were last brought in line with, with the modules whose beams a save
       # can rewrite, are the before picture. The IR PLT holds the IR this compile reads, no more:
       # the modules the graph patch rebuilds first, then the ones the walk reaches, then the rest
-      # once the graph says what is reachable.
-      {cache, old_module_info_plt, module_info_dumped_at} =
+      # once the graph says what is reachable. The dump time is the mtime of the module info dump
+      # the before picture came from: the one this VM kept, or the one the first compile in a VM
+      # loaded.
+      {cache, old_module_info_plt, before_dumped_at} =
         load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup)
 
       # Listed with the scan, so that the modules kept as editable and the module infos kept with
@@ -176,7 +178,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         build_module_info_plt(
           cache,
           old_module_info_plt,
-          module_info_dumped_at,
+          before_dumped_at,
           editable_beams,
           compiled_modules,
           sup
@@ -433,9 +435,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       # picture, so that a compile that dies between the two leaves the pending pages next to the
       # infos they were computed from, or an older picture; either way the next compile rebuilds
       # them. Written again once the batches are done.
-      dump_compile_state(cache, compile_state_dump_path, module_info_plt_dump_path)
+      dump_compile_state(before_dumped_at, compile_state_dump_path, module_info_plt_dump_path)
 
-      dump_before_picture(cache, call_graph, new_module_info_plt,
+      dump_before_picture(before_dumped_at, call_graph, new_module_info_plt,
         call_graph_dump_path: call_graph_dump_path,
         graph_unchanged?: graph_unchanged?,
         infos_changed?: infos_changed?,
@@ -502,8 +504,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       bundles =
         build_batches(remaining_pages, runtime_entry_files_info, bundles, batch_context)
 
-      # The pages built are in their states now, and no longer pending.
-      dump_compile_state(cache, compile_state_dump_path, module_info_plt_dump_path)
+      # The pages built are in their states now, and no longer pending. The module info dump on disk
+      # is the one this compile wrote or kept, so only a change of the state writes it.
+      dump_compile_state(
+        module_info_dumped_at,
+        compile_state_dump_path,
+        module_info_plt_dump_path
+      )
 
       # Whatever ended the batches, the static dir keeps the bundles the page digest PLT names, and
       # the runtime bundle.
@@ -561,10 +568,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
   # whether any entry changed. A cold compile reads every module against the dump, diffs the two
-  # PLTs and copies the result into the cache's PLT, once. A warm one brings the cache's PLT in line
-  # in place, reading the modules the compiler reported among the beams a save can rewrite, and
-  # takes the diff from that scan (see Hologram.Compiler.patch_module_info_plt!/5). The cache holds
-  # the editable modules only between two finished compiles, so nil means cold.
+  # PLTs, copies the result into the cache's PLT, once, and compares the two PLTs' entries. A warm
+  # one brings the cache's PLT in line in place, reading the modules the compiler reported among the
+  # beams a save can rewrite, and takes the diff from that scan (see
+  # Hologram.Compiler.patch_module_info_plt!/5). The cache holds the editable modules only between
+  # two finished compiles, so nil means cold.
   defp build_module_info_plt(
          %{editable_modules: nil} = cache,
          old_plt,
@@ -575,15 +583,13 @@ defmodule Mix.Tasks.Compile.Hologram do
        ) do
     new_plt = Compiler.build_module_info_plt!(old_plt, dumped_at, supervisor: sup)
     module_digests_diff = Compiler.diff_module_info_plts(old_plt, new_plt)
+    new_infos = PLT.get_all(new_plt)
 
-    new_items =
-      new_plt
-      |> PLT.get_all()
-      |> Map.to_list()
+    PLT.put(cache.module_info_plt, Map.to_list(new_infos))
 
-    PLT.put(cache.module_info_plt, new_items)
-
-    {cache.module_info_plt, module_digests_diff, true}
+    # An entry whose mtime moved but whose digest did not is a change the diff does not show, but
+    # the dump must record it, or the next scan reads that beam again.
+    {cache.module_info_plt, module_digests_diff, new_infos != PLT.get_all(old_plt)}
   end
 
   defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
@@ -698,14 +704,16 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The call graph and the module infos are the before picture of the next VM's first compile (see
-  # load_before_state/4). While both dumps on disk are the ones this VM wrote (the module info dump's
-  # mtime is the kept one), the graph dump describes this graph when the graph is unchanged, and the
-  # module info dump these infos when the scan changed no entry; each is written only when it would
-  # say something else. The graph changes only with the infos, so a graph dump is never written
-  # without the module info dump. Another VM's dump written meanwhile (the mtime moved), or a deleted
-  # graph dump, is written over. The first compile in a VM has no dump time kept, so it writes both.
-  defp dump_before_picture(cache, call_graph, module_info_plt, opts) do
-    own_dumps? = own_dumps?(cache, opts[:module_info_plt_dump_path])
+  # load_before_state/4). While both dumps on disk are the ones this VM wrote or loaded (the module
+  # info dump's mtime is the given one), the graph dump describes this graph when the graph is
+  # unchanged, and the module info dump these infos when the scan changed no entry; each is written
+  # only when it would say something else. The graph changes only with the infos, so a graph dump is
+  # never written without the module info dump. Another VM's dump written meanwhile (the mtime
+  # moved), or a deleted graph dump, is written over. The first compile in a VM loaded both under
+  # the compiler lock, so they are its own too; a build dir with no module info dump has none to
+  # own, and one with a module info dump but no graph dump loaded neither, so both are written then.
+  defp dump_before_picture(dumped_at, call_graph, module_info_plt, opts) do
+    own_dumps? = own_dumps?(dumped_at, opts[:module_info_plt_dump_path])
 
     if not (opts[:graph_unchanged?] and own_dumps? and File.exists?(opts[:call_graph_dump_path])) do
       CallGraph.dump(call_graph, opts[:call_graph_dump_path])
@@ -716,12 +724,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # The compile state is written when it moved since this VM last wrote it, and whenever the dumps on
-  # disk are not this VM's: another VM's compile state may be there (see own_dumps?/2).
-  defp dump_compile_state(cache, compile_state_dump_path, module_info_plt_dump_path) do
+  # The compile state is written when it moved since this VM last wrote or loaded it, and whenever
+  # the dumps on disk are not the given mtime's: another VM's compile state may be there (see
+  # own_dumps?/2).
+  defp dump_compile_state(dumped_at, compile_state_dump_path, module_info_plt_dump_path) do
     Cache.dump_compile_state(
       compile_state_dump_path,
-      not own_dumps?(cache, module_info_plt_dump_path)
+      not own_dumps?(dumped_at, module_info_plt_dump_path)
     )
   end
 
@@ -894,9 +903,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # Whether the module info dump on disk is the one this VM wrote last: its mtime is the kept one.
-  defp own_dumps?(cache, module_info_plt_dump_path) do
-    Compiler.module_info_dumped_at(module_info_plt_dump_path) == cache.dumped_at
+  # Whether the module info dump on disk is the one the given mtime belongs to: the one this VM
+  # wrote last, or the one the first compile in a VM loaded, under the compiler lock, so that
+  # nothing wrote it since. No dump and no mtime count as the same.
+  defp own_dumps?(dumped_at, module_info_plt_dump_path) do
+    Compiler.module_info_dumped_at(module_info_plt_dump_path) == dumped_at
   end
 
   defp page_state_modules(mfas) do

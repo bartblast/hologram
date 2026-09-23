@@ -1545,6 +1545,36 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_calls({IR, :for_module, 2}, fn -> run(opts) end) == 0
     end
 
+    test "a new VM with nothing changed writes no dump", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_compile_state_writes(fn ->
+               assert count_dumps(fn -> run(opts) end) == [0, 0]
+             end) == 0
+    end
+
+    test "a new VM whose call graph dump is gone writes both dumps", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.rm!()
+
+      Cache.reset()
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a new VM whose module infos changed writes the module info dump", %{opts: opts} do
+      run(opts)
+      fake_edit_in_dump(Module2, opts)
+      Cache.reset()
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+      assert load_module_info_items(opts)[Module2].digest != "edited"
+    end
+
     test "a new VM with nothing changed encodes nothing", %{opts: opts} do
       run(opts)
       Cache.reset()
