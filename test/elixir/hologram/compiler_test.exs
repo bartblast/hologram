@@ -685,6 +685,26 @@ defmodule Hologram.CompilerTest do
              end)
     end
 
+    test "leaves out the :hologram app's modules compiled from outside Hologram's lib dir", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
+      hologram_module_names = Enum.map(hologram_modules, fn {module, _digest} -> module end)
+
+      # A test fixture, compiled into the :hologram app from test/elixir/support.
+      assert Module18 in Application.spec(:hologram, :modules)
+      assert PLT.member?(module_info_plt, Module18)
+      refute Module18 in hologram_module_names
+
+      assert Enum.all?(hologram_module_names, fn module ->
+               module_info_plt
+               |> PLT.get!(module)
+               |> Map.fetch!(:source_path)
+               |> String.starts_with?(Path.join(@root_dir, "lib"))
+             end)
+    end
+
     test "lists every JavaScript source under the js dir with its mtime and size, sorted", %{
       module_info_plt: module_info_plt,
       opts: opts

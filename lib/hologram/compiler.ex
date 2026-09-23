@@ -118,12 +118,13 @@ defmodule Hologram.Compiler do
   @doc """
   Returns what every bundle depends on besides the modules it carries: the client stack traces
   setting (bundles built with it on register module metadata and app versions), the digests of
-  Hologram's own modules from the given module info PLT (the encoder and the transformer decide what
-  a module encodes to), the mtime and size of each of Hologram's JavaScript sources under the
-  `:js_dir` opt (esbuild copies them into every bundle) and the digest of `package.json` in the
-  `:assets_dir` opt (which pins esbuild). Two compiles whose inputs are equal make the same bundle
-  from the same modules; the compile task rebuilds every bundle when the inputs differ from the ones
-  its kept bundles were built with (see `Hologram.Compiler.Cache.forget_bundles/0`).
+  Hologram's own modules, the ones compiled from its lib dir, from the given module info PLT (the
+  encoder and the transformer decide what a module encodes to), the mtime and size of each of
+  Hologram's JavaScript sources under the `:js_dir` opt (esbuild copies them into every bundle) and
+  the digest of `package.json` in the `:assets_dir` opt (which pins esbuild). Two compiles whose
+  inputs are equal make the same bundle from the same modules; the compile task rebuilds every
+  bundle when the inputs differ from the ones its kept bundles were built with (see
+  `Hologram.Compiler.Cache.forget_bundles/0`).
 
   The JavaScript sources are compared by mtime and size rather than by content: they belong to a
   dependency, which changes with an upgrade or a fetch, never within a second of a compile.
@@ -1623,19 +1624,29 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # Hologram's own modules that the module info PLT holds, with their digests, sorted.
+  # Hologram's own modules that the module info PLT holds, with their digests, sorted: the modules of
+  # the :hologram app whose source is in Hologram's lib dir, the dir the Hologram module itself was
+  # compiled from. Hologram's own tests compile their fixtures into the :hologram app too, and an
+  # edit of a fixture is an edit of an app module, not of Hologram.
   defp list_hologram_module_digests(module_info_plt) do
     Application.ensure_loaded(:hologram)
 
-    :hologram
-    |> Application.spec(:modules)
-    |> Enum.flat_map(fn module ->
-      case PLT.get(module_info_plt, module) do
-        {:ok, %{digest: digest}} -> [{module, digest}]
-        :error -> []
+    lib_dir =
+      :compile
+      |> Hologram.module_info()
+      |> Keyword.fetch!(:source)
+      |> to_string()
+      |> Path.dirname()
+
+    digests =
+      for module <- Application.spec(:hologram, :modules),
+          {:ok, %{digest: digest, source_path: source_path}} <- [PLT.get(module_info_plt, module)],
+          is_binary(source_path),
+          Path.relative_to(source_path, lib_dir) != source_path do
+        {module, digest}
       end
-    end)
-    |> Enum.sort()
+
+    Enum.sort(digests)
   end
 
   # Every regular file under the given dir, as its path relative to the dir with its mtime and size,
