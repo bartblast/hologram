@@ -479,13 +479,18 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists Elixir modules which are Hologram components and that belong to any of the OTP apps in the project.
+  Lists the Hologram component modules of the loaded OTP applications used by the project (except
+  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_component__/0`. The beams are read, not loaded, and the code server is not asked about
+  any module.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_components_0/README.md
   """
   @spec list_components() :: list(module)
   def list_components do
-    Enum.filter(list_elixir_modules(), &component?/1)
+    project_apps()
+    |> list_modules_exporting(:__is_hologram_component__, 0)
+    |> Enum.sort()
   end
 
   @doc """

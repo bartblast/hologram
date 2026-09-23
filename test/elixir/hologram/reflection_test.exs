@@ -769,14 +769,35 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_components/0" do
-    result = list_components()
+  describe "list_components/0" do
+    test "lists the component modules of the loaded applications, sorted by name" do
+      result = list_components()
 
-    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
-    assert Module3 in result
+      assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
+      assert Module3 in result
 
-    refute Hologram.Compiler.Context in result
-    refute Module2 in result
+      refute Hologram.Compiler.Context in result
+      refute Module2 in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a component whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.ComponentInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, """
+      use Hologram.Component
+      @impl Component
+      def template, do: ~HOLO"ComponentInEbinOnly template"
+      """)
+
+      assert module in list_components()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_components/0) == 0
+    end
   end
 
   describe "list_ebin_modules/1" do
