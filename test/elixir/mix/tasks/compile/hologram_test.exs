@@ -70,6 +70,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # How many times the compile state dump is written while the given function runs: each write goes
+  # through a private function of the cache, whose local calls are counted.
+  defp count_compile_state_writes(fun) do
+    mfa = {Cache, :write_compile_state, 2}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
   # How many times the call graph and the module info PLT are dumped while the given function runs.
   # PLT.dump/2 also writes the page digest PLT, once before the batches and once after each, through
   # a private function whose local calls are counted and taken off.
@@ -174,6 +189,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   def handle_compiler_telemetry([:hologram, :compiler, :stop], _measurements, _metadata, tracker) do
     Agent.update(tracker, fn state -> %{state | current: state.current - 1} end)
+  end
+
+  defp load_compile_state_dump(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
+    assert File.exists?(dump_path)
+
+    dump_path
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
   end
 
   defp load_module_info_items(opts) do
@@ -1404,6 +1428,49 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().bundle_inputs.client_stacktraces? == Hologram.client_stacktraces?()
       test_page_bundles(opts)
       test_runtime_bundle(opts)
+    end
+
+    test "dumps the compile state with the bundles it built", %{opts: opts} do
+      run(opts)
+
+      {1, compile_state} = load_compile_state_dump(opts)
+      state = cache_state()
+
+      assert compile_state.pages == PLT.get_all(state.pages_plt)
+      assert map_size(compile_state.pages) == @num_pages
+      assert compile_state.runtime == state.runtime
+      assert compile_state.runtime != nil
+      assert compile_state.pending_pages == MapSet.new()
+      assert compile_state.app_versions == state.app_versions
+      assert compile_state.bundle_inputs == state.bundle_inputs
+      assert compile_state.encoding_inputs == state.encoding_inputs
+      assert compile_state.module_metadata == state.module_metadata
+      assert compile_state.template_modules == state.template_modules
+    end
+
+    test "dumps the pages a stopped run left pending", %{opts: opts} do
+      run(opts)
+      pending_pages = put_pending_kept_pages(2)
+
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+
+      {1, compile_state} = load_compile_state_dump(opts)
+      assert compile_state.pending_pages == pending_pages
+    end
+
+    test "a run that changes nothing writes no compile state", %{opts: opts} do
+      run(opts)
+
+      assert count_compile_state_writes(fn -> run(opts) end) == 0
+    end
+
+    test "a run that rebuilds a page writes the compile state before and after its batches", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(Module2)
+
+      assert count_compile_state_writes(fn -> run(opts) end) == 2
     end
 
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do

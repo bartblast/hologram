@@ -19,6 +19,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       with the page modules built, preceded by `:runtime` when the runtime bundle was built.
       Defaults to doing nothing.
 
+  ## Build dir
+
+  A compile leaves four files in the build dir, so that the first compile in the next VM (the next
+  `mix` command, say) reuses what this one built:
+
+    * the call graph dump and the module info dump - the before picture: the graph of what the
+      pages reach and the module infos it was brought in line with, which the next compile diffs
+      the beams against.
+
+    * the compile state dump - the after picture: what each page and the runtime bundle were built
+      from, the pages still to build and what the compile derived for the bundles. The next
+      compile keeps the bundles the diff does not reach.
+
+    * the page digest dump - the digest of each page's bundle, which the router serves.
+
   ## Telemetry
 
   Emits the following events around each compilation run, i.e. the critical
@@ -134,6 +149,9 @@ defmodule Mix.Tasks.Compile.Hologram do
         Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
 
       call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
+
+      compile_state_dump_path =
+        Path.join(build_dir, Reflection.compile_state_dump_file_name())
 
       # The IR PLT and the call graph are kept between compiles (see Hologram.Compiler.Cache), and
       # the module infos they were last brought in line with, with the modules whose beams a save
@@ -381,6 +399,23 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{nil, runtime_entry_file_path, "runtime"}]
         end
 
+      Cache.put_app_versions(app_versions)
+      Cache.put_encoding_inputs(encoding_inputs)
+      Cache.put_module_metadata(module_metadata)
+      Cache.put_template_modules(template_modules)
+
+      # The kept runtime state describes the bundle this compile replaces. A compile that fails
+      # during the bundling leaves the next one diffing against the infos kept below, which show no
+      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
+      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
+
+      # The after picture, for the first compile in the next VM: the bundles on disk, what they were
+      # built from, and the pages this compile is about to build, pending. Written before the before
+      # picture, so that a compile that dies between the two leaves the pending pages next to the
+      # infos they were computed from, or an older picture; either way the next compile rebuilds
+      # them. Written again once the batches are done.
+      dump_compile_state(cache, compile_state_dump_path, module_info_plt_dump_path)
+
       dump_before_picture(cache, call_graph, new_module_info_plt,
         call_graph_dump_path: call_graph_dump_path,
         graph_unchanged?: graph_unchanged?,
@@ -397,15 +432,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_info_dumped_at = Compiler.module_info_dumped_at(module_info_plt_dump_path)
 
       Cache.put_module_infos(module_info_dumped_at, editable_modules)
-      Cache.put_app_versions(app_versions)
-      Cache.put_encoding_inputs(encoding_inputs)
-      Cache.put_module_metadata(module_metadata)
-      Cache.put_template_modules(template_modules)
-
-      # The kept runtime state describes the bundle this compile replaces. A compile that fails
-      # during the bundling leaves the next one diffing against the infos just kept, which show no
-      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
-      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
 
       old_build_static_artifacts =
         opts[:static_dir]
@@ -456,6 +482,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       bundles =
         build_batches(remaining_pages, runtime_entry_files_info, bundles, batch_context)
+
+      # The pages built are in their states now, and no longer pending.
+      dump_compile_state(cache, compile_state_dump_path, module_info_plt_dump_path)
 
       # Whatever ended the batches, the static dir keeps the bundles the page digest PLT names, and
       # the runtime bundle.
@@ -666,6 +695,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     if opts[:infos_changed?] or not own_dumps? do
       PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
     end
+  end
+
+  # The compile state is written when it moved since this VM last wrote it, and whenever the dumps on
+  # disk are not this VM's: another VM's compile state may be there (see own_dumps?/2).
+  defp dump_compile_state(cache, compile_state_dump_path, module_info_plt_dump_path) do
+    Cache.dump_compile_state(
+      compile_state_dump_path,
+      not own_dumps?(cache, module_info_plt_dump_path)
+    )
   end
 
   # The page digest PLT is dumped after every batch, so that the build dir names the bundles on disk
