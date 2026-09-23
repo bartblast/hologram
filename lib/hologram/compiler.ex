@@ -116,6 +116,34 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns what every bundle depends on besides the modules it carries: the client stack traces
+  setting (bundles built with it on register module metadata and app versions), the digests of
+  Hologram's own modules from the given module info PLT (the encoder and the transformer decide what
+  a module encodes to), the mtime and size of each of Hologram's JavaScript sources under the
+  `:js_dir` opt (esbuild copies them into every bundle) and the digest of `package.json` in the
+  `:assets_dir` opt (which pins esbuild). Two compiles whose inputs are equal make the same bundle
+  from the same modules; the compile task rebuilds every bundle when the inputs differ from the ones
+  its kept bundles were built with (see `Hologram.Compiler.Cache.forget_bundles/0`).
+
+  The JavaScript sources are compared by mtime and size rather than by content: they belong to a
+  dependency, which changes with an upgrade or a fetch, never within a second of a compile.
+  """
+  @spec build_bundle_inputs(PLT.t(), T.opts()) :: %{
+          client_stacktraces?: boolean,
+          hologram_modules: [{module, integer}],
+          js_sources: [{String.t(), integer, non_neg_integer}],
+          package_json_digest: binary
+        }
+  def build_bundle_inputs(module_info_plt, opts) do
+    %{
+      client_stacktraces?: Hologram.client_stacktraces?(),
+      hologram_modules: list_hologram_module_digests(module_info_plt),
+      js_sources: list_js_sources(opts[:js_dir]),
+      package_json_digest: get_package_json_digest(opts[:assets_dir])
+    }
+  end
+
+  @doc """
   Builds the call graph of all modules in the project.
   """
   @spec build_call_graph :: CallGraph.t()
@@ -1593,6 +1621,39 @@ defmodule Hologram.Compiler do
     else
       _fallback -> nil
     end
+  end
+
+  # Hologram's own modules that the module info PLT holds, with their digests, sorted.
+  defp list_hologram_module_digests(module_info_plt) do
+    Application.ensure_loaded(:hologram)
+
+    :hologram
+    |> Application.spec(:modules)
+    |> Enum.flat_map(fn module ->
+      case PLT.get(module_info_plt, module) do
+        {:ok, %{digest: digest}} -> [{module, digest}]
+        :error -> []
+      end
+    end)
+    |> Enum.sort()
+  end
+
+  # Every regular file under the given dir, as its path relative to the dir with its mtime and size,
+  # sorted.
+  defp list_js_sources(js_dir) do
+    js_dir
+    |> Path.join("**/*")
+    |> Path.wildcard()
+    |> Enum.flat_map(fn path ->
+      case File.stat!(path, time: :posix) do
+        %File.Stat{type: :regular, mtime: mtime, size: size} ->
+          [{Path.relative_to(path, js_dir), mtime, size}]
+
+        _directory ->
+          []
+      end
+    end)
+    |> Enum.sort()
   end
 
   # Filtered in the table, so no info is copied out of it.

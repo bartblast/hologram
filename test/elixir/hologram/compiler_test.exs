@@ -639,6 +639,114 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_bundle_inputs/2" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "build_bundle_inputs_2"])
+      assets_dir = Path.join(test_tmp_dir, "assets")
+      js_dir = Path.join(assets_dir, "js")
+
+      clean_dir(test_tmp_dir)
+      File.mkdir_p!(assets_dir)
+      File.cp_r!(@js_dir, js_dir)
+      package_json_path = Path.join(assets_dir, "package.json")
+
+      @assets_dir
+      |> Path.join("package.json")
+      |> File.cp!(package_json_path)
+
+      [opts: [assets_dir: assets_dir, js_dir: js_dir]]
+    end
+
+    test "names the client stack traces setting", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      assert build_bundle_inputs(module_info_plt, opts).client_stacktraces? == true
+
+      Application.put_env(:hologram, :client_stacktraces, false)
+      assert build_bundle_inputs(module_info_plt, opts).client_stacktraces? == false
+    end
+
+    test "lists Hologram's modules with their module info digests, sorted", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
+      hologram_app_modules = Application.spec(:hologram, :modules)
+
+      assert {Compiler, PLT.get!(module_info_plt, Compiler).digest} in hologram_modules
+      assert hologram_modules == Enum.sort(hologram_modules)
+
+      assert Enum.all?(hologram_modules, fn {module, _digest} ->
+               module in hologram_app_modules
+             end)
+    end
+
+    test "lists every JavaScript source under the js dir with its mtime and size, sorted", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{js_sources: js_sources} = build_bundle_inputs(module_info_plt, opts)
+
+      file_paths =
+        opts[:js_dir]
+        |> Path.join("**/*")
+        |> Path.wildcard()
+        |> Enum.filter(&File.regular?/1)
+
+      %File.Stat{mtime: mtime, size: size} =
+        opts[:js_dir]
+        |> Path.join("hologram.mjs")
+        |> File.stat!(time: :posix)
+
+      assert {"hologram.mjs", mtime, size} in js_sources
+
+      assert Enum.any?(js_sources, fn {path, _mtime, _size} ->
+               String.starts_with?(path, "erlang/")
+             end)
+
+      assert length(js_sources) == length(file_paths)
+      assert js_sources == Enum.sort(js_sources)
+    end
+
+    test "leaves out directories", %{module_info_plt: module_info_plt, opts: opts} do
+      %{js_sources: js_sources} = build_bundle_inputs(module_info_plt, opts)
+
+      refute Enum.any?(js_sources, fn {path, _mtime, _size} -> path == "erlang" end)
+    end
+
+    test "changes when a JavaScript source changes", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      bundle_inputs = build_bundle_inputs(module_info_plt, opts)
+      js_source_path = Path.join(opts[:js_dir], "hologram.mjs")
+      File.write!(js_source_path, "\n", [:append])
+
+      assert build_bundle_inputs(module_info_plt, opts).js_sources != bundle_inputs.js_sources
+    end
+
+    test "changes when package.json changes", %{module_info_plt: module_info_plt, opts: opts} do
+      bundle_inputs = build_bundle_inputs(module_info_plt, opts)
+      package_json_path = Path.join(opts[:assets_dir], "package.json")
+      File.write!(package_json_path, "\n", [:append])
+
+      assert build_bundle_inputs(module_info_plt, opts).package_json_digest !=
+               bundle_inputs.package_json_digest
+    end
+
+    test "is equal for two calls with nothing changed", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      assert build_bundle_inputs(module_info_plt, opts) ==
+               build_bundle_inputs(module_info_plt, opts)
+    end
+  end
+
   test "build_call_graph/0" do
     assert %CallGraph{} = call_graph = build_call_graph()
 
