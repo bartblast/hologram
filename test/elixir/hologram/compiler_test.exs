@@ -3324,6 +3324,34 @@ defmodule Hologram.CompilerTest do
       assert length(kept) == length(page_modules)
     end
 
+    test "relisting rebuilds a page with no MFA list", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      mfas_by_page: mfas_by_page,
+      page_mfas_plt: page_mfas_plt,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      [{listless_page, _mfas} | _rest] = mfas_by_page
+
+      # A page state loaded from the compile state dump comes without its MFA list.
+      PLT.delete(page_mfas_plt, listless_page)
+
+      {rebuilt, kept} =
+        partition_pages_to_rebuild(
+          page_modules,
+          call_graph_without_runtime_mfas,
+          page_mfas_plt: page_mfas_plt,
+          pages_plt: pages_plt,
+          reaching_modules: MapSet.new(),
+          relist_all?: true,
+          static_dir: static_dir
+        )
+
+      assert rebuilt == [listless_page]
+      assert length(kept) == length(page_modules) - 1
+    end
+
     test "relisting rebuilds a page whose MFAs moved", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       mfas_by_page: mfas_by_page,
