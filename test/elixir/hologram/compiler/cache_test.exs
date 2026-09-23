@@ -411,6 +411,94 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
+  describe "load_compile_state/1" do
+    setup do
+      dump_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "load_compile_state_1"])
+
+      clean_dir(dump_dir)
+
+      [path: Path.join(dump_dir, "compile_state.bin")]
+    end
+
+    test "loads what dump_compile_state/2 wrote", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+
+      assert load_compile_state(path) == :ok
+
+      assert %{
+               app_versions: [hologram: "1.0.0"],
+               bundle_inputs: %{client_stacktraces?: true},
+               encoding_inputs: %{async_mfas: async_mfas, client_stacktraces?: true},
+               module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
+               pages_plt: pages_plt,
+               pending_pages: pending_pages,
+               runtime: %{
+                 app_versions: [hologram: "1.0.0"],
+                 bundle_info: %{digest: "b"},
+                 js_binding_modules: js_binding_modules,
+                 mfas: [{Module1, :fun_1, 0}]
+               },
+               template_modules: template_modules
+             } = get()
+
+      assert async_mfas == MapSet.new()
+      assert js_binding_modules == MapSet.new()
+      assert pending_pages == MapSet.new([Module2])
+      assert template_modules == %{Module1 => MapSet.new()}
+
+      assert PLT.get_all(pages_plt) == %{
+               Module1 => %{bundle_info: %{digest: "a"}, modules: MapSet.new([Module1])}
+             }
+    end
+
+    test "loads no page MFA lists", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+
+      load_compile_state(path)
+
+      assert PLT.keys(get().page_mfas_plt) == []
+    end
+
+    test "keeps the loaded state as the one on disk", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+
+      load_compile_state(path)
+
+      {1, compile_state} = read_compile_state_dump(path)
+      assert get().dumped_compile_state == compile_state
+    end
+
+    test "the next dump of an unchanged state writes nothing", %{path: path} do
+      put_full_state()
+      dump_compile_state(path, false)
+      stop_cache()
+      load_compile_state(path)
+
+      assert dump_compile_state(path, false) == :unchanged
+    end
+
+    test "a dump of another version is not loaded", %{path: path} do
+      File.write!(
+        path,
+        SerializationUtils.serialize({0, %{pending_pages: MapSet.new([Module2])}})
+      )
+
+      put_pending_pages([Module1])
+
+      assert load_compile_state(path) == :error
+
+      assert %{dumped_compile_state: nil, pending_pages: pending_pages} = get()
+      assert pending_pages == MapSet.new([Module1])
+    end
+  end
+
   test "put_bundle_inputs/1" do
     bundle_inputs = %{
       client_stacktraces?: true,

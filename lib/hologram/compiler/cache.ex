@@ -79,10 +79,10 @@ defmodule Hologram.Compiler.Cache do
   @doc """
   Forgets the dump time and the editable modules, which marks the kept module infos as untrusted,
   while keeping the module info PLT's entries, the IR PLT, the encode PLT, the encoding inputs, the
-  module metadata, the template modules, the bundle inputs, the compile state last dumped and the
-  call graph, so that the next compile starts from the build dir. The compile task calls it before
-  it changes the kept state in place: a compile that dies mid-way must not leave a half-patched
-  graph or half-scanned infos that the next compile would trust.
+  module metadata, the template modules, the bundle inputs, the compile state last dumped or loaded
+  and the call graph, so that the next compile starts from the build dir. The compile task calls it
+  before it changes the kept state in place: a compile that dies mid-way must not leave a
+  half-patched graph or half-scanned infos that the next compile would trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -111,8 +111,9 @@ defmodule Hologram.Compiler.Cache do
   inputs, which a compile in a new VM needs to keep this VM's bundles (the after picture of a
   compile, next to the before picture the call graph and module info dumps are). The page MFA lists
   are left out: they are read only after a change of the runtime's MFAs, and a page without one is
-  rebuilt then. Skipped when the state equals the one last written, unless forced: the compile
-  task forces it when the dumps on disk are not this VM's. Returns `:written` or `:unchanged`.
+  rebuilt then. Skipped when the state equals the one last written or loaded, unless forced: the
+  compile task forces it when the dumps on disk are not this VM's. Returns `:written` or
+  `:unchanged`.
   """
   @spec dump_compile_state(String.t(), boolean) :: :written | :unchanged
   def dump_compile_state(path, force?) do
@@ -141,9 +142,9 @@ defmodule Hologram.Compiler.Cache do
   from the rest of its state, since only a relisting after a change of the runtime's MFAs reads it),
   the modules each template uses and the inputs the bundles were built with (the dump time, the
   editable modules, the encoding inputs, the module metadata, the runtime state, the template
-  modules, the bundle inputs and the compile state last dumped are nil when no compile has finished
-  in this VM, and the module
-  info PLT's entries are then not to be trusted). Starts the cache on first use.
+  modules, the bundle inputs and the compile state last dumped or loaded are nil when no compile
+  has finished in this VM, and the module info PLT's entries are then not to be trusted). Starts the
+  cache on first use.
   """
   @spec get() :: t
   def get do
@@ -197,6 +198,32 @@ defmodule Hologram.Compiler.Cache do
     {:reply, state, state}
   end
 
+  def handle_call({:load_compile_state, path}, _from, state) do
+    case path
+         |> File.read!()
+         |> SerializationUtils.deserialize(true) do
+      {@dump_version, compile_state} ->
+        PLT.put(state.pages_plt, Map.to_list(compile_state.pages))
+
+        new_state = %{
+          state
+          | app_versions: compile_state.app_versions,
+            bundle_inputs: compile_state.bundle_inputs,
+            dumped_compile_state: compile_state,
+            encoding_inputs: compile_state.encoding_inputs,
+            module_metadata: compile_state.module_metadata,
+            pending_pages: compile_state.pending_pages,
+            runtime: compile_state.runtime,
+            template_modules: compile_state.template_modules
+        }
+
+        {:reply, :ok, new_state}
+
+      _other_version ->
+        {:reply, :error, state}
+    end
+  end
+
   def handle_call({:put_app_versions, app_versions}, _from, state) do
     {:reply, :ok, %{state | app_versions: app_versions}}
   end
@@ -246,6 +273,19 @@ defmodule Hologram.Compiler.Cache do
     Tracer.register()
 
     {:ok, initial_state()}
+  end
+
+  @doc """
+  Loads the compile state `dump_compile_state/2` wrote at the given path into the kept state: the
+  page states into the pages PLT and the rest into their fields, and keeps it as the state last
+  dumped, so that a compile that changes none of it does not write it again. Returns `:error`
+  without touching anything when the dump is of another version. The compile task calls it on the
+  first compile in a VM, once the call graph dump has loaded: the page states are trusted only
+  against the diff of the module infos that graph was brought in line with.
+  """
+  @spec load_compile_state(String.t()) :: :ok | :error
+  def load_compile_state(path) do
+    GenServer.call(server(), {:load_compile_state, path}, :infinity)
   end
 
   @doc """
@@ -356,7 +396,7 @@ defmodule Hologram.Compiler.Cache do
   with empty ones
   and forgets the kept dump time, editable modules, encoding inputs, module metadata, pending pages,
   application versions, runtime state, template modules, bundle inputs and the compile state last
-  dumped, so the next compile starts from the build dir, as the first one in the VM does.
+  dumped or loaded, so the next compile starts from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
