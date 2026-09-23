@@ -284,7 +284,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert dump_compile_state(path, false) == :written
 
       assert read_compile_state_dump(path) ==
-               {2,
+               {1,
                 %{
                   app_versions: [hologram: "1.0.0"],
                   bundle_inputs: %{client_stacktraces?: true},
@@ -310,7 +310,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       dump_compile_state(path, false)
 
-      {2, compile_state} = read_compile_state_dump(path)
+      {1, compile_state} = read_compile_state_dump(path)
       refute Map.has_key?(compile_state, :page_mfas)
     end
 
@@ -338,7 +338,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert dump_compile_state(path, false) == :written
 
-      {2, compile_state} = read_compile_state_dump(path)
+      {1, compile_state} = read_compile_state_dump(path)
       assert compile_state.pending_pages == MapSet.new([Module3])
     end
 
@@ -348,7 +348,7 @@ defmodule Hologram.Compiler.CacheTest do
       File.write!(path, "stale")
 
       assert dump_compile_state(path, true) == :written
-      assert {2, _compile_state} = read_compile_state_dump(path)
+      assert {1, _compile_state} = read_compile_state_dump(path)
     end
 
     test "creates the path's directory", %{path: path} do

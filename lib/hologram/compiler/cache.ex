@@ -33,7 +33,7 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Compiler.Tracer
 
   # Bumped when the compile state's shape changes: a dump of another version is not loaded.
-  @dump_version 2
+  @dump_version 1
 
   @type compile_state :: %{
           app_versions: keyword(String.t()) | nil,
