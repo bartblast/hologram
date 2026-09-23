@@ -8,6 +8,7 @@ defmodule Hologram.Commons.PLT do
   use GenServer
 
   alias Hologram.Commons.ETS
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.Types, as: T
@@ -53,7 +54,7 @@ defmodule Hologram.Commons.PLT do
     |> Path.dirname()
     |> File.mkdir_p!()
 
-    File.write!(path, data)
+    FileUtils.write_atomically!(path, data)
 
     plt
   end
