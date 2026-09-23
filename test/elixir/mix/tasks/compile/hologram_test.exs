@@ -116,6 +116,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # How many kept pages reach the given module, as their states record it.
+  defp count_pages_reaching(module) do
+    cache_state().pages_plt
+    |> PLT.get_all()
+    |> Enum.count(fn {_page_module, page_state} -> MapSet.member?(page_state.modules, module) end)
+  end
+
   defp count_plt_processes do
     Enum.count(Process.list(), fn pid ->
       case Process.info(pid, :dictionary) do
@@ -153,6 +160,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # A module the kept runtime carries whose beam a save can rewrite, since only such a beam is
   # rechecked, so that a fake edit of it is seen.
+  # Fakes an edit of the module since the dumps were written, as a new VM sees one: the module info
+  # dump gets a digest the beam does not have and an mtime the beam does not have, so the scan reads
+  # the beam again and finds a digest that differs from the dumped one.
+  defp fake_edit_in_dump(module, opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+    module_infos = load_module_info_items(opts)
+    info = module_infos[module]
+    edited_info = %{info | digest: "edited", mtime: info.mtime - 100}
+
+    plt = PLT.start(items: Map.to_list(%{module_infos | module => edited_info}))
+    PLT.dump(plt, dump_path)
+    PLT.stop(plt)
+  end
+
   defp find_editable_runtime_module do
     %{editable_modules: editable_modules, module_infos: module_infos, runtime: runtime} =
       cache_state()
@@ -161,6 +182,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
       if MapSet.member?(editable_modules, module) and Map.has_key?(module_infos, module),
         do: module
     end)
+  end
+
+  # Forgets what the last compile kept, in the VM and on disk: what the first compile in a fresh
+  # checkout finds. Cache.reset/0 alone is what the first compile in a new VM finds, the compile
+  # state dump next to the call graph dump.
+  defp forget_kept_state(opts) do
+    Cache.reset()
+
+    opts[:build_dir]
+    |> Path.join(Reflection.compile_state_dump_file_name())
+    |> File.rm()
+
+    :ok
   end
 
   defp generate_old_bundle(name, opts) do
@@ -529,11 +563,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "kept compile state" do
-    setup do
+    setup %{opts: opts} do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
       # rereads, since the modules they are for are not reported as compiled.
       on_exit(&Cache.reset/0)
-      Cache.reset()
+      forget_kept_state(opts)
     end
 
     test "the second run keeps what the first run built", %{opts: opts} do
@@ -1179,7 +1213,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a page no compile has built links to the pages its listing names", %{opts: opts} do
       run(opts)
 
-      Cache.reset()
+      forget_kept_state(opts)
 
       {record_links, recorded_links} = record_calls()
 
@@ -1271,7 +1305,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no page states lists each page once", %{opts: opts} do
       run(opts)
-      Cache.reset()
+      forget_kept_state(opts)
 
       assert count_calls({CallGraph, :list_page_mfas, 4}, fn -> run(opts) end) == @num_pages
       test_page_bundles(opts)
@@ -1394,7 +1428,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert pages_reaching_module_2 < @num_pages
       partial_digests = load_page_digest_items(opts)
 
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert load_page_digest_items(opts) == partial_digests
@@ -1471,6 +1505,143 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_edit(Module2)
 
       assert count_compile_state_writes(fn -> run(opts) end) == 2
+    end
+
+    test "a new VM with nothing changed bundles nothing", %{opts: opts} do
+      run(opts)
+      page_digests = load_page_digest_items(opts)
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      assert load_page_digest_items(opts) == page_digests
+      test_page_bundles(opts)
+      test_runtime_bundle(opts)
+    end
+
+    test "a new VM with nothing changed encodes nothing", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_calls(@encode_function_mfa, fn -> run(opts) end) == 0
+    end
+
+    test "a new VM with nothing changed lists no page and clones no graph", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      mfas = [
+        {CallGraph, :clone, 2},
+        {CallGraph, :list_page_mfas, 4},
+        {CallGraph, :list_runtime_mfas, 2}
+      ]
+
+      Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      try do
+        run(opts)
+
+        assert Enum.map(mfas, &:erlang.trace_info(&1, :call_count)) == [
+                 {:call_count, 0},
+                 {:call_count, 0},
+                 {:call_count, 0}
+               ]
+      after
+        Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+      end
+    end
+
+    test "a new VM with nothing changed validates no template", %{opts: opts} do
+      run(opts)
+      Cache.reset()
+
+      assert count_validated_templates(fn -> run(opts) end) == 0
+    end
+
+    test "a new VM with nothing changed keeps the runtime state and every page state it loaded",
+         %{
+           opts: opts
+         } do
+      run(opts)
+      %{runtime: runtime} = cache_state()
+      Cache.reset()
+
+      mfas = [{Cache, :put_page, 3}, {Cache, :put_runtime, 1}]
+      Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      try do
+        run(opts)
+
+        assert Enum.map(mfas, &:erlang.trace_info(&1, :call_count)) == [
+                 {:call_count, 0},
+                 {:call_count, 0}
+               ]
+      after
+        Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+      end
+
+      %{pages_plt: pages_plt, runtime: kept_runtime} = cache_state()
+
+      assert kept_runtime == runtime
+      assert length(PLT.keys(pages_plt)) == @num_pages
+    end
+
+    test "a new VM rebuilds the pages reaching a module edited since the dumps", %{opts: opts} do
+      run(opts)
+      pages_reaching_module_2 = count_pages_reaching(Module2)
+      fake_edit_in_dump(Module2, opts)
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      assert pages_reaching_module_2 < @num_pages
+      test_page_bundles(opts)
+    end
+
+    test "a new VM rebuilds the pages an earlier run left pending", %{opts: opts} do
+      run(opts)
+      pages_reaching_module_2 = count_pages_reaching(Module2)
+      fake_edit_in_dump(Module2, opts)
+      Cache.reset()
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      test_page_bundles(opts)
+    end
+
+    test "a new VM whose bundle inputs differ rebuilds every page and the runtime", %{
+      opts: opts
+    } do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      run(opts)
+      Cache.reset()
+
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      test_page_bundles(opts)
+    end
+
+    test "a compile state dump of another version is not loaded", %{opts: opts} do
+      run(opts)
+      dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
+      File.write!(dump_path, SerializationUtils.serialize({0, %{}}))
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert {1, _compile_state} = load_compile_state_dump(opts)
+    end
+
+    test "a compile state dump without a call graph dump is not loaded", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.call_graph_dump_file_name())
+      |> File.rm!()
+
+      Cache.reset()
+
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      test_page_bundles(opts)
     end
 
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do
@@ -1733,7 +1904,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       warm_app_versions = cache_state().app_versions
 
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert warm_app_versions == cache_state().app_versions
@@ -2078,9 +2249,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
-      %{call_graph: call_graph, ir_plt: ir_plt, module_infos: module_infos} = cache_state()
+      %{call_graph: call_graph, module_infos: module_infos, pages_plt: pages_plt} = cache_state()
 
-      assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
+      # The page's state comes from the compile state dump.
+      assert {:ok, %{bundle_info: %{}, modules: %MapSet{}}} = PLT.get(pages_plt, Module1)
       assert CallGraph.has_vertex?(call_graph, Module2)
       assert module_infos == load_module_info_items(opts)
     end
@@ -2333,7 +2505,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no changes builds no module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert count_calls({Compiler, :build_module_metadata, 1}, fn -> run(opts) end) == 0
@@ -2341,7 +2513,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "the kept module metadata after an edit is the one a full build finds", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
       fake_edit(Module1)
       run(opts)
@@ -2356,7 +2528,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "turning client stack traces off forgets the module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      Cache.reset()
+      forget_kept_state(opts)
       run(opts)
 
       assert cache_state().module_metadata != nil

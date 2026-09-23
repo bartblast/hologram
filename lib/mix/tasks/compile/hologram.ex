@@ -159,7 +159,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # the modules the graph patch rebuilds first, then the ones the walk reaches, then the rest
       # once the graph says what is reachable.
       {cache, old_module_info_plt, module_info_dumped_at} =
-        load_before_state(build_dir, call_graph_dump_path, sup)
+        load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup)
 
       # Listed with the scan, so that the modules kept as editable and the module infos kept with
       # them describe the same moment.
@@ -679,7 +679,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The call graph and the module infos are the before picture of the next VM's first compile (see
-  # load_before_state/3). While both dumps on disk are the ones this VM wrote (the module info dump's
+  # load_before_state/4). While both dumps on disk are the ones this VM wrote (the module info dump's
   # mtime is the kept one), the graph dump describes this graph when the graph is unchanged, and the
   # module info dump these infos when the scan changed no entry; each is written only when it would
   # say something else. The graph changes only with the infos, so a graph dump is never written
@@ -988,8 +988,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   # them, whatever another VM wrote to the build dir since, and they are trusted only between two
   # finished compiles (the cache keeps the editable modules then). Without them (the first compile
   # in a VM, or after a failed one) the cache is emptied and the build dir is the before picture:
-  # the graph comes from its dump and the module info dump written next to it says what changed.
-  defp load_before_state(build_dir, call_graph_dump_path, sup) do
+  # the graph comes from its dump and the module info dump written next to it says what changed. The
+  # compile state dump next to them is the after picture, what the bundles on disk were built from.
+  defp load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup) do
     case Cache.get() do
       %{editable_modules: nil} ->
         :ok = Cache.reset()
@@ -1005,6 +1006,12 @@ defmodule Mix.Tasks.Compile.Hologram do
         {module_info_plt, dumped_at} =
           with true <- File.exists?(call_graph_dump_path),
                :ok <- CallGraph.load(cache.call_graph, call_graph_dump_path) do
+            # The after picture of the compile that wrote the before picture: the bundles it left and
+            # what they were built from. Its page states are trusted only against the diff of these
+            # module infos, which is why it is loaded here and not with a module info dump alone. A
+            # dump of another version, or none, leaves every page to be built.
+            maybe_load_compile_state(compile_state_dump_path)
+
             {plt, _dump_path, dumped_at} =
               Compiler.maybe_load_module_info_plt(build_dir, supervisor: sup)
 
@@ -1013,7 +1020,8 @@ defmodule Mix.Tasks.Compile.Hologram do
             _no_usable_dump -> {PLT.start(supervisor: sup), nil}
           end
 
-        {cache, module_info_plt, dumped_at}
+        # Taken after the loads, so that the snapshot holds what was loaded.
+        {Cache.get(), module_info_plt, dumped_at}
 
       cache ->
         # Cleared before anything is patched in place: a compile that dies mid-patch can leave the
@@ -1023,6 +1031,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         :ok = Cache.clear_module_infos()
 
         {cache, cache.module_info_plt, cache.dumped_at}
+    end
+  end
+
+  # A dump of another version is not loaded (see Hologram.Compiler.Cache.load_compile_state/1): the
+  # state stays empty, as it does with no dump.
+  defp maybe_load_compile_state(compile_state_dump_path) do
+    if File.exists?(compile_state_dump_path) do
+      Cache.load_compile_state(compile_state_dump_path)
     end
   end
 
