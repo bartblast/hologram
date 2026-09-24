@@ -1249,11 +1249,12 @@ export default class Interpreter {
   // reason is stated rather than left for the struct's message/1 callback to
   // work out, since the callback asks the module whether it exports
   // module_info/0, which a client module proxy never does.
-  // A missing reflection function gets a hint: the compiler bundles one only
-  // when client code can call it on a module it does not name, so the message
-  // says what makes such a call detectable (see
-  // Hologram.Compiler.DynamicCallSites). The hint follows the text the
-  // struct's message/1 callback derives, kept as the eager message.
+  // A missing reflection function gets a hint. A call that names the module
+  // reaches it like any other function, but a call on a module the code does
+  // not name ships it only for the types the page can see, and only when the
+  // compiler detects the call (see Hologram.Compiler.DynamicCallGate), so the
+  // message says what makes such a call detectable. The hint follows the text
+  // the struct's message/1 callback derives, kept as the eager message.
   static raiseUndefinedFunctionError(
     module,
     functionName,
