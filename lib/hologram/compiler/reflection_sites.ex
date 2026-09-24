@@ -21,11 +21,32 @@ defmodule Hologram.Compiler.ReflectionSites do
 
   @names [:__changeset__, :__schema__, :__struct__]
 
+  # What an argument of a call is: an atom written in the code, the calling clause's parameter at
+  # the given index, or anything else.
+  @type arg_kind :: :literal | {:param, non_neg_integer} | :other
+
   # The module a site calls the function on: the function's parameter at the given index, or
   # anything else.
   @type kind :: :open | {:param, non_neg_integer}
 
   @type site :: {atom, arity, kind}
+
+  @doc """
+  Lists the calls of the given function in the given clause of a function of the given module, one
+  list per call, holding each argument's kind and IR. A call is a remote call with the callee's
+  module written in the code, a local call when the callee is a function of the clause's module, or
+  an apply/3 with the module, the function and the argument list written out. An argument is
+  `:literal` when it is an atom written in the code, `{:param, index}` when it is the clause's
+  parameter at that index, and `:other` otherwise. A call in an anonymous function keeps its
+  arguments' kinds, since a closure sees the value its enclosing function was given.
+  """
+  @spec call_args(IR.FunctionClause.t(), module, mfa) :: [[{arg_kind, IR.t()}]]
+  def call_args(%IR.FunctionClause{params: params, guards: guards, body: body}, module, callee) do
+    [guards, body]
+    |> collect_calls(module, callee, [])
+    |> Enum.reverse()
+    |> Enum.map(fn args -> Enum.map(args, &{arg_kind(&1, params), &1}) end)
+  end
 
   @doc """
   Returns the reflection functions, as `{name, arity}` tuples.
@@ -66,6 +87,83 @@ defmodule Hologram.Compiler.ReflectionSites do
   defp apply_arities(function, _args) do
     for {^function, arity} <- @functions, do: arity
   end
+
+  defp arg_kind(%IR.AtomType{}, _params), do: :literal
+
+  defp arg_kind(arg, params) do
+    case param_index(arg, params) do
+      nil -> :other
+      index -> {:param, index}
+    end
+  end
+
+  # The argument lists of the calls of the callee, the last found first.
+  defp collect_calls(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [
+             %IR.AtomType{value: module},
+             %IR.AtomType{value: function},
+             %IR.ListType{data: args}
+           ]
+         } = ir,
+         clause_module,
+         {module, function, arity} = callee,
+         calls
+       )
+       when length(args) == arity do
+    collect_calls(Map.from_struct(ir), clause_module, callee, [args | calls])
+  end
+
+  defp collect_calls(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: function,
+           args: args
+         } = ir,
+         clause_module,
+         {module, function, arity} = callee,
+         calls
+       )
+       when length(args) == arity do
+    collect_calls(Map.from_struct(ir), clause_module, callee, [args | calls])
+  end
+
+  defp collect_calls(
+         %IR.LocalFunctionCall{function: function, args: args} = ir,
+         module,
+         {module, function, arity} = callee,
+         calls
+       )
+       when length(args) == arity do
+    collect_calls(Map.from_struct(ir), module, callee, [args | calls])
+  end
+
+  defp collect_calls(%_struct{} = ir, clause_module, callee, calls) do
+    ir
+    |> Map.from_struct()
+    |> Map.values()
+    |> collect_calls(clause_module, callee, calls)
+  end
+
+  defp collect_calls(list, clause_module, callee, calls) when is_list(list) do
+    Enum.reduce(list, calls, &collect_calls(&1, clause_module, callee, &2))
+  end
+
+  defp collect_calls(map, clause_module, callee, calls) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> collect_calls(clause_module, callee, calls)
+  end
+
+  defp collect_calls(tuple, clause_module, callee, calls) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> collect_calls(clause_module, callee, calls)
+  end
+
+  defp collect_calls(_ir, _clause_module, _callee, calls), do: calls
 
   defp collect_sites(
          %IR.DotOperator{left: left, right: %IR.AtomType{value: function}},
@@ -140,17 +238,22 @@ defmodule Hologram.Compiler.ReflectionSites do
 
   defp collect_sites(_ir, _params, sites), do: sites
 
-  # IR read from a BEAM gives each binding of a variable its own version, so a variable with a
-  # parameter's name and version is that parameter's value. IR built from a code string has no
-  # versions, and such a variable is taken for anything.
-  defp kind(%IR.Variable{version: nil}, _params), do: :open
-
-  defp kind(%IR.Variable{name: name, version: version}, params) do
-    case Enum.find_index(params, &match?(%IR.Variable{name: ^name, version: ^version}, &1)) do
+  defp kind(module, params) do
+    case param_index(module, params) do
       nil -> :open
       index -> {:param, index}
     end
   end
 
-  defp kind(_module, _params), do: :open
+  # The index of the parameter the given expression is, or nil. IR read from a BEAM gives each
+  # binding of a variable its own version, so a variable with a parameter's name and version is that
+  # parameter's value. IR built from a code string has no versions, and such a variable is taken for
+  # anything.
+  defp param_index(%IR.Variable{version: nil}, _params), do: nil
+
+  defp param_index(%IR.Variable{name: name, version: version}, params) do
+    Enum.find_index(params, &match?(%IR.Variable{name: ^name, version: ^version}, &1))
+  end
+
+  defp param_index(_expr, _params), do: nil
 end
