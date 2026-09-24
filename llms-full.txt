@@ -4052,6 +4052,29 @@ A few things are read from the environment rather than from config, because they
 - `HOLOGRAM_START` - set it to `1` to start Hologram in `dev` and `test`, which is exactly what `mix holo` does. Outside those environments Hologram always starts.
 - `SECRET_KEY_BASE` - the secret Hologram signs with, required in every environment. In **embedded mode** (Hologram inside your Phoenix endpoint), `dev` and `test` fall back to the endpoint's configured `:secret_key_base`.
 
+### Bundling
+
+The compiler builds one runtime bundle, which every page loads, and one bundle per page. A page bundle holds the Elixir code the page's client side can reach from its template, its actions and its layout's, compiled to JavaScript. Code that runs only on the server, like `init/3` and commands, is not bundled, but the values it hands to the client can bring code with them, as the sections below describe.
+
+#### Reflection Functions
+
+A struct's `__struct__/0,1` and an Ecto schema's `__changeset__/0` and `__schema__/1,2` are reflection functions. A call that names the module, like `User.__changeset__()`, reaches them like any other function. A call on a module the code does not name reaches them only at runtime:
+
+```elixir
+schema = component.state.schema
+schema.__changeset__()
+```
+
+So a type's reflection functions ship with a page when two things hold. The type can reach the page: the page's client code names it, or `init/3`, a command or code that broadcasts an action creates it. And the page's client code, or the runtime every page loads, calls the function on a module it does not name, like `schema.__changeset__()` above or `apply(schema, :__schema__, [:fields])`. A call on a function's parameter counts only when some caller can pass that parameter something other than a module written in the code.
+
+A call through `apply/3` with a function name known only at runtime is not detected, as for any other function, so a reflection function reached only that way is not bundled and the call raises an `UndefinedFunctionError` on the client, whose message says why. Name the function in the call, or reference it anywhere in client-reachable code.
+
+One limit remains for now: a call on a value the compiler cannot tell is not a module keeps the function in the bundle. Elixir's own `Kernel.struct/2` and `Exception.message/1` make such calls, so `__struct__/0` of the types a page can see ships with every page.
+
+#### Related
+
+Which dynamic components a page bundles, and why one referenced in broadcast code goes into the runtime bundle, is covered in the Template Syntax documentation, under Module Reachability. To fail the build when a bundle grows past a size, see `max_bundle_size` in the Configuration documentation.
+
 ## Reference
 
 ### Client Runtime

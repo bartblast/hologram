@@ -367,6 +367,29 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_app_versions/1" do
+    test "names the applications of the modules the graph holds" do
+      call_graph =
+        CallGraph.start()
+        |> CallGraph.add_vertex(Enum)
+        |> CallGraph.add_vertex({:lists, :reverse, 1})
+
+      assert build_app_versions(call_graph) == [
+               elixir: to_string(Application.spec(:elixir, :vsn)),
+               stdlib: to_string(Application.spec(:stdlib, :vsn))
+             ]
+    end
+
+    test "names the application of the function a dynamic call was found in" do
+      site = {:dynamic_call, {Enum, :map, 2}, :__struct__, 0, :open}
+      call_graph = CallGraph.add_vertex(CallGraph.start(), site)
+
+      assert build_app_versions(call_graph) == [
+               elixir: to_string(Application.spec(:elixir, :vsn))
+             ]
+    end
+  end
+
   describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
@@ -2900,7 +2923,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_mfas_by_page/2" do
+  describe "list_mfas_by_page/3" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -2932,6 +2955,34 @@ defmodule Hologram.CompilerTest do
       assert length(page_modules) > 1
       assert Enum.all?(result, fn {_page_module, mfas} -> mfas != [] end)
       assert result == expected
+    end
+
+    test "passes the opts on to the listing of each page", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_modules: page_modules
+    } do
+      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+      module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
+
+      opts = [
+        gate: %{
+          ir_plt: PLT.start(),
+          runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
+        }
+      ]
+
+      expected =
+        Enum.map(page_modules, fn page_module ->
+          mfas = CallGraph.list_page_mfas(graph, page_module, PLT.start(), module_info_plt, opts)
+          {page_module, mfas}
+        end)
+
+      result = list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, opts)
+
+      assert result == expected
+
+      # A closed gate leaves out the reflection functions a page lists without one.
+      assert result != list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
     end
 
     test "asks the call graph for its graph once and releases it", %{
@@ -2998,7 +3049,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_mfas_by_page/4" do
+  describe "list_mfas_by_page/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -3038,6 +3089,26 @@ defmodule Hologram.CompilerTest do
       end)
 
       assert Enum.all?(page_modules, &match?({:ok, _analysis}, PLT.get(analyses, &1)))
+    end
+
+    test "passes the opts on to the listing of each page", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      module_info_plt: module_info_plt,
+      page_modules: page_modules
+    } do
+      opts = [
+        gate: %{
+          ir_plt: PLT.start(),
+          runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
+        }
+      ]
+
+      result =
+        CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
+          list_mfas_by_page(page_modules, read_graph, PLT.start(), module_info_plt, opts)
+        end)
+
+      assert result == list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, opts)
     end
 
     test "reads the analyses from the PLT", %{
@@ -3709,6 +3780,43 @@ defmodule Hologram.CompilerTest do
                )
 
       assert length(kept) == length(page_modules)
+    end
+
+    test "relisting lists the kept pages with the given gate", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_mfas_plt: page_mfas_plt,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      gate = %{
+        ir_plt: PLT.start(),
+        runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
+      }
+
+      # The kept lists are the ones the pages are built from with this gate.
+      page_modules
+      |> list_mfas_by_page(call_graph_without_runtime_mfas, gate: gate)
+      |> Enum.each(fn {page_module, mfas} -> PLT.put(page_mfas_plt, page_module, mfas) end)
+
+      opts = [
+        page_mfas_plt: page_mfas_plt,
+        pages_plt: pages_plt,
+        reaching_modules: MapSet.new(),
+        relist_all?: true,
+        static_dir: static_dir
+      ]
+
+      assert {[], _kept} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 [{:gate, gate} | opts]
+               )
+
+      # Listed without it, the pages whose reflection functions the gate leaves out look moved.
+      assert {[_moved_page | _more], _kept} =
+               partition_pages_to_rebuild(page_modules, call_graph_without_runtime_mfas, opts)
     end
 
     test "relisting rebuilds a page with no MFA list", %{

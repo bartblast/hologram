@@ -360,12 +360,12 @@ defmodule HologramFeatureTests.RealtimeTest do
     feature "from inside a handler", %{session: session} do
       # Page11 declares no subscription in init, so the client starts unbound. A
       # command handler then subscribes the connection to @channel_1 via
-      # put_subscription; gate on the registry reflecting it before broadcasting.
+      # put_subscription; gate on this connection receiving it before broadcasting.
       session =
         session
         |> visit(Page11)
         |> click(button("Subscribe"))
-        |> wait_for_subscription(@channel_1)
+        |> wait_for_own_subscription(@channel_1)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered after subscribing")
 
@@ -378,9 +378,9 @@ defmodule HologramFeatureTests.RealtimeTest do
       session = visit(session, Page11)
 
       # The server grants a {@channel_1, "page"} binding to the live connection;
-      # gate on the registry reflecting it before broadcasting.
+      # gate on this connection receiving it before broadcasting.
       Realtime.subscribe({:instance, current_instance_id(session)}, @channel_1, "page")
-      session = wait_for_subscription(session, @channel_1)
+      session = wait_for_own_subscription(session, @channel_1)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered on granted subscription")
 

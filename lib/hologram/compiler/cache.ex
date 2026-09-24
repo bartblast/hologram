@@ -33,7 +33,12 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
 
-  # Bumped when the compile state's shape changes: a dump of another version is not loaded.
+  # Bumped when the compile state's shape changes: a dump of another version is not loaded. A field
+  # added to a part forget_bundles/0 forgets (the runtime state, the page states, the template
+  # modules, the encoding inputs) needs no bump: the compile state holds the bundle inputs it was
+  # written with, which include the digests of Hologram's own modules, so the compile task forgets
+  # those parts of a compile state another Hologram build wrote before it reads them (see
+  # keep_bundle_inputs/2 there).
   @dump_version 1
 
   @type compile_state :: %{
@@ -57,7 +62,8 @@ defmodule Hologram.Compiler.Cache do
           bundle_info: map,
           client_config: String.t(),
           js_binding_modules: MapSet.t(module),
-          mfas: [mfa]
+          mfas: [mfa],
+          dynamic_calls: CallGraph.runtime_dynamic_calls()
         }
 
   @type t :: %{

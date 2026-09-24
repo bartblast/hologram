@@ -271,6 +271,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       runtime_mfas =
         list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
 
+      # What the runtime's dynamic calls open for every page, taken while the runtime graph still
+      # holds the runtime's MFAs (build_pages_graph/2 below takes them out), and kept when they are.
+      runtime_dynamic_calls =
+        list_runtime_dynamic_calls(
+          cache.runtime,
+          call_graph_for_runtime,
+          runtime_mfas,
+          ir_plt,
+          runtime_kept?
+        )
+
+      # Which reflection functions each page can call (see Hologram.Compiler.DynamicCallGate): given
+      # to every listing of pages, the kept pages' relisting included.
+      gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
+
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
       # the walk built nothing then, and no dependency was edited.
@@ -294,6 +309,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          gate: gate,
           js_fingerprints: js_fingerprints,
           page_mfas_plt: cache.page_mfas_plt,
           pages_plt: cache.pages_plt,
@@ -301,7 +317,9 @@ defmodule Mix.Tasks.Compile.Hologram do
           reaching_modules: reaching_modules,
           static_dir: opts[:static_dir],
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
-          relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
+          relist_all?:
+            runtime_mfas_changed?(cache.runtime, runtime_mfas) or
+              runtime_dynamic_calls_changed?(cache.runtime, runtime_dynamic_calls)
         )
 
       # A compile that kept the runtime's MFAs has no pages graph yet: it relists no kept page, so it
@@ -326,7 +344,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       unrecorded_mfas_by_page =
         pages_to_rebuild
         |> Enum.reject(&MapSet.member?(recorded_pages, &1))
-        |> Compiler.list_mfas_by_page(call_graph_for_pages)
+        |> Compiler.list_mfas_by_page(call_graph_for_pages, gate: gate)
 
       # The modules each page reaches: as its last built state recorded them, or as this compile
       # lists them for a page that has no state.
@@ -424,10 +442,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_module_metadata(module_metadata)
       Cache.put_template_modules(template_modules)
 
-      # The kept runtime state describes the bundle this compile replaces. A compile that fails
-      # during the bundling leaves the next one diffing against the infos kept below, which show no
-      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
-      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
+      keep_runtime_state(cache.runtime, runtime_entry_files_info, runtime_dynamic_calls)
 
       # The after picture, for the first compile in the next VM: the bundles on disk, what they were
       # built from, and the pages this compile is about to build, pending. Written before the before
@@ -485,6 +500,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         client_config: client_config,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
+        gate: gate,
         ir_plt: ir_plt,
         links: links,
         listed_mfas_by_page: Map.new(unrecorded_mfas_by_page),
@@ -806,7 +822,8 @@ defmodule Mix.Tasks.Compile.Hologram do
           bundle_info: bundle_info,
           client_config: context.client_config,
           js_binding_modules: context.runtime_js_binding_modules,
-          mfas: context.runtime_mfas
+          mfas: context.runtime_mfas,
+          dynamic_calls: context.gate.runtime
         })
     end)
   end
@@ -858,6 +875,22 @@ defmodule Mix.Tasks.Compile.Hologram do
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path) and
       File.exists?(kept_runtime.bundle_info.static_source_map_path)
+  end
+
+  # The kept runtime state describes the bundle this compile replaces. A compile that fails during
+  # the bundling leaves the next one diffing against the infos kept after it, which show no edit, so
+  # the state is forgotten when the runtime is rebuilt: without it the next compile rebuilds the
+  # runtime. A kept bundle keeps its state, but what the runtime's dynamic calls open is taken again
+  # whenever the graph changes (the page callers of the exposed runtime functions move with the
+  # pages), and a later compile that keeps the runtime's MFAs reads it from the state.
+  defp keep_runtime_state(kept_runtime, [], runtime_dynamic_calls) do
+    if runtime_dynamic_calls != kept_runtime.dynamic_calls do
+      Cache.put_runtime(%{kept_runtime | dynamic_calls: runtime_dynamic_calls})
+    end
+  end
+
+  defp keep_runtime_state(_kept_runtime, _runtime_entry_files_info, _runtime_dynamic_calls) do
+    Cache.put_runtime(nil)
   end
 
   # The first compile in a VM validated every templatable. A later one updates the kept entries with
@@ -951,6 +984,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       not Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app())
   end
 
+  defp runtime_dynamic_calls_changed?(nil, _runtime_dynamic_calls), do: false
+
+  # The page callers of the exposed runtime functions are left out: a page whose reach gains or
+  # loses one had a module it reaches edited, and is rebuilt for that, and a page that does not
+  # reach it lists the same MFAs either way.
+  defp runtime_dynamic_calls_changed?(kept_runtime, runtime_dynamic_calls) do
+    Map.take(kept_runtime.dynamic_calls, [:exposed, :open]) !=
+      Map.take(runtime_dynamic_calls, [:exposed, :open])
+  end
+
   defp runtime_mfas_changed?(nil, _runtime_mfas), do: false
 
   defp runtime_mfas_changed?(kept_runtime, runtime_mfas) do
@@ -989,7 +1032,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     mfas_by_page =
       unlisted_pages
-      |> Compiler.list_mfas_by_page(context.read_graph, context.analyses, context.module_info_plt)
+      |> Compiler.list_mfas_by_page(context.read_graph, context.analyses, context.module_info_plt,
+        gate: context.gate
+      )
       |> Enum.concat(listed_mfas_by_page)
 
     ir_modules =
@@ -1011,6 +1056,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         :error -> []
       end
     end)
+  end
+
+  # What the runtime's dynamic calls open is taken from the runtime's MFAs, so a compile that kept
+  # them (see runtime_kept?/3) keeps it too.
+  defp list_runtime_dynamic_calls(kept_runtime, _call_graph, _runtime_mfas, _ir_plt, true),
+    do: kept_runtime.dynamic_calls
+
+  defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, ir_plt, false) do
+    CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
   end
 
   # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)

@@ -104,10 +104,7 @@ defmodule Hologram.Compiler do
   def build_app_versions(call_graph) do
     call_graph
     |> CallGraph.vertices()
-    |> Enum.map(fn
-      {module, _function, _arity} -> module
-      module -> module
-    end)
+    |> Enum.map(&CallGraph.vertex_module/1)
     |> Enum.uniq()
     |> Enum.map(&Application.get_application/1)
     |> Enum.reject(&is_nil/1)
@@ -300,7 +297,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  The page's reachable MFAs are given (see `CallGraph.list_page_mfas/4`), so that a caller building
+  The page's reachable MFAs are given (see `CallGraph.list_page_mfas/5`), so that a caller building
   many pages can encode their functions first with `encode_reachable_functions/5` and render every
   page from the encode PLT.
 
@@ -618,7 +615,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/4`).
+  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/5`).
   The functions of all the given pages are encoded into the encode PLT first, with one IR read per
   module (`encode_reachable_functions/5`), and then each page is rendered from that cache, so a
   module's IR is read once for all the pages of one call. The compile task calls it once per batch;
@@ -969,24 +966,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`), sharing the call
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/5`), sharing the call
   graph's graph with the page tasks (see `CallGraph.with_shared_graph/2`) and the server callback
-  analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/4`
+  analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/5`
   against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
   With no page, the graph is not read: a graph still being rebuilt is not waited for. A caller
-  with no graph to give (see the compile task's pages graph) passes nil with no page.
+  with no graph to give (see the compile task's pages graph) passes nil with no page. The opts are
+  passed on to `CallGraph.list_page_mfas/5` (the `:gate` opt says which reflection functions the
+  pages can call).
   """
-  @spec list_mfas_by_page([module], CallGraph.t() | nil) :: [{module, [mfa]}]
-  def list_mfas_by_page([], _call_graph), do: []
+  @spec list_mfas_by_page([module], CallGraph.t() | nil, T.opts()) :: [{module, [mfa]}]
+  def list_mfas_by_page(page_modules, call_graph, opts \\ [])
 
-  def list_mfas_by_page(page_modules, call_graph) do
+  def list_mfas_by_page([], _call_graph, _opts), do: []
+
+  def list_mfas_by_page(page_modules, call_graph, opts) do
     module_info_plt = CallGraph.module_info_plt(call_graph)
     analyses = PLT.start()
 
     try do
       CallGraph.with_shared_graph(
         call_graph,
-        &list_mfas_by_page(page_modules, &1, analyses, module_info_plt)
+        &list_mfas_by_page(page_modules, &1, analyses, module_info_plt, opts)
       )
     after
       PLT.stop(analyses)
@@ -994,19 +995,20 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`), one task per
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/5`), one task per
   page, through the reader of a shared graph (see `CallGraph.with_shared_graph/2`) and the PLT of
   server callback analyses, which the pages fill as they go: a caller listing pages in rounds, as the
-  compile task does with its batches, computes each templatable's analysis once for all of them.
+  compile task does with its batches, computes each templatable's analysis once for all of them. The
+  opts are passed on to `CallGraph.list_page_mfas/5`.
   """
-  @spec list_mfas_by_page([module], (-> Digraph.t()), PLT.t(), PLT.t() | nil) ::
+  @spec list_mfas_by_page([module], (-> Digraph.t()), PLT.t(), PLT.t() | nil, T.opts()) ::
           [{module, [mfa]}]
-  def list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt) do
+  def list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt, opts \\ []) do
     # The tasks get the reader, which captures only the shared graph's key: a closure that
     # captured the graph itself would copy it into every task it starts. Listing a page's MFAs is
     # a cheap graph walk.
     TaskUtils.map_concurrently(page_modules, fn page_module ->
-      mfas = CallGraph.list_page_mfas(read_graph.(), page_module, analyses, module_info_plt)
+      mfas = CallGraph.list_page_mfas(read_graph.(), page_module, analyses, module_info_plt, opts)
       {page_module, mfas}
     end)
   end
@@ -1178,11 +1180,14 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns `{pages_to_rebuild, kept_pages}`: the pages this compile must rebuild, which it lists with
-  their batches (see `list_mfas_by_page/4`), and the pages whose kept bundle it can reuse, each with
+  their batches (see `list_mfas_by_page/5`), and the pages whose kept bundle it can reuse, each with
   its state.
 
   Options:
 
+    * `:gate` - the dynamic call gate the pages are listed with (see
+      `Hologram.Compiler.DynamicCallGate`); read only with `:relist_all?`, where the kept pages are
+      listed again with it, as their kept MFA lists were. Defaults to none.
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
     * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
       `:relist_all?`. A kept page it has no list for is rebuilt then.
@@ -1196,11 +1201,13 @@ defmodule Hologram.Compiler do
       `fingerprint_js_inputs/2`); a kept page whose recorded inputs no longer match them is
       rebuilt. Defaults to none, which only a page that recorded no input matches.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
-    * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
-      moved although nothing it reaches was edited: a function that joined the runtime's set leaves
-      the page's bundle, and one that left it enters. The otherwise kept pages are listed again and
-      those whose list differs from the one their bundle was built from are rebuilt, and listed
-      again with their batch: few pages move, and a page's list is taken when the page is built.
+    * `:relist_all?` - when the runtime bundle's MFA set, or what its dynamic calls open (see
+      `Hologram.Compiler.CallGraph.runtime_dynamic_calls/2`), changed. A kept page's MFAs can then
+      have moved although nothing it reaches was edited: a function that joined the runtime's set
+      leaves the page's bundle, and one that left it enters, and a reflection function the runtime
+      opens or closes enters or leaves it. The otherwise kept pages are listed again and those whose
+      list differs from the one their bundle was built from are rebuilt, and listed again with their
+      batch: few pages move, and a page's list is taken when the page is built.
     * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
       those imports out, which their MFA lists do not show, so every page is rebuilt.
 
@@ -1225,7 +1232,7 @@ defmodule Hologram.Compiler do
 
     if opts[:relist_all?] do
       {moved_pages, still_kept_pages} =
-        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt])
+        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt], opts[:gate])
 
       {pages_to_rebuild ++ moved_pages, still_kept_pages}
     else
@@ -2064,11 +2071,11 @@ defmodule Hologram.Compiler do
   # page's MFAs as its bundle was built from them are read from the page MFAs PLT. A page with no
   # list there counts as moved: its state was loaded from the compile state dump, which does not hold
   # the lists (see Hologram.Compiler.Cache.dump_compile_state/2).
-  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt) do
+  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt, gate) do
     mfas_by_kept_page =
       kept_pages
       |> Enum.map(fn {page_module, _page_state} -> page_module end)
-      |> list_mfas_by_page(call_graph)
+      |> list_mfas_by_page(call_graph, gate: gate)
       |> Map.new()
 
     {changed_pages, unchanged_pages} =

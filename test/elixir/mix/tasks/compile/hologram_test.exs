@@ -52,6 +52,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
+  # Pages whose inits put an Ecto schema into state; only the second calls a reflection function on
+  # a module it does not name (see the dynamic call gate tests).
+  @reflection_closed_page Hologram.Test.Fixtures.Compiler.CallGraph.Module43
+  @reflection_open_page Hologram.Test.Fixtures.Compiler.CallGraph.Module44
+  @reflection_schema Hologram.Test.Fixtures.Compiler.CallGraph.Module24
+
   # The cache's state with the kept module infos as a map, nil while they are untrusted (no editable
   # modules kept), as the tests read them.
   defp cache_state do
@@ -1256,7 +1262,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       put_pending_kept_pages(3)
 
-      mfa = {CallGraph, :list_page_mfas, 4}
+      mfa = {CallGraph, :list_page_mfas, 5}
       {record_count, recorded_counts} = record_calls()
 
       # The pages listed so far, read as each batch is asked for.
@@ -1287,7 +1293,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
 
       count =
-        count_calls({CallGraph, :list_page_mfas, 4}, fn ->
+        count_calls({CallGraph, :list_page_mfas, 5}, fn ->
           run(Keyword.put(opts, :next_batch, next_batch))
         end)
 
@@ -1318,7 +1324,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       forget_kept_state(opts)
 
-      assert count_calls({CallGraph, :list_page_mfas, 4}, fn -> run(opts) end) == @num_pages
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == @num_pages
       test_page_bundles(opts)
     end
 
@@ -1581,7 +1587,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       mfas = [
         {CallGraph, :clone, 2},
-        {CallGraph, :list_page_mfas, 4},
+        {CallGraph, :list_page_mfas, 5},
         {CallGraph, :list_runtime_mfas, 2}
       ]
 
@@ -2758,6 +2764,75 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       assert cache_state().module_metadata == nil
+    end
+  end
+
+  describe "dynamic call gate" do
+    setup %{opts: opts} do
+      on_exit(&Cache.reset/0)
+      forget_kept_state(opts)
+    end
+
+    # The page's init/3 puts an Ecto schema and a struct into state, and its client code calls no
+    # reflection function on a module it does not name.
+    test "a page gets no reflection function only its server code could reach", %{opts: opts} do
+      run(opts)
+
+      {:ok, mfas} = PLT.get(cache_state().page_mfas_plt, @reflection_closed_page)
+
+      refute {@reflection_schema, :__changeset__, 0} in mfas
+      refute {@reflection_schema, :__schema__, 1} in mfas
+      refute {@reflection_schema, :__schema__, 2} in mfas
+    end
+
+    # The page's action calls __changeset__/0 on a module it reads from state.
+    test "a page gets the reflection function its client code calls on a module it does not name",
+         %{opts: opts} do
+      run(opts)
+
+      {:ok, mfas} = PLT.get(cache_state().page_mfas_plt, @reflection_open_page)
+
+      assert {@reflection_schema, :__changeset__, 0} in mfas
+    end
+
+    test "keeps what the runtime's dynamic calls open with the runtime state", %{opts: opts} do
+      run(opts)
+
+      assert %{runtime: %{dynamic_calls: %{exposed: %{}, open: %MapSet{}, page_callers: %{}}}} =
+               cache_state()
+    end
+
+    # The page callers of the exposed runtime functions move with the pages, so a compile whose
+    # graph changed takes them again, and a later compile that keeps the runtime's MFAs reads them
+    # from the kept state, even when the runtime bundle itself was kept.
+    test "updates the kept runtime state's dynamic calls when the runtime bundle is kept",
+         %{opts: opts} do
+      run(opts)
+
+      %{runtime: %{bundle_info: bundle_info, dynamic_calls: dynamic_calls} = runtime} =
+        cache_state()
+
+      assert dynamic_calls.page_callers != %{}
+
+      Cache.put_runtime(%{runtime | dynamic_calls: %{dynamic_calls | page_callers: %{}}})
+      fake_edit(@reflection_open_page)
+
+      run(opts)
+
+      assert %{runtime: %{bundle_info: ^bundle_info, dynamic_calls: ^dynamic_calls}} =
+               cache_state()
+    end
+
+    # Kernel.struct!/2 calls __struct__/1 on its parameter, and the runtime's own callers of it name
+    # the module they pass (struct!(__MODULE__, args) in exception constructors).
+    test "exposes the runtime's struct!/2 to the pages instead of opening __struct__/1",
+         %{opts: opts} do
+      run(opts)
+
+      %{exposed: exposed, open: open} = cache_state().runtime.dynamic_calls
+
+      refute {:__struct__, 1} in open
+      assert exposed[{{Kernel, :struct!, 2}, 0}] == MapSet.new([{:__struct__, 1}])
     end
   end
 
