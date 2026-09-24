@@ -10755,7 +10755,7 @@ describe("Interpreter", () => {
             0,
           ),
         "UndefinedFunctionError",
-        "function Aaa.Bbb.__changeset__/0 is undefined or private. Reflection functions (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) are bundled only when client code can call them on a module it does not name, such as mod.__changeset__(); a call through apply/3 with a function name known only at runtime is not detected.",
+        "function Aaa.Bbb.__changeset__/0 is undefined or private. A reflection function (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.",
       );
     });
 
@@ -10769,7 +10769,7 @@ describe("Interpreter", () => {
             false,
           ),
         "UndefinedFunctionError",
-        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). Reflection functions (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) are bundled only when client code can call them on a module it does not name, such as mod.__changeset__(); a call through apply/3 with a function name known only at runtime is not detected.",
+        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). A reflection function (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.",
       );
     });
 
