@@ -28,6 +28,10 @@ defmodule Hologram.Compiler.DynamicCallGate do
   # not hold yet is put once read.
   @type t :: %{ir_plt: PLT.t(), runtime: CallGraph.runtime_dynamic_calls()}
 
+  # The literal empty `MapSet.new()` a resolution starts from reads as concrete and won't unify with
+  # the opaque `MapSet.t()` the visited parameters are put into (see the same note in CallGraph).
+  @dialyzer {:no_opaque, [{:resolve_param, 4}]}
+
   @doc """
   Returns the reflection functions, as `{name, arity}` tuples, that the given gate opens for code
   that reaches the given vertices from the given entries (the functions called from outside the
