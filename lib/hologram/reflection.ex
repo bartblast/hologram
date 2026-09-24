@@ -120,6 +120,9 @@ defmodule Hologram.Reflection do
         implemented_protocol: nil
       }
   """
+  # WARNING: a change in what this records about a module needs a bump of the call graph's
+  # @dump_version (see the warning in Hologram.Compiler.CallGraph), or a kept module info dump keeps
+  # what the previous code recorded for every module whose beam did not change.
   # TODO: Narrow the spec back to charlist, and rename the param back to
   # beam_path, when beam_source/1 goes (see the removal note there) - nothing
   # passes a BEAM binary here once the umbrella fallback is gone.

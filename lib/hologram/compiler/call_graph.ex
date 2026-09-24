@@ -67,9 +67,21 @@ defmodule Hologram.Compiler.CallGraph do
     Tuple
   ]
 
-  # The version of what dump/2 writes. Bump it whenever the shape of the agent's state changes: a
-  # dump of another version is not loaded (see load/2), and the compile starts cold. A dump written
-  # before the version existed holds a bare graph, which counts as version 0.
+  # The version of what dump/2 writes. A dump of another version is not loaded (see load/2), and the
+  # compile starts cold: the compile task then loads neither the module info dump nor the compile
+  # state written with the graph. A dump written before the version existed holds a bare graph,
+  # which counts as version 0.
+  #
+  # WARNING: bump it with every change that makes a compile read back something the current code
+  # would not write, not only when the shape of the agent's state changes. That includes a change in
+  # what build/3 adds to the graph for a module (a new kind of vertex or edge, an edge no longer
+  # added) and a change in what Hologram.Reflection.beam_info/1 records about a module. A kept dump
+  # holds the graph and the module infos of every module whose beam did not change, as the Hologram
+  # that wrote it built them, so without a bump an upgrade keeps them as they were, and the pages
+  # built from them can miss functions without any error. One bump per release is enough: if the
+  # value already differs from the one at the last release tag, leave it
+  # (`git show <tag>:lib/hologram/compiler/call_graph.ex | grep "@dump_version"`, nothing printed
+  # meaning 0).
   @dump_version 1
 
   # Edges for dynamic dispatch: the caller reads the callee module from data
@@ -618,6 +630,8 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from IR.
   """
+  # WARNING: a change in what this adds to the graph needs a bump of @dump_version (see the warning
+  # there), or a kept graph dump keeps what the previous code added.
   @spec build(t, IR.t() | list | map | tuple, vertex | nil) :: t
   def build(call_graph, ir, from_vertex \\ nil)
 
