@@ -73,13 +73,14 @@ defmodule Hologram.Compiler.CallGraph do
   # which counts as version 0.
   #
   # WARNING: bump it with every change that makes a compile read back something the current code
-  # would not write, not only when the shape of the agent's state changes. That includes a change in
-  # what build/3 adds to the graph for a module (a new kind of vertex or edge, an edge no longer
-  # added) and a change in what Hologram.Reflection.beam_info/1 records about a module. A kept dump
-  # holds the graph and the module infos of every module whose beam did not change, as the Hologram
-  # that wrote it built them, so without a bump an upgrade keeps them as they were, and the pages
-  # built from them can miss functions without any error. One bump per release is enough: if the
-  # value already differs from the one at the last release tag, leave it
+  # would not write. That is not only a change in the structure of what dump/2 writes (a key added to
+  # or removed from the state, a value of another kind), but also a change in what the code puts in
+  # it: what build/3 adds to the graph for a module (a new kind of vertex or edge, an edge no longer
+  # added) or what Hologram.Reflection.beam_info/1 records about a module. A kept dump holds the
+  # graph and the module infos of every module whose beam did not change, as the Hologram that wrote
+  # it built them, so without a bump an upgrade keeps them as they were, and the pages built from
+  # them can miss functions without any error. One bump per release is enough: if the value already
+  # differs from the one at the last release tag, leave it
   # (`git show <tag>:lib/hologram/compiler/call_graph.ex | grep "@dump_version"`, nothing printed
   # meaning 0).
   @dump_version 1
