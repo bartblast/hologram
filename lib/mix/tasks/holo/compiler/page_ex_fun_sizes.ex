@@ -33,12 +33,14 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     ir_plt = Compiler.build_ir_plt()
     aggregated_funs = aggregate_funs(ir_plt)
 
-    call_graph = build_call_graph(ir_plt)
+    {call_graph, gate} = build_call_graph(ir_plt)
     graph = CallGraph.get_graph(call_graph)
     analyses = PLT.start()
 
     graph
-    |> CallGraph.list_page_mfas(page_module, analyses, CallGraph.module_info_plt(call_graph))
+    |> CallGraph.list_page_mfas(page_module, analyses, CallGraph.module_info_plt(call_graph),
+      gate: gate
+    )
     |> filter_elixir_mfas()
     |> calculate_encoded_fun_sizes(aggregated_funs)
     |> sort_by_size_and_mfa()
@@ -60,11 +62,14 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     end)
   end
 
+  # The pages graph, with the gate the compile task lists pages with (see
+  # Hologram.Compiler.DynamicCallGate): what the runtime's dynamic calls open is taken before the
+  # runtime's MFAs are removed, as the compile task does.
   defp build_call_graph(ir_plt) do
     ir_plt
     |> Compiler.build_call_graph()
     |> CallGraph.remove_manually_ported_mfas()
-    |> remove_runtime_mfas()
+    |> remove_runtime_mfas(ir_plt)
   end
 
   defp calculate_encoded_fun_sizes(mfas, aggregated_funs) do
@@ -90,14 +95,17 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     Enum.filter(mfas, fn {module, _fun, _arity} -> Reflection.elixir_module?(module) end)
   end
 
-  defp remove_runtime_mfas(call_graph) do
+  defp remove_runtime_mfas(call_graph, ir_plt) do
     page_modules =
       call_graph
       |> CallGraph.module_info_plt()
       |> Compiler.list_pages()
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
-    CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
+    runtime_dynamic_calls = CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
+    gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
+
+    {CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas), gate}
   end
 
   defp sort_by_size_and_mfa(encoded_fun_sizes) do
