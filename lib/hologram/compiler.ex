@@ -1185,8 +1185,8 @@ defmodule Hologram.Compiler do
 
   Options:
 
-    * `:gate` - the reflection gate the pages are listed with (see
-      `Hologram.Compiler.ReflectionGate`); read only with `:relist_all?`, where the kept pages are
+    * `:gate` - the dynamic call gate the pages are listed with (see
+      `Hologram.Compiler.DynamicCallGate`); read only with `:relist_all?`, where the kept pages are
       listed again with it, as their kept MFA lists were. Defaults to none.
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
     * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
@@ -1201,13 +1201,13 @@ defmodule Hologram.Compiler do
       `fingerprint_js_inputs/2`); a kept page whose recorded inputs no longer match them is
       rebuilt. Defaults to none, which only a page that recorded no input matches.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
-    * `:relist_all?` - when the runtime bundle's MFA set, or what its reflection calls open (see
-      `Hologram.Compiler.CallGraph.runtime_reflection/2`), changed. A kept page's MFAs can then have
-      moved although nothing it reaches was edited: a function that joined the runtime's set leaves
-      the page's bundle, and one that left it enters, and a reflection function the runtime opens or
-      closes enters or leaves it. The otherwise kept pages are listed again and
-      those whose list differs from the one their bundle was built from are rebuilt, and listed
-      again with their batch: few pages move, and a page's list is taken when the page is built.
+    * `:relist_all?` - when the runtime bundle's MFA set, or what its dynamic calls open (see
+      `Hologram.Compiler.CallGraph.runtime_dynamic_calls/2`), changed. A kept page's MFAs can then
+      have moved although nothing it reaches was edited: a function that joined the runtime's set
+      leaves the page's bundle, and one that left it enters, and a reflection function the runtime
+      opens or closes enters or leaves it. The otherwise kept pages are listed again and those whose
+      list differs from the one their bundle was built from are rebuilt, and listed again with their
+      batch: few pages move, and a page's list is taken when the page is built.
     * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
       those imports out, which their MFA lists do not show, so every page is rebuilt.
 

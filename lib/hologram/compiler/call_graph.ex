@@ -8,9 +8,9 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
+  alias Hologram.Compiler.DynamicCallGate
+  alias Hologram.Compiler.DynamicCallSites
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.ReflectionGate
-  alias Hologram.Compiler.ReflectionSites
   alias Hologram.Reflection
 
   # The agent holds the graph, the modules whose definitions were built into it (see modules/1), and
@@ -27,9 +27,9 @@ defmodule Hologram.Compiler.CallGraph do
   @type edge :: {vertex, vertex}
 
   # A call of a reflection function on a module the code does not name, found in a function's
-  # definition (see Hologram.Compiler.ReflectionSites): a vertex the function has an edge to, so
+  # definition (see Hologram.Compiler.DynamicCallSites): a vertex the function has an edge to, so
   # that a walk reaching the function reaches the call.
-  @type reflection_site :: {:reflection_site, mfa, atom, arity, ReflectionSites.kind()}
+  @type dynamic_call :: {:dynamic_call, mfa, atom, arity, DynamicCallSites.kind()}
 
   # What the walk of build_reach/3 reached: the state expand_reachable_state/4 works on, and the
   # templatables whose client entries and server callbacks it walked.
@@ -40,15 +40,15 @@ defmodule Hologram.Compiler.CallGraph do
           types: MapSet.t(module)
         }
 
-  # What the runtime's own reflection calls open for every page (see runtime_reflection/2).
-  @type runtime_reflection :: %{open: MapSet.t({atom, arity})}
+  # What the runtime's own dynamic calls open for every page (see runtime_dynamic_calls/2).
+  @type runtime_dynamic_calls :: %{open: MapSet.t({atom, arity})}
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
           server_referenced_components: [module]
         }
 
-  @type vertex :: module | mfa | reflection_site
+  @type vertex :: module | mfa | dynamic_call
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
@@ -657,7 +657,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> add_vertex(fun_def_vertex)
-    |> add_reflection_site_edges(fun_def_vertex, clause)
+    |> add_dynamic_call_edges(fun_def_vertex, clause)
     |> build(clause, fun_def_vertex)
   end
 
@@ -999,8 +999,8 @@ defmodule Hologram.Compiler.CallGraph do
   The reflection functions (`__struct__/0,1` of a struct, `__changeset__/0` and `__schema__/1,2` of
   an Ecto schema) of the types that can appear at protocol dispatch on the page are listed the way
   the protocol implementations of those types are, but only the ones the page can call on a module
-  its code does not name: the `:gate` opt (see `Hologram.Compiler.ReflectionGate`) says which,
-  from the reflection calls the page's client code reaches and the ones the runtime holds. With no
+  its code does not name: the `:gate` opt (see `Hologram.Compiler.DynamicCallGate`) says which,
+  from the dynamic calls the page's client code reaches and the ones the runtime holds. With no
   gate, every reflection function of every such type is listed.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
@@ -1032,7 +1032,7 @@ defmodule Hologram.Compiler.CallGraph do
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
 
     open_reflection_functions =
-      ReflectionGate.open_functions(graph, final_state.reached_vertices, entry_mfas, opts[:gate])
+      DynamicCallGate.open_functions(graph, final_state.reached_vertices, entry_mfas, opts[:gate])
 
     graph
     |> finalize_reachable_mfas(final_state, module_info_plt)
@@ -1108,7 +1108,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the vertices that belong to the given module (see vertex_module/1): the module's own vertex,
-  its MFAs and the reflection sites of its functions.
+  its MFAs and the dynamic calls of its functions.
   """
   @spec module_vertices(t, module) :: [vertex]
   def module_vertices(call_graph, module) do
@@ -1326,22 +1326,22 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns what the runtime's own reflection calls open for every page (see
-  `Hologram.Compiler.ReflectionGate`): the reflection functions, as `{name, arity}` tuples, that a
+  Returns what the runtime's own dynamic calls open for every page (see
+  `Hologram.Compiler.DynamicCallGate`): the reflection functions, as `{name, arity}` tuples, that a
   function among the given runtime MFAs calls on a module its code does not name. Every page loads
   the runtime, so what its functions can call, any page can.
 
   Called on the graph that still holds the runtime's MFAs: the pages graph has them and their
-  reflection sites' edges taken out (see remove_runtime_mfas!/2).
+  dynamic calls' edges taken out (see remove_runtime_mfas!/2).
 
   The walk runs inside the call graph's agent, so the graph is not copied out.
   """
-  @spec runtime_reflection(t, [mfa]) :: runtime_reflection
-  def runtime_reflection(call_graph, runtime_mfas) do
+  @spec runtime_dynamic_calls(t, [mfa]) :: runtime_dynamic_calls
+  def runtime_dynamic_calls(call_graph, runtime_mfas) do
     read_graph(call_graph.pid, fn graph ->
       open =
         for mfa <- runtime_mfas,
-            {_mfa, {:reflection_site, _function, name, arity, _kind}} <-
+            {_mfa, {:dynamic_call, _function, name, arity, _kind}} <-
               Digraph.outgoing_edges(graph, mfa),
             into: MapSet.new() do
           {name, arity}
@@ -1496,10 +1496,10 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the module the given vertex belongs to: the module of an MFA, the module a module vertex
-  is, and the module of the function a reflection site was found in.
+  is, and the module of the function a dynamic call was found in.
   """
   @spec vertex_module(vertex) :: module
-  def vertex_module({:reflection_site, {module, _function, _arity}, _name, _arity_2, _kind}),
+  def vertex_module({:dynamic_call, {module, _function, _arity}, _name, _arity_2, _kind}),
     do: module
 
   def vertex_module({module, _function, _arity}), do: module
@@ -1550,6 +1550,21 @@ defmodule Hologram.Compiler.CallGraph do
     |> add_edge(module, {module, :template, 0})
   end
 
+  # An edge from the function to each dynamic call its clause holds, so that the call is replaced
+  # with the function when its module is patched, and dumped with the graph.
+  defp add_dynamic_call_edges(
+         call_graph,
+         {_module, _function, _arity} = fun_def_vertex,
+         clause
+       ) do
+    edges =
+      for {name, arity, kind} <- DynamicCallSites.list(clause) do
+        {fun_def_vertex, {:dynamic_call, fun_def_vertex, name, arity, kind}}
+      end
+
+    add_edges(call_graph, edges)
+  end
+
   # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
   defp add_page_call_graph_edges(call_graph, module) do
     call_graph
@@ -1574,11 +1589,11 @@ defmodule Hologram.Compiler.CallGraph do
     add_edges(call_graph, edges)
   end
 
-  # The reflection functions (see Hologram.Compiler.ReflectionSites) of the types that can appear at
-  # protocol dispatch on the page, the way protocol implementations are entered for them: a type's
-  # __struct__/0,1 when it is a struct, its __changeset__/0 and __schema__/1,2 when it is an Ecto
-  # schema, and only the functions the gate opens (see Hologram.Compiler.ReflectionGate). A named
-  # call of a reflection function reaches it through an ordinary edge and needs none of this.
+  # The reflection functions (see Hologram.Compiler.DynamicCallSites) of the types that can appear
+  # at protocol dispatch on the page, the way protocol implementations are entered for them: a
+  # type's __struct__/0,1 when it is a struct, its __changeset__/0 and __schema__/1,2 when it is an
+  # Ecto schema, and only the functions the gate opens (see Hologram.Compiler.DynamicCallGate). A
+  # named call of a reflection function reaches it through an ordinary edge and needs none of this.
   # TODO: #938. The types come from every module the server callbacks name. Once the compiler knows
   # which types can reach the client, this set shrinks with the protocol implementations' one.
   defp add_reflection_mfas(page_mfas, types, open_functions, module_info_plt) do
@@ -1590,21 +1605,6 @@ defmodule Hologram.Compiler.CallGraph do
       end
 
     page_mfas ++ added_mfas
-  end
-
-  # An edge from the function to each reflection site its clause holds, so that the site is replaced
-  # with the function when its module is patched, and dumped with the graph.
-  defp add_reflection_site_edges(
-         call_graph,
-         {_module, _function, _arity} = fun_def_vertex,
-         clause
-       ) do
-    edges =
-      for {name, arity, kind} <- ReflectionSites.list(clause) do
-        {fun_def_vertex, {:reflection_site, fun_def_vertex, name, arity, kind}}
-      end
-
-    add_edges(call_graph, edges)
   end
 
   # A broadcast caller's functions that call a broadcast function, which broadcast_caller_analysis/2
@@ -1855,8 +1855,8 @@ defmodule Hologram.Compiler.CallGraph do
   # Whether a reached vertex needs its module built before its edges are complete: a function of a
   # module the graph holds no definition of and the module info PLT knows (an Erlang module has no
   # IR, a module the PLT does not know has no beam), or the vertex of such a module when building it
-  # would give that vertex edges. A reflection site exists only once its function's module is built.
-  defp frontier_vertex?({:reflection_site, _mfa, _name, _arity, _kind}, _modules, _module_infos),
+  # would give that vertex edges. A dynamic call exists only once its function's module is built.
+  defp frontier_vertex?({:dynamic_call, _mfa, _name, _arity, _kind}, _modules, _module_infos),
     do: false
 
   defp frontier_vertex?({module, _function, _arity}, graph_modules, module_info_plt) do

@@ -271,19 +271,19 @@ defmodule Mix.Tasks.Compile.Hologram do
       runtime_mfas =
         list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
 
-      # What the runtime's reflection calls open for every page, taken while the runtime graph still
+      # What the runtime's dynamic calls open for every page, taken while the runtime graph still
       # holds the runtime's MFAs (build_pages_graph/2 below takes them out), and kept when they are.
-      runtime_reflection =
-        list_runtime_reflection(
+      runtime_dynamic_calls =
+        list_runtime_dynamic_calls(
           cache.runtime,
           call_graph_for_runtime,
           runtime_mfas,
           runtime_kept?
         )
 
-      # Which reflection functions each page can call (see Hologram.Compiler.ReflectionGate): given
+      # Which reflection functions each page can call (see Hologram.Compiler.DynamicCallGate): given
       # to every listing of pages, the kept pages' relisting included.
-      gate = %{ir_plt: ir_plt, runtime: runtime_reflection}
+      gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
 
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
@@ -318,7 +318,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
           relist_all?:
             runtime_mfas_changed?(cache.runtime, runtime_mfas) or
-              runtime_reflection_changed?(cache.runtime, runtime_reflection)
+              runtime_dynamic_calls_changed?(cache.runtime, runtime_dynamic_calls)
         )
 
       # A compile that kept the runtime's MFAs has no pages graph yet: it relists no kept page, so it
@@ -825,7 +825,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           client_config: context.client_config,
           js_binding_modules: context.runtime_js_binding_modules,
           mfas: context.runtime_mfas,
-          reflection: context.gate.runtime
+          dynamic_calls: context.gate.runtime
         })
     end)
   end
@@ -970,16 +970,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       not Compiler.app_versions_changed?(module_digests_diff, Reflection.otp_app())
   end
 
+  defp runtime_dynamic_calls_changed?(nil, _runtime_dynamic_calls), do: false
+
+  defp runtime_dynamic_calls_changed?(kept_runtime, runtime_dynamic_calls) do
+    kept_runtime.dynamic_calls != runtime_dynamic_calls
+  end
+
   defp runtime_mfas_changed?(nil, _runtime_mfas), do: false
 
   defp runtime_mfas_changed?(kept_runtime, runtime_mfas) do
     kept_runtime.mfas != runtime_mfas
-  end
-
-  defp runtime_reflection_changed?(nil, _runtime_reflection), do: false
-
-  defp runtime_reflection_changed?(kept_runtime, runtime_reflection) do
-    kept_runtime.reflection != runtime_reflection
   end
 
   defp compiler_enabled? do
@@ -1040,19 +1040,21 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  # What the runtime's dynamic calls open is taken from the runtime's MFAs, so a compile that kept
+  # them (see runtime_kept?/3) keeps it too.
+  defp list_runtime_dynamic_calls(kept_runtime, _call_graph, _runtime_mfas, true),
+    do: kept_runtime.dynamic_calls
+
+  defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, false) do
+    CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas)
+  end
+
   # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)
   # finds the ones the runtime bundle on disk was built from.
   defp list_runtime_mfas(kept_runtime, _call_graph, _page_modules, true), do: kept_runtime.mfas
 
   defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, false) do
     CallGraph.list_runtime_mfas(call_graph, page_modules)
-  end
-
-  defp list_runtime_reflection(kept_runtime, _call_graph, _runtime_mfas, true),
-    do: kept_runtime.reflection
-
-  defp list_runtime_reflection(_kept_runtime, call_graph, runtime_mfas, false) do
-    CallGraph.runtime_reflection(call_graph, runtime_mfas)
   end
 
   # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which

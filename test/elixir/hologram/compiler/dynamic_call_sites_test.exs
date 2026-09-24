@@ -1,12 +1,12 @@
-defmodule Hologram.Compiler.ReflectionSitesTest do
+defmodule Hologram.Compiler.DynamicCallSitesTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.ReflectionSites
+  import Hologram.Compiler.DynamicCallSites
 
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
-  alias Hologram.Test.Fixtures.Compiler.ReflectionSites.Module1
-  alias Hologram.Test.Fixtures.Compiler.ReflectionSites.Module2
-  alias Hologram.Test.Fixtures.Compiler.ReflectionSites.Module3
+  alias Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module1
+  alias Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module2
+  alias Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module3
 
   @target {Module3, :target, 2}
 
@@ -73,8 +73,8 @@ defmodule Hologram.Compiler.ReflectionSitesTest do
     end
   end
 
-  test "functions/0" do
-    assert functions() == [
+  test "reflection_functions/0" do
+    assert reflection_functions() == [
              {:__changeset__, 0},
              {:__schema__, 1},
              {:__schema__, 2},

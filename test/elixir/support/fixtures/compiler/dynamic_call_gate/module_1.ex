@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.ReflectionGate.Module1 do
-  alias Hologram.Test.Fixtures.Compiler.ReflectionGate.Module2
+defmodule Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1 do
+  alias Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module2
 
   # Calls __struct__/0 on its parameter.
   def build(module), do: module.__struct__()

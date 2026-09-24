@@ -1,17 +1,18 @@
-defmodule Hologram.Compiler.ReflectionSites do
+defmodule Hologram.Compiler.DynamicCallSites do
   @moduledoc false
 
-  # Finds the calls of reflection functions (__changeset__/0, __schema__/1, __schema__/2,
-  # __struct__/0, __struct__/1) on a module the code does not name, such as `mod.__changeset__()`
-  # or `data.__struct__`. A call on a named module gives the call graph an edge to the function it
-  # calls, so only these calls can reach a reflection function the graph cannot see. A call whose
-  # function name is known only at runtime (`apply(mod, fun, args)` with a variable `fun`,
-  # `:erlang.make_fun/3`) is not one of them: the call graph adds no edge for such calls, so no
-  # function reached only that way is bundled, reflection functions included.
+  # Finds the dynamic calls the compiler tracks: calls of a reflection function on a module the code
+  # does not name, such as `mod.__changeset__()` or `data.__struct__`. The reflection functions are
+  # Ecto's schema reflection, __changeset__/0 and __schema__/1,2, and a struct's __struct__/0,1 (see
+  # reflection_functions/0); this has nothing to do with Hologram.Reflection. A call on a named
+  # module needs no tracking: it gives the call graph an edge to the function it calls. Not every
+  # dynamic call is tracked: a call whose function name is known only at runtime (`apply(mod, fun,
+  # args)` with a variable `fun`, `:erlang.make_fun/3`) is not, since the call graph adds no edge for
+  # such calls and no function reached only that way is bundled, reflection functions included.
 
   alias Hologram.Compiler.IR
 
-  @functions [
+  @reflection_functions [
     {:__changeset__, 0},
     {:__schema__, 1},
     {:__schema__, 2},
@@ -51,8 +52,8 @@ defmodule Hologram.Compiler.ReflectionSites do
   @doc """
   Returns the reflection functions, as `{name, arity}` tuples.
   """
-  @spec functions :: [{atom, arity}]
-  def functions, do: @functions
+  @spec reflection_functions :: [{atom, arity}]
+  def reflection_functions, do: @reflection_functions
 
   @doc """
   Lists the calls of reflection functions on a module the code does not name in the given function
@@ -71,7 +72,7 @@ defmodule Hologram.Compiler.ReflectionSites do
   end
 
   defp add_site(sites, function, arity, module, params) do
-    if {function, arity} in @functions do
+    if {function, arity} in @reflection_functions do
       [{function, arity, kind(module, params)} | sites]
     else
       sites
@@ -81,11 +82,11 @@ defmodule Hologram.Compiler.ReflectionSites do
   # An apply with an argument list written out calls the function with that many arguments; with
   # any other argument list, it can call the function with any arity it has.
   defp apply_arities(function, %IR.ListType{data: args}) do
-    if {function, length(args)} in @functions, do: [length(args)], else: []
+    if {function, length(args)} in @reflection_functions, do: [length(args)], else: []
   end
 
   defp apply_arities(function, _args) do
-    for {^function, arity} <- @functions, do: arity
+    for {^function, arity} <- @reflection_functions, do: arity
   end
 
   defp arg_kind(%IR.AtomType{}, _params), do: :literal

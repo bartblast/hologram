@@ -807,7 +807,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == []
     end
 
-    test "function definition IR, with a reflection call on a module the code does not name", %{
+    test "function definition IR, with a dynamic call", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.FunctionDefinition{
@@ -831,7 +831,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       build(call_graph, ir, Module1)
 
-      site = {:reflection_site, {Module1, :my_fun, 1}, :__changeset__, 0, {:param, 0}}
+      site = {:dynamic_call, {Module1, :my_fun, 1}, :__changeset__, 0, {:param, 0}}
 
       assert sorted_vertices(call_graph) == [{Module1, :my_fun, 1}, site]
       assert sorted_edges(call_graph) == [{{Module1, :my_fun, 1}, site}]
@@ -3013,7 +3013,7 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
-  test "module_vertices/2 includes the reflection sites of the module's functions", %{
+  test "module_vertices/2 includes the dynamic calls of the module's functions", %{
     empty_call_graph: call_graph
   } do
     build(call_graph, IR.for_module(Module42))
@@ -3025,7 +3025,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert result == [
              {Module42, :my_fun, 1},
-             {:reflection_site, {Module42, :my_fun, 1}, :__changeset__, 0, {:param, 0}}
+             {:dynamic_call, {Module42, :my_fun, 1}, :__changeset__, 0, {:param, 0}}
            ]
   end
 
@@ -3422,7 +3422,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert get_graph(call_graph) == graph_after_first_patch
     end
 
-    test "removes the reflection sites of a removed module", %{empty_call_graph: call_graph} do
+    test "removes the dynamic calls of a removed module", %{empty_call_graph: call_graph} do
       build(call_graph, IR.for_module(Module42))
 
       diff = %{added_modules: [], removed_modules: [Module42], edited_modules: []}
@@ -3431,10 +3431,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert vertices(call_graph) == []
     end
 
-    test "replaces the reflection sites of an edited module", %{empty_call_graph: call_graph} do
+    test "replaces the dynamic calls of an edited module", %{empty_call_graph: call_graph} do
       build(call_graph, IR.for_module(Module42))
 
-      # The edit takes the reflection call out: the module now defines Module9's functions.
+      # The edit takes the dynamic call out: the module now defines Module9's functions.
       edited_ir = %{IR.for_module(Module9) | module: %IR.AtomType{value: Module42}}
       ir_plt = PLT.put(PLT.start(), Module42, edited_ir)
 
@@ -3856,7 +3856,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
-  describe "runtime_reflection/2" do
+  describe "runtime_dynamic_calls/2" do
     test "opens the reflection functions the runtime's functions call on unnamed modules", %{
       empty_call_graph: call_graph
     } do
@@ -3864,28 +3864,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> build(IR.for_module(Module42))
       |> add_edge(
         {:module_1, :fun_a, 1},
-        {:reflection_site, {:module_1, :fun_a, 1}, :__struct__, 1, :open}
+        {:dynamic_call, {:module_1, :fun_a, 1}, :__struct__, 1, :open}
       )
       |> add_edge(
         {:module_1, :fun_a, 1},
-        {:reflection_site, {:module_1, :fun_a, 1}, :__schema__, 2, {:param, 0}}
+        {:dynamic_call, {:module_1, :fun_a, 1}, :__schema__, 2, {:param, 0}}
       )
 
-      result = runtime_reflection(call_graph, [{Module42, :my_fun, 1}, {:module_1, :fun_a, 1}])
+      result = runtime_dynamic_calls(call_graph, [{Module42, :my_fun, 1}, {:module_1, :fun_a, 1}])
 
       assert result == %{
                open: MapSet.new([{:__changeset__, 0}, {:__schema__, 2}, {:__struct__, 1}])
              }
     end
 
-    test "ignores the reflection calls of functions outside the runtime", %{
+    test "ignores the dynamic calls of functions outside the runtime", %{
       empty_call_graph: call_graph
     } do
       call_graph
       |> build(IR.for_module(Module42))
       |> add_vertex({:module_1, :fun_a, 1})
 
-      assert runtime_reflection(call_graph, [{:module_1, :fun_a, 1}]) == %{open: MapSet.new()}
+      assert runtime_dynamic_calls(call_graph, [{:module_1, :fun_a, 1}]) == %{open: MapSet.new()}
     end
   end
 
@@ -4191,8 +4191,8 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert vertex_module(Module1) == Module1
     end
 
-    test "reflection site" do
-      site = {:reflection_site, {Module1, :my_fun, 2}, :__struct__, 0, :open}
+    test "dynamic call" do
+      site = {:dynamic_call, {Module1, :my_fun, 2}, :__struct__, 0, :open}
 
       assert vertex_module(site) == Module1
     end

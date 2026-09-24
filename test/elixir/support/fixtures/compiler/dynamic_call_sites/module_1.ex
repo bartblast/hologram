@@ -1,7 +1,7 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 # credo:disable-for-this-file Credo.Check.Refactor.Apply
-defmodule Hologram.Test.Fixtures.Compiler.ReflectionSites.Module1 do
-  alias Hologram.Test.Fixtures.Compiler.ReflectionSites.Module2
+defmodule Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module1 do
+  alias Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module2
 
   def apply_with_function_name(module), do: apply(module, :__schema__, [:fields])
 

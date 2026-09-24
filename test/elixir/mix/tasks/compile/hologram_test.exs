@@ -53,7 +53,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
   # Pages whose inits put an Ecto schema into state; only the second calls a reflection function on
-  # a module it does not name (see the reflection gate tests).
+  # a module it does not name (see the dynamic call gate tests).
   @reflection_closed_page Hologram.Test.Fixtures.Compiler.CallGraph.Module43
   @reflection_open_page Hologram.Test.Fixtures.Compiler.CallGraph.Module44
   @reflection_schema Hologram.Test.Fixtures.Compiler.CallGraph.Module24
@@ -2767,7 +2767,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
-  describe "reflection gate" do
+  describe "dynamic call gate" do
     setup %{opts: opts} do
       on_exit(&Cache.reset/0)
       forget_kept_state(opts)
@@ -2795,10 +2795,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert {@reflection_schema, :__changeset__, 0} in mfas
     end
 
-    test "keeps what the runtime's reflection calls open with the runtime state", %{opts: opts} do
+    test "keeps what the runtime's dynamic calls open with the runtime state", %{opts: opts} do
       run(opts)
 
-      assert %{runtime: %{reflection: %{open: %MapSet{}}}} = cache_state()
+      assert %{runtime: %{dynamic_calls: %{open: %MapSet{}}}} = cache_state()
     end
   end
 

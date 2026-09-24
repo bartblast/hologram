@@ -380,8 +380,8 @@ defmodule Hologram.CompilerTest do
              ]
     end
 
-    test "names the application of the function a reflection site was found in" do
-      site = {:reflection_site, {Enum, :map, 2}, :__struct__, 0, :open}
+    test "names the application of the function a dynamic call was found in" do
+      site = {:dynamic_call, {Enum, :map, 2}, :__struct__, 0, :open}
       call_graph = CallGraph.add_vertex(CallGraph.start(), site)
 
       assert build_app_versions(call_graph) == [

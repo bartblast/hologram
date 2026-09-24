@@ -1,15 +1,15 @@
-defmodule Hologram.Compiler.ReflectionGateTest do
+defmodule Hologram.Compiler.DynamicCallGateTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.ReflectionGate
+  import Hologram.Compiler.DynamicCallGate
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
-  alias Hologram.Test.Fixtures.Compiler.ReflectionGate.Module1
+  alias Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1
 
   @build {Module1, :build, 1}
-  @site {:reflection_site, @build, :__struct__, 0, {:param, 0}}
+  @site {:dynamic_call, @build, :__struct__, 0, {:param, 0}}
 
   # The graph of Module1, its reach from the given entry function, and what the gate opens for it.
   defp open_from(function, arity, graph \\ module_1_graph()) do
@@ -48,9 +48,9 @@ defmodule Hologram.Compiler.ReflectionGateTest do
     test "sites on modules that are not their function's parameter open the functions they call" do
       reached_vertices = [
         {:module_1, :fun_a, 1},
-        {:reflection_site, {:module_1, :fun_a, 1}, :__changeset__, 0, :open},
-        {:reflection_site, {:module_2, :fun_b, 2}, :__schema__, 2, :open},
-        {:reflection_site, {:module_3, :fun_c, 0}, :__schema__, 2, :open}
+        {:dynamic_call, {:module_1, :fun_a, 1}, :__changeset__, 0, :open},
+        {:dynamic_call, {:module_2, :fun_b, 2}, :__schema__, 2, :open},
+        {:dynamic_call, {:module_3, :fun_c, 0}, :__schema__, 2, :open}
       ]
 
       assert open_functions(Digraph.new(), reached_vertices, [], gate()) ==
@@ -64,7 +64,7 @@ defmodule Hologram.Compiler.ReflectionGateTest do
     end
 
     test "the runtime's open functions are added" do
-      reached_vertices = [{:reflection_site, {:module_1, :fun_a, 1}, :__schema__, 1, :open}]
+      reached_vertices = [{:dynamic_call, {:module_1, :fun_a, 1}, :__schema__, 1, :open}]
 
       assert open_functions(Digraph.new(), reached_vertices, [], gate([{:__struct__, 0}])) ==
                MapSet.new([{:__schema__, 1}, {:__struct__, 0}])
