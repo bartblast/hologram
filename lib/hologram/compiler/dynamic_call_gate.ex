@@ -164,11 +164,13 @@ defmodule Hologram.Compiler.DynamicCallGate do
   # in an umbrella a module still loaded from a consolidated beam the code reloader deleted is read
   # from its object code, and a module with no beam is left out.
   defp module_ir(module, ir_plt) do
-    if Reflection.elixir_module?(module) do
-      Compiler.build_missing_ir!(ir_plt, [module])
-    end
+    with :error <- PLT.get(ir_plt, module) do
+      if Reflection.elixir_module?(module) do
+        Compiler.build_missing_ir!(ir_plt, [module])
+      end
 
-    PLT.get(ir_plt, module)
+      PLT.get(ir_plt, module)
+    end
   end
 
   defp non_runtime_callers(graph, function, runtime) do
