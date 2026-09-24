@@ -2963,7 +2963,7 @@ defmodule Hologram.CompilerTest do
     } do
       graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
       module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
-      opts = [gate: %{runtime: %{open: MapSet.new()}}]
+      opts = [gate: %{ir_plt: PLT.start(), runtime: %{open: MapSet.new()}}]
 
       expected =
         Enum.map(page_modules, fn page_module ->
@@ -3090,7 +3090,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt,
       page_modules: page_modules
     } do
-      opts = [gate: %{runtime: %{open: MapSet.new()}}]
+      opts = [gate: %{ir_plt: PLT.start(), runtime: %{open: MapSet.new()}}]
 
       result =
         CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
@@ -3778,7 +3778,7 @@ defmodule Hologram.CompilerTest do
       pages_plt: pages_plt,
       static_dir: static_dir
     } do
-      gate = %{runtime: %{open: MapSet.new()}}
+      gate = %{ir_plt: PLT.start(), runtime: %{open: MapSet.new()}}
 
       # The kept lists are the ones the pages are built from with this gate.
       page_modules

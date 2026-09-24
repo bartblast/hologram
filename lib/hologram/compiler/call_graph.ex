@@ -1032,7 +1032,7 @@ defmodule Hologram.Compiler.CallGraph do
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
 
     open_reflection_functions =
-      ReflectionGate.open_functions(graph, final_state.reached_vertices, opts[:gate])
+      ReflectionGate.open_functions(graph, final_state.reached_vertices, entry_mfas, opts[:gate])
 
     graph
     |> finalize_reachable_mfas(final_state, module_info_plt)

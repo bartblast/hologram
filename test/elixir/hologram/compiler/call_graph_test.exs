@@ -2551,7 +2551,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         full_call_graph
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas_with_gate(Module43, %{runtime: %{open: MapSet.new()}})
+        |> list_page_mfas_with_gate(Module43, %{
+          ir_plt: PLT.start(),
+          runtime: %{open: MapSet.new()}
+        })
 
       refute {Module24, :__changeset__, 0} in result
       refute {Module24, :__schema__, 1} in result
@@ -2571,7 +2574,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         full_call_graph
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas_with_gate(Module44, %{runtime: %{open: MapSet.new()}})
+        |> list_page_mfas_with_gate(Module44, %{
+          ir_plt: PLT.start(),
+          runtime: %{open: MapSet.new()}
+        })
 
       assert {Module24, :__changeset__, 0} in result
       assert {Module32, :__changeset__, 0} in result
@@ -2590,7 +2596,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         full_call_graph
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas_with_gate(Module43, %{runtime: %{open: MapSet.new([{:__struct__, 0}])}})
+        |> list_page_mfas_with_gate(Module43, %{
+          ir_plt: PLT.start(),
+          runtime: %{open: MapSet.new([{:__struct__, 0}])}
+        })
 
       assert {Module24, :__struct__, 0} in result
       assert {Module25, :__struct__, 0} in result

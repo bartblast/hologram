@@ -283,7 +283,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # Which reflection functions each page can call (see Hologram.Compiler.ReflectionGate): given
       # to every listing of pages, the kept pages' relisting included.
-      gate = %{runtime: runtime_reflection}
+      gate = %{ir_plt: ir_plt, runtime: runtime_reflection}
 
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
