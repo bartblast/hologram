@@ -42,7 +42,8 @@ defmodule Hologram.Compiler.CacheTest do
       app_versions: [hologram: "1.0.0"],
       bundle_info: %{digest: "b", js_inputs: %{"/app/assets/js/runtime.mjs" => {:digest, 2}}},
       js_binding_modules: MapSet.new(),
-      mfas: [{Module1, :fun_1, 0}]
+      mfas: [{Module1, :fun_1, 0}],
+      reflection: %{open: MapSet.new([{:__struct__, 0}])}
     })
 
     put_template_modules(%{Module1 => MapSet.new()})
@@ -318,7 +319,8 @@ defmodule Hologram.Compiler.CacheTest do
                       js_inputs: %{"/app/assets/js/runtime.mjs" => {:digest, 2}}
                     },
                     js_binding_modules: MapSet.new(),
-                    mfas: [{Module1, :fun_1, 0}]
+                    mfas: [{Module1, :fun_1, 0}],
+                    reflection: %{open: MapSet.new([{:__struct__, 0}])}
                   },
                   template_modules: %{Module1 => MapSet.new()}
                 }}
@@ -642,12 +644,14 @@ defmodule Hologram.Compiler.CacheTest do
                    js_inputs: %{"/app/assets/js/runtime.mjs" => {:digest, 2}}
                  },
                  js_binding_modules: js_binding_modules,
-                 mfas: [{Module1, :fun_1, 0}]
+                 mfas: [{Module1, :fun_1, 0}],
+                 reflection: %{open: reflection_open}
                },
                template_modules: template_modules
              } = get()
 
       assert async_mfas == MapSet.new()
+      assert reflection_open == MapSet.new([{:__struct__, 0}])
 
       assert js_input_paths ==
                MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"])
