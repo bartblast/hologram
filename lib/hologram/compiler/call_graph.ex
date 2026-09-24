@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.CallGraph do
   # The version of what dump/2 writes. Bump it whenever the shape of the agent's state changes: a
   # dump of another version is not loaded (see load/2), and the compile starts cold. A dump written
   # before the version existed holds a bare graph, which counts as version 0.
-  @dump_version 3
+  @dump_version 1
 
   # Edges for dynamic dispatch: the caller reads the callee module from data
   # (e.g. a struct's calendar field), so static IR analysis can't see the
