@@ -72,6 +72,24 @@ defmodule Hologram.Compiler.CompileInputs do
     end
   end
 
+  @doc """
+  Whether the world is as the given record says: the manifests, the bundle inputs, the client config
+  and the static files built again equal the recorded ones, and no recorded JavaScript file has
+  another fingerprint now (see `Hologram.Compiler.js_inputs_changed?/2`). A file recorded as
+  `:fresh` always counts as changed.
+  """
+  @spec unchanged?(t, keyword) :: boolean
+  def unchanged?(record, opts) do
+    {js_inputs, rest} = Map.pop!(record, :js_inputs)
+
+    js_fingerprints =
+      js_inputs
+      |> Map.keys()
+      |> Compiler.fingerprint_js_inputs(nil)
+
+    rest == build(opts) and not Compiler.js_inputs_changed?(js_inputs, js_fingerprints)
+  end
+
   # The Elixir compile manifest of every loaded application that has one, in application name order,
   # digested. Content rather than mtime: the compile task touches the umbrella apps' manifests after
   # every run (see refresh_umbrella_app_manifests/0 there).

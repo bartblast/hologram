@@ -18,7 +18,9 @@ defmodule Hologram.Compiler.CompileInputsTest do
   @lib_js_dir Path.join(@lib_assets_dir, "js")
   @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
 
+  @imported_js_path Path.join(@test_dir, "imported.mjs")
   @manifest_dir Path.dirname(@manifest_path)
+  @static_file_path Path.join(@static_dir, "page-Module1-ABC.js")
   @package_json_path Path.join(@assets_dir, "package.json")
 
   setup_all do
@@ -30,6 +32,7 @@ defmodule Hologram.Compiler.CompileInputsTest do
     File.cp_r!(@lib_js_dir, @js_dir)
     File.cp!(@lib_package_json_path, @package_json_path)
 
+    File.write!(@imported_js_path, "export const a = 1;\n")
     File.write!(@manifest_path, "manifest 1")
 
     for file_name <- ["page-Module2-DEF.js", "page-Module1-ABC.js"] do
@@ -96,6 +99,57 @@ defmodule Hologram.Compiler.CompileInputsTest do
       dump(record, path)
 
       assert load(path) == record
+    end
+  end
+
+  describe "unchanged?/2" do
+    setup %{opts: opts} do
+      js_inputs = Compiler.fingerprint_js_inputs([@imported_js_path], nil)
+
+      record =
+        opts
+        |> build()
+        |> Map.put(:js_inputs, js_inputs)
+
+      [record: record]
+    end
+
+    test "a JavaScript file recorded as fresh", %{opts: opts, record: record} do
+      fresh_record = %{record | js_inputs: %{@imported_js_path => :fresh}}
+
+      refute unchanged?(fresh_record, opts)
+    end
+
+    test "a manifest changed", %{opts: opts, record: record} do
+      on_exit(fn -> File.write!(@manifest_path, "manifest 1") end)
+      File.write!(@manifest_path, "manifest 2")
+
+      refute unchanged?(record, opts)
+    end
+
+    test "a static file vanished", %{opts: opts, record: record} do
+      on_exit(fn -> File.write!(@static_file_path, "") end)
+      File.rm!(@static_file_path)
+
+      refute unchanged?(record, opts)
+    end
+
+    test "an imported JavaScript file changed", %{opts: opts, record: record} do
+      on_exit(fn -> File.write!(@imported_js_path, "export const a = 1;\n") end)
+      File.write!(@imported_js_path, "export const a = 2;\n")
+
+      refute unchanged?(record, opts)
+    end
+
+    test "nothing changed", %{opts: opts, record: record} do
+      assert unchanged?(record, opts)
+    end
+
+    test "the client stack traces setting changed", %{opts: opts, record: record} do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      refute unchanged?(record, opts)
     end
   end
 end
