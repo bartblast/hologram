@@ -9,6 +9,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.CompileInputs
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Tracer
@@ -32,11 +33,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
+  @build_lib_dir Path.join(@test_dir, "build_lib")
   @static_dir Path.join(@test_dir, "static")
   @tmp_dir Path.join(@test_dir, "tmp")
 
+  @compile_inputs_path Path.join(@build_dir, Reflection.compile_inputs_dump_file_name())
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
+
+  # The Elixir compile manifest of the :hologram app, the one app with a manifest in the test
+  # build lib dir.
+  @manifest_path Path.join([@build_lib_dir, "hologram", ".mix", "compile.elixir"])
+  @manifest_dir Path.dirname(@manifest_path)
 
   @compile_fixtures_dir Path.join([@fixtures_dir, "mix", "tasks", "compile", "hologram"])
 
@@ -508,11 +516,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.mkdir!(@assets_dir)
     File.mkdir!(@build_dir)
 
+    File.mkdir_p!(@manifest_dir)
+    File.write!(@manifest_path, "manifest 1")
+
     test_node_modules_path = Path.join(@assets_dir, "node_modules")
 
     opts = [
       assets_dir: @assets_dir,
       build_dir: @build_dir,
+      build_lib_dir: @build_lib_dir,
       esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(@lib_assets_dir, "js"),
       node_modules_path: test_node_modules_path,
@@ -529,6 +541,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup do
+    File.rm(@compile_inputs_path)
     File.rm(@lock_path)
 
     clean_dir(@static_dir)
@@ -1507,6 +1520,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       {1, compile_state} = load_compile_state_dump(opts)
       assert compile_state.pending_pages == pending_pages
+    end
+
+    test "a run that builds every page writes the compile inputs", %{opts: opts} do
+      run(opts)
+
+      assert %{js_inputs: js_inputs, manifests: [{:hologram, _digest}]} =
+               CompileInputs.load(@compile_inputs_path)
+
+      recorded_paths = MapSet.new(js_inputs, fn {path, _fingerprint} -> path end)
+
+      assert recorded_paths == cache_state().js_input_paths
+      assert MapSet.size(recorded_paths) > 0
+    end
+
+    test "a run that leaves pages pending writes no compile inputs", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(2)
+
+      run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
+
+      refute File.exists?(@compile_inputs_path)
     end
 
     test "a run that changes nothing writes no compile state", %{opts: opts} do
