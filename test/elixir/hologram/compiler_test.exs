@@ -138,6 +138,26 @@ defmodule Hologram.CompilerTest do
     Enum.reject(mfas, fn {module, _function, _arity} -> Reflection.js_imports?(module) end)
   end
 
+  # A copy of Hologram's JavaScript sources and package.json, so that a test can edit them.
+  defp setup_bundle_inputs_test(test_subdir) do
+    on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+    test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
+    assets_dir = Path.join(test_tmp_dir, "assets")
+    js_dir = Path.join(assets_dir, "js")
+
+    clean_dir(test_tmp_dir)
+    File.mkdir_p!(assets_dir)
+    File.cp_r!(@js_dir, js_dir)
+    package_json_path = Path.join(assets_dir, "package.json")
+
+    @assets_dir
+    |> Path.join("package.json")
+    |> File.cp!(package_json_path)
+
+    [opts: [assets_dir: assets_dir, js_dir: js_dir]]
+  end
+
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
     assets_dir = Path.join(test_tmp_dir, "assets")
@@ -695,77 +715,41 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_bundle_inputs/2" do
+  describe "build_bundle_inputs/1" do
     setup do
-      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
-
-      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "build_bundle_inputs_2"])
-      assets_dir = Path.join(test_tmp_dir, "assets")
-      js_dir = Path.join(assets_dir, "js")
-
-      clean_dir(test_tmp_dir)
-      File.mkdir_p!(assets_dir)
-      File.cp_r!(@js_dir, js_dir)
-      package_json_path = Path.join(assets_dir, "package.json")
-
-      @assets_dir
-      |> Path.join("package.json")
-      |> File.cp!(package_json_path)
-
-      [opts: [assets_dir: assets_dir, js_dir: js_dir]]
+      setup_bundle_inputs_test("build_bundle_inputs_1")
     end
 
-    test "names the client stack traces setting", %{
-      module_info_plt: module_info_plt,
-      opts: opts
-    } do
-      Application.put_env(:hologram, :client_stacktraces, true)
-      assert build_bundle_inputs(module_info_plt, opts).client_stacktraces? == true
+    test "changes when a JavaScript source changes", %{opts: opts} do
+      bundle_inputs = build_bundle_inputs(opts)
+      js_source_path = Path.join(opts[:js_dir], "hologram.mjs")
+      File.write!(js_source_path, "\n", [:append])
 
-      Application.put_env(:hologram, :client_stacktraces, false)
-      assert build_bundle_inputs(module_info_plt, opts).client_stacktraces? == false
+      assert build_bundle_inputs(opts).js_sources != bundle_inputs.js_sources
     end
 
-    test "lists Hologram's modules with their module info digests, sorted", %{
-      module_info_plt: module_info_plt,
-      opts: opts
-    } do
-      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
-      hologram_app_modules = Application.spec(:hologram, :modules)
+    test "changes when package.json changes", %{opts: opts} do
+      bundle_inputs = build_bundle_inputs(opts)
+      package_json_path = Path.join(opts[:assets_dir], "package.json")
+      File.write!(package_json_path, "\n", [:append])
 
-      assert {Compiler, PLT.get!(module_info_plt, Compiler).digest} in hologram_modules
-      assert hologram_modules == Enum.sort(hologram_modules)
-
-      assert Enum.all?(hologram_modules, fn {module, _digest} ->
-               module in hologram_app_modules
-             end)
+      assert build_bundle_inputs(opts).package_json_digest != bundle_inputs.package_json_digest
     end
 
-    test "leaves out the :hologram app's modules compiled from outside Hologram's lib dir", %{
-      module_info_plt: module_info_plt,
-      opts: opts
-    } do
-      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
-      hologram_module_names = Enum.map(hologram_modules, fn {module, _digest} -> module end)
+    test "is equal for two calls with nothing changed", %{opts: opts} do
+      assert build_bundle_inputs(opts) == build_bundle_inputs(opts)
+    end
 
-      # A test fixture, compiled into the :hologram app from test/elixir/support.
-      assert Module18 in Application.spec(:hologram, :modules)
-      assert PLT.member?(module_info_plt, Module18)
-      refute Module18 in hologram_module_names
+    test "leaves out directories", %{opts: opts} do
+      %{js_sources: js_sources} = build_bundle_inputs(opts)
 
-      assert Enum.all?(hologram_module_names, fn module ->
-               module_info_plt
-               |> PLT.get!(module)
-               |> Map.fetch!(:source_path)
-               |> String.starts_with?(Path.join(@root_dir, "lib"))
-             end)
+      refute Enum.any?(js_sources, fn {path, _mtime, _size} -> path == "erlang" end)
     end
 
     test "lists every JavaScript source under the js dir with its mtime and size, sorted", %{
-      module_info_plt: module_info_plt,
       opts: opts
     } do
-      %{js_sources: js_sources} = build_bundle_inputs(module_info_plt, opts)
+      %{js_sources: js_sources} = build_bundle_inputs(opts)
 
       file_paths =
         opts[:js_dir]
@@ -788,38 +772,69 @@ defmodule Hologram.CompilerTest do
       assert js_sources == Enum.sort(js_sources)
     end
 
-    test "leaves out directories", %{module_info_plt: module_info_plt, opts: opts} do
-      %{js_sources: js_sources} = build_bundle_inputs(module_info_plt, opts)
-
-      refute Enum.any?(js_sources, fn {path, _mtime, _size} -> path == "erlang" end)
+    test "names no module", %{opts: opts} do
+      refute opts
+             |> build_bundle_inputs()
+             |> Map.has_key?(:hologram_modules)
     end
 
-    test "changes when a JavaScript source changes", %{
+    test "names the client stack traces setting", %{opts: opts} do
+      Application.put_env(:hologram, :client_stacktraces, true)
+      assert build_bundle_inputs(opts).client_stacktraces? == true
+
+      Application.put_env(:hologram, :client_stacktraces, false)
+      assert build_bundle_inputs(opts).client_stacktraces? == false
+    end
+  end
+
+  describe "build_bundle_inputs/2" do
+    setup do
+      setup_bundle_inputs_test("build_bundle_inputs_2")
+    end
+
+    test "adds the digests of Hologram's modules to the inputs that need no module", %{
       module_info_plt: module_info_plt,
       opts: opts
     } do
       bundle_inputs = build_bundle_inputs(module_info_plt, opts)
-      js_source_path = Path.join(opts[:js_dir], "hologram.mjs")
-      File.write!(js_source_path, "\n", [:append])
 
-      assert build_bundle_inputs(module_info_plt, opts).js_sources != bundle_inputs.js_sources
+      assert Map.delete(bundle_inputs, :hologram_modules) == build_bundle_inputs(opts)
+      assert bundle_inputs.hologram_modules != []
     end
 
-    test "changes when package.json changes", %{module_info_plt: module_info_plt, opts: opts} do
-      bundle_inputs = build_bundle_inputs(module_info_plt, opts)
-      package_json_path = Path.join(opts[:assets_dir], "package.json")
-      File.write!(package_json_path, "\n", [:append])
-
-      assert build_bundle_inputs(module_info_plt, opts).package_json_digest !=
-               bundle_inputs.package_json_digest
-    end
-
-    test "is equal for two calls with nothing changed", %{
+    test "leaves out the :hologram app's modules compiled from outside Hologram's lib dir", %{
       module_info_plt: module_info_plt,
       opts: opts
     } do
-      assert build_bundle_inputs(module_info_plt, opts) ==
-               build_bundle_inputs(module_info_plt, opts)
+      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
+      hologram_module_names = Enum.map(hologram_modules, fn {module, _digest} -> module end)
+
+      # A test fixture, compiled into the :hologram app from test/elixir/support.
+      assert Module18 in Application.spec(:hologram, :modules)
+      assert PLT.member?(module_info_plt, Module18)
+      refute Module18 in hologram_module_names
+
+      assert Enum.all?(hologram_module_names, fn module ->
+               module_info_plt
+               |> PLT.get!(module)
+               |> Map.fetch!(:source_path)
+               |> String.starts_with?(Path.join(@root_dir, "lib"))
+             end)
+    end
+
+    test "lists Hologram's modules with their module info digests, sorted", %{
+      module_info_plt: module_info_plt,
+      opts: opts
+    } do
+      %{hologram_modules: hologram_modules} = build_bundle_inputs(module_info_plt, opts)
+      hologram_app_modules = Application.spec(:hologram, :modules)
+
+      assert {Compiler, PLT.get!(module_info_plt, Compiler).digest} in hologram_modules
+      assert hologram_modules == Enum.sort(hologram_modules)
+
+      assert Enum.all?(hologram_modules, fn {module, _digest} ->
+               module in hologram_app_modules
+             end)
     end
   end
 
