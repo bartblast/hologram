@@ -23,18 +23,20 @@ defmodule Hologram.Compiler.DynamicCallGate do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
-  # What the gate is given besides the page's reach: what the runtime's own dynamic calls open
-  # (see CallGraph.runtime_dynamic_calls/2), and the IR PLT the callers' code is read from, where a
-  # module it does not hold yet is put once read.
+  # What the gate is given besides the page's reach: what the runtime's own dynamic calls open (see
+  # runtime_dynamic_calls/3), and the IR PLT the callers' code is read from, where a module it does
+  # not hold yet is put once read.
   @type t :: %{ir_plt: PLT.t(), runtime: CallGraph.runtime_dynamic_calls()}
 
   @doc """
   Returns the reflection functions, as `{name, arity}` tuples, that the given gate opens for code
   that reaches the given vertices from the given entries (the functions called from outside the
   graph, with arguments the graph cannot see): those a dynamic call among the vertices makes on a
-  module that is not its function's parameter, those a dynamic call makes on a parameter some caller
-  can pass anything else than a module written in the code, and those the runtime opens. With no gate,
-  every reflection function is open, which is what the compiler did before it had one.
+  module that is not its function's parameter, those a dynamic call makes on a parameter some
+  caller can pass anything else than a module written in the code, those the runtime opens, and
+  those of a runtime function's closed dynamic call that a reached caller of the runtime function
+  can open (see runtime_dynamic_calls/3). With no gate, every reflection function is open, which is
+  what the compiler did before it had one.
   """
   @spec open_functions(Digraph.t(), Enumerable.t(CallGraph.vertex()), [mfa], t | nil) ::
           MapSet.t({atom, arity})
@@ -52,11 +54,76 @@ defmodule Hologram.Compiler.DynamicCallGate do
       reached: MapSet.new(reached_vertices)
     }
 
-    for {:dynamic_call, function, name, arity, kind} <- reached_vertices,
-        open_site?(kind, function, context),
-        into: gate.runtime.open do
-      {name, arity}
+    %{exposed: exposed, open: runtime_open, page_callers: page_callers} = gate.runtime
+
+    open =
+      for {:dynamic_call, function, name, arity, kind} <- reached_vertices,
+          open_site?(kind, function, context),
+          into: runtime_open do
+        {name, arity}
+      end
+
+    for {{function, index}, functions} <- exposed,
+        open_exposed?(function, index, page_callers, context),
+        reflection_function <- functions,
+        into: open do
+      reflection_function
     end
+  end
+
+  @doc """
+  Returns what the runtime's own dynamic calls open for every page, from the graph that still holds
+  the runtime's MFAs, the MFAs and the IR PLT the callers' code is read from:
+
+    * `:open` - the reflection functions, as `{name, arity}` tuples, that a runtime function's
+      dynamic call opens, followed up the runtime's own functions from the runtime's entries.
+    * `:exposed` - for a dynamic call on a parameter that the runtime's own callers keep closed,
+      each `{function, index}` its closed chain went through, with the reflection functions the
+      call would open: page code can call those functions too, with arguments of its own.
+    * `:page_callers` - the callers of each exposed function that are not runtime MFAs, taken
+      here because the pages graph has the runtime's MFAs and their edges taken out.
+  """
+  @spec runtime_dynamic_calls(Digraph.t(), [mfa], PLT.t()) :: CallGraph.runtime_dynamic_calls()
+  def runtime_dynamic_calls(graph, runtime_mfas, ir_plt) do
+    runtime = MapSet.new(runtime_mfas)
+
+    context = %{
+      entries: MapSet.new(CallGraph.list_runtime_entry_mfas()),
+      graph: graph,
+      ir_plt: ir_plt,
+      reached: runtime
+    }
+
+    sites =
+      for mfa <- runtime_mfas,
+          {_mfa, {:dynamic_call, function, name, arity, kind}} <-
+            Digraph.outgoing_edges(graph, mfa) do
+        {function, {name, arity}, kind}
+      end
+
+    %{exposed: exposed, open: open} =
+      Enum.reduce(sites, %{exposed: %{}, open: MapSet.new()}, fn
+        {_function, reflection_function, :open}, acc ->
+          %{acc | open: MapSet.put(acc.open, reflection_function)}
+
+        {function, reflection_function, {:param, index}}, acc ->
+          case resolve_param(function, index, context, MapSet.new()) do
+            {:open, _visited} ->
+              %{acc | open: MapSet.put(acc.open, reflection_function)}
+
+            {:closed, visited} ->
+              %{acc | exposed: expose(acc.exposed, visited, reflection_function)}
+          end
+      end)
+
+    page_callers =
+      exposed
+      |> Map.keys()
+      |> Enum.map(fn {function, _index} -> function end)
+      |> Enum.uniq()
+      |> Map.new(&{&1, non_runtime_callers(graph, &1, runtime)})
+
+    %{exposed: exposed, open: open, page_callers: page_callers}
   end
 
   # The clauses of the given function, read from its module's IR, or nil when the module has no IR
@@ -72,6 +139,21 @@ defmodule Hologram.Compiler.DynamicCallGate do
       _no_clauses -> nil
     end
   end
+
+  defp expose(exposed, visited, reflection_function) do
+    Enum.reduce(visited, exposed, fn param, acc ->
+      Map.update(
+        acc,
+        param,
+        MapSet.new([reflection_function]),
+        &MapSet.put(&1, reflection_function)
+      )
+    end)
+  end
+
+  # Stops a reduction over callers or calls at the first one that opens.
+  defp halt_when_open({:open, _visited} = open), do: {:halt, open}
+  defp halt_when_open(closed), do: {:cont, closed}
 
   defp module_ir(module, ir_plt) do
     case PLT.get(ir_plt, module) do
@@ -89,55 +171,94 @@ defmodule Hologram.Compiler.DynamicCallGate do
     end
   end
 
-  defp open_argument?({:literal, _ir}, _caller, _context, _seen), do: false
-
-  defp open_argument?({{:param, caller_index}, _ir}, caller, context, seen) do
-    open_param?(caller, caller_index, context, seen)
+  defp non_runtime_callers(graph, function, runtime) do
+    for {caller, _function} <- Digraph.incoming_edges(graph, function),
+        not MapSet.member?(runtime, caller) do
+      caller
+    end
+    |> Enum.sort()
   end
 
-  defp open_argument?({:other, _ir}, _caller, _context, _seen), do: true
+  # A runtime function's closed dynamic call opens for a page when one of the page's reached
+  # functions calls the runtime function with an argument that opens it. The runtime's own callers
+  # were followed already, so a page that reaches no such caller leaves it closed.
+  defp open_exposed?(function, index, page_callers, context) do
+    page_callers
+    |> Map.fetch!(function)
+    |> Enum.filter(&MapSet.member?(context.reached, &1))
+    |> resolve_callers(function, index, context, MapSet.new())
+    |> elem(0)
+    |> Kernel.==(:open)
+  end
 
-  defp open_caller?({module, _function, _arity} = caller, function, index, context, seen) do
-    case clauses(caller, context.ir_plt) do
-      nil ->
-        true
+  defp open_site?(:open, _function, _context), do: true
 
-      clauses ->
-        calls = Enum.flat_map(clauses, &DynamicCallSites.call_args(&1, module, function))
+  defp open_site?({:param, index}, function, context) do
+    function
+    |> resolve_param(index, context, MapSet.new())
+    |> elem(0)
+    |> Kernel.==(:open)
+  end
 
-        calls == [] or
-          Enum.any?(calls, &open_argument?(Enum.at(&1, index), caller, context, seen))
+  defp resolve_argument({:literal, _ir}, _caller, _context, visited), do: {:closed, visited}
+
+  defp resolve_argument({{:param, caller_index}, _ir}, caller, context, visited) do
+    resolve_param(caller, caller_index, context, visited)
+  end
+
+  defp resolve_argument({:other, _ir}, _caller, _context, visited), do: {:open, visited}
+
+  defp resolve_caller({module, _function, _arity} = caller, function, index, context, visited) do
+    with clauses when clauses != nil <- clauses(caller, context.ir_plt),
+         [_call | _calls] = calls <-
+           Enum.flat_map(clauses, &DynamicCallSites.call_args(&1, module, function)) do
+      Enum.reduce_while(calls, {:closed, visited}, fn args, {:closed, acc} ->
+        args
+        |> Enum.at(index)
+        |> resolve_argument(caller, context, acc)
+        |> halt_when_open()
+      end)
+    else
+      _no_call -> {:open, visited}
     end
   end
 
-  defp open_caller?(_module_vertex, _function, _index, _context, _seen), do: true
+  defp resolve_caller(_module_vertex, _function, _index, _context, visited), do: {:open, visited}
 
-  # A parameter already being followed on this path is closed here: whether it opens is decided
-  # where the path first reached it, by its other callers.
-  defp open_param?(function, index, context, seen) do
+  defp resolve_callers(callers, function, index, context, visited) do
+    Enum.reduce_while(callers, {:closed, visited}, fn caller, {:closed, acc} ->
+      caller
+      |> resolve_caller(function, index, context, acc)
+      |> halt_when_open()
+    end)
+  end
+
+  # Whether a parameter can hold anything else than a module written in the code, with the
+  # parameters visited so far: a visited parameter is closed here, since the first result that
+  # opens ends the resolution, so one visited before either closed or is being followed further up
+  # this chain, where its other callers decide.
+  defp resolve_param(function, index, context, visited) do
     cond do
-      MapSet.member?(seen, {function, index}) ->
-        false
+      MapSet.member?(visited, {function, index}) ->
+        {:closed, visited}
 
       MapSet.member?(context.entries, function) ->
-        true
+        {:open, visited}
 
       true ->
+        new_visited = MapSet.put(visited, {function, index})
+
         callers =
           for {caller, _function} <- Digraph.incoming_edges(context.graph, function),
               MapSet.member?(context.reached, caller) do
             caller
           end
 
-        new_seen = MapSet.put(seen, {function, index})
-
-        callers == [] or Enum.any?(callers, &open_caller?(&1, function, index, context, new_seen))
+        if callers == [] do
+          {:open, new_visited}
+        else
+          resolve_callers(callers, function, index, context, new_visited)
+        end
     end
-  end
-
-  defp open_site?(:open, _function, _context), do: true
-
-  defp open_site?({:param, index}, function, context) do
-    open_param?(function, index, context, MapSet.new())
   end
 end

@@ -278,6 +278,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           cache.runtime,
           call_graph_for_runtime,
           runtime_mfas,
+          ir_plt,
           runtime_kept?
         )
 
@@ -972,8 +973,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp runtime_dynamic_calls_changed?(nil, _runtime_dynamic_calls), do: false
 
+  # The page callers of the exposed runtime functions are left out: a page whose reach gains or
+  # loses one had a module it reaches edited, and is rebuilt for that, and a page that does not
+  # reach it lists the same MFAs either way.
   defp runtime_dynamic_calls_changed?(kept_runtime, runtime_dynamic_calls) do
-    kept_runtime.dynamic_calls != runtime_dynamic_calls
+    Map.take(kept_runtime.dynamic_calls, [:exposed, :open]) !=
+      Map.take(runtime_dynamic_calls, [:exposed, :open])
   end
 
   defp runtime_mfas_changed?(nil, _runtime_mfas), do: false
@@ -1042,11 +1047,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # What the runtime's dynamic calls open is taken from the runtime's MFAs, so a compile that kept
   # them (see runtime_kept?/3) keeps it too.
-  defp list_runtime_dynamic_calls(kept_runtime, _call_graph, _runtime_mfas, true),
+  defp list_runtime_dynamic_calls(kept_runtime, _call_graph, _runtime_mfas, _ir_plt, true),
     do: kept_runtime.dynamic_calls
 
-  defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, false) do
-    CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas)
+  defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, ir_plt, false) do
+    CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
   end
 
   # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)

@@ -20,13 +20,36 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
   end
 
   defp gate(runtime_open \\ []) do
-    %{ir_plt: PLT.start(), runtime: %{open: MapSet.new(runtime_open)}}
+    %{
+      ir_plt: PLT.start(),
+      runtime: %{exposed: %{}, open: MapSet.new(runtime_open), page_callers: %{}}
+    }
   end
 
   defp module_1_graph do
     CallGraph.start()
     |> CallGraph.build(IR.for_module(Module1))
     |> CallGraph.get_graph()
+  end
+
+  # What the gate opens on a pages graph, which has the runtime's MFAs taken out, for code reached
+  # from the given entry function, when Module1.build/1 is a runtime function whose dynamic call its
+  # runtime callers keep closed and every other function of Module1 is page code.
+  defp open_on_pages_from(function, arity) do
+    full_graph = module_1_graph()
+    graph = Digraph.remove_vertices(full_graph, [@build, @site])
+    entry = {Module1, function, arity}
+
+    page_callers =
+      for {caller, _build} <- Digraph.incoming_edges(full_graph, @build), do: caller
+
+    runtime = %{
+      exposed: %{{@build, 0} => MapSet.new([{:__struct__, 0}])},
+      open: MapSet.new(),
+      page_callers: %{@build => page_callers}
+    }
+
+    open_functions(graph, Digraph.reachable(graph, [entry]), [entry], %{gate() | runtime: runtime})
   end
 
   describe "open_functions/4" do
@@ -122,6 +145,78 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       open_functions(graph, Digraph.reachable(graph, [entry]), [entry], gate)
 
       assert PLT.member?(ir_plt, Module1)
+    end
+
+    test "a reached page caller passing a value from state opens an exposed runtime call" do
+      assert open_on_pages_from(:with_state_value, 1) == MapSet.new([{:__struct__, 0}])
+    end
+
+    test "a reached page caller passing a written module keeps an exposed runtime call closed" do
+      assert open_on_pages_from(:with_literal, 0) == MapSet.new()
+    end
+
+    test "a reached page caller passing its own parameter is followed to its page callers" do
+      assert open_on_pages_from(:forwarding_with_literal, 0) == MapSet.new()
+
+      assert open_on_pages_from(:forwarding_with_state_value, 1) ==
+               MapSet.new([{:__struct__, 0}])
+    end
+
+    test "a page caller outside the reach leaves an exposed runtime call closed" do
+      assert open_on_pages_from(:no_call, 0) == MapSet.new()
+    end
+  end
+
+  describe "runtime_dynamic_calls/3" do
+    test "a call the runtime's own callers keep closed is exposed, with its page callers" do
+      result =
+        runtime_dynamic_calls(
+          module_1_graph(),
+          [@build, {Module1, :with_literal, 0}],
+          PLT.start()
+        )
+
+      assert result == %{
+               exposed: %{{@build, 0} => MapSet.new([{:__struct__, 0}])},
+               open: MapSet.new(),
+               page_callers: %{
+                 @build => [
+                   {Module1, :capturing, 0},
+                   {Module1, :forwarding, 1},
+                   {Module1, :recursive, 2},
+                   {Module1, :with_state_value, 1}
+                 ]
+               }
+             }
+    end
+
+    test "a call a runtime caller opens is open" do
+      result =
+        runtime_dynamic_calls(
+          module_1_graph(),
+          [@build, {Module1, :with_state_value, 1}],
+          PLT.start()
+        )
+
+      assert result.open == MapSet.new([{:__struct__, 0}])
+      assert result.exposed == %{}
+    end
+
+    test "every parameter a closed chain goes through is exposed" do
+      runtime_mfas = [
+        @build,
+        {Module1, :forwarding, 1},
+        {Module1, :forwarding_with_literal, 0}
+      ]
+
+      result = runtime_dynamic_calls(module_1_graph(), runtime_mfas, PLT.start())
+
+      assert result.open == MapSet.new()
+
+      assert result.exposed == %{
+               {@build, 0} => MapSet.new([{:__struct__, 0}]),
+               {{Module1, :forwarding, 1}, 0} => MapSet.new([{:__struct__, 0}])
+             }
     end
   end
 end

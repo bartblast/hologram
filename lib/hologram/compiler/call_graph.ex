@@ -40,8 +40,13 @@ defmodule Hologram.Compiler.CallGraph do
           types: MapSet.t(module)
         }
 
-  # What the runtime's own dynamic calls open for every page (see runtime_dynamic_calls/2).
-  @type runtime_dynamic_calls :: %{open: MapSet.t({atom, arity})}
+  # What the runtime's own dynamic calls open for every page, and what page code can still open
+  # through the runtime's functions (see runtime_dynamic_calls/3).
+  @type runtime_dynamic_calls :: %{
+          exposed: %{{mfa, non_neg_integer} => MapSet.t({atom, arity})},
+          open: MapSet.t({atom, arity}),
+          page_callers: %{mfa => [vertex]}
+        }
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
@@ -1326,29 +1331,22 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns what the runtime's own dynamic calls open for every page (see
-  `Hologram.Compiler.DynamicCallGate`): the reflection functions, as `{name, arity}` tuples, that a
-  function among the given runtime MFAs calls on a module its code does not name. Every page loads
-  the runtime, so what its functions can call, any page can.
+  Returns what the runtime's own dynamic calls open for every page, with what page code can still
+  open through the runtime's functions (see
+  `Hologram.Compiler.DynamicCallGate.runtime_dynamic_calls/3`, which reads the callers' code from
+  the given IR PLT). Every page loads the runtime, so what its functions can call, any page can.
 
   Called on the graph that still holds the runtime's MFAs: the pages graph has them and their
   dynamic calls' edges taken out (see remove_runtime_mfas!/2).
 
   The walk runs inside the call graph's agent, so the graph is not copied out.
   """
-  @spec runtime_dynamic_calls(t, [mfa]) :: runtime_dynamic_calls
-  def runtime_dynamic_calls(call_graph, runtime_mfas) do
-    read_graph(call_graph.pid, fn graph ->
-      open =
-        for mfa <- runtime_mfas,
-            {_mfa, {:dynamic_call, _function, name, arity, _kind}} <-
-              Digraph.outgoing_edges(graph, mfa),
-            into: MapSet.new() do
-          {name, arity}
-        end
-
-      %{open: open}
-    end)
+  @spec runtime_dynamic_calls(t, [mfa], PLT.t()) :: runtime_dynamic_calls
+  def runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt) do
+    read_graph(
+      call_graph.pid,
+      &DynamicCallGate.runtime_dynamic_calls(&1, runtime_mfas, ir_plt)
+    )
   end
 
   @doc """

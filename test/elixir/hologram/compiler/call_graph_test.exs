@@ -2553,7 +2553,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module43, %{
           ir_plt: PLT.start(),
-          runtime: %{open: MapSet.new()}
+          runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
         })
 
       refute {Module24, :__changeset__, 0} in result
@@ -2576,7 +2576,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module44, %{
           ir_plt: PLT.start(),
-          runtime: %{open: MapSet.new()}
+          runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
         })
 
       assert {Module24, :__changeset__, 0} in result
@@ -2598,7 +2598,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module43, %{
           ir_plt: PLT.start(),
-          runtime: %{open: MapSet.new([{:__struct__, 0}])}
+          runtime: %{exposed: %{}, open: MapSet.new([{:__struct__, 0}]), page_callers: %{}}
         })
 
       assert {Module24, :__struct__, 0} in result
@@ -3856,10 +3856,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
-  describe "runtime_dynamic_calls/2" do
+  # How the runtime's dynamic calls are resolved is tested with Hologram.Compiler.DynamicCallGate.
+  describe "runtime_dynamic_calls/3" do
     test "opens the reflection functions the runtime's functions call on unnamed modules", %{
       empty_call_graph: call_graph
     } do
+      # No runtime function calls either function, so their parameters can hold anything.
       call_graph
       |> build(IR.for_module(Module42))
       |> add_edge(
@@ -3871,10 +3873,13 @@ defmodule Hologram.Compiler.CallGraphTest do
         {:dynamic_call, {:module_1, :fun_a, 1}, :__schema__, 2, {:param, 0}}
       )
 
-      result = runtime_dynamic_calls(call_graph, [{Module42, :my_fun, 1}, {:module_1, :fun_a, 1}])
+      runtime_mfas = [{Module42, :my_fun, 1}, {:module_1, :fun_a, 1}]
+      result = runtime_dynamic_calls(call_graph, runtime_mfas, PLT.start())
 
       assert result == %{
-               open: MapSet.new([{:__changeset__, 0}, {:__schema__, 2}, {:__struct__, 1}])
+               exposed: %{},
+               open: MapSet.new([{:__changeset__, 0}, {:__schema__, 2}, {:__struct__, 1}]),
+               page_callers: %{}
              }
     end
 
@@ -3885,7 +3890,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> build(IR.for_module(Module42))
       |> add_vertex({:module_1, :fun_a, 1})
 
-      assert runtime_dynamic_calls(call_graph, [{:module_1, :fun_a, 1}]) == %{open: MapSet.new()}
+      assert runtime_dynamic_calls(call_graph, [{:module_1, :fun_a, 1}], PLT.start()) == %{
+               exposed: %{},
+               open: MapSet.new(),
+               page_callers: %{}
+             }
     end
   end
 

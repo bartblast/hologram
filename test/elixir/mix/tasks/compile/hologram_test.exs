@@ -2798,7 +2798,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "keeps what the runtime's dynamic calls open with the runtime state", %{opts: opts} do
       run(opts)
 
-      assert %{runtime: %{dynamic_calls: %{open: %MapSet{}}}} = cache_state()
+      assert %{runtime: %{dynamic_calls: %{exposed: %{}, open: %MapSet{}, page_callers: %{}}}} =
+               cache_state()
+    end
+
+    # Kernel.struct!/2 calls __struct__/1 on its parameter, and the runtime's own callers of it name
+    # the module they pass (struct!(__MODULE__, args) in exception constructors).
+    test "exposes the runtime's struct!/2 to the pages instead of opening __struct__/1",
+         %{opts: opts} do
+      run(opts)
+
+      %{exposed: exposed, open: open} = cache_state().runtime.dynamic_calls
+
+      refute {:__struct__, 1} in open
+      assert exposed[{{Kernel, :struct!, 2}, 0}] == MapSet.new([{:__struct__, 1}])
     end
   end
 
