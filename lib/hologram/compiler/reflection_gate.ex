@@ -10,9 +10,9 @@ defmodule Hologram.Compiler.ReflectionGate do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.ReflectionSites
 
-  # What the gate is given besides the page's reach: the reflection functions the runtime's own
-  # calls open.
-  @type t :: %{runtime: %{open: MapSet.t({atom, arity})}}
+  # What the gate is given besides the page's reach: what the runtime's own reflection calls open
+  # (see CallGraph.runtime_reflection/2).
+  @type t :: %{runtime: CallGraph.runtime_reflection()}
 
   @doc """
   Returns the reflection functions, as `{name, arity}` tuples, that the given gate opens for a page

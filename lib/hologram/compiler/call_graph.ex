@@ -40,6 +40,9 @@ defmodule Hologram.Compiler.CallGraph do
           types: MapSet.t(module)
         }
 
+  # What the runtime's own reflection calls open for every page (see runtime_reflection/2).
+  @type runtime_reflection :: %{open: MapSet.t({atom, arity})}
+
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
           server_referenced_components: [module]
@@ -1320,6 +1323,32 @@ defmodule Hologram.Compiler.CallGraph do
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
     update_graph(pid, &Digraph.remove_vertices(&1, vertices))
     call_graph
+  end
+
+  @doc """
+  Returns what the runtime's own reflection calls open for every page (see
+  `Hologram.Compiler.ReflectionGate`): the reflection functions, as `{name, arity}` tuples, that a
+  function among the given runtime MFAs calls on a module its code does not name. Every page loads
+  the runtime, so what its functions can call, any page can.
+
+  Called on the graph that still holds the runtime's MFAs: the pages graph has them and their
+  reflection sites' edges taken out (see remove_runtime_mfas!/2).
+
+  The walk runs inside the call graph's agent, so the graph is not copied out.
+  """
+  @spec runtime_reflection(t, [mfa]) :: runtime_reflection
+  def runtime_reflection(call_graph, runtime_mfas) do
+    read_graph(call_graph.pid, fn graph ->
+      open =
+        for mfa <- runtime_mfas,
+            {_mfa, {:reflection_site, _function, name, arity, _kind}} <-
+              Digraph.outgoing_edges(graph, mfa),
+            into: MapSet.new() do
+          {name, arity}
+        end
+
+      %{open: open}
+    end)
   end
 
   @doc """

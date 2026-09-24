@@ -3847,6 +3847,39 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
+  describe "runtime_reflection/2" do
+    test "opens the reflection functions the runtime's functions call on unnamed modules", %{
+      empty_call_graph: call_graph
+    } do
+      call_graph
+      |> build(IR.for_module(Module42))
+      |> add_edge(
+        {:module_1, :fun_a, 1},
+        {:reflection_site, {:module_1, :fun_a, 1}, :__struct__, 1, :open}
+      )
+      |> add_edge(
+        {:module_1, :fun_a, 1},
+        {:reflection_site, {:module_1, :fun_a, 1}, :__schema__, 2, {:param, 0}}
+      )
+
+      result = runtime_reflection(call_graph, [{Module42, :my_fun, 1}, {:module_1, :fun_a, 1}])
+
+      assert result == %{
+               open: MapSet.new([{:__changeset__, 0}, {:__schema__, 2}, {:__struct__, 1}])
+             }
+    end
+
+    test "ignores the reflection calls of functions outside the runtime", %{
+      empty_call_graph: call_graph
+    } do
+      call_graph
+      |> build(IR.for_module(Module42))
+      |> add_vertex({:module_1, :fun_a, 1})
+
+      assert runtime_reflection(call_graph, [{:module_1, :fun_a, 1}]) == %{open: MapSet.new()}
+    end
+  end
+
   describe "server_callback_analysis_by_templatable/3" do
     test "returns an entry for each given templatable" do
       graph =
