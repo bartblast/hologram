@@ -10745,6 +10745,46 @@ describe("Interpreter", () => {
         ]),
       );
     });
+
+    it("adds a hint when the function is a reflection function", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("Aaa.Bbb"),
+            "__changeset__",
+            0,
+          ),
+        "UndefinedFunctionError",
+        "function Aaa.Bbb.__changeset__/0 is undefined or private. Reflection functions (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) are bundled only when client code can call them on a module it does not name, such as mod.__changeset__(); a call through apply/3 with a function name known only at runtime is not detected.",
+      );
+    });
+
+    it("adds the hint after the text for a module that is not available", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("Aaa.Bbb"),
+            "__struct__",
+            1,
+            false,
+          ),
+        "UndefinedFunctionError",
+        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). Reflection functions (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) are bundled only when client code can call them on a module it does not name, such as mod.__changeset__(); a call through apply/3 with a function name known only at runtime is not detected.",
+      );
+    });
+
+    it("adds no hint for a function of another arity", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("Aaa.Bbb"),
+            "__changeset__",
+            1,
+          ),
+        "UndefinedFunctionError",
+        "function Aaa.Bbb.__changeset__/1 is undefined or private",
+      );
+    });
   });
 
   it("raiseWithClauseError()", () => {

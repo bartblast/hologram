@@ -69,6 +69,16 @@ export default class Interpreter {
   // Clause heads of manually ported functions, keyed by "Module.function/arity".
   static #functionClauseHeads = {};
 
+  // The functions a missing one gets a hint for in raiseUndefinedFunctionError(). Keep in sync with
+  // Hologram.Compiler.DynamicCallSites.reflection_functions/0.
+  static #REFLECTION_FUNCTIONS = new Set([
+    "__changeset__/0",
+    "__schema__/1",
+    "__schema__/2",
+    "__struct__/0",
+    "__struct__/1",
+  ]);
+
   // Deps: [:lists.keyfind/3]
   static accessKeywordListElement(keywordList, key, defaultValue = null) {
     const keyfindRes = Erlang_Lists["keyfind/3"](
@@ -1239,6 +1249,11 @@ export default class Interpreter {
   // reason is stated rather than left for the struct's message/1 callback to
   // work out, since the callback asks the module whether it exports
   // module_info/0, which a client module proxy never does.
+  // A missing reflection function gets a hint: the compiler bundles one only
+  // when client code can call it on a module it does not name, so the message
+  // says what makes such a call detectable (see
+  // Hologram.Compiler.DynamicCallSites). The hint follows the text the
+  // struct's message/1 callback derives, kept as the eager message.
   static raiseUndefinedFunctionError(
     module,
     functionName,
@@ -1249,13 +1264,26 @@ export default class Interpreter {
       ? "function not exported"
       : "module could not be loaded";
 
-    Interpreter.#raiseFieldBearingError("UndefinedFunctionError", [
+    const fields = [
       [Type.atom("arity"), Type.integer(arity)],
       [Type.atom("function"), Type.atom(functionName)],
       [Type.atom("message"), Type.nil()],
       [Type.atom("module"), module],
       [Type.atom("reason"), Type.atom(reason)],
-    ]);
+    ];
+
+    if (Interpreter.#REFLECTION_FUNCTIONS.has(`${functionName}/${arity}`)) {
+      const struct = Type.struct("UndefinedFunctionError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        ...fields,
+      ]);
+
+      const message = `${Interpreter.resolveErrorMessage(struct)}. Reflection functions (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) are bundled only when client code can call them on a module it does not name, such as mod.__changeset__(); a call through apply/3 with a function name known only at runtime is not detected.`;
+
+      fields[2] = [Type.atom("message"), Type.bitstring(message)];
+    }
+
+    Interpreter.#raiseFieldBearingError("UndefinedFunctionError", fields);
   }
 
   static raiseWithClauseError(term) {
