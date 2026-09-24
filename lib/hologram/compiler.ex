@@ -1185,6 +1185,9 @@ defmodule Hologram.Compiler do
 
   Options:
 
+    * `:gate` - the reflection gate the pages are listed with (see
+      `Hologram.Compiler.ReflectionGate`); read only with `:relist_all?`, where the kept pages are
+      listed again with it, as their kept MFA lists were. Defaults to none.
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
     * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
       `:relist_all?`. A kept page it has no list for is rebuilt then.
@@ -1198,9 +1201,11 @@ defmodule Hologram.Compiler do
       `fingerprint_js_inputs/2`); a kept page whose recorded inputs no longer match them is
       rebuilt. Defaults to none, which only a page that recorded no input matches.
     * `:static_dir` - the dir this compile writes its bundles to; a kept bundle must live there.
-    * `:relist_all?` - when the runtime bundle's MFA set changed. A kept page's MFAs can then have
+    * `:relist_all?` - when the runtime bundle's MFA set, or what its reflection calls open (see
+      `Hologram.Compiler.CallGraph.runtime_reflection/2`), changed. A kept page's MFAs can then have
       moved although nothing it reaches was edited: a function that joined the runtime's set leaves
-      the page's bundle, and one that left it enters. The otherwise kept pages are listed again and
+      the page's bundle, and one that left it enters, and a reflection function the runtime opens or
+      closes enters or leaves it. The otherwise kept pages are listed again and
       those whose list differs from the one their bundle was built from are rebuilt, and listed
       again with their batch: few pages move, and a page's list is taken when the page is built.
     * `:rebuild_all?` - when the JS import modules the runtime registers changed. Page bundles leave
@@ -1227,7 +1232,7 @@ defmodule Hologram.Compiler do
 
     if opts[:relist_all?] do
       {moved_pages, still_kept_pages} =
-        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt])
+        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt], opts[:gate])
 
       {pages_to_rebuild ++ moved_pages, still_kept_pages}
     else
@@ -2066,11 +2071,11 @@ defmodule Hologram.Compiler do
   # page's MFAs as its bundle was built from them are read from the page MFAs PLT. A page with no
   # list there counts as moved: its state was loaded from the compile state dump, which does not hold
   # the lists (see Hologram.Compiler.Cache.dump_compile_state/2).
-  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt) do
+  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt, gate) do
     mfas_by_kept_page =
       kept_pages
       |> Enum.map(fn {page_module, _page_state} -> page_module end)
-      |> list_mfas_by_page(call_graph)
+      |> list_mfas_by_page(call_graph, gate: gate)
       |> Map.new()
 
     {changed_pages, unchanged_pages} =

@@ -3771,6 +3771,40 @@ defmodule Hologram.CompilerTest do
       assert length(kept) == length(page_modules)
     end
 
+    test "relisting lists the kept pages with the given gate", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_mfas_plt: page_mfas_plt,
+      page_modules: page_modules,
+      pages_plt: pages_plt,
+      static_dir: static_dir
+    } do
+      gate = %{runtime: %{open: MapSet.new()}}
+
+      # The kept lists are the ones the pages are built from with this gate.
+      page_modules
+      |> list_mfas_by_page(call_graph_without_runtime_mfas, gate: gate)
+      |> Enum.each(fn {page_module, mfas} -> PLT.put(page_mfas_plt, page_module, mfas) end)
+
+      opts = [
+        page_mfas_plt: page_mfas_plt,
+        pages_plt: pages_plt,
+        reaching_modules: MapSet.new(),
+        relist_all?: true,
+        static_dir: static_dir
+      ]
+
+      assert {[], _kept} =
+               partition_pages_to_rebuild(
+                 page_modules,
+                 call_graph_without_runtime_mfas,
+                 [{:gate, gate} | opts]
+               )
+
+      # Listed without it, the pages whose reflection functions the gate leaves out look moved.
+      assert {[_moved_page | _more], _kept} =
+               partition_pages_to_rebuild(page_modules, call_graph_without_runtime_mfas, opts)
+    end
+
     test "relisting rebuilds a page with no MFA list", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       mfas_by_page: mfas_by_page,

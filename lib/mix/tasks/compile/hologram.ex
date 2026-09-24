@@ -271,6 +271,20 @@ defmodule Mix.Tasks.Compile.Hologram do
       runtime_mfas =
         list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
 
+      # What the runtime's reflection calls open for every page, taken while the runtime graph still
+      # holds the runtime's MFAs (build_pages_graph/2 below takes them out), and kept when they are.
+      runtime_reflection =
+        list_runtime_reflection(
+          cache.runtime,
+          call_graph_for_runtime,
+          runtime_mfas,
+          runtime_kept?
+        )
+
+      # Which reflection functions each page can call (see Hologram.Compiler.ReflectionGate): given
+      # to every listing of pages, the kept pages' relisting included.
+      gate = %{runtime: runtime_reflection}
+
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
       # the walk built nothing then, and no dependency was edited.
@@ -294,6 +308,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          gate: gate,
           js_fingerprints: js_fingerprints,
           page_mfas_plt: cache.page_mfas_plt,
           pages_plt: cache.pages_plt,
@@ -301,7 +316,9 @@ defmodule Mix.Tasks.Compile.Hologram do
           reaching_modules: reaching_modules,
           static_dir: opts[:static_dir],
           rebuild_all?: runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
-          relist_all?: runtime_mfas_changed?(cache.runtime, runtime_mfas)
+          relist_all?:
+            runtime_mfas_changed?(cache.runtime, runtime_mfas) or
+              runtime_reflection_changed?(cache.runtime, runtime_reflection)
         )
 
       # A compile that kept the runtime's MFAs has no pages graph yet: it relists no kept page, so it
@@ -326,7 +343,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       unrecorded_mfas_by_page =
         pages_to_rebuild
         |> Enum.reject(&MapSet.member?(recorded_pages, &1))
-        |> Compiler.list_mfas_by_page(call_graph_for_pages)
+        |> Compiler.list_mfas_by_page(call_graph_for_pages, gate: gate)
 
       # The modules each page reaches: as its last built state recorded them, or as this compile
       # lists them for a page that has no state.
@@ -485,6 +502,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         client_config: client_config,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
+        gate: gate,
         ir_plt: ir_plt,
         links: links,
         listed_mfas_by_page: Map.new(unrecorded_mfas_by_page),
@@ -806,7 +824,8 @@ defmodule Mix.Tasks.Compile.Hologram do
           bundle_info: bundle_info,
           client_config: context.client_config,
           js_binding_modules: context.runtime_js_binding_modules,
-          mfas: context.runtime_mfas
+          mfas: context.runtime_mfas,
+          reflection: context.gate.runtime
         })
     end)
   end
@@ -957,6 +976,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     kept_runtime.mfas != runtime_mfas
   end
 
+  defp runtime_reflection_changed?(nil, _runtime_reflection), do: false
+
+  defp runtime_reflection_changed?(kept_runtime, runtime_reflection) do
+    kept_runtime.reflection != runtime_reflection
+  end
+
   defp compiler_enabled? do
     # credo:disable-for-next-line Credo.Check.Warning.MixEnv
     Mix.env() not in [:dev, :test] or System.get_env("HOLOGRAM_START") == "1"
@@ -989,7 +1014,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     mfas_by_page =
       unlisted_pages
-      |> Compiler.list_mfas_by_page(context.read_graph, context.analyses, context.module_info_plt)
+      |> Compiler.list_mfas_by_page(context.read_graph, context.analyses, context.module_info_plt,
+        gate: context.gate
+      )
       |> Enum.concat(listed_mfas_by_page)
 
     ir_modules =
@@ -1019,6 +1046,13 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, false) do
     CallGraph.list_runtime_mfas(call_graph, page_modules)
+  end
+
+  defp list_runtime_reflection(kept_runtime, _call_graph, _runtime_mfas, true),
+    do: kept_runtime.reflection
+
+  defp list_runtime_reflection(_kept_runtime, call_graph, runtime_mfas, false) do
+    CallGraph.runtime_reflection(call_graph, runtime_mfas)
   end
 
   # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which
