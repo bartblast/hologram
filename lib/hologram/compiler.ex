@@ -104,10 +104,7 @@ defmodule Hologram.Compiler do
   def build_app_versions(call_graph) do
     call_graph
     |> CallGraph.vertices()
-    |> Enum.map(fn
-      {module, _function, _arity} -> module
-      module -> module
-    end)
+    |> Enum.map(&CallGraph.vertex_module/1)
     |> Enum.uniq()
     |> Enum.map(&Application.get_application/1)
     |> Enum.reject(&is_nil/1)

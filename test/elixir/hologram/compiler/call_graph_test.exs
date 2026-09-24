@@ -46,6 +46,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module40
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module42
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
@@ -254,7 +255,11 @@ defmodule Hologram.Compiler.CallGraphTest do
           name: name,
           arity: arity,
           visibility: :public,
-          clause: Enum.map(callees, &reach_callee_ir/1)
+          clause: %IR.FunctionClause{
+            params: [],
+            guards: [],
+            body: %IR.Block{expressions: Enum.map(callees, &reach_callee_ir/1)}
+          }
         }
       end)
 
@@ -841,6 +846,36 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
       assert sorted_edges(call_graph) == []
+    end
+
+    test "function definition IR, with a reflection call on a module the code does not name", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :module, version: 0}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.RemoteFunctionCall{
+                module: %IR.Variable{name: :module, version: 0},
+                function: :__changeset__,
+                args: []
+              }
+            ]
+          }
+        }
+      }
+
+      build(call_graph, ir, Module1)
+
+      site = {:reflection_site, {Module1, :my_fun, 1}, :__changeset__, 0, {:param, 0}}
+
+      assert sorted_vertices(call_graph) == [{Module1, :my_fun, 1}, site]
+      assert sorted_edges(call_graph) == [{{Module1, :my_fun, 1}, site}]
     end
 
     test "list", %{empty_call_graph: call_graph} do
@@ -1817,7 +1852,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> File.read!()
         |> SerializationUtils.deserialize()
 
-      assert {2, %{graph: ^graph, modules: modules, reach: reach}} = deserialized_state
+      assert {3, %{graph: ^graph, modules: modules, reach: reach}} = deserialized_state
       assert modules == MapSet.new()
       assert reach == reach_state(call_graph)
     end
@@ -1830,7 +1865,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> build(IR.for_module(Module9))
       |> dump(dump_path)
 
-      {2, %{modules: modules}} =
+      {3, %{modules: modules}} =
         dump_path
         |> File.read!()
         |> SerializationUtils.deserialize()
@@ -1850,7 +1885,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              |> Path.dirname()
              |> File.ls!() == [Path.basename(dump_path)]
 
-      assert {2, _state} =
+      assert {3, _state} =
                dump_path
                |> File.read!()
                |> SerializationUtils.deserialize()
@@ -2919,6 +2954,22 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "module_vertices/2 includes the reflection sites of the module's functions", %{
+    empty_call_graph: call_graph
+  } do
+    build(call_graph, IR.for_module(Module42))
+
+    result =
+      call_graph
+      |> module_vertices(Module42)
+      |> Enum.sort()
+
+    assert result == [
+             {Module42, :my_fun, 1},
+             {:reflection_site, {Module42, :my_fun, 1}, :__changeset__, 0, {:param, 0}}
+           ]
+  end
+
   test "module_info_plt/1" do
     module_info_plt = PLT.start()
 
@@ -3310,6 +3361,31 @@ defmodule Hologram.Compiler.CallGraphTest do
       patch(call_graph, ir_plt, diff)
 
       assert get_graph(call_graph) == graph_after_first_patch
+    end
+
+    test "removes the reflection sites of a removed module", %{empty_call_graph: call_graph} do
+      build(call_graph, IR.for_module(Module42))
+
+      diff = %{added_modules: [], removed_modules: [Module42], edited_modules: []}
+      patch(call_graph, PLT.start(), diff)
+
+      assert vertices(call_graph) == []
+    end
+
+    test "replaces the reflection sites of an edited module", %{empty_call_graph: call_graph} do
+      build(call_graph, IR.for_module(Module42))
+
+      # The edit takes the reflection call out: the module now defines Module9's functions.
+      edited_ir = %{IR.for_module(Module9) | module: %IR.AtomType{value: Module42}}
+      ir_plt = PLT.put(PLT.start(), Module42, edited_ir)
+
+      diff = %{added_modules: [], removed_modules: [], edited_modules: [Module42]}
+      patch(call_graph, ir_plt, diff)
+
+      assert sorted_vertices(call_graph) == [
+               {Module42, :my_fun_1, 0},
+               {Module42, :my_fun_2, 0}
+             ]
     end
   end
 
@@ -4051,6 +4127,22 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_3 in result
     assert :vertex_4 in result
     assert :vertex_5 in result
+  end
+
+  describe "vertex_module/1" do
+    test "MFA" do
+      assert vertex_module({Module1, :my_fun, 2}) == Module1
+    end
+
+    test "module" do
+      assert vertex_module(Module1) == Module1
+    end
+
+    test "reflection site" do
+      site = {:reflection_site, {Module1, :my_fun, 2}, :__struct__, 0, :open}
+
+      assert vertex_module(site) == Module1
+    end
   end
 
   describe "with_shared_graph/2" do

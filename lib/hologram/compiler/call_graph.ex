@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.ReflectionSites
   alias Hologram.Reflection
 
   # The agent holds the graph, the modules whose definitions were built into it (see modules/1), and
@@ -23,6 +24,11 @@ defmodule Hologram.Compiler.CallGraph do
         }
 
   @type edge :: {vertex, vertex}
+
+  # A call of a reflection function on a module the code does not name, found in a function's
+  # definition (see Hologram.Compiler.ReflectionSites): a vertex the function has an edge to, so
+  # that a walk reaching the function reaches the call.
+  @type reflection_site :: {:reflection_site, mfa, atom, arity, ReflectionSites.kind()}
 
   # What the walk of build_reach/3 reached: the state expand_reachable_state/4 works on, and the
   # templatables whose client entries and server callbacks it walked.
@@ -39,7 +45,7 @@ defmodule Hologram.Compiler.CallGraph do
           server_referenced_components: [module]
         }
 
-  @type vertex :: module | mfa
+  @type vertex :: module | mfa | reflection_site
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
@@ -64,7 +70,7 @@ defmodule Hologram.Compiler.CallGraph do
   # The version of what dump/2 writes. Bump it whenever the shape of the agent's state changes: a
   # dump of another version is not loaded (see load/2), and the compile starts cold. A dump written
   # before the version existed holds a bare graph, which counts as version 0.
-  @dump_version 2
+  @dump_version 3
 
   # Edges for dynamic dispatch: the caller reads the callee module from data
   # (e.g. a struct's calendar field), so static IR analysis can't see the
@@ -633,6 +639,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> add_vertex(fun_def_vertex)
+    |> add_reflection_site_edges(fun_def_vertex, clause)
     |> build(clause, fun_def_vertex)
   end
 
@@ -1077,17 +1084,14 @@ defmodule Hologram.Compiler.CallGraph do
   def module_info_plt(%CallGraph{module_info_plt: module_info_plt}), do: module_info_plt
 
   @doc """
-  Returns the list of vertices that are MFAs belonging to the given module.
+  Returns the vertices that belong to the given module (see vertex_module/1): the module's own vertex,
+  its MFAs and the reflection sites of its functions.
   """
   @spec module_vertices(t, module) :: [vertex]
   def module_vertices(call_graph, module) do
     call_graph
     |> vertices()
-    |> Enum.filter(fn
-      ^module -> true
-      {^module, _fun, _arity} -> true
-      _fallback -> false
-    end)
+    |> Enum.filter(&(vertex_module(&1) == module))
   end
 
   @doc """
@@ -1446,6 +1450,17 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the module the given vertex belongs to: the module of an MFA, the module a module vertex
+  is, and the module of the function a reflection site was found in.
+  """
+  @spec vertex_module(vertex) :: module
+  def vertex_module({:reflection_site, {module, _function, _arity}, _name, _arity_2, _kind}),
+    do: module
+
+  def vertex_module({module, _function, _arity}), do: module
+  def vertex_module(module), do: module
+
+  @doc """
   Returns call graph vertices.
   """
   @spec vertices(t) :: [vertex]
@@ -1536,6 +1551,21 @@ defmodule Hologram.Compiler.CallGraph do
       end)
 
     page_mfas ++ added_mfas
+  end
+
+  # An edge from the function to each reflection site its clause holds, so that the site is replaced
+  # with the function when its module is patched, and dumped with the graph.
+  defp add_reflection_site_edges(
+         call_graph,
+         {_module, _function, _arity} = fun_def_vertex,
+         clause
+       ) do
+    edges =
+      for {name, arity, kind} <- ReflectionSites.list(clause) do
+        {fun_def_vertex, {:reflection_site, fun_def_vertex, name, arity, kind}}
+      end
+
+    add_edges(call_graph, edges)
   end
 
   # A broadcast caller's functions that call a broadcast function, which broadcast_caller_analysis/2
@@ -1741,9 +1771,9 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  defp extract_uniq_components(mfas, module_info_plt) do
-    mfas
-    |> Enum.map(fn {module, _function, _arity} -> module end)
+  defp extract_uniq_components(vertices, module_info_plt) do
+    vertices
+    |> Enum.map(&vertex_module/1)
     |> Enum.uniq()
     |> Enum.filter(&flag?(module_info_plt, &1, :component?))
   end
@@ -1786,7 +1816,10 @@ defmodule Hologram.Compiler.CallGraph do
   # Whether a reached vertex needs its module built before its edges are complete: a function of a
   # module the graph holds no definition of and the module info PLT knows (an Erlang module has no
   # IR, a module the PLT does not know has no beam), or the vertex of such a module when building it
-  # would give that vertex edges.
+  # would give that vertex edges. A reflection site exists only once its function's module is built.
+  defp frontier_vertex?({:reflection_site, _mfa, _name, _arity, _kind}, _modules, _module_infos),
+    do: false
+
   defp frontier_vertex?({module, _function, _arity}, graph_modules, module_info_plt) do
     unbuilt_module?(module, graph_modules, module_info_plt)
   end
@@ -1856,10 +1889,7 @@ defmodule Hologram.Compiler.CallGraph do
     target_vertices =
       graph
       |> Digraph.vertices()
-      |> Enum.filter(fn
-        {module, _function, _arity} -> MapSet.member?(target_modules, module)
-        module_vertex -> MapSet.member?(target_modules, module_vertex)
-      end)
+      |> Enum.filter(&MapSet.member?(target_modules, vertex_module(&1)))
 
     protocol_function_mfa? = &protocol_function_mfa?(&1, module_info_plt)
 
@@ -1871,11 +1901,7 @@ defmodule Hologram.Compiler.CallGraph do
     # affects are found by that intersection rather than through the dispatch edges. Editing a
     # protocol module itself still reaches its callers, since the target modules are unioned back in.
     |> Enum.reject(protocol_function_mfa?)
-    |> Enum.map(fn
-      {module, _function, _arity} -> module
-      module_vertex -> module_vertex
-    end)
-    |> MapSet.new()
+    |> MapSet.new(&vertex_module/1)
     |> MapSet.union(target_modules)
   end
 
@@ -2332,9 +2358,6 @@ defmodule Hologram.Compiler.CallGraph do
   defp update_graph(pid, fun) do
     Agent.cast(pid, fn state -> %{state | graph: fun.(state.graph)} end)
   end
-
-  defp vertex_module({module, _function, _arity}), do: module
-  defp vertex_module(module), do: module
 
   # One round of build_reach/3, run inside the agent: walks from the given entries, and returns the
   # modules the reached vertices need built (see frontier_vertex?/3) with the entries of the next

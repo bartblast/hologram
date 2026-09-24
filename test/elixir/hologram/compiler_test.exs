@@ -367,6 +367,29 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_app_versions/1" do
+    test "names the applications of the modules the graph holds" do
+      call_graph =
+        CallGraph.start()
+        |> CallGraph.add_vertex(Enum)
+        |> CallGraph.add_vertex({:lists, :reverse, 1})
+
+      assert build_app_versions(call_graph) == [
+               elixir: to_string(Application.spec(:elixir, :vsn)),
+               stdlib: to_string(Application.spec(:stdlib, :vsn))
+             ]
+    end
+
+    test "names the application of the function a reflection site was found in" do
+      site = {:reflection_site, {Enum, :map, 2}, :__struct__, 0, :open}
+      call_graph = CallGraph.add_vertex(CallGraph.start(), site)
+
+      assert build_app_versions(call_graph) == [
+               elixir: to_string(Application.spec(:elixir, :vsn))
+             ]
+    end
+  end
+
   describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
