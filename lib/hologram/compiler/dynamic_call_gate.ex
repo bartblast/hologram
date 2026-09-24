@@ -195,6 +195,15 @@ defmodule Hologram.Compiler.DynamicCallGate do
     |> Kernel.==(:open)
   end
 
+  # TODO: #938. Ask the value analysis whether the expression the call is made on is definitely a
+  # map or a struct: such a value is never the module a reflection function is called on, so the
+  # call would stay closed. The cases that keep __struct__/0 open on every page today are
+  # Kernel.struct/3 calling itself on the result of validate_struct!/3 (every clause returns a map
+  # or raises), Exception.message/1 calling __struct__ on its rescued exception, and, in a
+  # dependency of a big app, Localize.LanguageTag.try_minimal_form/2 passing Kernel.struct/2 a value
+  # taken from `{:ok, maximized} <- add_likely_subtags(tag)`, whose every clause returns
+  # `{:ok, <a map>}` or `{:error, _}`. The same applies to an `:other` argument in
+  # resolve_argument/4.
   defp open_site?(:open, _function, _context), do: true
 
   defp open_site?({:param, index}, function, context) do
@@ -210,6 +219,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
     resolve_param(caller, caller_index, context, visited)
   end
 
+  # TODO: #938. See open_site?/3: an argument that is definitely a map or a struct would close.
   defp resolve_argument({:other, _ir}, _caller, _context, visited), do: {:open, visited}
 
   defp resolve_caller({module, _function, _arity} = caller, function, index, context, visited) do
