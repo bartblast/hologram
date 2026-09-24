@@ -1966,7 +1966,7 @@ defmodule Hologram.Compiler.CallGraph do
           extract_uniq_components(initial_mfas, module_info_plt)
       )
 
-    # The same server-referenced component expansion as in list_page_mfas/4, so chains
+    # The same server-referenced component expansion as in list_page_mfas/5, so chains
     # like a broadcast-referenced component whose own server callbacks reference
     # further components end up in the runtime bundle too. The runtime lists against a PLT
     # of its own, filled on demand and stopped once the MFAs are listed: its analyses are

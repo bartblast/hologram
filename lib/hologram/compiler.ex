@@ -297,7 +297,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  The page's reachable MFAs are given (see `CallGraph.list_page_mfas/4`), so that a caller building
+  The page's reachable MFAs are given (see `CallGraph.list_page_mfas/5`), so that a caller building
   many pages can encode their functions first with `encode_reachable_functions/5` and render every
   page from the encode PLT.
 
@@ -615,7 +615,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/4`).
+  Creates the page bundle entry files, given each page's reachable MFAs (see `list_mfas_by_page/5`).
   The functions of all the given pages are encoded into the encode PLT first, with one IR read per
   module (`encode_reachable_functions/5`), and then each page is rendered from that cache, so a
   module's IR is read once for all the pages of one call. The compile task calls it once per batch;
@@ -966,24 +966,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`), sharing the call
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/5`), sharing the call
   graph's graph with the page tasks (see `CallGraph.with_shared_graph/2`) and the server callback
-  analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/4`
+  analyses they compute, for this call. The compile task lists its batches with `list_mfas_by_page/5`
   against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
   With no page, the graph is not read: a graph still being rebuilt is not waited for. A caller
-  with no graph to give (see the compile task's pages graph) passes nil with no page.
+  with no graph to give (see the compile task's pages graph) passes nil with no page. The opts are
+  passed on to `CallGraph.list_page_mfas/5` (the `:gate` opt says which reflection functions the
+  pages can call).
   """
-  @spec list_mfas_by_page([module], CallGraph.t() | nil) :: [{module, [mfa]}]
-  def list_mfas_by_page([], _call_graph), do: []
+  @spec list_mfas_by_page([module], CallGraph.t() | nil, T.opts()) :: [{module, [mfa]}]
+  def list_mfas_by_page(page_modules, call_graph, opts \\ [])
 
-  def list_mfas_by_page(page_modules, call_graph) do
+  def list_mfas_by_page([], _call_graph, _opts), do: []
+
+  def list_mfas_by_page(page_modules, call_graph, opts) do
     module_info_plt = CallGraph.module_info_plt(call_graph)
     analyses = PLT.start()
 
     try do
       CallGraph.with_shared_graph(
         call_graph,
-        &list_mfas_by_page(page_modules, &1, analyses, module_info_plt)
+        &list_mfas_by_page(page_modules, &1, analyses, module_info_plt, opts)
       )
     after
       PLT.stop(analyses)
@@ -991,19 +995,20 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/4`), one task per
+  Lists, for each page, the MFAs reachable from it (see `CallGraph.list_page_mfas/5`), one task per
   page, through the reader of a shared graph (see `CallGraph.with_shared_graph/2`) and the PLT of
   server callback analyses, which the pages fill as they go: a caller listing pages in rounds, as the
-  compile task does with its batches, computes each templatable's analysis once for all of them.
+  compile task does with its batches, computes each templatable's analysis once for all of them. The
+  opts are passed on to `CallGraph.list_page_mfas/5`.
   """
-  @spec list_mfas_by_page([module], (-> Digraph.t()), PLT.t(), PLT.t() | nil) ::
+  @spec list_mfas_by_page([module], (-> Digraph.t()), PLT.t(), PLT.t() | nil, T.opts()) ::
           [{module, [mfa]}]
-  def list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt) do
+  def list_mfas_by_page(page_modules, read_graph, analyses, module_info_plt, opts \\ []) do
     # The tasks get the reader, which captures only the shared graph's key: a closure that
     # captured the graph itself would copy it into every task it starts. Listing a page's MFAs is
     # a cheap graph walk.
     TaskUtils.map_concurrently(page_modules, fn page_module ->
-      mfas = CallGraph.list_page_mfas(read_graph.(), page_module, analyses, module_info_plt)
+      mfas = CallGraph.list_page_mfas(read_graph.(), page_module, analyses, module_info_plt, opts)
       {page_module, mfas}
     end)
   end
@@ -1175,7 +1180,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns `{pages_to_rebuild, kept_pages}`: the pages this compile must rebuild, which it lists with
-  their batches (see `list_mfas_by_page/4`), and the pages whose kept bundle it can reuse, each with
+  their batches (see `list_mfas_by_page/5`), and the pages whose kept bundle it can reuse, each with
   its state.
 
   Options:

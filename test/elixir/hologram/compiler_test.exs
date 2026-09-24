@@ -2923,7 +2923,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_mfas_by_page/2" do
+  describe "list_mfas_by_page/3" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -2955,6 +2955,28 @@ defmodule Hologram.CompilerTest do
       assert length(page_modules) > 1
       assert Enum.all?(result, fn {_page_module, mfas} -> mfas != [] end)
       assert result == expected
+    end
+
+    test "passes the opts on to the listing of each page", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      page_modules: page_modules
+    } do
+      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+      module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
+      opts = [gate: %{runtime: %{open: MapSet.new()}}]
+
+      expected =
+        Enum.map(page_modules, fn page_module ->
+          mfas = CallGraph.list_page_mfas(graph, page_module, PLT.start(), module_info_plt, opts)
+          {page_module, mfas}
+        end)
+
+      result = list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, opts)
+
+      assert result == expected
+
+      # A closed gate leaves out the reflection functions a page lists without one.
+      assert result != list_mfas_by_page(page_modules, call_graph_without_runtime_mfas)
     end
 
     test "asks the call graph for its graph once and releases it", %{
@@ -3021,7 +3043,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_mfas_by_page/4" do
+  describe "list_mfas_by_page/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -3061,6 +3083,21 @@ defmodule Hologram.CompilerTest do
       end)
 
       assert Enum.all?(page_modules, &match?({:ok, _analysis}, PLT.get(analyses, &1)))
+    end
+
+    test "passes the opts on to the listing of each page", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      module_info_plt: module_info_plt,
+      page_modules: page_modules
+    } do
+      opts = [gate: %{runtime: %{open: MapSet.new()}}]
+
+      result =
+        CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
+          list_mfas_by_page(page_modules, read_graph, PLT.start(), module_info_plt, opts)
+        end)
+
+      assert result == list_mfas_by_page(page_modules, call_graph_without_runtime_mfas, opts)
     end
 
     test "reads the analyses from the PLT", %{
