@@ -4069,7 +4069,7 @@ So a type's reflection functions ship with a page when two things hold. The type
 
 A call through `apply/3` with a function name known only at runtime is not detected, as for any other function, so a reflection function reached only that way is not bundled and the call raises an `UndefinedFunctionError` on the client, whose message says why. Name the function in the call, or reference it anywhere in client-reachable code.
 
-One limit remains for now: a call on a value the compiler cannot tell is not a module keeps the function in the bundle. Elixir's own `Kernel.struct/3` and `Exception.message/1` make such calls, so `__struct__/0` of the types a page can see ships with every page.
+One limit remains for now: a call on a value the compiler cannot tell is not a module keeps the function in the bundle. Elixir's own `Kernel.struct/2` and `Exception.message/1` make such calls, so `__struct__/0` of the types a page can see ships with every page.
 
 #### Related
 
