@@ -31,6 +31,7 @@
 - [Realtime](https://hologram.page/docs/realtime): Live server-pushed updates, subscribing to channels, broadcasting actions, delivery semantics
 - [JavaScript Interop](https://hologram.page/docs/javascript-interop): Calling JavaScript from Elixir, importing JS modules, async support
 - [Configuration](https://hologram.page/docs/configuration): Client diagnostics settings, bundle size limit, environment variables
+- [Bundling](https://hologram.page/docs/bundling): What goes into the runtime and page bundles, when reflection functions ship
 
 ## Reference
 
