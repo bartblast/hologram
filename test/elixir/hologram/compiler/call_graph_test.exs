@@ -47,6 +47,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module40
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module42
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module43
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module44
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
@@ -135,6 +137,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     call_graph
     |> CallGraph.get_graph()
     |> list_page_mfas(page_module, PLT.start(), CallGraph.module_info_plt(call_graph))
+  end
+
+  defp list_page_mfas_with_gate(call_graph, page_module, gate) do
+    call_graph
+    |> CallGraph.get_graph()
+    |> list_page_mfas(page_module, PLT.start(), CallGraph.module_info_plt(call_graph), gate: gate)
   end
 
   # The module info PLT of the fixture app, started once per test run in setup_all (whose
@@ -322,55 +330,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   defp reach_state(%{pid: pid}), do: Agent.get(pid, & &1.reach)
-
-  # A templatable whose init/3 calls a protocol function and creates a TypeA struct. The protocol has
-  # an implementation for TypeA, which creates a TypeB struct, and one for TypeC, which no reached
-  # code names, which creates a TypeD struct.
-  defp reflection_walk_fixture do
-    graph =
-      Digraph.new()
-      |> Digraph.add_edge({ReflectionWalk.Tpl, :init, 3}, {ReflectionWalk.Proto, :fun, 1})
-      |> Digraph.add_edge({ReflectionWalk.Tpl, :init, 3}, {ReflectionWalk.TypeA, :__struct__, 0})
-      |> Digraph.add_edge(
-        {ReflectionWalk.Proto, :fun, 1},
-        {ReflectionWalk.Proto.TypeA, :__impl__, 1}
-      )
-      |> Digraph.add_edge({ReflectionWalk.Proto, :fun, 1}, {ReflectionWalk.Proto.TypeA, :fun, 1})
-      |> Digraph.add_edge(
-        {ReflectionWalk.Proto.TypeA, :fun, 1},
-        {ReflectionWalk.TypeB, :__struct__, 0}
-      )
-      |> Digraph.add_edge(
-        {ReflectionWalk.Proto, :fun, 1},
-        {ReflectionWalk.Proto.TypeC, :__impl__, 1}
-      )
-      |> Digraph.add_edge({ReflectionWalk.Proto, :fun, 1}, {ReflectionWalk.Proto.TypeC, :fun, 1})
-      |> Digraph.add_edge(
-        {ReflectionWalk.Proto.TypeC, :fun, 1},
-        {ReflectionWalk.TypeD, :__struct__, 0}
-      )
-
-    module_info_plt =
-      PLT.start()
-      |> PLT.put(ReflectionWalk.Tpl, %{})
-      |> PLT.put(ReflectionWalk.Proto, %{protocol?: true, protocol_functions: [fun: 1]})
-      |> PLT.put(ReflectionWalk.Proto.TypeA, %{
-        protocol_implementation?: true,
-        implementation_for: ReflectionWalk.TypeA,
-        implemented_protocol: ReflectionWalk.Proto
-      })
-      |> PLT.put(ReflectionWalk.Proto.TypeC, %{
-        protocol_implementation?: true,
-        implementation_for: ReflectionWalk.TypeC,
-        implemented_protocol: ReflectionWalk.Proto
-      })
-      |> PLT.put(ReflectionWalk.TypeA, %{struct?: true})
-      |> PLT.put(ReflectionWalk.TypeB, %{struct?: true})
-      |> PLT.put(ReflectionWalk.TypeC, %{struct?: true})
-      |> PLT.put(ReflectionWalk.TypeD, %{struct?: true})
-
-    {graph, module_info_plt}
-  end
 
   setup_all do
     module_info_plt = module_info_plt_fixture()
@@ -2132,7 +2091,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "list_page_mfas/4" do
+  describe "list_page_mfas/5" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =
         full_call_graph
@@ -2531,22 +2490,113 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(IR.for_module(Module15))
         |> build(IR.for_module(Module16))
 
-      # No walk of Module14's server callbacks finds this MFA, so it is listed only when the
-      # kept analysis is read.
+      # No walk of Module14's server callbacks finds this component, so its client MFAs are listed
+      # only when the kept analysis is read.
       kept_analysis = %{
         dispatch_types: MapSet.new(),
-        reflection_mfas: [{Module16, :kept_analysis_marker, 0}],
-        server_referenced_components: []
+        server_referenced_components: [Module38]
       }
 
       analyses = PLT.start(items: [{Module14, kept_analysis}])
 
       result =
         call_graph
+        |> build(IR.for_module(Module38))
         |> CallGraph.get_graph()
         |> list_page_mfas(Module14, analyses, module_info_plt)
 
-      assert {Module16, :kept_analysis_marker, 0} in result
+      assert {Module38, :template, 0} in result
+    end
+
+    test "lists the reflection functions of the types the page reaches, when no gate is given", %{
+      page_module_22_mfas: result
+    } do
+      # Module25 is a struct put into state by the page's init/3, Module21 an Ecto schema no
+      # templatable of the page reaches.
+      assert {Module25, :__struct__, 0} in result
+      assert {Module25, :__struct__, 1} in result
+
+      refute {Module21, :__changeset__, 0} in result
+      refute {Module21, :__struct__, 0} in result
+    end
+
+    test "lists the reflection functions of the types created in command/3", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> add_edge({Module22, :command, 3}, Module21)
+        |> list_page_mfas_with_analysis(Module22)
+
+      assert {Module21, :__changeset__, 0} in result
+      assert {Module21, :__schema__, 1} in result
+      assert {Module21, :__schema__, 2} in result
+      assert {Module21, :__struct__, 0} in result
+      assert {Module21, :__struct__, 1} in result
+    end
+
+    test "lists no reflection functions for the built-in types", %{page_module_22_mfas: result} do
+      refute {Map, :__struct__, 0} in result
+      refute {Atom, :__struct__, 0} in result
+    end
+
+    test "lists no reflection functions the gate closes", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas_with_gate(Module43, %{runtime: %{open: MapSet.new()}})
+
+      refute {Module24, :__changeset__, 0} in result
+      refute {Module24, :__schema__, 1} in result
+      refute {Module24, :__schema__, 2} in result
+      refute {Module24, :__struct__, 0} in result
+      refute {Module25, :__struct__, 0} in result
+      refute {Module25, :__struct__, 1} in result
+    end
+
+    test "lists the reflection functions the page's client code opens", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      # Module44's action calls __changeset__/0 on a module it does not name; the types come from
+      # the inits of the page (Module24, Module25) and of its layout (Module32, Module33).
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas_with_gate(Module44, %{runtime: %{open: MapSet.new()}})
+
+      assert {Module24, :__changeset__, 0} in result
+      assert {Module32, :__changeset__, 0} in result
+
+      refute {Module24, :__schema__, 1} in result
+      refute {Module24, :__struct__, 0} in result
+      refute {Module25, :__struct__, 0} in result
+      refute {Module33, :__struct__, 0} in result
+    end
+
+    test "lists the reflection functions the runtime opens", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas_with_gate(Module43, %{runtime: %{open: MapSet.new([{:__struct__, 0}])}})
+
+      assert {Module24, :__struct__, 0} in result
+      assert {Module25, :__struct__, 0} in result
+
+      refute {Module24, :__changeset__, 0} in result
+      refute {Module25, :__struct__, 1} in result
     end
   end
 
@@ -3837,45 +3887,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert Module12 in result[Module4].dispatch_types
       refute Struct1 in result[Module4].dispatch_types
-    end
-
-    test "collects reflection MFAs reachable from init/3" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, {Module5, :__schema__, 1})
-
-      result =
-        server_callback_analysis_by_templatable(graph, [Module2], module_info_plt_fixture())
-
-      assert result[Module2].reflection_mfas == [{Module5, :__schema__, 1}]
-    end
-
-    test "collects reflection MFAs through an implementation of a type init/3 names" do
-      {graph, module_info_plt} = reflection_walk_fixture()
-
-      result =
-        server_callback_analysis_by_templatable(graph, [ReflectionWalk.Tpl], module_info_plt)
-
-      assert {ReflectionWalk.TypeB, :__struct__, 0} in result[ReflectionWalk.Tpl].reflection_mfas
-    end
-
-    test "doesn't collect reflection MFAs reachable only through an implementation of a type init/3 doesn't name" do
-      {graph, module_info_plt} = reflection_walk_fixture()
-
-      result =
-        server_callback_analysis_by_templatable(graph, [ReflectionWalk.Tpl], module_info_plt)
-
-      refute {ReflectionWalk.TypeD, :__struct__, 0} in result[ReflectionWalk.Tpl].reflection_mfas
-    end
-
-    test "doesn't collect reflection MFAs reachable only from command/3" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Module5, :__schema__, 1})
-
-      result =
-        server_callback_analysis_by_templatable(graph, [Module2], module_info_plt_fixture())
-
-      assert result[Module2].reflection_mfas == []
     end
 
     test "collects component modules referenced in the templatable's own server callbacks" do

@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.ReflectionGate
   alias Hologram.Compiler.ReflectionSites
   alias Hologram.Reflection
 
@@ -41,7 +42,6 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
-          reflection_mfas: [mfa],
           server_referenced_components: [module]
         }
 
@@ -984,7 +984,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
-  Server dispatch types, reflection MFAs, and server-referenced components of
+  Server dispatch types and server-referenced components of
   the page's templatables come from their server callback analyses (see
   server_callback_analysis_by_templatable/3), which are read from `analyses`, a PLT the caller keeps
   for as long as it lists pages, and computed and put there when missing. Pages listed against the
@@ -993,10 +993,17 @@ defmodule Hologram.Compiler.CallGraph do
   The graph is taken as it is, so that callers running many pages at once
   can share one graph (see with_shared_graph/2) instead of each copying it out of the call graph.
 
+  The reflection functions (`__struct__/0,1` of a struct, `__changeset__/0` and `__schema__/1,2` of
+  an Ecto schema) of the types that can appear at protocol dispatch on the page are listed the way
+  the protocol implementations of those types are, but only the ones the page can call on a module
+  its code does not name: the `:gate` opt (see `Hologram.Compiler.ReflectionGate`) says which,
+  from the reflection calls the page's client code reaches and the ones the runtime holds. With no
+  gate, every reflection function of every such type is listed.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
-  @spec list_page_mfas(Digraph.t(), module, PLT.t(), PLT.t() | nil) :: [mfa]
-  def list_page_mfas(graph, page_module, analyses, module_info_plt) do
+  @spec list_page_mfas(Digraph.t(), module, PLT.t(), PLT.t() | nil, T.opts()) :: [mfa]
+  def list_page_mfas(graph, page_module, analyses, module_info_plt, opts \\ []) do
     entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt)
@@ -1021,15 +1028,13 @@ defmodule Hologram.Compiler.CallGraph do
     final_state =
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
 
+    open_reflection_functions =
+      ReflectionGate.open_functions(graph, final_state.reached_vertices, opts[:gate])
+
     graph
     |> finalize_reachable_mfas(final_state, module_info_plt)
     |> reject_hex_mfas()
-    |> add_reflection_mfas_reachable_from_server_inits(
-      graph,
-      page_module,
-      analyses,
-      module_info_plt
-    )
+    |> add_reflection_mfas(final_state.types, open_reflection_functions, module_info_plt)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1320,9 +1325,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the server callback analysis of each given templatable module: the
   protocol dispatch types that can appear in its server-executed code (code
-  reachable from its init/3 and command/3 callbacks), the reflection MFAs
-  reachable from its init/3, with protocol implementations entered only for
-  the types that code names (see reachable_mfas/4), and the component modules
+  reachable from its init/3 and command/3 callbacks) and the component modules
   referenced in its server-executed code.
   Templatables are analyzed sequentially, since spawning a task per templatable
   would copy the whole graph into each task process, which costs far more than
@@ -1346,8 +1349,6 @@ defmodule Hologram.Compiler.CallGraph do
 
       analysis = %{
         dispatch_types: protocol_dispatch_types(server_vertices, module_info_plt),
-        reflection_mfas:
-          list_reflection_mfas_reachable_from_server_init(templatable, graph, module_info_plt),
         server_referenced_components:
           extract_component_module_vertices(server_vertices, module_info_plt)
       }
@@ -1544,26 +1545,20 @@ defmodule Hologram.Compiler.CallGraph do
     add_edges(call_graph, edges)
   end
 
-  # Adds reflection MFAs, i.e.:
-  # * __changeset__/0
-  # * __schema__/1
-  # * __schema__/2
-  # * __struct__/0
-  # * __struct__/1
-  # that are reachable from server inits (init/3) of the components used by the page.
-  defp add_reflection_mfas_reachable_from_server_inits(
-         page_mfas,
-         graph,
-         page_module,
-         analyses,
-         module_info_plt
-       ) do
-    templatables = [page_module | extract_uniq_components(page_mfas, module_info_plt)]
-
+  # The reflection functions (see Hologram.Compiler.ReflectionSites) of the types that can appear at
+  # protocol dispatch on the page, the way protocol implementations are entered for them: a type's
+  # __struct__/0,1 when it is a struct, its __changeset__/0 and __schema__/1,2 when it is an Ecto
+  # schema, and only the functions the gate opens (see Hologram.Compiler.ReflectionGate). A named
+  # call of a reflection function reaches it through an ordinary edge and needs none of this.
+  # TODO: #938. The types come from every module the server callbacks name. Once the compiler knows
+  # which types can reach the client, this set shrinks with the protocol implementations' one.
+  defp add_reflection_mfas(page_mfas, types, open_functions, module_info_plt) do
     added_mfas =
-      Enum.flat_map(templatables, fn templatable ->
-        server_callback_analysis(graph, templatable, analyses, module_info_plt).reflection_mfas
-      end)
+      for type <- types,
+          {name, arity} <- open_functions,
+          reflection_function?(type, name, module_info_plt) do
+        {type, name, arity}
+      end
 
     page_mfas ++ added_mfas
   end
@@ -1920,25 +1915,6 @@ defmodule Hologram.Compiler.CallGraph do
     |> MapSet.union(target_modules)
   end
 
-  # Walks with the rules of the page listings (see reachable_mfas/4): a protocol implementation is
-  # entered only for a type the reached code names. Following every dispatch edge instead would enter
-  # every implementation the graph holds, and the graph holds the modules the pages reach, so the
-  # result would depend on which implementations earlier compiles happened to build.
-  defp list_reflection_mfas_reachable_from_server_init(templatable, graph, module_info_plt) do
-    graph
-    |> reachable_mfas([{templatable, :init, 3}], MapSet.new(), module_info_plt)
-    |> Enum.filter(fn mfa ->
-      case mfa do
-        {_module, :__changeset__, 0} -> true
-        {_module, :__schema__, 1} -> true
-        {_module, :__schema__, 2} -> true
-        {_module, :__struct__, 0} -> true
-        {_module, :__struct__, 1} -> true
-        _fallback -> false
-      end
-    end)
-  end
-
   defp list_runtime_mfas_in_graph(graph, pages, module_info_plt) do
     entry_mfas = list_runtime_entry_mfas()
 
@@ -2189,6 +2165,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp protocol_metadata_mfa?(_vertex, _module_infos), do: false
+
+  # Whether the type defines the reflection function: a struct defines __struct__/0,1, an Ecto schema
+  # __changeset__/0 and __schema__/1,2. The built-in protocol dispatch types define none.
+  defp reflection_function?(type, :__struct__, module_info_plt) do
+    flag?(module_info_plt, type, :struct?)
+  end
+
+  defp reflection_function?(type, _name, module_info_plt) do
+    flag?(module_info_plt, type, :ecto_schema?)
+  end
 
   # Records the module as one whose definition is built into the graph (see modules/1).
   defp put_module(%{pid: pid} = call_graph, module) do
