@@ -2802,6 +2802,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
                cache_state()
     end
 
+    # The page callers of the exposed runtime functions move with the pages, so a compile whose
+    # graph changed takes them again, and a later compile that keeps the runtime's MFAs reads them
+    # from the kept state, even when the runtime bundle itself was kept.
+    test "updates the kept runtime state's dynamic calls when the runtime bundle is kept",
+         %{opts: opts} do
+      run(opts)
+
+      %{runtime: %{bundle_info: bundle_info, dynamic_calls: dynamic_calls} = runtime} =
+        cache_state()
+
+      assert dynamic_calls.page_callers != %{}
+
+      Cache.put_runtime(%{runtime | dynamic_calls: %{dynamic_calls | page_callers: %{}}})
+      fake_edit(@reflection_open_page)
+
+      run(opts)
+
+      assert %{runtime: %{bundle_info: ^bundle_info, dynamic_calls: ^dynamic_calls}} =
+               cache_state()
+    end
+
     # Kernel.struct!/2 calls __struct__/1 on its parameter, and the runtime's own callers of it name
     # the module they pass (struct!(__MODULE__, args) in exception constructors).
     test "exposes the runtime's struct!/2 to the pages instead of opening __struct__/1",

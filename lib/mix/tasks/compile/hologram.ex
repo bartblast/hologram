@@ -442,10 +442,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_module_metadata(module_metadata)
       Cache.put_template_modules(template_modules)
 
-      # The kept runtime state describes the bundle this compile replaces. A compile that fails
-      # during the bundling leaves the next one diffing against the infos kept below, which show no
-      # edit, so the state is forgotten here: without it the next compile rebuilds the runtime.
-      if runtime_entry_files_info != [], do: Cache.put_runtime(nil)
+      keep_runtime_state(cache.runtime, runtime_entry_files_info, runtime_dynamic_calls)
 
       # The after picture, for the first compile in the next VM: the bundles on disk, what they were
       # built from, and the pages this compile is about to build, pending. Written before the before
@@ -878,6 +875,22 @@ defmodule Mix.Tasks.Compile.Hologram do
       Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
       File.exists?(kept_runtime.bundle_info.static_bundle_path) and
       File.exists?(kept_runtime.bundle_info.static_source_map_path)
+  end
+
+  # The kept runtime state describes the bundle this compile replaces. A compile that fails during
+  # the bundling leaves the next one diffing against the infos kept after it, which show no edit, so
+  # the state is forgotten when the runtime is rebuilt: without it the next compile rebuilds the
+  # runtime. A kept bundle keeps its state, but what the runtime's dynamic calls open is taken again
+  # whenever the graph changes (the page callers of the exposed runtime functions move with the
+  # pages), and a later compile that keeps the runtime's MFAs reads it from the state.
+  defp keep_runtime_state(kept_runtime, [], runtime_dynamic_calls) do
+    if runtime_dynamic_calls != kept_runtime.dynamic_calls do
+      Cache.put_runtime(%{kept_runtime | dynamic_calls: runtime_dynamic_calls})
+    end
+  end
+
+  defp keep_runtime_state(_kept_runtime, _runtime_entry_files_info, _runtime_dynamic_calls) do
+    Cache.put_runtime(nil)
   end
 
   # The first compile in a VM validated every templatable. A later one updates the kept entries with
