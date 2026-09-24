@@ -17,6 +17,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
   # function (a capture, a protocol dispatch, a call the graph was given by hand).
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.DynamicCallSites
@@ -159,20 +160,15 @@ defmodule Hologram.Compiler.DynamicCallGate do
   defp halt_when_open({:open, _visited} = open), do: {:halt, open}
   defp halt_when_open(closed), do: {:cont, closed}
 
+  # Builds a module's IR the way the compile task does (see Hologram.Compiler.build_ir_plt/1), so that
+  # in an umbrella a module still loaded from a consolidated beam the code reloader deleted is read
+  # from its object code, and a module with no beam is left out.
   defp module_ir(module, ir_plt) do
-    case PLT.get(ir_plt, module) do
-      {:ok, module_def} ->
-        {:ok, module_def}
-
-      :error ->
-        if Reflection.elixir_module?(module) do
-          module_def = IR.for_module(module)
-          PLT.put(ir_plt, module, module_def)
-          {:ok, module_def}
-        else
-          :error
-        end
+    if Reflection.elixir_module?(module) do
+      Compiler.build_missing_ir!(ir_plt, [module])
     end
+
+    PLT.get(ir_plt, module)
   end
 
   defp non_runtime_callers(graph, function, runtime) do
