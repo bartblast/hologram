@@ -6,8 +6,9 @@ defmodule Hologram.Compiler.CompileInputs do
 
   For the modules: the Elixir compile manifest of every loaded application that has one, digested.
   The Elixir compiler rewrites an application's manifest whenever it compiles a module of it and
-  leaves it alone otherwise. For the JavaScript a bundle inlines: the fingerprints the served
-  bundles recorded for the files esbuild read (see `Hologram.Compiler.bundle/4`). For the rest of
+  leaves it alone otherwise. For the JavaScript a bundle inlines: every file and fingerprint pair
+  the served bundles recorded for the files esbuild read (see `Hologram.Compiler.bundle/4`), so that
+  a file two bundles read at different contents is recorded with both. For the rest of
   what a bundle is built from: the bundle inputs that need no module (see
   `Hologram.Compiler.build_bundle_inputs/1`), the client config and the files in the static dir.
   """
@@ -25,7 +26,7 @@ defmodule Hologram.Compiler.CompileInputs do
   @type t :: %{
           bundle_inputs: map,
           client_config: String.t(),
-          js_inputs: %{String.t() => Compiler.js_input_fingerprint()},
+          js_inputs: [{String.t(), Compiler.js_input_fingerprint()}],
           manifests: [{atom, non_neg_integer}],
           static_files: [String.t()]
         }
@@ -74,9 +75,9 @@ defmodule Hologram.Compiler.CompileInputs do
 
   @doc """
   Whether the world is as the given record says: the manifests, the bundle inputs, the client config
-  and the static files built again equal the recorded ones, and no recorded JavaScript file has
-  another fingerprint now (see `Hologram.Compiler.js_inputs_changed?/2`). A file recorded as
-  `:fresh` always counts as changed.
+  and the static files built again equal the recorded ones, and every recorded JavaScript file and
+  fingerprint pair still holds (see `Hologram.Compiler.js_inputs_changed?/2`). A file recorded with
+  two fingerprints, or as `:fresh`, always counts as changed.
   """
   @spec unchanged?(t, keyword) :: boolean
   def unchanged?(record, opts) do
@@ -84,7 +85,8 @@ defmodule Hologram.Compiler.CompileInputs do
 
     js_fingerprints =
       js_inputs
-      |> Map.keys()
+      |> Enum.map(fn {path, _fingerprint} -> path end)
+      |> Enum.uniq()
       |> Compiler.fingerprint_js_inputs(nil)
 
     rest == build(opts) and not Compiler.js_inputs_changed?(js_inputs, js_fingerprints)

@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.CompileInputsTest do
       record =
         opts
         |> build()
-        |> Map.put(:js_inputs, %{"/app/assets/js/hooks.mjs" => {:digest, 123}})
+        |> Map.put(:js_inputs, [{"/app/assets/js/hooks.mjs", {:digest, 123}}])
 
       dump(record, path)
 
@@ -104,7 +104,10 @@ defmodule Hologram.Compiler.CompileInputsTest do
 
   describe "unchanged?/2" do
     setup %{opts: opts} do
-      js_inputs = Compiler.fingerprint_js_inputs([@imported_js_path], nil)
+      js_inputs =
+        [@imported_js_path]
+        |> Compiler.fingerprint_js_inputs(nil)
+        |> Map.to_list()
 
       record =
         opts
@@ -115,9 +118,18 @@ defmodule Hologram.Compiler.CompileInputsTest do
     end
 
     test "a JavaScript file recorded as fresh", %{opts: opts, record: record} do
-      fresh_record = %{record | js_inputs: %{@imported_js_path => :fresh}}
+      fresh_record = %{record | js_inputs: [{@imported_js_path, :fresh}]}
 
       refute unchanged?(fresh_record, opts)
+    end
+
+    test "a JavaScript file two bundles recorded at different contents", %{
+      opts: opts,
+      record: record
+    } do
+      stale_record = %{record | js_inputs: [{@imported_js_path, {:digest, 0}} | record.js_inputs]}
+
+      refute unchanged?(stale_record, opts)
     end
 
     test "a manifest changed", %{opts: opts, record: record} do
