@@ -56,6 +56,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
       entries: MapSet.new(entries),
       graph: graph,
       ir_plt: gate.ir_plt,
+      module_callers?: false,
       reached: MapSet.new(reached_vertices)
     }
 
@@ -96,6 +97,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
       entries: MapSet.new(CallGraph.list_runtime_entry_mfas()),
       graph: graph,
       ir_plt: ir_plt,
+      module_callers?: true,
       reached: runtime
     }
 
@@ -211,6 +213,13 @@ defmodule Hologram.Compiler.DynamicCallGate do
     |> Kernel.==(:open)
   end
 
+  # The runtime's reached set holds its MFAs only, so there a module vertex among the callers is
+  # taken whether or not the runtime reaches it: the runtime calls a component's or an exception's
+  # functions through it, with arguments the walk cannot see. One only a page reaches then opens the
+  # call for every page, which ships more than the page needs but never less.
+  defp reached_caller?(caller, %{module_callers?: true}) when is_atom(caller), do: true
+  defp reached_caller?(caller, context), do: MapSet.member?(context.reached, caller)
+
   defp resolve_argument({:literal, _ir}, _caller, _context, visited), do: {:closed, visited}
 
   defp resolve_argument({{:param, caller_index}, _ir}, caller, context, visited) do
@@ -262,7 +271,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
 
         callers =
           for {caller, _function} <- Digraph.incoming_edges(context.graph, function),
-              MapSet.member?(context.reached, caller) do
+              reached_caller?(caller, context) do
             caller
           end
 

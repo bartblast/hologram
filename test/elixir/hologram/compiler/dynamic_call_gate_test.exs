@@ -202,6 +202,17 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       assert result.exposed == %{}
     end
 
+    # The runtime's MFAs hold no module vertex, and the runtime calls a component's functions through
+    # one, with arguments the walk cannot see.
+    test "a module vertex among the callers opens a runtime call a runtime caller keeps closed" do
+      graph = Digraph.add_edge(module_1_graph(), Module1, @build)
+
+      result = runtime_dynamic_calls(graph, [@build, {Module1, :with_literal, 0}], PLT.start())
+
+      assert result.open == MapSet.new([{:__struct__, 0}])
+      assert result.exposed == %{}
+    end
+
     test "every parameter a closed chain goes through is exposed" do
       runtime_mfas = [
         @build,
