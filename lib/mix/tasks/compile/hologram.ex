@@ -100,6 +100,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         opts[:force?] -> compile_with_lock(opts)
         language_server_build?(opts) -> :noop
         !compiler_enabled?() -> :noop
+        nothing_changed?(opts) -> :noop
         true -> compile_with_lock(opts)
       end
 
@@ -157,6 +158,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       compile_inputs_dump_path =
         Path.join(build_dir, Reflection.compile_inputs_dump_file_name())
+
+      # Gone until this compile finishes with every page built, so that a compile that fails, having
+      # replaced some bundles, leaves the next one nothing to skip on.
+      File.rm(compile_inputs_dump_path)
 
       compile_state_dump_path =
         Path.join(build_dir, Reflection.compile_state_dump_file_name())
@@ -550,7 +555,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # The world as this compile leaves it, for the first compile in the next VM to compare with (see
       # Hologram.Compiler.CompileInputs). None while a page is pending: the next compile must run to
       # build it, whatever changed.
-      record_compile_inputs(served_bundles_info, compile_inputs_dump_path, opts)
+      maybe_record_compile_inputs(served_bundles_info, compile_inputs_dump_path, opts)
 
       Logger.info("Hologram: compiler finished")
 
@@ -942,6 +947,23 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The first compile in a VM has nothing to do when the world is as the record of the last compile
+  # that built every page says (see Hologram.Compiler.CompileInputs), and it can tell before it loads
+  # anything. A later compile in the same VM comes after an edit this VM compiled, so the record is
+  # not consulted for it.
+  defp nothing_changed?(opts) do
+    if Cache.get().editable_modules == nil do
+      record =
+        opts[:build_dir]
+        |> Path.join(Reflection.compile_inputs_dump_file_name())
+        |> CompileInputs.load()
+
+      record != nil and CompileInputs.unchanged?(record, opts)
+    else
+      false
+    end
+  end
+
   # The runtime bundle is found by scanning the static dir rather than through the page digest PLT, so
   # the one it replaces is deleted as soon as it is written: a registry reload between two batches
   # could otherwise find the old one. A page's old bundle stays until the cleanup at the end.
@@ -1150,6 +1172,22 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The JavaScript inputs are the served bundles' own records, so that a file saved while the compile
+  # ran is recorded as the bundle that read it saw it.
+  defp maybe_record_compile_inputs(served_bundles_info, dump_path, opts) do
+    if MapSet.size(Cache.get().pending_pages) == 0 do
+      js_inputs =
+        served_bundles_info
+        |> Enum.flat_map(& &1.js_inputs)
+        |> Enum.uniq()
+
+      opts
+      |> CompileInputs.build()
+      |> Map.put(:js_inputs, js_inputs)
+      |> CompileInputs.dump(dump_path)
+    end
+  end
+
   # The removal here shares the path-based race documented at
   # remove_lock_for_dead_process/2, in its narrowest form: only an integer comparison
   # separates the age check from the removal, where that function spends milliseconds
@@ -1187,24 +1225,6 @@ defmodule Mix.Tasks.Compile.Hologram do
         {:error, _reason} ->
           remove_unreadable_lock_file(lock_path)
       end
-    end
-  end
-
-  # The JavaScript inputs are the served bundles' own records, so that a file saved while the compile
-  # ran is recorded as the bundle that read it saw it.
-  defp record_compile_inputs(served_bundles_info, dump_path, opts) do
-    if MapSet.size(Cache.get().pending_pages) == 0 do
-      js_inputs =
-        served_bundles_info
-        |> Enum.flat_map(& &1.js_inputs)
-        |> Enum.uniq()
-
-      opts
-      |> CompileInputs.build()
-      |> Map.put(:js_inputs, js_inputs)
-      |> CompileInputs.dump(dump_path)
-    else
-      File.rm(dump_path)
     end
   end
 

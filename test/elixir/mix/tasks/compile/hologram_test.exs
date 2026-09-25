@@ -179,6 +179,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.stop(plt)
   end
 
+  # A recompile that changed no module, as the Elixir compiler leaves one: the manifest rewritten,
+  # every beam as it was. It opens the gate of the first compile in a new VM, which a test of what
+  # that compile does needs.
+  defp fake_recompile do
+    File.write!(@manifest_path, "manifest #{System.unique_integer([:positive])}")
+  end
+
   defp find_editable_runtime_module do
     %{editable_modules: editable_modules, module_infos: module_infos, runtime: runtime} =
       cache_state()
@@ -194,6 +201,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # state dump next to the call graph dump.
   defp forget_kept_state(opts) do
     Cache.reset()
+    File.rm(@compile_inputs_path)
 
     opts[:build_dir]
     |> Path.join(Reflection.compile_state_dump_file_name())
@@ -1558,10 +1566,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_compile_state_writes(fn -> run(opts) end) == 2
     end
 
-    test "a new VM with nothing changed bundles nothing", %{opts: opts} do
+    test "a new VM after a recompile that changed no module bundles nothing", %{opts: opts} do
       run(opts)
       page_digests = load_page_digest_items(opts)
       Cache.reset()
+      fake_recompile()
 
       assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
       assert load_page_digest_items(opts) == page_digests
@@ -1569,18 +1578,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(opts)
     end
 
-    test "a new VM with nothing changed builds no IR", %{opts: opts} do
+    test "a new VM after a recompile that changed no module builds no IR", %{opts: opts} do
       run(opts)
       Cache.reset()
+      fake_recompile()
 
       Code.ensure_loaded!(IR)
 
       assert count_calls({IR, :for_module, 2}, fn -> run(opts) end) == 0
     end
 
-    test "a new VM with nothing changed writes no dump", %{opts: opts} do
+    test "a new VM after a recompile that changed no module writes no dump", %{opts: opts} do
       run(opts)
       Cache.reset()
+      fake_recompile()
 
       assert count_compile_state_writes(fn ->
                assert count_dumps(fn -> run(opts) end) == [0, 0]
@@ -1595,6 +1606,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> File.rm!()
 
       Cache.reset()
+      fake_recompile()
 
       assert count_dumps(fn -> run(opts) end) == [1, 1]
     end
@@ -1603,21 +1615,26 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit_in_dump(Module2, opts)
       Cache.reset()
+      fake_recompile()
 
       assert count_dumps(fn -> run(opts) end) == [1, 1]
       assert load_module_info_items(opts)[Module2].digest != "edited"
     end
 
-    test "a new VM with nothing changed encodes nothing", %{opts: opts} do
+    test "a new VM after a recompile that changed no module encodes nothing", %{opts: opts} do
       run(opts)
       Cache.reset()
+      fake_recompile()
 
       assert count_calls(@encode_function_mfa, fn -> run(opts) end) == 0
     end
 
-    test "a new VM with nothing changed lists no page and clones no graph", %{opts: opts} do
+    test "a new VM after a recompile that changed no module lists no page and clones no graph", %{
+      opts: opts
+    } do
       run(opts)
       Cache.reset()
+      fake_recompile()
 
       mfas = [
         {CallGraph, :clone, 2},
@@ -1640,20 +1657,22 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
-    test "a new VM with nothing changed validates no template", %{opts: opts} do
+    test "a new VM after a recompile that changed no module validates no template", %{opts: opts} do
       run(opts)
       Cache.reset()
+      fake_recompile()
 
       assert count_validated_templates(fn -> run(opts) end) == 0
     end
 
-    test "a new VM with nothing changed keeps the runtime state and every page state it loaded",
+    test "a new VM after a recompile that changed no module keeps the runtime state and every page state it loaded",
          %{
            opts: opts
          } do
       run(opts)
       %{runtime: runtime} = cache_state()
       Cache.reset()
+      fake_recompile()
 
       mfas = [{Cache, :put_page, 3}, {Cache, :put_runtime, 1}]
       Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
@@ -1680,6 +1699,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       pages_reaching_module_2 = count_pages_reaching(Module2)
       fake_edit_in_dump(Module2, opts)
       Cache.reset()
+      fake_recompile()
 
       assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
       assert pages_reaching_module_2 < @num_pages
@@ -1691,6 +1711,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       pages_reaching_module_2 = count_pages_reaching(Module2)
       fake_edit_in_dump(Module2, opts)
       Cache.reset()
+      fake_recompile()
       run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
       Cache.reset()
 
@@ -1716,6 +1737,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
       File.write!(dump_path, SerializationUtils.serialize({0, %{}}))
       Cache.reset()
+      fake_recompile()
 
       assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
       assert {1, _compile_state} = load_compile_state_dump(opts)
@@ -1729,6 +1751,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> File.rm!()
 
       Cache.reset()
+      fake_recompile()
 
       assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
       test_page_bundles(opts)
@@ -2496,6 +2519,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run after a reset starts from the build dir", %{opts: opts} do
       run(opts)
       Cache.reset()
+      fake_recompile()
 
       mfa = {CallGraph, :load, 2}
       :erlang.trace_pattern(mfa, true, [:call_count])
@@ -2559,6 +2583,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_raise File.RenameError, fn -> run(opts) end
       assert cache_state().module_infos == nil
+      refute File.exists?(@compile_inputs_path)
 
       File.rmdir!(blocked_dump_path)
 
@@ -2678,6 +2703,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> File.rm!()
 
       Cache.reset()
+      fake_recompile()
 
       run(opts)
 
@@ -2695,11 +2721,78 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> File.write!(SerializationUtils.serialize(Digraph.new()))
 
       Cache.reset()
+      fake_recompile()
 
       run(opts)
 
       test_call_graph(opts)
       test_page_bundles(opts)
+    end
+  end
+
+  describe "nothing changed since the last compile" do
+    setup %{opts: opts} do
+      on_exit(&Cache.reset/0)
+      forget_kept_state(opts)
+      run(opts)
+      Cache.reset()
+
+      :ok
+    end
+
+    test "a new VM after a recompile compiles", %{opts: opts} do
+      fake_recompile()
+
+      assert run(opts) == :ok
+    end
+
+    test "a new VM after an edit of imported JavaScript compiles", %{opts: opts} do
+      with_edited_fixture("js_fixture.mjs", fn ->
+        assert run(opts) == :ok
+      end)
+    end
+
+    test "a new VM whose kept bundle is gone compiles", %{opts: opts} do
+      [bundle_path | _bundle_paths] =
+        opts[:static_dir]
+        |> Path.join("page-*.js")
+        |> Path.wildcard()
+
+      File.rm!(bundle_path)
+
+      assert run(opts) == :ok
+    end
+
+    test "a new VM with no record compiles", %{opts: opts} do
+      File.rm!(@compile_inputs_path)
+
+      assert run(opts) == :ok
+    end
+
+    test "a new VM with nothing changed does not compile", %{opts: opts} do
+      assert count_calls({CallGraph, :load, 2}, fn ->
+               assert run(opts) == :noop
+             end) == 0
+    end
+
+    test "a new VM with the client stack traces setting changed compiles", %{opts: opts} do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert run(opts) == :ok
+    end
+
+    test "a record of another version is ignored", %{opts: opts} do
+      File.write!(@compile_inputs_path, SerializationUtils.serialize({0, %{}}))
+
+      assert run(opts) == :ok
+    end
+
+    test "a VM that compiled compiles again, whatever the record says", %{opts: opts} do
+      fake_recompile()
+      run(opts)
+
+      assert run(opts) == :ok
     end
   end
 
