@@ -30,13 +30,13 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module5 do
     fun.(%Struct1{})
   end
 
-  def closure_clauses do
+  def closure_clauses(value) do
     fun = fn
       :a -> %Struct1{}
       _other -> %Struct2{}
     end
 
-    fun.(:a)
+    fun.(value)
   end
 
   def closure_free_variable do

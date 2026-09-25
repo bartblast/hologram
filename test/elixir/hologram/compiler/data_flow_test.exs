@@ -531,7 +531,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "anonymous function with two clauses" do
-      assert summary_of(Module5, :closure_clauses, 0) == MapSet.new([@struct_1, @struct_2])
+      assert summary_of(Module5, :closure_clauses, 1) == MapSet.new([@struct_1, @struct_2])
     end
 
     test "anonymous function reading a variable of its function" do
