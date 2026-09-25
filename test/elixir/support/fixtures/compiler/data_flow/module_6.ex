@@ -15,6 +15,10 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module6 do
   end
 
   # Through apply/3: the type checker takes a dot for map access and rejects a module here.
+  def build_struct(module), do: struct(module, [])
+
+  def calls_build_struct, do: build_struct(Struct1)
+
   def calls_dot_on_param, do: apply(__MODULE__, :dot_on_param, [Struct1])
 
   def calls_field_of_param, do: field_of_param(%Struct1{field: %Struct2{}})
@@ -29,6 +33,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module6 do
   end
 
   def field_of_param(struct), do: struct.field
+
+  def kernel_struct, do: struct(Struct1, field: :x)
 
   def on_literal_module do
     module = Module3

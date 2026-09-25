@@ -30,6 +30,7 @@ defmodule Hologram.Compiler.DataFlow do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.DataFlow.Models
   alias Hologram.Compiler.IR
 
   # How many summaries can be in the making at once, one inside another. A call past it gives the
@@ -65,7 +66,9 @@ defmodule Hologram.Compiler.DataFlow do
   # One alternative of a value:
   #
   #   * `{:atom, atom}` - the atom, a module atom included.
-  #   * `:prim` - a number, a binary, a pid, a port or a reference: nothing inside.
+  #   * `:prim` - a value holding no types: a number, a binary, a pid, a port, a reference, an atom
+  #     the code does not name, or a list, a tuple or a map of those. Its structure is not known, so
+  #     it can match any pattern, and every part of it is `:prim` too.
   #   * `{:struct, module, shapes}` - a struct of the module, with what is in its fields.
   #   * `{:map, shapes}` - a map, with its keys and values.
   #   * `{:tuple, [shapes]}` - a tuple, with its elements in order.
@@ -224,8 +227,8 @@ defmodule Hologram.Compiler.DataFlow do
   # A call of the named function on a module of the given shapes, for each alternative: a module
   # atom gives the function's summary with the arguments put in; a value that depends on a param or
   # on an anonymous function's argument keeps the call for when that is known; a value of unknown
-  # structure gives itself and the arguments, and the calls on the module atoms it holds. Any other
-  # value is no module: the call raises.
+  # structure gives itself and the arguments, and the calls on the module atoms it holds; a primitive
+  # gives a primitive. Any other value is no module: the call raises.
   defp call_dyn(module_shapes, name, arity, args, ctx) do
     module_shapes
     |> Enum.map(&call_dyn_shape(&1, name, arity, args, ctx))
@@ -253,6 +256,10 @@ defmodule Hologram.Compiler.DataFlow do
   defp call_dyn_shape({:reach, _vertex} = reach, _name, _arity, args, _ctx) do
     MapSet.new([{:bag, union([MapSet.new([reach]) | args])}])
   end
+
+  # A module the code does not name (an atom made at runtime) gives what the code names for it:
+  # nothing (see the contract).
+  defp call_dyn_shape(:prim, _name, _arity, _args, _ctx), do: MapSet.new([:prim])
 
   defp call_dyn_shape(_shape, _name, _arity, _args, _ctx), do: MapSet.new()
 
@@ -308,8 +315,28 @@ defmodule Hologram.Compiler.DataFlow do
     |> Map.put(:id, make_ref())
   end
 
-  # What can be inside a value of the given shapes, one level down. An atom and a primitive hold
-  # nothing; a shape of unknown structure holds itself.
+  # What the function's code returns. A protocol function returns everything it is given (see the
+  # contract): which implementation runs depends on the type of a value, and following every one
+  # would follow code the value never meets. A function with no IR returns everything it is given.
+  defp code_summary({_module, _function, arity} = mfa, ctx) do
+    clauses = function_clauses(mfa, ctx)
+
+    if clauses == nil or protocol_function?(mfa, ctx.flow.module_info_plt) do
+      MapSet.new([{:bag, params(arity)}])
+    else
+      function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
+
+      clauses
+      |> Enum.map(fn clause ->
+        frame = clause_frame(clause, &{:param, &1})
+        eval(clause.body, %{function_ctx | frames: [frame]})
+      end)
+      |> union()
+    end
+  end
+
+  # What can be inside a value of the given shapes, one level down. An atom holds nothing, a part of
+  # a primitive is a primitive, and a shape of unknown structure holds itself.
   defp contents(shapes) do
     shapes
     |> Enum.map(&shape_contents/1)
@@ -320,7 +347,8 @@ defmodule Hologram.Compiler.DataFlow do
   # summary of the module's zero-arity function; a struct gives its module for __struct__ and what
   # its fields hold for any other name, a map what it holds; a value that depends on a param or on
   # an anonymous function's argument keeps the dot for when that is known; a value of unknown
-  # structure gives itself, and the dots on the module atoms it holds. Any other value raises.
+  # structure gives itself, and the dots on the module atoms it holds; a primitive gives a primitive.
+  # Any other value raises.
   defp dot(shapes, name, ctx) do
     shapes
     |> Enum.map(&dot_shape(&1, name, ctx))
@@ -334,6 +362,8 @@ defmodule Hologram.Compiler.DataFlow do
   defp dot_shape({:struct, _module, fields}, _name, _ctx), do: fields
 
   defp dot_shape({:map, inner}, _name, _ctx), do: inner
+
+  defp dot_shape(:prim, _name, _ctx), do: MapSet.new([:prim])
 
   defp dot_shape(shape, name, _ctx)
        when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
@@ -657,7 +687,7 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp extract_shape(shape, pattern, var) do
-    if opaque?(shape) and var in pattern_variables(pattern, []) do
+    if (opaque?(shape) or shape == :prim) and var in pattern_variables(pattern, []) do
       MapSet.new([shape])
     else
       MapSet.new()
@@ -727,25 +757,8 @@ defmodule Hologram.Compiler.DataFlow do
     |> Map.get({function, arity})
   end
 
-  # A protocol function returns everything it is given (see the contract): which implementation runs
-  # depends on the type of a value, and following every one would follow code the value never meets.
-  # A function with no IR returns everything it is given too.
-  defp function_summary({_module, _function, arity} = mfa, ctx) do
-    clauses = function_clauses(mfa, ctx)
-
-    if clauses == nil or protocol_function?(mfa, ctx.flow.module_info_plt) do
-      MapSet.new([{:bag, params(arity)}])
-    else
-      function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
-
-      clauses
-      |> Enum.map(fn clause ->
-        frame = clause_frame(clause, &{:param, &1})
-        eval(clause.body, %{function_ctx | frames: [frame]})
-      end)
-      |> union()
-    end
-  end
+  # A function's model (see Hologram.Compiler.DataFlow.Models), else what its code returns.
+  defp function_summary(mfa, ctx), do: Models.summary(mfa) || code_summary(mfa, ctx)
 
   # The current answer of a function in the making, which is a read of it, or its provisional summary.
   defp in_progress_summary({_module, _function, arity} = mfa, ctx) do
@@ -1343,7 +1356,7 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp shape_contents({:atom, _atom}), do: MapSet.new()
 
-  defp shape_contents(:prim), do: MapSet.new()
+  defp shape_contents(:prim), do: MapSet.new([:prim])
 
   defp shape_contents({:struct, _module, fields}), do: fields
 
@@ -1384,7 +1397,7 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  defp structurally_may_match?(:prim, %type{}) when type in @primitive_types, do: true
+  defp structurally_may_match?(:prim, _pattern), do: true
 
   defp structurally_may_match?(_shape, _pattern), do: false
 

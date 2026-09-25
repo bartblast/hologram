@@ -3,6 +3,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   import Hologram.Compiler.DataFlow
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
@@ -11,6 +12,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module6
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module7
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -34,7 +36,22 @@ defmodule Hologram.Compiler.DataFlowTest do
     end)
   end
 
-  defp flow, do: start(PLT.start(), PLT.start())
+  defp flow, do: start(PLT.start(), module_info_plt_fixture())
+
+  # The module info PLT of the test build, built once per test run and kept for the tests that take
+  # no context (the analysis reads which functions are protocol functions from it). setup_all
+  # builds it first, in a process that lives for the whole module, so the linked PLT does too.
+  defp module_info_plt_fixture do
+    case :persistent_term.get({__MODULE__, :module_info_plt}, nil) do
+      nil ->
+        module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
+        :persistent_term.put({__MODULE__, :module_info_plt}, module_info_plt)
+        module_info_plt
+
+      module_info_plt ->
+        module_info_plt
+    end
+  end
 
   # The shapes of the value the given function of the given module returns, from its only clause.
   defp shapes_of(module, function) do
@@ -62,6 +79,11 @@ defmodule Hologram.Compiler.DataFlowTest do
     shapes
     |> MapSet.new()
     |> types(start(PLT.start(), module_info_plt))
+  end
+
+  setup_all do
+    module_info_plt_fixture()
+    :ok
   end
 
   describe "apply_summary/2" do
@@ -320,6 +342,47 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "summary/2" do
+    test "Kernel.struct/2 on a module" do
+      flow = flow()
+      summary = summary({Module6, :kernel_struct, 0}, flow)
+
+      assert Struct1 in types(summary, flow).structs
+      refute PLT.member?(flow.summaries, {ArgumentError, :exception, 1})
+    end
+
+    test "Kernel.struct/2 on a module passed as an argument" do
+      flow = flow()
+      summary = summary({Module6, :calls_build_struct, 0}, flow)
+
+      assert Struct1 in types(summary, flow).structs
+    end
+
+    test "model of a function returning a primitive" do
+      assert summary_of(Module7, :count, 1) == MapSet.new([:prim])
+      assert summary_of(Module7, :inspects, 0) == MapSet.new([:prim])
+      assert summary_of(Module7, :to_string_of, 1) == MapSet.new([:prim])
+    end
+
+    test "binary with values interpolated" do
+      assert summary_of(Module7, :interpolates, 1) == MapSet.new([:prim])
+    end
+
+    test "a part of a primitive is a primitive" do
+      assert summary_of(Module7, :first_part, 1) == MapSet.new([:prim])
+    end
+
+    test "a primitive in a tuple doesn't keep a pattern from matching the tuple" do
+      assert summary_of(Module7, :pairs_with_parts, 1) == MapSet.new([@struct_1])
+    end
+
+    test "model of a function that never returns" do
+      assert summary_of(Module7, :raises, 0) == MapSet.new()
+    end
+
+    test "a branch that raises gives nothing" do
+      assert summary_of(Module7, :raises_or_struct, 1) == MapSet.new([@struct_1])
+    end
+
     test "apply/2 with the argument list written out" do
       assert summary_of(Module6, :apply_fun, 0) == MapSet.new([@struct_1])
     end
@@ -551,8 +614,8 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "recursive function whose answer never settles takes its recursive calls' arguments" do
-      count_minus_one = {:bag, MapSet.new([{:param, 0}, :prim])}
-      recursive_call = {:bag, MapSet.new([count_minus_one])}
+      # count - 1 is a primitive.
+      recursive_call = {:bag, MapSet.new([:prim])}
 
       assert summary_of(Module4, :growing, 1) ==
                MapSet.new([@struct_1, {:tuple, [MapSet.new([recursive_call])]}])
