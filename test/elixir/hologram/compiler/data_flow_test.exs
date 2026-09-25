@@ -1,14 +1,14 @@
-defmodule Hologram.Compiler.ValueFlowTest do
+defmodule Hologram.Compiler.DataFlowTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Compiler.ValueFlow
+  import Hologram.Compiler.DataFlow
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Module1
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Module2
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Struct1
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Struct2
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
   # The fields an empty Struct1 or Struct2 literal holds: its field name and the default value.
   @defaults MapSet.new([{:atom, :field}, {:atom, nil}])

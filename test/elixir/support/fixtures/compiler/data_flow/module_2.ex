@@ -3,9 +3,9 @@
 # credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
 # credo:disable-for-this-file Credo.Check.Refactor.CondStatements
 # credo:disable-for-this-file Credo.Check.Refactor.VariableRebinding
-defmodule Hologram.Test.Fixtures.Compiler.ValueFlow.Module2 do
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Struct1
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Struct2
+defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module2 do
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
   def bound do
     struct = %Struct1{}

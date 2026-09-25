@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.ValueFlow.Module1 do
-  alias Hologram.Test.Fixtures.Compiler.ValueFlow.Struct1
+defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module1 do
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
 
   def atom, do: :ok
 

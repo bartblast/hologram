@@ -1,4 +1,4 @@
-defmodule Hologram.Compiler.ValueFlow do
+defmodule Hologram.Compiler.DataFlow do
   @moduledoc false
 
   # Follows values through server code without running it, to tell which struct types and module
