@@ -49,7 +49,7 @@ defmodule Hologram.Compiler.DataFlow do
 
   # Shapes of unknown structure: they can hold anything, so they can match any pattern, and a part
   # of one is the shape itself.
-  @opaque_kinds [:arg, :bag, :call, :dyn, :param, :reach]
+  @opaque_kinds [:arg, :bag, :call, :dot, :dyn, :param, :reach]
 
   @primitive_types [
     IR.BitstringType,
@@ -78,6 +78,8 @@ defmodule Hologram.Compiler.DataFlow do
   #   * `{:arg, ref, index}` - whatever the anonymous function is given as that argument.
   #   * `{:reach, vertex}` - the rule before this module, applied from the vertex (see the contract).
   #   * `{:call, shapes, [shapes]}` - a call of a function value that depends on a parameter.
+  #   * `{:dot, shapes, name}` - `value.name` on a value that depends on a parameter: a field of a
+  #     map or a struct, or a call of a zero-arity function of a module.
   #   * `{:dyn, shapes, name, arity, [shapes]}` - a call of the named function on a module that
   #     depends on a parameter.
   @type shape ::
@@ -93,6 +95,7 @@ defmodule Hologram.Compiler.DataFlow do
           | {:arg, fun_ref, non_neg_integer}
           | {:reach, CallGraph.vertex()}
           | {:call, shapes, [shapes]}
+          | {:dot, shapes, atom}
           | {:dyn, shapes, atom, arity, [shapes]}
 
   @type fun_ref :: {mfa, non_neg_integer}
@@ -114,12 +117,11 @@ defmodule Hologram.Compiler.DataFlow do
   Returns the shapes a summary (see `summary/2`) gives for a call with arguments of the given
   shapes: each `{:param, index}` in it, at any depth, replaced with the argument's shapes. A missing
   argument gives nothing. A call of an anonymous function that a param stood for is made once the
-  param is replaced.
+  param is replaced. A dynamic call or a dot on a module a param stood for is left as it is: making
+  it needs the analysis (the calls made while summarising do).
   """
   @spec apply_summary(shapes, [shapes]) :: shapes
-  def apply_summary(summary, args) do
-    replace(summary, &replace_param(&1, args), 0)
-  end
+  def apply_summary(summary, args), do: put_args(summary, args, nil)
 
   @doc """
   Returns the shapes of the value the given expression gives, where the expression is in the given
@@ -197,10 +199,10 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # What calling a function value of the given shapes with arguments of the given shapes gives, for
-  # each alternative; calls is how many calls of anonymous functions this one is made inside.
-  defp apply_fun(fun_shapes, args, calls) do
+  # each alternative (see replace/3 about rep).
+  defp apply_fun(fun_shapes, args, rep) do
     fun_shapes
-    |> Enum.map(&call_fun(&1, args, calls))
+    |> Enum.map(&call_fun(&1, args, rep))
     |> union()
   end
 
@@ -215,52 +217,76 @@ defmodule Hologram.Compiler.DataFlow do
     put_pattern_extras(new_acc, pattern)
   end
 
+  # Records that an answer of a summary in the making changed, which a provisional summary that read
+  # it no longer holds (see fixpoint_summary/2).
+  defp bump_answers_version(ctx), do: :ets.update_counter(ctx.memo, :answers_version, 1)
+
+  # A call of the named function on a module of the given shapes, for each alternative: a module
+  # atom gives the function's summary with the arguments put in; a value that depends on a param or
+  # on an anonymous function's argument keeps the call for when that is known; a value of unknown
+  # structure gives itself and the arguments, and the calls on the module atoms it holds. Any other
+  # value is no module: the call raises.
+  defp call_dyn(module_shapes, name, arity, args, ctx) do
+    module_shapes
+    |> Enum.map(&call_dyn_shape(&1, name, arity, args, ctx))
+    |> union()
+  end
+
+  defp call_dyn_shape({:atom, module}, name, arity, args, ctx) do
+    {module, name, arity}
+    |> callee_summary(ctx)
+    |> put_args(args, ctx)
+  end
+
+  defp call_dyn_shape(shape, name, arity, args, _ctx)
+       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
+    MapSet.new([{:dyn, MapSet.new([shape]), name, arity, args}])
+  end
+
+  defp call_dyn_shape({:bag, inner} = bag, name, arity, args, ctx) do
+    module_atoms = for {:atom, _module} = atom <- inner, into: MapSet.new(), do: atom
+    unknown = MapSet.new([{:bag, union([MapSet.new([bag]) | args])}])
+
+    union([unknown, call_dyn(module_atoms, name, arity, args, ctx)])
+  end
+
+  defp call_dyn_shape({:reach, _vertex} = reach, _name, _arity, args, _ctx) do
+    MapSet.new([{:bag, union([MapSet.new([reach]) | args])}])
+  end
+
+  defp call_dyn_shape(_shape, _name, _arity, _args, _ctx), do: MapSet.new()
+
   # An anonymous function returns what it returns with the arguments put in for its own. A function
   # that depends on a param or on an anonymous function's argument is called once that is known (see
   # replace_parts/3). A value of unknown structure can be a function returning anything it holds or
   # it is given. Any other value is no function: calling it raises.
-  defp call_fun({:fun, _ref, _returned} = fun, args, calls) when calls >= @max_fun_calls do
+  defp call_fun({:fun, _ref, _returned} = fun, args, %{calls: calls})
+       when calls >= @max_fun_calls do
     MapSet.new([{:call, MapSet.new([fun]), args}])
   end
 
-  defp call_fun({:fun, ref, returned}, args, calls) do
-    replace(returned, &replace_arg(&1, ref, args), calls + 1)
+  defp call_fun({:fun, ref, returned}, args, rep) do
+    replace(returned, &replace_arg(&1, ref, args), %{rep | calls: rep.calls + 1})
   end
 
-  defp call_fun(shape, args, _calls)
-       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dyn, :param] do
+  defp call_fun(shape, args, _rep)
+       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
     MapSet.new([{:call, MapSet.new([shape]), args}])
   end
 
-  defp call_fun(shape, args, _calls) when is_tuple(shape) and elem(shape, 0) in [:bag, :reach] do
+  defp call_fun(shape, args, _rep) when is_tuple(shape) and elem(shape, 0) in [:bag, :reach] do
     union([MapSet.new([shape]) | args])
   end
 
-  defp call_fun(_shape, _args, _calls), do: MapSet.new()
+  defp call_fun(_shape, _args, _rep), do: MapSet.new()
 
-  # The summary of a function a call reaches: from the analysis when made already, the current
-  # answer when it is in the making (a recursive call, see fixpoint_summary/2), else made now.
-  defp callee_summary({_module, _function, arity} = mfa, ctx) do
+  # The summary of a function a call reaches: from the analysis when made already, else the current
+  # answer when it is in the making (a recursive call, see fixpoint_summary/2), else a provisional
+  # summary still valid, else made now.
+  defp callee_summary(mfa, ctx) do
     case PLT.get(ctx.flow.summaries, mfa) do
-      {:ok, summary} ->
-        summary
-
-      :error ->
-        case :ets.lookup(ctx.memo, {:in_progress, mfa}) do
-          [{_key, _depth, :fallback, _read?}] ->
-            MapSet.new([{:bag, params(arity)}])
-
-          [{key, depth, answer, _read?}] ->
-            :ets.insert(ctx.memo, {key, depth, answer, true})
-            note_read_depth(depth, ctx)
-            answer
-
-          [] when length(ctx.stack) >= @max_call_depth ->
-            top(mfa)
-
-          [] ->
-            fixpoint_summary(mfa, ctx)
-        end
+      {:ok, summary} -> summary
+      :error -> in_progress_summary(mfa, ctx)
     end
   end
 
@@ -290,12 +316,45 @@ defmodule Hologram.Compiler.DataFlow do
     |> union()
   end
 
+  # `value.name` on a value of the given shapes, for each alternative: a module atom gives the
+  # summary of the module's zero-arity function; a struct gives its module for __struct__ and what
+  # its fields hold for any other name, a map what it holds; a value that depends on a param or on
+  # an anonymous function's argument keeps the dot for when that is known; a value of unknown
+  # structure gives itself, and the dots on the module atoms it holds. Any other value raises.
+  defp dot(shapes, name, ctx) do
+    shapes
+    |> Enum.map(&dot_shape(&1, name, ctx))
+    |> union()
+  end
+
+  defp dot_shape({:atom, _module} = atom, name, ctx), do: call_dyn_shape(atom, name, 0, [], ctx)
+
+  defp dot_shape({:struct, module, _fields}, :__struct__, _ctx), do: MapSet.new([{:atom, module}])
+
+  defp dot_shape({:struct, _module, fields}, _name, _ctx), do: fields
+
+  defp dot_shape({:map, inner}, _name, _ctx), do: inner
+
+  defp dot_shape(shape, name, _ctx)
+       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
+    MapSet.new([{:dot, MapSet.new([shape]), name}])
+  end
+
+  defp dot_shape({:bag, inner} = bag, name, ctx) do
+    module_atoms = for {:atom, _module} = atom <- inner, into: MapSet.new(), do: atom
+    union([MapSet.new([bag]), dot(module_atoms, name, ctx)])
+  end
+
+  defp dot_shape({:reach, _vertex} = reach, _name, _ctx), do: MapSet.new([reach])
+
+  defp dot_shape(_shape, _name, _ctx), do: MapSet.new()
+
   defp eval(%IR.AnonymousFunctionCall{function: function, args: args}, ctx) do
     arg_shapes = Enum.map(args, &eval(&1, ctx))
 
     function
     |> eval(ctx)
-    |> apply_fun(arg_shapes, 0)
+    |> apply_fun(arg_shapes, %{calls: 0, ctx: ctx})
   end
 
   # An anonymous function returns what its clauses give, its parameters being its arguments. A
@@ -375,6 +434,12 @@ defmodule Hologram.Compiler.DataFlow do
     MapSet.new([{:list, eval_all(data, ctx)}])
   end
 
+  defp eval(%IR.DotOperator{left: left, right: %IR.AtomType{value: name}}, ctx) do
+    left
+    |> eval(ctx)
+    |> dot(name, ctx)
+  end
+
   defp eval(%IR.LocalFunctionCall{function: function, args: args}, ctx) do
     {module, _function, _arity} = ctx.mfa
     eval_call({module, function, length(args)}, args, ctx)
@@ -386,6 +451,54 @@ defmodule Hologram.Compiler.DataFlow do
 
   # The value of a match is its right side.
   defp eval(%IR.MatchOperator{right: right}, ctx), do: eval(right, ctx)
+
+  # apply/3 with the module, the function name and the argument list written out is a call.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [
+             %IR.AtomType{value: module},
+             %IR.AtomType{value: name},
+             %IR.ListType{data: args}
+           ]
+         },
+         ctx
+       ) do
+    eval_call({module, name, length(args)}, args, ctx)
+  end
+
+  # apply/3 with the function name and the argument list written out is a call on the module.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [module, %IR.AtomType{value: name}, %IR.ListType{data: args}]
+         },
+         ctx
+       ) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    module
+    |> eval(ctx)
+    |> call_dyn(name, length(args), arg_shapes, ctx)
+  end
+
+  # apply/2 with the argument list written out is a call of the function.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [fun, %IR.ListType{data: args}]
+         },
+         ctx
+       ) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    fun
+    |> eval(ctx)
+    |> apply_fun(arg_shapes, %{calls: 0, ctx: ctx})
+  end
 
   # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
   # default fields filled in.
@@ -415,6 +528,15 @@ defmodule Hologram.Compiler.DataFlow do
          ctx
        ) do
     eval_call({module, function, length(args)}, args, ctx)
+  end
+
+  # A call on a module the code does not name.
+  defp eval(%IR.RemoteFunctionCall{module: module, function: function, args: args}, ctx) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    module
+    |> eval(ctx)
+    |> call_dyn(function, length(args), arg_shapes, ctx)
   end
 
   # With else clauses, the body's value goes through them; a rescue or a catch gives its own.
@@ -472,7 +594,7 @@ defmodule Hologram.Compiler.DataFlow do
         if MapSet.member?(used_indexes, index), do: eval(arg, ctx), else: MapSet.new()
       end)
 
-    apply_summary(summary, arg_shapes)
+    put_args(summary, arg_shapes, ctx)
   end
 
   # The part of a value of the given shapes that the pattern binds to the variable, from the
@@ -547,8 +669,10 @@ defmodule Hologram.Compiler.DataFlow do
   # (the number of summaries in the making below it), its current answer and whether a call read it.
   #
   # A summary that read the answer of a function lower on the stack (one it is called from, still
-  # in the making) holds an answer that can change, so it is not kept: it is made again when asked
-  # for again. The lowest depth read so far is kept in the memo table, per summary in the making.
+  # in the making) is provisional: that answer can change. It is not kept in the analysis, only in the
+  # memo table, stamped with the answers version (see bump_answers_version/1), and reused while the
+  # version is the same. The lowest depth read so far is kept in the memo table, per summary in the
+  # making, and a reused provisional summary counts as a read of the depth it read.
   defp fixpoint_summary(mfa, ctx) do
     depth = length(ctx.stack)
     [{:lowest_read_depth, outer_lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
@@ -560,6 +684,8 @@ defmodule Hologram.Compiler.DataFlow do
     :ets.delete(ctx.memo, {:in_progress, mfa})
 
     if lowest < depth do
+      [{:answers_version, version}] = :ets.lookup(ctx.memo, :answers_version)
+      :ets.insert(ctx.memo, {{:provisional, mfa}, version, summary, lowest})
       :ets.insert(ctx.memo, {:lowest_read_depth, min(outer_lowest, lowest)})
     else
       :ets.insert(ctx.memo, {:lowest_read_depth, outer_lowest})
@@ -570,7 +696,9 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # One pass of fixpoint_summary/2, recursive calls giving the given answer. Past @max_rounds
-  # passes, the last one answers a recursive call with whatever its arguments hold.
+  # passes, the last one answers a recursive call with whatever its arguments hold. Every answer
+  # given after the first, the fallback, and the summary the fallback pass makes change what the
+  # function's callers read.
   defp fixpoint_round(mfa, depth, answer, round, ctx) do
     :ets.insert(ctx.memo, {{:in_progress, mfa}, depth, answer, false})
     summary = function_summary(mfa, ctx)
@@ -581,11 +709,15 @@ defmodule Hologram.Compiler.DataFlow do
         summary
 
       round < @max_rounds ->
+        bump_answers_version(ctx)
         fixpoint_round(mfa, depth, summary, round + 1, ctx)
 
       true ->
+        bump_answers_version(ctx)
         :ets.insert(ctx.memo, {{:in_progress, mfa}, depth, :fallback, false})
-        function_summary(mfa, ctx)
+        fallback_summary = function_summary(mfa, ctx)
+        bump_answers_version(ctx)
+        fallback_summary
     end
   end
 
@@ -595,20 +727,39 @@ defmodule Hologram.Compiler.DataFlow do
     |> Map.get({function, arity})
   end
 
+  # A protocol function returns everything it is given (see the contract): which implementation runs
+  # depends on the type of a value, and following every one would follow code the value never meets.
+  # A function with no IR returns everything it is given too.
   defp function_summary({_module, _function, arity} = mfa, ctx) do
-    case function_clauses(mfa, ctx) do
-      nil ->
+    clauses = function_clauses(mfa, ctx)
+
+    if clauses == nil or protocol_function?(mfa, ctx.flow.module_info_plt) do
+      MapSet.new([{:bag, params(arity)}])
+    else
+      function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
+
+      clauses
+      |> Enum.map(fn clause ->
+        frame = clause_frame(clause, &{:param, &1})
+        eval(clause.body, %{function_ctx | frames: [frame]})
+      end)
+      |> union()
+    end
+  end
+
+  # The current answer of a function in the making, which is a read of it, or its provisional summary.
+  defp in_progress_summary({_module, _function, arity} = mfa, ctx) do
+    case :ets.lookup(ctx.memo, {:in_progress, mfa}) do
+      [{_key, _depth, :fallback, _read?}] ->
         MapSet.new([{:bag, params(arity)}])
 
-      clauses ->
-        function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
+      [{key, depth, answer, _read?}] ->
+        :ets.insert(ctx.memo, {key, depth, answer, true})
+        note_read_depth(depth, ctx)
+        answer
 
-        clauses
-        |> Enum.map(fn clause ->
-          frame = clause_frame(clause, &{:param, &1})
-          eval(clause.body, %{function_ctx | frames: [frame]})
-        end)
-        |> union()
+      [] ->
+        provisional_summary(mfa, ctx)
     end
   end
 
@@ -911,6 +1062,43 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp pattern_variables(_ir, vars), do: vars
 
+  # Whether the function is one a protocol defines, from the module info PLT the way the call graph
+  # tells (a protocol module's functions are read from it when its entry has no list of them).
+  defp protocol_function?({module, function, arity}, module_info_plt) do
+    case PLT.get(module_info_plt, module) do
+      {:ok, %{protocol?: true} = info} ->
+        functions = info[:protocol_functions] || module.__protocol__(:functions)
+        {function, arity} in functions
+
+      _no_protocol ->
+        false
+    end
+  end
+
+  # The provisional summary of the function while nothing it read changed (see fixpoint_summary/2),
+  # which is a read of the depth it read, else the summary made now.
+  defp provisional_summary(mfa, ctx) do
+    [{:answers_version, version}] = :ets.lookup(ctx.memo, :answers_version)
+
+    case :ets.lookup(ctx.memo, {:provisional, mfa}) do
+      [{_key, ^version, summary, lowest}] ->
+        note_read_depth(lowest, ctx)
+        summary
+
+      _none_or_stale when length(ctx.stack) >= @max_call_depth ->
+        top(mfa)
+
+      _none_or_stale ->
+        fixpoint_summary(mfa, ctx)
+    end
+  end
+
+  # The summary with the arguments put in for its params (see apply_summary/2). With a ctx, the
+  # dynamic calls and dots on a module an argument makes known are made too.
+  defp put_args(summary, args, ctx) do
+    replace(summary, &replace_param(&1, args), %{calls: 0, ctx: ctx})
+  end
+
   defp put_binding(acc, var, binding) do
     %{acc | bindings: Map.update(acc.bindings, var, [binding], &[binding | &1])}
   end
@@ -1010,6 +1198,10 @@ defmodule Hologram.Compiler.DataFlow do
     Enum.reduce([fun | args], acc, &put_types(&1, &2, module_info_plt))
   end
 
+  defp put_types({:dot, shapes, _name}, acc, module_info_plt) do
+    put_types(shapes, acc, module_info_plt)
+  end
+
   defp put_types({:dyn, module, _name, _arity, args}, acc, module_info_plt) do
     Enum.reduce([module | args], acc, &put_types(&1, &2, module_info_plt))
   end
@@ -1056,10 +1248,13 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # Replaces, at any depth, each shape the replacer gives shapes for (it gives nil for a shape it
-  # leaves as it is), and makes the calls of anonymous functions that the replacing resolves.
-  defp replace(shapes, replacer, calls) do
+  # leaves as it is), and makes the calls that the replacing resolves: a call of an anonymous
+  # function, and, when rep holds a ctx, a dynamic call or a dot whose module became known (see
+  # call_dyn/5 and dot/3). rep also holds how many calls of anonymous functions this one is made
+  # inside (see call_fun/3).
+  defp replace(shapes, replacer, rep) do
     shapes
-    |> Enum.map(&replace_shape(&1, replacer, calls))
+    |> Enum.map(&replace_shape(&1, replacer, rep))
     |> union()
   end
 
@@ -1071,44 +1266,58 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp replace_param(_shape, _args), do: nil
 
-  defp replace_parts({:struct, module, fields}, replacer, calls) do
-    MapSet.new([{:struct, module, replace(fields, replacer, calls)}])
+  defp replace_parts({:struct, module, fields}, replacer, rep) do
+    MapSet.new([{:struct, module, replace(fields, replacer, rep)}])
   end
 
-  defp replace_parts({kind, inner}, replacer, calls) when kind in [:bag, :list, :map] do
-    MapSet.new([{kind, replace(inner, replacer, calls)}])
+  defp replace_parts({kind, inner}, replacer, rep) when kind in [:bag, :list, :map] do
+    MapSet.new([{kind, replace(inner, replacer, rep)}])
   end
 
-  defp replace_parts({:tuple, elements}, replacer, calls) do
-    MapSet.new([{:tuple, Enum.map(elements, &replace(&1, replacer, calls))}])
+  defp replace_parts({:tuple, elements}, replacer, rep) do
+    MapSet.new([{:tuple, Enum.map(elements, &replace(&1, replacer, rep))}])
   end
 
-  defp replace_parts({:fun, ref, returned}, replacer, calls) do
-    MapSet.new([{:fun, ref, replace(returned, replacer, calls)}])
+  defp replace_parts({:fun, ref, returned}, replacer, rep) do
+    MapSet.new([{:fun, ref, replace(returned, replacer, rep)}])
   end
 
-  defp replace_parts({:call, fun, args}, replacer, calls) do
-    new_args = Enum.map(args, &replace(&1, replacer, calls))
+  defp replace_parts({:call, fun, args}, replacer, rep) do
+    new_args = Enum.map(args, &replace(&1, replacer, rep))
 
     fun
-    |> replace(replacer, calls)
-    |> apply_fun(new_args, calls)
+    |> replace(replacer, rep)
+    |> apply_fun(new_args, rep)
   end
 
-  defp replace_parts({:dyn, module, name, arity, args}, replacer, calls) do
-    new_module = replace(module, replacer, calls)
-    new_args = Enum.map(args, &replace(&1, replacer, calls))
+  defp replace_parts({:dot, shapes, name}, replacer, rep) do
+    new_shapes = replace(shapes, replacer, rep)
 
-    MapSet.new([{:dyn, new_module, name, arity, new_args}])
+    if rep.ctx do
+      dot(new_shapes, name, rep.ctx)
+    else
+      MapSet.new([{:dot, new_shapes, name}])
+    end
+  end
+
+  defp replace_parts({:dyn, module, name, arity, args}, replacer, rep) do
+    new_module = replace(module, replacer, rep)
+    new_args = Enum.map(args, &replace(&1, replacer, rep))
+
+    if rep.ctx do
+      call_dyn(new_module, name, arity, new_args, rep.ctx)
+    else
+      MapSet.new([{:dyn, new_module, name, arity, new_args}])
+    end
   end
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex, which holds none of them.
-  defp replace_parts(shape, _replacer, _calls), do: MapSet.new([shape])
+  defp replace_parts(shape, _replacer, _rep), do: MapSet.new([shape])
 
-  defp replace_shape(shape, replacer, calls) do
+  defp replace_shape(shape, replacer, rep) do
     case replacer.(shape) do
-      nil -> replace_parts(shape, replacer, calls)
+      nil -> replace_parts(shape, replacer, rep)
       replaced -> replaced
     end
   end
@@ -1119,7 +1328,7 @@ defmodule Hologram.Compiler.DataFlow do
   # another one.
   defp run(fun) do
     memo = :ets.new(__MODULE__, [:set, :private])
-    :ets.insert(memo, {:lowest_read_depth, :none})
+    :ets.insert(memo, [{:answers_version, 0}, {:lowest_read_depth, :none}])
 
     try do
       fun.(memo)

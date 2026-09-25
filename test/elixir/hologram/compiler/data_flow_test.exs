@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module6
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -90,6 +91,14 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert apply_summary(summary, [MapSet.new([fun])]) ==
                MapSet.new([{:tuple, [MapSet.new([@struct_1])]}])
+    end
+
+    test "leaves a dynamic call on a module a param stood for as it is" do
+      summary = MapSet.new([{:dyn, @param_0, :build, 0, []}])
+      args = [MapSet.new([{:atom, Module3}])]
+
+      assert apply_summary(summary, args) ==
+               MapSet.new([{:dyn, MapSet.new([{:atom, Module3}]), :build, 0, []}])
     end
   end
 
@@ -311,6 +320,65 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "summary/2" do
+    test "apply/2 with the argument list written out" do
+      assert summary_of(Module6, :apply_fun, 0) == MapSet.new([@struct_1])
+    end
+
+    test "apply/3 with a function name known only at runtime gives everything it is given" do
+      args = MapSet.new([{:atom, Module3}, {:param, 0}, {:list, MapSet.new()}])
+
+      assert summary_of(Module6, :apply_variable_name, 1) == MapSet.new([{:bag, args}])
+    end
+
+    test "apply/3 with the function name and the argument list written out" do
+      fields = MapSet.new([{:atom, :field}, @struct_2])
+
+      assert summary_of(Module6, :apply_written, 0) == MapSet.new([{:struct, Struct1, fields}])
+    end
+
+    test "call on a module in a variable" do
+      assert summary_of(Module6, :on_literal_module, 0) == MapSet.new([@struct_1])
+    end
+
+    test "call on a param is made once the param is known" do
+      assert summary_of(Module6, :on_param, 1) == MapSet.new([{:dyn, @param_0, :build, 0, []}])
+    end
+
+    test "call on a module passed as an argument" do
+      assert summary_of(Module6, :calls_on_param, 0) == MapSet.new([@struct_1])
+    end
+
+    test "dot on a struct gives what its fields hold" do
+      assert summary_of(Module6, :field, 0) == MapSet.new([{:atom, :field}, @struct_2])
+    end
+
+    test "dot on a param is made once the param is known" do
+      assert summary_of(Module6, :field_of_param, 1) == MapSet.new([{:dot, @param_0, :field}])
+    end
+
+    test "dot on a struct passed as an argument gives its fields, not the struct" do
+      assert summary_of(Module6, :calls_field_of_param, 0) ==
+               MapSet.new([{:atom, :field}, @struct_2])
+    end
+
+    test "__struct__ dot on a struct gives its module" do
+      assert summary_of(Module6, :struct_module, 0) == MapSet.new([{:atom, Struct1}])
+    end
+
+    test "dot on a module passed as an argument calls its zero-arity function" do
+      assert summary_of(Module6, :dot_on_param, 1) == MapSet.new([{:dot, @param_0, :__struct__}])
+      assert summary_of(Module6, :calls_dot_on_param, 0) == MapSet.new([@struct_1])
+    end
+
+    test "protocol function gives everything it is given" do
+      module_info_plt =
+        PLT.put(PLT.start(), Enumerable, %{protocol?: true, protocol_functions: [count: 1]})
+
+      flow = start(PLT.start(), module_info_plt)
+
+      assert summary({Enumerable, :count, 1}, flow) == MapSet.new([{:bag, @param_0}])
+    end
+
     test "anonymous function" do
       summary = summary_of(Module5, :closure, 0)
 
