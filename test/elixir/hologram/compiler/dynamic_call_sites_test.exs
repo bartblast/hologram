@@ -161,4 +161,24 @@ defmodule Hologram.Compiler.DynamicCallSitesTest do
       assert list(clause(:struct_call_with_fields)) == [{:__struct__, 1, {:param, 0}}]
     end
   end
+
+  describe "site_expressions/3" do
+    test "expression a call not on a param is made on" do
+      assert [%IR.DotOperator{right: %IR.AtomType{value: :schema}}] =
+               site_expressions(clause(:call_on_state_value), :__changeset__, 0)
+    end
+
+    test "dot on a variable" do
+      assert [%IR.Variable{name: :struct}] =
+               site_expressions(clause(:call_on_built_struct), :__struct__, 0)
+    end
+
+    test "call on a param" do
+      assert site_expressions(clause(:call_on_param), :__changeset__, 0) == []
+    end
+
+    test "call of another reflection function" do
+      assert site_expressions(clause(:call_on_state_value), :__struct__, 0) == []
+    end
+  end
 end

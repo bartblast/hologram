@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
 
     open =
       for {:dynamic_call, function, name, arity, kind} <- reached_vertices,
-          open_site?(kind, function, context),
+          open_site?(kind, function, {name, arity}, context),
           into: runtime_open do
         {name, arity}
       end
@@ -121,8 +121,12 @@ defmodule Hologram.Compiler.DynamicCallGate do
 
     %{exposed: exposed, open: open} =
       Enum.reduce(sites, %{exposed: %{}, open: MapSet.new()}, fn
-        {_function, reflection_function, :open}, acc ->
-          %{acc | open: MapSet.put(acc.open, reflection_function)}
+        {function, reflection_function, :open}, acc ->
+          if open_site?(:open, function, reflection_function, context) do
+            %{acc | open: MapSet.put(acc.open, reflection_function)}
+          else
+            acc
+          end
 
         {function, reflection_function, {:param, index}}, acc ->
           case resolve_param(function, index, context, MapSet.new()) do
@@ -200,17 +204,32 @@ defmodule Hologram.Compiler.DynamicCallGate do
     |> Kernel.==(:open)
   end
 
-  # TODO: #938. Ask the value analysis whether the expression the call is made on is definitely a
-  # map or a struct: such a value is never the module a reflection function is called on, so the
-  # call would stay closed. The cases that keep __struct__/0 open on every page today are
-  # Kernel.struct/3 calling itself on the result of validate_struct!/3 (every clause returns a map
-  # or raises), Exception.message/1 calling __struct__ on its rescued exception, and, in a
-  # dependency of a big app, Localize.LanguageTag.try_minimal_form/2 passing Kernel.struct/2 a value
-  # taken from `{:ok, maximized} <- add_likely_subtags(tag)`, whose every clause returns
-  # `{:ok, <a map>}` or `{:error, _}`. An `:other` argument asks it already (see resolve_argument/5).
-  defp open_site?(:open, _function, _context), do: true
+  # A call on a value that is not the function's parameter opens, unless the data flow tells that
+  # every value the function's calls of the reflection function are made on is certainly a map or a
+  # struct, which is never the module a reflection function is called on (Exception.message/1 calls
+  # __struct__ on the exception it rescued). A call on a parameter asks the callers (see
+  # resolve_param/4); an argument that is certainly a map closes it there (see resolve_argument/5).
+  defp open_site?(:open, function, {name, arity}, %{flow: flow} = context) when flow != nil do
+    case clauses(function, context.ir_plt) do
+      nil ->
+        true
 
-  defp open_site?({:param, index}, function, context) do
+      clauses ->
+        sites =
+          for clause <- clauses, expr <- DynamicCallSites.site_expressions(clause, name, arity) do
+            {clause, expr}
+          end
+
+        sites == [] or
+          not Enum.all?(sites, fn {clause, expr} ->
+            DataFlow.definite_map?(expr, clause, function, flow)
+          end)
+    end
+  end
+
+  defp open_site?(:open, _function, _reflection_function, _context), do: true
+
+  defp open_site?({:param, index}, function, _reflection_function, context) do
     function
     |> resolve_param(index, context, MapSet.new())
     |> elem(0)

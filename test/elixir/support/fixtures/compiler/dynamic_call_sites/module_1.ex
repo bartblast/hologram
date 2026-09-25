@@ -14,6 +14,11 @@ defmodule Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module1 do
 
   def call_of_other_function(module), do: module.other_fun()
 
+  def call_on_built_struct do
+    struct = %Module2{}
+    struct.__struct__
+  end
+
   def call_on_literal_module, do: Module2.__changeset__()
 
   def call_on_param(_other, module), do: module.__changeset__()

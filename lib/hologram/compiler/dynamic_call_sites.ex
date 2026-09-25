@@ -67,13 +67,36 @@ defmodule Hologram.Compiler.DynamicCallSites do
   def list(%IR.FunctionClause{params: params, guards: guards, body: body}) do
     [guards, body]
     |> collect_sites(params, [])
+    |> Enum.map(fn {function, arity, kind, _module} -> {function, arity, kind} end)
     |> Enum.uniq()
     |> Enum.sort()
   end
 
+  @doc """
+  Lists the expressions that the calls of the given reflection function in the given clause, those
+  `list/1` gives the kind `:open`, are made on: the module expression of each, as written, in the
+  order written. A call in an anonymous function is listed too, its expression read in the clause.
+  """
+  @spec site_expressions(IR.FunctionClause.t(), atom, arity) :: [IR.t()]
+  def site_expressions(
+        %IR.FunctionClause{params: params, guards: guards, body: body},
+        name,
+        arity
+      ) do
+    [guards, body]
+    |> collect_sites(params, [])
+    |> Enum.reverse()
+    |> Enum.flat_map(fn
+      {^name, ^arity, :open, module} -> [module]
+      _other_site -> []
+    end)
+  end
+
+  # A site is the reflection function's name and arity, its kind, and the expression of the module it
+  # is called on.
   defp add_site(sites, function, arity, module, params) do
     if {function, arity} in @reflection_functions do
-      [{function, arity, kind(module, params)} | sites]
+      [{function, arity, kind(module, params), module} | sites]
     else
       sites
     end

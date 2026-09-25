@@ -26,6 +26,19 @@ defmodule Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1 do
 
   def recursive_with_literal, do: recursive(Module2, 3)
 
+  def struct_of_built do
+    struct = %Module2{}
+    struct.__struct__
+  end
+
+  def struct_of_rescued(fun) do
+    fun.()
+  rescue
+    error -> error.__struct__
+  end
+
+  def struct_of_state_value(component), do: component.state.module.__struct__()
+
   def with_literal, do: build(Module2)
 
   def with_state_value(component), do: build(component.state.module)

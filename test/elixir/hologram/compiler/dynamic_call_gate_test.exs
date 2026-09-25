@@ -79,6 +79,23 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       assert open_from(:with_map_literal, 0) == MapSet.new([{:__struct__, 0}])
     end
 
+    test "with a data flow context, a site on a struct the function built stays closed" do
+      assert open_from(:struct_of_built, 0, module_1_graph(), gate_with_flow()) == MapSet.new()
+    end
+
+    test "with a data flow context, a site on a rescued exception stays closed" do
+      assert open_from(:struct_of_rescued, 1, module_1_graph(), gate_with_flow()) == MapSet.new()
+    end
+
+    test "with a data flow context, a site on a value from state still opens" do
+      assert open_from(:struct_of_state_value, 1, module_1_graph(), gate_with_flow()) ==
+               MapSet.new([{:__struct__, 0}])
+    end
+
+    test "without a data flow context, a site on a struct the function built opens" do
+      assert open_from(:struct_of_built, 0) == MapSet.new([{:__struct__, 0}])
+    end
+
     test "no gate opens every reflection function" do
       assert open_functions(Digraph.new(), [], [], nil) ==
                MapSet.new([
@@ -194,6 +211,24 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
   end
 
   describe "runtime_dynamic_calls/4" do
+    test "with a data flow context, a runtime site on a struct the function built stays closed" do
+      runtime_mfas = [{Module1, :struct_of_built, 0}]
+      %{ir_plt: ir_plt, flow: flow} = gate_with_flow()
+
+      refute {:__struct__, 0} in runtime_dynamic_calls(
+               module_1_graph(),
+               runtime_mfas,
+               ir_plt,
+               flow
+             ).open
+
+      assert {:__struct__, 0} in runtime_dynamic_calls(
+               module_1_graph(),
+               runtime_mfas,
+               PLT.start()
+             ).open
+    end
+
     test "with a data flow context, a runtime caller passing a map keeps a call closed" do
       runtime_mfas = [{Module1, :build_or_keep, 1}, {Module1, :with_map_literal, 0}]
       %{ir_plt: ir_plt, flow: flow} = gate_with_flow()
