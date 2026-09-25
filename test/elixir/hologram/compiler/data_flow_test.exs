@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -80,6 +81,15 @@ defmodule Hologram.Compiler.DataFlowTest do
       summary = MapSet.new([{:reach, {Module3, :build, 0}}, :prim])
 
       assert apply_summary(summary, []) == summary
+    end
+
+    test "makes the call of an anonymous function a param stood for" do
+      ref = {{Module5, :closure_arg, 0}, 1}
+      fun = {:fun, ref, MapSet.new([{:tuple, [MapSet.new([{:arg, ref, 0}])]}])}
+      summary = MapSet.new([{:call, @param_0, [MapSet.new([@struct_1])]}])
+
+      assert apply_summary(summary, [MapSet.new([fun])]) ==
+               MapSet.new([{:tuple, [MapSet.new([@struct_1])]}])
     end
   end
 
@@ -261,7 +271,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert shapes_of(Module2, :try_rescue_bare) == MapSet.new([{:reach, mfa}, {:atom, :ok}])
     end
 
-    test "variable of IR built from a code string is the function's top" do
+    test "variable no binding in the clause knows is the function's top" do
       var = IR.for_code("value", %Context{})
       clause = %IR.FunctionClause{params: [], guards: [], body: %IR.Block{expressions: [var]}}
       mfa = {Module2, :param, 1}
@@ -301,6 +311,79 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "summary/2" do
+    test "anonymous function" do
+      summary = summary_of(Module5, :closure, 0)
+
+      assert [{:fun, {{Module5, :closure, 0}, _hash}, returned}] = MapSet.to_list(summary)
+
+      assert returned == MapSet.new([@struct_1])
+    end
+
+    test "an anonymous function is the same on every pass" do
+      assert summary_of(Module5, :closure, 0) == summary_of(Module5, :closure, 0)
+    end
+
+    test "call of an anonymous function" do
+      assert summary_of(Module5, :calls_closure, 0) == MapSet.new([@struct_1])
+    end
+
+    test "call of an anonymous function with an argument" do
+      assert summary_of(Module5, :closure_arg, 0) ==
+               MapSet.new([{:tuple, [MapSet.new([{:atom, :ok}]), MapSet.new([@struct_1])]}])
+    end
+
+    test "anonymous function with two clauses" do
+      assert summary_of(Module5, :closure_clauses, 0) == MapSet.new([@struct_1, @struct_2])
+    end
+
+    test "anonymous function reading a variable of its function" do
+      assert summary_of(Module5, :closure_free_variable, 0) == MapSet.new([@struct_1])
+    end
+
+    test "anonymous function returning its function's param" do
+      summary = summary_of(Module5, :closure_of_param, 1)
+
+      assert [{:fun, _ref, returned}] = MapSet.to_list(summary)
+      assert returned == @param_0
+    end
+
+    test "call of an anonymous function a call returned" do
+      assert summary_of(Module5, :calls_closure_of_param, 0) == MapSet.new([@struct_1])
+    end
+
+    test "anonymous function's param shadowing its function's" do
+      assert summary_of(Module5, :closure_shadowing_param, 1) ==
+               MapSet.new([
+                 {:tuple, [@param_0, MapSet.new([{:tuple, [MapSet.new([@struct_1])]}])]}
+               ])
+    end
+
+    test "capture of a local function" do
+      assert summary_of(Module5, :capture_local, 0) ==
+               MapSet.new([{:tuple, [MapSet.new([{:atom, :ok}]), MapSet.new([@struct_1])]}])
+    end
+
+    test "capture of a remote function" do
+      assert summary_of(Module5, :capture_remote, 0) == MapSet.new([@struct_1])
+    end
+
+    test "call of a param is made once the param is known" do
+      assert summary_of(Module5, :higher_order, 1) ==
+               MapSet.new([{:call, @param_0, [MapSet.new([@struct_1])]}])
+    end
+
+    test "anonymous function given to a function that calls it" do
+      assert summary_of(Module5, :calls_higher_order, 0) ==
+               MapSet.new([{:tuple, [MapSet.new([@struct_1]), MapSet.new([@struct_2])]}])
+    end
+
+    test "recursive function returning an anonymous function settles" do
+      summary = summary_of(Module5, :recursive_closure, 1)
+
+      assert [{:fun, _ref, returned}] = MapSet.to_list(summary)
+      assert returned == MapSet.new([@struct_1])
+    end
+
     test "function building a struct" do
       assert summary_of(Module3, :build, 0) == MapSet.new([@struct_1])
     end
