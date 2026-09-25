@@ -64,6 +64,14 @@ defmodule Hologram.Compiler.DataFlow do
   # answers of the calls back into the loop from their arguments (see fixpoint_round/5).
   @max_rounds 4
 
+  # How large a function's summary can be, in bytes of its external term format (see
+  # :erlang.external_size/1, a walk of the whole term like every walk the analysis makes over it),
+  # before it is the function's top instead (see capped_summary/3). Without a cap a summary can grow to
+  # megabytes: a bag holds any number of leaves, and a pending call or an anonymous function in it keeps
+  # its own sets. Every call that uses a summary walks it several times (param_indexes/2, replace/3,
+  # widen/1), so a few such summaries stall a compile. A start/3 opt can set another cap.
+  @max_summary_size 32_768
+
   # The range of the hash that tells anonymous functions apart within a function (see eval/2).
   @fun_hash_range 4_294_967_296
 
@@ -141,7 +149,12 @@ defmodule Hologram.Compiler.DataFlow do
 
   # What a compile's analysis works with: the IR PLT the code is read from (and where missing IR is
   # built), the module info PLT, and the summaries of the functions it has followed so far.
-  @type t :: %{ir_plt: PLT.t(), module_info_plt: PLT.t(), summaries: PLT.t()}
+  @type t :: %{
+          ir_plt: PLT.t(),
+          max_summary_size: pos_integer,
+          module_info_plt: PLT.t(),
+          summaries: PLT.t()
+        }
 
   # The types shapes hold (see types/2).
   @type types :: %{
@@ -255,12 +268,26 @@ defmodule Hologram.Compiler.DataFlow do
 
   @doc """
   Starts the analysis of a compile, which reads IR from the given IR PLT and module facts from the
-  given module info PLT. The opts are given to the PLT it keeps its summaries in (see
-  `Hologram.Commons.PLT.start/1`: a `:supervisor` stops it with the supervisor).
+  given module info PLT.
+
+  ## Options
+
+    * `:max_summary_size` - how large a function's summary can be, in bytes of its external term
+      format, before the function's top stands for it (see `top/1`); defaults to 32 KiB.
+
+  The other opts are given to the PLT it keeps its summaries in (see `Hologram.Commons.PLT.start/1`:
+  a `:supervisor` stops it with the supervisor).
   """
   @spec start(PLT.t(), PLT.t(), T.opts()) :: t
   def start(ir_plt, module_info_plt, opts \\ []) do
-    %{ir_plt: ir_plt, module_info_plt: module_info_plt, summaries: PLT.start(opts)}
+    {max_summary_size, plt_opts} = Keyword.pop(opts, :max_summary_size, @max_summary_size)
+
+    %{
+      ir_plt: ir_plt,
+      max_summary_size: max_summary_size,
+      module_info_plt: module_info_plt,
+      summaries: PLT.start(plt_opts)
+    }
   end
 
   @doc """
@@ -279,7 +306,8 @@ defmodule Hologram.Compiler.DataFlow do
   until no answer in it changes, each call back into the group giving the answer of the pass
   before, the first one nothing. Past a few passes, one last pass answers every call back into the
   group with whatever its arguments hold. A call made with too many summaries in the making, one
-  inside another, gives the callee's top.
+  inside another, gives the callee's top. A summary larger than the cap given to `start/3` is the
+  function's top as well.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
@@ -512,6 +540,18 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  # The summary, or the function's top when the summary is larger than the flow context's
+  # :max_summary_size (see @max_summary_size). The top holds the rule before this module applied from
+  # the function and everything it is given, so no type the summary holds is lost, and it is small: the
+  # functions that call this one get small summaries too.
+  defp capped_summary(summary, mfa, ctx) do
+    if :erlang.external_size(summary) > ctx.flow.max_summary_size do
+      top(mfa)
+    else
+      summary
+    end
+  end
+
   # The variables of a function clause or an anonymous function's clause, each with the places it is
   # bound at and the shapes the patterns it is matched against name for it; the given function says
   # what the parameter at an index holds. A variable of IR read from a BEAM has a version per
@@ -552,6 +592,7 @@ defmodule Hologram.Compiler.DataFlow do
       end)
       |> union()
       |> widen()
+      |> capped_summary(mfa, ctx)
     end
   end
 

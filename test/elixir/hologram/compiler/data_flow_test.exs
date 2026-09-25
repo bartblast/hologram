@@ -552,6 +552,18 @@ defmodule Hologram.Compiler.DataFlowTest do
     refute Process.alive?(pid)
   end
 
+  describe "start/3" do
+    test "caps summaries at 32 KiB by default" do
+      assert flow().max_summary_size == 32_768
+    end
+
+    test "takes another cap" do
+      flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: 100)
+
+      assert flow.max_summary_size == 100
+    end
+  end
+
   describe "summary/2" do
     test "a set nested too deep becomes a bag of its leaves, with the same types" do
       flow = flow()
@@ -897,6 +909,12 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert summary_of(Module4, :growing, 1) ==
                MapSet.new([@struct_1, {:tuple, [MapSet.new([recursive_call])]}])
+    end
+
+    test "a summary larger than the cap is the function's top" do
+      flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: 1)
+
+      assert summary({Module3, :recursive, 1}, flow) == top({Module3, :recursive, 1})
     end
 
     test "function with two clauses" do
