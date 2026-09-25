@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Tracer
@@ -1644,7 +1645,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       mfas = [
         {CallGraph, :clone, 2},
         {CallGraph, :list_page_mfas, 5},
-        {CallGraph, :list_runtime_mfas, 2}
+        {CallGraph, :list_runtime_mfas, 3}
       ]
 
       Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
@@ -2231,7 +2232,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with no changes lists no runtime MFAs", %{opts: opts} do
       run(opts)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+      assert count_calls({CallGraph, :list_runtime_mfas, 3}, fn -> run(opts) end) == 0
     end
 
     test "an edit of a module the graph does not hold lists no runtime MFAs", %{opts: opts} do
@@ -2239,7 +2240,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(@unreached_module)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+      assert count_calls({CallGraph, :list_runtime_mfas, 3}, fn -> run(opts) end) == 0
     end
 
     test "an edit of a page lists the runtime MFAs again", %{opts: opts} do
@@ -2247,7 +2248,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(Module1)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 1
+      assert count_calls({CallGraph, :list_runtime_mfas, 3}, fn -> run(opts) end) == 1
     end
 
     test "the kept runtime MFAs are the ones a walk finds", %{opts: opts} do
@@ -2267,8 +2268,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       pages = Compiler.list_pages(module_info_plt)
 
-      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph, pages)
+      # With a data flow context, as the compile task lists it.
+      flow = DataFlow.start(PLT.start(), module_info_plt)
 
+      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph, pages, flow: flow)
+
+      DataFlow.stop(flow)
       CallGraph.stop(call_graph)
       PLT.stop(module_info_plt)
     end

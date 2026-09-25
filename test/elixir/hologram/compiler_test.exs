@@ -3178,7 +3178,7 @@ defmodule Hologram.CompilerTest do
         |> Map.to_list()
 
       analyses = PLT.start(items: analyses_items)
-      mfa = {CallGraph, :server_callback_analysis_by_templatable, 3}
+      mfa = {CallGraph, :server_callback_analysis_by_templatable, 4}
 
       count =
         count_calls(mfa, fn ->
