@@ -60,8 +60,8 @@ defmodule Hologram.Compiler.DataFlow do
   # rest are left unmade (see call_fun/3): a function given itself can call itself without end.
   @max_fun_calls 32
 
-  # How many times a recursive function is read before its answer is taken from the arguments of
-  # its recursive calls instead (see fixpoint_summary/2).
+  # How many passes the entry of a loop of functions makes before its last one, which takes the
+  # answers of the calls back into the loop from their arguments (see fixpoint_round/5).
   @max_rounds 4
 
   # The range of the hash that tells anonymous functions apart within a function (see eval/2).
@@ -275,10 +275,11 @@ defmodule Hologram.Compiler.DataFlow do
   Erlang module, or of a module with no beam) or that its module doesn't define returns everything
   it is given. A summary is kept in the analysis once made, for the rest of the compile.
 
-  A recursive function is read again until its answer stops changing, each recursive call giving
-  the answer of the pass before, the first one nothing. Past a few passes, one last pass answers a
-  recursive call with whatever its arguments hold. A call made with too many summaries in the
-  making, one inside another, gives the callee's top.
+  A recursive function, or a group of functions that call each other, is read again as a whole
+  until no answer in it changes, each call back into the group giving the answer of the pass
+  before, the first one nothing. Past a few passes, one last pass answers every call back into the
+  group with whatever its arguments hold. A call made with too many summaries in the making, one
+  inside another, gives the callee's top.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
@@ -923,9 +924,18 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # Makes the function's summary, reading the function again while a recursive call read an answer
-  # that differs from the one the pass gave. The function's entry in the memo table holds its depth
-  # (the number of summaries in the making below it), its current answer and whether a call read it.
+  # Makes the function's summary. A function that calls itself, directly or through others, is read
+  # again until its answer stops changing, each call back into it giving the answer of the pass
+  # before. The function's entry in the memo table holds its depth (the number of summaries in the
+  # making below it), its current answer and whether a call read it.
+  #
+  # Functions that call each other form a loop, which the lowest of them on the stack, its entry,
+  # reads again as a whole: a function of the loop above the entry makes one pass each time the entry
+  # makes one, starting from the answer it gave in the pass before, and records in the memo table
+  # when its answer changes (`:group_changed`). The entry reads again while its own answer or one of
+  # the loop's changed (see fixpoint_round/5). What changes in a loop inside the loop, which has an
+  # entry of its own, does not make the outer entry read again. Reading each function of the loop
+  # once per pass keeps the work to the passes times the functions of the loop.
   #
   # A summary that read the answer of a function lower on the stack (one it is called from, still
   # in the making) is provisional: that answer can change. It is not kept in the analysis, only in the
@@ -935,36 +945,48 @@ defmodule Hologram.Compiler.DataFlow do
   defp fixpoint_summary(mfa, ctx) do
     depth = length(ctx.stack)
     [{:lowest_read_depth, outer_lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
+    [{:group_changed, outer_changed?}] = :ets.lookup(ctx.memo, :group_changed)
     :ets.insert(ctx.memo, {:lowest_read_depth, :none})
 
-    summary = fixpoint_round(mfa, depth, MapSet.new(), 1, ctx)
+    previous = previous_answer(mfa, ctx)
+    summary = fixpoint_round(mfa, depth, previous, 1, ctx)
 
     [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
+    [{:group_changed, changed?}] = :ets.lookup(ctx.memo, :group_changed)
     :ets.delete(ctx.memo, {:in_progress, mfa})
 
     if lowest < depth do
       [{:answers_version, version}] = :ets.lookup(ctx.memo, :answers_version)
-      :ets.insert(ctx.memo, {{:provisional, mfa}, version, summary, lowest})
-      :ets.insert(ctx.memo, {:lowest_read_depth, min(outer_lowest, lowest)})
+      group_changed? = outer_changed? or changed? or summary != previous
+
+      :ets.insert(ctx.memo, [
+        {{:provisional, mfa}, version, summary, lowest},
+        {:lowest_read_depth, min(outer_lowest, lowest)},
+        {:group_changed, group_changed?}
+      ])
     else
-      :ets.insert(ctx.memo, {:lowest_read_depth, outer_lowest})
+      :ets.insert(ctx.memo, [{:lowest_read_depth, outer_lowest}, {:group_changed, outer_changed?}])
+
       PLT.put(ctx.flow.summaries, mfa, summary)
     end
 
     summary
   end
 
-  # One pass of fixpoint_summary/2, recursive calls giving the given answer. Past @max_rounds
-  # passes, the last one answers a recursive call with whatever its arguments hold. Every answer
-  # given after the first, the fallback, and the summary the fallback pass makes change what the
-  # function's callers read.
+  # One pass of fixpoint_summary/2, calls back into the function giving the given answer. A function
+  # that read one lower on the stack is above its loop's entry and makes one pass. The entry makes
+  # another while a call read its answer and the answer changed, or a function of the loop changed
+  # its answer; past @max_rounds passes, it makes the last one (see last_round/3). Every new pass
+  # changes what the loop's functions read.
   defp fixpoint_round(mfa, depth, answer, round, ctx) do
-    :ets.insert(ctx.memo, {{:in_progress, mfa}, depth, answer, false})
+    :ets.insert(ctx.memo, [{{:in_progress, mfa}, depth, answer, false}, {:group_changed, false}])
     summary = function_summary(mfa, ctx)
     [{_key, _depth, _answer, read?}] = :ets.lookup(ctx.memo, {:in_progress, mfa})
+    [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
+    [{:group_changed, changed?}] = :ets.lookup(ctx.memo, :group_changed)
 
     cond do
-      not read? or summary == answer ->
+      lowest < depth or not (changed? or (read? and summary != answer)) ->
         summary
 
       round < @max_rounds ->
@@ -972,11 +994,7 @@ defmodule Hologram.Compiler.DataFlow do
         fixpoint_round(mfa, depth, summary, round + 1, ctx)
 
       true ->
-        bump_answers_version(ctx)
-        :ets.insert(ctx.memo, {{:in_progress, mfa}, depth, :fallback, false})
-        fallback_summary = function_summary(mfa, ctx)
-        bump_answers_version(ctx)
-        fallback_summary
+        last_round(mfa, depth, ctx)
     end
   end
 
@@ -994,9 +1012,14 @@ defmodule Hologram.Compiler.DataFlow do
   defp function_summary(mfa, ctx), do: Models.summary(mfa) || code_summary(mfa, ctx)
 
   # The current answer of a function in the making, which is a read of it, or its provisional summary.
+  # In the last pass of a loop's entry (see last_round/3), a function in the making at or above the
+  # entry gives whatever its arguments hold, which counts as a read of the entry.
   defp in_progress_summary({_module, _function, arity} = mfa, ctx) do
+    [{:last_round_depth, last_round_depth}] = :ets.lookup(ctx.memo, :last_round_depth)
+
     case :ets.lookup(ctx.memo, {:in_progress, mfa}) do
-      [{_key, _depth, :fallback, _read?}] ->
+      [{_key, depth, _answer, _read?}] when depth >= last_round_depth ->
+        note_read_depth(last_round_depth, ctx)
         MapSet.new([{:bag, params(arity)}])
 
       [{key, depth, answer, _read?}] ->
@@ -1141,6 +1164,19 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp index_with_clause(%IR.WithBareClause{expression: expr}, acc), do: index(expr, acc)
+
+  # The last pass of a loop's entry at the given depth (see fixpoint_round/5): every call back into
+  # the loop, into the entry or a function above it, gives whatever its arguments hold. A function
+  # that reads such an answer counts as reading the entry, so its summary is not kept in the analysis.
+  defp last_round(mfa, depth, ctx) do
+    [{:last_round_depth, outer_depth}] = :ets.lookup(ctx.memo, :last_round_depth)
+    bump_answers_version(ctx)
+    :ets.insert(ctx.memo, {:last_round_depth, min(outer_depth, depth)})
+    summary = function_summary(mfa, ctx)
+    :ets.insert(ctx.memo, {:last_round_depth, outer_depth})
+    bump_answers_version(ctx)
+    summary
+  end
 
   # Every shape the given shapes hold, at any depth, flat: a struct with no fields besides what its
   # fields hold, and the contents of maps, lists, tuples and bags. A shape that stands for a value not
@@ -1361,6 +1397,15 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp pattern_variables(_ir, vars), do: vars
+
+  # The answer a function of a loop gave in the pass before, which its next pass starts from (see
+  # fixpoint_summary/2): its provisional summary of any version, else nothing.
+  defp previous_answer(mfa, ctx) do
+    case :ets.lookup(ctx.memo, {:provisional, mfa}) do
+      [{_key, _version, summary, _lowest}] -> summary
+      [] -> MapSet.new()
+    end
+  end
 
   # The provisional summary of the function while nothing it read changed (see fixpoint_summary/2),
   # which is a read of the depth it read, else the summary made now.
@@ -1666,7 +1711,13 @@ defmodule Hologram.Compiler.DataFlow do
   # another one.
   defp run(fun) do
     memo = :ets.new(__MODULE__, [:set, :private])
-    :ets.insert(memo, [{:answers_version, 0}, {:lowest_read_depth, :none}])
+
+    :ets.insert(memo, [
+      {:answers_version, 0},
+      {:group_changed, false},
+      {:last_round_depth, :none},
+      {:lowest_read_depth, :none}
+    ])
 
     try do
       fun.(memo)

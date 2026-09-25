@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10
@@ -13,6 +14,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module12
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module13
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module14
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module15
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -48,6 +50,40 @@ defmodule Hologram.Compiler.DataFlowTest do
       %IR.FunctionDefinition{name: ^function, clause: clause} -> clause
       _expression -> nil
     end)
+  end
+
+  # How many times the analysis works out a summary from a function's code while running the given
+  # function, counted in the calling process only, so tests running in parallel don't count.
+  defp count_code_summaries(fun) do
+    mfa = {DataFlow, :code_summary, 2}
+    test_pid = self()
+    counter = spawn(fn -> count_trace_messages(test_pid, 0) end)
+    :erlang.trace_pattern(mfa, true, [:local])
+    :erlang.trace(self(), true, [:arity, :call, {:tracer, counter}])
+
+    try do
+      fun.()
+    after
+      :erlang.trace(self(), false, [:arity, :call])
+      :erlang.trace_pattern(mfa, false, [:local])
+    end
+
+    ref = :erlang.trace_delivered(self())
+
+    receive do
+      {:trace_delivered, _pid, ^ref} -> send(counter, :done)
+    end
+
+    receive do
+      {:trace_messages, count} -> count
+    end
+  end
+
+  defp count_trace_messages(test_pid, count) do
+    receive do
+      {:trace, _pid, :call, _mfa} -> count_trace_messages(test_pid, count + 1)
+      :done -> send(test_pid, {:trace_messages, count})
+    end
   end
 
   # The call graph of the given modules, built with the module info PLT of the test build.
@@ -830,6 +866,21 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "mutually recursive functions" do
       assert summary_of(Module4, :mutual_a, 1) == MapSet.new([{:atom, :done}, @struct_2])
+    end
+
+    test "a loop inside a loop is read again until neither changes" do
+      flow = flow()
+      summary = summary({Module15, :outer, 2}, flow)
+
+      assert types(summary, flow).structs == MapSet.new([Struct1])
+    end
+
+    test "functions that call each other are read once per pass of the loop's entry" do
+      flow = flow()
+      count = count_code_summaries(fn -> summary({Module15, :ring_a, 1}, flow) end)
+
+      # 4 functions, at most 4 passes and the last one.
+      assert count <= 20
     end
 
     test "a summary that read an answer still in the making is not kept" do
