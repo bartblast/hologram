@@ -34,6 +34,4 @@ defmodule Hologram.Test.Fixtures.Compiler.ValueFlow.Module1 do
   def struct_with_fields, do: %Struct1{field: :x}
 
   def tuple, do: {:ok, 1}
-
-  def unknown(value), do: value
 end
