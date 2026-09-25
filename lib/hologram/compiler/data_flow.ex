@@ -56,8 +56,10 @@ defmodule Hologram.Compiler.DataFlow do
   # sets, before widen/1 makes it a bag.
   @max_depth 3
 
-  # How many calls of anonymous functions a call of one can make, one inside another, before the
-  # rest are left unmade (see call_fun/3): a function given itself can call itself without end.
+  # How many calls of anonymous functions one substitution makes in total, in all its branches, before
+  # the rest are left unmade (see call_fun/3): a function given itself can call itself without end,
+  # and one of several functions given itself calls each of them at every level, so a count of the
+  # calls one inside another would still let the work double at every level.
   @max_fun_calls 32
 
   # How many passes the entry of a loop of functions makes before its last one, which takes the
@@ -510,13 +512,13 @@ defmodule Hologram.Compiler.DataFlow do
   # that depends on a param or on an anonymous function's argument is called once that is known (see
   # replace_parts/3). A value of unknown structure can be a function returning anything it holds or
   # it is given. Any other value is no function: calling it raises.
-  defp call_fun({:fun, _ref, _returned} = fun, args, %{calls: calls})
-       when calls >= @max_fun_calls do
-    MapSet.new([{:call, MapSet.new([fun]), args}])
-  end
-
-  defp call_fun({:fun, ref, returned}, args, rep) do
-    replace(returned, &replace_arg(&1, ref, args), %{rep | calls: rep.calls + 1})
+  defp call_fun({:fun, ref, returned} = fun, args, rep) do
+    if :counters.get(rep.calls, 1) < @max_fun_calls do
+      :counters.add(rep.calls, 1, 1)
+      replace(returned, &replace_arg(&1, ref, args), rep)
+    else
+      MapSet.new([{:call, MapSet.new([fun]), args}])
+    end
   end
 
   defp call_fun(shape, args, _rep)
@@ -645,7 +647,7 @@ defmodule Hologram.Compiler.DataFlow do
 
     function
     |> eval(ctx)
-    |> apply_fun(arg_shapes, %{calls: 0, ctx: ctx})
+    |> apply_fun(arg_shapes, new_rep(ctx))
   end
 
   # An anonymous function returns what its clauses give, its parameters being its arguments. A
@@ -788,7 +790,7 @@ defmodule Hologram.Compiler.DataFlow do
 
     fun
     |> eval(ctx)
-    |> apply_fun(arg_shapes, %{calls: 0, ctx: ctx})
+    |> apply_fun(arg_shapes, new_rep(ctx))
   end
 
   # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
@@ -1328,6 +1330,10 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp nested_shapes({kind, inner}) when kind in [:list, :map], do: with_nested_shapes(inner)
 
+  # What a substitution carries through replace/3: the ctx, or nil, and a counter of the calls of
+  # anonymous functions it made, one cell every branch adds to (see @max_fun_calls).
+  defp new_rep(ctx), do: %{calls: :counters.new(1, []), ctx: ctx}
+
   # Records that the summary in the making read the answer of a function in the making at the given
   # depth (see fixpoint_summary/2). Any integer is less than :none.
   defp note_read_depth(depth, ctx) do
@@ -1470,7 +1476,7 @@ defmodule Hologram.Compiler.DataFlow do
   # dynamic calls and dots on a module an argument makes known are made too.
   defp put_args(summary, args, ctx) do
     summary
-    |> replace(&replace_param(&1, args), %{calls: 0, ctx: ctx})
+    |> replace(&replace_param(&1, args), new_rep(ctx))
     |> widen()
   end
 
@@ -1656,8 +1662,8 @@ defmodule Hologram.Compiler.DataFlow do
   # Replaces, at any depth, each shape the replacer gives shapes for (it gives nil for a shape it
   # leaves as it is), and makes the calls that the replacing resolves: a call of an anonymous
   # function, and, when rep holds a ctx, a dynamic call or a dot whose module became known (see
-  # call_dyn/5 and dot/3). rep also holds how many calls of anonymous functions this one is made
-  # inside (see call_fun/3).
+  # call_dyn/5 and dot/3). rep also holds the counter of the calls of anonymous functions the
+  # substitution made, in all its branches (see new_rep/1 and call_fun/3).
   defp replace(shapes, replacer, rep) do
     shapes
     |> Enum.map(&replace_shape(&1, replacer, rep))

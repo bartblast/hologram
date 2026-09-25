@@ -15,6 +15,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module13
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module14
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module15
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module16
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -749,6 +750,14 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert [{:fun, _ref, returned}] = MapSet.to_list(summary)
       assert returned == @param_0
+    end
+
+    test "one of two functions given itself is called a bounded number of times" do
+      flow = flow()
+      summary = summary({Module16, :encode, 2}, flow)
+
+      assert {:param, 0} in summary
+      assert types(summary, flow).structs == MapSet.new([Struct1])
     end
 
     test "call of an anonymous function a call returned" do
