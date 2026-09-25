@@ -19,14 +19,20 @@ defmodule Hologram.Compiler.DynamicCallGate do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.DynamicCallSites
   alias Hologram.Compiler.IR
 
   # What the gate is given besides the page's reach: what the runtime's own dynamic calls open (see
-  # runtime_dynamic_calls/3), and the IR PLT the callers' code is read from, where a module it does
-  # not hold yet is put once read.
-  @type t :: %{ir_plt: PLT.t(), runtime: CallGraph.runtime_dynamic_calls()}
+  # runtime_dynamic_calls/4), the IR PLT the callers' code is read from, where a module it does not
+  # hold yet is put once read, and the data flow context that tells an argument certainly a map or a
+  # struct (nil for none, and every such argument opens).
+  @type t :: %{
+          flow: DataFlow.t() | nil,
+          ir_plt: PLT.t(),
+          runtime: CallGraph.runtime_dynamic_calls()
+        }
 
   # The literal empty `MapSet.new()` a resolution starts from reads as concrete and won't unify with
   # the opaque `MapSet.t()` the visited parameters are put into (see the same note in CallGraph).
@@ -39,7 +45,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
   module that is not its function's parameter, those a dynamic call makes on a parameter some
   caller can pass anything else than a module written in the code, those the runtime opens, and
   those of a runtime function's closed dynamic call that a reached caller of the runtime function
-  can open (see runtime_dynamic_calls/3). With no gate, every reflection function is open, which is
+  can open (see runtime_dynamic_calls/4). With no gate, every reflection function is open, which is
   what the compiler did before it had one.
   """
   @spec open_functions(Digraph.t(), Enumerable.t(CallGraph.vertex()), [mfa], t | nil) ::
@@ -53,6 +59,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
   def open_functions(graph, reached_vertices, entries, gate) do
     context = %{
       entries: MapSet.new(entries),
+      flow: gate.flow,
       graph: graph,
       ir_plt: gate.ir_plt,
       module_callers?: false,
@@ -87,13 +94,18 @@ defmodule Hologram.Compiler.DynamicCallGate do
       call would open: page code can call those functions too, with arguments of its own.
     * `:page_callers` - the callers of each exposed function that are not runtime MFAs, taken
       here because the pages graph has the runtime's MFAs and their edges taken out.
+
+  With a data flow context, a caller passing an argument that is certainly a map or a struct keeps
+  the call closed (see `Hologram.Compiler.DataFlow.definite_map?/4`).
   """
-  @spec runtime_dynamic_calls(Digraph.t(), [mfa], PLT.t()) :: CallGraph.runtime_dynamic_calls()
-  def runtime_dynamic_calls(graph, runtime_mfas, ir_plt) do
+  @spec runtime_dynamic_calls(Digraph.t(), [mfa], PLT.t(), DataFlow.t() | nil) ::
+          CallGraph.runtime_dynamic_calls()
+  def runtime_dynamic_calls(graph, runtime_mfas, ir_plt, flow \\ nil) do
     runtime = MapSet.new(runtime_mfas)
 
     context = %{
       entries: MapSet.new(CallGraph.list_runtime_entry_mfas()),
+      flow: flow,
       graph: graph,
       ir_plt: ir_plt,
       module_callers?: true,
@@ -161,6 +173,13 @@ defmodule Hologram.Compiler.DynamicCallGate do
   defp halt_when_open({:open, _visited} = open), do: {:halt, open}
   defp halt_when_open(closed), do: {:cont, closed}
 
+  # The calls of the function in the given clauses, each with the clause it is in.
+  defp list_calls(clauses, module, function) do
+    for clause <- clauses, args <- DynamicCallSites.call_args(clause, module, function) do
+      {clause, args}
+    end
+  end
+
   defp non_runtime_callers(graph, function, runtime) do
     for {caller, _function} <- Digraph.incoming_edges(graph, function),
         not MapSet.member?(runtime, caller) do
@@ -188,8 +207,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
   # or raises), Exception.message/1 calling __struct__ on its rescued exception, and, in a
   # dependency of a big app, Localize.LanguageTag.try_minimal_form/2 passing Kernel.struct/2 a value
   # taken from `{:ok, maximized} <- add_likely_subtags(tag)`, whose every clause returns
-  # `{:ok, <a map>}` or `{:error, _}`. The same applies to an `:other` argument in
-  # resolve_argument/4.
+  # `{:ok, <a map>}` or `{:error, _}`. An `:other` argument asks it already (see resolve_argument/5).
   defp open_site?(:open, _function, _context), do: true
 
   defp open_site?({:param, index}, function, context) do
@@ -206,23 +224,31 @@ defmodule Hologram.Compiler.DynamicCallGate do
   defp reached_caller?(caller, %{module_callers?: true}) when is_atom(caller), do: true
   defp reached_caller?(caller, context), do: MapSet.member?(context.reached, caller)
 
-  defp resolve_argument({:literal, _ir}, _caller, _context, visited), do: {:closed, visited}
+  defp resolve_argument({:literal, _ir}, _caller, _clause, _context, visited),
+    do: {:closed, visited}
 
-  defp resolve_argument({{:param, caller_index}, _ir}, caller, context, visited) do
+  defp resolve_argument({{:param, caller_index}, _ir}, caller, _clause, context, visited) do
     resolve_param(caller, caller_index, context, visited)
   end
 
-  # TODO: #938. See open_site?/3: an argument that is definitely a map or a struct would close.
-  defp resolve_argument({:other, _ir}, _caller, _context, visited), do: {:open, visited}
+  # Any other argument opens, unless it is certainly a map or a struct, which is never a module.
+  defp resolve_argument({:other, ir}, caller, clause, %{flow: flow}, visited) when flow != nil do
+    if DataFlow.definite_map?(ir, clause, caller, flow) do
+      {:closed, visited}
+    else
+      {:open, visited}
+    end
+  end
+
+  defp resolve_argument({:other, _ir}, _caller, _clause, _context, visited), do: {:open, visited}
 
   defp resolve_caller({module, _function, _arity} = caller, function, index, context, visited) do
     with clauses when clauses != nil <- clauses(caller, context.ir_plt),
-         [_call | _calls] = calls <-
-           Enum.flat_map(clauses, &DynamicCallSites.call_args(&1, module, function)) do
-      Enum.reduce_while(calls, {:closed, visited}, fn args, {:closed, acc} ->
+         [_call | _calls] = calls <- list_calls(clauses, module, function) do
+      Enum.reduce_while(calls, {:closed, visited}, fn {clause, args}, {:closed, acc} ->
         args
         |> Enum.at(index)
-        |> resolve_argument(caller, context, acc)
+        |> resolve_argument(caller, clause, context, acc)
         |> halt_when_open()
       end)
     else

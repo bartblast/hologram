@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.DataFlow do
 
   # Shapes that stand for a value not known yet, which a caller's arguments or an anonymous
   # function's arguments make known (see replace/3).
-  @pending_kinds [:arg, :call, :contents, :dot, :dyn, :param, :part]
+  @pending_kinds [:arg, :as_map, :call, :contents, :dot, :dyn, :param, :part]
 
   # Shapes of unknown structure: they can hold anything, so they can match any pattern.
   @opaque_kinds [:bag, :reach | @pending_kinds]
@@ -104,6 +104,8 @@ defmodule Hologram.Compiler.DataFlow do
   #   * `{:arg, ref, index}` - whatever the anonymous function is given as that argument.
   #   * `{:reach, vertex}` - the rule before this module, applied from the vertex (see the contract).
   #   * `{:call, shapes, [shapes]}` - a call of a function value that depends on a parameter.
+  #   * `{:as_map, shapes}` - whichever of the shapes' values is a map or a struct: a variable a
+  #     pattern matched as a whole against a map pattern (`%{} = value`), or a rescued exception.
   #   * `{:contents, shapes}` - what is inside a value that depends on a parameter, one level down
   #     (see contents/1).
   #   * `{:part, shapes}` - a part, at any depth, of a value that depends on a parameter (see
@@ -125,6 +127,7 @@ defmodule Hologram.Compiler.DataFlow do
           | {:arg, fun_ref, non_neg_integer}
           | {:reach, CallGraph.vertex()}
           | {:call, shapes, [shapes]}
+          | {:as_map, shapes}
           | {:contents, shapes}
           | {:part, shapes}
           | {:dot, shapes, atom}
@@ -182,6 +185,18 @@ defmodule Hologram.Compiler.DataFlow do
 
     {dispatch_types, components} = reaching_types(sent, graph, flow)
     %{dispatch_types: dispatch_types, referenced_components: components}
+  end
+
+  @doc """
+  Returns whether the given expression, in the given clause of the given function, certainly gives a
+  map or a struct: it gives something (it can return), and every alternative is a map, a struct, or
+  a value a map pattern matched (see `shapes/4`). Such a value is never a module, so a call of a
+  function on it is no call of a module's function (see `Hologram.Compiler.DynamicCallGate`).
+  """
+  @spec definite_map?(IR.t(), IR.FunctionClause.t(), mfa, t) :: boolean
+  def definite_map?(expr, clause, mfa, flow) do
+    shapes = shapes(expr, clause, mfa, flow)
+    MapSet.size(shapes) > 0 and Enum.all?(shapes, &map_shape?/1)
   end
 
   @doc """
@@ -303,6 +318,25 @@ defmodule Hologram.Compiler.DataFlow do
     |> Enum.map(&call_fun(&1, args, rep))
     |> union()
   end
+
+  # The alternatives of the given shapes that are maps or structs: a value not known yet, or of unknown
+  # structure, becomes `{:as_map, ...}`; an atom, a list, a tuple or a function is dropped (a map
+  # pattern does not match it).
+  defp as_maps(shapes) do
+    for shape <- shapes, map_shape <- as_map_shapes(shape), into: MapSet.new(), do: map_shape
+  end
+
+  defp as_map_shapes({kind, _inner} = shape) when kind in [:as_map, :map], do: [shape]
+
+  defp as_map_shapes({:struct, _module, _fields} = shape), do: [shape]
+
+  defp as_map_shapes(shape)
+       when shape == :prim or
+              (is_tuple(shape) and elem(shape, 0) in [:bag, :reach | @pending_kinds]) do
+    [{:as_map, MapSet.new([shape])}]
+  end
+
+  defp as_map_shapes(_shape), do: []
 
   defp bag_of_leaves(shapes), do: MapSet.new([{:bag, leaves(shapes)}])
 
@@ -821,8 +855,16 @@ defmodule Hologram.Compiler.DataFlow do
     MapSet.new([shape])
   end
 
+  # A variable matched as a whole against a map pattern (`%{} = value`, either way round) holds only
+  # the alternatives that are maps or structs.
   defp extract_shape(shape, %IR.MatchOperator{left: left, right: right}, var) do
-    union([extract_shape(shape, left, var), extract_shape(shape, right, var)])
+    extracted = union([extract_shape(shape, left, var), extract_shape(shape, right, var)])
+
+    if matched_as_map?(left, right, var) or matched_as_map?(right, left, var) do
+      as_maps(extracted)
+    else
+      extracted
+    end
   end
 
   # A variable in a binary pattern takes a binary or a number.
@@ -1115,6 +1157,12 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  defp map_shape?({kind, _inner}) when kind in [:as_map, :map], do: true
+
+  defp map_shape?({:struct, _module, _fields}), do: true
+
+  defp map_shape?(_shape), do: false
+
   defp may_match?(_shape, %IR.MatchPlaceholder{}), do: true
 
   defp may_match?(_shape, %IR.PinOperator{}), do: true
@@ -1142,6 +1190,16 @@ defmodule Hologram.Compiler.DataFlow do
       functions
     end
   end
+
+  # Whether the pattern is the given variable and the other side of the match a map or struct pattern.
+  defp matched_as_map?(
+         %IR.Variable{name: name, version: version},
+         %IR.MapType{},
+         {name, version}
+       ),
+       do: true
+
+  defp matched_as_map?(_pattern, _other_side, _var), do: false
 
   # Whether a pattern names a type: an alias, or a struct, whose module is one.
   defp names_type?(%IR.AtomType{value: value}) do
@@ -1425,7 +1483,7 @@ defmodule Hologram.Compiler.DataFlow do
     Enum.reduce([fun | args], acc, &put_types(&1, &2, module_info_plt))
   end
 
-  defp put_types({kind, shapes}, acc, module_info_plt) when kind in [:contents, :part] do
+  defp put_types({kind, shapes}, acc, module_info_plt) when kind in [:as_map, :contents, :part] do
     put_types(shapes, acc, module_info_plt)
   end
 
@@ -1548,6 +1606,12 @@ defmodule Hologram.Compiler.DataFlow do
     |> apply_fun(new_args, rep)
   end
 
+  defp replace_parts({:as_map, shapes}, replacer, rep) do
+    shapes
+    |> replace(replacer, rep)
+    |> as_maps()
+  end
+
   defp replace_parts({:contents, shapes}, replacer, rep) do
     shapes
     |> replace(replacer, rep)
@@ -1665,7 +1729,9 @@ defmodule Hologram.Compiler.DataFlow do
     [{:dyn, leaves(module), name, arity, Enum.map(args, &bag_of_leaves/1)}]
   end
 
-  defp shape_leaves({kind, shapes}) when kind in [:contents, :part], do: [{kind, leaves(shapes)}]
+  defp shape_leaves({kind, shapes}) when kind in [:as_map, :contents, :part] do
+    [{kind, leaves(shapes)}]
+  end
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex.
@@ -1737,8 +1803,8 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp subject_shapes({:param, index}, _ctx), do: MapSet.new([{:param, index}])
 
-  # A rescue without modules takes any exception, raised anywhere the function reaches.
-  defp subject_shapes({:rescue, []}, ctx), do: top(ctx.mfa)
+  # A rescue without modules takes any exception, raised anywhere the function reaches: a struct.
+  defp subject_shapes({:rescue, []}, ctx), do: MapSet.new([{:as_map, top(ctx.mfa)}])
 
   # An exception raised where the function reaches, of one of the modules, holding anything.
   defp subject_shapes({:rescue, modules}, ctx) do
@@ -1783,7 +1849,7 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp widen_shape({:struct, module, fields}, depth), do: {:struct, module, widen(fields, depth)}
 
-  defp widen_shape({kind, inner}, depth) when kind in [:contents, :list, :map, :part] do
+  defp widen_shape({kind, inner}, depth) when kind in [:as_map, :contents, :list, :map, :part] do
     {kind, widen(inner, depth)}
   end
 

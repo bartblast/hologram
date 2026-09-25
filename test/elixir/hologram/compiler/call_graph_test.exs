@@ -2706,6 +2706,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module43, %{
+          flow: nil,
           ir_plt: PLT.start(),
           runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
         })
@@ -2729,6 +2730,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module44, %{
+          flow: nil,
           ir_plt: PLT.start(),
           runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
         })
@@ -2751,6 +2753,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module43, %{
+          flow: nil,
           ir_plt: PLT.start(),
           runtime: %{exposed: %{}, open: MapSet.new([{:__struct__, 0}]), page_callers: %{}}
         })

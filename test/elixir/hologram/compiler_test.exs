@@ -2999,6 +2999,7 @@ defmodule Hologram.CompilerTest do
 
       opts = [
         gate: %{
+          flow: nil,
           ir_plt: PLT.start(),
           runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
         }
@@ -3148,6 +3149,7 @@ defmodule Hologram.CompilerTest do
     } do
       opts = [
         gate: %{
+          flow: nil,
           ir_plt: PLT.start(),
           runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
         }
@@ -3872,6 +3874,7 @@ defmodule Hologram.CompilerTest do
       static_dir: static_dir
     } do
       gate = %{
+        flow: nil,
         ir_plt: PLT.start(),
         runtime: %{exposed: %{}, open: MapSet.new(), page_callers: %{}}
       }

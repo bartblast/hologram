@@ -306,12 +306,13 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph_for_runtime,
           runtime_mfas,
           ir_plt,
+          flow,
           runtime_kept?
         )
 
       # Which reflection functions each page can call (see Hologram.Compiler.DynamicCallGate): given
       # to every listing of pages, the kept pages' relisting included.
-      gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
+      gate = %{flow: flow, ir_plt: ir_plt, runtime: runtime_dynamic_calls}
 
       # Derived before the graph is split into runtime and page parts, so that the
       # applications reached from pages are named as well. Kept whenever the runtime's MFAs are:
@@ -1114,11 +1115,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # What the runtime's dynamic calls open is taken from the runtime's MFAs, so a compile that kept
   # them (see runtime_kept?/3) keeps it too.
-  defp list_runtime_dynamic_calls(kept_runtime, _call_graph, _runtime_mfas, _ir_plt, true),
+  defp list_runtime_dynamic_calls(kept_runtime, _call_graph, _runtime_mfas, _ir_plt, _flow, true),
     do: kept_runtime.dynamic_calls
 
-  defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, ir_plt, false) do
-    CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
+  defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, ir_plt, flow, false) do
+    CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt, flow)
   end
 
   # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)

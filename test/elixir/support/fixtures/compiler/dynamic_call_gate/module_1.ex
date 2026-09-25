@@ -5,6 +5,11 @@ defmodule Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1 do
   # Calls __struct__/0 on its parameter.
   def build(module), do: module.__struct__()
 
+  # Calls __struct__/0 on its parameter when it is an atom, and gives it back otherwise.
+  def build_or_keep(value) when is_atom(value), do: value.__struct__()
+
+  def build_or_keep(value), do: value
+
   def capturing, do: Enum.map([Module2], &build/1)
 
   def forwarding(module), do: build(module)
@@ -24,4 +29,14 @@ defmodule Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1 do
   def with_literal, do: build(Module2)
 
   def with_state_value(component), do: build(component.state.module)
+
+  def with_map_literal, do: build_or_keep(%{field: :value})
+
+  def with_rescued(fun) do
+    fun.()
+  rescue
+    error -> build_or_keep(error)
+  end
+
+  def with_state_value_kept(component), do: build_or_keep(component.state.module)
 end

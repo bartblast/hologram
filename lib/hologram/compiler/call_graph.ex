@@ -1410,19 +1410,20 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns what the runtime's own dynamic calls open for every page, with what page code can still
   open through the runtime's functions (see
-  `Hologram.Compiler.DynamicCallGate.runtime_dynamic_calls/3`, which reads the callers' code from
-  the given IR PLT). Every page loads the runtime, so what its functions can call, any page can.
+  `Hologram.Compiler.DynamicCallGate.runtime_dynamic_calls/4`, which reads the callers' code from
+  the given IR PLT, and with a data flow context keeps closed a call whose argument is certainly a
+  map or a struct). Every page loads the runtime, so what its functions can call, any page can.
 
   Called on the graph that still holds the runtime's MFAs: the pages graph has them and their
   dynamic calls' edges taken out (see remove_runtime_mfas!/2).
 
   The walk runs inside the call graph's agent, so the graph is not copied out.
   """
-  @spec runtime_dynamic_calls(t, [mfa], PLT.t()) :: runtime_dynamic_calls
-  def runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt) do
+  @spec runtime_dynamic_calls(t, [mfa], PLT.t(), DataFlow.t() | nil) :: runtime_dynamic_calls
+  def runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt, flow \\ nil) do
     read_graph(
       call_graph.pid,
-      &DynamicCallGate.runtime_dynamic_calls(&1, runtime_mfas, ir_plt)
+      &DynamicCallGate.runtime_dynamic_calls(&1, runtime_mfas, ir_plt, flow)
     )
   end
 

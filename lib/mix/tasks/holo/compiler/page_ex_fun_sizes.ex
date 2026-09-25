@@ -103,8 +103,11 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     flow = DataFlow.start(ir_plt, module_info_plt)
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules, flow: flow)
-    runtime_dynamic_calls = CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
-    gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
+
+    runtime_dynamic_calls =
+      CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt, flow)
+
+    gate = %{flow: flow, ir_plt: ir_plt, runtime: runtime_dynamic_calls}
 
     {CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas), gate, flow}
   end

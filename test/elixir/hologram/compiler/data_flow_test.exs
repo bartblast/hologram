@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module11
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module12
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module13
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module14
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -56,6 +57,13 @@ defmodule Hologram.Compiler.DataFlowTest do
       CallGraph.build(acc, IR.for_module(module))
     end)
     |> CallGraph.get_graph()
+  end
+
+  # Whether the body of the given function's only clause certainly gives a map or a struct.
+  defp definite_map_of(module, function) do
+    %IR.FunctionClause{params: params, body: body} = clause = clause(module, function)
+
+    definite_map?(body, clause, {module, function, length(params)}, flow())
   end
 
   defp flow, do: start(PLT.start(), module_info_plt_fixture())
@@ -145,6 +153,13 @@ defmodule Hologram.Compiler.DataFlowTest do
                MapSet.new([{:dyn, MapSet.new([{:atom, Module3}]), :build, 0, []}])
     end
 
+    test "a param a map pattern matched is whichever alternative of the argument is a map" do
+      args = [MapSet.new([@struct_1, {:atom, :ok}, {:map, MapSet.new()}])]
+
+      assert apply_summary(MapSet.new([{:as_map, @param_0}]), args) ==
+               MapSet.new([@struct_1, {:map, MapSet.new()}])
+    end
+
     test "a part of a param is what is inside the argument, at any depth" do
       args = [MapSet.new([{:tuple, [MapSet.new([{:atom, :ok}]), MapSet.new([@struct_1])]}])]
 
@@ -202,6 +217,40 @@ defmodule Hologram.Compiler.DataFlowTest do
                  referenced_components: []
                }
       end
+    end
+  end
+
+  describe "definite_map?/4" do
+    test "map literal" do
+      assert definite_map_of(Module14, :map_literal)
+    end
+
+    test "struct literal" do
+      assert definite_map_of(Module14, :struct_literal)
+    end
+
+    test "param a map pattern matched" do
+      assert definite_map_of(Module14, :matched)
+    end
+
+    test "value of a call returning a param a map pattern matched" do
+      assert definite_map_of(Module14, :validated)
+    end
+
+    test "rescued exception" do
+      assert definite_map_of(Module14, :rescued)
+    end
+
+    test "atom" do
+      refute definite_map_of(Module14, :atom)
+    end
+
+    test "param" do
+      refute definite_map_of(Module14, :param)
+    end
+
+    test "expression that never returns" do
+      refute definite_map_of(Module14, :raises)
     end
   end
 
@@ -386,8 +435,9 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert shapes_of(Module2, :param) == @param_0
     end
 
-    test "param matched against a struct pattern takes what the pattern names" do
-      assert shapes_of(Module2, :param_named) == MapSet.new([{:param, 0}, @struct_1_named])
+    test "param matched against a struct pattern is a map, and takes what the pattern names" do
+      assert shapes_of(Module2, :param_named) ==
+               MapSet.new([{:as_map, @param_0}, @struct_1_named])
     end
 
     test "variable taken from a param is a part of the param" do
@@ -417,10 +467,11 @@ defmodule Hologram.Compiler.DataFlowTest do
                MapSet.new([{:atom, :ok}, {:struct, ArgumentError, fields}])
     end
 
-    test "try with a bare rescue" do
+    test "try with a bare rescue: the rescued exception is a struct holding anything" do
       mfa = {Module2, :try_rescue_bare, 0}
 
-      assert shapes_of(Module2, :try_rescue_bare) == MapSet.new([{:reach, mfa}, {:atom, :ok}])
+      assert shapes_of(Module2, :try_rescue_bare) ==
+               MapSet.new([{:as_map, MapSet.new([{:reach, mfa}])}, {:atom, :ok}])
     end
 
     test "variable no binding in the clause knows is the function's top" do
