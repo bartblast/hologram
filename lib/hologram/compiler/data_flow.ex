@@ -499,7 +499,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp code_summary({_module, _function, arity} = mfa, ctx) do
     clauses = function_clauses(mfa, ctx)
 
-    if clauses == nil or protocol_function?(mfa, ctx.flow.module_info_plt) do
+    if clauses == nil or CallGraph.protocol_function_mfa?(mfa, ctx.flow.module_info_plt) do
       MapSet.new([{:bag, params(arity)}])
     else
       function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
@@ -1298,21 +1298,6 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp pattern_variables(_ir, vars), do: vars
 
-  # Whether the function is one a protocol defines, from the module info PLT the way the call graph
-  # tells (a protocol module's functions are read from it when its entry has no list of them).
-  defp protocol_function?({module, function, arity}, module_info_plt) do
-    case PLT.get(module_info_plt, module) do
-      {:ok, %{protocol?: true} = info} ->
-        functions = info[:protocol_functions] || module.__protocol__(:functions)
-        {function, arity} in functions
-
-      _no_protocol ->
-        false
-    end
-  end
-
-  defp protocol_function?(_vertex, _module_info_plt), do: false
-
   # The provisional summary of the function while nothing it read changed (see fixpoint_summary/2),
   # which is a read of the depth it read, else the summary made now.
   defp provisional_summary(mfa, ctx) do
@@ -1462,7 +1447,7 @@ defmodule Hologram.Compiler.DataFlow do
 
     walked_vertices =
       Digraph.reachable(graph, MapSet.to_list(MapSet.union(reach, structs)),
-        opaque_vertex?: &protocol_function?(&1, module_info_plt)
+        opaque_vertex?: &CallGraph.protocol_function_mfa?(&1, module_info_plt)
       )
 
     components =

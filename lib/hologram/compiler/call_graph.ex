@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.TaskUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.DynamicCallGate
   alias Hologram.Compiler.DynamicCallSites
@@ -1223,6 +1224,21 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns whether the given vertex is a function its protocol defines, as opposed to one of the
+  dispatch helpers `defprotocol` generates (`impl_for/1` and the like) or a function of any other
+  module, from the module info PLT. A protocol module's functions are read from the module when its
+  entry has no list of them.
+  """
+  @spec protocol_function_mfa?(vertex, PLT.t() | nil) :: boolean
+  # The flag keeps the function list lookup off every module that is not a protocol.
+  def protocol_function_mfa?({module, function, arity}, module_info_plt) do
+    flag?(module_info_plt, module, :protocol?) and
+      {function, arity} in protocol_functions(module, module_info_plt)
+  end
+
+  def protocol_function_mfa?(_vertex, _module_info_plt), do: false
+
+  @doc """
   Replaces the graph of the underlying Agent process with the given graph, keeping the modules.
   """
   @spec put_graph(t, Digraph.t()) :: t
@@ -1354,15 +1370,29 @@ defmodule Hologram.Compiler.CallGraph do
   protocol dispatch types that can appear in its server-executed code (code
   reachable from its init/3 and command/3 callbacks) and the component modules
   referenced in its server-executed code.
+
+  With a data flow context, the analysis follows the values the callbacks return to the client
+  instead (see `Hologram.Compiler.DataFlow.server_callback_analysis/3`), and a type or a component
+  that only server code meets is left out; the context's module info PLT is the one read then.
   Templatables are analyzed sequentially, since spawning a task per templatable
   would copy the whole graph into each task process, which costs far more than
   the traversals themselves.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_callback_analysis_by_templatable_3/README.md
   """
-  @spec server_callback_analysis_by_templatable(Digraph.t(), [module], PLT.t() | nil) ::
-          %{module => server_callback_analysis}
-  def server_callback_analysis_by_templatable(graph, templatables, module_info_plt) do
+  @spec server_callback_analysis_by_templatable(
+          Digraph.t(),
+          [module],
+          PLT.t() | nil,
+          DataFlow.t() | nil
+        ) :: %{module => server_callback_analysis}
+  def server_callback_analysis_by_templatable(graph, templatables, module_info_plt, flow \\ nil)
+
+  def server_callback_analysis_by_templatable(graph, templatables, _module_info_plt, %{} = flow) do
+    Map.new(templatables, &{&1, DataFlow.server_callback_analysis(graph, &1, flow)})
+  end
+
+  def server_callback_analysis_by_templatable(graph, templatables, module_info_plt, nil) do
     Map.new(templatables, fn templatable ->
       # One traversal feeds both the dispatch types and the referenced components,
       # matching what server_protocol_dispatch_types/2 would traverse for a single
@@ -1391,10 +1421,24 @@ defmodule Hologram.Compiler.CallGraph do
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
 
+  With a data flow context, the types are the union of the templatables' data flow analyses (see
+  `server_callback_analysis_by_templatable/4`).
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_protocol_dispatch_types_3/README.md
   """
-  @spec server_protocol_dispatch_types(Digraph.t(), [module], PLT.t() | nil) :: MapSet.t(module)
-  def server_protocol_dispatch_types(graph, templatables, module_info_plt) do
+  @spec server_protocol_dispatch_types(Digraph.t(), [module], PLT.t() | nil, DataFlow.t() | nil) ::
+          MapSet.t(module)
+  def server_protocol_dispatch_types(graph, templatables, module_info_plt, flow \\ nil)
+
+  def server_protocol_dispatch_types(graph, templatables, module_info_plt, %{} = flow) do
+    graph
+    |> server_callback_analysis_by_templatable(templatables, module_info_plt, flow)
+    |> Enum.reduce(MapSet.new(), fn {_templatable, analysis}, acc ->
+      MapSet.union(acc, analysis.dispatch_types)
+    end)
+  end
+
+  def server_protocol_dispatch_types(graph, templatables, module_info_plt, nil) do
     entry_mfas =
       for templatable <- templatables, function <- [:command, :init] do
         {templatable, function, 3}
@@ -2161,14 +2205,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp protocol_dispatch_helper_mfa?(_vertex, _target_vertex, _module_infos), do: false
-
-  # The flag keeps the function list lookup off every module that is not a protocol.
-  defp protocol_function_mfa?({module, function, arity}, module_info_plt) do
-    flag?(module_info_plt, module, :protocol?) and
-      {function, arity} in protocol_functions(module, module_info_plt)
-  end
-
-  defp protocol_function_mfa?(_vertex, _module_infos), do: false
 
   defp protocol_functions(module, module_info_plt) do
     fact(module_info_plt, module, :protocol_functions) || module.__protocol__(:functions)

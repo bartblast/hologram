@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Component
@@ -56,6 +57,11 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10, as: DataFlowPage
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module11, as: DataFlowComponent
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1, as: DroppedStruct
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2, as: StateStruct
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
@@ -113,6 +119,19 @@ defmodule Hologram.Compiler.CallGraphTest do
       :erlang.trace_pattern({CallGraph, :get_graph, 1}, false, [:local])
       send(walker, :stop)
     end
+  end
+
+  # A data flow context on the fixture app's module info PLT.
+  defp data_flow_fixture, do: DataFlow.start(PLT.start(), module_info_plt_fixture())
+
+  # The graph of a page of the data flow fixtures: its init/3 builds DroppedStruct and drops it, and
+  # puts StateStruct in the state.
+  defp data_flow_page_graph do
+    [module_info_plt: module_info_plt_fixture()]
+    |> start()
+    |> build(IR.for_module(DataFlowPage))
+    |> build(IR.for_module(DataFlowComponent))
+    |> get_graph()
   end
 
   defp list_declared_erlang_deps do
@@ -3547,6 +3566,24 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "protocol_function_mfa?/2" do
+    test "function its protocol defines" do
+      assert protocol_function_mfa?({Protocol1, :my_fun, 1}, module_info_plt_fixture())
+    end
+
+    test "dispatch helper of a protocol" do
+      refute protocol_function_mfa?({Protocol1, :impl_for, 1}, module_info_plt_fixture())
+    end
+
+    test "function of a module that is no protocol" do
+      refute protocol_function_mfa?({Module5, :my_fun, 0}, module_info_plt_fixture())
+    end
+
+    test "module vertex" do
+      refute protocol_function_mfa?(Protocol1, module_info_plt_fixture())
+    end
+  end
+
   test "put_graph", %{empty_call_graph: call_graph} do
     build(call_graph, IR.for_module(Module9))
     graph = Digraph.add_edge(Digraph.new(), :vertex_3, :vertex_4)
@@ -3898,7 +3935,31 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "server_callback_analysis_by_templatable/3" do
+  describe "server_callback_analysis_by_templatable/4" do
+    test "with a data flow context, a struct server code builds and drops is no dispatch type" do
+      analysis =
+        server_callback_analysis_by_templatable(
+          data_flow_page_graph(),
+          [DataFlowPage],
+          module_info_plt_fixture(),
+          data_flow_fixture()
+        )
+
+      refute DroppedStruct in analysis[DataFlowPage].dispatch_types
+      assert StateStruct in analysis[DataFlowPage].dispatch_types
+    end
+
+    test "without a data flow context, a struct server code names is a dispatch type" do
+      analysis =
+        server_callback_analysis_by_templatable(
+          data_flow_page_graph(),
+          [DataFlowPage],
+          module_info_plt_fixture()
+        )
+
+      assert DroppedStruct in analysis[DataFlowPage].dispatch_types
+    end
+
     test "returns an entry for each given templatable" do
       graph =
         Digraph.new()
@@ -3988,7 +4049,31 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "server_protocol_dispatch_types/3" do
+  describe "server_protocol_dispatch_types/4" do
+    test "with a data flow context, the types come from the data flow analyses" do
+      types =
+        server_protocol_dispatch_types(
+          data_flow_page_graph(),
+          [DataFlowPage],
+          module_info_plt_fixture(),
+          data_flow_fixture()
+        )
+
+      refute DroppedStruct in types
+      assert StateStruct in types
+    end
+
+    test "without a data flow context, a struct server code names is a dispatch type" do
+      types =
+        server_protocol_dispatch_types(
+          data_flow_page_graph(),
+          [DataFlowPage],
+          module_info_plt_fixture()
+        )
+
+      assert DroppedStruct in types
+    end
+
     test "includes struct types reachable from init/3" do
       graph =
         Digraph.new()
