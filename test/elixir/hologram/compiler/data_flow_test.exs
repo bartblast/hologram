@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module14
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module15
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module16
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module17
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -334,6 +335,25 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "shapes/4" do
+    test "a call whose value is larger than the cap gives the callee's top with the arguments" do
+      clause = clause(Module17, :calls_repeat)
+      mfa = {Module17, :calls_repeat, 0}
+      value = shapes(clause.body, clause, mfa, flow())
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(),
+          max_summary_size: :erlang.external_size(value) - 1
+        )
+
+      assert value == MapSet.new([{:tuple, List.duplicate(MapSet.new([@struct_1]), 4)}])
+
+      assert summary({Module17, :repeat, 1}, flow) ==
+               MapSet.new([{:tuple, List.duplicate(@param_0, 4)}])
+
+      assert shapes(clause.body, clause, mfa, flow) ==
+               MapSet.new([{:reach, {Module17, :repeat, 1}}, @struct_1])
+    end
+
     test "atom" do
       assert shapes_of(Module1, :atom) == MapSet.new([{:atom, :ok}])
     end
