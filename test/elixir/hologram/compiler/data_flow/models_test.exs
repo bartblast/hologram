@@ -96,11 +96,15 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
       assert call_model({:lists, :foldl, 3}, args) == round_2
     end
 
-    test "Hologram function that keeps what it is given on the server" do
-      args = [[{:struct, Server, MapSet.new()}], [{:atom, :user}], [@struct_1]]
+    test "Hologram function that returns the server as it was" do
+      args = [[{:struct, Server, MapSet.new()}], [:prim]]
 
-      assert call_model({Server, :put_session, 3}, args) ==
+      assert call_model({Server, :put_status, 2}, args) ==
                MapSet.new([{:struct, Server, MapSet.new()}])
+    end
+
+    test "a Hologram function that puts a value in the session has no model" do
+      assert summary({Server, :put_session, 3}) == nil
     end
   end
 end

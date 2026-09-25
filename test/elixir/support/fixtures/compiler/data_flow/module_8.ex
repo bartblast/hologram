@@ -21,5 +21,5 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module8 do
 
   def map_put, do: Map.put(%{}, :struct, %Struct1{})
 
-  def session_dropped(server), do: Server.put_session(server, :struct, %Struct1{})
+  def session_put(server), do: Server.put_session(server, :struct, %Struct1{})
 end

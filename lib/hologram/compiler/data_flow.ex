@@ -23,9 +23,11 @@ defmodule Hologram.Compiler.DataFlow do
   #   4. A protocol call returns everything in its arguments, unless it has a hand-written answer.
   #   5. A call on a module the code does not name returns everything in its arguments and in the
   #      module, and the answers of the functions it can call when the module is known.
-  #   6. A value from outside the code (a session, a stash, a database row, a message) holds only
-  #      the types the code names for it, as before this module: a variable matched against a
-  #      pattern that names a module or a struct holds what the pattern names.
+  #   6. A value from outside the code (a database row, a message, one read from the session) holds
+  #      only the types the code names for it, as before this module: a variable matched against a
+  #      pattern that names a module or a struct holds what the pattern names. A value put in the
+  #      session, a cookie or the stash stays in the server struct, so it counts as reaching the
+  #      client: another handler can read it back.
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Types, as: T
@@ -211,8 +213,10 @@ defmodule Hologram.Compiler.DataFlow do
   The callbacks are followed with nothing known about their arguments: params and props come from
   the client, which has their types already, and the server struct holds what the code names for
   it. The values they return go to the client: the component's state, context, next action,
-  command and page, and the server's next action and broadcasts; what the server keeps (its
-  session, cookies and stash) is dropped on the way in (see `Hologram.Compiler.DataFlow.Models`).
+  command and page, and the server's next action and broadcasts, and the server's session, cookies
+  and stash too, which another handler can read back and hand on. What the server is only told (its
+  status, a redirect, a response, the user id, the subscriptions) is dropped on the way in (see
+  `Hologram.Compiler.DataFlow.Models`).
 
   Where the analysis could not follow the code, the rule before it applies from there: the given
   graph is walked from those vertices (see `top/1`), protocol functions not entered, and so it is

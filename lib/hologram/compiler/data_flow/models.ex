@@ -188,21 +188,20 @@ defmodule Hologram.Compiler.DataFlow.Models do
   ]
 
   # Functions that return their first argument, the server or the component, as it was: what they
-  # are given stays on the server (a session, a cookie, a stash, a response).
+  # are given is a key, a status, a page to redirect to, a response, a user id or a channel, which
+  # holds no type the client needs. A value put in the session, a cookie or the stash is not dropped
+  # this way: another handler can read it back and hand it to the client, so the code of those
+  # functions is followed, and the value stays in the server struct they return.
   @unchanged_first_arg_mfas [
     {Hologram.Component, :delete_subscription, 2},
     {Hologram.Component, :put_subscription, 2},
     {Hologram.Server, :delete_cookie, 2},
     {Hologram.Server, :delete_session, 2},
     {Hologram.Server, :delete_stash, 2},
-    {Hologram.Server, :put_cookie, 3},
-    {Hologram.Server, :put_cookie, 4},
     {Hologram.Server, :put_redirect, 2},
     {Hologram.Server, :put_redirect, 3},
     {Hologram.Server, :put_response_body, 2},
     {Hologram.Server, :put_response_header, 3},
-    {Hologram.Server, :put_session, 3},
-    {Hologram.Server, :put_stash, 3},
     {Hologram.Server, :put_status, 2},
     {Hologram.Server, :put_user_id, 2}
   ]

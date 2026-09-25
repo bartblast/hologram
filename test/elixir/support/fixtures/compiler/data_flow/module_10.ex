@@ -14,7 +14,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module10 do
   layout Hologram.Test.Fixtures.LayoutFixture
 
   # Struct1 and Struct6 are built and dropped on the server (no other fixture hands Struct6 to the
-  # client), Struct2 and the Module11 component reach the state, Struct3 stays in the session.
+  # client), Struct2 and the Module11 component reach the state, Struct3 is put in the session
+  # (which another handler can read back and hand to the client).
   def init(_params, component, server) do
     new_component =
       put_state(component,

@@ -271,8 +271,10 @@ defmodule Hologram.Compiler.DataFlowTest do
       refute Struct1 in server_callback_analysis(graph, Module10, flow()).dispatch_types
     end
 
-    test "a struct put in the session is not a dispatch type", %{graph: graph} do
-      refute Struct3 in server_callback_analysis(graph, Module10, flow()).dispatch_types
+    test "a struct put in the session is a dispatch type: another handler can read it back", %{
+      graph: graph
+    } do
+      assert Struct3 in server_callback_analysis(graph, Module10, flow()).dispatch_types
     end
 
     test "a component module that reaches the state is a referenced component", %{graph: graph} do
@@ -557,8 +559,11 @@ defmodule Hologram.Compiler.DataFlowTest do
       end
     end
 
-    test "a value put in the session stays on the server" do
-      assert summary_of(Module8, :session_dropped, 1) == @param_0
+    test "a value put in the session stays in the server struct" do
+      flow = flow()
+      summary = summary({Module8, :session_put, 1}, flow)
+
+      assert Struct1 in types(summary, flow).structs
     end
 
     test "Kernel.struct/2 on a module" do
