@@ -1051,7 +1051,7 @@ defmodule Hologram.Compiler.CallGraph do
   Returns the sorted list of MFAs that are reachable by the given page.
   Server dispatch types and server-referenced components of
   the page's templatables come from their server callback analyses (see
-  server_callback_analysis_by_templatable/3), which are read from `analyses`, a PLT the caller keeps
+  server_callback_analysis_by_templatable/4), which are read from `analyses`, a PLT the caller keeps
   for as long as it lists pages, and computed and put there when missing. Pages listed against the
   same PLT, at once or in rounds, compute each templatable's analysis once; tasks listing pages at
   once may compute a missing analysis twice and put the same value twice, which is harmless.
@@ -1064,6 +1064,10 @@ defmodule Hologram.Compiler.CallGraph do
   its code does not name: the `:gate` opt (see `Hologram.Compiler.DynamicCallGate`) says which,
   from the dynamic calls the page's client code reaches and the ones the runtime holds. With no
   gate, every reflection function of every such type is listed.
+
+  With a data flow context (the `:flow` opt), the server analyses follow the values the server
+  callbacks hand to the client (see `Hologram.Compiler.DataFlow`): a type or a component only server
+  code meets is not listed for the page.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
@@ -1081,10 +1085,11 @@ defmodule Hologram.Compiler.CallGraph do
         initial_state,
         initial_templatables,
         analyses,
-        module_info_plt
+        module_info_plt,
+        opts[:flow]
       )
 
-    server_types = union_server_types(graph, templatables, analyses, module_info_plt, nil)
+    server_types = union_server_types(graph, templatables, analyses, module_info_plt, opts[:flow])
 
     final_state =
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
@@ -1123,13 +1128,17 @@ defmodule Hologram.Compiler.CallGraph do
   is a traversal of the graph and reads of the module info PLT. The analyses PLT it starts is
   started from the agent and stopped there too, before it returns.
 
+  With a data flow context (the `:flow` opt), the server and broadcast analyses follow the values
+  that reach the client (see `Hologram.Compiler.DataFlow`): a type or a component only server code
+  meets is not listed for the runtime.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
   """
-  @spec list_runtime_mfas(t, [module]) :: [mfa]
-  def list_runtime_mfas(call_graph, pages) do
+  @spec list_runtime_mfas(t, [module], T.opts()) :: [mfa]
+  def list_runtime_mfas(call_graph, pages, opts \\ []) do
     read_graph(
       call_graph.pid,
-      &list_runtime_mfas_in_graph(&1, pages, call_graph.module_info_plt)
+      &list_runtime_mfas_in_graph(&1, pages, call_graph.module_info_plt, opts[:flow])
     )
   end
 
@@ -1851,13 +1860,14 @@ defmodule Hologram.Compiler.CallGraph do
          state,
          templatables,
          analyses,
-         module_info_plt
+         module_info_plt,
+         flow
        ) do
     # The analyses are read from the PLT, and computed into it as templatables turn up.
     new_components =
       templatables
       |> Enum.flat_map(fn templatable ->
-        server_callback_analysis(graph, templatable, analyses, module_info_plt, nil).server_referenced_components
+        server_callback_analysis(graph, templatable, analyses, module_info_plt, flow).server_referenced_components
       end)
       |> Enum.uniq()
       |> Kernel.--(templatables)
@@ -1880,7 +1890,8 @@ defmodule Hologram.Compiler.CallGraph do
         new_state,
         new_templatables,
         analyses,
-        module_info_plt
+        module_info_plt,
+        flow
       )
     end
   end
@@ -2047,14 +2058,14 @@ defmodule Hologram.Compiler.CallGraph do
     |> MapSet.union(target_modules)
   end
 
-  defp list_runtime_mfas_in_graph(graph, pages, module_info_plt) do
+  defp list_runtime_mfas_in_graph(graph, pages, module_info_plt, flow) do
     entry_mfas = list_runtime_entry_mfas()
 
     # A component module referenced in broadcast caller code can be delivered to any
     # connected page as a runtime value (e.g. in broadcast action params) and render
     # as a dynamic tag there, so its client code goes into the runtime bundle, which
     # every page loads.
-    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
+    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt, flow)
 
     # The runtime lists against an analyses PLT of its own, filled on demand and stopped once the MFAs
     # are listed: its analyses are taken on the graph that still holds the runtime's functions, so
@@ -2064,7 +2075,8 @@ defmodule Hologram.Compiler.CallGraph do
 
     app_types =
       app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt,
-        analyses: analyses
+        analyses: analyses,
+        flow: flow
       )
 
     entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
@@ -2086,10 +2098,11 @@ defmodule Hologram.Compiler.CallGraph do
         initial_state,
         initial_templatables,
         analyses,
-        module_info_plt
+        module_info_plt,
+        flow
       )
 
-    server_types = union_server_types(graph, templatables, analyses, module_info_plt, nil)
+    server_types = union_server_types(graph, templatables, analyses, module_info_plt, flow)
 
     PLT.stop(analyses)
 

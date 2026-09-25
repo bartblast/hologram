@@ -69,6 +69,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
+  alias String.Chars.Hologram.Test.Fixtures.Compiler.DataFlow.Struct1,
+    as: StringCharsDataFlowStruct1
+
+  alias String.Chars.Hologram.Test.Fixtures.Compiler.DataFlow.Struct2,
+    as: StringCharsDataFlowStruct2
+
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
   @tmp_dir Reflection.tmp_dir()
@@ -138,6 +144,23 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   # A data flow context on the fixture app's module info PLT.
   defp data_flow_fixture, do: DataFlow.start(PLT.start(), module_info_plt_fixture())
+
+  # The call graph of the data flow fixtures' page, its component, String.Chars and the
+  # implementations of it for DataFlowStruct1, which the page's init/3 builds and drops, and
+  # DataFlowStruct2, which it puts in the state; the page's template calls to_string/1.
+  defp data_flow_page_call_graph do
+    call_graph = start(module_info_plt: module_info_plt_fixture())
+
+    [
+      DataFlowPage,
+      DataFlowComponent,
+      String.Chars,
+      StringCharsDataFlowStruct1,
+      StringCharsDataFlowStruct2
+    ]
+    |> Enum.reduce(call_graph, &build(&2, IR.for_module(&1)))
+    |> add_edge({DataFlowPage, :template, 0}, {String.Chars, :to_string, 1})
+  end
 
   # The graph of a page of the data flow fixtures: its init/3 builds DataFlowStruct1 and drops it, and
   # puts DataFlowStruct2 in the state.
@@ -2209,6 +2232,27 @@ defmodule Hologram.Compiler.CallGraphTest do
       [page_module_22_mfas: page_module_22_mfas]
     end
 
+    test "with a data flow context, excludes implementations of a type server code builds and drops" do
+      result =
+        data_flow_page_call_graph()
+        |> get_graph()
+        |> list_page_mfas(DataFlowPage, PLT.start(), module_info_plt_fixture(),
+          flow: data_flow_fixture()
+        )
+
+      refute {StringCharsDataFlowStruct1, :to_string, 1} in result
+      assert {StringCharsDataFlowStruct2, :to_string, 1} in result
+    end
+
+    test "without a data flow context, includes implementations of a type server code names" do
+      result =
+        data_flow_page_call_graph()
+        |> get_graph()
+        |> list_page_mfas(DataFlowPage, PLT.start(), module_info_plt_fixture())
+
+      assert {StringCharsDataFlowStruct1, :to_string, 1} in result
+    end
+
     test "includes action/3, template/0 and other MFAs that should be included", %{
       module_info_plt: module_info_plt
     } do
@@ -2730,9 +2774,23 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
 
-  describe "list_runtime_mfas/2" do
+  describe "list_runtime_mfas/3" do
     setup %{full_call_graph: call_graph} do
       [runtime_mfas: list_runtime_mfas(call_graph, Reflection.list_pages())]
+    end
+
+    test "with a data flow context, excludes implementations of a type server code builds and drops" do
+      result =
+        list_runtime_mfas(data_flow_page_call_graph(), [DataFlowPage], flow: data_flow_fixture())
+
+      refute {StringCharsDataFlowStruct1, :to_string, 1} in result
+      assert {StringCharsDataFlowStruct2, :to_string, 1} in result
+    end
+
+    test "without a data flow context, includes implementations of a type server code names" do
+      result = list_runtime_mfas(data_flow_page_call_graph(), [DataFlowPage])
+
+      assert {StringCharsDataFlowStruct1, :to_string, 1} in result
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
@@ -2997,6 +3055,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     # built-in type implementations would break rendering of primitives on every page,
     # while any extra entry means implementations of unreachable types (and their
     # dependency subtrees) are getting pulled into the runtime bundle again.
+    # Besides them, the implementations for DataFlowStruct1 and DataFlowStruct2: the data flow
+    # fixtures' page and broadcaster name those structs in server code, which the runtime listed
+    # without a data flow context counts.
     test "includes exactly the built-in type implementations of String.Chars", %{
       runtime_mfas: result
     } do
@@ -3011,6 +3072,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                String.Chars.Atom,
                String.Chars.BitString,
                String.Chars.Float,
+               StringCharsDataFlowStruct1,
+               StringCharsDataFlowStruct2,
                String.Chars.Integer,
                String.Chars.List
              ]
