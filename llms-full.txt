@@ -377,7 +377,7 @@ Hologram automatically analyzes your code and:
 3. Ships only the code and protocol implementations your app can actually reach, keeping client bundles small
 4. Sets up all required client-server communication
 
-Protocol implementations are included by type reachability. A struct's implementations (e.g. `String.Chars`) ship to the browser when the compiler finds the struct type in client-reachable code, in server-executed `init` or command code, or in action broadcasting code - not merely because a dependency defines them. If a type is resolved dynamically at runtime (for example from a string or external data), reference its struct module anywhere in client-reachable code to include its implementations.
+Protocol implementations are included by type reachability. A struct's implementations (e.g. `String.Chars`) ship to the browser when the compiler finds the struct type in client-reachable code, or finds that server-executed `init` or command code, or action broadcasting code, can hand a value holding it to the client - not merely because a dependency defines them, or because server code uses the struct on the way. If a type is resolved dynamically at runtime (for example from a string or external data), reference its struct module anywhere in client-reachable code to include its implementations.
 
 #### Client-Side State
 
@@ -493,9 +493,9 @@ That repetition is a good reason to keep the expression short. Logic written inl
 
 ##### Module Reachability
 
-To render a dynamic component on the client, the compiler must know its module at build time. It bundles a component whenever the module atom appears as a literal in code it can see - a template, any client-reachable function, a page's or component's `init/3` or `command/3` server callback, or any code that broadcasts an action - `put_broadcast/3,4` inside a handler, `Hologram.Realtime.broadcast_action/2,3` outside one. So a module put into state by `init/3` or sent back in action params by `command/3` works without any extra declaration.
+To render a dynamic component on the client, the compiler must know its module at build time. It bundles a component whenever the module atom appears as a literal in client-reachable code - a template or any client-reachable function - or when server code hands it to the client: a page's or component's `init/3` or `command/3` server callback putting it into state or sending it back in action params, or any code that broadcasts an action sending it in the params - `put_broadcast/3,4` inside a handler, `Hologram.Realtime.broadcast_action/2,3` outside one. So a module put into state by `init/3` or sent back in action params by `command/3` works without any extra declaration, while a module that server code only uses on the way is not bundled.
 
-The search follows calls forward, so functions those callbacks call count too, but their own callers don't - a module picked elsewhere and passed down into a broadcasting helper won't be found. Modules that exist only at runtime don't work at all: ones built with `Module.concat/1`, resolved with `String.to_existing_atom/1`, or read from the database or config without a literal anywhere in the app's code are not bundled, and rendering them on the client raises.
+The compiler follows the values forward through the functions those callbacks call, but not back to their own callers - a module picked elsewhere and passed down into a broadcasting helper won't be found. Modules that exist only at runtime don't work at all: ones built with `Module.concat/1`, resolved with `String.to_existing_atom/1`, or read from the database or config without a literal anywhere in the app's code are not bundled, and rendering them on the client raises.
 
 A component referenced in broadcast code goes into the shared runtime bundle rather than a page bundle, so it ships with every page - a broadcast is addressed to a `cid`, and which page has that `cid` mounted is only known at runtime.
 
@@ -4056,6 +4056,26 @@ A few things are read from the environment rather than from config, because they
 
 The compiler builds one runtime bundle, which every page loads, and one bundle per page. A page bundle holds the Elixir code the page's client side can reach from its template, its actions and its layout's, compiled to JavaScript. Code that runs only on the server, like `init/3` and commands, is not bundled, but the values it hands to the client can bring code with them, as the sections below describe.
 
+#### Server-Created Types
+
+A struct built in `init/3`, in a command or in code that broadcasts an action can reach the client, and then its protocol implementations have to be there too, like `String.Chars` to interpolate it in a template. The compiler follows the values these callbacks return to where they reach the client - the state, the context, the params of an action or a command, the page to navigate to, and the params of a broadcast - and ships the implementations of the structs those values can hold:
+
+```elixir
+def init(_params, component, _server) do
+  # Ships Price's implementations: the struct reaches the state.
+  price = %Price{amount: 1_000, currency: :EUR}
+
+  # Ships none of Duration's: only the string reaches the state.
+  every = "Every #{Duration.to_iso8601(Duration.new!(minute: 30))}"
+
+  put_state(component, price: price, every: every)
+end
+```
+
+A struct that server code only uses on the way - turned into a string, counted or validated - ships nothing. A struct that `init/3`, a command or code they call puts in the session, the cookies or the stash counts as handed to the client, since code that runs later can read it back and hand it on: a later request's handler for the session and cookies, code later in the same request for the stash. A struct that middleware or a controller puts there counts only when the code reading it names its module, for example in a `%User{} = user` pattern. Where the compiler loses track of a value, for example at a call into Erlang code or a message from another process, it assumes the value can hold anything passed into the code it lost track in and any struct created in that code. For example, `Repo.get!(User, id)` ships `User`'s implementations: whatever happens to the row on its way back, `User` was passed in. Structs built inside a protocol implementation that server code calls are not followed.
+
+Dynamic components work the same way: one ships when server code hands its module to the client, not when server code merely names it. See Module Reachability in the Template Syntax documentation.
+
 #### Reflection Functions
 
 A struct's `__struct__/0,1` and an Ecto schema's `__changeset__/0` and `__schema__/1,2` are reflection functions. A call that names the module, like `User.__changeset__()`, reaches them like any other function. A call on a module the code does not name reaches them only at runtime:
@@ -4065,11 +4085,11 @@ schema = component.state.schema
 schema.__changeset__()
 ```
 
-So a type's reflection functions ship with a page when two things hold. The type can reach the page: the page's client code names it, or `init/3`, a command or code that broadcasts an action creates it. And the page's client code, or the runtime every page loads, calls the function on a module it does not name, like `schema.__changeset__()` above or `apply(schema, :__schema__, [:fields])`. A call on a function's parameter counts only when some caller can pass that parameter something other than a module written in the code.
+So a type's reflection functions ship with a page when two things hold. The type can reach the page: the page's client code names it, or `init/3`, a command or code that broadcasts an action hands it to the client (see Server-Created Types above). And the page's client code, or the runtime every page loads, calls the function on a module it does not name, like `schema.__changeset__()` above or `apply(schema, :__schema__, [:fields])`. A call on a function's parameter counts only when some caller can pass that parameter something other than a module written in the code.
 
 A call through `apply/3` with a function name known only at runtime is not detected, as for any other function, so a reflection function reached only that way is not bundled and the call raises an `UndefinedFunctionError` on the client, whose message says why. Name the function in the call, or reference it anywhere in client-reachable code.
 
-One limit remains for now: a call on a value the compiler cannot tell is not a module keeps the function in the bundle. Elixir's own `Kernel.struct/2` and `Exception.message/1` make such calls, so `__struct__/0` of the types a page can see ships with every page.
+A call on a value that is certainly a map or a struct, never a module, keeps the function out, like Elixir's own `Kernel.struct/2` on the struct it has just validated, or `Exception.message/1` on the exception it rescued. A call on a value the compiler cannot tell is not a module keeps the function in the bundle.
 
 #### Related
 
