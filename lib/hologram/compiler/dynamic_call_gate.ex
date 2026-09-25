@@ -22,7 +22,6 @@ defmodule Hologram.Compiler.DynamicCallGate do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.DynamicCallSites
   alias Hologram.Compiler.IR
-  alias Hologram.Reflection
 
   # What the gate is given besides the page's reach: what the runtime's own dynamic calls open (see
   # runtime_dynamic_calls/3), and the IR PLT the callers' code is read from, where a module it does
@@ -136,7 +135,7 @@ defmodule Hologram.Compiler.DynamicCallGate do
   # The clauses of the given function, read from its module's IR, or nil when the module has no IR
   # (an Erlang module) or does not define the function.
   defp clauses({module, function, arity}, ir_plt) do
-    with {:ok, module_def} <- module_ir(module, ir_plt),
+    with {:ok, module_def} <- Compiler.module_ir(ir_plt, module),
          {_key, {_visibility, clauses}} <-
            module_def
            |> IR.aggregate_module_funs()
@@ -161,19 +160,6 @@ defmodule Hologram.Compiler.DynamicCallGate do
   # Stops a reduction over callers or calls at the first one that opens.
   defp halt_when_open({:open, _visited} = open), do: {:halt, open}
   defp halt_when_open(closed), do: {:cont, closed}
-
-  # Builds a module's IR the way the compile task does (see Hologram.Compiler.build_ir_plt/1), so that
-  # in an umbrella a module still loaded from a consolidated beam the code reloader deleted is read
-  # from its object code, and a module with no beam is left out.
-  defp module_ir(module, ir_plt) do
-    with :error <- PLT.get(ir_plt, module) do
-      if Reflection.elixir_module?(module) do
-        Compiler.build_missing_ir!(ir_plt, [module])
-      end
-
-      PLT.get(ir_plt, module)
-    end
-  end
 
   defp non_runtime_callers(graph, function, runtime) do
     for {caller, _function} <- Digraph.incoming_edges(graph, function),

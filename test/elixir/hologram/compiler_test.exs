@@ -3405,6 +3405,38 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "module_ir/2" do
+    test "returns the IR the PLT holds" do
+      ir_plt = PLT.put(PLT.start(), Module1, :ir_1)
+
+      assert module_ir(ir_plt, Module1) == {:ok, :ir_1}
+      assert PLT.size(ir_plt) == 1
+    end
+
+    test "builds and puts the IR of an Elixir module the PLT doesn't hold" do
+      ir_plt = PLT.start()
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: Module1}} = ir} =
+               module_ir(ir_plt, Module1)
+
+      assert PLT.get(ir_plt, Module1) == {:ok, ir}
+    end
+
+    test "Erlang module" do
+      ir_plt = PLT.start()
+
+      assert module_ir(ir_plt, :lists) == :error
+      assert PLT.size(ir_plt) == 0
+    end
+
+    test "module with no beam" do
+      ir_plt = PLT.start()
+
+      assert module_ir(ir_plt, Hologram.Test.Fixtures.Compiler.NoSuchModule) == :error
+      assert PLT.size(ir_plt) == 0
+    end
+  end
+
   describe "partition_affected_pages/6" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_6"])

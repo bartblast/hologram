@@ -1138,6 +1138,23 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the IR of the given module from the IR PLT, building it there first when the PLT does not
+  hold it (see `build_missing_ir!/2`, so that in an umbrella a module still loaded from a consolidated
+  beam the code reloader deleted is read from its object code). Returns `:error` for a module that
+  has no IR: an Erlang module, or one with no beam.
+  """
+  @spec module_ir(PLT.t(), module) :: {:ok, IR.ModuleDefinition.t()} | :error
+  def module_ir(ir_plt, module) do
+    with :error <- PLT.get(ir_plt, module) do
+      if Reflection.elixir_module?(module) do
+        build_missing_ir!(ir_plt, [module])
+      end
+
+      PLT.get(ir_plt, module)
+    end
+  end
+
+  @doc """
   Splits the given pages into the ones a compile must rebuild and the ones whose bundle it can reuse.
 
   A page is rebuilt when the pages PLT holds no state for it (a new page, or the first compile in a
