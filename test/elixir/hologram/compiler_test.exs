@@ -6,10 +6,12 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10, as: DataFlowPage
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
   alias Hologram.Test.Fixtures.Compiler.Module12
@@ -2951,6 +2953,22 @@ defmodule Hologram.CompilerTest do
       ]
     end
 
+    test "passes a data flow context on to the page listing", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas
+    } do
+      module_info_plt = CallGraph.module_info_plt(call_graph_without_runtime_mfas)
+      flow = DataFlow.start(PLT.start(), module_info_plt)
+      analysis_mfa = {DataFlow, :server_callback_analysis, 3}
+
+      assert count_calls(analysis_mfa, fn ->
+               list_mfas_by_page([DataFlowPage], call_graph_without_runtime_mfas, flow: flow)
+             end) > 0
+
+      assert count_calls(analysis_mfa, fn ->
+               list_mfas_by_page([DataFlowPage], call_graph_without_runtime_mfas)
+             end) == 0
+    end
+
     test "lists each page's reachable MFAs", %{
       call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
       page_modules: page_modules
@@ -3076,6 +3094,23 @@ defmodule Hologram.CompilerTest do
         module_info_plt: CallGraph.module_info_plt(call_graph_without_runtime_mfas),
         page_modules: Reflection.list_pages()
       ]
+    end
+
+    test "passes a data flow context on to the page listing", %{
+      call_graph_without_runtime_mfas: call_graph_without_runtime_mfas,
+      module_info_plt: module_info_plt
+    } do
+      flow = DataFlow.start(PLT.start(), module_info_plt)
+      analysis_mfa = {DataFlow, :server_callback_analysis, 3}
+
+      list = fn opts ->
+        CallGraph.with_shared_graph(call_graph_without_runtime_mfas, fn read_graph ->
+          list_mfas_by_page([DataFlowPage], read_graph, PLT.start(), module_info_plt, opts)
+        end)
+      end
+
+      assert count_calls(analysis_mfa, fn -> list.(flow: flow) end) > 0
+      assert count_calls(analysis_mfa, fn -> list.([]) end) == 0
     end
 
     test "lists each page's reachable MFAs through the graph reader", %{

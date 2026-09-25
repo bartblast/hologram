@@ -986,8 +986,9 @@ defmodule Hologram.Compiler do
   against a graph and analyses it shares for the whole compile; this is for a caller that lists once.
   With no page, the graph is not read: a graph still being rebuilt is not waited for. A caller
   with no graph to give (see the compile task's pages graph) passes nil with no page. The opts are
-  passed on to `CallGraph.list_page_mfas/5` (the `:gate` opt says which reflection functions the
-  pages can call).
+  passed on to `CallGraph.list_page_mfas/5`: the `:gate` opt says which reflection functions the
+  pages can call, and the `:flow` opt (a `Hologram.Compiler.DataFlow` context) which types and
+  components the pages' server callbacks can hand to the client.
   """
   @spec list_mfas_by_page([module], CallGraph.t() | nil, T.opts()) :: [{module, [mfa]}]
   def list_mfas_by_page(page_modules, call_graph, opts \\ [])
@@ -1013,7 +1014,8 @@ defmodule Hologram.Compiler do
   page, through the reader of a shared graph (see `CallGraph.with_shared_graph/2`) and the PLT of
   server callback analyses, which the pages fill as they go: a caller listing pages in rounds, as the
   compile task does with its batches, computes each templatable's analysis once for all of them. The
-  opts are passed on to `CallGraph.list_page_mfas/5`.
+  opts are passed on to `CallGraph.list_page_mfas/5` (see `list_mfas_by_page/3` about the `:gate` and
+  `:flow` opts).
   """
   @spec list_mfas_by_page([module], (-> Digraph.t()), PLT.t(), PLT.t() | nil, T.opts()) ::
           [{module, [mfa]}]
