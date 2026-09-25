@@ -572,14 +572,29 @@ defmodule Hologram.Compiler.CallGraph do
   types created in server-executed code of the pages, their components, and the
   broadcast-referenced components, and types reachable from action broadcasting
   code (taken from the given precomputed broadcast caller analysis).
+
+  Options:
+
+    * `:analyses` - a PLT of server callback analyses by templatable (see
+      `server_callback_analysis_by_templatable/4`), read for the server-created types and filled with
+      the analyses it makes, so that a caller listing more with it analyses each templatable once.
+    * `:flow` - a data flow context: the server-created types are the ones that can reach the client
+      (see `Hologram.Compiler.DataFlow.server_callback_analysis/3`).
   """
   @spec app_protocol_dispatch_types(
           Digraph.t(),
           [module],
           broadcast_caller_analysis,
-          PLT.t() | nil
+          PLT.t() | nil,
+          T.opts()
         ) :: MapSet.t(module)
-  def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt) do
+  def app_protocol_dispatch_types(
+        graph,
+        pages,
+        broadcast_caller_analysis,
+        module_info_plt,
+        opts \\ []
+      ) do
     page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas(&1, module_info_plt))
 
     page_vertices =
@@ -599,7 +614,15 @@ defmodule Hologram.Compiler.CallGraph do
       Enum.uniq(pages ++ components ++ broadcast_caller_analysis.referenced_components)
 
     client_types = protocol_dispatch_types(page_vertices, module_info_plt)
-    server_types = server_protocol_dispatch_types(graph, templatables, module_info_plt)
+
+    server_types =
+      case opts[:analyses] do
+        nil ->
+          server_protocol_dispatch_types(graph, templatables, module_info_plt, opts[:flow])
+
+        analyses ->
+          union_server_types(graph, templatables, analyses, module_info_plt, opts[:flow])
+      end
 
     client_types
     |> MapSet.union(server_types)
@@ -1061,11 +1084,7 @@ defmodule Hologram.Compiler.CallGraph do
         module_info_plt
       )
 
-    server_types =
-      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
-        MapSet.union(acc, analysis.dispatch_types)
-      end)
+    server_types = union_server_types(graph, templatables, analyses, module_info_plt, nil)
 
     final_state =
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
@@ -1838,7 +1857,7 @@ defmodule Hologram.Compiler.CallGraph do
     new_components =
       templatables
       |> Enum.flat_map(fn templatable ->
-        server_callback_analysis(graph, templatable, analyses, module_info_plt).server_referenced_components
+        server_callback_analysis(graph, templatable, analyses, module_info_plt, nil).server_referenced_components
       end)
       |> Enum.uniq()
       |> Kernel.--(templatables)
@@ -2037,8 +2056,16 @@ defmodule Hologram.Compiler.CallGraph do
     # every page loads.
     broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
 
+    # The runtime lists against an analyses PLT of its own, filled on demand and stopped once the MFAs
+    # are listed: its analyses are taken on the graph that still holds the runtime's functions, so
+    # they must not mix with the pages'. The app's types and the expansion below share it, so each
+    # templatable is analysed once.
+    analyses = PLT.start()
+
     app_types =
-      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt)
+      app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt,
+        analyses: analyses
+      )
 
     entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
     initial_state = start_reachable_state(graph, entry_vertices, app_types, module_info_plt)
@@ -2052,12 +2079,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     # The same server-referenced component expansion as in list_page_mfas/5, so chains
     # like a broadcast-referenced component whose own server callbacks reference
-    # further components end up in the runtime bundle too. The runtime lists against a PLT
-    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
-    # taken on the graph that still holds the runtime's functions, so they must not mix
-    # with the pages'.
-    analyses = PLT.start()
-
+    # further components end up in the runtime bundle too.
     {expanded_state, templatables} =
       expand_reachable_state_with_server_referenced_components(
         graph,
@@ -2067,11 +2089,7 @@ defmodule Hologram.Compiler.CallGraph do
         module_info_plt
       )
 
-    server_types =
-      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
-        MapSet.union(acc, analysis.dispatch_types)
-      end)
+    server_types = union_server_types(graph, templatables, analyses, module_info_plt, nil)
 
     PLT.stop(analyses)
 
@@ -2414,9 +2432,10 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  # A templatable's server callback analysis, from the PLT when it holds one, else computed and
-  # put there for the pages listed after this one.
-  defp server_callback_analysis(graph, templatable, analyses, module_info_plt) do
+  # A templatable's server callback analysis, from the PLT when it holds one, else computed (through
+  # the data flow when a context is given, see server_callback_analysis_by_templatable/4) and put
+  # there for the pages listed after this one.
+  defp server_callback_analysis(graph, templatable, analyses, module_info_plt, flow) do
     case PLT.get(analyses, templatable) do
       {:ok, analysis} ->
         analysis
@@ -2424,7 +2443,7 @@ defmodule Hologram.Compiler.CallGraph do
       :error ->
         analysis =
           graph
-          |> server_callback_analysis_by_templatable([templatable], module_info_plt)
+          |> server_callback_analysis_by_templatable([templatable], module_info_plt, flow)
           |> Map.fetch!(templatable)
 
         PLT.put(analyses, templatable, analysis)
@@ -2458,6 +2477,15 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp unbuilt_module?(module, graph_modules, module_info_plt) do
     not MapSet.member?(graph_modules, module) and PLT.member?(module_info_plt, module)
+  end
+
+  # The union of the given templatables' server dispatch types, their analyses read from the PLT
+  # and put there when missing (see server_callback_analysis/5).
+  defp union_server_types(graph, templatables, analyses, module_info_plt, flow) do
+    Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+      analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt, flow)
+      MapSet.union(acc, analysis.dispatch_types)
+    end)
   end
 
   # Replaces the agent's graph with what the function makes of it, keeping the modules and the reach.

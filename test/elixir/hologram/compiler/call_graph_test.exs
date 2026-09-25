@@ -423,7 +423,57 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
-  describe "app_protocol_dispatch_types/4" do
+  describe "app_protocol_dispatch_types/5" do
+    test "server types come from the given analyses PLT" do
+      analyses =
+        PLT.put(PLT.start(), Module2, %{
+          dispatch_types: MapSet.new([Struct1]),
+          server_referenced_components: []
+        })
+
+      no_broadcasts = %{dispatch_types: MapSet.new(), referenced_components: []}
+
+      types =
+        app_protocol_dispatch_types(
+          Digraph.new(),
+          [Module2],
+          no_broadcasts,
+          module_info_plt_fixture(),
+          analyses: analyses
+        )
+
+      assert Struct1 in types
+    end
+
+    test "puts the server callback analyses it makes in the given analyses PLT" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
+      analyses = PLT.start()
+      no_broadcasts = %{dispatch_types: MapSet.new(), referenced_components: []}
+
+      app_protocol_dispatch_types(graph, [Module2], no_broadcasts, module_info_plt_fixture(),
+        analyses: analyses
+      )
+
+      assert {:ok, %{dispatch_types: dispatch_types}} = PLT.get(analyses, Module2)
+      assert Struct1 in dispatch_types
+    end
+
+    test "with a data flow context, a struct server code builds and drops is no app type" do
+      no_broadcasts = %{dispatch_types: MapSet.new(), referenced_components: []}
+
+      types =
+        app_protocol_dispatch_types(
+          data_flow_page_graph(),
+          [DataFlowPage],
+          no_broadcasts,
+          module_info_plt_fixture(),
+          flow: data_flow_fixture()
+        )
+
+      refute DataFlowStruct1 in types
+      assert DataFlowStruct2 in types
+    end
+
     test "includes types reachable from page client code" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
 
