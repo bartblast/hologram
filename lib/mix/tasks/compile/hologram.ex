@@ -60,6 +60,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
 
@@ -241,6 +242,13 @@ defmodule Mix.Tasks.Compile.Hologram do
           module_digests_diff.removed_modules ++ module_digests_diff.edited_modules
         )
 
+      # What server code can hand to the client (see Hologram.Compiler.DataFlow), read from this
+      # compile's IR PLT, where it builds the IR it reads, and followed for every listing of the
+      # runtime and of pages, so that a type or a component only server code meets ships nothing.
+      # Its summaries hold for the whole compile: they depend on the code, not on the graph. Stopped
+      # with the supervisor.
+      flow = DataFlow.start(ir_plt, new_module_info_plt, supervisor: sup)
+
       # The graph holds the modules the pages, the runtime and the broadcast callers reach, no more
       # (see Hologram.Compiler.build_reach!/3), so only the modules of the diff it holds or must
       # come to hold are patched. On a build into an empty build dir those are the pages and the
@@ -282,7 +290,13 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       runtime_mfas =
-        list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
+        list_runtime_mfas(
+          cache.runtime,
+          call_graph_for_runtime,
+          page_modules,
+          flow,
+          runtime_kept?
+        )
 
       # What the runtime's dynamic calls open for every page, taken while the runtime graph still
       # holds the runtime's MFAs (build_pages_graph/2 below takes them out), and kept when they are.
@@ -322,6 +336,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {pages_to_rebuild, kept_pages} =
         Compiler.partition_pages_to_rebuild(page_modules, call_graph_for_pages,
+          flow: flow,
           gate: gate,
           js_fingerprints: js_fingerprints,
           page_mfas_plt: cache.page_mfas_plt,
@@ -357,7 +372,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       unrecorded_mfas_by_page =
         pages_to_rebuild
         |> Enum.reject(&MapSet.member?(recorded_pages, &1))
-        |> Compiler.list_mfas_by_page(call_graph_for_pages, gate: gate)
+        |> Compiler.list_mfas_by_page(call_graph_for_pages, flow: flow, gate: gate)
 
       # The modules each page reaches: as its last built state recorded them, or as this compile
       # lists them for a page that has no state.
@@ -513,6 +528,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         client_config: client_config,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
+        flow: flow,
         gate: gate,
         ir_plt: ir_plt,
         links: links,
@@ -1070,6 +1086,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     mfas_by_page =
       unlisted_pages
       |> Compiler.list_mfas_by_page(context.read_graph, context.analyses, context.module_info_plt,
+        flow: context.flow,
         gate: context.gate
       )
       |> Enum.concat(listed_mfas_by_page)
@@ -1106,10 +1123,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)
   # finds the ones the runtime bundle on disk was built from.
-  defp list_runtime_mfas(kept_runtime, _call_graph, _page_modules, true), do: kept_runtime.mfas
+  defp list_runtime_mfas(kept_runtime, _call_graph, _page_modules, _flow, true),
+    do: kept_runtime.mfas
 
-  defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, false) do
-    CallGraph.list_runtime_mfas(call_graph, page_modules)
+  defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, flow, false) do
+    CallGraph.list_runtime_mfas(call_graph, page_modules, flow: flow)
   end
 
   # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which

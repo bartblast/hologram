@@ -66,6 +66,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @reflection_open_page Hologram.Test.Fixtures.Compiler.CallGraph.Module44
   @reflection_schema Hologram.Test.Fixtures.Compiler.CallGraph.Module24
 
+  # The String.Chars implementations of two structs of the data flow fixtures' page: its init/3 builds
+  # the first and drops it (no other fixture hands it to the client), and puts the second in state.
+  @dropped_struct_impl String.Chars.Hologram.Test.Fixtures.Compiler.DataFlow.Struct6
+  @state_struct_impl String.Chars.Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
+
   # The cache's state with the kept module infos as a map, nil while they are untrusted (no editable
   # modules kept), as the tests read them.
   defp cache_state do
@@ -2960,6 +2965,25 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       refute {:__struct__, 1} in open
       assert exposed[{{Kernel, :struct!, 2}, 0}] == MapSet.new([{:__struct__, 1}])
+    end
+  end
+
+  describe "server-created types" do
+    setup %{opts: opts} do
+      on_exit(&Cache.reset/0)
+      forget_kept_state(opts)
+    end
+
+    test "a type server code builds and drops ships no protocol implementation", %{opts: opts} do
+      run(opts)
+
+      refute {@dropped_struct_impl, :to_string, 1} in cache_state().runtime.mfas
+    end
+
+    test "a type server code puts in the state ships its protocol implementations", %{opts: opts} do
+      run(opts)
+
+      assert {@state_struct_impl, :to_string, 1} in cache_state().runtime.mfas
     end
   end
 

@@ -28,6 +28,7 @@ defmodule Hologram.Compiler.DataFlow do
   #      pattern that names a module or a struct holds what the pattern names.
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.DataFlow.Models
@@ -235,11 +236,12 @@ defmodule Hologram.Compiler.DataFlow do
 
   @doc """
   Starts the analysis of a compile, which reads IR from the given IR PLT and module facts from the
-  given module info PLT.
+  given module info PLT. The opts are given to the PLT it keeps its summaries in (see
+  `Hologram.Commons.PLT.start/1`: a `:supervisor` stops it with the supervisor).
   """
-  @spec start(PLT.t(), PLT.t()) :: t
-  def start(ir_plt, module_info_plt) do
-    %{ir_plt: ir_plt, module_info_plt: module_info_plt, summaries: PLT.start()}
+  @spec start(PLT.t(), PLT.t(), T.opts()) :: t
+  def start(ir_plt, module_info_plt, opts \\ []) do
+    %{ir_plt: ir_plt, module_info_plt: module_info_plt, summaries: PLT.start(opts)}
   end
 
   @doc """

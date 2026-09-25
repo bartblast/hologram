@@ -1221,6 +1221,8 @@ defmodule Hologram.Compiler do
     * `:gate` - the dynamic call gate the pages are listed with (see
       `Hologram.Compiler.DynamicCallGate`); read only with `:relist_all?`, where the kept pages are
       listed again with it, as their kept MFA lists were. Defaults to none.
+    * `:flow` - the data flow context the pages are listed with (see `Hologram.Compiler.DataFlow`);
+      read only with `:relist_all?`, like `:gate`. Defaults to none.
     * `:pages_plt` - the PLT of page states kept by `Hologram.Compiler.Cache`.
     * `:page_mfas_plt` - the PLT of page MFA lists kept by `Hologram.Compiler.Cache`; read only with
       `:relist_all?`. A kept page it has no list for is rebuilt then.
@@ -1265,7 +1267,7 @@ defmodule Hologram.Compiler do
 
     if opts[:relist_all?] do
       {moved_pages, still_kept_pages} =
-        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt], opts[:gate])
+        relist_kept_pages(kept_pages, call_graph, opts[:page_mfas_plt], opts[:gate], opts[:flow])
 
       {pages_to_rebuild ++ moved_pages, still_kept_pages}
     else
@@ -2104,11 +2106,11 @@ defmodule Hologram.Compiler do
   # page's MFAs as its bundle was built from them are read from the page MFAs PLT. A page with no
   # list there counts as moved: its state was loaded from the compile state dump, which does not hold
   # the lists (see Hologram.Compiler.Cache.dump_compile_state/2).
-  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt, gate) do
+  defp relist_kept_pages(kept_pages, call_graph, page_mfas_plt, gate, flow) do
     mfas_by_kept_page =
       kept_pages
       |> Enum.map(fn {page_module, _page_state} -> page_module end)
-      |> list_mfas_by_page(call_graph, gate: gate)
+      |> list_mfas_by_page(call_graph, gate: gate, flow: flow)
       |> Map.new()
 
     {changed_pages, unchanged_pages} =

@@ -7,16 +7,18 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module10 do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct4
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct6
 
   route "/hologram-test-fixtures-compiler-dataflow-module10"
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
-  # Struct1 is built and dropped on the server, Struct2 and the Module11 component reach the state,
-  # Struct3 stays in the session.
+  # Struct1 and Struct6 are built and dropped on the server (no other fixture hands Struct6 to the
+  # client), Struct2 and the Module11 component reach the state, Struct3 stays in the session.
   def init(_params, component, server) do
     new_component =
       put_state(component,
+        label: describe(%Struct6{field: :label}),
         text: describe(%Struct1{field: :transient}),
         struct: %Struct2{},
         component: Module11

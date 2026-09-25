@@ -75,6 +75,9 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias String.Chars.Hologram.Test.Fixtures.Compiler.DataFlow.Struct2,
     as: StringCharsDataFlowStruct2
 
+  alias String.Chars.Hologram.Test.Fixtures.Compiler.DataFlow.Struct6,
+    as: StringCharsDataFlowStruct6
+
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
   @tmp_dir Reflection.tmp_dir()
@@ -3055,9 +3058,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     # built-in type implementations would break rendering of primitives on every page,
     # while any extra entry means implementations of unreachable types (and their
     # dependency subtrees) are getting pulled into the runtime bundle again.
-    # Besides them, the implementations for DataFlowStruct1 and DataFlowStruct2: the data flow
-    # fixtures' page and broadcaster name those structs in server code, which the runtime listed
-    # without a data flow context counts.
+    # Besides them, the implementations for three structs of the data flow fixtures, whose page and
+    # broadcaster name them in server code, which the runtime listed without a data flow context
+    # counts.
     test "includes exactly the built-in type implementations of String.Chars", %{
       runtime_mfas: result
     } do
@@ -3074,6 +3077,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                String.Chars.Float,
                StringCharsDataFlowStruct1,
                StringCharsDataFlowStruct2,
+               StringCharsDataFlowStruct6,
                String.Chars.Integer,
                String.Chars.List
              ]
