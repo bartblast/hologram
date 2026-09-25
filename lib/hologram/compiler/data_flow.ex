@@ -28,8 +28,13 @@ defmodule Hologram.Compiler.DataFlow do
   #      pattern that names a module or a struct holds what the pattern names.
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+
+  # How many summaries can be in the making at once, one inside another. A call past it gives the
+  # callee's top.
+  @max_call_depth 64
 
   # Shapes of unknown structure: they can hold anything, so they can match any pattern, and a part
   # of one is the shape itself.
@@ -85,20 +90,28 @@ defmodule Hologram.Compiler.DataFlow do
   @type t :: %{ir_plt: PLT.t(), module_info_plt: PLT.t(), summaries: PLT.t()}
 
   @doc """
+  Returns the shapes a summary (see `summary/2`) gives for a call with arguments of the given
+  shapes: each `{:param, index}` in it, at any depth, replaced with the argument's shapes. A missing
+  argument gives nothing.
+  """
+  @spec apply_summary(shapes, [shapes]) :: shapes
+  def apply_summary(summary, args) do
+    summary
+    |> Enum.map(&substitute(&1, args))
+    |> union()
+  end
+
+  @doc """
   Returns the shapes of the value the given expression gives, where the expression is in the given
   clause of the given function: a variable holds what its binding in the clause gives, and a
   parameter of the clause is `{:param, index}`.
   """
   @spec shapes(IR.t(), IR.FunctionClause.t(), mfa, t) :: shapes
   def shapes(expr, clause, mfa, flow) do
-    # Each variable's shapes, once read, keyed by its frame and itself.
-    memo = :ets.new(__MODULE__, [:set, :private])
-
-    try do
-      eval(expr, %{flow: flow, frames: [clause_frame(clause)], memo: memo, mfa: mfa})
-    after
-      :ets.delete(memo)
-    end
+    run(fn memo ->
+      ctx = %{flow: flow, frames: [clause_frame(clause)], memo: memo, mfa: mfa, stack: [mfa]}
+      eval(expr, ctx)
+    end)
   end
 
   @doc """
@@ -117,13 +130,30 @@ defmodule Hologram.Compiler.DataFlow do
   def stop(%{summaries: summaries}), do: PLT.stop(summaries)
 
   @doc """
+  Returns the summary of the given function: the shapes of the value it returns, in terms of its
+  parameters (`{:param, index}`), the union over its clauses. A function with no IR (one of an
+  Erlang module, or of a module with no beam) or that its module doesn't define returns everything
+  it is given. A summary is kept in the analysis once made, for the rest of the compile.
+
+  A call of a function whose summary is still being made (recursion) gives the callee's top, for
+  now, and so does a call made with too many summaries in the making, one inside another.
+  """
+  @spec summary(mfa, t) :: shapes
+  def summary(mfa, flow) do
+    run(fn memo ->
+      callee_summary(mfa, %{flow: flow, frames: [], memo: memo, mfa: mfa, stack: []})
+    end)
+  end
+
+  @doc """
   Returns what the given function's value is when the analysis cannot follow it: the rule before
   this module applied from the function, and everything the function is given.
   """
   @spec top(mfa) :: shapes
   def top({_module, _function, arity} = mfa) do
-    params = for index <- 0..(arity - 1)//1, do: {:param, index}
-    MapSet.new([{:reach, mfa} | params])
+    arity
+    |> params()
+    |> MapSet.put({:reach, mfa})
   end
 
   # Records that every variable of the pattern is bound by matching the pattern against the subject
@@ -135,6 +165,23 @@ defmodule Hologram.Compiler.DataFlow do
       |> Enum.reduce(acc, &put_binding(&2, &1, {pattern, subject}))
 
     put_pattern_extras(new_acc, pattern)
+  end
+
+  # The summary of a function a call reaches, from the analysis when made already.
+  defp callee_summary(mfa, ctx) do
+    if mfa in ctx.stack or length(ctx.stack) >= @max_call_depth do
+      top(mfa)
+    else
+      case PLT.get(ctx.flow.summaries, mfa) do
+        {:ok, summary} ->
+          summary
+
+        :error ->
+          summary = function_summary(mfa, ctx)
+          PLT.put(ctx.flow.summaries, mfa, summary)
+          summary
+      end
+    end
   end
 
   # The variables of a function clause (or, later, of an anonymous function's clause), each with the
@@ -222,6 +269,11 @@ defmodule Hologram.Compiler.DataFlow do
     MapSet.new([{:list, eval_all(data, ctx)}])
   end
 
+  defp eval(%IR.LocalFunctionCall{function: function, args: args}, ctx) do
+    {module, _function, _arity} = ctx.mfa
+    eval_call({module, function, length(args)}, args, ctx)
+  end
+
   defp eval(%IR.MapType{data: data}, ctx) do
     MapSet.new([map_shape(data, &eval(&1, ctx))])
   end
@@ -246,6 +298,17 @@ defmodule Hologram.Compiler.DataFlow do
       |> union()
 
     MapSet.new([{:struct, module, fields}])
+  end
+
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: function,
+           args: args
+         },
+         ctx
+       ) do
+    eval_call({module, function, length(args)}, args, ctx)
   end
 
   # With else clauses, the body's value goes through them; a rescue or a catch gives its own.
@@ -291,6 +354,22 @@ defmodule Hologram.Compiler.DataFlow do
     exprs
     |> Enum.map(&eval(&1, ctx))
     |> union()
+  end
+
+  # The callee's summary with the arguments put in. An argument the summary doesn't hold is not
+  # followed: whatever it holds can't reach the call's value.
+  defp eval_call(mfa, args, ctx) do
+    summary = callee_summary(mfa, ctx)
+    used_indexes = param_indexes(summary, MapSet.new())
+
+    arg_shapes =
+      args
+      |> Enum.with_index()
+      |> Enum.map(fn {arg, index} ->
+        if MapSet.member?(used_indexes, index), do: eval(arg, ctx), else: MapSet.new()
+      end)
+
+    apply_summary(summary, arg_shapes)
   end
 
   # The part of a value of the given shapes that the pattern binds to the variable, from the
@@ -357,6 +436,26 @@ defmodule Hologram.Compiler.DataFlow do
       MapSet.new([shape])
     else
       MapSet.new()
+    end
+  end
+
+  defp function_clauses({module, function, arity}, ctx) do
+    module
+    |> module_functions(ctx)
+    |> Map.get({function, arity})
+  end
+
+  defp function_summary({_module, _function, arity} = mfa, ctx) do
+    case function_clauses(mfa, ctx) do
+      nil ->
+        MapSet.new([{:bag, params(arity)}])
+
+      clauses ->
+        function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
+
+        clauses
+        |> Enum.map(&eval(&1.body, %{function_ctx | frames: [clause_frame(&1)]}))
+        |> union()
     end
   end
 
@@ -518,6 +617,20 @@ defmodule Hologram.Compiler.DataFlow do
     opaque?(shape) or structurally_may_match?(shape, pattern)
   end
 
+  # The clauses of each function of the module, by name and arity, none for a module with no IR. A
+  # module's IR is read out of the IR PLT once per run (see run/1) and kept in the process
+  # dictionary, since a read copies the whole module out of ETS and some generated modules hold
+  # over a hundred megabytes of IR.
+  defp module_functions(module, ctx) do
+    key = {__MODULE__, :functions, module}
+
+    with nil <- Process.get(key) do
+      functions = read_module_functions(module, ctx)
+      Process.put(key, functions)
+      functions
+    end
+  end
+
   # Whether a pattern names a type: an alias, or a struct, whose module is one.
   defp names_type?(%IR.AtomType{value: value}) do
     value
@@ -554,6 +667,25 @@ defmodule Hologram.Compiler.DataFlow do
     |> Enum.map(shapes_fun)
     |> union()
   end
+
+  # The indexes of the params the shapes hold, at any depth.
+  defp param_indexes({:param, index}, acc), do: MapSet.put(acc, index)
+
+  defp param_indexes(set, acc) when is_struct(set, MapSet) do
+    Enum.reduce(set, acc, &param_indexes/2)
+  end
+
+  defp param_indexes(list, acc) when is_list(list), do: Enum.reduce(list, acc, &param_indexes/2)
+
+  defp param_indexes(tuple, acc) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> param_indexes(acc)
+  end
+
+  defp param_indexes(_term, acc), do: acc
+
+  defp params(arity), do: MapSet.new(0..(arity - 1)//1, &{:param, &1})
 
   # The shapes a pattern names, a variable, a placeholder or a pin naming nothing.
   defp pattern_shapes(%IR.AtomType{value: value}), do: MapSet.new([{:atom, value}])
@@ -679,6 +811,18 @@ defmodule Hologram.Compiler.DataFlow do
     put_side_extras(acc, subject_expr, pattern)
   end
 
+  defp read_module_functions(module, ctx) do
+    case Compiler.module_ir(ctx.flow.ir_plt, module) do
+      {:ok, module_def} ->
+        module_def
+        |> IR.aggregate_module_funs()
+        |> Map.new(fn {name_arity, {_visibility, clauses}} -> {name_arity, clauses} end)
+
+      :error ->
+        %{}
+    end
+  end
+
   # The variable's shapes, from the innermost frame that knows it, read once per frame.
   defp read_variable(var, ctx) do
     case Enum.find(ctx.frames, &(Map.has_key?(&1.bindings, var) or Map.has_key?(&1.extras, var))) do
@@ -702,6 +846,23 @@ defmodule Hologram.Compiler.DataFlow do
             :ets.insert(ctx.memo, {key, shapes})
             shapes
         end
+    end
+  end
+
+  # Runs a public entry with an ETS table the variables' shapes are kept in once read (see
+  # read_variable/2), and forgets the modules' functions it read (see module_functions/2) when done.
+  # An entry never runs inside another one.
+  defp run(fun) do
+    memo = :ets.new(__MODULE__, [:set, :private])
+
+    try do
+      fun.(memo)
+    after
+      :ets.delete(memo)
+
+      for {{__MODULE__, :functions, _module} = key, _functions} <- Process.get() do
+        Process.delete(key)
+      end
     end
   end
 
@@ -776,6 +937,41 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp subject_shapes(:top, ctx), do: top(ctx.mfa)
+
+  # A shape with the given arguments put in for its params (see apply_summary/2). The rule before
+  # this module applied from a vertex holds no params.
+  defp substitute({:param, index}, args), do: Enum.at(args, index, MapSet.new())
+
+  defp substitute({:struct, module, fields}, args) do
+    MapSet.new([{:struct, module, apply_summary(fields, args)}])
+  end
+
+  defp substitute({kind, inner}, args) when kind in [:bag, :list, :map] do
+    MapSet.new([{kind, apply_summary(inner, args)}])
+  end
+
+  defp substitute({:tuple, elements}, args) do
+    MapSet.new([{:tuple, Enum.map(elements, &apply_summary(&1, args))}])
+  end
+
+  defp substitute({:fun, ref, returned}, args) do
+    MapSet.new([{:fun, ref, apply_summary(returned, args)}])
+  end
+
+  defp substitute({:call, fun, call_args}, args) do
+    MapSet.new([
+      {:call, apply_summary(fun, args), Enum.map(call_args, &apply_summary(&1, args))}
+    ])
+  end
+
+  defp substitute({:dyn, module, name, arity, call_args}, args) do
+    MapSet.new([
+      {:dyn, apply_summary(module, args), name, arity,
+       Enum.map(call_args, &apply_summary(&1, args))}
+    ])
+  end
+
+  defp substitute(shape, _args), do: MapSet.new([shape])
 
   defp union(sets), do: Enum.reduce(sets, MapSet.new(), &MapSet.union/2)
 

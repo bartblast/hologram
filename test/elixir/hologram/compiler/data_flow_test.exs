@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -37,6 +38,29 @@ defmodule Hologram.Compiler.DataFlowTest do
     %IR.FunctionClause{params: params, body: body} = clause = clause(module, function)
 
     shapes(body, clause, {module, function, length(params)}, flow())
+  end
+
+  defp summary_of(module, function, arity), do: summary({module, function, arity}, flow())
+
+  describe "apply_summary/2" do
+    test "puts the arguments in for the params, at any depth" do
+      summary = MapSet.new([{:list, @param_0}, {:tuple, [MapSet.new([{:param, 1}])]}])
+      args = [MapSet.new([@struct_1]), MapSet.new([:prim])]
+
+      assert apply_summary(summary, args) ==
+               MapSet.new([{:list, MapSet.new([@struct_1])}, {:tuple, [MapSet.new([:prim])]}])
+    end
+
+    test "a missing argument gives nothing" do
+      assert apply_summary(MapSet.new([{:param, 2}, {:atom, :ok}]), [@param_0]) ==
+               MapSet.new([{:atom, :ok}])
+    end
+
+    test "keeps what holds no params" do
+      summary = MapSet.new([{:reach, {Module3, :build, 0}}, :prim])
+
+      assert apply_summary(summary, []) == summary
+    end
   end
 
   describe "shapes/4" do
@@ -254,6 +278,91 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     assert stop(flow) == :ok
     refute Process.alive?(pid)
+  end
+
+  describe "summary/2" do
+    test "function building a struct" do
+      assert summary_of(Module3, :build, 0) == MapSet.new([@struct_1])
+    end
+
+    test "function building a struct from its param" do
+      fields = MapSet.new([{:atom, :field}, {:param, 0}])
+
+      assert summary_of(Module3, :build_from, 1) == MapSet.new([{:struct, Struct1, fields}])
+    end
+
+    test "call of a local function" do
+      assert summary_of(Module3, :calls_build, 0) == MapSet.new([@struct_1])
+    end
+
+    test "call puts its arguments in the callee's summary" do
+      fields = MapSet.new([{:atom, :field}, @struct_2])
+
+      assert summary_of(Module3, :calls_build_from, 0) == MapSet.new([{:struct, Struct1, fields}])
+    end
+
+    test "call of an Erlang function gives everything it is given" do
+      assert summary_of(Module3, :calls_erlang, 1) == MapSet.new([{:bag, @param_0}])
+    end
+
+    test "call of a remote function" do
+      assert summary_of(Module3, :calls_remote, 0) == MapSet.new([@struct_1])
+    end
+
+    test "call whose value a pattern takes apart" do
+      assert summary_of(Module3, :calls_wrap, 0) == MapSet.new([@struct_1])
+    end
+
+    test "an argument the callee's value doesn't hold is not followed" do
+      flow = flow()
+
+      assert summary({Module3, :calls_ignores, 0}, flow) == MapSet.new([{:atom, :ok}])
+      refute PLT.member?(flow.summaries, {Module3, :build, 0})
+    end
+
+    test "a call whose value is dropped is not followed" do
+      flow = flow()
+
+      assert summary({Module3, :drops_result, 0}, flow) == MapSet.new([{:atom, :ok}])
+      refute PLT.member?(flow.summaries, {Module3, :build, 0})
+    end
+
+    test "Erlang function" do
+      assert summary_of(:lists, :reverse, 1) == MapSet.new([{:bag, @param_0}])
+    end
+
+    test "function its module doesn't define" do
+      assert summary_of(Module3, :no_such_function, 0) == MapSet.new([{:bag, MapSet.new()}])
+    end
+
+    test "is kept in the analysis, with the summaries of the functions it calls" do
+      flow = flow()
+      summary = summary({Module3, :calls_build, 0}, flow)
+
+      assert PLT.get(flow.summaries, {Module3, :calls_build, 0}) == {:ok, summary}
+      assert PLT.get(flow.summaries, {Module3, :build, 0}) == {:ok, MapSet.new([@struct_1])}
+    end
+
+    test "param" do
+      assert summary_of(Module3, :identity, 1) == @param_0
+    end
+
+    test "recursive call gives the callee's top with the arguments put in" do
+      mfa = {Module3, :recursive, 1}
+      count_minus_one = {:bag, MapSet.new([{:param, 0}, :prim])}
+
+      assert summary_of(Module3, :recursive, 1) ==
+               MapSet.new([@struct_1, {:reach, mfa}, count_minus_one])
+    end
+
+    test "function with two clauses" do
+      assert summary_of(Module3, :two_clauses, 1) == MapSet.new([@struct_1, @struct_2])
+    end
+
+    test "function returning its param in a tuple" do
+      assert summary_of(Module3, :wrap, 1) ==
+               MapSet.new([{:tuple, [MapSet.new([{:atom, :ok}]), @param_0]}])
+    end
   end
 
   describe "top/1" do
