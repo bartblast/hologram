@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -33,12 +34,13 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     ir_plt = Compiler.build_ir_plt()
     aggregated_funs = aggregate_funs(ir_plt)
 
-    {call_graph, gate} = build_call_graph(ir_plt)
+    {call_graph, gate, flow} = build_call_graph(ir_plt)
     graph = CallGraph.get_graph(call_graph)
     analyses = PLT.start()
 
     graph
     |> CallGraph.list_page_mfas(page_module, analyses, CallGraph.module_info_plt(call_graph),
+      flow: flow,
       gate: gate
     )
     |> filter_elixir_mfas()
@@ -62,9 +64,9 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     end)
   end
 
-  # The pages graph, with the gate the compile task lists pages with (see
-  # Hologram.Compiler.DynamicCallGate): what the runtime's dynamic calls open is taken before the
-  # runtime's MFAs are removed, as the compile task does.
+  # The pages graph, with the gate and the data flow context the compile task lists pages with (see
+  # Hologram.Compiler.DynamicCallGate and Hologram.Compiler.DataFlow): what the runtime's dynamic
+  # calls open is taken before the runtime's MFAs are removed, as the compile task does.
   defp build_call_graph(ir_plt) do
     ir_plt
     |> Compiler.build_call_graph()
@@ -96,16 +98,15 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
   end
 
   defp remove_runtime_mfas(call_graph, ir_plt) do
-    page_modules =
-      call_graph
-      |> CallGraph.module_info_plt()
-      |> Compiler.list_pages()
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    page_modules = Compiler.list_pages(module_info_plt)
+    flow = DataFlow.start(ir_plt, module_info_plt)
 
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules, flow: flow)
     runtime_dynamic_calls = CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
     gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
 
-    {CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas), gate}
+    {CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas), gate, flow}
   end
 
   defp sort_by_size_and_mfa(encoded_fun_sizes) do

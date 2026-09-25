@@ -11,8 +11,10 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
 
   use Mix.Task
 
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.Digraph
 
   @requirements ["app.config"]
@@ -24,12 +26,13 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
 
     call_graph = CallGraph.remove_manually_ported_mfas(Compiler.build_call_graph())
 
-    page_modules =
-      call_graph
-      |> CallGraph.module_info_plt()
-      |> Compiler.list_pages()
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    page_modules = Compiler.list_pages(module_info_plt)
 
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
+    # What the compiler ships: the server types the data flow finds (see Hologram.Compiler.DataFlow).
+    flow = DataFlow.start(PLT.start(), module_info_plt)
+
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules, flow: flow)
 
     if dest_mfa in runtime_mfas do
       print_runtime_mfa_paths(call_graph, dest_mfa)
