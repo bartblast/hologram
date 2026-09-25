@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -366,12 +367,44 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module3, :identity, 1) == @param_0
     end
 
-    test "recursive call gives the callee's top with the arguments put in" do
-      mfa = {Module3, :recursive, 1}
-      count_minus_one = {:bag, MapSet.new([{:param, 0}, :prim])}
+    test "recursive function" do
+      assert summary_of(Module3, :recursive, 1) == MapSet.new([@struct_1])
+    end
 
-      assert summary_of(Module3, :recursive, 1) ==
-               MapSet.new([@struct_1, {:reach, mfa}, count_minus_one])
+    test "recursive function whose answer is found on a later pass" do
+      assert summary_of(Module4, :direct, 1) == MapSet.new([@struct_1])
+    end
+
+    test "recursive function passing its param on" do
+      assert summary_of(Module4, :join, 2) == MapSet.new([{:param, 1}, :prim])
+    end
+
+    test "a caller of a recursive function gets its final answer, and both are kept" do
+      flow = flow()
+
+      assert summary({Module4, :calls_direct, 0}, flow) == MapSet.new([@struct_1])
+      assert PLT.get(flow.summaries, {Module4, :direct, 1}) == {:ok, MapSet.new([@struct_1])}
+      assert PLT.member?(flow.summaries, {Module4, :calls_direct, 0})
+    end
+
+    test "mutually recursive functions" do
+      assert summary_of(Module4, :mutual_a, 1) == MapSet.new([{:atom, :done}, @struct_2])
+    end
+
+    test "a summary that read an answer still in the making is not kept" do
+      flow = flow()
+      summary({Module4, :mutual_a, 1}, flow)
+
+      assert PLT.member?(flow.summaries, {Module4, :mutual_a, 1})
+      refute PLT.member?(flow.summaries, {Module4, :mutual_b, 1})
+    end
+
+    test "recursive function whose answer never settles takes its recursive calls' arguments" do
+      count_minus_one = {:bag, MapSet.new([{:param, 0}, :prim])}
+      recursive_call = {:bag, MapSet.new([count_minus_one])}
+
+      assert summary_of(Module4, :growing, 1) ==
+               MapSet.new([@struct_1, {:tuple, [MapSet.new([recursive_call])]}])
     end
 
     test "function with two clauses" do

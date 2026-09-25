@@ -36,6 +36,10 @@ defmodule Hologram.Compiler.DataFlow do
   # callee's top.
   @max_call_depth 64
 
+  # How many times a recursive function is read before its answer is taken from the arguments of
+  # its recursive calls instead (see fixpoint_summary/2).
+  @max_rounds 4
+
   # Shapes of unknown structure: they can hold anything, so they can match any pattern, and a part
   # of one is the shape itself.
   @opaque_kinds [:arg, :bag, :call, :dyn, :param, :reach]
@@ -142,8 +146,10 @@ defmodule Hologram.Compiler.DataFlow do
   Erlang module, or of a module with no beam) or that its module doesn't define returns everything
   it is given. A summary is kept in the analysis once made, for the rest of the compile.
 
-  A call of a function whose summary is still being made (recursion) gives the callee's top, for
-  now, and so does a call made with too many summaries in the making, one inside another.
+  A recursive function is read again until its answer stops changing, each recursive call giving
+  the answer of the pass before, the first one nothing. Past a few passes, one last pass answers a
+  recursive call with whatever its arguments hold. A call made with too many summaries in the
+  making, one inside another, gives the callee's top.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
@@ -191,20 +197,29 @@ defmodule Hologram.Compiler.DataFlow do
     put_pattern_extras(new_acc, pattern)
   end
 
-  # The summary of a function a call reaches, from the analysis when made already.
-  defp callee_summary(mfa, ctx) do
-    if mfa in ctx.stack or length(ctx.stack) >= @max_call_depth do
-      top(mfa)
-    else
-      case PLT.get(ctx.flow.summaries, mfa) do
-        {:ok, summary} ->
-          summary
+  # The summary of a function a call reaches: from the analysis when made already, the current
+  # answer when it is in the making (a recursive call, see fixpoint_summary/2), else made now.
+  defp callee_summary({_module, _function, arity} = mfa, ctx) do
+    case PLT.get(ctx.flow.summaries, mfa) do
+      {:ok, summary} ->
+        summary
 
-        :error ->
-          summary = function_summary(mfa, ctx)
-          PLT.put(ctx.flow.summaries, mfa, summary)
-          summary
-      end
+      :error ->
+        case :ets.lookup(ctx.memo, {:in_progress, mfa}) do
+          [{_key, _depth, :fallback, _read?}] ->
+            MapSet.new([{:bag, params(arity)}])
+
+          [{key, depth, answer, _read?}] ->
+            :ets.insert(ctx.memo, {key, depth, answer, true})
+            note_read_depth(depth, ctx)
+            answer
+
+          [] when length(ctx.stack) >= @max_call_depth ->
+            top(mfa)
+
+          [] ->
+            fixpoint_summary(mfa, ctx)
+        end
     end
   end
 
@@ -463,6 +478,53 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  # Makes the function's summary, reading the function again while a recursive call read an answer
+  # that differs from the one the pass gave. The function's entry in the memo table holds its depth
+  # (the number of summaries in the making below it), its current answer and whether a call read it.
+  #
+  # A summary that read the answer of a function lower on the stack (one it is called from, still
+  # in the making) holds an answer that can change, so it is not kept: it is made again when asked
+  # for again. The lowest depth read so far is kept in the memo table, per summary in the making.
+  defp fixpoint_summary(mfa, ctx) do
+    depth = length(ctx.stack)
+    [{:lowest_read_depth, outer_lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
+    :ets.insert(ctx.memo, {:lowest_read_depth, :none})
+
+    summary = fixpoint_round(mfa, depth, MapSet.new(), 1, ctx)
+
+    [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
+    :ets.delete(ctx.memo, {:in_progress, mfa})
+
+    if lowest < depth do
+      :ets.insert(ctx.memo, {:lowest_read_depth, min(outer_lowest, lowest)})
+    else
+      :ets.insert(ctx.memo, {:lowest_read_depth, outer_lowest})
+      PLT.put(ctx.flow.summaries, mfa, summary)
+    end
+
+    summary
+  end
+
+  # One pass of fixpoint_summary/2, recursive calls giving the given answer. Past @max_rounds
+  # passes, the last one answers a recursive call with whatever its arguments hold.
+  defp fixpoint_round(mfa, depth, answer, round, ctx) do
+    :ets.insert(ctx.memo, {{:in_progress, mfa}, depth, answer, false})
+    summary = function_summary(mfa, ctx)
+    [{_key, _depth, _answer, read?}] = :ets.lookup(ctx.memo, {:in_progress, mfa})
+
+    cond do
+      not read? or summary == answer ->
+        summary
+
+      round < @max_rounds ->
+        fixpoint_round(mfa, depth, summary, round + 1, ctx)
+
+      true ->
+        :ets.insert(ctx.memo, {{:in_progress, mfa}, depth, :fallback, false})
+        function_summary(mfa, ctx)
+    end
+  end
+
   defp function_clauses({module, function, arity}, ctx) do
     module
     |> module_functions(ctx)
@@ -680,6 +742,13 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp names_type?(_ir), do: false
+
+  # Records that the summary in the making read the answer of a function in the making at the given
+  # depth (see fixpoint_summary/2). Any integer is less than :none.
+  defp note_read_depth(depth, ctx) do
+    [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
+    :ets.insert(ctx.memo, {:lowest_read_depth, min(lowest, depth)})
+  end
 
   defp opaque?(shape) when is_tuple(shape), do: elem(shape, 0) in @opaque_kinds
 
@@ -923,10 +992,12 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # Runs a public entry with an ETS table the variables' shapes are kept in once read (see
-  # read_variable/2), and forgets the modules' functions it read (see module_functions/2) when done.
-  # An entry never runs inside another one.
+  # read_variable/2), with the summaries in the making (see fixpoint_summary/2), and forgets the
+  # modules' functions it read (see module_functions/2) when done. An entry never runs inside
+  # another one.
   defp run(fun) do
     memo = :ets.new(__MODULE__, [:set, :private])
+    :ets.insert(memo, {:lowest_read_depth, :none})
 
     try do
       fun.(memo)
