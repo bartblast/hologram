@@ -33,9 +33,16 @@ defmodule Hologram.Compiler.DataFlow do
   alias Hologram.Compiler.DataFlow.Models
   alias Hologram.Compiler.IR
 
+  # How many alternatives a set of shapes can hold before widen/1 makes it a bag.
+  @max_alternatives 32
+
   # How many summaries can be in the making at once, one inside another. A call past it gives the
   # callee's top.
   @max_call_depth 64
+
+  # How deep a set of shapes can be inside structs, maps, lists, tuples and the other shapes that hold
+  # sets, before widen/1 makes it a bag.
+  @max_depth 3
 
   # How many calls of anonymous functions a call of one can make, one inside another, before the
   # rest are left unmade (see call_fun/3): a function given itself can call itself without end.
@@ -221,6 +228,8 @@ defmodule Hologram.Compiler.DataFlow do
     |> union()
   end
 
+  defp bag_of_leaves(shapes), do: MapSet.new([{:bag, leaves(shapes)}])
+
   # Records that every variable of the pattern is bound by matching the pattern against the subject
   # (see subject_shapes/2), and what the pattern names for the variables matched against a part of it.
   defp bind_pattern(acc, pattern, subject) do
@@ -344,6 +353,7 @@ defmodule Hologram.Compiler.DataFlow do
         eval(clause.body, %{function_ctx | frames: [frame]})
       end)
       |> union()
+      |> widen()
     end
   end
 
@@ -923,6 +933,14 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp index_with_clause(%IR.WithBareClause{expression: expr}, acc), do: index(expr, acc)
 
+  # Every shape the given shapes hold, at any depth, flat: a struct with no fields besides what its
+  # fields hold, and the contents of maps, lists, tuples and bags. A shape that stands for a value not
+  # known yet stays, with the sets it holds made bags of their leaves too; an anonymous function
+  # stays, with what it returns made a bag of its leaves.
+  defp leaves(shapes) do
+    for shape <- shapes, leaf <- shape_leaves(shape), into: MapSet.new(), do: leaf
+  end
+
   # A map or a struct, from its key and value pairs and what each key and value gives.
   defp map_shape(pairs, shapes_fun) do
     case List.keytake(pairs, %IR.AtomType{value: :__struct__}, 0) do
@@ -1153,7 +1171,9 @@ defmodule Hologram.Compiler.DataFlow do
   # The summary with the arguments put in for its params (see apply_summary/2). With a ctx, the
   # dynamic calls and dots on a module an argument makes known are made too.
   defp put_args(summary, args, ctx) do
-    replace(summary, &replace_param(&1, args), %{calls: 0, ctx: ctx})
+    summary
+    |> replace(&replace_param(&1, args), %{calls: 0, ctx: ctx})
+    |> widen()
   end
 
   defp put_binding(acc, var, binding) do
@@ -1434,6 +1454,46 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp shape_contents({:fun, _ref, _returned}), do: MapSet.new()
 
+  defp shape_leaves({:struct, module, fields}) do
+    field_leaves =
+      fields
+      |> leaves()
+      |> MapSet.to_list()
+
+    [{:struct, module, MapSet.new()} | field_leaves]
+  end
+
+  defp shape_leaves({kind, inner}) when kind in [:bag, :list, :map] do
+    inner
+    |> leaves()
+    |> MapSet.to_list()
+  end
+
+  defp shape_leaves({:tuple, elements}) do
+    elements
+    |> union()
+    |> leaves()
+    |> MapSet.to_list()
+  end
+
+  defp shape_leaves({:fun, ref, returned}), do: [{:fun, ref, bag_of_leaves(returned)}]
+
+  defp shape_leaves({:call, fun, args}) do
+    [{:call, leaves(fun), Enum.map(args, &bag_of_leaves/1)}]
+  end
+
+  defp shape_leaves({:dot, shapes, name}), do: [{:dot, leaves(shapes), name}]
+
+  defp shape_leaves({:dyn, module, name, arity, args}) do
+    [{:dyn, leaves(module), name, arity, Enum.map(args, &bag_of_leaves/1)}]
+  end
+
+  defp shape_leaves({kind, shapes}) when kind in [:contents, :part], do: [{kind, leaves(shapes)}]
+
+  # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
+  # applied from a vertex.
+  defp shape_leaves(shape), do: [shape]
+
   defp shape_parts(shape) when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
     MapSet.new([{:part, MapSet.new([shape])}])
   end
@@ -1513,18 +1573,60 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp union(sets), do: Enum.reduce(sets, MapSet.new(), &MapSet.union/2)
 
-  defp with_nested_shapes(shapes) do
-    for shape <- shapes,
-        nested <- [shape | nested_shape_list(shape)],
-        into: MapSet.new(),
-        do: nested
-  end
-
   defp variable_shapes(frame, var, ctx) do
     frame.bindings
     |> Map.get(var, [])
     |> Enum.map(fn {pattern, subject} -> extract(subject_shapes(subject, ctx), pattern, var) end)
     |> union()
     |> MapSet.union(Map.get(frame.extras, var, MapSet.new()))
+  end
+
+  # Keeps the given shapes from growing without end: a set nested @max_depth deep that holds shapes
+  # with more shapes inside, or a set holding more than @max_alternatives alternatives, becomes a bag
+  # of its leaves (see leaves/1), which holds the same types. A recursive function whose answer
+  # nests deeper on every pass then settles. A set of leaves stays as it is: an empty one is no value
+  # at all (a branch that never returns), which a bag is not.
+  defp widen(shapes), do: widen(shapes, 0)
+
+  defp widen(shapes, depth) do
+    cond do
+      MapSet.size(shapes) > @max_alternatives -> MapSet.new([{:bag, leaves(shapes)}])
+      depth < @max_depth -> MapSet.new(shapes, &widen_shape(&1, depth + 1))
+      Enum.all?(shapes, &(shape_leaves(&1) == [&1])) -> shapes
+      true -> MapSet.new([{:bag, leaves(shapes)}])
+    end
+  end
+
+  defp widen_shape({:struct, module, fields}, depth), do: {:struct, module, widen(fields, depth)}
+
+  defp widen_shape({kind, inner}, depth) when kind in [:contents, :list, :map, :part] do
+    {kind, widen(inner, depth)}
+  end
+
+  defp widen_shape({:bag, inner}, _depth), do: {:bag, leaves(inner)}
+
+  defp widen_shape({:tuple, elements}, depth), do: {:tuple, Enum.map(elements, &widen(&1, depth))}
+
+  defp widen_shape({:fun, ref, returned}, depth), do: {:fun, ref, widen(returned, depth)}
+
+  defp widen_shape({:call, fun, args}, depth) do
+    {:call, widen(fun, depth), Enum.map(args, &widen(&1, depth))}
+  end
+
+  defp widen_shape({:dot, shapes, name}, depth), do: {:dot, widen(shapes, depth), name}
+
+  defp widen_shape({:dyn, module, name, arity, args}, depth) do
+    {:dyn, widen(module, depth), name, arity, Enum.map(args, &widen(&1, depth))}
+  end
+
+  # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
+  # applied from a vertex.
+  defp widen_shape(shape, _depth), do: shape
+
+  defp with_nested_shapes(shapes) do
+    for shape <- shapes,
+        nested <- [shape | nested_shape_list(shape)],
+        into: MapSet.new(),
+        do: nested
   end
 end

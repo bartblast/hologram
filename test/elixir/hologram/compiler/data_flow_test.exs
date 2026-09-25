@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module6
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module7
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module8
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module9
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -129,7 +130,14 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "a part of a param is what is inside the argument, at any depth" do
       args = [MapSet.new([{:tuple, [MapSet.new([{:atom, :ok}]), MapSet.new([@struct_1])]}])]
-      inside = MapSet.new([{:atom, :ok}, @struct_1, {:atom, :field}, {:atom, nil}])
+
+      inside =
+        MapSet.new([
+          {:atom, :ok},
+          {:struct, Struct1, MapSet.new()},
+          {:atom, :field},
+          {:atom, nil}
+        ])
 
       assert apply_summary(@part_of_param_0, args) == MapSet.new([{:bag, inside}])
     end
@@ -354,6 +362,24 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "summary/2" do
+    test "a set nested too deep becomes a bag of its leaves, with the same types" do
+      flow = flow()
+      summary = summary({Module9, :deep, 0}, flow)
+      leaves = MapSet.new([{:struct, Struct1, MapSet.new()}, {:atom, :field}, {:atom, nil}])
+      level_3 = MapSet.new([{:tuple, [MapSet.new([{:bag, leaves}])]}])
+      level_2 = MapSet.new([{:tuple, [level_3]}])
+
+      assert summary == MapSet.new([{:tuple, [level_2]}])
+      assert types(summary, flow).structs == MapSet.new([Struct1])
+    end
+
+    test "a set with too many alternatives becomes a bag of them" do
+      atoms = Enum.map(Module9.wide(), &{:atom, &1})
+
+      assert summary_of(Module9, :wide, 0) ==
+               MapSet.new([{:list, MapSet.new([{:bag, MapSet.new(atoms)}])}])
+    end
+
     test "call on each module of a list param is made once the list is known" do
       call = {:dyn, MapSet.new([{:contents, @param_0}]), :build, 0, []}
 
@@ -428,7 +454,8 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "apply/3 with a function name known only at runtime gives everything it is given" do
-      args = MapSet.new([{:atom, Module3}, {:param, 0}, {:list, MapSet.new()}])
+      # A bag holds leaves (see widening): the empty argument list holds none.
+      args = MapSet.new([{:atom, Module3}, {:param, 0}])
 
       assert summary_of(Module6, :apply_variable_name, 1) == MapSet.new([{:bag, args}])
     end
