@@ -3,11 +3,13 @@ defmodule Hologram.Compiler.DataFlow.Models do
 
   # Hand-written summaries of functions (see Hologram.Compiler.DataFlow.summary/2), which the
   # analysis takes instead of following their code: Erlang functions have no IR, and some Elixir
-  # functions are worth not following. A function listed here returns a value holding no types
-  # (:prim) or never returns (it raises, throws or exits). A function not listed has no model.
+  # functions are worth not following. A model says that a function returns a value holding no
+  # types (:prim), never returns (it raises, throws or exits), or returns what it is given, in the
+  # shapes of Hologram.Compiler.DataFlow over its params: `{:contents, ...}` for what is inside an
+  # argument, `{:call, ...}` for what calling a function argument gives. A function without a model
+  # is followed through its code, or returns everything it is given when it has none.
   #
-  # A model must not be smaller than what the function can return: a function whose result can hold
-  # a struct, a module atom or a function given to it is not listed here.
+  # A model must not be smaller than what the function can return.
 
   alias Hologram.Compiler.DataFlow
 
@@ -185,11 +187,31 @@ defmodule Hologram.Compiler.DataFlow.Models do
     String
   ]
 
+  # Functions that return their first argument, the server or the component, as it was: what they
+  # are given stays on the server (a session, a cookie, a stash, a response).
+  @unchanged_first_arg_mfas [
+    {Hologram.Component, :delete_subscription, 2},
+    {Hologram.Component, :put_subscription, 2},
+    {Hologram.Server, :delete_cookie, 2},
+    {Hologram.Server, :delete_session, 2},
+    {Hologram.Server, :delete_stash, 2},
+    {Hologram.Server, :put_cookie, 3},
+    {Hologram.Server, :put_cookie, 4},
+    {Hologram.Server, :put_redirect, 2},
+    {Hologram.Server, :put_redirect, 3},
+    {Hologram.Server, :put_response_body, 2},
+    {Hologram.Server, :put_response_header, 3},
+    {Hologram.Server, :put_session, 3},
+    {Hologram.Server, :put_stash, 3},
+    {Hologram.Server, :put_status, 2},
+    {Hologram.Server, :put_user_id, 2}
+  ]
+
   @doc """
   Returns the Elixir functions listed one by one (not through their module), as MFAs.
   """
   @spec listed_elixir_mfas :: [mfa]
-  def listed_elixir_mfas, do: @primitive_mfas
+  def listed_elixir_mfas, do: @primitive_mfas ++ @unchanged_first_arg_mfas
 
   @doc """
   Returns the model of the given function: the shapes of what it returns, or nil when it has none.
@@ -198,9 +220,196 @@ defmodule Hologram.Compiler.DataFlow.Models do
   def summary({module, function, _arity} = mfa) do
     cond do
       mfa in @diverging_mfas -> MapSet.new()
-      module == :erlang and function in @primitive_erlang_functions -> MapSet.new([:prim])
-      module in @primitive_modules or mfa in @primitive_mfas -> MapSet.new([:prim])
-      true -> nil
+      module == :erlang and function in @primitive_erlang_functions -> prim()
+      module in @primitive_modules or mfa in @primitive_mfas -> prim()
+      mfa in @unchanged_first_arg_mfas -> param(0)
+      true -> structural(mfa)
     end
   end
+
+  defp atom(value), do: MapSet.new([{:atom, value}])
+
+  defp bag(shapes), do: MapSet.new([{:bag, shapes}])
+
+  defp call(fun, args), do: MapSet.new([{:call, fun, args}])
+
+  defp contents(shapes), do: MapSet.new([{:contents, shapes}])
+
+  # What folding the function over the elements gives, from the accumulator: two rounds of calling
+  # the function with the args the given function builds around what the rounds before gave. The
+  # types that can reach the accumulator are all there after one round; the second keeps a value
+  # one round deeper.
+  defp fold(fun, acc, args_around) do
+    round_1 = union([acc, call(fun, args_around.(acc))])
+    union([round_1, call(fun, args_around.(round_1))])
+  end
+
+  defp list(elements), do: MapSet.new([{:list, elements}])
+
+  defp map(inner), do: MapSet.new([{:map, inner}])
+
+  # What :lists.mapfoldl/3 and :lists.mapfoldr/3 give: the mapped elements and the accumulator,
+  # from two rounds of calling the function, which returns a tuple of both.
+  defp mapfold do
+    round_1 = call(param(0), [contents(param(2)), param(1)])
+    acc_1 = union([param(1), contents(round_1)])
+    round_2 = call(param(0), [contents(param(2)), acc_1])
+    acc_2 = union([acc_1, contents(round_2)])
+    mapped = contents(union([round_1, round_2]))
+
+    tuple([list(mapped), acc_2])
+  end
+
+  defp param(index), do: MapSet.new([{:param, index}])
+
+  defp part(shapes), do: MapSet.new([{:part, shapes}])
+
+  defp prim, do: MapSet.new([:prim])
+
+  defp structural({:erlang, :++, 2}), do: list(union([contents(param(0)), contents(param(1))]))
+  defp structural({:erlang, :--, 2}), do: param(0)
+  defp structural({:erlang, :append_element, 2}), do: bag(union([contents(param(0)), param(1)]))
+  defp structural({:erlang, :element, 2}), do: contents(param(1))
+  defp structural({:erlang, :hd, 1}), do: contents(param(0))
+  defp structural({:erlang, :list_to_tuple, 1}), do: bag(contents(param(0)))
+  defp structural({:erlang, :max, 2}), do: union([param(0), param(1)])
+  defp structural({:erlang, :min, 2}), do: union([param(0), param(1)])
+  defp structural({:erlang, :setelement, 3}), do: bag(union([contents(param(1)), param(2)]))
+  defp structural({:erlang, :tl, 1}), do: param(0)
+  defp structural({:erlang, :tuple_to_list, 1}), do: list(contents(param(0)))
+
+  defp structural({:lists, function, 1})
+       when function in [:droplast, :reverse, :sort, :uniq, :usort],
+       do: param(0)
+
+  defp structural({:lists, function, 2})
+       when function in [
+              :delete,
+              :dropwhile,
+              :filter,
+              :keysort,
+              :nthtail,
+              :sort,
+              :takewhile,
+              :uniq,
+              :usort
+            ],
+       do: param(1)
+
+  defp structural({:lists, function, 2}) when function in [:all, :any, :member, :seq], do: prim()
+  defp structural({:lists, function, 3}) when function in [:keymember, :seq], do: prim()
+  defp structural({:lists, :sum, 1}), do: prim()
+  defp structural({:lists, :append, 1}), do: list(contents(contents(param(0))))
+  defp structural({:lists, :append, 2}), do: list(union([contents(param(0)), contents(param(1))]))
+  defp structural({:lists, :duplicate, 2}), do: list(param(1))
+  defp structural({:lists, :enumerate, 1}), do: list(tuple([prim(), contents(param(0))]))
+
+  defp structural({:lists, :filtermap, 2}) do
+    kept = call(param(0), [contents(param(1))])
+    list(union([contents(param(1)), contents(kept)]))
+  end
+
+  defp structural({:lists, :flatmap, 2}), do: list(contents(call(param(0), [contents(param(1))])))
+  defp structural({:lists, :flatten, 1}), do: list(part(param(0)))
+  defp structural({:lists, :flatten, 2}), do: list(union([part(param(0)), contents(param(1))]))
+  defp structural({:lists, :foldl, 3}), do: fold(param(0), param(1), &[contents(param(2)), &1])
+  defp structural({:lists, :foldr, 3}), do: fold(param(0), param(1), &[contents(param(2)), &1])
+  defp structural({:lists, :foreach, 2}), do: atom(:ok)
+  defp structural({:lists, :keydelete, 3}), do: param(2)
+  defp structural({:lists, :keyfind, 3}), do: union([contents(param(2)), atom(false)])
+  defp structural({:lists, :keyreplace, 4}), do: list(union([contents(param(2)), param(3)]))
+  defp structural({:lists, :keystore, 4}), do: list(union([contents(param(2)), param(3)]))
+
+  defp structural({:lists, :keytake, 3}) do
+    union([tuple([atom(:value), contents(param(2)), param(2)]), atom(false)])
+  end
+
+  defp structural({:lists, :last, 1}), do: contents(param(0))
+  defp structural({:lists, :map, 2}), do: list(call(param(0), [contents(param(1))]))
+  defp structural({:lists, :mapfoldl, 3}), do: mapfold()
+  defp structural({:lists, :mapfoldr, 3}), do: mapfold()
+  defp structural({:lists, :max, 1}), do: contents(param(0))
+  defp structural({:lists, :min, 1}), do: contents(param(0))
+  defp structural({:lists, :nth, 2}), do: contents(param(1))
+  defp structural({:lists, :partition, 2}), do: tuple([param(1), param(1)])
+
+  defp structural({:lists, :search, 2}) do
+    union([tuple([atom(:value), contents(param(1))]), atom(false)])
+  end
+
+  defp structural({:lists, :split, 2}), do: tuple([param(1), param(1)])
+  defp structural({:lists, :splitwith, 2}), do: tuple([param(1), param(1)])
+  defp structural({:lists, :sublist, arity}) when arity in [2, 3], do: param(0)
+
+  defp structural({:lists, :unzip, 1}) do
+    elements = list(contents(contents(param(0))))
+    tuple([elements, elements])
+  end
+
+  defp structural({:lists, :zip, 2}), do: list(tuple([contents(param(0)), contents(param(1))]))
+
+  defp structural({:maps, :filter, 2}), do: map(contents(param(1)))
+
+  defp structural({:maps, :find, 2}) do
+    union([tuple([atom(:ok), contents(param(1))]), atom(:error)])
+  end
+
+  defp structural({:maps, :fold, 3}) do
+    fold(param(0), param(1), &[contents(param(2)), contents(param(2)), &1])
+  end
+
+  defp structural({:maps, :from_keys, 2}), do: map(union([contents(param(0)), param(1)]))
+  defp structural({:maps, :from_list, 1}), do: map(contents(contents(param(0))))
+  defp structural({:maps, :get, 2}), do: contents(param(1))
+  defp structural({:maps, :get, 3}), do: union([contents(param(1)), param(2)])
+  defp structural({:maps, :is_key, 2}), do: prim()
+  defp structural({:maps, :keys, 1}), do: list(contents(param(0)))
+
+  defp structural({:maps, :map, 2}) do
+    values = contents(param(1))
+    map(union([values, call(param(0), [values, values])]))
+  end
+
+  defp structural({:maps, :merge, 2}), do: map(union([contents(param(0)), contents(param(1))]))
+
+  defp structural({:maps, :merge_with, 3}) do
+    values = union([contents(param(1)), contents(param(2))])
+    map(union([values, call(param(0), [values, values, values])]))
+  end
+
+  defp structural({:maps, :new, 0}), do: map(MapSet.new())
+  defp structural({:maps, :put, 3}), do: map(union([param(0), param(1), contents(param(2))]))
+  defp structural({:maps, :remove, 2}), do: map(contents(param(1)))
+  defp structural({:maps, :size, 1}), do: prim()
+
+  defp structural({:maps, :take, 2}) do
+    union([tuple([contents(param(1)), map(contents(param(1)))]), atom(:error)])
+  end
+
+  defp structural({:maps, :to_list, 1}) do
+    inner = contents(param(0))
+    list(tuple([inner, inner]))
+  end
+
+  defp structural({:maps, :update, 3}), do: map(union([param(0), param(1), contents(param(2))]))
+
+  defp structural({:maps, :update_with, 3}) do
+    values = contents(param(2))
+    map(union([param(0), values, call(param(1), [values])]))
+  end
+
+  defp structural({:maps, :update_with, 4}) do
+    values = contents(param(3))
+    map(union([param(0), param(2), values, call(param(1), [values])]))
+  end
+
+  defp structural({:maps, :values, 1}), do: list(contents(param(0)))
+  defp structural({:maps, :with, 2}), do: map(contents(param(1)))
+  defp structural({:maps, :without, 2}), do: map(contents(param(1)))
+
+  defp structural(_mfa), do: nil
+
+  defp tuple(elements), do: MapSet.new([{:tuple, elements}])
+
+  defp union(sets), do: Enum.reduce(sets, MapSet.new(), &MapSet.union/2)
 end

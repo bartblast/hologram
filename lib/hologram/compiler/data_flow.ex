@@ -48,9 +48,15 @@ defmodule Hologram.Compiler.DataFlow do
   # The range of the hash that tells anonymous functions apart within a function (see eval/2).
   @fun_hash_range 4_294_967_296
 
-  # Shapes of unknown structure: they can hold anything, so they can match any pattern, and a part
-  # of one is the shape itself.
-  @opaque_kinds [:arg, :bag, :call, :dot, :dyn, :param, :reach]
+  # Shapes of values whose structure is known: what is inside them can be taken out.
+  @data_kinds [:list, :map, :struct, :tuple]
+
+  # Shapes that stand for a value not known yet, which a caller's arguments or an anonymous
+  # function's arguments make known (see replace/3).
+  @pending_kinds [:arg, :call, :contents, :dot, :dyn, :param, :part]
+
+  # Shapes of unknown structure: they can hold anything, so they can match any pattern.
+  @opaque_kinds [:bag, :reach | @pending_kinds]
 
   @primitive_types [
     IR.BitstringType,
@@ -81,6 +87,10 @@ defmodule Hologram.Compiler.DataFlow do
   #   * `{:arg, ref, index}` - whatever the anonymous function is given as that argument.
   #   * `{:reach, vertex}` - the rule before this module, applied from the vertex (see the contract).
   #   * `{:call, shapes, [shapes]}` - a call of a function value that depends on a parameter.
+  #   * `{:contents, shapes}` - what is inside a value that depends on a parameter, one level down
+  #     (see contents/1).
+  #   * `{:part, shapes}` - a part, at any depth, of a value that depends on a parameter (see
+  #     parts/1).
   #   * `{:dot, shapes, name}` - `value.name` on a value that depends on a parameter: a field of a
   #     map or a struct, or a call of a zero-arity function of a module.
   #   * `{:dyn, shapes, name, arity, [shapes]}` - a call of the named function on a module that
@@ -98,6 +108,8 @@ defmodule Hologram.Compiler.DataFlow do
           | {:arg, fun_ref, non_neg_integer}
           | {:reach, CallGraph.vertex()}
           | {:call, shapes, [shapes]}
+          | {:contents, shapes}
+          | {:part, shapes}
           | {:dot, shapes, atom}
           | {:dyn, shapes, atom, arity, [shapes]}
 
@@ -242,7 +254,7 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp call_dyn_shape(shape, name, arity, args, _ctx)
-       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
+       when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
     MapSet.new([{:dyn, MapSet.new([shape]), name, arity, args}])
   end
 
@@ -277,7 +289,7 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp call_fun(shape, args, _rep)
-       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
+       when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
     MapSet.new([{:call, MapSet.new([shape]), args}])
   end
 
@@ -366,7 +378,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp dot_shape(:prim, _name, _ctx), do: MapSet.new([:prim])
 
   defp dot_shape(shape, name, _ctx)
-       when is_tuple(shape) and elem(shape, 0) in [:arg, :call, :dot, :dyn, :param] do
+       when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
     MapSet.new([{:dot, MapSet.new([shape]), name}])
   end
 
@@ -686,9 +698,11 @@ defmodule Hologram.Compiler.DataFlow do
     |> union()
   end
 
+  # A variable inside a pattern matched against a value of unknown structure takes a part of it (see
+  # parts/1).
   defp extract_shape(shape, pattern, var) do
     if (opaque?(shape) or shape == :prim) and var in pattern_variables(pattern, []) do
-      MapSet.new([shape])
+      parts(MapSet.new([shape]))
     else
       MapSet.new()
     end
@@ -974,6 +988,26 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp names_type?(_ir), do: false
 
+  defp nested_shape_list(shape) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
+    shape
+    |> nested_shapes()
+    |> MapSet.to_list()
+  end
+
+  defp nested_shape_list(_shape), do: []
+
+  # Everything inside a struct, a map, a list or a tuple, at any depth: the shapes inside it, and
+  # what is inside those of them that are structs, maps, lists or tuples.
+  defp nested_shapes({:struct, _module, fields}), do: with_nested_shapes(fields)
+
+  defp nested_shapes({:tuple, elements}) do
+    elements
+    |> union()
+    |> with_nested_shapes()
+  end
+
+  defp nested_shapes({kind, inner}) when kind in [:list, :map], do: with_nested_shapes(inner)
+
   # Records that the summary in the making read the answer of a function in the making at the given
   # depth (see fixpoint_summary/2). Any integer is less than :none.
   defp note_read_depth(depth, ctx) do
@@ -1010,6 +1044,16 @@ defmodule Hologram.Compiler.DataFlow do
   defp param_indexes(_term, acc), do: acc
 
   defp params(arity), do: MapSet.new(0..(arity - 1)//1, &{:param, &1})
+
+  # A part, at any depth, of a value of the given shapes, for each alternative: a value that depends
+  # on a parameter gives `{:part, ...}` for when it is known; a value of unknown structure and a
+  # primitive give themselves; a struct, a map, a list or a tuple give what is inside them at any
+  # depth, in a bag; an atom and a function have no parts.
+  defp parts(shapes) do
+    shapes
+    |> Enum.map(&shape_parts/1)
+    |> union()
+  end
 
   # The shapes a pattern names, a variable, a placeholder or a pin naming nothing.
   defp pattern_shapes(%IR.AtomType{value: value}), do: MapSet.new([{:atom, value}])
@@ -1211,6 +1255,10 @@ defmodule Hologram.Compiler.DataFlow do
     Enum.reduce([fun | args], acc, &put_types(&1, &2, module_info_plt))
   end
 
+  defp put_types({kind, shapes}, acc, module_info_plt) when kind in [:contents, :part] do
+    put_types(shapes, acc, module_info_plt)
+  end
+
   defp put_types({:dot, shapes, _name}, acc, module_info_plt) do
     put_types(shapes, acc, module_info_plt)
   end
@@ -1303,6 +1351,18 @@ defmodule Hologram.Compiler.DataFlow do
     |> apply_fun(new_args, rep)
   end
 
+  defp replace_parts({:contents, shapes}, replacer, rep) do
+    shapes
+    |> replace(replacer, rep)
+    |> contents()
+  end
+
+  defp replace_parts({:part, shapes}, replacer, rep) do
+    shapes
+    |> replace(replacer, rep)
+    |> parts()
+  end
+
   defp replace_parts({:dot, shapes, name}, replacer, rep) do
     new_shapes = replace(shapes, replacer, rep)
 
@@ -1364,7 +1424,30 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp shape_contents({kind, inner}) when kind in [:bag, :list, :map], do: inner
 
-  defp shape_contents(opaque), do: MapSet.new([opaque])
+  defp shape_contents(shape) when elem(shape, 0) in @pending_kinds do
+    MapSet.new([{:contents, MapSet.new([shape])}])
+  end
+
+  # The rule before this module applied from a vertex holds itself; a function holds nothing to
+  # take apart.
+  defp shape_contents({:reach, _vertex} = reach), do: MapSet.new([reach])
+
+  defp shape_contents({:fun, _ref, _returned}), do: MapSet.new()
+
+  defp shape_parts(shape) when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
+    MapSet.new([{:part, MapSet.new([shape])}])
+  end
+
+  defp shape_parts({:atom, _atom}), do: MapSet.new()
+
+  defp shape_parts({:fun, _ref, _returned}), do: MapSet.new()
+
+  defp shape_parts(shape) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
+    MapSet.new([{:bag, nested_shapes(shape)}])
+  end
+
+  # A value of unknown structure, the rule before this module from a vertex, or a primitive.
+  defp shape_parts(shape), do: MapSet.new([shape])
 
   # What the fields argument of a __struct__/1 call puts in the struct: the keys and values of the
   # keyword list or map it is, two levels down.
@@ -1429,6 +1512,13 @@ defmodule Hologram.Compiler.DataFlow do
   defp subject_shapes(:top, ctx), do: top(ctx.mfa)
 
   defp union(sets), do: Enum.reduce(sets, MapSet.new(), &MapSet.union/2)
+
+  defp with_nested_shapes(shapes) do
+    for shape <- shapes,
+        nested <- [shape | nested_shape_list(shape)],
+        into: MapSet.new(),
+        do: nested
+  end
 
   defp variable_shapes(frame, var, ctx) do
     frame.bindings

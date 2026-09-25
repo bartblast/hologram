@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module6
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module7
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module8
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -20,6 +21,9 @@ defmodule Hologram.Compiler.DataFlowTest do
   @defaults MapSet.new([{:atom, :field}, {:atom, nil}])
 
   @param_0 MapSet.new([{:param, 0}])
+
+  # A value a pattern takes out of what param 0 holds.
+  @part_of_param_0 MapSet.new([{:part, @param_0}])
 
   @struct_1 {:struct, Struct1, @defaults}
   @struct_2 {:struct, Struct2, @defaults}
@@ -122,6 +126,13 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert apply_summary(summary, args) ==
                MapSet.new([{:dyn, MapSet.new([{:atom, Module3}]), :build, 0, []}])
     end
+
+    test "a part of a param is what is inside the argument, at any depth" do
+      args = [MapSet.new([{:tuple, [MapSet.new([{:atom, :ok}]), MapSet.new([@struct_1])]}])]
+      inside = MapSet.new([{:atom, :ok}, @struct_1, {:atom, :field}, {:atom, nil}])
+
+      assert apply_summary(@part_of_param_0, args) == MapSet.new([{:bag, inside}])
+    end
   end
 
   describe "shapes/4" do
@@ -217,7 +228,7 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "variables of the same name in two case clauses are apart" do
       assert shapes_of(Module2, :case_same_name) ==
-               MapSet.new([{:tuple, [@param_0]}, {:list, @param_0}])
+               MapSet.new([{:tuple, [@part_of_param_0]}, {:list, @part_of_param_0}])
     end
 
     test "comprehension into a list" do
@@ -269,8 +280,8 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert shapes_of(Module2, :param_named) == MapSet.new([{:param, 0}, @struct_1_named])
     end
 
-    test "variable taken from a param keeps the param" do
-      assert shapes_of(Module2, :param_pattern) == @param_0
+    test "variable taken from a param is a part of the param" do
+      assert shapes_of(Module2, :param_pattern) == @part_of_param_0
     end
 
     test "rebound variable" do
@@ -312,7 +323,7 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "with and its else clauses" do
       assert shapes_of(Module2, :with_else) ==
-               MapSet.new([{:tuple, [@param_0]}, {:list, @param_0}])
+               MapSet.new([{:tuple, [@part_of_param_0]}, {:list, @part_of_param_0}])
     end
 
     test "with clause expression variable takes what the clause's pattern names" do
@@ -320,7 +331,8 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "with without else gives an unmatched value too" do
-      assert shapes_of(Module2, :with_no_else) == MapSet.new([{:tuple, [@param_0]}, {:param, 0}])
+      assert shapes_of(Module2, :with_no_else) ==
+               MapSet.new([{:tuple, [@part_of_param_0]}, {:param, 0}])
     end
   end
 
@@ -342,6 +354,34 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "summary/2" do
+    test "call on each module of a list param is made once the list is known" do
+      call = {:dyn, MapSet.new([{:contents, @param_0}]), :build, 0, []}
+
+      assert summary_of(Module8, :call_each, 1) == MapSet.new([{:list, MapSet.new([call])}])
+
+      assert summary_of(Module8, :calls_modules, 0) ==
+               MapSet.new([{:list, MapSet.new([@struct_1])}])
+    end
+
+    test "Elixir functions that build on the structural models" do
+      for {function, structs} <- [
+            enum_map: [Struct1],
+            enum_reduce: [Struct1, Struct2],
+            keyword_get: [Struct1],
+            map_get: [Struct1],
+            map_put: [Struct1]
+          ] do
+        flow = flow()
+        summary = summary({Module8, function, 0}, flow)
+
+        assert types(summary, flow).structs == MapSet.new(structs)
+      end
+    end
+
+    test "a value put in the session stays on the server" do
+      assert summary_of(Module8, :session_dropped, 1) == @param_0
+    end
+
     test "Kernel.struct/2 on a module" do
       flow = flow()
       summary = summary({Module6, :kernel_struct, 0}, flow)
@@ -535,8 +575,8 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module3, :calls_build_from, 0) == MapSet.new([{:struct, Struct1, fields}])
     end
 
-    test "call of an Erlang function gives everything it is given" do
-      assert summary_of(Module3, :calls_erlang, 1) == MapSet.new([{:bag, @param_0}])
+    test "call of a modelled Erlang function" do
+      assert summary_of(Module3, :calls_erlang, 1) == @param_0
     end
 
     test "call of a remote function" do
@@ -561,8 +601,10 @@ defmodule Hologram.Compiler.DataFlowTest do
       refute PLT.member?(flow.summaries, {Module3, :build, 0})
     end
 
-    test "Erlang function" do
-      assert summary_of(:lists, :reverse, 1) == MapSet.new([{:bag, @param_0}])
+    test "Erlang function without a model gives everything it is given" do
+      params = MapSet.new([{:param, 0}, {:param, 1}, {:param, 2}])
+
+      assert summary_of(:lists, :zipwith, 3) == MapSet.new([{:bag, params}])
     end
 
     test "function its module doesn't define" do
