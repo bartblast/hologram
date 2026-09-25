@@ -21,7 +21,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   ## Build dir
 
-  A compile leaves four files in the build dir, so that the first compile in the next VM (the next
+  A compile leaves five files in the build dir, so that the first compile in the next VM (the next
   `mix` command, say) reuses what this one built:
 
     * the call graph dump and the module info dump - the before picture: the graph of what the
@@ -33,6 +33,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       compile keeps the bundles the diff does not reach.
 
     * the page digest dump - the digest of each page's bundle, which the router serves.
+
+    * the compile inputs dump - what a compile with nothing to do is decided by, as the last compile
+      that built every page saw it (see `Hologram.Compiler.CompileInputs`).
 
   ## Telemetry
 
@@ -56,6 +59,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.CompileInputs
   alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
 
@@ -96,6 +100,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         opts[:force?] -> compile_with_lock(opts)
         language_server_build?(opts) -> :noop
         !compiler_enabled?() -> :noop
+        nothing_changed?(opts) -> :noop
         true -> compile_with_lock(opts)
       end
 
@@ -117,6 +122,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     [
       assets_dir: assets_dir,
       build_dir: build_dir,
+      build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
@@ -149,6 +155,13 @@ defmodule Mix.Tasks.Compile.Hologram do
         Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
 
       call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
+
+      compile_inputs_dump_path =
+        Path.join(build_dir, Reflection.compile_inputs_dump_file_name())
+
+      # Gone until this compile finishes with every page built, so that a compile that fails, having
+      # replaced some bundles, leaves the next one nothing to skip on.
+      File.rm(compile_inputs_dump_path)
 
       compile_state_dump_path =
         Path.join(build_dir, Reflection.compile_state_dump_file_name())
@@ -530,12 +543,19 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # Whatever ended the batches, the static dir keeps the bundles the page digest PLT names, and
       # the runtime bundle.
+      served_bundles_info = Enum.reject([bundles.runtime | Map.values(bundles.pages)], &is_nil/1)
+
       named_build_static_artifacts =
-        [bundles.runtime | Map.values(bundles.pages)]
-        |> Enum.reject(&is_nil/1)
-        |> Enum.flat_map(fn info -> [info.static_bundle_path, info.static_source_map_path] end)
+        Enum.flat_map(served_bundles_info, fn info ->
+          [info.static_bundle_path, info.static_source_map_path]
+        end)
 
       Enum.each(old_build_static_artifacts -- named_build_static_artifacts, &File.rm/1)
+
+      # The world as this compile leaves it, for the first compile in the next VM to compare with (see
+      # Hologram.Compiler.CompileInputs). None while a page is pending: the next compile must run to
+      # build it, whatever changed.
+      maybe_record_compile_inputs(served_bundles_info, compile_inputs_dump_path, opts)
 
       Logger.info("Hologram: compiler finished")
 
@@ -927,6 +947,23 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The first compile in a VM has nothing to do when the world is as the record of the last compile
+  # that built every page says (see Hologram.Compiler.CompileInputs), and it can tell before it loads
+  # anything. A later compile in the same VM comes after an edit this VM compiled, so the record is
+  # not consulted for it.
+  defp nothing_changed?(opts) do
+    if Cache.get().editable_modules == nil do
+      record =
+        opts[:build_dir]
+        |> Path.join(Reflection.compile_inputs_dump_file_name())
+        |> CompileInputs.load()
+
+      record != nil and CompileInputs.unchanged?(record, opts)
+    else
+      false
+    end
+  end
+
   # The runtime bundle is found by scanning the static dir rather than through the page digest PLT, so
   # the one it replaces is deleted as soon as it is written: a registry reload between two batches
   # could otherwise find the old one. A page's old bundle stays until the cleanup at the end.
@@ -1132,6 +1169,22 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp maybe_load_compile_state(compile_state_dump_path) do
     if File.exists?(compile_state_dump_path) do
       Cache.load_compile_state(compile_state_dump_path)
+    end
+  end
+
+  # The JavaScript inputs are the served bundles' own records, so that a file saved while the compile
+  # ran is recorded as the bundle that read it saw it.
+  defp maybe_record_compile_inputs(served_bundles_info, dump_path, opts) do
+    if MapSet.size(Cache.get().pending_pages) == 0 do
+      js_inputs =
+        served_bundles_info
+        |> Enum.flat_map(& &1.js_inputs)
+        |> Enum.uniq()
+
+      opts
+      |> CompileInputs.build()
+      |> Map.put(:js_inputs, js_inputs)
+      |> CompileInputs.dump(dump_path)
     end
   end
 

@@ -42,6 +42,8 @@ defmodule Hologram.Reflection do
 
   @call_graph_dump_file_name "call_graph.bin"
 
+  @compile_inputs_dump_file_name "compile_inputs.bin"
+
   @compile_state_dump_file_name "compile_state.bin"
 
   @compiler_lock_file_name "hologram_compiler.lock"
@@ -262,6 +264,14 @@ defmodule Hologram.Reflection do
   @spec call_graph_dump_file_name() :: String.t()
   def call_graph_dump_file_name do
     @call_graph_dump_file_name
+  end
+
+  @doc """
+  Returns the compile inputs dump file name.
+  """
+  @spec compile_inputs_dump_file_name() :: String.t()
+  def compile_inputs_dump_file_name do
+    @compile_inputs_dump_file_name
   end
 
   @doc """
