@@ -89,6 +89,13 @@ defmodule Hologram.Compiler.DataFlow do
   # built), the module info PLT, and the summaries of the functions it has followed so far.
   @type t :: %{ir_plt: PLT.t(), module_info_plt: PLT.t(), summaries: PLT.t()}
 
+  # The types shapes hold (see types/2).
+  @type types :: %{
+          modules: MapSet.t(module),
+          reach: MapSet.t(CallGraph.vertex()),
+          structs: MapSet.t(module)
+        }
+
   @doc """
   Returns the shapes a summary (see `summary/2`) gives for a call with arguments of the given
   shapes: each `{:param, index}` in it, at any depth, replaced with the argument's shapes. A missing
@@ -154,6 +161,23 @@ defmodule Hologram.Compiler.DataFlow do
     arity
     |> params()
     |> MapSet.put({:reach, mfa})
+  end
+
+  @doc """
+  Returns the types the given shapes hold, at any depth:
+
+    * `:structs` - the modules of the structs, and the module atoms of struct modules.
+    * `:modules` - the module atoms the module info PLT knows.
+    * `:reach` - the vertices the rule before this module applies from (see `top/1`).
+
+  A param or an anonymous function's argument holds nothing: the value the shapes are asked about
+  is one no caller gives anything to. An anonymous function holds what it returns, and a call the
+  analysis could not make holds its function or module and its arguments.
+  """
+  @spec types(shapes, t) :: types
+  def types(shapes, flow) do
+    acc = %{modules: MapSet.new(), reach: MapSet.new(), structs: MapSet.new()}
+    put_types(shapes, acc, flow.module_info_plt)
   end
 
   # Records that every variable of the pattern is bound by matching the pattern against the subject
@@ -810,6 +834,55 @@ defmodule Hologram.Compiler.DataFlow do
   defp put_subject_extras(acc, subject_expr, pattern) do
     put_side_extras(acc, subject_expr, pattern)
   end
+
+  # Adds the types the shapes hold to the accumulator (see types/2).
+  defp put_types(shapes, acc, module_info_plt) when is_struct(shapes, MapSet) do
+    Enum.reduce(shapes, acc, &put_types(&1, &2, module_info_plt))
+  end
+
+  defp put_types({:atom, atom}, acc, module_info_plt) do
+    case PLT.get(module_info_plt, atom) do
+      {:ok, %{struct?: true}} ->
+        %{acc | modules: MapSet.put(acc.modules, atom), structs: MapSet.put(acc.structs, atom)}
+
+      {:ok, _info} ->
+        %{acc | modules: MapSet.put(acc.modules, atom)}
+
+      :error ->
+        acc
+    end
+  end
+
+  defp put_types({:struct, module, fields}, acc, module_info_plt) do
+    put_types(fields, %{acc | structs: MapSet.put(acc.structs, module)}, module_info_plt)
+  end
+
+  defp put_types({:reach, vertex}, acc, _module_info_plt) do
+    %{acc | reach: MapSet.put(acc.reach, vertex)}
+  end
+
+  defp put_types({:tuple, elements}, acc, module_info_plt) do
+    Enum.reduce(elements, acc, &put_types(&1, &2, module_info_plt))
+  end
+
+  defp put_types({kind, inner}, acc, module_info_plt) when kind in [:bag, :list, :map] do
+    put_types(inner, acc, module_info_plt)
+  end
+
+  defp put_types({:fun, _ref, returned}, acc, module_info_plt) do
+    put_types(returned, acc, module_info_plt)
+  end
+
+  defp put_types({:call, fun, args}, acc, module_info_plt) do
+    Enum.reduce([fun | args], acc, &put_types(&1, &2, module_info_plt))
+  end
+
+  defp put_types({:dyn, module, _name, _arity, args}, acc, module_info_plt) do
+    Enum.reduce([module | args], acc, &put_types(&1, &2, module_info_plt))
+  end
+
+  # A primitive, a param or an anonymous function's argument.
+  defp put_types(_shape, acc, _module_info_plt), do: acc
 
   defp read_module_functions(module, ctx) do
     case Compiler.module_ir(ctx.flow.ir_plt, module) do

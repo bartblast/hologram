@@ -42,6 +42,25 @@ defmodule Hologram.Compiler.DataFlowTest do
 
   defp summary_of(module, function, arity), do: summary({module, function, arity}, flow())
 
+  defp types_fixture(modules, reach, structs) do
+    %{modules: MapSet.new(modules), reach: MapSet.new(reach), structs: MapSet.new(structs)}
+  end
+
+  # The types of the given shapes, where Struct1 and Struct2 are struct modules and Module1 is a
+  # module that defines no struct.
+  defp types_of(shapes) do
+    module_info_plt =
+      PLT.put(PLT.start(), [
+        {Module1, %{struct?: false}},
+        {Struct1, %{struct?: true}},
+        {Struct2, %{struct?: true}}
+      ])
+
+    shapes
+    |> MapSet.new()
+    |> types(start(PLT.start(), module_info_plt))
+  end
+
   describe "apply_summary/2" do
     test "puts the arguments in for the params, at any depth" do
       summary = MapSet.new([{:list, @param_0}, {:tuple, [MapSet.new([{:param, 1}])]}])
@@ -376,6 +395,69 @@ defmodule Hologram.Compiler.DataFlowTest do
       mfa = {Module1, :atom, 0}
 
       assert top(mfa) == MapSet.new([{:reach, mfa}])
+    end
+  end
+
+  describe "types/2" do
+    test "struct" do
+      assert types_of([@struct_1]) == types_fixture([], [], [Struct1])
+    end
+
+    test "struct in a struct's fields" do
+      struct = {:struct, Struct1, MapSet.new([@struct_2])}
+
+      assert types_of([struct]) == types_fixture([], [], [Struct1, Struct2])
+    end
+
+    test "module atom of a struct module" do
+      assert types_of([{:atom, Struct1}]) == types_fixture([Struct1], [], [Struct1])
+    end
+
+    test "module atom of a module that defines no struct" do
+      assert types_of([{:atom, Module1}]) == types_fixture([Module1], [], [])
+    end
+
+    test "atom that is no module the module info PLT knows" do
+      assert types_of([{:atom, :ok}]) == types_fixture([], [], [])
+    end
+
+    test "reach" do
+      mfa = {Module3, :build, 0}
+
+      assert types_of([{:reach, mfa}]) == types_fixture([], [mfa], [])
+    end
+
+    test "param, anonymous function's argument and primitive hold nothing" do
+      assert types_of([{:param, 0}, {:arg, make_ref(), 0}, :prim]) == types_fixture([], [], [])
+    end
+
+    test "tuple, list, map and bag hold what is inside them" do
+      shapes = [
+        {:tuple, [MapSet.new([@struct_1])]},
+        {:list, MapSet.new([{:atom, Module1}])},
+        {:map, MapSet.new([@struct_2])},
+        {:bag, MapSet.new([{:reach, {Module3, :build, 0}}])}
+      ]
+
+      assert types_of(shapes) ==
+               types_fixture([Module1], [{Module3, :build, 0}], [Struct1, Struct2])
+    end
+
+    test "anonymous function holds what it returns" do
+      assert types_of([{:fun, make_ref(), MapSet.new([@struct_1])}]) ==
+               types_fixture([], [], [Struct1])
+    end
+
+    test "call not made holds its function and its arguments" do
+      shapes = [{:call, MapSet.new([@struct_1]), [MapSet.new([@struct_2])]}]
+
+      assert types_of(shapes) == types_fixture([], [], [Struct1, Struct2])
+    end
+
+    test "dynamic call not made holds its module and its arguments" do
+      shapes = [{:dyn, MapSet.new([{:atom, Module1}]), :build, 1, [MapSet.new([@struct_2])]}]
+
+      assert types_of(shapes) == types_fixture([Module1], [], [Struct2])
     end
   end
 end
