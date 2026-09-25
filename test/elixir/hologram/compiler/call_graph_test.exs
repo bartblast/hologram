@@ -60,8 +60,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10, as: DataFlowPage
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module11, as: DataFlowComponent
-  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1, as: DroppedStruct
-  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2, as: StateStruct
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module13, as: DataFlowBroadcaster
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1, as: DataFlowStruct1
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2, as: DataFlowStruct2
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct3, as: DataFlowStruct3
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct4, as: DataFlowStruct4
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct5, as: DataFlowStruct5
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
@@ -121,11 +125,22 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  # The graph of the data flow fixtures' broadcaster: its functions broadcast DataFlowStruct1,
+  # DataFlowStruct3, DataFlowStruct4 and DataFlowStruct5 and the DataFlowComponent module, and one
+  # builds DataFlowStruct2 and drops it before it broadcasts.
+  defp data_flow_broadcaster_graph do
+    [module_info_plt: module_info_plt_fixture()]
+    |> start()
+    |> build(IR.for_module(DataFlowBroadcaster))
+    |> build(IR.for_module(DataFlowComponent))
+    |> get_graph()
+  end
+
   # A data flow context on the fixture app's module info PLT.
   defp data_flow_fixture, do: DataFlow.start(PLT.start(), module_info_plt_fixture())
 
-  # The graph of a page of the data flow fixtures: its init/3 builds DroppedStruct and drops it, and
-  # puts StateStruct in the state.
+  # The graph of a page of the data flow fixtures: its init/3 builds DataFlowStruct1 and drops it, and
+  # puts DataFlowStruct2 in the state.
   defp data_flow_page_graph do
     [module_info_plt: module_info_plt_fixture()]
     |> start()
@@ -457,7 +472,30 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "broadcast_caller_analysis/2" do
+  describe "broadcast_caller_analysis/3" do
+    test "with a data flow context, what the params of broadcasts hold" do
+      analysis =
+        broadcast_caller_analysis(
+          data_flow_broadcaster_graph(),
+          module_info_plt_fixture(),
+          data_flow_fixture()
+        )
+
+      for struct <- [DataFlowStruct1, DataFlowStruct3, DataFlowStruct4, DataFlowStruct5] do
+        assert struct in analysis.dispatch_types
+      end
+
+      refute DataFlowStruct2 in analysis.dispatch_types
+      assert analysis.referenced_components == [DataFlowComponent]
+    end
+
+    test "without a data flow context, a struct a broadcast caller names is a dispatch type" do
+      analysis =
+        broadcast_caller_analysis(data_flow_broadcaster_graph(), module_info_plt_fixture())
+
+      assert DataFlowStruct2 in analysis.dispatch_types
+    end
+
     test "includes struct types reachable from broadcast_action callers" do
       graph =
         Digraph.new()
@@ -3945,8 +3983,8 @@ defmodule Hologram.Compiler.CallGraphTest do
           data_flow_fixture()
         )
 
-      refute DroppedStruct in analysis[DataFlowPage].dispatch_types
-      assert StateStruct in analysis[DataFlowPage].dispatch_types
+      refute DataFlowStruct1 in analysis[DataFlowPage].dispatch_types
+      assert DataFlowStruct2 in analysis[DataFlowPage].dispatch_types
     end
 
     test "without a data flow context, a struct server code names is a dispatch type" do
@@ -3957,7 +3995,7 @@ defmodule Hologram.Compiler.CallGraphTest do
           module_info_plt_fixture()
         )
 
-      assert DroppedStruct in analysis[DataFlowPage].dispatch_types
+      assert DataFlowStruct1 in analysis[DataFlowPage].dispatch_types
     end
 
     test "returns an entry for each given templatable" do
@@ -4059,8 +4097,8 @@ defmodule Hologram.Compiler.CallGraphTest do
           data_flow_fixture()
         )
 
-      refute DroppedStruct in types
-      assert StateStruct in types
+      refute DataFlowStruct1 in types
+      assert DataFlowStruct2 in types
     end
 
     test "without a data flow context, a struct server code names is a dispatch type" do
@@ -4071,7 +4109,7 @@ defmodule Hologram.Compiler.CallGraphTest do
           module_info_plt_fixture()
         )
 
-      assert DroppedStruct in types
+      assert DataFlowStruct1 in types
     end
 
     test "includes struct types reachable from init/3" do

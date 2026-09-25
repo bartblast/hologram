@@ -616,17 +616,50 @@ defmodule Hologram.Compiler.CallGraph do
   be available in the runtime bundle and the types count as app-wide dispatch types.
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
-  """
-  @spec broadcast_caller_analysis(Digraph.t(), PLT.t() | nil) :: broadcast_caller_analysis
-  def broadcast_caller_analysis(graph, module_info_plt) do
-    caller_vertices =
-      for broadcast_mfa <- Reflection.broadcast_mfas(),
-          {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
-        caller_vertex
-      end
 
+  With a data flow context, a caller that is a function sends only what the params of its
+  broadcasts hold (see `Hologram.Compiler.DataFlow.broadcast_analysis/3`); a type or a component
+  its code only meets on the way is left out. Components then come back sorted.
+  """
+  @spec broadcast_caller_analysis(Digraph.t(), PLT.t() | nil, DataFlow.t() | nil) ::
+          broadcast_caller_analysis
+  def broadcast_caller_analysis(graph, module_info_plt, flow \\ nil)
+
+  def broadcast_caller_analysis(graph, module_info_plt, %{} = flow) do
+    # A caller is a function when a module's code calls a broadcast function; any other caller is
+    # walked as before.
+    {function_callers, other_callers} =
+      graph
+      |> broadcast_callers()
+      |> Enum.split_with(&match?({_module, _function, _arity}, &1))
+
+    walked_vertices =
+      Digraph.reachable(graph, other_callers,
+        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
+      )
+
+    analyses = Enum.map(function_callers, &DataFlow.broadcast_analysis(graph, &1, flow))
+
+    dispatch_types =
+      Enum.reduce(
+        analyses,
+        protocol_dispatch_types(walked_vertices, module_info_plt),
+        &MapSet.union(&1.dispatch_types, &2)
+      )
+
+    referenced_components =
+      walked_vertices
+      |> extract_component_module_vertices(module_info_plt)
+      |> Enum.concat(Enum.flat_map(analyses, & &1.referenced_components))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{dispatch_types: dispatch_types, referenced_components: referenced_components}
+  end
+
+  def broadcast_caller_analysis(graph, module_info_plt, nil) do
     broadcast_vertices =
-      Digraph.reachable(graph, caller_vertices,
+      Digraph.reachable(graph, broadcast_callers(graph),
         opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
       )
 
@@ -1661,6 +1694,15 @@ defmodule Hologram.Compiler.CallGraph do
       end
     else
       []
+    end
+  end
+
+  # The vertices with an edge to a function that broadcasts actions, each once.
+  defp broadcast_callers(graph) do
+    for broadcast_mfa <- Reflection.broadcast_mfas(),
+        {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa),
+        uniq: true do
+      caller_vertex
     end
   end
 
