@@ -4,9 +4,13 @@ defmodule Hologram.Compiler.DataFlowTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module11
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module12
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -17,6 +21,9 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module9
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct3
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct4
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct5
 
   # The fields an empty Struct1 or Struct2 literal holds: its field name and the default value.
   @defaults MapSet.new([{:atom, :field}, {:atom, nil}])
@@ -39,6 +46,15 @@ defmodule Hologram.Compiler.DataFlowTest do
       %IR.FunctionDefinition{name: ^function, clause: clause} -> clause
       _expression -> nil
     end)
+  end
+
+  # The call graph of the given modules, built with the module info PLT of the test build.
+  defp graph_of(modules) do
+    modules
+    |> Enum.reduce(CallGraph.start(module_info_plt: module_info_plt_fixture()), fn module, acc ->
+      CallGraph.build(acc, IR.for_module(module))
+    end)
+    |> CallGraph.get_graph()
   end
 
   defp flow, do: start(PLT.start(), module_info_plt_fixture())
@@ -140,6 +156,46 @@ defmodule Hologram.Compiler.DataFlowTest do
         ])
 
       assert apply_summary(@part_of_param_0, args) == MapSet.new([{:bag, inside}])
+    end
+  end
+
+  describe "server_callback_analysis/3" do
+    setup do
+      [graph: graph_of([Module10, Module11, Module12])]
+    end
+
+    test "a struct that reaches the state is a dispatch type", %{graph: graph} do
+      assert Struct2 in server_callback_analysis(graph, Module10, flow()).dispatch_types
+    end
+
+    test "a struct sent in the params of a command's action is a dispatch type", %{graph: graph} do
+      assert Struct4 in server_callback_analysis(graph, Module10, flow()).dispatch_types
+    end
+
+    test "a struct built and dropped on the server is not a dispatch type", %{graph: graph} do
+      refute Struct1 in server_callback_analysis(graph, Module10, flow()).dispatch_types
+    end
+
+    test "a struct put in the session is not a dispatch type", %{graph: graph} do
+      refute Struct3 in server_callback_analysis(graph, Module10, flow()).dispatch_types
+    end
+
+    test "a component module that reaches the state is a referenced component", %{graph: graph} do
+      assert server_callback_analysis(graph, Module10, flow()).server_referenced_components ==
+               [Module11]
+    end
+
+    test "a templatable with the default callbacks hands nothing to the client", %{graph: graph} do
+      assert server_callback_analysis(graph, Module11, flow()) == %{
+               dispatch_types: CallGraph.protocol_dispatch_types([], module_info_plt_fixture()),
+               server_referenced_components: []
+             }
+    end
+
+    test "where the analysis can't follow the code, the rule before it applies from there", %{
+      graph: graph
+    } do
+      assert Struct5 in server_callback_analysis(graph, Module12, flow()).dispatch_types
     end
   end
 

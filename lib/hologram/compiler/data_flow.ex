@@ -31,6 +31,7 @@ defmodule Hologram.Compiler.DataFlow do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.DataFlow.Models
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
 
   # How many alternatives a set of shapes can hold before widen/1 makes it a bag.
@@ -144,6 +145,62 @@ defmodule Hologram.Compiler.DataFlow do
   """
   @spec apply_summary(shapes, [shapes]) :: shapes
   def apply_summary(summary, args), do: put_args(summary, args, nil)
+
+  @doc """
+  Returns what the server callbacks of the given templatable (its init/3 and command/3) can hand to
+  the client, in the shape of `Hologram.Compiler.CallGraph.server_callback_analysis/3`'s results:
+
+    * `:dispatch_types` - the types that can appear at protocol dispatch on the client: the structs
+      the values the callbacks return hold, and the types the graph walk below finds.
+    * `:server_referenced_components` - the component modules those values hold, and the ones the
+      graph walk finds, sorted.
+
+  The callbacks are followed with nothing known about their arguments: params and props come from
+  the client, which has their types already, and the server struct holds what the code names for
+  it. The values they return go to the client: the component's state, context, next action,
+  command and page, and the server's next action and broadcasts; what the server keeps (its
+  session, cookies and stash) is dropped on the way in (see `Hologram.Compiler.DataFlow.Models`).
+
+  Where the analysis could not follow the code, the rule before it applies from there: the given
+  graph is walked from those vertices (see `top/1`), protocol functions not entered, and so it is
+  from each struct module found, whose vertex has edges to what the struct needs (an Ecto schema's
+  related schemas).
+  """
+  @spec server_callback_analysis(Digraph.t(), module, t) :: CallGraph.server_callback_analysis()
+  def server_callback_analysis(graph, templatable, flow) do
+    returned =
+      run(fn memo ->
+        ctx = %{flow: flow, frames: [], memo: memo, mfa: nil, stack: []}
+        no_args = [MapSet.new(), MapSet.new(), MapSet.new()]
+
+        [{templatable, :command, 3}, {templatable, :init, 3}]
+        |> Enum.map(&summary_with_args(&1, no_args, ctx))
+        |> union()
+      end)
+
+    %{modules: modules, reach: reach, structs: structs} = types(returned, flow)
+    module_info_plt = flow.module_info_plt
+
+    walked_vertices =
+      Digraph.reachable(graph, MapSet.to_list(MapSet.union(reach, structs)),
+        opaque_vertex?: &protocol_function?(&1, module_info_plt)
+      )
+
+    components =
+      modules
+      |> Enum.concat(Enum.filter(walked_vertices, &is_atom/1))
+      |> Enum.filter(&component?(&1, module_info_plt))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{
+      dispatch_types:
+        walked_vertices
+        |> CallGraph.protocol_dispatch_types(module_info_plt)
+        |> MapSet.union(structs),
+      server_referenced_components: components
+    }
+  end
 
   @doc """
   Returns the shapes of the value the given expression gives, where the expression is in the given
@@ -334,6 +391,10 @@ defmodule Hologram.Compiler.DataFlow do
     [guards, body]
     |> index(acc)
     |> Map.put(:id, make_ref())
+  end
+
+  defp component?(module, module_info_plt) do
+    match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
   end
 
   # What the function's code returns. A protocol function returns everything it is given (see the
@@ -1150,6 +1211,8 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  defp protocol_function?(_vertex, _module_info_plt), do: false
+
   # The provisional summary of the function while nothing it read changed (see fixpoint_summary/2),
   # which is a read of the depth it read, else the summary made now.
   defp provisional_summary(mfa, ctx) do
@@ -1570,6 +1633,13 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp subject_shapes(:top, ctx), do: top(ctx.mfa)
+
+  # The summary of the function with the given arguments put in.
+  defp summary_with_args(mfa, args, ctx) do
+    mfa
+    |> callee_summary(ctx)
+    |> put_args(args, ctx)
+  end
 
   defp union(sets), do: Enum.reduce(sets, MapSet.new(), &MapSet.union/2)
 
