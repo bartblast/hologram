@@ -37,6 +37,14 @@ defmodule Hologram.Compiler.DataFlow do
   # How many alternatives a set of shapes can hold before widen/1 makes it a bag.
   @max_alternatives 32
 
+  # The functions that broadcast an action with params, with the index of the params argument.
+  @broadcast_params_indexes %{
+    {Hologram.Component, :put_broadcast, 4} => 3,
+    {Hologram.Component, :put_broadcast_except, 5} => 4,
+    {Hologram.Realtime, :broadcast_action, 3} => 2,
+    {Hologram.Realtime, :broadcast_action_except, 4} => 3
+  }
+
   # How many summaries can be in the making at once, one inside another. A call past it gives the
   # callee's top.
   @max_call_depth 64
@@ -147,6 +155,35 @@ defmodule Hologram.Compiler.DataFlow do
   def apply_summary(summary, args), do: put_args(summary, args, nil)
 
   @doc """
+  Returns what the given function, which broadcasts actions (see
+  `Hologram.Reflection.broadcast_mfas/0`), sends to the clients, in the shape of
+  `Hologram.Compiler.CallGraph.broadcast_caller_analysis/2`'s results: the protocol dispatch types
+  and the component modules the params of its broadcasts hold, found the way
+  `server_callback_analysis/3` finds them. A broadcast inside an anonymous function counts, a value
+  that comes from the function's own params holds nothing, as the rule before this module walked
+  from the function and not from its callers.
+  """
+  @spec broadcast_analysis(Digraph.t(), mfa, t) :: CallGraph.broadcast_caller_analysis()
+  def broadcast_analysis(graph, caller, flow) do
+    sent =
+      run(fn memo ->
+        ctx = %{flow: flow, frames: [], memo: memo, mfa: caller, stack: [caller]}
+
+        caller
+        |> function_clauses(ctx)
+        |> List.wrap()
+        |> Enum.map(fn clause ->
+          frame = clause_frame(clause, &{:param, &1})
+          broadcast_params(clause.body, %{ctx | frames: [frame]})
+        end)
+        |> union()
+      end)
+
+    {dispatch_types, components} = reaching_types(sent, graph, flow)
+    %{dispatch_types: dispatch_types, referenced_components: components}
+  end
+
+  @doc """
   Returns what the server callbacks of the given templatable (its init/3 and command/3) can hand to
   the client, in the shape of `Hologram.Compiler.CallGraph.server_callback_analysis/3`'s results:
 
@@ -178,28 +215,8 @@ defmodule Hologram.Compiler.DataFlow do
         |> union()
       end)
 
-    %{modules: modules, reach: reach, structs: structs} = types(returned, flow)
-    module_info_plt = flow.module_info_plt
-
-    walked_vertices =
-      Digraph.reachable(graph, MapSet.to_list(MapSet.union(reach, structs)),
-        opaque_vertex?: &protocol_function?(&1, module_info_plt)
-      )
-
-    components =
-      modules
-      |> Enum.concat(Enum.filter(walked_vertices, &is_atom/1))
-      |> Enum.filter(&component?(&1, module_info_plt))
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    %{
-      dispatch_types:
-        walked_vertices
-        |> CallGraph.protocol_dispatch_types(module_info_plt)
-        |> MapSet.union(structs),
-      server_referenced_components: components
-    }
+    {dispatch_types, components} = reaching_types(returned, graph, flow)
+    %{dispatch_types: dispatch_types, server_referenced_components: components}
   end
 
   @doc """
@@ -296,6 +313,85 @@ defmodule Hologram.Compiler.DataFlow do
       |> Enum.reduce(acc, &put_binding(&2, &1, {pattern, subject}))
 
     put_pattern_extras(new_acc, pattern)
+  end
+
+  # What the params of a broadcast call gives, when the function called is one that broadcasts with
+  # params, else nothing.
+  defp broadcast_call_params(mfa, args, ctx) do
+    case Map.fetch(@broadcast_params_indexes, mfa) do
+      {:ok, index} ->
+        args
+        |> Enum.at(index)
+        |> eval(ctx)
+
+      :error ->
+        MapSet.new()
+    end
+  end
+
+  # What the params of the broadcasts in the given IR give, each read in the frame it is in: a
+  # broadcast inside an anonymous function reads the function's args and the variables it closes over.
+  defp broadcast_params(%IR.AnonymousFunctionType{clauses: clauses} = ir, ctx) do
+    ref = fun_ref(ir, ctx)
+
+    clauses
+    |> Enum.map(fn clause ->
+      frame = clause_frame(clause, &{:arg, ref, &1})
+      broadcast_params(clause.body, %{ctx | frames: [frame | ctx.frames]})
+    end)
+    |> union()
+  end
+
+  defp broadcast_params(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [
+             %IR.AtomType{value: module},
+             %IR.AtomType{value: name},
+             %IR.ListType{data: args}
+           ]
+         } = ir,
+         ctx
+       ) do
+    union([
+      broadcast_call_params({module, name, length(args)}, args, ctx),
+      broadcast_params_inside(ir, ctx)
+    ])
+  end
+
+  defp broadcast_params(
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: module}, function: name, args: args} =
+           ir,
+         ctx
+       ) do
+    union([
+      broadcast_call_params({module, name, length(args)}, args, ctx),
+      broadcast_params_inside(ir, ctx)
+    ])
+  end
+
+  defp broadcast_params(%_struct{} = ir, ctx), do: broadcast_params_inside(ir, ctx)
+
+  defp broadcast_params(list, ctx) when is_list(list) do
+    list
+    |> Enum.map(&broadcast_params(&1, ctx))
+    |> union()
+  end
+
+  defp broadcast_params(tuple, ctx) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> broadcast_params(ctx)
+  end
+
+  defp broadcast_params(_ir, _ctx), do: MapSet.new()
+
+  defp broadcast_params_inside(ir, ctx) do
+    ir
+    |> Map.from_struct()
+    |> Map.values()
+    |> broadcast_params(ctx)
   end
 
   # Records that an answer of a summary in the making changed, which a provisional summary that read
@@ -473,7 +569,7 @@ defmodule Hologram.Compiler.DataFlow do
   # An anonymous function returns what its clauses give, its parameters being its arguments. A
   # capture comes with a clause that calls the captured function.
   defp eval(%IR.AnonymousFunctionType{clauses: clauses} = ir, ctx) do
-    ref = {ctx.mfa, :erlang.phash2(ir, @fun_hash_range)}
+    ref = fun_ref(ir, ctx)
 
     returned =
       clauses
@@ -835,6 +931,10 @@ defmodule Hologram.Compiler.DataFlow do
         fallback_summary
     end
   end
+
+  # What tells an anonymous function apart: the function it is written in and a hash of its IR, the
+  # same on every pass over that function.
+  defp fun_ref(ir, ctx), do: {ctx.mfa, :erlang.phash2(ir, @fun_hash_range)}
 
   defp function_clauses({module, function, arity}, ctx) do
     module
@@ -1352,6 +1452,33 @@ defmodule Hologram.Compiler.DataFlow do
 
   # A primitive, a param or an anonymous function's argument.
   defp put_types(_shape, acc, _module_info_plt), do: acc
+
+  # The dispatch types and the component modules that values of the given shapes bring to the client
+  # (see server_callback_analysis/3): the structs and components they hold, and what the graph walk
+  # from the vertices the rule before this module applies from, and from the structs, finds.
+  defp reaching_types(shapes, graph, flow) do
+    %{modules: modules, reach: reach, structs: structs} = types(shapes, flow)
+    module_info_plt = flow.module_info_plt
+
+    walked_vertices =
+      Digraph.reachable(graph, MapSet.to_list(MapSet.union(reach, structs)),
+        opaque_vertex?: &protocol_function?(&1, module_info_plt)
+      )
+
+    components =
+      modules
+      |> Enum.concat(Enum.filter(walked_vertices, &is_atom/1))
+      |> Enum.filter(&component?(&1, module_info_plt))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    dispatch_types =
+      walked_vertices
+      |> CallGraph.protocol_dispatch_types(module_info_plt)
+      |> MapSet.union(structs)
+
+    {dispatch_types, components}
+  end
 
   defp read_module_functions(module, ctx) do
     case Compiler.module_ir(ctx.flow.ir_plt, module) do

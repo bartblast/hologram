@@ -11,6 +11,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module11
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module12
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module13
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -156,6 +157,51 @@ defmodule Hologram.Compiler.DataFlowTest do
         ])
 
       assert apply_summary(@part_of_param_0, args) == MapSet.new([{:bag, inside}])
+    end
+  end
+
+  describe "broadcast_analysis/3" do
+    setup do
+      [graph: graph_of([Module11, Module13])]
+    end
+
+    test "a struct in the params of a broadcast is a dispatch type", %{graph: graph} do
+      for {function, struct} <- [
+            broadcast_except: Struct5,
+            broadcast_in_closure: Struct3,
+            broadcast_struct: Struct1,
+            queue_broadcast: Struct4
+          ] do
+        analysis = broadcast_analysis(graph, {Module13, function, 1}, flow())
+
+        assert struct in analysis.dispatch_types
+      end
+    end
+
+    test "a struct built and dropped before a broadcast is not a dispatch type", %{graph: graph} do
+      refute Struct2 in broadcast_analysis(graph, {Module13, :broadcast_label, 1}, flow()).dispatch_types
+    end
+
+    test "a component module in the params of a broadcast is a referenced component", %{
+      graph: graph
+    } do
+      analysis = broadcast_analysis(graph, {Module13, :broadcast_component, 1}, flow())
+
+      assert analysis.referenced_components == [Module11]
+    end
+
+    test "params from the function's own params, or no params, hold nothing", %{graph: graph} do
+      built_in_types = CallGraph.protocol_dispatch_types([], module_info_plt_fixture())
+
+      for caller <- [
+            {Module13, :broadcast_from_param, 2},
+            {Module13, :broadcast_without_params, 1}
+          ] do
+        assert broadcast_analysis(graph, caller, flow()) == %{
+                 dispatch_types: built_in_types,
+                 referenced_components: []
+               }
+      end
     end
   end
 
