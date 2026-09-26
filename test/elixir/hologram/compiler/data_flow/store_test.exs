@@ -42,6 +42,23 @@ defmodule Hologram.Compiler.DataFlow.StoreTest do
     end
   end
 
+  describe "memo/3" do
+    test "gives the function's result, remembered", %{store: store} do
+      assert memo(store, {:walk, 1}, fn -> :result end) == :result
+      assert memo(store, {:walk, 1}, fn -> raise "not called again" end) == :result
+    end
+  end
+
+  describe "memo_count/2" do
+    test "counts the remembered results of one walk", %{store: store} do
+      memo(store, {:walk, 1}, fn -> :a end)
+      memo(store, {:walk, 2, 0}, fn -> :b end)
+      memo(store, {:other, 1}, fn -> :c end)
+
+      assert memo_count(store, :walk) == 2
+    end
+  end
+
   describe "start/1" do
     test "the empty set is id 1", %{store: store} do
       assert intern(store, []) == 1

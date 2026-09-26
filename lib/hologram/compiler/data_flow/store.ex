@@ -52,6 +52,34 @@ defmodule Hologram.Compiler.DataFlow.Store do
   end
 
   @doc """
+  Returns the result remembered under the key, or the function's result, remembered under it. The
+  walks of the analysis remember their results per set this way (a set's content never changes, so
+  neither does a walk's result on it), so a set held in many places is walked once.
+  """
+  @spec memo(t, tuple, (-> value)) :: value when value: term
+  def memo(%Store{memo: memo}, key, fun) do
+    case :ets.lookup(memo.table_ref, key) do
+      [{_key, value}] ->
+        value
+
+      [] ->
+        value = fun.()
+        :ets.insert(memo.table_ref, {key, value})
+        value
+    end
+  end
+
+  @doc """
+  Returns how many results of the given walk the store remembers (see `memo/3`): the keys whose first
+  element is the walk. For tests.
+  """
+  @spec memo_count(t, atom) :: non_neg_integer
+  def memo_count(%Store{memo: memo}, walk) do
+    match_spec = [{{:"$1", :_}, [{:is_tuple, :"$1"}, {:==, {:element, 1, :"$1"}, walk}], [true]}]
+    :ets.select_count(memo.table_ref, match_spec)
+  end
+
+  @doc """
   Starts a store: its tables are PLTs started with the given opts (see
   `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor). The empty set is
   interned first, so its id is 1.

@@ -193,6 +193,13 @@ defmodule Hologram.Compiler.DataFlowTest do
   # The tree of shapes/4's answer.
   defp shapes_tree(expr, clause, mfa, flow), do: to_tree(shapes(expr, clause, mfa, flow), flow)
 
+  # A chain of the given number of sets over param 0, each a tuple holding the one before twice.
+  defp shared_chain(length, flow) do
+    Enum.reduce(1..length, ShapeSet.new([{:param, 0}], flow.store), fn _index, set ->
+      ShapeSet.new([{:tuple, [set, set]}], flow.store)
+    end)
+  end
+
   defp summary_of(module, function, arity), do: summary_tree({module, function, arity}, flow())
 
   # The tree of summary/2's answer.
@@ -225,7 +232,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     :ok
   end
 
-  describe "apply_summary/2" do
+  describe "apply_summary/3" do
     test "puts the arguments in for the params, at any depth" do
       summary = tree_set([{:list, @param_0}, {:tuple, [tree_set([{:param, 1}])]}])
       args = [tree_set([@struct_1]), tree_set([:prim])]
@@ -292,6 +299,38 @@ defmodule Hologram.Compiler.DataFlowTest do
         ])
 
       assert apply_tree(@part_of_param_0, args) == tree_set([{:bag, inside}])
+    end
+
+    # A chain of 30 sets, each a tuple holding the one before twice: 2^30 leaves as a tree, 30 sets in
+    # the store. Each substitution replaces each distinct set once, and each walk remembers its result
+    # per set, so putting an argument in takes 30 steps, not 2^30.
+    @tag timeout: 10_000
+    test "a substitution replaces a repeated set once" do
+      flow = flow()
+      arg = ShapeSet.new([{:atom, :x}], flow.store)
+
+      bag = tree_set([{:bag, tree_set([{:atom, :x}])}])
+      level_2 = tree_set([{:tuple, [bag, bag]}])
+      level_1 = tree_set([{:tuple, [level_2, level_2]}])
+
+      value =
+        30
+        |> shared_chain(flow)
+        |> apply_summary([arg], flow)
+
+      assert to_tree(value, flow) == tree_set([{:tuple, [level_1, level_1]}])
+    end
+
+    @tag timeout: 10_000
+    test "a set widened twice at one depth is widened once" do
+      flow = flow()
+      arg = ShapeSet.new([{:atom, :x}], flow.store)
+
+      30
+      |> shared_chain(flow)
+      |> apply_summary([arg], flow)
+
+      assert Store.memo_count(flow.store, :widen) == 4
     end
   end
 
@@ -371,6 +410,33 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "expression that never returns" do
       refute definite_map_of(Module14, :raises)
+    end
+  end
+
+  describe "map_nested/2" do
+    test "applies the function to each set nested in the shape" do
+      assert map_nested({:tuple, [1, 2]}, &(&1 * 10)) == {:tuple, [10, 20]}
+      assert map_nested({:call, 1, [2, 3]}, &(&1 * 10)) == {:call, 10, [20, 30]}
+      assert map_nested({:dyn, 1, :build, 1, [2]}, &(&1 * 10)) == {:dyn, 10, :build, 1, [20]}
+      assert map_nested({:struct, Struct1, 1}, &(&1 * 10)) == {:struct, Struct1, 10}
+    end
+
+    test "a shape with no nested sets is given back" do
+      assert map_nested({:param, 1}, &(&1 * 10)) == {:param, 1}
+      assert map_nested({:atom, :ok}, &(&1 * 10)) == {:atom, :ok}
+    end
+  end
+
+  describe "nested_sets/1" do
+    test "the sets nested in the shape" do
+      assert nested_sets({:fun, {{Module1, :fun, 0}, 1}, 7}) == [7]
+      assert nested_sets({:dot, 3, :name}) == [3]
+      assert nested_sets({:dyn, 1, :build, 1, [2]}) == [1, 2]
+    end
+
+    test "a shape with no nested sets" do
+      assert nested_sets({:arg, {{Module1, :fun, 0}, 1}, 0}) == []
+      assert nested_sets(:prim) == []
     end
   end
 
@@ -1220,6 +1286,17 @@ defmodule Hologram.Compiler.DataFlowTest do
     test "function returning its param in a tuple" do
       assert summary_of(Module3, :wrap, 1) ==
                tree_set([{:tuple, [tree_set([{:atom, :ok}]), @param_0]}])
+    end
+  end
+
+  describe "to_tree/2" do
+    test "writes the nested sets out, sorted by content" do
+      flow = flow()
+      inner = ShapeSet.new([{:atom, :b}, {:atom, :a}], flow.store)
+      set = ShapeSet.new([{:tuple, [inner, inner]}, :prim], flow.store)
+
+      assert to_tree(set, flow) ==
+               [:prim, {:tuple, [[{:atom, :a}, {:atom, :b}], [{:atom, :a}, {:atom, :b}]]}]
     end
   end
 
