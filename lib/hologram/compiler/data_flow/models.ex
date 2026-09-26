@@ -11,8 +11,9 @@ defmodule Hologram.Compiler.DataFlow.Models do
   # or returns everything it is given when it has none.
   #
   # A function that gives its map argument back with entries added, changed or removed returns that
-  # argument as a map (`{:as_map, ...}`), joined with a map of the new keys and values: a struct stays
-  # a struct, so an updated struct keeps its protocol implementations.
+  # argument as a map (`{:as_map, ...}`), joined with a map holding the new keys and values in its rest
+  # (a model does not know which key it is given): a struct stays a struct, so an updated struct keeps
+  # its protocol implementations, and a read of any field of it holds the new values.
   #
   # A model must not be smaller than what the function can return.
   #
@@ -257,7 +258,11 @@ defmodule Hologram.Compiler.DataFlow.Models do
 
   defp list(elements), do: set([{:list, elements}])
 
-  defp map(inner), do: set([{:map, inner}])
+  # A map whose keys are not known: its keys and values are the rest (see
+  # Hologram.Compiler.DataFlow.fields/0), none for an empty map.
+  defp map([]), do: set([{:map, %{}}])
+
+  defp map(inner), do: set([{:map, DataFlow.rest_fields(inner)}])
 
   # What :lists.mapfoldl/3 and :lists.mapfoldr/3 give: the mapped elements and the accumulator,
   # from two rounds of calling the function, which returns a tuple of both.

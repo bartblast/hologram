@@ -9,7 +9,17 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
 
-  @struct_1 {:struct, Struct1, tree_set()}
+  @struct_1 {:struct, Struct1, %{}}
+
+  # A map whose keys are not known, holding the shapes (see DataFlow.fields/0).
+  defp rest_map(shapes) do
+    fields =
+      shapes
+      |> tree_set()
+      |> DataFlow.rest_fields()
+
+    {:map, fields}
+  end
 
   # The tree of what a call of the modelled function with arguments of the given shapes gives.
   defp call_model(mfa, args) do
@@ -65,7 +75,7 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
     end
 
     test "Erlang function taking a value out of what it is given" do
-      assert call_model({:maps, :get, 2}, [[{:atom, :a}], [{:map, tree_set([@struct_1])}]]) ==
+      assert call_model({:maps, :get, 2}, [[{:atom, :a}], [rest_map([@struct_1])]]) ==
                tree_set([@struct_1])
 
       assert call_model({:erlang, :element, 2}, [[:prim], [{:tuple, [tree_set([@struct_1])]}]]) ==
@@ -73,23 +83,24 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
     end
 
     test "Erlang function putting what it is given in a new value" do
-      args = [[{:atom, :a}], [@struct_1], [{:map, tree_set()}]]
+      args = [[{:atom, :a}], [@struct_1], [{:map, %{}}]]
 
+      # The key is a param, so the new pair goes to the rest (see DataFlow.fields/0).
       assert call_model({:maps, :put, 3}, args) ==
                tree_set([
-                 {:map, tree_set()},
-                 {:map, tree_set([{:atom, :a}, @struct_1])}
+                 {:map, %{}},
+                 rest_map([{:atom, :a}, @struct_1])
                ])
     end
 
     test "Erlang function giving back the struct it is given" do
-      map = {:map, tree_set([{:atom, :a}])}
+      map = {:map, %{a: tree_set([:prim])}}
 
       assert call_model({:maps, :merge, 2}, [[@struct_1], [map]]) ==
                tree_set([@struct_1, map])
 
       assert call_model({:maps, :put, 3}, [[{:atom, :a}], [:prim], [@struct_1]]) ==
-               tree_set([@struct_1, {:map, tree_set([{:atom, :a}, :prim])}])
+               tree_set([@struct_1, rest_map([{:atom, :a}, :prim])])
 
       assert call_model({:maps, :remove, 2}, [[{:atom, :a}], [@struct_1]]) ==
                tree_set([@struct_1])
@@ -124,10 +135,9 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
     end
 
     test "Hologram function that returns the server as it was" do
-      args = [[{:struct, Server, tree_set()}], [:prim]]
+      args = [[{:struct, Server, %{}}], [:prim]]
 
-      assert call_model({Server, :put_status, 2}, args) ==
-               tree_set([{:struct, Server, tree_set()}])
+      assert call_model({Server, :put_status, 2}, args) == tree_set([{:struct, Server, %{}}])
     end
 
     test "a Hologram function that puts a value in the session has no model" do

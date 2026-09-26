@@ -25,6 +25,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module20
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module21
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module24
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -37,9 +38,10 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct5
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct7
 
-  # The fields an empty Struct1 or Struct2 literal holds: its field name and the default value.
-  @defaults tree_set([{:atom, :field}, {:atom, nil}])
+  # The fields an empty Struct1 or Struct2 literal holds: its one field, holding the default value.
+  @defaults %{field: tree_set([{:atom, nil}])}
 
   @param_0 tree_set([{:param, 0}])
 
@@ -50,13 +52,13 @@ defmodule Hologram.Compiler.DataFlowTest do
   @struct_2 {:struct, Struct2, @defaults}
 
   # A stored answer's atoms that are not modules are primitives (see summary/2): a struct literal's
-  # defaults, its field name and nil, become one primitive.
-  @stored_defaults tree_set([:prim])
+  # default, nil, becomes a primitive.
+  @stored_defaults %{field: tree_set([:prim])}
   @struct_1_stored {:struct, Struct1, @stored_defaults}
   @struct_2_stored {:struct, Struct2, @stored_defaults}
 
   # What a pattern naming Struct1 with no fields names.
-  @struct_1_named {:struct, Struct1, tree_set()}
+  @struct_1_named {:struct, Struct1, %{}}
 
   # The tree of what the summary gives with the given arguments put in (see apply_summary/2).
   defp apply_tree(summary, args) do
@@ -273,10 +275,10 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "a param a map pattern matched is whichever alternative of the argument is a map" do
-      args = [tree_set([@struct_1, {:atom, :ok}, {:map, tree_set()}])]
+      args = [tree_set([@struct_1, {:atom, :ok}, {:map, %{}}])]
 
       assert apply_tree(tree_set([{:as_map, @param_0}]), args) ==
-               tree_set([@struct_1, {:map, tree_set()}])
+               tree_set([@struct_1, {:map, %{}}])
     end
 
     test "a collapsed route gives every type inside the argument" do
@@ -293,8 +295,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       inside =
         tree_set([
           {:atom, :ok},
-          {:struct, Struct1, tree_set()},
-          {:atom, :field},
+          @struct_1_named,
           {:atom, nil}
         ])
 
@@ -470,7 +471,12 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert map_nested({:tuple, [1, 2]}, &(&1 * 10)) == {:tuple, [10, 20]}
       assert map_nested({:call, 1, [2, 3]}, &(&1 * 10)) == {:call, 10, [20, 30]}
       assert map_nested({:dyn, 1, :build, 1, [2]}, &(&1 * 10)) == {:dyn, 10, :build, 1, [20]}
-      assert map_nested({:struct, Struct1, 1}, &(&1 * 10)) == {:struct, Struct1, 10}
+
+      assert map_nested({:struct, Struct1, %{field: 1}}, &(&1 * 10)) ==
+               {:struct, Struct1, %{field: 10}}
+
+      assert map_nested({:map, %{:a => 1, {:rest} => 2}}, &(&1 * 10)) ==
+               {:map, %{:a => 10, {:rest} => 20}}
     end
 
     test "a shape with no nested sets is given back" do
@@ -549,7 +555,7 @@ defmodule Hologram.Compiler.DataFlowTest do
                tree_set([{:tuple, List.duplicate(@param_0, 4)}])
 
       assert shapes_tree(clause.body, clause, mfa, flow) ==
-               tree_set([{:bag, :ordsets.union(@defaults, tree_set([@struct_1_named]))}])
+               tree_set([{:bag, tree_set([{:atom, nil}, @struct_1_named])}])
     end
 
     # The cap is exactly what twice/2's substitution copies into the value: its summary and the value it
@@ -587,7 +593,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       clause = clause(Module21, :calls_dispatch)
       mfa = {Module21, :calls_dispatch, 1}
       value = shapes_tree(clause.body, clause, mfa, flow())
-      leaves = tree_set([:prim, @struct_1_named, {:struct, Struct2, tree_set()}])
+      leaves = tree_set([:prim, @struct_1_named, {:struct, Struct2, %{}}])
 
       flow =
         start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(value) - 1)
@@ -630,8 +636,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "map" do
-      assert shapes_of(Module1, :map) ==
-               tree_set([{:map, tree_set([{:atom, :a}, :prim])}])
+      assert shapes_of(Module1, :map) == tree_set([{:map, %{a: tree_set([:prim])}}])
     end
 
     test "match gives its right side" do
@@ -659,12 +664,12 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "map with a __struct__ key is a struct" do
       assert shapes_of(Module1, :struct_map) ==
-               tree_set([{:struct, Struct1, tree_set([{:atom, :field}, {:atom, :x}])}])
+               tree_set([{:struct, Struct1, %{field: tree_set([{:atom, :x}])}}])
     end
 
     test "struct with fields" do
       assert shapes_of(Module1, :struct_with_fields) ==
-               tree_set([{:struct, Struct1, tree_set([{:atom, :field}, {:atom, :x}])}])
+               tree_set([{:struct, Struct1, %{field: tree_set([{:atom, :x}])}}])
     end
 
     test "tuple" do
@@ -704,8 +709,9 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "comprehension into a map" do
+      # Its keys are not known: the keys and the values are the rest.
       assert shapes_of(Module2, :comprehension_into_map) ==
-               tree_set([{:map, tree_set([{:atom, :a}, @struct_1])}])
+               tree_set([{:map, rest_fields(tree_set([{:atom, :a}, @struct_1]))}])
     end
 
     test "comprehension with a reducer" do
@@ -724,12 +730,12 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert shapes_of(Module2, :from_list) == tree_set([@struct_1])
     end
 
-    test "variable taken from a map holds what the map holds" do
-      assert shapes_of(Module2, :from_map) == tree_set([{:atom, :a}, @struct_1])
+    test "variable taken from a map holds what the map holds under the key" do
+      assert shapes_of(Module2, :from_map) == tree_set([@struct_1])
     end
 
     test "variable taken from a struct's field" do
-      assert shapes_of(Module2, :from_struct_field) == tree_set([{:atom, :field}, @struct_2])
+      assert shapes_of(Module2, :from_struct_field) == tree_set([@struct_2])
     end
 
     test "variable taken from a tuple" do
@@ -770,7 +776,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "try with rescue of a module" do
-      fields = top({Module2, :try_rescue, 0})
+      fields = rest_fields(top({Module2, :try_rescue, 0}))
 
       assert shapes_of(Module2, :try_rescue) ==
                tree_set([{:atom, :ok}, {:struct, ArgumentError, fields}])
@@ -843,7 +849,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     test "a set nested too deep becomes a bag of its leaves, with the same types" do
       flow = flow()
       summary = summary({Module9, :deep, 0}, flow)
-      leaves = tree_set([{:struct, Struct1, tree_set()}, :prim])
+      leaves = tree_set([@struct_1_named, :prim])
       level_3 = tree_set([{:tuple, [tree_set([{:bag, leaves}])]}])
       level_2 = tree_set([{:tuple, [level_3]}])
 
@@ -941,7 +947,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "apply/3 with the function name and the argument list written out" do
-      fields = tree_set([:prim, @struct_2_stored])
+      fields = %{field: tree_set([@struct_2_stored])}
 
       assert summary_of(Module6, :apply_written, 0) == tree_set([{:struct, Struct1, fields}])
     end
@@ -958,17 +964,47 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module6, :calls_on_param, 0) == tree_set([@struct_1_stored])
     end
 
-    test "dot on a struct gives what its fields hold" do
-      assert summary_of(Module6, :field, 0) == tree_set([:prim, @struct_2_stored])
+    test "dot on a struct gives what the field holds" do
+      assert summary_of(Module6, :field, 0) == tree_set([@struct_2_stored])
     end
 
     test "dot on a param is made once the param is known" do
       assert summary_of(Module6, :field_of_param, 1) == tree_set([{:dot, @param_0, :field}])
     end
 
-    test "dot on a struct passed as an argument gives its fields, not the struct" do
-      assert summary_of(Module6, :calls_field_of_param, 0) ==
-               tree_set([:prim, @struct_2_stored])
+    test "dot on a struct passed as an argument gives the field, not the struct" do
+      assert summary_of(Module6, :calls_field_of_param, 0) == tree_set([@struct_2_stored])
+    end
+
+    test "a field of a struct literal holds only that field's value" do
+      assert summary_of(Module24, :literal_field, 0) == tree_set([:prim])
+    end
+
+    test "a key of a map literal holds only that key's value" do
+      assert summary_of(Module24, :map_key, 0) == tree_set([:prim])
+    end
+
+    test "a map literal's atom keys are its fields, not values" do
+      fields = %{item: tree_set([@struct_1_stored]), title: tree_set([:prim])}
+
+      assert summary_of(Module24, :map_literal, 0) == tree_set([{:map, fields}])
+    end
+
+    test "a field read holds what the pairs with keys other than atoms hold" do
+      assert summary_of(Module24, :mixed_keys, 0) == tree_set([:prim, @struct_1_stored])
+    end
+
+    test "a field of a struct built from a value keeps the types in the value" do
+      flow = flow()
+      summary = summary({Module24, :built_field, 1}, flow)
+
+      pair = {:tuple, [tree_set([{:atom, :name}]), tree_set([@struct_1])]}
+      list = {:list, tree_set([pair])}
+      arg = ShapeSet.from_tree([list], flow.store)
+
+      applied = apply_summary(summary, [arg], flow)
+
+      assert Struct1 in types(applied, flow).structs
     end
 
     test "__struct__ dot on a struct gives its module" do
@@ -1084,7 +1120,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "function building a struct from its param" do
-      fields = tree_set([:prim, {:param, 0}])
+      fields = %{field: @param_0}
 
       assert summary_of(Module3, :build_from, 1) == tree_set([{:struct, Struct1, fields}])
     end
@@ -1094,7 +1130,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "call puts its arguments in the callee's summary" do
-      fields = tree_set([:prim, @struct_2_stored])
+      fields = %{field: tree_set([@struct_2_stored])}
 
       assert summary_of(Module3, :calls_build_from, 0) ==
                tree_set([{:struct, Struct1, fields}])
@@ -1389,8 +1425,13 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert types_of([@struct_1]) == types_fixture([], [], [Struct1])
     end
 
+    test "a map's atom keys, a module among them" do
+      assert types_of([{:map, %{Module1 => tree_set([:prim])}}]) ==
+               types_fixture([Module1], [], [])
+    end
+
     test "struct in a struct's fields" do
-      struct = {:struct, Struct1, tree_set([@struct_2])}
+      struct = {:struct, Struct1, %{field: tree_set([@struct_2])}}
 
       assert types_of([struct]) == types_fixture([], [], [Struct1, Struct2])
     end
@@ -1421,7 +1462,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       shapes = [
         {:tuple, [tree_set([@struct_1])]},
         {:list, tree_set([{:atom, Module1}])},
-        {:map, tree_set([@struct_2])},
+        {:map, %{a: tree_set([@struct_2])}},
         {:bag, tree_set([{:reach, {Module3, :build, 0}}])}
       ]
 
