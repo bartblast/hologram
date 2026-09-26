@@ -74,11 +74,10 @@ defmodule Hologram.Compiler.DataFlow do
 
   # How large a function's summary, or the value of a call, can be, in bytes of its external term
   # format (see :erlang.external_size/1, a walk of the whole term like every walk the analysis makes
-  # over it), before the function's top stands for it (see capped_summary/3 and capped_call/4).
-  # Without a cap a summary can grow to megabytes: a bag holds any number of leaves, and a pending
-  # call or an anonymous function in it keeps its own sets. Every call that uses a summary walks it
-  # several times (param_indexes/2, replace/3, widen/1), so a few such summaries stall a compile. A
-  # start/3 opt can set another cap.
+  # over it), before it becomes a bag of its leaves (see bounded/2). Without a cap a summary can grow
+  # to megabytes: a bag holds any number of leaves, and a pending call or an anonymous function in it
+  # keeps its own sets. Every call that uses a summary walks it several times (param_indexes/2,
+  # replace/3, widen/1), so a few such summaries stall a compile. A start/3 opt can set another cap.
   @max_summary_size 32_768
 
   # The range of the hash that tells anonymous functions apart within a function (see eval/2).
@@ -283,8 +282,8 @@ defmodule Hologram.Compiler.DataFlow do
   ## Options
 
     * `:max_summary_size` - how large a function's summary, or the value of a call, can be, in bytes
-      of its external term format, before the function's top stands for it (see `top/1`); defaults
-      to 32 KiB.
+      of its external term format, before it becomes a bag of its leaves, which keeps the types it
+      names and drops its structure; defaults to 32 KiB.
 
   The other opts are given to the PLTs it keeps its summaries and its module checks in (see
   `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
@@ -319,9 +318,10 @@ defmodule Hologram.Compiler.DataFlow do
 
   Functions that call each other are solved together: each is evaluated again when an answer it read
   changes, until none changes, the first evaluation reading nothing for a function not evaluated yet.
-  An answer that keeps growing becomes a bag of its leaves after a few evaluations. Every function a
-  run solves is kept for the rest of the compile. A summary, or the value of a call, larger than the
-  cap given to `start/3` is the function's top, with the arguments put in for a call.
+  An answer that keeps growing becomes a bag of its leaves after a few evaluations, and the function's
+  top after more (see `top/1`). Every function a run solves is kept for the rest of the compile. A
+  summary, or the value of a call, larger than the cap given to `start/3` becomes a bag of its leaves:
+  it keeps the types it names and drops its structure.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
@@ -392,6 +392,20 @@ defmodule Hologram.Compiler.DataFlow do
       |> Enum.reduce(acc, &put_binding(&2, &1, {pattern, subject}))
 
     put_pattern_extras(new_acc, pattern)
+  end
+
+  # The shapes, or a bag of their leaves when they are larger than the flow context's
+  # :max_summary_size (see @max_summary_size): the bag holds every type the shapes name and drops their
+  # structure, so no type is lost and nothing falls back to the rule before this module. Checked on a
+  # function's summary and on the value of every call, since putting arguments in multiplies sizes (a
+  # summary holding its param many times, given a large argument), and a value made so is an argument
+  # of the next call in the same function.
+  defp bounded(shapes, ctx) do
+    if :erlang.external_size(shapes) > ctx.flow.max_summary_size do
+      ShapeSet.new([{:bag, leaves(shapes)}])
+    else
+      shapes
+    end
   end
 
   # What the params of a broadcast call gives, when the function called is one that broadcasts with
@@ -483,11 +497,10 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp call_dyn_shape({:atom, module}, name, arity, args, ctx) do
-    mfa = {module, name, arity}
-
-    mfa
+    {module, name, arity}
     |> callee_summary(ctx)
-    |> capped_call(mfa, args, ctx)
+    |> put_args(args, ctx)
+    |> bounded(ctx)
   end
 
   defp call_dyn_shape(shape, name, arity, args, _ctx)
@@ -559,34 +572,6 @@ defmodule Hologram.Compiler.DataFlow do
     |> ShapeSet.union_all()
   end
 
-  # The callee's summary with the arguments put in, or the callee's top with them when that value is
-  # larger than the flow context's :max_summary_size: the rule before this module applied from the
-  # callee, and everything it is given, which holds every type the value holds. Putting arguments in
-  # multiplies sizes (a summary holding its param many times, given a large argument), and a value
-  # made so is an argument of the next call in the same function, so the check is made at every call,
-  # not only on a function's finished summary (see capped_summary/3).
-  defp capped_call(summary, mfa, args, ctx) do
-    value = put_args(summary, args, ctx)
-
-    if :erlang.external_size(value) > ctx.flow.max_summary_size do
-      put_args(top(mfa), args, ctx)
-    else
-      value
-    end
-  end
-
-  # The summary, or the function's top when the summary is larger than the flow context's
-  # :max_summary_size (see @max_summary_size). The top holds the rule before this module applied from
-  # the function and everything it is given, so no type the summary holds is lost, and it is small: the
-  # functions that call this one get small summaries too.
-  defp capped_summary(summary, mfa, ctx) do
-    if :erlang.external_size(summary) > ctx.flow.max_summary_size do
-      top(mfa)
-    else
-      summary
-    end
-  end
-
   # The variables of a function clause or an anonymous function's clause, each with the places it is
   # bound at and the shapes the patterns it is matched against name for it; the given function says
   # what the parameter at an index holds. A variable of IR read from a BEAM has a version per
@@ -623,7 +608,7 @@ defmodule Hologram.Compiler.DataFlow do
     |> ShapeSet.union_all()
     |> widen()
     |> compress_atoms(ctx)
-    |> capped_summary(mfa, ctx)
+    |> bounded(ctx)
   end
 
   # Collapses routes into arguments: a chain of two or more steps (@route_steps) around params or
@@ -1021,7 +1006,9 @@ defmodule Hologram.Compiler.DataFlow do
         if MapSet.member?(used_indexes, index), do: eval(arg, ctx), else: ShapeSet.new()
       end)
 
-    capped_call(summary, mfa, arg_shapes, ctx)
+    summary
+    |> put_args(arg_shapes, ctx)
+    |> bounded(ctx)
   end
 
   # Evaluates a function the run is solving: its answer is what its code gives with the current answers

@@ -355,7 +355,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "shapes/4" do
-    test "a call whose value is larger than the cap gives the callee's top with the arguments" do
+    test "a call whose value is larger than the cap is a bag of its leaves" do
       clause = clause(Module17, :calls_repeat)
       mfa = {Module17, :calls_repeat, 0}
       value = shapes(clause.body, clause, mfa, flow())
@@ -371,7 +371,7 @@ defmodule Hologram.Compiler.DataFlowTest do
                ShapeSet.new([{:tuple, List.duplicate(@param_0, 4)}])
 
       assert shapes(clause.body, clause, mfa, flow) ==
-               ShapeSet.new([{:reach, {Module17, :repeat, 1}}, @struct_1])
+               ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
     end
 
     test "atom" do
@@ -1044,10 +1044,11 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert PLT.get(flow.module_atoms, :done) == {:ok, false}
     end
 
-    test "a summary larger than the cap is the function's top" do
+    test "a summary larger than the cap is a bag of its leaves" do
       flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: 1)
 
-      assert summary({Module3, :recursive, 1}, flow) == top({Module3, :recursive, 1})
+      assert summary({Module3, :recursive, 1}, flow) ==
+               ShapeSet.new([{:bag, ShapeSet.new([:prim, @struct_1_named])}])
     end
 
     test "function with two clauses" do
