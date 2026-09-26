@@ -305,6 +305,34 @@ defmodule Hologram.Compiler.DataFlowTest do
     # the store. Each substitution replaces each distinct set once, and each walk remembers its result
     # per set, so putting an argument in takes 30 steps, not 2^30.
     @tag timeout: 10_000
+    # widen/1 makes a set nested three levels deep a bag of its leaves (see shape_leaves/2), so a value
+    # under three tuples shows which leaves a bag keeps. `other` stands for an anonymous function that
+    # is still whole elsewhere, whose placeholders a later call fills; `ref` for one dissolved here.
+    test "in a bag, a step into a value not known yet is that value" do
+      other = {{Module1, :other, 0}, 1}
+
+      assert apply_tree(under_three_tuples(tree_set([{:part, tree_set([{:arg, other, 1}])}])), []) ==
+               under_three_tuples(tree_set([{:bag, tree_set([{:arg, other, 1}])}]))
+    end
+
+    test "in a bag, a dissolved function's own argument placeholders and dots on them are gone" do
+      ref = {{Module1, :fun, 0}, 1}
+      other = {{Module1, :other, 0}, 1}
+
+      returned =
+        tree_set([
+          {:arg, ref, 0},
+          {:atom, :x},
+          {:dot, tree_set([{:arg, ref, 0}]), :name},
+          {:dot, tree_set([{:arg, other, 0}]), :name}
+        ])
+
+      leaves = tree_set([{:atom, :x}, {:dot, tree_set([{:arg, other, 0}]), :name}])
+
+      assert apply_tree(under_three_tuples(tree_set([{:fun, ref, returned}])), []) ==
+               under_three_tuples(tree_set([{:bag, leaves}]))
+    end
+
     test "a substitution replaces a repeated set once" do
       flow = flow()
       arg = ShapeSet.new([{:atom, :x}], flow.store)
@@ -1384,5 +1412,10 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert types_of(shapes) == types_fixture([Module1], [], [Struct2])
     end
+  end
+
+  # The tree of the given tree nested under three one-element tuples.
+  defp under_three_tuples(tree) do
+    Enum.reduce(1..3, tree, fn _level, inner -> tree_set([{:tuple, [inner]}]) end)
   end
 end

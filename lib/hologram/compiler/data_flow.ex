@@ -1518,9 +1518,15 @@ defmodule Hologram.Compiler.DataFlow do
   # fields hold, and the contents of maps, lists, tuples and bags. An anonymous function and a call of
   # one not made yet dissolve into their parts: what the function returns, the function called and the
   # arguments. That holds every type the call can give, since a function returns what it builds or
-  # what it is given, and a bag is called the same way either way (see call_fun/3). A dynamic call, a
-  # dot and a step into a value not known yet stay, with the sets they hold made leaves too: a call on
-  # a module not known yet gives what that module's function builds, which its parts don't hold.
+  # what it is given, and a bag is called the same way either way (see call_fun/3); a dissolved
+  # function's own argument placeholders go, since nothing can fill them any more (see
+  # without_args/3). A step into a value not known yet (a part of it, what is inside it, it as a map)
+  # is that value's leaves: a part holds at most what the whole holds. A dynamic call and a dot stay,
+  # with the sets they hold made leaves too: a call on a module not known yet, or a field read of one,
+  # gives what that module's function builds, which its parts don't hold. So a function's bag can only
+  # hold its params, the atoms and struct modules its code names, the vertices the rule before this
+  # module applies from, and dots and dynamic calls over those: a finite set, which an answer that
+  # keeps growing reaches in a few evaluations.
   defp leaves(shapes, store) do
     Store.memo(store, {:leaves, shapes}, fn ->
       ShapeSet.flat_map(shapes, &ShapeSet.new(shape_leaves(&1, store), store), store)
@@ -2184,6 +2190,13 @@ defmodule Hologram.Compiler.DataFlow do
   # Runs the entry's function and returns what it gives; when it read an answer that is not final,
   # solves the work list first and runs it again, until a run reads only final answers. The function
   # makes its own frames, so that each run reads its variables again.
+  defp set_without_args(set, ref, store) do
+    set
+    |> ShapeSet.to_list(store)
+    |> without_args(ref, store)
+    |> ShapeSet.new(store)
+  end
+
   defp settle(ctx, fun) do
     :ets.insert(ctx.memo, {:unsettled, false})
     result = fun.()
@@ -2238,10 +2251,11 @@ defmodule Hologram.Compiler.DataFlow do
     |> ShapeSet.to_list(store)
   end
 
-  defp shape_leaves({:fun, _ref, returned}, store) do
+  defp shape_leaves({:fun, ref, returned}, store) do
     returned
     |> leaves(store)
     |> ShapeSet.to_list(store)
+    |> without_args(ref, store)
   end
 
   defp shape_leaves({:call, fun, args}, store) do
@@ -2258,7 +2272,9 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp shape_leaves({kind, shapes}, store) when kind in [:as_map, :contents, :part] do
-    [{kind, leaves(shapes, store)}]
+    shapes
+    |> leaves(store)
+    |> ShapeSet.to_list(store)
   end
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
@@ -2279,6 +2295,28 @@ defmodule Hologram.Compiler.DataFlow do
 
   # A value of unknown structure, the rule before this module from a vertex, or a primitive.
   defp shape_parts(shape, store), do: ShapeSet.new([shape], store)
+
+  defp shape_without_args({:arg, ref, _index}, ref, _store), do: []
+
+  defp shape_without_args({:bag, inner}, ref, store),
+    do: [{:bag, set_without_args(inner, ref, store)}]
+
+  defp shape_without_args({:dot, inner, name}, ref, store) do
+    inner = set_without_args(inner, ref, store)
+    if ShapeSet.empty?(inner, store), do: [], else: [{:dot, inner, name}]
+  end
+
+  defp shape_without_args({:dyn, module, name, arity, args}, ref, store) do
+    module = set_without_args(module, ref, store)
+
+    if ShapeSet.empty?(module, store) do
+      []
+    else
+      [{:dyn, module, name, arity, Enum.map(args, &set_without_args(&1, ref, store))}]
+    end
+  end
+
+  defp shape_without_args(shape, _ref, _store), do: [shape]
 
   # Evaluates the functions of the work list until it is empty (see evaluate/2): the deepest first, a
   # function met while evaluating another one being one deeper, and among equals in the order they were
@@ -2525,4 +2563,11 @@ defmodule Hologram.Compiler.DataFlow do
   defp within_cap?(shapes, ctx) do
     graph_bytes_within?([shapes], ctx.flow.max_summary_size, ctx.flow.store)
   end
+
+  # The leaves without the placeholders of the given anonymous function's arguments, at any depth of
+  # the bags, dots and dynamic calls among them: once the function is dissolved into its leaves (see
+  # shape_leaves/2), no call of it will ever fill them. A dot or a dynamic call left with no module is
+  # dropped too: it can never be made.
+  defp without_args(leaves, ref, store),
+    do: Enum.flat_map(leaves, &shape_without_args(&1, ref, store))
 end
