@@ -516,19 +516,6 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert shapes_tree(clause.body, clause, mfa, flow) == tree_set([{:bag, tree_set(atoms)}])
     end
 
-    test "an expression whose value is larger than the cap is a bag of its leaves" do
-      clause = clause(Module21, :nested)
-      mfa = {Module21, :nested, 0}
-      structs = four_structs()
-      nested = tree_set([{:tuple, List.duplicate(structs, 4)}])
-
-      flow =
-        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(nested) - 1)
-
-      assert shapes_tree(clause.body, clause, mfa, flow) ==
-               tree_set([{:bag, :ordsets.union(@defaults, tree_set([@struct_1_named]))}])
-    end
-
     test "an argument larger than the cap is flattened before it is put in" do
       clause = clause(Module21, :calls_wrap)
       mfa = {Module21, :calls_wrap, 0}
@@ -1259,6 +1246,28 @@ defmodule Hologram.Compiler.DataFlowTest do
         assert types(summary, flow).structs == MapSet.new([Struct1]),
                "#{function}: #{inspect(summary)}"
       end
+    end
+
+    # nested/0 builds its value with no call, so no call's bound applies; the summary's bound does.
+    test "a summary built without a call, larger than the cap, is a bag of its leaves" do
+      mfa = {Module21, :nested, 0}
+      struct = tree_set([@struct_1_stored])
+      structs = tree_set([{:tuple, List.duplicate(struct, 4)}])
+      value = tree_set([{:tuple, List.duplicate(structs, 4)}])
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(value) - 1)
+
+      assert summary_tree(mfa, flow) == tree_set([{:bag, tree_set([:prim, @struct_1_named])}])
+    end
+
+    # Measured as a tree, the value is 1,000 copies of the struct, far over the cap; the store holds
+    # the struct's set once, so the value fits and keeps its structure.
+    test "a value holding one set a thousand times fits the cap" do
+      struct = tree_set([@struct_1_stored])
+
+      assert summary_tree({Module21, :calls_thousand, 0}, flow()) ==
+               tree_set([{:tuple, List.duplicate(struct, 1_000)}])
     end
 
     test "a summary larger than the cap is a bag of its leaves" do

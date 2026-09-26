@@ -73,13 +73,13 @@ defmodule Hologram.Compiler.DataFlow do
   # calls one inside another would still let the work double at every level.
   @max_fun_calls 32
 
-  # How large a function's summary, or the value of a call, can be, in bytes of its external term
-  # format (see :erlang.external_size/1, a walk of the whole term like every walk the analysis makes
-  # over it), before it becomes a bag of its leaves, or the top of the function being read when even
-  # that is larger (see bounded/2). Without a cap a summary can grow to megabytes: a bag holds any
-  # number of leaves, and a pending call or an anonymous function in it keeps its own sets. Every call
-  # that uses a summary walks it several times (used_indexes/3, replace/3, widen/1), so a few such
-  # summaries stall a compile. A start/3 opt can set another cap.
+  # How large a value can be before it becomes a bag of its leaves, or the top of the function being
+  # read when even that is larger (see bounded/2): the bytes of each distinct set the value reaches,
+  # counted once, each set nested in one counted as a small integer (see graph_bytes_within?/3). A set
+  # held in many places is stored once (see Store) and walked once (see Store.memo/3), so a copy costs
+  # nothing; distinct content is what memory and walks pay for. A value can still grow without a cap:
+  # a bag holds any number of leaves, and code can build values of many distinct parts. A start/3 opt
+  # can set another cap.
   @max_summary_size 32_768
 
   # The range of the hash that tells anonymous functions apart within a function (see eval/2).
@@ -346,9 +346,9 @@ defmodule Hologram.Compiler.DataFlow do
   ## Options
 
     * `:max_summary_size` - how large a function's summary, or the value of a call, can be, in bytes
-      of its external term format, before it becomes a bag of its leaves, which keeps the types it
-      names and drops its structure, or the top of the function being read when even that is larger
-      (see `top/1`); defaults to 32 KiB.
+      of the distinct sets it reaches, each counted once, before it becomes a bag of its leaves, which
+      keeps the types it names and drops its structure, or the top of the function being read when
+      even that is larger (see `top/1`); defaults to 32 KiB.
 
   The other opts are given to the PLTs it keeps its summaries, its module checks and its store in
   (see `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
@@ -387,9 +387,9 @@ defmodule Hologram.Compiler.DataFlow do
   changes, until none changes, the first evaluation reading nothing for a function not evaluated yet.
   An answer that keeps growing becomes a bag of its leaves after a few evaluations, and the function's
   top after more (see `top/1`). Every function a run solves is kept for the rest of the compile. A
-  summary, or the value of a call, larger than the cap given to `start/3` becomes a bag of its leaves,
-  which keeps the types it names and drops its structure, or the top of the function being read when
-  even that is larger.
+  summary, or the value of a call, larger than the cap given to `start/3` (each distinct set counted
+  once) becomes a bag of its leaves, which keeps the types it names and drops its structure, or the
+  top of the function being read when even that is larger.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
@@ -490,10 +490,10 @@ defmodule Hologram.Compiler.DataFlow do
   # :max_summary_size (see @max_summary_size): the bag holds every type the shapes name and drops their
   # structure, so no type is lost. A bag still larger than the cap (leaves can hold sets of their own,
   # see shape_leaves/1) gives the top of the function being read (see top/1): everything its code can
-  # give, a call's value in it included, in a few bytes. Checked on a function's summary and on the
-  # value of every call, since putting arguments in multiplies sizes (a summary holding its param many
-  # times, given a large argument), and a value made so is an argument of the next call in the same
-  # function.
+  # give, a call's value in it included, in a few bytes. Checked on a function's summary, a call's
+  # value, a called function's value (see call_fun/3) and an argument before it is put in (see
+  # substitution_inputs/4): where values from elsewhere join. A value built inside one function grows
+  # by what its code names, not by copies, since the store holds each set once.
   defp bounded(shapes, ctx) do
     if within_cap?(shapes, ctx) do
       shapes
@@ -951,16 +951,237 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # The shapes of the expression's value, bounded (see bounded/2): every expression's value is checked
-  # against the cap, so no value is larger than the cap plus what one expression joins or nests (a
-  # case of values under the cap, a tuple of them), wherever it is built. Checked only on calls and
-  # answers, values built inside one function (variables joined and nested, literals of them) grew
-  # without end.
-  defp eval(expr, ctx) do
-    expr
-    |> eval_node(ctx)
-    |> bounded(ctx)
+  defp eval(%IR.AnonymousFunctionCall{function: function, args: args}, ctx) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    function
+    |> eval(ctx)
+    |> apply_fun(arg_shapes, new_rep(ctx, ctx.flow.store))
   end
+
+  # An anonymous function returns what its clauses give, its parameters being its arguments. A
+  # capture comes with a clause that calls the captured function.
+  defp eval(%IR.AnonymousFunctionType{clauses: clauses} = ir, ctx) do
+    ref = fun_ref(ir, ctx)
+
+    returned =
+      clauses
+      |> Enum.map(fn clause ->
+        frame = clause_frame(clause, &{:arg, ref, &1}, ctx.flow.store)
+        eval(clause.body, %{ctx | frames: [frame | ctx.frames]})
+      end)
+      |> ShapeSet.union_all(ctx.flow.store)
+
+    ShapeSet.new([{:fun, ref, returned}], ctx.flow.store)
+  end
+
+  defp eval(%IR.AtomType{value: value}, ctx),
+    do: ShapeSet.new([{:atom, value}], ctx.flow.store)
+
+  defp eval(%IR.Block{expressions: []}, ctx),
+    do: ShapeSet.new([{:atom, nil}], ctx.flow.store)
+
+  defp eval(%IR.Block{expressions: expressions}, ctx) do
+    expressions
+    |> List.last()
+    |> eval(ctx)
+  end
+
+  defp eval(%IR.Case{clauses: clauses}, ctx) do
+    clauses
+    |> Enum.map(& &1.body)
+    |> eval_all(ctx)
+  end
+
+  defp eval(%IR.Comprehension{reducer: nil, collectable: collectable, mapper: mapper}, ctx) do
+    mapped = eval(mapper, ctx)
+
+    case collectable do
+      %IR.ListType{data: []} ->
+        ShapeSet.new([{:list, mapped}], ctx.flow.store)
+
+      %IR.MapType{data: []} ->
+        ShapeSet.new([{:map, contents(mapped, ctx.flow.store)}], ctx.flow.store)
+
+      _other ->
+        inner =
+          collectable
+          |> eval(ctx)
+          |> ShapeSet.union(mapped, ctx.flow.store)
+
+        ShapeSet.new([{:bag, inner}], ctx.flow.store)
+    end
+  end
+
+  defp eval(
+         %IR.Comprehension{reducer: %{initial_value: initial_value, clauses: clauses}},
+         ctx
+       ) do
+    inner = eval_all([initial_value | Enum.map(clauses, & &1.body)], ctx)
+    ShapeSet.new([{:bag, inner}], ctx.flow.store)
+  end
+
+  defp eval(%IR.Cond{clauses: clauses}, ctx) do
+    clauses
+    |> Enum.map(& &1.body)
+    |> eval_all(ctx)
+  end
+
+  defp eval(%IR.ConsOperator{head: head, tail: tail}, ctx) do
+    elements =
+      tail
+      |> eval(ctx)
+      |> contents(ctx.flow.store)
+      |> ShapeSet.union(eval(head, ctx), ctx.flow.store)
+
+    ShapeSet.new([{:list, elements}], ctx.flow.store)
+  end
+
+  defp eval(%IR.ListType{data: data}, ctx) do
+    ShapeSet.new([{:list, eval_all(data, ctx)}], ctx.flow.store)
+  end
+
+  defp eval(%IR.DotOperator{left: left, right: %IR.AtomType{value: name}}, ctx) do
+    left
+    |> eval(ctx)
+    |> dot(name, ctx)
+  end
+
+  defp eval(%IR.LocalFunctionCall{function: function, args: args}, ctx) do
+    {module, _function, _arity} = ctx.mfa
+    eval_call({module, function, length(args)}, args, ctx)
+  end
+
+  defp eval(%IR.MapType{data: data}, ctx) do
+    ShapeSet.new([map_shape(data, &eval(&1, ctx), ctx.flow.store)], ctx.flow.store)
+  end
+
+  # The value of a match is its right side.
+  defp eval(%IR.MatchOperator{right: right}, ctx), do: eval(right, ctx)
+
+  # apply/3 with the module, the function name and the argument list written out is a call.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [
+             %IR.AtomType{value: module},
+             %IR.AtomType{value: name},
+             %IR.ListType{data: args}
+           ]
+         },
+         ctx
+       ) do
+    eval_call({module, name, length(args)}, args, ctx)
+  end
+
+  # apply/3 with the function name and the argument list written out is a call on the module.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [module, %IR.AtomType{value: name}, %IR.ListType{data: args}]
+         },
+         ctx
+       ) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    module
+    |> eval(ctx)
+    |> call_dyn(name, length(args), arg_shapes, ctx)
+  end
+
+  # apply/2 with the argument list written out is a call of the function.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [fun, %IR.ListType{data: args}]
+         },
+         ctx
+       ) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    fun
+    |> eval(ctx)
+    |> apply_fun(arg_shapes, new_rep(ctx, ctx.flow.store))
+  end
+
+  # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
+  # default fields filled in.
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: :__struct__,
+           args: args
+         },
+         ctx
+       )
+       when length(args) in [0, 1] do
+    fields =
+      args
+      |> Enum.map(&struct_fields(&1, ctx))
+      |> ShapeSet.union_all(ctx.flow.store)
+
+    ShapeSet.new([{:struct, module, fields}], ctx.flow.store)
+  end
+
+  defp eval(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: function,
+           args: args
+         },
+         ctx
+       ) do
+    eval_call({module, function, length(args)}, args, ctx)
+  end
+
+  # A call on a module the code does not name.
+  defp eval(%IR.RemoteFunctionCall{module: module, function: function, args: args}, ctx) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    module
+    |> eval(ctx)
+    |> call_dyn(function, length(args), arg_shapes, ctx)
+  end
+
+  # With else clauses, the body's value goes through them; a rescue or a catch gives its own.
+  defp eval(%IR.Try{} = ir, ctx) do
+    value_bodies =
+      if ir.else_clauses == [] do
+        [ir.body]
+      else
+        Enum.map(ir.else_clauses, & &1.body)
+      end
+
+    handler_bodies = Enum.map(ir.rescue_clauses ++ ir.catch_clauses, & &1.body)
+
+    eval_all(value_bodies ++ handler_bodies, ctx)
+  end
+
+  defp eval(%IR.TupleType{data: data}, ctx) do
+    ShapeSet.new([{:tuple, Enum.map(data, &eval(&1, ctx))}], ctx.flow.store)
+  end
+
+  defp eval(%IR.Variable{name: name, version: version}, ctx) do
+    read_variable({name, version}, ctx)
+  end
+
+  # Without else clauses, a value a clause does not match is the with's value.
+  defp eval(%IR.With{clauses: clauses, body: body, else_clauses: []}, ctx) do
+    unmatched_exprs = for %IR.WithMatchClause{expression: expr} <- clauses, do: expr
+    eval_all([body | unmatched_exprs], ctx)
+  end
+
+  defp eval(%IR.With{body: body, else_clauses: else_clauses}, ctx) do
+    eval_all([body | Enum.map(else_clauses, & &1.body)], ctx)
+  end
+
+  defp eval(%type{}, ctx) when type in @primitive_types,
+    do: ShapeSet.new([:prim], ctx.flow.store)
+
+  defp eval(_expr, ctx), do: top_set(ctx.mfa, ctx.flow.store)
 
   defp eval_all(exprs, ctx) do
     exprs
@@ -985,238 +1206,6 @@ defmodule Hologram.Compiler.DataFlow do
     |> put_args(arg_shapes, copied, ctx)
     |> bounded(ctx)
   end
-
-  defp eval_node(%IR.AnonymousFunctionCall{function: function, args: args}, ctx) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    function
-    |> eval(ctx)
-    |> apply_fun(arg_shapes, new_rep(ctx, ctx.flow.store))
-  end
-
-  # An anonymous function returns what its clauses give, its parameters being its arguments. A
-  # capture comes with a clause that calls the captured function.
-  defp eval_node(%IR.AnonymousFunctionType{clauses: clauses} = ir, ctx) do
-    ref = fun_ref(ir, ctx)
-
-    returned =
-      clauses
-      |> Enum.map(fn clause ->
-        frame = clause_frame(clause, &{:arg, ref, &1}, ctx.flow.store)
-        eval(clause.body, %{ctx | frames: [frame | ctx.frames]})
-      end)
-      |> ShapeSet.union_all(ctx.flow.store)
-
-    ShapeSet.new([{:fun, ref, returned}], ctx.flow.store)
-  end
-
-  defp eval_node(%IR.AtomType{value: value}, ctx),
-    do: ShapeSet.new([{:atom, value}], ctx.flow.store)
-
-  defp eval_node(%IR.Block{expressions: []}, ctx),
-    do: ShapeSet.new([{:atom, nil}], ctx.flow.store)
-
-  defp eval_node(%IR.Block{expressions: expressions}, ctx) do
-    expressions
-    |> List.last()
-    |> eval(ctx)
-  end
-
-  defp eval_node(%IR.Case{clauses: clauses}, ctx) do
-    clauses
-    |> Enum.map(& &1.body)
-    |> eval_all(ctx)
-  end
-
-  defp eval_node(%IR.Comprehension{reducer: nil, collectable: collectable, mapper: mapper}, ctx) do
-    mapped = eval(mapper, ctx)
-
-    case collectable do
-      %IR.ListType{data: []} ->
-        ShapeSet.new([{:list, mapped}], ctx.flow.store)
-
-      %IR.MapType{data: []} ->
-        ShapeSet.new([{:map, contents(mapped, ctx.flow.store)}], ctx.flow.store)
-
-      _other ->
-        inner =
-          collectable
-          |> eval(ctx)
-          |> ShapeSet.union(mapped, ctx.flow.store)
-
-        ShapeSet.new([{:bag, inner}], ctx.flow.store)
-    end
-  end
-
-  defp eval_node(
-         %IR.Comprehension{reducer: %{initial_value: initial_value, clauses: clauses}},
-         ctx
-       ) do
-    inner = eval_all([initial_value | Enum.map(clauses, & &1.body)], ctx)
-    ShapeSet.new([{:bag, inner}], ctx.flow.store)
-  end
-
-  defp eval_node(%IR.Cond{clauses: clauses}, ctx) do
-    clauses
-    |> Enum.map(& &1.body)
-    |> eval_all(ctx)
-  end
-
-  defp eval_node(%IR.ConsOperator{head: head, tail: tail}, ctx) do
-    elements =
-      tail
-      |> eval(ctx)
-      |> contents(ctx.flow.store)
-      |> ShapeSet.union(eval(head, ctx), ctx.flow.store)
-
-    ShapeSet.new([{:list, elements}], ctx.flow.store)
-  end
-
-  defp eval_node(%IR.ListType{data: data}, ctx) do
-    ShapeSet.new([{:list, eval_all(data, ctx)}], ctx.flow.store)
-  end
-
-  defp eval_node(%IR.DotOperator{left: left, right: %IR.AtomType{value: name}}, ctx) do
-    left
-    |> eval(ctx)
-    |> dot(name, ctx)
-  end
-
-  defp eval_node(%IR.LocalFunctionCall{function: function, args: args}, ctx) do
-    {module, _function, _arity} = ctx.mfa
-    eval_call({module, function, length(args)}, args, ctx)
-  end
-
-  defp eval_node(%IR.MapType{data: data}, ctx) do
-    ShapeSet.new([map_shape(data, &eval(&1, ctx), ctx.flow.store)], ctx.flow.store)
-  end
-
-  # The value of a match is its right side.
-  defp eval_node(%IR.MatchOperator{right: right}, ctx), do: eval(right, ctx)
-
-  # apply/3 with the module, the function name and the argument list written out is a call.
-  defp eval_node(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: :erlang},
-           function: :apply,
-           args: [
-             %IR.AtomType{value: module},
-             %IR.AtomType{value: name},
-             %IR.ListType{data: args}
-           ]
-         },
-         ctx
-       ) do
-    eval_call({module, name, length(args)}, args, ctx)
-  end
-
-  # apply/3 with the function name and the argument list written out is a call on the module.
-  defp eval_node(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: :erlang},
-           function: :apply,
-           args: [module, %IR.AtomType{value: name}, %IR.ListType{data: args}]
-         },
-         ctx
-       ) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    module
-    |> eval(ctx)
-    |> call_dyn(name, length(args), arg_shapes, ctx)
-  end
-
-  # apply/2 with the argument list written out is a call of the function.
-  defp eval_node(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: :erlang},
-           function: :apply,
-           args: [fun, %IR.ListType{data: args}]
-         },
-         ctx
-       ) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    fun
-    |> eval(ctx)
-    |> apply_fun(arg_shapes, new_rep(ctx, ctx.flow.store))
-  end
-
-  # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
-  # default fields filled in.
-  defp eval_node(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: module},
-           function: :__struct__,
-           args: args
-         },
-         ctx
-       )
-       when length(args) in [0, 1] do
-    fields =
-      args
-      |> Enum.map(&struct_fields(&1, ctx))
-      |> ShapeSet.union_all(ctx.flow.store)
-
-    ShapeSet.new([{:struct, module, fields}], ctx.flow.store)
-  end
-
-  defp eval_node(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: module},
-           function: function,
-           args: args
-         },
-         ctx
-       ) do
-    eval_call({module, function, length(args)}, args, ctx)
-  end
-
-  # A call on a module the code does not name.
-  defp eval_node(%IR.RemoteFunctionCall{module: module, function: function, args: args}, ctx) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    module
-    |> eval(ctx)
-    |> call_dyn(function, length(args), arg_shapes, ctx)
-  end
-
-  # With else clauses, the body's value goes through them; a rescue or a catch gives its own.
-  defp eval_node(%IR.Try{} = ir, ctx) do
-    value_bodies =
-      if ir.else_clauses == [] do
-        [ir.body]
-      else
-        Enum.map(ir.else_clauses, & &1.body)
-      end
-
-    handler_bodies = Enum.map(ir.rescue_clauses ++ ir.catch_clauses, & &1.body)
-
-    eval_all(value_bodies ++ handler_bodies, ctx)
-  end
-
-  defp eval_node(%IR.TupleType{data: data}, ctx) do
-    ShapeSet.new([{:tuple, Enum.map(data, &eval(&1, ctx))}], ctx.flow.store)
-  end
-
-  defp eval_node(%IR.Variable{name: name, version: version}, ctx) do
-    read_variable({name, version}, ctx)
-  end
-
-  # Without else clauses, a value a clause does not match is the with's value.
-  defp eval_node(%IR.With{clauses: clauses, body: body, else_clauses: []}, ctx) do
-    unmatched_exprs = for %IR.WithMatchClause{expression: expr} <- clauses, do: expr
-    eval_all([body | unmatched_exprs], ctx)
-  end
-
-  defp eval_node(%IR.With{body: body, else_clauses: else_clauses}, ctx) do
-    eval_all([body | Enum.map(else_clauses, & &1.body)], ctx)
-  end
-
-  defp eval_node(%type{}, ctx) when type in @primitive_types,
-    do: ShapeSet.new([:prim], ctx.flow.store)
-
-  defp eval_node(_expr, ctx), do: top_set(ctx.mfa, ctx.flow.store)
 
   # Evaluates a function the run is solving: its answer is what its code gives with the current answers
   # of the functions it calls. When the answer changed, the functions that read it are evaluated
@@ -2015,19 +2004,13 @@ defmodule Hologram.Compiler.DataFlow do
   # substitution made, in all its branches (see new_rep/2 and call_fun/3), and the table where the
   # substitution remembers the set it gave for each set it replaced (see replace_root/3), so a set held
   # in many places is replaced once.
-  #
-  # With a ctx, every set the substitution builds is bounded (see bounded/2), as every expression's
-  # value is (see eval/2): a dynamic call on a set of module atoms joins the value of each module's
-  # function, each within the cap, and a join made inside a function given to another dynamic call
-  # joins those joins, so a value grew with the square of the modules (the type modules a data
-  # framework loads each field with) before a check at the end of the substitution saw it.
   defp replace(shapes, replacer, rep) do
     case :ets.lookup(rep.memo, shapes) do
       [{_shapes, value}] ->
         value
 
       [] ->
-        value = replace_set(shapes, replacer, rep)
+        value = ShapeSet.flat_map(shapes, &replace_shape(&1, replacer, rep), rep.store)
         :ets.insert(rep.memo, {shapes, value})
         value
     end
@@ -2120,16 +2103,6 @@ defmodule Hologram.Compiler.DataFlow do
       replace(shapes, replacer, Map.put(rep, :memo, memo))
     after
       :ets.delete(memo)
-    end
-  end
-
-  defp replace_set(shapes, replacer, rep) do
-    value = ShapeSet.flat_map(shapes, &replace_shape(&1, replacer, rep), rep.store)
-
-    if rep.ctx do
-      bounded(value, rep.ctx)
-    else
-      value
     end
   end
 

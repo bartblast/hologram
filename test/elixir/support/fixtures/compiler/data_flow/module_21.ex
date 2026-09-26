@@ -6,6 +6,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
 
   def calls_dispatch(flag), do: dispatch(if flag, do: Module22, else: Module23)
 
+  def calls_thousand, do: thousand(%Struct1{})
+
   def calls_twice, do: twice({{:u}, {:v}, {:w}, {:x}, {:y}, {:z}}, &spread/1)
 
   def calls_wrap, do: wrap({{:a}, {:b}, {:c}, {:d}, {:e}, {:f}})
@@ -19,6 +21,11 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
 
   def spread(value),
     do: {{:a, value}, {:b, value}, {:c, value}, {:d, value}, {:e, value}, {:f, value}}
+
+  # A tuple of 1,000 elements, each the given value.
+  param = Macro.var(:value, nil)
+  elements = List.duplicate(param, 1_000)
+  def thousand(value), do: unquote({:{}, [], elements})
 
   def twice(value, fun) do
     value
