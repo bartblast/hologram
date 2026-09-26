@@ -78,7 +78,7 @@ defmodule Hologram.Compiler.DataFlow do
   # over it), before it becomes a bag of its leaves, or the top of the function being read when even
   # that is larger (see bounded/2). Without a cap a summary can grow to megabytes: a bag holds any
   # number of leaves, and a pending call or an anonymous function in it keeps its own sets. Every call
-  # that uses a summary walks it several times (occurrence_counts/3, replace/3, widen/1), so a few such
+  # that uses a summary walks it several times (used_indexes/3, replace/3, widen/1), so a few such
   # summaries stall a compile. A start/3 opt can set another cap.
   @max_summary_size 32_768
 
@@ -236,6 +236,54 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   @doc """
+  Returns the shape with the given function applied to each set nested in it, by its kind: the one
+  place that knows where sets sit in a shape (see `nested_sets/1`). A shape with no nested sets (an
+  atom, a primitive, a param, an anonymous function's argument, a vertex) is given back as it is.
+  """
+  @spec map_nested(shape, (term -> term)) :: shape
+  def map_nested({:struct, module, fields}, fun), do: {:struct, module, fun.(fields)}
+
+  def map_nested({kind, inner}, fun)
+      when kind in [:as_map, :bag, :contents, :list, :map, :part] do
+    {kind, fun.(inner)}
+  end
+
+  def map_nested({:tuple, elements}, fun), do: {:tuple, Enum.map(elements, fun)}
+
+  def map_nested({:fun, ref, returned}, fun), do: {:fun, ref, fun.(returned)}
+
+  def map_nested({:call, called, args}, fun), do: {:call, fun.(called), Enum.map(args, fun)}
+
+  def map_nested({:dot, inner, name}, fun), do: {:dot, fun.(inner), name}
+
+  def map_nested({:dyn, module, name, arity, args}, fun) do
+    {:dyn, fun.(module), name, arity, Enum.map(args, fun)}
+  end
+
+  def map_nested(shape, _fun), do: shape
+
+  @doc """
+  Returns the sets nested in the shape (see `map_nested/2`).
+  """
+  @spec nested_sets(shape) :: [shapes]
+  def nested_sets({:struct, _module, fields}), do: [fields]
+
+  def nested_sets({kind, inner}) when kind in [:as_map, :bag, :contents, :list, :map, :part],
+    do: [inner]
+
+  def nested_sets({:tuple, elements}), do: elements
+
+  def nested_sets({:fun, _ref, returned}), do: [returned]
+
+  def nested_sets({:call, called, args}), do: [called | args]
+
+  def nested_sets({:dot, inner, _name}), do: [inner]
+
+  def nested_sets({:dyn, module, _name, _arity, args}), do: [module | args]
+
+  def nested_sets(_shape), do: []
+
+  @doc """
   Returns what the server callbacks of the given templatable (its init/3 and command/3) can hand to
   the client, in the shape of `Hologram.Compiler.CallGraph.server_callback_analysis/3`'s results:
 
@@ -353,7 +401,12 @@ defmodule Hologram.Compiler.DataFlow do
   shapes whose nested sets are trees too. Tests compare answers in this form.
   """
   @spec to_tree(shapes, t) :: tree
-  def to_tree(shapes, _flow), do: shapes
+  def to_tree(shapes, flow) do
+    shapes
+    |> ShapeSet.to_list(flow.store)
+    |> Enum.map(&map_nested(&1, fn nested -> to_tree(nested, flow) end))
+    |> :lists.usort()
+  end
 
   @doc """
   Returns what the given function's value is when the analysis cannot follow it: the rule before
@@ -377,8 +430,16 @@ defmodule Hologram.Compiler.DataFlow do
   """
   @spec types(shapes, t) :: types
   def types(shapes, flow) do
-    acc = %{modules: MapSet.new(), reach: MapSet.new(), structs: MapSet.new()}
-    put_types(shapes, acc, flow.module_info_plt, flow.store)
+    acc = %{
+      modules: MapSet.new(),
+      reach: MapSet.new(),
+      structs: MapSet.new(),
+      visited: MapSet.new()
+    }
+
+    shapes
+    |> put_types(acc, flow.module_info_plt, flow.store)
+    |> Map.delete(:visited)
   end
 
   # What calling a function value of the given shapes with arguments of the given shapes gives, for
@@ -595,8 +656,8 @@ defmodule Hologram.Compiler.DataFlow do
       :counters.add(rep.calls, 1, 1)
 
       if rep.ctx do
-        counts = occurrence_counts(returned, &arg_index(&1, ref), %{})
-        {shapes, bounded_args} = substitution_inputs(returned, args, counts, rep.ctx)
+        {_used, copied} = used_indexes(returned, &arg_index(&1, ref), rep.store)
+        {shapes, bounded_args} = substitution_inputs(returned, args, copied, rep.ctx)
 
         shapes
         |> replace(&replace_arg(&1, ref, bounded_args, rep.store), rep)
@@ -805,6 +866,14 @@ defmodule Hologram.Compiler.DataFlow do
   defp compress_atoms(shapes, ctx),
     do: ShapeSet.map(shapes, &compress_atom(&1, ctx), ctx.flow.store)
 
+  # The bytes of a set's content with each nested set a reference of one small integer (see
+  # graph_bytes_within?/3).
+  defp content_bytes(content) do
+    content
+    |> Enum.map(&map_nested(&1, fn _nested -> 0 end))
+    |> :erlang.external_size()
+  end
+
   # What can be inside a value of the given shapes, one level down. An atom holds nothing, a part of
   # a primitive is a primitive, and a shape of unknown structure holds itself.
   defp contents(shapes, store) do
@@ -888,17 +957,17 @@ defmodule Hologram.Compiler.DataFlow do
   # followed: whatever it holds can't reach the call's value.
   defp eval_call(mfa, args, ctx) do
     summary = callee_summary(mfa, ctx)
-    counts = occurrence_counts(summary, &param_index/1, %{})
+    {used, copied} = used_indexes(summary, &param_index/1, ctx.flow.store)
 
     arg_shapes =
       args
       |> Enum.with_index()
       |> Enum.map(fn {arg, index} ->
-        if Map.has_key?(counts, index), do: eval(arg, ctx), else: ShapeSet.new(ctx.flow.store)
+        if MapSet.member?(used, index), do: eval(arg, ctx), else: ShapeSet.new(ctx.flow.store)
       end)
 
     summary
-    |> put_args(arg_shapes, counts, ctx)
+    |> put_args(arg_shapes, copied, ctx)
     |> bounded(ctx)
   end
 
@@ -1282,6 +1351,32 @@ defmodule Hologram.Compiler.DataFlow do
     |> Map.get({function, arity})
   end
 
+  # Whether the distinct sets the given sets reach, each counted once, take at most max bytes: the
+  # external term format of each set's content, what walks and memory pay for (a set shared by many
+  # shapes is one set), each nested set in it counted as a reference of one small integer, so a value
+  # measures the same in every store, whatever its ids. The walk stops as soon as the total passes
+  # max, so a measurement never costs more than max bytes of content. Not remembered per set: a
+  # per-set total would count a set shared by two siblings twice, which is the sharing the store
+  # exists to remove.
+  defp graph_bytes_within?(sets, max, store) do
+    graph_bytes_within?(sets, max, store, %{}, 0)
+  end
+
+  defp graph_bytes_within?(_sets, max, _store, _visited, total) when total > max, do: false
+
+  defp graph_bytes_within?([], _max, _store, _visited, _total), do: true
+
+  defp graph_bytes_within?([set | sets], max, store, visited, total) do
+    if Map.has_key?(visited, set) do
+      graph_bytes_within?(sets, max, store, visited, total)
+    else
+      content = ShapeSet.to_list(set, store)
+      nested = Enum.flat_map(content, &nested_sets/1)
+      bytes = total + content_bytes(content)
+      graph_bytes_within?(nested ++ sets, max, store, Map.put(visited, set, true), bytes)
+    end
+  end
+
   # Collects the bindings of the variables in the given IR (see clause_frame/1). The places a
   # variable is bound at: a match, a case clause, a with clause and its else clauses, a comprehension
   # generator and its reducer, a rescue, a catch and a try's else clauses. An anonymous function's
@@ -1552,35 +1647,6 @@ defmodule Hologram.Compiler.DataFlow do
   # @max_fun_calls).
   defp new_rep(ctx, store), do: %{calls: :counters.new(1, []), ctx: ctx, store: store}
 
-  # How many copies of each index the given function gives for a shape (the index of a param, or of
-  # an anonymous function's argument) putting values in for them makes, at any depth, each index the
-  # shapes hold at least with 0. A function called is not copied into the value (what calling it gives
-  # is, see call_fun/3), so an index held in a call's function counts as held, not as a copy.
-  defp occurrence_counts(term, index_of, acc), do: occurrence_counts(term, index_of, 1, acc)
-
-  defp occurrence_counts(list, index_of, weight, acc) when is_list(list) do
-    Enum.reduce(list, acc, &occurrence_counts(&1, index_of, weight, &2))
-  end
-
-  defp occurrence_counts({:call, fun, args}, index_of, weight, acc) do
-    counts = occurrence_counts(fun, index_of, 0, acc)
-    occurrence_counts(args, index_of, weight, counts)
-  end
-
-  defp occurrence_counts(tuple, index_of, weight, acc) when is_tuple(tuple) do
-    case index_of.(tuple) do
-      nil ->
-        tuple
-        |> Tuple.to_list()
-        |> occurrence_counts(index_of, weight, acc)
-
-      index ->
-        Map.update(acc, index, weight, &(&1 + weight))
-    end
-  end
-
-  defp occurrence_counts(_term, _index_of, _weight, acc), do: acc
-
   defp opaque?(shape) when is_tuple(shape), do: elem(shape, 0) in @opaque_kinds
 
   defp opaque?(_shape), do: false
@@ -1673,18 +1739,18 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp pattern_variables(_ir, vars), do: vars
 
-  # The summary with the arguments put in for its params (see apply_summary/2). With a ctx, the
-  # dynamic calls and dots on a module an argument makes known are made too.
-  # The summary with the arguments put in for its params (without a context, see apply_summary/3): the
-  # arguments are bounded and the summary is flattened first when putting them in would make a value
-  # larger than the cap (see substitution_inputs/4); the counts are how many times the summary holds
-  # each param.
+  # The summary with the arguments put in for its params (without a context, see apply_summary/3):
+  # the dynamic calls and dots on a module an argument makes known are made too, the arguments are
+  # bounded, and the summary is flattened first when putting them in would make a value larger than
+  # the cap (see substitution_inputs/4); `copied` holds the indexes of the params the summary copies
+  # into the value (see used_indexes/3).
   defp put_args(summary, args, ctx) do
-    put_args(summary, args, occurrence_counts(summary, &param_index/1, %{}), ctx)
+    {_used, copied} = used_indexes(summary, &param_index/1, ctx.flow.store)
+    put_args(summary, args, copied, ctx)
   end
 
-  defp put_args(summary, args, counts, ctx) do
-    {shapes, bounded_args} = substitution_inputs(summary, args, counts, ctx)
+  defp put_args(summary, args, copied, ctx) do
+    {shapes, bounded_args} = substitution_inputs(summary, args, copied, ctx)
 
     shapes
     |> replace(&replace_param(&1, bounded_args, ctx.flow.store), new_rep(ctx, ctx.flow.store))
@@ -1748,9 +1814,19 @@ defmodule Hologram.Compiler.DataFlow do
     put_side_extras(acc, subject_expr, pattern)
   end
 
-  # Adds the types the shapes hold to the accumulator (see types/2).
-  defp put_types(shapes, acc, module_info_plt, store) when is_list(shapes) do
-    ShapeSet.reduce(shapes, acc, &put_types(&1, &2, module_info_plt, store), store)
+  # Adds the types the shapes hold to the accumulator (see types/2). A set already walked adds nothing
+  # new, so each distinct set is walked once.
+  defp put_types(set, acc, module_info_plt, store) when is_integer(set) do
+    if MapSet.member?(acc.visited, set) do
+      acc
+    else
+      ShapeSet.reduce(
+        set,
+        %{acc | visited: MapSet.put(acc.visited, set)},
+        &put_types(&1, &2, module_info_plt, store),
+        store
+      )
+    end
   end
 
   defp put_types({:atom, atom}, acc, module_info_plt, _store) do
@@ -1809,6 +1885,27 @@ defmodule Hologram.Compiler.DataFlow do
   # The dispatch types and the component modules that values of the given shapes bring to the client
   # (see server_callback_analysis/3): the structs and components they hold, and what the graph walk
   # from the vertices the rule before this module applies from, and from the structs, finds.
+  # Adds the index of the shape to the used indexes (and to the copied ones where the shape is copied),
+  # or walks the sets nested in it (see used_indexes/3).
+  defp put_used_index({:call, called, args}, acc, index_of, store, copied?) do
+    acc = used_indexes(called, index_of, store, false, acc)
+    Enum.reduce(args, acc, &used_indexes(&1, index_of, store, copied?, &2))
+  end
+
+  defp put_used_index(shape, acc, index_of, store, copied?) do
+    case index_of.(shape) do
+      nil ->
+        shape
+        |> nested_sets()
+        |> Enum.reduce(acc, &used_indexes(&1, index_of, store, copied?, &2))
+
+      index ->
+        used = MapSet.put(acc.used, index)
+        copied = if copied?, do: MapSet.put(acc.copied, index), else: acc.copied
+        %{acc | copied: copied, used: used}
+    end
+  end
+
   defp reaching_types(shapes, graph, flow) do
     %{modules: modules, reach: reach, structs: structs} = types(shapes, flow)
     module_info_plt = flow.module_info_plt
@@ -2275,27 +2372,19 @@ defmodule Hologram.Compiler.DataFlow do
 
   # The shapes and the arguments to put in for them: every argument bounded (see bounded/2), and the
   # shapes a bag of their leaves when putting the arguments in would make a value larger than the
-  # cap. The estimate is the shapes' size plus each argument's size as many times as the shapes hold
-  # it: shapes holding a param a thousand times make a thousand copies of the argument, and every walk
-  # after goes through each copy (sharing saves the memory, not the walks), so a check after the
-  # substitution comes too late. Flattened, the shapes hold each param in fewer places, and the value
-  # holds the same types. The estimate is exact for plain copies and more than the value where the
-  # shapes take small parts of an argument (a field, a struct's module), which then lose their
-  # structure too.
-  defp substitution_inputs(shapes, args, counts, ctx) do
+  # cap. The estimate is the distinct sets of the shapes and of each argument they copy into the value,
+  # each counted once (see graph_bytes_within?/3, used_indexes/3): an argument put into a thousand
+  # places is stored once, so a substitution costs what it puts in, not how many times.
+  defp substitution_inputs(shapes, args, copied, ctx) do
     bounded_args = Enum.map(args, &bounded(&1, ctx))
 
-    estimate =
-      Enum.reduce(counts, :erlang.external_size(shapes), fn {index, count}, acc ->
-        acc +
-          count *
-            :erlang.external_size(Enum.at(bounded_args, index, ShapeSet.new(ctx.flow.store)))
-      end)
+    used_args =
+      for {arg, index} <- Enum.with_index(bounded_args), MapSet.member?(copied, index), do: arg
 
-    if estimate > ctx.flow.max_summary_size do
-      {bag_of_leaves(shapes, ctx.flow.store), bounded_args}
-    else
+    if graph_bytes_within?([shapes | used_args], ctx.flow.max_summary_size, ctx.flow.store) do
       {shapes, bounded_args}
+    else
+      {bag_of_leaves(shapes, ctx.flow.store), bounded_args}
     end
   end
 
@@ -2311,6 +2400,26 @@ defmodule Hologram.Compiler.DataFlow do
     mfa
     |> top()
     |> ShapeSet.from_tree(store)
+  end
+
+  # The indexes the given function gives for the shapes the set holds, at any depth (the index of a
+  # param, or of an anonymous function's argument), as two sets: the ones the set uses, and the ones
+  # putting values in copies into the value. An index held only in a call's function is used, not
+  # copied: calling a function puts what the call gives into the value, not the function (see
+  # call_fun/3). Each distinct set is walked once for each of the two.
+  defp used_indexes(set, index_of, store) do
+    acc = %{copied: MapSet.new(), used: MapSet.new(), visited: MapSet.new()}
+    %{copied: copied, used: used} = used_indexes(set, index_of, store, true, acc)
+    {used, copied}
+  end
+
+  defp used_indexes(set, index_of, store, copied?, acc) do
+    if MapSet.member?(acc.visited, {set, copied?}) do
+      acc
+    else
+      acc = %{acc | visited: MapSet.put(acc.visited, {set, copied?})}
+      ShapeSet.reduce(set, acc, &put_used_index(&1, &2, index_of, store, copied?), store)
+    end
   end
 
   defp variable_shapes(frame, var, ctx) do
@@ -2379,6 +2488,6 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp within_cap?(shapes, ctx) do
-    :erlang.external_size(shapes) <= ctx.flow.max_summary_size
+    graph_bytes_within?([shapes], ctx.flow.max_summary_size, ctx.flow.store)
   end
 end

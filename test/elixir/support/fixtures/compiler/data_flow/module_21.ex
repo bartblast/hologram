@@ -6,9 +6,9 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
 
   def calls_dispatch(flag), do: dispatch(if flag, do: Module22, else: Module23)
 
-  def calls_twice, do: twice({%Struct1{}, %Struct1{}, %Struct1{}, %Struct1{}}, &repeat/1)
+  def calls_twice, do: twice({{:u}, {:v}, {:w}, {:x}, {:y}, {:z}}, &spread/1)
 
-  def calls_wrap, do: wrap({%Struct1{}, %Struct1{}, %Struct1{}, %Struct1{}})
+  def calls_wrap, do: wrap({{:a}, {:b}, {:c}, {:d}, {:e}, {:f}})
 
   def dispatch(module), do: {module.value(), :done}
 
@@ -17,7 +17,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
     {value, value, value, value}
   end
 
-  def repeat(value), do: {value, value, value, value}
+  def spread(value),
+    do: {{:a, value}, {:b, value}, {:c, value}, {:d, value}, {:e, value}, {:f, value}}
 
   def twice(value, fun) do
     value

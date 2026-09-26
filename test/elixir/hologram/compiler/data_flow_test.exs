@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.DataFlow.ShapeSet
+  alias Hologram.Compiler.DataFlow.Store
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10
@@ -68,6 +69,12 @@ defmodule Hologram.Compiler.DataFlowTest do
     |> to_tree(flow)
   end
 
+  # The tree of a tuple of one-atom tuples, one for each given atom.
+  defp atom_tuples(atoms) do
+    tuples = for atom <- atoms, do: tree_set([{:tuple, [tree_set([{:atom, atom}])]}])
+    tree_set([{:tuple, tuples}])
+  end
+
   defp clause(module, function) do
     %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}} = IR.for_module(module)
 
@@ -124,6 +131,31 @@ defmodule Hologram.Compiler.DataFlowTest do
   defp four_structs do
     struct = tree_set([@struct_1])
     tree_set([{:tuple, List.duplicate(struct, 4)}])
+  end
+
+  # The bytes of the distinct sets the tree stands for, each counted once, each nested set in them a
+  # reference of one small integer: what the cap measures (see @max_summary_size).
+  defp graph_bytes(tree) do
+    store = Store.start()
+    graph_bytes([ShapeSet.from_tree(tree, store)], store, MapSet.new(), 0)
+  end
+
+  defp graph_bytes([], _store, _visited, total), do: total
+
+  defp graph_bytes([set | sets], store, visited, total) do
+    if MapSet.member?(visited, set) do
+      graph_bytes(sets, store, visited, total)
+    else
+      content = ShapeSet.to_list(set, store)
+      nested = Enum.flat_map(content, &nested_sets/1)
+
+      bytes =
+        content
+        |> Enum.map(&map_nested(&1, fn _nested -> 0 end))
+        |> :erlang.external_size()
+
+      graph_bytes(nested ++ sets, store, MapSet.put(visited, set), total + bytes)
+    end
   end
 
   # The call graph of the given modules, built with the module info PLT of the test build.
@@ -391,9 +423,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       value = shapes_tree(clause.body, clause, mfa, flow())
 
       flow =
-        start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: :erlang.external_size(value) - 1
-        )
+        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(value) - 1)
 
       assert value == four_structs()
 
@@ -404,22 +434,20 @@ defmodule Hologram.Compiler.DataFlowTest do
                tree_set([{:bag, :ordsets.union(@defaults, tree_set([@struct_1_named]))}])
     end
 
-    # The inner call would make four copies of the four structs, over the cap, so the function's value
-    # is flattened before its arguments are put in (see substitution_inputs/4); the outer call's four
-    # copies of that bag fit, so they keep their tuple. The cap is twice the value's size, between the
-    # two. Flattened only once the whole call is made, the value would be one bag.
-    test "a call of a function argument is bounded as soon as it is made" do
+    # The cap is exactly what twice/2's substitution copies into the value: its summary and the value it
+    # is given. The function it is given is only called (see used_indexes/3), so its shape is not
+    # counted, the summary is not flattened, and both calls are made: the value names every atom and no
+    # anonymous function's argument. Counted as copied, the function would take the summary over the
+    # cap, its calls would be dissolved unmade, and its argument would be left in the value.
+    test "a function a param stands for, only called, is not counted as copied" do
       clause = clause(Module21, :calls_twice)
       mfa = {Module21, :calls_twice, 0}
-      bag = tree_set([{:bag, :ordsets.union(@defaults, tree_set([@struct_1_named]))}])
-      value = tree_set([{:tuple, List.duplicate(bag, 4)}])
+      value = atom_tuples([:u, :v, :w, :x, :y, :z])
+      cap = graph_bytes(value) + graph_bytes(summary_tree({Module21, :twice, 2}, flow()))
+      atoms = for atom <- [:a, :b, :c, :d, :e, :f, :u, :v, :w, :x, :y, :z], do: {:atom, atom}
+      flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: cap)
 
-      flow =
-        start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: 2 * :erlang.external_size(value)
-        )
-
-      assert shapes_tree(clause.body, clause, mfa, flow) == value
+      assert shapes_tree(clause.body, clause, mfa, flow) == tree_set([{:bag, tree_set(atoms)}])
     end
 
     test "an expression whose value is larger than the cap is a bag of its leaves" do
@@ -429,9 +457,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       nested = tree_set([{:tuple, List.duplicate(structs, 4)}])
 
       flow =
-        start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: :erlang.external_size(nested) - 1
-        )
+        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(nested) - 1)
 
       assert shapes_tree(clause.body, clause, mfa, flow) ==
                tree_set([{:bag, :ordsets.union(@defaults, tree_set([@struct_1_named]))}])
@@ -440,39 +466,28 @@ defmodule Hologram.Compiler.DataFlowTest do
     test "an argument larger than the cap is flattened before it is put in" do
       clause = clause(Module21, :calls_wrap)
       mfa = {Module21, :calls_wrap, 0}
-      structs = four_structs()
-      bag = tree_set([{:bag, :ordsets.union(@defaults, tree_set([@struct_1_named]))}])
+      argument = atom_tuples([:a, :b, :c, :d, :e, :f])
+      bag = tree_set([{:bag, tree_set(for atom <- [:a, :b, :c, :d, :e, :f], do: {:atom, atom})}])
 
       flow =
-        start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: :erlang.external_size(structs) - 1
-        )
+        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(argument) - 1)
 
       assert shapes_tree(clause.body, clause, mfa, flow) ==
                tree_set([{:tuple, [tree_set([{:atom, :ok}]), bag]}])
     end
 
-    # Each module's value, four structs, fits the cap (the cap is their size as the literal gives them,
-    # before the stored answer makes their atoms primitives); the two joined don't, so the join is
-    # flattened where the substitution builds it (see replace/3) and the tuple around it stays. Checked
-    # only once the substitution ends, the value would be one bag.
-    test "a join of dynamic calls inside a substitution is bounded where it is built" do
+    # The call's value joins what each module's function gives; with the cap one byte under that value,
+    # it becomes a bag of its leaves: the types of both modules' values, their structure dropped.
+    test "a join of dynamic calls larger than the cap is a bag of its leaves" do
       clause = clause(Module21, :calls_dispatch)
       mfa = {Module21, :calls_dispatch, 1}
-      structs = four_structs()
-
-      bag =
-        tree_set([
-          {:bag, tree_set([:prim, @struct_1_named, {:struct, Struct2, tree_set()}])}
-        ])
+      value = shapes_tree(clause.body, clause, mfa, flow())
+      leaves = tree_set([:prim, @struct_1_named, {:struct, Struct2, tree_set()}])
 
       flow =
-        start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: :erlang.external_size(structs)
-        )
+        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(value) - 1)
 
-      assert shapes_tree(clause.body, clause, mfa, flow) ==
-               tree_set([{:tuple, [bag, tree_set([:prim])]}])
+      assert shapes_tree(clause.body, clause, mfa, flow) == tree_set([{:bag, leaves}])
     end
 
     test "a call whose leaves are larger than the cap is the caller's top" do
@@ -1022,8 +1037,8 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert PLT.get(flow.summaries, {Module3, :calls_build, 0}) == {:ok, summary}
 
-      assert PLT.get(flow.summaries, {Module3, :build, 0}) ==
-               {:ok, tree_set([@struct_1_stored])}
+      assert {:ok, build} = PLT.get(flow.summaries, {Module3, :build, 0})
+      assert to_tree(build, flow) == tree_set([@struct_1_stored])
     end
 
     test "param" do
@@ -1047,8 +1062,8 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert summary_tree({Module4, :calls_direct, 0}, flow) == tree_set([@struct_1_stored])
 
-      assert PLT.get(flow.summaries, {Module4, :direct, 1}) ==
-               {:ok, tree_set([@struct_1_stored])}
+      assert {:ok, direct} = PLT.get(flow.summaries, {Module4, :direct, 1})
+      assert to_tree(direct, flow) == tree_set([@struct_1_stored])
 
       assert PLT.member?(flow.summaries, {Module4, :calls_direct, 0})
     end
@@ -1185,9 +1200,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       value = summary_tree(mfa, flow())
 
       flow =
-        start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: :erlang.external_size(value) - 1
-        )
+        start(PLT.start(), module_info_plt_fixture(), max_summary_size: graph_bytes(value) - 1)
 
       assert value == tree_set([{:tuple, List.duplicate(@param_0, 4)}])
       assert summary_tree(mfa, flow) == tree_set([{:bag, @param_0}])

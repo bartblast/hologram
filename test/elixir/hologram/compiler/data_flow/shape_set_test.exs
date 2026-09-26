@@ -76,10 +76,10 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
   end
 
   describe "from_tree/2" do
-    test "the set a tree stands for", %{store: store} do
+    test "the set a tree stands for, its nested trees interned", %{store: store} do
       set = from_tree([:prim, {:tuple, [[{:atom, :a}]]}], store)
 
-      assert to_list(set, store) == [:prim, {:tuple, [[{:atom, :a}]]}]
+      assert to_list(set, store) == [:prim, {:tuple, [new([{:atom, :a}], store)]}]
     end
   end
 
@@ -111,8 +111,12 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
       assert size(new([:prim, {:atom, :a}, :prim], store), store) == 2
     end
 
-    test "a set is a sorted list without duplicates", %{store: store} do
-      assert new([{:param, 0}, :prim, :prim], store) == [:prim, {:param, 0}]
+    test "a set's elements are sorted, each once", %{store: store} do
+      assert to_list(new([{:param, 0}, :prim, :prim], store), store) == [:prim, {:param, 0}]
+    end
+
+    test "equal sets are one id", %{store: store} do
+      assert new([:prim, {:atom, :a}], store) == new([{:atom, :a}, :prim, :prim], store)
     end
   end
 
@@ -163,6 +167,12 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
                store
              ) ==
                new([:prim, {:atom, :a}, {:param, 0}], store)
+    end
+
+    test "a union of a set with itself is the set", %{store: store} do
+      set = new([:prim], store)
+
+      assert union(set, set, store) == set
     end
   end
 
