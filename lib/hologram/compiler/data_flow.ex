@@ -1792,8 +1792,20 @@ defmodule Hologram.Compiler.DataFlow do
   # function, and, when rep holds a ctx, a dynamic call or a dot whose module became known (see
   # call_dyn/5 and dot/3). rep also holds the counter of the calls of anonymous functions the
   # substitution made, in all its branches (see new_rep/1 and call_fun/3).
+  #
+  # With a ctx, every set the substitution builds is bounded (see bounded/2), as every expression's
+  # value is (see eval/2): a dynamic call on a set of module atoms joins the value of each module's
+  # function, each within the cap, and a join made inside a function given to another dynamic call
+  # joins those joins, so a value grew with the square of the modules (the type modules a data
+  # framework loads each field with) before a check at the end of the substitution saw it.
   defp replace(shapes, replacer, rep) do
-    ShapeSet.flat_map(shapes, &replace_shape(&1, replacer, rep))
+    value = ShapeSet.flat_map(shapes, &replace_shape(&1, replacer, rep))
+
+    if rep.ctx do
+      bounded(value, rep.ctx)
+    else
+      value
+    end
   end
 
   defp replace_arg({:arg, ref, index}, ref, args), do: Enum.at(args, index, ShapeSet.new())

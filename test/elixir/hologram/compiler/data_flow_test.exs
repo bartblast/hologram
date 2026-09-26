@@ -23,6 +23,8 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module20
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module21
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module22
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module23
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -422,6 +424,29 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert shapes(clause.body, clause, mfa, flow) ==
                ShapeSet.new([{:tuple, [ShapeSet.new([{:atom, :ok}]), bag]}])
+    end
+
+    # Each module's value, four structs, fits the cap (the cap is their size as the literal gives them,
+    # before the stored answer makes their atoms primitives); the two joined don't, so the join is
+    # flattened where the substitution builds it (see replace/3) and the tuple around it stays. Checked
+    # only once the substitution ends, the value would be one bag.
+    test "a join of dynamic calls inside a substitution is bounded where it is built" do
+      clause = clause(Module21, :calls_dispatch)
+      mfa = {Module21, :calls_dispatch, 1}
+      structs = ShapeSet.new([{:tuple, List.duplicate(ShapeSet.new([@struct_1]), 4)}])
+
+      bag =
+        ShapeSet.new([
+          {:bag, ShapeSet.new([:prim, @struct_1_named, {:struct, Struct2, ShapeSet.new()}])}
+        ])
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(),
+          max_summary_size: :erlang.external_size(structs)
+        )
+
+      assert shapes(clause.body, clause, mfa, flow) ==
+               ShapeSet.new([{:tuple, [bag, ShapeSet.new([:prim])]}])
     end
 
     test "a call whose leaves are larger than the cap is the caller's top" do
