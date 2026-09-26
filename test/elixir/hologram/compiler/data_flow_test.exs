@@ -375,6 +375,14 @@ defmodule Hologram.Compiler.DataFlowTest do
                ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
     end
 
+    test "a call whose leaves are larger than the cap is the caller's top" do
+      clause = clause(Module17, :calls_repeat)
+      mfa = {Module17, :calls_repeat, 0}
+      flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: 1)
+
+      assert shapes(clause.body, clause, mfa, flow) == top(mfa)
+    end
+
     test "atom" do
       assert shapes_of(Module1, :atom) == ShapeSet.new([{:atom, :ok}])
     end
@@ -1024,6 +1032,24 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module19, :field, 1) == ShapeSet.new([{:dot, @param_0, :title}])
     end
 
+    test "a field of a value matched as a map or struct is the value or anything inside it" do
+      assert summary_of(Module20, :read_field, 1) ==
+               ShapeSet.new([{:param, 0}, {:part, @param_0}])
+    end
+
+    test "reads of several fields of a value matched as a map are one shape" do
+      assert summary_of(Module20, :read_fields, 1) ==
+               ShapeSet.new([{:list, ShapeSet.new([{:param, 0}, {:part, @param_0}])}])
+    end
+
+    test "the __struct__ field of a value matched as a struct stays a field read" do
+      assert summary_of(Module20, :read_struct, 1) ==
+               ShapeSet.new([
+                 {:atom, Struct1},
+                 {:dot, ShapeSet.new([{:as_map, @param_0}]), :__struct__}
+               ])
+    end
+
     test "a stored answer turns an atom that is not a module into a primitive" do
       assert summary_of(Module19, :bare, 0) == ShapeSet.new([:prim])
     end
@@ -1056,10 +1082,22 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "a summary larger than the cap is a bag of its leaves" do
+      mfa = {Module17, :repeat, 1}
+      value = summary(mfa, flow())
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(),
+          max_summary_size: :erlang.external_size(value) - 1
+        )
+
+      assert value == ShapeSet.new([{:tuple, List.duplicate(@param_0, 4)}])
+      assert summary(mfa, flow) == ShapeSet.new([{:bag, @param_0}])
+    end
+
+    test "a summary whose leaves are larger than the cap is the function's top" do
       flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: 1)
 
-      assert summary({Module3, :recursive, 1}, flow) ==
-               ShapeSet.new([{:bag, ShapeSet.new([:prim, @struct_1_named])}])
+      assert summary({Module3, :recursive, 1}, flow) == top({Module3, :recursive, 1})
     end
 
     test "function with two clauses" do

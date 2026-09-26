@@ -74,10 +74,11 @@ defmodule Hologram.Compiler.DataFlow do
 
   # How large a function's summary, or the value of a call, can be, in bytes of its external term
   # format (see :erlang.external_size/1, a walk of the whole term like every walk the analysis makes
-  # over it), before it becomes a bag of its leaves (see bounded/2). Without a cap a summary can grow
-  # to megabytes: a bag holds any number of leaves, and a pending call or an anonymous function in it
-  # keeps its own sets. Every call that uses a summary walks it several times (param_indexes/2,
-  # replace/3, widen/1), so a few such summaries stall a compile. A start/3 opt can set another cap.
+  # over it), before it becomes a bag of its leaves, or the top of the function being read when even
+  # that is larger (see bounded/2). Without a cap a summary can grow to megabytes: a bag holds any
+  # number of leaves, and a pending call or an anonymous function in it keeps its own sets. Every call
+  # that uses a summary walks it several times (param_indexes/2, replace/3, widen/1), so a few such
+  # summaries stall a compile. A start/3 opt can set another cap.
   @max_summary_size 32_768
 
   # The range of the hash that tells anonymous functions apart within a function (see eval/2).
@@ -283,7 +284,8 @@ defmodule Hologram.Compiler.DataFlow do
 
     * `:max_summary_size` - how large a function's summary, or the value of a call, can be, in bytes
       of its external term format, before it becomes a bag of its leaves, which keeps the types it
-      names and drops its structure; defaults to 32 KiB.
+      names and drops its structure, or the top of the function being read when even that is larger
+      (see `top/1`); defaults to 32 KiB.
 
   The other opts are given to the PLTs it keeps its summaries and its module checks in (see
   `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
@@ -320,8 +322,9 @@ defmodule Hologram.Compiler.DataFlow do
   changes, until none changes, the first evaluation reading nothing for a function not evaluated yet.
   An answer that keeps growing becomes a bag of its leaves after a few evaluations, and the function's
   top after more (see `top/1`). Every function a run solves is kept for the rest of the compile. A
-  summary, or the value of a call, larger than the cap given to `start/3` becomes a bag of its leaves:
-  it keeps the types it names and drops its structure.
+  summary, or the value of a call, larger than the cap given to `start/3` becomes a bag of its leaves,
+  which keeps the types it names and drops its structure, or the top of the function being read when
+  even that is larger.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
@@ -396,15 +399,18 @@ defmodule Hologram.Compiler.DataFlow do
 
   # The shapes, or a bag of their leaves when they are larger than the flow context's
   # :max_summary_size (see @max_summary_size): the bag holds every type the shapes name and drops their
-  # structure, so no type is lost and nothing falls back to the rule before this module. Checked on a
-  # function's summary and on the value of every call, since putting arguments in multiplies sizes (a
-  # summary holding its param many times, given a large argument), and a value made so is an argument
-  # of the next call in the same function.
+  # structure, so no type is lost. A bag still larger than the cap (leaves can hold sets of their own,
+  # see shape_leaves/1) gives the top of the function being read (see top/1): everything its code can
+  # give, a call's value in it included, in a few bytes. Checked on a function's summary and on the
+  # value of every call, since putting arguments in multiplies sizes (a summary holding its param many
+  # times, given a large argument), and a value made so is an argument of the next call in the same
+  # function.
   defp bounded(shapes, ctx) do
-    if :erlang.external_size(shapes) > ctx.flow.max_summary_size do
-      bag_of_leaves(shapes)
-    else
+    if within_cap?(shapes, ctx) do
       shapes
+    else
+      bag = bag_of_leaves(shapes)
+      if within_cap?(bag, ctx), do: bag, else: top(ctx.mfa)
     end
   end
 
@@ -604,7 +610,7 @@ defmodule Hologram.Compiler.DataFlow do
     |> ShapeSet.union_all()
     |> widen()
     |> compress_atoms(ctx)
-    |> bounded(ctx)
+    |> bounded(function_ctx)
   end
 
   # Collapses routes into arguments: a chain of two or more steps (@route_steps) around params or
@@ -718,8 +724,11 @@ defmodule Hologram.Compiler.DataFlow do
 
   # `value.name` on a value of the given shapes, for each alternative: a module atom gives the
   # summary of the module's zero-arity function; a struct gives its module for __struct__ and what
-  # its fields hold for any other name, a map what it holds; a value that depends on a param or on
-  # an anonymous function's argument keeps the dot for when that is known; a value of unknown
+  # its fields hold for any other name, a map what it holds; a map or a struct not known yet
+  # (`{:as_map, ...}`, a value the code matched as one) gives what it holds for any name but
+  # __struct__, since it is no module atom, so every field read of it is the same shape and reads of
+  # many fields don't make as many copies of it; any other value that depends on a param or on an
+  # anonymous function's argument keeps the dot for when that is known; a value of unknown
   # structure gives itself, and the dots on the module atoms it holds; a primitive gives a primitive.
   # Any other value raises.
   defp dot(shapes, name, ctx) do
@@ -736,6 +745,10 @@ defmodule Hologram.Compiler.DataFlow do
   defp dot_shape({:map, inner}, _name, _ctx), do: inner
 
   defp dot_shape(:prim, _name, _ctx), do: ShapeSet.new([:prim])
+
+  defp dot_shape({:as_map, _inner} = shape, name, _ctx) when name != :__struct__ do
+    ShapeSet.new([{:contents, ShapeSet.new([shape])}])
+  end
 
   defp dot_shape(shape, name, _ctx)
        when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
@@ -2128,5 +2141,9 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp with_nested_shapes(shapes) do
     ShapeSet.flat_map(shapes, &ShapeSet.new([&1 | nested_shape_list(&1)]))
+  end
+
+  defp within_cap?(shapes, ctx) do
+    :erlang.external_size(shapes) <= ctx.flow.max_summary_size
   end
 end
