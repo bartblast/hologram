@@ -93,6 +93,9 @@ defmodule Hologram.Compiler.DataFlow do
   # Shapes of unknown structure: they can hold anything, so they can match any pattern.
   @opaque_kinds [:bag, :reach | @pending_kinds]
 
+  # The steps a value takes into an argument that is not known yet (see collapse_route/1).
+  @route_steps [:as_map, :contents, :part]
+
   @primitive_types [
     IR.BitstringType,
     IR.FloatType,
@@ -615,6 +618,60 @@ defmodule Hologram.Compiler.DataFlow do
     |> widen()
     |> capped_summary(mfa, ctx)
   end
+
+  # Collapses routes into arguments: a chain of two or more steps (@route_steps) around params or
+  # anonymous function arguments becomes those roots and `{:part, roots}`, the argument itself or
+  # anything inside it, which holds every value the chain can give. A single step stays, and so does a
+  # dot, which on a module atom calls a function. The chains made answers grow with every way the code
+  # takes a piece out of an argument, and no type depends on which way it took.
+  defp collapse_route({step, inner}) when step in @route_steps do
+    collapsed = collapse_routes(inner)
+
+    case route_roots(collapsed) do
+      {:ok, roots} ->
+        if ShapeSet.any?(collapsed, &route_step?/1) do
+          ShapeSet.put(roots, {:part, roots})
+        else
+          ShapeSet.new([{step, collapsed}])
+        end
+
+      :error ->
+        ShapeSet.new([{step, collapsed}])
+    end
+  end
+
+  defp collapse_route({:struct, module, fields}) do
+    ShapeSet.new([{:struct, module, collapse_routes(fields)}])
+  end
+
+  defp collapse_route({kind, inner}) when kind in [:bag, :list, :map] do
+    ShapeSet.new([{kind, collapse_routes(inner)}])
+  end
+
+  defp collapse_route({:tuple, elements}) do
+    ShapeSet.new([{:tuple, Enum.map(elements, &collapse_routes/1)}])
+  end
+
+  defp collapse_route({:fun, ref, returned}) do
+    ShapeSet.new([{:fun, ref, collapse_routes(returned)}])
+  end
+
+  defp collapse_route({:call, fun, args}) do
+    ShapeSet.new([{:call, collapse_routes(fun), Enum.map(args, &collapse_routes/1)}])
+  end
+
+  defp collapse_route({:dot, inner, name}),
+    do: ShapeSet.new([{:dot, collapse_routes(inner), name}])
+
+  defp collapse_route({:dyn, module, name, arity, args}) do
+    ShapeSet.new([
+      {:dyn, collapse_routes(module), name, arity, Enum.map(args, &collapse_routes/1)}
+    ])
+  end
+
+  defp collapse_route(shape), do: ShapeSet.new([shape])
+
+  defp collapse_routes(shapes), do: ShapeSet.flat_map(shapes, &collapse_route/1)
 
   # What can be inside a value of the given shapes, one level down. An atom holds nothing, a part of
   # a primitive is a primitive, and a shape of unknown structure holds itself.
@@ -1678,6 +1735,29 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  # The params and anonymous function arguments the shapes start from, when every alternative is one
+  # of them or a step of only them (see collapse_route/1); :error otherwise.
+  defp route_roots(shapes) do
+    ShapeSet.reduce(shapes, {:ok, ShapeSet.new()}, fn
+      _shape, :error -> :error
+      {:param, _index} = root, {:ok, roots} -> {:ok, ShapeSet.put(roots, root)}
+      {:arg, _ref, _index} = root, {:ok, roots} -> {:ok, ShapeSet.put(roots, root)}
+      {step, inner}, {:ok, roots} when step in @route_steps -> route_step_roots(inner, roots)
+      _other, {:ok, _roots} -> :error
+    end)
+  end
+
+  defp route_step?({step, _inner}) when step in @route_steps, do: true
+
+  defp route_step?(_shape), do: false
+
+  defp route_step_roots(inner, roots) do
+    case route_roots(inner) do
+      {:ok, inner_roots} -> {:ok, ShapeSet.union(roots, inner_roots)}
+      :error -> :error
+    end
+  end
+
   # Runs a public entry with the tables of a solve (see solve/1), given in the ctx: `answers` holds
   # `{mfa, answer}` for the functions the run is solving; `dependents` holds `{callee, caller}` when the
   # caller's evaluation read the callee's answer (a bag, so each pair once); `work` holds
@@ -1947,7 +2027,11 @@ defmodule Hologram.Compiler.DataFlow do
   # of its leaves (see leaves/1), which holds the same types. A recursive function whose answer
   # nests deeper on every pass then settles. A set of leaves stays as it is: an empty one is no value
   # at all (a branch that never returns), which a bag is not.
-  defp widen(shapes), do: widen(shapes, 0)
+  defp widen(shapes) do
+    shapes
+    |> collapse_routes()
+    |> widen(0)
+  end
 
   defp widen(shapes, depth) do
     cond do

@@ -19,6 +19,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module16
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module17
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module18
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module19
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -201,6 +202,14 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert apply_summary(ShapeSet.new([{:as_map, @param_0}]), args) ==
                ShapeSet.new([@struct_1, {:map, ShapeSet.new()}])
+    end
+
+    test "a collapsed route gives every type inside the argument" do
+      summary = summary_of(Module19, :nested, 1)
+      inner = ShapeSet.new([{:tuple, [ShapeSet.new([@struct_1])]}])
+      arg = ShapeSet.new([{:tuple, [inner]}])
+
+      assert Struct1 in types_of(apply_summary(summary, [arg])).structs
     end
 
     test "a part of a param is what is inside the argument, at any depth" do
@@ -978,6 +987,18 @@ defmodule Hologram.Compiler.DataFlowTest do
       level_2 = ShapeSet.new([{:tuple, [level_3]}])
 
       assert summary_of(Module9, :deep_call, 1) == ShapeSet.new([{:tuple, [level_2]}])
+    end
+
+    test "a chain of steps into a param becomes the param or anything inside it" do
+      assert summary_of(Module19, :nested, 1) == ShapeSet.new([{:param, 0}, {:part, @param_0}])
+    end
+
+    test "a single step into a param stays" do
+      assert summary_of(Module19, :single, 1) == ShapeSet.new([{:contents, @param_0}])
+    end
+
+    test "a field of a param stays" do
+      assert summary_of(Module19, :field, 1) == ShapeSet.new([{:dot, @param_0, :title}])
     end
 
     test "a summary larger than the cap is the function's top" do
