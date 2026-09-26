@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
   # A model must not be smaller than what the function can return.
 
   alias Hologram.Compiler.DataFlow
+  alias Hologram.Compiler.DataFlow.ShapeSet
 
   # Erlang functions that never return.
   @diverging_mfas [
@@ -218,7 +219,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
   @spec summary(mfa) :: DataFlow.shapes() | nil
   def summary({module, function, _arity} = mfa) do
     cond do
-      mfa in @diverging_mfas -> MapSet.new()
+      mfa in @diverging_mfas -> ShapeSet.new()
       module == :erlang and function in @primitive_erlang_functions -> prim()
       module in @primitive_modules or mfa in @primitive_mfas -> prim()
       mfa in @unchanged_first_arg_mfas -> param(0)
@@ -226,13 +227,13 @@ defmodule Hologram.Compiler.DataFlow.Models do
     end
   end
 
-  defp atom(value), do: MapSet.new([{:atom, value}])
+  defp atom(value), do: ShapeSet.new([{:atom, value}])
 
-  defp bag(shapes), do: MapSet.new([{:bag, shapes}])
+  defp bag(shapes), do: ShapeSet.new([{:bag, shapes}])
 
-  defp call(fun, args), do: MapSet.new([{:call, fun, args}])
+  defp call(fun, args), do: ShapeSet.new([{:call, fun, args}])
 
-  defp contents(shapes), do: MapSet.new([{:contents, shapes}])
+  defp contents(shapes), do: ShapeSet.new([{:contents, shapes}])
 
   # What folding the function over the elements gives, from the accumulator: two rounds of calling
   # the function with the args the given function builds around what the rounds before gave. The
@@ -243,9 +244,9 @@ defmodule Hologram.Compiler.DataFlow.Models do
     union([round_1, call(fun, args_around.(round_1))])
   end
 
-  defp list(elements), do: MapSet.new([{:list, elements}])
+  defp list(elements), do: ShapeSet.new([{:list, elements}])
 
-  defp map(inner), do: MapSet.new([{:map, inner}])
+  defp map(inner), do: ShapeSet.new([{:map, inner}])
 
   # What :lists.mapfoldl/3 and :lists.mapfoldr/3 give: the mapped elements and the accumulator,
   # from two rounds of calling the function, which returns a tuple of both.
@@ -259,11 +260,11 @@ defmodule Hologram.Compiler.DataFlow.Models do
     tuple([list(mapped), acc_2])
   end
 
-  defp param(index), do: MapSet.new([{:param, index}])
+  defp param(index), do: ShapeSet.new([{:param, index}])
 
-  defp part(shapes), do: MapSet.new([{:part, shapes}])
+  defp part(shapes), do: ShapeSet.new([{:part, shapes}])
 
-  defp prim, do: MapSet.new([:prim])
+  defp prim, do: ShapeSet.new([:prim])
 
   defp structural({:erlang, :++, 2}), do: list(union([contents(param(0)), contents(param(1))]))
   defp structural({:erlang, :--, 2}), do: param(0)
@@ -376,7 +377,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
     map(union([values, call(param(0), [values, values, values])]))
   end
 
-  defp structural({:maps, :new, 0}), do: map(MapSet.new())
+  defp structural({:maps, :new, 0}), do: map(ShapeSet.new())
   defp structural({:maps, :put, 3}), do: map(union([param(0), param(1), contents(param(2))]))
   defp structural({:maps, :remove, 2}), do: map(contents(param(1)))
   defp structural({:maps, :size, 1}), do: prim()
@@ -408,7 +409,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
 
   defp structural(_mfa), do: nil
 
-  defp tuple(elements), do: MapSet.new([{:tuple, elements}])
+  defp tuple(elements), do: ShapeSet.new([{:tuple, elements}])
 
-  defp union(sets), do: Enum.reduce(sets, MapSet.new(), &MapSet.union/2)
+  defp union(sets), do: ShapeSet.union_all(sets)
 end
