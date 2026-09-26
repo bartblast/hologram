@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module19
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module20
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module21
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -373,6 +374,23 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert shapes(clause.body, clause, mfa, flow) ==
                ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
+    end
+
+    # The inner call gives four copies of the four structs, over the cap, so it is flattened as soon as
+    # it is made (see call_fun/3); the outer call's four copies of that bag fit, so they keep their
+    # tuple. Flattened only once the whole call is made, the value would be one bag.
+    test "a call of a function argument is bounded as soon as it is made" do
+      clause = clause(Module21, :calls_twice)
+      mfa = {Module21, :calls_twice, 0}
+      bag = ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
+      value = ShapeSet.new([{:tuple, List.duplicate(bag, 4)}])
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(),
+          max_summary_size: :erlang.external_size(value)
+        )
+
+      assert shapes(clause.body, clause, mfa, flow) == value
     end
 
     test "a call whose leaves are larger than the cap is the caller's top" do

@@ -535,10 +535,22 @@ defmodule Hologram.Compiler.DataFlow do
   # that depends on a param or on an anonymous function's argument is called once that is known (see
   # replace_parts/3). A value of unknown structure can be a function returning anything it holds or
   # it is given. Any other value is no function: calling it raises.
+  #
+  # A call's value is bounded (see bounded/2) as soon as it is made, not only once the whole
+  # substitution ends: when a call's value is the argument of the next call, as in a fold's rounds,
+  # each call multiplies the value by how many times the function holds its argument, so three calls
+  # can reach gigabytes before the end. Bounded, each call starts from a value near the cap, and a
+  # flattened value holds the same types. Without a context (apply_summary/2) nothing is bounded.
   defp call_fun({:fun, ref, returned} = fun, args, rep) do
     if :counters.get(rep.calls, 1) < @max_fun_calls do
       :counters.add(rep.calls, 1, 1)
-      replace(returned, &replace_arg(&1, ref, args), rep)
+      value = replace(returned, &replace_arg(&1, ref, args), rep)
+
+      if rep.ctx do
+        bounded(value, rep.ctx)
+      else
+        value
+      end
     else
       ShapeSet.new([{:call, ShapeSet.new([fun]), args}])
     end
