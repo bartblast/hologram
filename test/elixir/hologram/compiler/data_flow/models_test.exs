@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.DataFlow
+  alias Hologram.Compiler.DataFlow.ShapeSet
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
 
@@ -13,10 +14,12 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
   # The tree of what a call of the modelled function with arguments of the given shapes gives.
   defp call_model(mfa, args) do
     flow = DataFlow.start(PLT.start(), PLT.start())
+    arg_sets = Enum.map(args, &ShapeSet.from_tree(tree_set(&1), flow.store))
 
     mfa
     |> summary()
-    |> DataFlow.apply_summary(Enum.map(args, &tree_set/1))
+    |> ShapeSet.from_tree(flow.store)
+    |> DataFlow.apply_summary(arg_sets, flow)
     |> DataFlow.to_tree(flow)
   end
 

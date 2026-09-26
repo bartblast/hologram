@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.DataFlow
+  alias Hologram.Compiler.DataFlow.ShapeSet
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module10
@@ -59,7 +60,12 @@ defmodule Hologram.Compiler.DataFlowTest do
   # The tree of what the summary gives with the given arguments put in (see apply_summary/2).
   defp apply_tree(summary, args) do
     flow = flow()
-    to_tree(apply_summary(summary, args), flow)
+    arg_sets = Enum.map(args, &ShapeSet.from_tree(&1, flow.store))
+
+    summary
+    |> ShapeSet.from_tree(flow.store)
+    |> apply_summary(arg_sets, flow)
+    |> to_tree(flow)
   end
 
   defp clause(module, function) do
@@ -174,9 +180,12 @@ defmodule Hologram.Compiler.DataFlowTest do
         {Struct2, %{struct?: true}}
       ])
 
+    flow = start(PLT.start(), module_info_plt)
+
     shapes
     |> tree_set()
-    |> types(start(PLT.start(), module_info_plt))
+    |> ShapeSet.from_tree(flow.store)
+    |> types(flow)
   end
 
   setup_all do

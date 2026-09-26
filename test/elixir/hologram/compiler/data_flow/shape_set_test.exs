@@ -2,141 +2,181 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.DataFlow.ShapeSet
 
-  describe "all?/2" do
-    test "every element passes" do
-      assert all?(new([{:atom, :a}, {:atom, :b}]), &match?({:atom, _atom}, &1))
+  alias Hologram.Compiler.DataFlow.Store
+
+  # The store is linked to the test process and stops with it.
+  setup do
+    [store: Store.start()]
+  end
+
+  describe "all?/3" do
+    test "every element passes", %{store: store} do
+      assert all?(new([{:atom, :a}, {:atom, :b}], store), &match?({:atom, _atom}, &1), store)
     end
 
-    test "an element fails" do
-      refute all?(new([{:atom, :a}, :prim]), &match?({:atom, _atom}, &1))
+    test "an element fails", %{store: store} do
+      refute all?(new([{:atom, :a}, :prim], store), &match?({:atom, _atom}, &1), store)
     end
 
-    test "empty set" do
-      assert all?(new(), &match?({:atom, _atom}, &1))
+    test "empty set", %{store: store} do
+      assert all?(new(store), &match?({:atom, _atom}, &1), store)
     end
   end
 
-  describe "any?/2" do
-    test "an element passes" do
-      assert any?(new([{:atom, :a}, :prim]), &(&1 == :prim))
+  describe "any?/3" do
+    test "an element passes", %{store: store} do
+      assert any?(new([{:atom, :a}, :prim], store), &(&1 == :prim), store)
     end
 
-    test "no element passes" do
-      refute any?(new([{:atom, :a}]), &(&1 == :prim))
+    test "no element passes", %{store: store} do
+      refute any?(new([{:atom, :a}], store), &(&1 == :prim), store)
     end
 
-    test "empty set" do
-      refute any?(new(), &(&1 == :prim))
-    end
-  end
-
-  describe "empty?/1" do
-    test "empty set" do
-      assert empty?(new())
-    end
-
-    test "set with an element" do
-      refute empty?(new([:prim]))
+    test "empty set", %{store: store} do
+      refute any?(new(store), &(&1 == :prim), store)
     end
   end
 
-  describe "filter/2" do
-    test "keeps the elements that pass" do
-      assert filter(new([{:atom, :a}, :prim, {:param, 0}]), &match?({:atom, _atom}, &1)) ==
-               new([{:atom, :a}])
+  describe "empty?/2" do
+    test "empty set", %{store: store} do
+      assert empty?(new(store), store)
+    end
+
+    test "set with an element", %{store: store} do
+      refute empty?(new([:prim], store), store)
     end
   end
 
-  describe "flat_map/2" do
-    test "unions the sets the function gives" do
-      set = new([{:param, 0}, {:param, 1}])
-
-      assert flat_map(set, fn {:param, index} -> new([{:param, index + 1}, :prim]) end) ==
-               new([{:param, 1}, {:param, 2}, :prim])
-    end
-
-    test "empty set" do
-      assert flat_map(new(), fn shape -> new([shape]) end) == new()
+  describe "filter/3" do
+    test "keeps the elements that pass", %{store: store} do
+      assert filter(
+               new([{:atom, :a}, :prim, {:param, 0}], store),
+               &match?({:atom, _atom}, &1),
+               store
+             ) ==
+               new([{:atom, :a}], store)
     end
   end
 
-  describe "map/2" do
-    test "the set of what the function gives" do
-      assert map(new([{:param, 0}, {:param, 1}]), fn _shape -> :prim end) == new([:prim])
+  describe "flat_map/3" do
+    test "unions the sets the function gives", %{store: store} do
+      set = new([{:param, 0}, {:param, 1}], store)
+
+      assert flat_map(
+               set,
+               fn {:param, index} -> new([{:param, index + 1}, :prim], store) end,
+               store
+             ) ==
+               new([{:param, 1}, {:param, 2}, :prim], store)
+    end
+
+    test "empty set", %{store: store} do
+      assert flat_map(new(store), fn shape -> new([shape], store) end, store) == new(store)
     end
   end
 
-  describe "member?/2" do
-    test "element of the set" do
-      assert member?(new([:prim, {:atom, :a}]), {:atom, :a})
-    end
+  describe "from_tree/2" do
+    test "the set a tree stands for", %{store: store} do
+      set = from_tree([:prim, {:tuple, [[{:atom, :a}]]}], store)
 
-    test "not an element of the set" do
-      refute member?(new([:prim]), {:atom, :a})
+      assert to_list(set, store) == [:prim, {:tuple, [[{:atom, :a}]]}]
     end
   end
 
-  describe "new/0" do
-    test "empty set" do
-      assert size(new()) == 0
+  describe "map/3" do
+    test "the set of what the function gives", %{store: store} do
+      assert map(new([{:param, 0}, {:param, 1}], store), fn _shape -> :prim end, store) ==
+               new([:prim], store)
+    end
+  end
+
+  describe "member?/3" do
+    test "element of the set", %{store: store} do
+      assert member?(new([:prim, {:atom, :a}], store), {:atom, :a}, store)
+    end
+
+    test "not an element of the set", %{store: store} do
+      refute member?(new([:prim], store), {:atom, :a}, store)
     end
   end
 
   describe "new/1" do
-    test "drops duplicates" do
-      assert size(new([:prim, {:atom, :a}, :prim])) == 2
-    end
-
-    test "a set is a sorted list without duplicates" do
-      assert new([{:param, 0}, :prim, :prim]) == [:prim, {:param, 0}]
+    test "empty set", %{store: store} do
+      assert size(new(store), store) == 0
     end
   end
 
-  describe "put/2" do
-    test "new element" do
-      assert put(new([:prim]), {:atom, :a}) == new([:prim, {:atom, :a}])
+  describe "new/2" do
+    test "drops duplicates", %{store: store} do
+      assert size(new([:prim, {:atom, :a}, :prim], store), store) == 2
     end
 
-    test "element already in the set" do
-      assert put(new([:prim]), :prim) == new([:prim])
-    end
-  end
-
-  describe "reduce/3" do
-    test "folds the elements" do
-      assert reduce(new([{:param, 0}, {:param, 2}]), 0, fn {:param, index}, acc ->
-               acc + index
-             end) == 2
+    test "a set is a sorted list without duplicates", %{store: store} do
+      assert new([{:param, 0}, :prim, :prim], store) == [:prim, {:param, 0}]
     end
   end
 
-  describe "size/1" do
-    test "number of elements" do
-      assert size(new([:prim, {:atom, :a}])) == 2
+  describe "put/3" do
+    test "new element", %{store: store} do
+      assert put(new([:prim], store), {:atom, :a}, store) == new([:prim, {:atom, :a}], store)
+    end
+
+    test "element already in the set", %{store: store} do
+      assert put(new([:prim], store), :prim, store) == new([:prim], store)
     end
   end
 
-  describe "to_list/1" do
-    test "elements in term order" do
-      assert to_list(new([{:param, 0}, :prim, {:atom, :a}])) == [:prim, {:atom, :a}, {:param, 0}]
+  describe "reduce/4" do
+    test "folds the elements", %{store: store} do
+      assert reduce(
+               new([{:param, 0}, {:param, 2}], store),
+               0,
+               fn {:param, index}, acc ->
+                 acc + index
+               end,
+               store
+             ) == 2
     end
   end
 
-  describe "union/2" do
-    test "elements of both sets, once each" do
-      assert union(new([:prim, {:atom, :a}]), new([{:atom, :a}, {:param, 0}])) ==
-               new([:prim, {:atom, :a}, {:param, 0}])
+  describe "size/2" do
+    test "number of elements", %{store: store} do
+      assert size(new([:prim, {:atom, :a}], store), store) == 2
     end
   end
 
-  describe "union_all/1" do
-    test "elements of every set" do
-      assert union_all([new([:prim]), new([{:atom, :a}]), new([:prim])]) ==
-               new([:prim, {:atom, :a}])
+  describe "to_list/2" do
+    test "elements in term order", %{store: store} do
+      assert to_list(new([{:param, 0}, :prim, {:atom, :a}], store), store) == [
+               :prim,
+               {:atom, :a},
+               {:param, 0}
+             ]
+    end
+  end
+
+  describe "union/3" do
+    test "elements of both sets, once each", %{store: store} do
+      assert union(
+               new([:prim, {:atom, :a}], store),
+               new([{:atom, :a}, {:param, 0}], store),
+               store
+             ) ==
+               new([:prim, {:atom, :a}, {:param, 0}], store)
+    end
+  end
+
+  describe "union_all/2" do
+    test "elements of every set", %{store: store} do
+      assert union_all(
+               [new([:prim], store), new([{:atom, :a}], store), new([:prim], store)],
+               store
+             ) ==
+               new([:prim, {:atom, :a}], store)
     end
 
-    test "no sets" do
-      assert union_all([]) == new()
+    test "no sets", %{store: store} do
+      assert union_all([], store) == new(store)
     end
   end
 end

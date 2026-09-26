@@ -35,6 +35,7 @@ defmodule Hologram.Compiler.DataFlow do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.DataFlow.Models
   alias Hologram.Compiler.DataFlow.ShapeSet
+  alias Hologram.Compiler.DataFlow.Store
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -165,12 +166,14 @@ defmodule Hologram.Compiler.DataFlow do
   @type tree :: [shape]
 
   # What a compile's analysis works with: the IR PLT the code is read from (and where missing IR is
-  # built), the module info PLT, and the summaries of the functions it has followed so far.
+  # built), the module info PLT, the store its sets are in (see Store), and the summaries of the
+  # functions it has followed so far.
   @type t :: %{
           ir_plt: PLT.t(),
           max_summary_size: pos_integer,
           module_atoms: PLT.t(),
           module_info_plt: PLT.t(),
+          store: Store.t(),
           summaries: PLT.t()
         }
 
@@ -187,9 +190,16 @@ defmodule Hologram.Compiler.DataFlow do
   argument gives nothing. A call of an anonymous function that a param stood for is made once the
   param is replaced. A dynamic call or a dot on a module a param stood for is left as it is: making
   it needs the analysis (the calls made while summarising do).
+
+  The summary and the arguments are sets of the given flow context's store (see
+  `Hologram.Compiler.DataFlow.ShapeSet.from_tree/2`).
   """
-  @spec apply_summary(shapes, [shapes]) :: shapes
-  def apply_summary(summary, args), do: put_args(summary, args, nil)
+  @spec apply_summary(shapes, [shapes], t) :: shapes
+  def apply_summary(summary, args, flow) do
+    summary
+    |> replace(&replace_param(&1, args, flow.store), new_rep(nil, flow.store))
+    |> widen(flow.store)
+  end
 
   @doc """
   Returns what the given function, which broadcasts actions (see
@@ -222,7 +232,7 @@ defmodule Hologram.Compiler.DataFlow do
   @spec definite_map?(IR.t(), IR.FunctionClause.t(), mfa, t) :: boolean
   def definite_map?(expr, clause, mfa, flow) do
     shapes = shapes(expr, clause, mfa, flow)
-    not ShapeSet.empty?(shapes) and ShapeSet.all?(shapes, &map_shape?/1)
+    not ShapeSet.empty?(shapes, flow.store) and ShapeSet.all?(shapes, &map_shape?/1, flow.store)
   end
 
   @doc """
@@ -251,12 +261,12 @@ defmodule Hologram.Compiler.DataFlow do
   def server_callback_analysis(graph, templatable, flow) do
     returned =
       run(flow, fn ctx ->
-        no_args = [ShapeSet.new(), ShapeSet.new(), ShapeSet.new()]
+        no_args = [ShapeSet.new(flow.store), ShapeSet.new(flow.store), ShapeSet.new(flow.store)]
 
         settle(ctx, fn ->
           [{templatable, :command, 3}, {templatable, :init, 3}]
           |> Enum.map(&summary_with_args(&1, no_args, ctx))
-          |> ShapeSet.union_all()
+          |> ShapeSet.union_all(flow.store)
         end)
       end)
 
@@ -275,7 +285,7 @@ defmodule Hologram.Compiler.DataFlow do
       expr_ctx = %{ctx | mfa: mfa}
 
       settle(expr_ctx, fn ->
-        frame = clause_frame(clause, &{:param, &1})
+        frame = clause_frame(clause, &{:param, &1}, ctx.flow.store)
         eval(expr, %{expr_ctx | frames: [frame]})
       end)
     end)
@@ -292,8 +302,8 @@ defmodule Hologram.Compiler.DataFlow do
       names and drops its structure, or the top of the function being read when even that is larger
       (see `top/1`); defaults to 32 KiB.
 
-  The other opts are given to the PLTs it keeps its summaries and its module checks in (see
-  `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
+  The other opts are given to the PLTs it keeps its summaries, its module checks and its store in
+  (see `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
   """
   @spec start(PLT.t(), PLT.t(), T.opts()) :: t
   def start(ir_plt, module_info_plt, opts \\ []) do
@@ -304,6 +314,7 @@ defmodule Hologram.Compiler.DataFlow do
       max_summary_size: max_summary_size,
       module_atoms: PLT.start(plt_opts),
       module_info_plt: module_info_plt,
+      store: Store.start(plt_opts),
       summaries: PLT.start(plt_opts)
     }
   end
@@ -312,8 +323,9 @@ defmodule Hologram.Compiler.DataFlow do
   Stops the given analysis.
   """
   @spec stop(t) :: :ok
-  def stop(%{module_atoms: module_atoms, summaries: summaries}) do
+  def stop(%{module_atoms: module_atoms, store: store, summaries: summaries}) do
     PLT.stop(module_atoms)
+    Store.stop(store)
     PLT.stop(summaries)
   end
 
@@ -347,11 +359,9 @@ defmodule Hologram.Compiler.DataFlow do
   Returns what the given function's value is when the analysis cannot follow it: the rule before
   this module applied from the function, and everything the function is given.
   """
-  @spec top(mfa) :: shapes
+  @spec top(mfa) :: tree
   def top({_module, _function, arity} = mfa) do
-    arity
-    |> params()
-    |> ShapeSet.put({:reach, mfa})
+    :lists.usort([{:reach, mfa} | params(arity)])
   end
 
   @doc """
@@ -368,39 +378,39 @@ defmodule Hologram.Compiler.DataFlow do
   @spec types(shapes, t) :: types
   def types(shapes, flow) do
     acc = %{modules: MapSet.new(), reach: MapSet.new(), structs: MapSet.new()}
-    put_types(shapes, acc, flow.module_info_plt)
+    put_types(shapes, acc, flow.module_info_plt, flow.store)
   end
 
   # What calling a function value of the given shapes with arguments of the given shapes gives, for
   # each alternative (see replace/3 about rep).
   defp apply_fun(fun_shapes, args, rep) do
-    ShapeSet.flat_map(fun_shapes, &call_fun(&1, args, rep))
+    ShapeSet.flat_map(fun_shapes, &call_fun(&1, args, rep), rep.store)
   end
 
   defp arg_index({:arg, ref, index}, ref), do: index
 
   defp arg_index(_shape, _ref), do: nil
 
-  defp as_map_shapes({kind, _inner} = shape) when kind in [:as_map, :map], do: [shape]
+  defp as_map_shapes({kind, _inner} = shape, _store) when kind in [:as_map, :map], do: [shape]
 
-  defp as_map_shapes({:struct, _module, _fields} = shape), do: [shape]
+  defp as_map_shapes({:struct, _module, _fields} = shape, _store), do: [shape]
 
-  defp as_map_shapes(shape)
+  defp as_map_shapes(shape, store)
        when shape == :prim or
               (is_tuple(shape) and elem(shape, 0) in [:bag, :reach | @pending_kinds]) do
-    [{:as_map, ShapeSet.new([shape])}]
+    [{:as_map, ShapeSet.new([shape], store)}]
   end
 
-  defp as_map_shapes(_shape), do: []
+  defp as_map_shapes(_shape, _store), do: []
 
   # The alternatives of the given shapes that are maps or structs: a value not known yet, or of unknown
   # structure, becomes `{:as_map, ...}`; an atom, a list, a tuple or a function is dropped (a map
   # pattern does not match it).
-  defp as_maps(shapes) do
-    ShapeSet.flat_map(shapes, &ShapeSet.new(as_map_shapes(&1)))
+  defp as_maps(shapes, store) do
+    ShapeSet.flat_map(shapes, &ShapeSet.new(as_map_shapes(&1, store), store), store)
   end
 
-  defp bag_of_leaves(shapes), do: ShapeSet.new([{:bag, leaves(shapes)}])
+  defp bag_of_leaves(shapes, store), do: ShapeSet.new([{:bag, leaves(shapes, store)}], store)
 
   # Records that every variable of the pattern is bound by matching the pattern against the subject
   # (see subject_shapes/2), and what the pattern names for the variables matched against a part of it.
@@ -425,8 +435,8 @@ defmodule Hologram.Compiler.DataFlow do
     if within_cap?(shapes, ctx) do
       shapes
     else
-      bag = bag_of_leaves(shapes)
-      if within_cap?(bag, ctx), do: bag, else: top(ctx.mfa)
+      bag = bag_of_leaves(shapes, ctx.flow.store)
+      if within_cap?(bag, ctx), do: bag, else: top_set(ctx.mfa, ctx.flow.store)
     end
   end
 
@@ -440,7 +450,7 @@ defmodule Hologram.Compiler.DataFlow do
         |> eval(ctx)
 
       :error ->
-        ShapeSet.new()
+        ShapeSet.new(ctx.flow.store)
     end
   end
 
@@ -451,10 +461,10 @@ defmodule Hologram.Compiler.DataFlow do
 
     clauses
     |> Enum.map(fn clause ->
-      frame = clause_frame(clause, &{:arg, ref, &1})
+      frame = clause_frame(clause, &{:arg, ref, &1}, ctx.flow.store)
       broadcast_params(clause.body, %{ctx | frames: [frame | ctx.frames]})
     end)
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(ctx.flow.store)
   end
 
   defp broadcast_params(
@@ -469,10 +479,13 @@ defmodule Hologram.Compiler.DataFlow do
          } = ir,
          ctx
        ) do
-    ShapeSet.union_all([
-      broadcast_call_params({module, name, length(args)}, args, ctx),
-      broadcast_params_inside(ir, ctx)
-    ])
+    ShapeSet.union_all(
+      [
+        broadcast_call_params({module, name, length(args)}, args, ctx),
+        broadcast_params_inside(ir, ctx)
+      ],
+      ctx.flow.store
+    )
   end
 
   defp broadcast_params(
@@ -480,10 +493,13 @@ defmodule Hologram.Compiler.DataFlow do
            ir,
          ctx
        ) do
-    ShapeSet.union_all([
-      broadcast_call_params({module, name, length(args)}, args, ctx),
-      broadcast_params_inside(ir, ctx)
-    ])
+    ShapeSet.union_all(
+      [
+        broadcast_call_params({module, name, length(args)}, args, ctx),
+        broadcast_params_inside(ir, ctx)
+      ],
+      ctx.flow.store
+    )
   end
 
   defp broadcast_params(%_struct{} = ir, ctx), do: broadcast_params_inside(ir, ctx)
@@ -491,7 +507,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp broadcast_params(list, ctx) when is_list(list) do
     list
     |> Enum.map(&broadcast_params(&1, ctx))
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(ctx.flow.store)
   end
 
   defp broadcast_params(tuple, ctx) when is_tuple(tuple) do
@@ -500,7 +516,7 @@ defmodule Hologram.Compiler.DataFlow do
     |> broadcast_params(ctx)
   end
 
-  defp broadcast_params(_ir, _ctx), do: ShapeSet.new()
+  defp broadcast_params(_ir, ctx), do: ShapeSet.new(ctx.flow.store)
 
   defp broadcast_params_inside(ir, ctx) do
     ir
@@ -515,7 +531,7 @@ defmodule Hologram.Compiler.DataFlow do
   # structure gives itself and the arguments, and the calls on the module atoms it holds; a primitive
   # gives a primitive. Any other value is no module: the call raises.
   defp call_dyn(module_shapes, name, arity, args, ctx) do
-    ShapeSet.flat_map(module_shapes, &call_dyn_shape(&1, name, arity, args, ctx))
+    ShapeSet.flat_map(module_shapes, &call_dyn_shape(&1, name, arity, args, ctx), ctx.flow.store)
   end
 
   defp call_dyn_shape({:atom, module}, name, arity, args, ctx) do
@@ -525,27 +541,42 @@ defmodule Hologram.Compiler.DataFlow do
     |> bounded(ctx)
   end
 
-  defp call_dyn_shape(shape, name, arity, args, _ctx)
+  defp call_dyn_shape(shape, name, arity, args, ctx)
        when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
-    ShapeSet.new([{:dyn, ShapeSet.new([shape]), name, arity, args}])
+    ShapeSet.new(
+      [{:dyn, ShapeSet.new([shape], ctx.flow.store), name, arity, args}],
+      ctx.flow.store
+    )
   end
 
   defp call_dyn_shape({:bag, inner} = bag, name, arity, args, ctx) do
-    module_atoms = ShapeSet.filter(inner, &match?({:atom, _module}, &1))
-    unknown = ShapeSet.new([{:bag, ShapeSet.union_all([ShapeSet.new([bag]) | args])}])
+    module_atoms = ShapeSet.filter(inner, &match?({:atom, _module}, &1), ctx.flow.store)
 
-    ShapeSet.union_all([unknown, call_dyn(module_atoms, name, arity, args, ctx)])
+    unknown =
+      ShapeSet.new(
+        [
+          {:bag, ShapeSet.union_all([ShapeSet.new([bag], ctx.flow.store) | args], ctx.flow.store)}
+        ],
+        ctx.flow.store
+      )
+
+    ShapeSet.union_all([unknown, call_dyn(module_atoms, name, arity, args, ctx)], ctx.flow.store)
   end
 
-  defp call_dyn_shape({:reach, _vertex} = reach, _name, _arity, args, _ctx) do
-    ShapeSet.new([{:bag, ShapeSet.union_all([ShapeSet.new([reach]) | args])}])
+  defp call_dyn_shape({:reach, _vertex} = reach, _name, _arity, args, ctx) do
+    ShapeSet.new(
+      [
+        {:bag, ShapeSet.union_all([ShapeSet.new([reach], ctx.flow.store) | args], ctx.flow.store)}
+      ],
+      ctx.flow.store
+    )
   end
 
   # A module the code does not name (an atom made at runtime) gives what the code names for it:
   # nothing (see the contract).
-  defp call_dyn_shape(:prim, _name, _arity, _args, _ctx), do: ShapeSet.new([:prim])
+  defp call_dyn_shape(:prim, _name, _arity, _args, ctx), do: ShapeSet.new([:prim], ctx.flow.store)
 
-  defp call_dyn_shape(_shape, _name, _arity, _args, _ctx), do: ShapeSet.new()
+  defp call_dyn_shape(_shape, _name, _arity, _args, ctx), do: ShapeSet.new(ctx.flow.store)
 
   # An anonymous function returns what it returns with the arguments put in for its own. A function
   # that depends on a param or on an anonymous function's argument is called once that is known (see
@@ -558,7 +589,7 @@ defmodule Hologram.Compiler.DataFlow do
   # can reach gigabytes before the end. Bounded, each call starts from a value near the cap, and a
   # flattened value holds the same types; widened first (see widen/1), a bag the arguments were put
   # into is its leaves, so the next call's estimate (see substitution_inputs/4) sees their size.
-  # Without a context (apply_summary/2) nothing is bounded.
+  # Without a context (apply_summary/3) nothing is bounded.
   defp call_fun({:fun, ref, returned} = fun, args, rep) do
     if :counters.get(rep.calls, 1) < @max_fun_calls do
       :counters.add(rep.calls, 1, 1)
@@ -568,35 +599,41 @@ defmodule Hologram.Compiler.DataFlow do
         {shapes, bounded_args} = substitution_inputs(returned, args, counts, rep.ctx)
 
         shapes
-        |> replace(&replace_arg(&1, ref, bounded_args), rep)
-        |> widen()
+        |> replace(&replace_arg(&1, ref, bounded_args, rep.store), rep)
+        |> widen(rep.store)
         |> bounded(rep.ctx)
       else
-        replace(returned, &replace_arg(&1, ref, args), rep)
+        replace(returned, &replace_arg(&1, ref, args, rep.store), rep)
       end
     else
-      ShapeSet.new([{:call, ShapeSet.new([fun]), args}])
+      ShapeSet.new([{:call, ShapeSet.new([fun], rep.store), args}], rep.store)
     end
   end
 
-  defp call_fun(shape, args, _rep)
+  defp call_fun(shape, args, rep)
        when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
-    ShapeSet.new([{:call, ShapeSet.new([shape]), args}])
+    ShapeSet.new([{:call, ShapeSet.new([shape], rep.store), args}], rep.store)
   end
 
-  defp call_fun(shape, args, _rep) when is_tuple(shape) and elem(shape, 0) in [:bag, :reach] do
-    ShapeSet.union_all([ShapeSet.new([shape]) | args])
+  defp call_fun(shape, args, rep) when is_tuple(shape) and elem(shape, 0) in [:bag, :reach] do
+    ShapeSet.union_all([ShapeSet.new([shape], rep.store) | args], rep.store)
   end
 
-  defp call_fun(_shape, _args, _rep), do: ShapeSet.new()
+  defp call_fun(_shape, _args, rep), do: ShapeSet.new(rep.store)
 
   # The summary of a function a call reaches: from the analysis when solved already, else its model
   # (see Hologram.Compiler.DataFlow.Models), else its current answer in the run's solve (see
   # solving_summary/2).
   defp callee_summary(mfa, ctx) do
     case PLT.get(ctx.flow.summaries, mfa) do
-      {:ok, summary} -> summary
-      :error -> Models.summary(mfa) || solving_summary(mfa, ctx)
+      {:ok, summary} ->
+        summary
+
+      :error ->
+        case Models.summary(mfa) do
+          nil -> solving_summary(mfa, ctx)
+          model -> ShapeSet.from_tree(model, ctx.flow.store)
+        end
     end
   end
 
@@ -607,10 +644,10 @@ defmodule Hologram.Compiler.DataFlow do
     |> function_clauses(ctx)
     |> List.wrap()
     |> Enum.map(fn clause ->
-      frame = clause_frame(clause, &{:param, &1})
+      frame = clause_frame(clause, &{:param, &1}, ctx.flow.store)
       broadcast_params(clause.body, %{ctx | frames: [frame]})
     end)
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(ctx.flow.store)
   end
 
   # The variables of a function clause or an anonymous function's clause, each with the places it is
@@ -618,11 +655,15 @@ defmodule Hologram.Compiler.DataFlow do
   # what the parameter at an index holds. A variable of IR read from a BEAM has a version per
   # binding, so a variable is a name and a version. A capture's parameters (`$1`) have none, and
   # are unique within it.
-  defp clause_frame(%IR.FunctionClause{params: params, guards: guards, body: body}, param_subject) do
+  defp clause_frame(
+         %IR.FunctionClause{params: params, guards: guards, body: body},
+         param_subject,
+         store
+       ) do
     acc =
       params
       |> Enum.with_index()
-      |> Enum.reduce(%{bindings: %{}, extras: %{}}, fn {param, index}, acc ->
+      |> Enum.reduce(%{bindings: %{}, extras: %{}, store: store}, fn {param, index}, acc ->
         bind_pattern(acc, param, param_subject.(index))
       end)
 
@@ -639,11 +680,11 @@ defmodule Hologram.Compiler.DataFlow do
     mfa
     |> function_clauses(ctx)
     |> Enum.map(fn clause ->
-      frame = clause_frame(clause, &{:param, &1})
+      frame = clause_frame(clause, &{:param, &1}, ctx.flow.store)
       eval(clause.body, %{function_ctx | frames: [frame]})
     end)
-    |> ShapeSet.union_all()
-    |> widen()
+    |> ShapeSet.union_all(ctx.flow.store)
+    |> widen(ctx.flow.store)
     |> compress_atoms(ctx)
     |> bounded(function_ctx)
   end
@@ -653,54 +694,62 @@ defmodule Hologram.Compiler.DataFlow do
   # anything inside it, which holds every value the chain can give. A single step stays, and so does a
   # dot, which on a module atom calls a function. The chains made answers grow with every way the code
   # takes a piece out of an argument, and no type depends on which way it took.
-  defp collapse_route({step, inner}) when step in @route_steps do
-    collapsed = collapse_routes(inner)
+  defp collapse_route({step, inner}, store) when step in @route_steps do
+    collapsed = collapse_routes(inner, store)
 
-    case route_roots(collapsed) do
+    case route_roots(collapsed, store) do
       {:ok, roots} ->
-        if ShapeSet.any?(collapsed, &route_step?/1) do
-          ShapeSet.put(roots, {:part, roots})
+        if ShapeSet.any?(collapsed, &route_step?/1, store) do
+          ShapeSet.put(roots, {:part, roots}, store)
         else
-          ShapeSet.new([{step, collapsed}])
+          ShapeSet.new([{step, collapsed}], store)
         end
 
       :error ->
-        ShapeSet.new([{step, collapsed}])
+        ShapeSet.new([{step, collapsed}], store)
     end
   end
 
-  defp collapse_route({:struct, module, fields}) do
-    ShapeSet.new([{:struct, module, collapse_routes(fields)}])
+  defp collapse_route({:struct, module, fields}, store) do
+    ShapeSet.new([{:struct, module, collapse_routes(fields, store)}], store)
   end
 
-  defp collapse_route({kind, inner}) when kind in [:bag, :list, :map] do
-    ShapeSet.new([{kind, collapse_routes(inner)}])
+  defp collapse_route({kind, inner}, store) when kind in [:bag, :list, :map] do
+    ShapeSet.new([{kind, collapse_routes(inner, store)}], store)
   end
 
-  defp collapse_route({:tuple, elements}) do
-    ShapeSet.new([{:tuple, Enum.map(elements, &collapse_routes/1)}])
+  defp collapse_route({:tuple, elements}, store) do
+    ShapeSet.new([{:tuple, Enum.map(elements, &collapse_routes(&1, store))}], store)
   end
 
-  defp collapse_route({:fun, ref, returned}) do
-    ShapeSet.new([{:fun, ref, collapse_routes(returned)}])
+  defp collapse_route({:fun, ref, returned}, store) do
+    ShapeSet.new([{:fun, ref, collapse_routes(returned, store)}], store)
   end
 
-  defp collapse_route({:call, fun, args}) do
-    ShapeSet.new([{:call, collapse_routes(fun), Enum.map(args, &collapse_routes/1)}])
+  defp collapse_route({:call, fun, args}, store) do
+    ShapeSet.new(
+      [{:call, collapse_routes(fun, store), Enum.map(args, &collapse_routes(&1, store))}],
+      store
+    )
   end
 
-  defp collapse_route({:dot, inner, name}),
-    do: ShapeSet.new([{:dot, collapse_routes(inner), name}])
+  defp collapse_route({:dot, inner, name}, store),
+    do: ShapeSet.new([{:dot, collapse_routes(inner, store), name}], store)
 
-  defp collapse_route({:dyn, module, name, arity, args}) do
-    ShapeSet.new([
-      {:dyn, collapse_routes(module), name, arity, Enum.map(args, &collapse_routes/1)}
-    ])
+  defp collapse_route({:dyn, module, name, arity, args}, store) do
+    ShapeSet.new(
+      [
+        {:dyn, collapse_routes(module, store), name, arity,
+         Enum.map(args, &collapse_routes(&1, store))}
+      ],
+      store
+    )
   end
 
-  defp collapse_route(shape), do: ShapeSet.new([shape])
+  defp collapse_route(shape, store), do: ShapeSet.new([shape], store)
 
-  defp collapse_routes(shapes), do: ShapeSet.flat_map(shapes, &collapse_route/1)
+  defp collapse_routes(shapes, store),
+    do: ShapeSet.flat_map(shapes, &collapse_route(&1, store), store)
 
   defp component?(module, module_info_plt) do
     match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
@@ -718,10 +767,14 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp compress_atom({:tuple, [first | rest]}, ctx) do
     kept_first =
-      ShapeSet.map(first, fn
-        {:atom, _atom} = tag -> tag
-        shape -> compress_atom(shape, ctx)
-      end)
+      ShapeSet.map(
+        first,
+        fn
+          {:atom, _atom} = tag -> tag
+          shape -> compress_atom(shape, ctx)
+        end,
+        ctx.flow.store
+      )
 
     {:tuple, [kept_first | Enum.map(rest, &compress_atoms(&1, ctx))]}
   end
@@ -749,12 +802,13 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp compress_atom(shape, _ctx), do: shape
 
-  defp compress_atoms(shapes, ctx), do: ShapeSet.map(shapes, &compress_atom(&1, ctx))
+  defp compress_atoms(shapes, ctx),
+    do: ShapeSet.map(shapes, &compress_atom(&1, ctx), ctx.flow.store)
 
   # What can be inside a value of the given shapes, one level down. An atom holds nothing, a part of
   # a primitive is a primitive, and a shape of unknown structure holds itself.
-  defp contents(shapes) do
-    ShapeSet.flat_map(shapes, &shape_contents/1)
+  defp contents(shapes, store) do
+    ShapeSet.flat_map(shapes, &shape_contents(&1, store), store)
   end
 
   # `value.name` on a value of the given shapes, for each alternative: a module atom gives the
@@ -767,37 +821,41 @@ defmodule Hologram.Compiler.DataFlow do
   # structure gives itself, and the dots on the module atoms it holds; a primitive gives a primitive.
   # Any other value raises.
   defp dot(shapes, name, ctx) do
-    ShapeSet.flat_map(shapes, &dot_shape(&1, name, ctx))
+    ShapeSet.flat_map(shapes, &dot_shape(&1, name, ctx), ctx.flow.store)
   end
 
   defp dot_shape({:atom, _module} = atom, name, ctx), do: call_dyn_shape(atom, name, 0, [], ctx)
 
-  defp dot_shape({:struct, module, _fields}, :__struct__, _ctx),
-    do: ShapeSet.new([{:atom, module}])
+  defp dot_shape({:struct, module, _fields}, :__struct__, ctx),
+    do: ShapeSet.new([{:atom, module}], ctx.flow.store)
 
   defp dot_shape({:struct, _module, fields}, _name, _ctx), do: fields
 
   defp dot_shape({:map, inner}, _name, _ctx), do: inner
 
-  defp dot_shape(:prim, _name, _ctx), do: ShapeSet.new([:prim])
+  defp dot_shape(:prim, _name, ctx), do: ShapeSet.new([:prim], ctx.flow.store)
 
-  defp dot_shape({:as_map, _inner} = shape, name, _ctx) when name != :__struct__ do
-    ShapeSet.new([{:contents, ShapeSet.new([shape])}])
+  defp dot_shape({:as_map, _inner} = shape, name, ctx) when name != :__struct__ do
+    ShapeSet.new([{:contents, ShapeSet.new([shape], ctx.flow.store)}], ctx.flow.store)
   end
 
-  defp dot_shape(shape, name, _ctx)
+  defp dot_shape(shape, name, ctx)
        when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
-    ShapeSet.new([{:dot, ShapeSet.new([shape]), name}])
+    ShapeSet.new([{:dot, ShapeSet.new([shape], ctx.flow.store), name}], ctx.flow.store)
   end
 
   defp dot_shape({:bag, inner} = bag, name, ctx) do
-    module_atoms = ShapeSet.filter(inner, &match?({:atom, _module}, &1))
-    ShapeSet.union_all([ShapeSet.new([bag]), dot(module_atoms, name, ctx)])
+    module_atoms = ShapeSet.filter(inner, &match?({:atom, _module}, &1), ctx.flow.store)
+
+    ShapeSet.union_all(
+      [ShapeSet.new([bag], ctx.flow.store), dot(module_atoms, name, ctx)],
+      ctx.flow.store
+    )
   end
 
-  defp dot_shape({:reach, _vertex} = reach, _name, _ctx), do: ShapeSet.new([reach])
+  defp dot_shape({:reach, _vertex} = reach, _name, ctx), do: ShapeSet.new([reach], ctx.flow.store)
 
-  defp dot_shape(_shape, _name, _ctx), do: ShapeSet.new()
+  defp dot_shape(_shape, _name, ctx), do: ShapeSet.new(ctx.flow.store)
 
   # Puts the function on the run's work list (see solve/1), unless it is there already, keyed by its
   # depth and then by when it was put there.
@@ -823,7 +881,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp eval_all(exprs, ctx) do
     exprs
     |> Enum.map(&eval(&1, ctx))
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(ctx.flow.store)
   end
 
   # The callee's summary with the arguments put in. An argument the summary doesn't hold is not
@@ -836,7 +894,7 @@ defmodule Hologram.Compiler.DataFlow do
       args
       |> Enum.with_index()
       |> Enum.map(fn {arg, index} ->
-        if Map.has_key?(counts, index), do: eval(arg, ctx), else: ShapeSet.new()
+        if Map.has_key?(counts, index), do: eval(arg, ctx), else: ShapeSet.new(ctx.flow.store)
       end)
 
     summary
@@ -849,7 +907,7 @@ defmodule Hologram.Compiler.DataFlow do
 
     function
     |> eval(ctx)
-    |> apply_fun(arg_shapes, new_rep(ctx))
+    |> apply_fun(arg_shapes, new_rep(ctx, ctx.flow.store))
   end
 
   # An anonymous function returns what its clauses give, its parameters being its arguments. A
@@ -860,17 +918,19 @@ defmodule Hologram.Compiler.DataFlow do
     returned =
       clauses
       |> Enum.map(fn clause ->
-        frame = clause_frame(clause, &{:arg, ref, &1})
+        frame = clause_frame(clause, &{:arg, ref, &1}, ctx.flow.store)
         eval(clause.body, %{ctx | frames: [frame | ctx.frames]})
       end)
-      |> ShapeSet.union_all()
+      |> ShapeSet.union_all(ctx.flow.store)
 
-    ShapeSet.new([{:fun, ref, returned}])
+    ShapeSet.new([{:fun, ref, returned}], ctx.flow.store)
   end
 
-  defp eval_node(%IR.AtomType{value: value}, _ctx), do: ShapeSet.new([{:atom, value}])
+  defp eval_node(%IR.AtomType{value: value}, ctx),
+    do: ShapeSet.new([{:atom, value}], ctx.flow.store)
 
-  defp eval_node(%IR.Block{expressions: []}, _ctx), do: ShapeSet.new([{:atom, nil}])
+  defp eval_node(%IR.Block{expressions: []}, ctx),
+    do: ShapeSet.new([{:atom, nil}], ctx.flow.store)
 
   defp eval_node(%IR.Block{expressions: expressions}, ctx) do
     expressions
@@ -889,18 +949,18 @@ defmodule Hologram.Compiler.DataFlow do
 
     case collectable do
       %IR.ListType{data: []} ->
-        ShapeSet.new([{:list, mapped}])
+        ShapeSet.new([{:list, mapped}], ctx.flow.store)
 
       %IR.MapType{data: []} ->
-        ShapeSet.new([{:map, contents(mapped)}])
+        ShapeSet.new([{:map, contents(mapped, ctx.flow.store)}], ctx.flow.store)
 
       _other ->
         inner =
           collectable
           |> eval(ctx)
-          |> ShapeSet.union(mapped)
+          |> ShapeSet.union(mapped, ctx.flow.store)
 
-        ShapeSet.new([{:bag, inner}])
+        ShapeSet.new([{:bag, inner}], ctx.flow.store)
     end
   end
 
@@ -909,7 +969,7 @@ defmodule Hologram.Compiler.DataFlow do
          ctx
        ) do
     inner = eval_all([initial_value | Enum.map(clauses, & &1.body)], ctx)
-    ShapeSet.new([{:bag, inner}])
+    ShapeSet.new([{:bag, inner}], ctx.flow.store)
   end
 
   defp eval_node(%IR.Cond{clauses: clauses}, ctx) do
@@ -922,14 +982,14 @@ defmodule Hologram.Compiler.DataFlow do
     elements =
       tail
       |> eval(ctx)
-      |> contents()
-      |> ShapeSet.union(eval(head, ctx))
+      |> contents(ctx.flow.store)
+      |> ShapeSet.union(eval(head, ctx), ctx.flow.store)
 
-    ShapeSet.new([{:list, elements}])
+    ShapeSet.new([{:list, elements}], ctx.flow.store)
   end
 
   defp eval_node(%IR.ListType{data: data}, ctx) do
-    ShapeSet.new([{:list, eval_all(data, ctx)}])
+    ShapeSet.new([{:list, eval_all(data, ctx)}], ctx.flow.store)
   end
 
   defp eval_node(%IR.DotOperator{left: left, right: %IR.AtomType{value: name}}, ctx) do
@@ -944,7 +1004,7 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp eval_node(%IR.MapType{data: data}, ctx) do
-    ShapeSet.new([map_shape(data, &eval(&1, ctx))])
+    ShapeSet.new([map_shape(data, &eval(&1, ctx), ctx.flow.store)], ctx.flow.store)
   end
 
   # The value of a match is its right side.
@@ -995,7 +1055,7 @@ defmodule Hologram.Compiler.DataFlow do
 
     fun
     |> eval(ctx)
-    |> apply_fun(arg_shapes, new_rep(ctx))
+    |> apply_fun(arg_shapes, new_rep(ctx, ctx.flow.store))
   end
 
   # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
@@ -1012,9 +1072,9 @@ defmodule Hologram.Compiler.DataFlow do
     fields =
       args
       |> Enum.map(&struct_fields(&1, ctx))
-      |> ShapeSet.union_all()
+      |> ShapeSet.union_all(ctx.flow.store)
 
-    ShapeSet.new([{:struct, module, fields}])
+    ShapeSet.new([{:struct, module, fields}], ctx.flow.store)
   end
 
   defp eval_node(
@@ -1052,7 +1112,7 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp eval_node(%IR.TupleType{data: data}, ctx) do
-    ShapeSet.new([{:tuple, Enum.map(data, &eval(&1, ctx))}])
+    ShapeSet.new([{:tuple, Enum.map(data, &eval(&1, ctx))}], ctx.flow.store)
   end
 
   defp eval_node(%IR.Variable{name: name, version: version}, ctx) do
@@ -1069,9 +1129,10 @@ defmodule Hologram.Compiler.DataFlow do
     eval_all([body | Enum.map(else_clauses, & &1.body)], ctx)
   end
 
-  defp eval_node(%type{}, _ctx) when type in @primitive_types, do: ShapeSet.new([:prim])
+  defp eval_node(%type{}, ctx) when type in @primitive_types,
+    do: ShapeSet.new([:prim], ctx.flow.store)
 
-  defp eval_node(_expr, ctx), do: top(ctx.mfa)
+  defp eval_node(_expr, ctx), do: top_set(ctx.mfa, ctx.flow.store)
 
   # Evaluates a function the run is solving: its answer is what its code gives with the current answers
   # of the functions it calls. When the answer changed, the functions that read it are evaluated
@@ -1099,93 +1160,115 @@ defmodule Hologram.Compiler.DataFlow do
   # the answer only grows and its growth ends with its leaves (see shape_leaves/1); past
   # @evaluations_before_top, its top, which never changes, so the solve ends whatever keeps the answer
   # changing. The top holds every type the function can give (see the contract).
-  defp evaluated_answer(mfa, _old, evaluations, _ctx)
+  defp evaluated_answer(mfa, _old, evaluations, ctx)
        when evaluations > @evaluations_before_top do
-    top(mfa)
+    top_set(mfa, ctx.flow.store)
   end
 
   defp evaluated_answer(mfa, old, evaluations, ctx)
        when evaluations > @evaluations_before_leaves do
     new = code_summary(mfa, %{ctx | node: mfa})
-    bag_of_leaves(ShapeSet.union(old, new))
+    bag_of_leaves(ShapeSet.union(old, new, ctx.flow.store), ctx.flow.store)
   end
 
   defp evaluated_answer(mfa, _old, _evaluations, ctx), do: code_summary(mfa, %{ctx | node: mfa})
 
   # The part of a value of the given shapes that the pattern binds to the variable, from the
   # alternatives the pattern can match.
-  defp extract(shapes, pattern, var) do
+  defp extract(shapes, pattern, var, store) do
     shapes
-    |> ShapeSet.filter(&may_match?(&1, pattern))
-    |> ShapeSet.flat_map(&extract_shape(&1, pattern, var))
+    |> ShapeSet.filter(&may_match?(&1, pattern, store), store)
+    |> ShapeSet.flat_map(&extract_shape(&1, pattern, var, store), store)
   end
 
-  defp extract_shape(shape, %IR.Variable{name: name, version: version}, {name, version}) do
-    ShapeSet.new([shape])
+  defp extract_shape(shape, %IR.Variable{name: name, version: version}, {name, version}, store) do
+    ShapeSet.new([shape], store)
   end
 
   # A variable matched as a whole against a map pattern (`%{} = value`, either way round) holds only
   # the alternatives that are maps or structs.
-  defp extract_shape(shape, %IR.MatchOperator{left: left, right: right}, var) do
+  defp extract_shape(shape, %IR.MatchOperator{left: left, right: right}, var, store) do
     extracted =
-      ShapeSet.union_all([extract_shape(shape, left, var), extract_shape(shape, right, var)])
+      ShapeSet.union_all(
+        [extract_shape(shape, left, var, store), extract_shape(shape, right, var, store)],
+        store
+      )
 
     if matched_as_map?(left, right, var) or matched_as_map?(right, left, var) do
-      as_maps(extracted)
+      as_maps(extracted, store)
     else
       extracted
     end
   end
 
   # A variable in a binary pattern takes a binary or a number.
-  defp extract_shape(_shape, %IR.BitstringType{} = pattern, var) do
-    if var in pattern_variables(pattern, []), do: ShapeSet.new([:prim]), else: ShapeSet.new()
+  defp extract_shape(_shape, %IR.BitstringType{} = pattern, var, store) do
+    if var in pattern_variables(pattern, []),
+      do: ShapeSet.new([:prim], store),
+      else: ShapeSet.new(store)
   end
 
-  defp extract_shape({:tuple, elements}, %IR.TupleType{data: patterns}, var) do
+  defp extract_shape({:tuple, elements}, %IR.TupleType{data: patterns}, var, store) do
     elements
     |> Enum.zip(patterns)
-    |> Enum.map(fn {element, pattern} -> extract(element, pattern, var) end)
-    |> ShapeSet.union_all()
+    |> Enum.map(fn {element, pattern} -> extract(element, pattern, var, store) end)
+    |> ShapeSet.union_all(store)
   end
 
-  defp extract_shape({:list, elements}, %IR.ListType{data: patterns}, var) do
+  defp extract_shape({:list, elements}, %IR.ListType{data: patterns}, var, store) do
     patterns
-    |> Enum.map(&extract(elements, &1, var))
-    |> ShapeSet.union_all()
+    |> Enum.map(&extract(elements, &1, var, store))
+    |> ShapeSet.union_all(store)
   end
 
-  defp extract_shape({:list, elements} = shape, %IR.ConsOperator{head: head, tail: tail}, var) do
-    ShapeSet.union_all([extract(elements, head, var), extract(ShapeSet.new([shape]), tail, var)])
+  defp extract_shape(
+         {:list, elements} = shape,
+         %IR.ConsOperator{head: head, tail: tail},
+         var,
+         store
+       ) do
+    ShapeSet.union_all(
+      [
+        extract(elements, head, var, store),
+        extract(ShapeSet.new([shape], store), tail, var, store)
+      ],
+      store
+    )
   end
 
-  defp extract_shape({:struct, module, fields}, %IR.MapType{data: pairs}, var) do
+  defp extract_shape({:struct, module, fields}, %IR.MapType{data: pairs}, var, store) do
     pairs
     |> Enum.map(fn
       {%IR.AtomType{value: :__struct__}, value} ->
-        extract(ShapeSet.new([{:atom, module}]), value, var)
+        extract(ShapeSet.new([{:atom, module}], store), value, var, store)
 
       {key, value} ->
-        ShapeSet.union_all([extract(fields, key, var), extract(fields, value, var)])
+        ShapeSet.union_all(
+          [extract(fields, key, var, store), extract(fields, value, var, store)],
+          store
+        )
     end)
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(store)
   end
 
-  defp extract_shape({:map, inner}, %IR.MapType{data: pairs}, var) do
+  defp extract_shape({:map, inner}, %IR.MapType{data: pairs}, var, store) do
     pairs
     |> Enum.map(fn {key, value} ->
-      ShapeSet.union_all([extract(inner, key, var), extract(inner, value, var)])
+      ShapeSet.union_all(
+        [extract(inner, key, var, store), extract(inner, value, var, store)],
+        store
+      )
     end)
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(store)
   end
 
   # A variable inside a pattern matched against a value of unknown structure takes a part of it (see
   # parts/1).
-  defp extract_shape(shape, pattern, var) do
+  defp extract_shape(shape, pattern, var, store) do
     if (opaque?(shape) or shape == :prim) and var in pattern_variables(pattern, []) do
-      parts(ShapeSet.new([shape]))
+      parts(ShapeSet.new([shape], store), store)
     else
-      ShapeSet.new()
+      ShapeSet.new(store)
     end
   end
 
@@ -1339,18 +1422,18 @@ defmodule Hologram.Compiler.DataFlow do
   # what it is given, and a bag is called the same way either way (see call_fun/3). A dynamic call, a
   # dot and a step into a value not known yet stay, with the sets they hold made leaves too: a call on
   # a module not known yet gives what that module's function builds, which its parts don't hold.
-  defp leaves(shapes) do
-    ShapeSet.flat_map(shapes, &ShapeSet.new(shape_leaves(&1)))
+  defp leaves(shapes, store) do
+    ShapeSet.flat_map(shapes, &ShapeSet.new(shape_leaves(&1, store), store), store)
   end
 
   # A map or a struct, from its key and value pairs and what each key and value gives.
-  defp map_shape(pairs, shapes_fun) do
+  defp map_shape(pairs, shapes_fun, store) do
     case List.keytake(pairs, %IR.AtomType{value: :__struct__}, 0) do
       {{_key, %IR.AtomType{value: module}}, fields} ->
-        {:struct, module, pair_shapes(fields, shapes_fun)}
+        {:struct, module, pair_shapes(fields, shapes_fun, store)}
 
       _no_struct_key ->
-        {:map, pair_shapes(pairs, shapes_fun)}
+        {:map, pair_shapes(pairs, shapes_fun, store)}
     end
   end
 
@@ -1370,18 +1453,18 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp matched_as_map?(_pattern, _other_side, _var), do: false
 
-  defp may_match?(_shape, %IR.MatchPlaceholder{}), do: true
+  defp may_match?(_shape, %IR.MatchPlaceholder{}, _store), do: true
 
-  defp may_match?(_shape, %IR.PinOperator{}), do: true
+  defp may_match?(_shape, %IR.PinOperator{}, _store), do: true
 
-  defp may_match?(_shape, %IR.Variable{}), do: true
+  defp may_match?(_shape, %IR.Variable{}, _store), do: true
 
-  defp may_match?(shape, %IR.MatchOperator{left: left, right: right}) do
-    may_match?(shape, left) and may_match?(shape, right)
+  defp may_match?(shape, %IR.MatchOperator{left: left, right: right}, store) do
+    may_match?(shape, left, store) and may_match?(shape, right, store)
   end
 
-  defp may_match?(shape, pattern) do
-    opaque?(shape) or structurally_may_match?(shape, pattern)
+  defp may_match?(shape, pattern, store) do
+    opaque?(shape) or structurally_may_match?(shape, pattern, store)
   end
 
   # Whether the atom names a module, Elixir or Erlang, remembered for the whole compile in the flow
@@ -1443,29 +1526,31 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp names_type?(_ir), do: false
 
-  defp nested_shape_list(shape) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
+  defp nested_shape_list(shape, store) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
     shape
-    |> nested_shapes()
-    |> ShapeSet.to_list()
+    |> nested_shapes(store)
+    |> ShapeSet.to_list(store)
   end
 
-  defp nested_shape_list(_shape), do: []
+  defp nested_shape_list(_shape, _store), do: []
 
   # Everything inside a struct, a map, a list or a tuple, at any depth: the shapes inside it, and
   # what is inside those of them that are structs, maps, lists or tuples.
-  defp nested_shapes({:struct, _module, fields}), do: with_nested_shapes(fields)
+  defp nested_shapes({:struct, _module, fields}, store), do: with_nested_shapes(fields, store)
 
-  defp nested_shapes({:tuple, elements}) do
+  defp nested_shapes({:tuple, elements}, store) do
     elements
-    |> ShapeSet.union_all()
-    |> with_nested_shapes()
+    |> ShapeSet.union_all(store)
+    |> with_nested_shapes(store)
   end
 
-  defp nested_shapes({kind, inner}) when kind in [:list, :map], do: with_nested_shapes(inner)
+  defp nested_shapes({kind, inner}, store) when kind in [:list, :map],
+    do: with_nested_shapes(inner, store)
 
-  # What a substitution carries through replace/3: the ctx, or nil, and a counter of the calls of
-  # anonymous functions it made, one cell every branch adds to (see @max_fun_calls).
-  defp new_rep(ctx), do: %{calls: :counters.new(1, []), ctx: ctx}
+  # What a substitution carries through replace/3: the ctx, or nil, the store its sets are in, and a
+  # counter of the calls of anonymous functions it made, one cell every branch adds to (see
+  # @max_fun_calls).
+  defp new_rep(ctx, store), do: %{calls: :counters.new(1, []), ctx: ctx, store: store}
 
   # How many copies of each index the given function gives for a shape (the index of a param, or of
   # an anonymous function's argument) putting values in for them makes, at any depth, each index the
@@ -1500,68 +1585,67 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp opaque?(_shape), do: false
 
-  defp pair_shapes(pairs, shapes_fun) do
+  defp pair_shapes(pairs, shapes_fun, store) do
     pairs
     |> Enum.flat_map(fn {key, value} -> [key, value] end)
     |> Enum.map(shapes_fun)
-    |> ShapeSet.union_all()
+    |> ShapeSet.union_all(store)
   end
 
   defp param_index({:param, index}), do: index
 
   defp param_index(_shape), do: nil
 
-  defp params(arity) do
-    0..(arity - 1)//1
-    |> Enum.map(&{:param, &1})
-    |> ShapeSet.new()
-  end
+  # The tree of the params of a function of the given arity.
+  defp params(arity), do: Enum.map(0..(arity - 1)//1, &{:param, &1})
 
   # A part, at any depth, of a value of the given shapes, for each alternative: a value that depends
   # on a parameter gives `{:part, ...}` for when it is known; a value of unknown structure and a
   # primitive give themselves; a struct, a map, a list or a tuple give what is inside them at any
   # depth, in a bag; an atom and a function have no parts.
-  defp parts(shapes) do
-    ShapeSet.flat_map(shapes, &shape_parts/1)
+  defp parts(shapes, store) do
+    ShapeSet.flat_map(shapes, &shape_parts(&1, store), store)
   end
 
   # The shapes a pattern names, a variable, a placeholder or a pin naming nothing.
-  defp pattern_shapes(%IR.AtomType{value: value}), do: ShapeSet.new([{:atom, value}])
+  defp pattern_shapes(%IR.AtomType{value: value}, store),
+    do: ShapeSet.new([{:atom, value}], store)
 
-  defp pattern_shapes(%IR.ConsOperator{head: head, tail: tail}) do
+  defp pattern_shapes(%IR.ConsOperator{head: head, tail: tail}, store) do
     elements =
       tail
-      |> pattern_shapes()
-      |> contents()
-      |> ShapeSet.union(pattern_shapes(head))
+      |> pattern_shapes(store)
+      |> contents(store)
+      |> ShapeSet.union(pattern_shapes(head, store), store)
 
-    ShapeSet.new([{:list, elements}])
+    ShapeSet.new([{:list, elements}], store)
   end
 
-  defp pattern_shapes(%IR.ListType{data: data}) do
+  defp pattern_shapes(%IR.ListType{data: data}, store) do
     elements =
       data
-      |> Enum.map(&pattern_shapes/1)
-      |> ShapeSet.union_all()
+      |> Enum.map(&pattern_shapes(&1, store))
+      |> ShapeSet.union_all(store)
 
-    ShapeSet.new([{:list, elements}])
+    ShapeSet.new([{:list, elements}], store)
   end
 
-  defp pattern_shapes(%IR.MapType{data: data}) do
-    ShapeSet.new([map_shape(data, &pattern_shapes/1)])
+  defp pattern_shapes(%IR.MapType{data: data}, store) do
+    ShapeSet.new([map_shape(data, &pattern_shapes(&1, store), store)], store)
   end
 
-  defp pattern_shapes(%IR.MatchOperator{left: left, right: right}) do
-    ShapeSet.union_all([pattern_shapes(left), pattern_shapes(right)])
+  defp pattern_shapes(%IR.MatchOperator{left: left, right: right}, store) do
+    ShapeSet.union_all([pattern_shapes(left, store), pattern_shapes(right, store)], store)
   end
 
-  defp pattern_shapes(%IR.TupleType{data: data}) do
-    ShapeSet.new([{:tuple, Enum.map(data, &pattern_shapes/1)}])
+  defp pattern_shapes(%IR.TupleType{data: data}, store) do
+    ShapeSet.new([{:tuple, Enum.map(data, &pattern_shapes(&1, store))}], store)
   end
 
-  defp pattern_shapes(%type{}) when type in @primitive_types, do: ShapeSet.new([:prim])
+  defp pattern_shapes(%type{}, store) when type in @primitive_types,
+    do: ShapeSet.new([:prim], store)
 
-  defp pattern_shapes(_pattern), do: ShapeSet.new()
+  defp pattern_shapes(_pattern, store), do: ShapeSet.new(store)
 
   # The variables a pattern binds, a pinned one being read, not bound.
   defp pattern_variables(%IR.PinOperator{}, vars), do: vars
@@ -1591,15 +1675,10 @@ defmodule Hologram.Compiler.DataFlow do
 
   # The summary with the arguments put in for its params (see apply_summary/2). With a ctx, the
   # dynamic calls and dots on a module an argument makes known are made too.
-  # The summary with the arguments put in for its params. With a context, the arguments are bounded
-  # and the summary is flattened first when putting them in would make a value larger than the cap
-  # (see substitution_inputs/4); the counts are how many times the summary holds each param.
-  defp put_args(summary, args, nil) do
-    summary
-    |> replace(&replace_param(&1, args), new_rep(nil))
-    |> widen()
-  end
-
+  # The summary with the arguments put in for its params (without a context, see apply_summary/3): the
+  # arguments are bounded and the summary is flattened first when putting them in would make a value
+  # larger than the cap (see substitution_inputs/4); the counts are how many times the summary holds
+  # each param.
   defp put_args(summary, args, ctx) do
     put_args(summary, args, occurrence_counts(summary, &param_index/1, %{}), ctx)
   end
@@ -1608,8 +1687,8 @@ defmodule Hologram.Compiler.DataFlow do
     {shapes, bounded_args} = substitution_inputs(summary, args, counts, ctx)
 
     shapes
-    |> replace(&replace_param(&1, bounded_args), new_rep(ctx))
-    |> widen()
+    |> replace(&replace_param(&1, bounded_args, ctx.flow.store), new_rep(ctx, ctx.flow.store))
+    |> widen(ctx.flow.store)
   end
 
   defp put_binding(acc, var, binding) do
@@ -1617,10 +1696,10 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # Adds what the pattern names to the variable's shapes, when it names a type (see the contract).
-  defp put_extras(acc, var, pattern) do
+  defp put_extras(acc, var, pattern, store) do
     if names_type?(pattern) do
-      shapes = pattern_shapes(pattern)
-      %{acc | extras: Map.update(acc.extras, var, shapes, &ShapeSet.union(&1, shapes))}
+      shapes = pattern_shapes(pattern, store)
+      %{acc | extras: Map.update(acc.extras, var, shapes, &ShapeSet.union(&1, shapes, store))}
     else
       acc
     end
@@ -1658,7 +1737,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp put_pattern_extras(acc, _ir), do: acc
 
   defp put_side_extras(acc, %IR.Variable{name: name, version: version}, pattern) do
-    put_extras(acc, {name, version}, pattern)
+    put_extras(acc, {name, version}, pattern, acc.store)
   end
 
   defp put_side_extras(acc, _side, _pattern), do: acc
@@ -1670,11 +1749,11 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # Adds the types the shapes hold to the accumulator (see types/2).
-  defp put_types(shapes, acc, module_info_plt) when is_list(shapes) do
-    ShapeSet.reduce(shapes, acc, &put_types(&1, &2, module_info_plt))
+  defp put_types(shapes, acc, module_info_plt, store) when is_list(shapes) do
+    ShapeSet.reduce(shapes, acc, &put_types(&1, &2, module_info_plt, store), store)
   end
 
-  defp put_types({:atom, atom}, acc, module_info_plt) do
+  defp put_types({:atom, atom}, acc, module_info_plt, _store) do
     case PLT.get(module_info_plt, atom) do
       {:ok, %{struct?: true}} ->
         %{acc | modules: MapSet.put(acc.modules, atom), structs: MapSet.put(acc.structs, atom)}
@@ -1687,44 +1766,45 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  defp put_types({:struct, module, fields}, acc, module_info_plt) do
-    put_types(fields, %{acc | structs: MapSet.put(acc.structs, module)}, module_info_plt)
+  defp put_types({:struct, module, fields}, acc, module_info_plt, store) do
+    put_types(fields, %{acc | structs: MapSet.put(acc.structs, module)}, module_info_plt, store)
   end
 
-  defp put_types({:reach, vertex}, acc, _module_info_plt) do
+  defp put_types({:reach, vertex}, acc, _module_info_plt, _store) do
     %{acc | reach: MapSet.put(acc.reach, vertex)}
   end
 
-  defp put_types({:tuple, elements}, acc, module_info_plt) do
-    Enum.reduce(elements, acc, &put_types(&1, &2, module_info_plt))
+  defp put_types({:tuple, elements}, acc, module_info_plt, store) do
+    Enum.reduce(elements, acc, &put_types(&1, &2, module_info_plt, store))
   end
 
-  defp put_types({kind, inner}, acc, module_info_plt) when kind in [:bag, :list, :map] do
-    put_types(inner, acc, module_info_plt)
+  defp put_types({kind, inner}, acc, module_info_plt, store) when kind in [:bag, :list, :map] do
+    put_types(inner, acc, module_info_plt, store)
   end
 
-  defp put_types({:fun, _ref, returned}, acc, module_info_plt) do
-    put_types(returned, acc, module_info_plt)
+  defp put_types({:fun, _ref, returned}, acc, module_info_plt, store) do
+    put_types(returned, acc, module_info_plt, store)
   end
 
-  defp put_types({:call, fun, args}, acc, module_info_plt) do
-    Enum.reduce([fun | args], acc, &put_types(&1, &2, module_info_plt))
+  defp put_types({:call, fun, args}, acc, module_info_plt, store) do
+    Enum.reduce([fun | args], acc, &put_types(&1, &2, module_info_plt, store))
   end
 
-  defp put_types({kind, shapes}, acc, module_info_plt) when kind in [:as_map, :contents, :part] do
-    put_types(shapes, acc, module_info_plt)
+  defp put_types({kind, shapes}, acc, module_info_plt, store)
+       when kind in [:as_map, :contents, :part] do
+    put_types(shapes, acc, module_info_plt, store)
   end
 
-  defp put_types({:dot, shapes, _name}, acc, module_info_plt) do
-    put_types(shapes, acc, module_info_plt)
+  defp put_types({:dot, shapes, _name}, acc, module_info_plt, store) do
+    put_types(shapes, acc, module_info_plt, store)
   end
 
-  defp put_types({:dyn, module, _name, _arity, args}, acc, module_info_plt) do
-    Enum.reduce([module | args], acc, &put_types(&1, &2, module_info_plt))
+  defp put_types({:dyn, module, _name, _arity, args}, acc, module_info_plt, store) do
+    Enum.reduce([module | args], acc, &put_types(&1, &2, module_info_plt, store))
   end
 
   # A primitive, a param or an anonymous function's argument.
-  defp put_types(_shape, acc, _module_info_plt), do: acc
+  defp put_types(_shape, acc, _module_info_plt, _store), do: acc
 
   # The dispatch types and the component modules that values of the given shapes bring to the client
   # (see server_callback_analysis/3): the structs and components they hold, and what the graph walk
@@ -1769,7 +1849,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp read_variable(var, ctx) do
     case Enum.find(ctx.frames, &(Map.has_key?(&1.bindings, var) or Map.has_key?(&1.extras, var))) do
       nil ->
-        top(ctx.mfa)
+        top_set(ctx.mfa, ctx.flow.store)
 
       frame ->
         key = {frame.id, var}
@@ -1777,7 +1857,7 @@ defmodule Hologram.Compiler.DataFlow do
         case :ets.lookup(ctx.memo, key) do
           # A variable whose binding reads itself (a reducer's accumulator).
           [{^key, :in_progress}] ->
-            top(ctx.mfa)
+            top_set(ctx.mfa, ctx.flow.store)
 
           [{^key, shapes}] ->
             shapes
@@ -1811,7 +1891,7 @@ defmodule Hologram.Compiler.DataFlow do
   # joins those joins, so a value grew with the square of the modules (the type modules a data
   # framework loads each field with) before a check at the end of the substitution saw it.
   defp replace(shapes, replacer, rep) do
-    value = ShapeSet.flat_map(shapes, &replace_shape(&1, replacer, rep))
+    value = ShapeSet.flat_map(shapes, &replace_shape(&1, replacer, rep), rep.store)
 
     if rep.ctx do
       bounded(value, rep.ctx)
@@ -1820,28 +1900,30 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  defp replace_arg({:arg, ref, index}, ref, args), do: Enum.at(args, index, ShapeSet.new())
+  defp replace_arg({:arg, ref, index}, ref, args, store) do
+    Enum.at(args, index, ShapeSet.new(store))
+  end
 
-  defp replace_arg(_shape, _ref, _args), do: nil
+  defp replace_arg(_shape, _ref, _args, _store), do: nil
 
-  defp replace_param({:param, index}, args), do: Enum.at(args, index, ShapeSet.new())
+  defp replace_param({:param, index}, args, store), do: Enum.at(args, index, ShapeSet.new(store))
 
-  defp replace_param(_shape, _args), do: nil
+  defp replace_param(_shape, _args, _store), do: nil
 
   defp replace_parts({:struct, module, fields}, replacer, rep) do
-    ShapeSet.new([{:struct, module, replace(fields, replacer, rep)}])
+    ShapeSet.new([{:struct, module, replace(fields, replacer, rep)}], rep.store)
   end
 
   defp replace_parts({kind, inner}, replacer, rep) when kind in [:bag, :list, :map] do
-    ShapeSet.new([{kind, replace(inner, replacer, rep)}])
+    ShapeSet.new([{kind, replace(inner, replacer, rep)}], rep.store)
   end
 
   defp replace_parts({:tuple, elements}, replacer, rep) do
-    ShapeSet.new([{:tuple, Enum.map(elements, &replace(&1, replacer, rep))}])
+    ShapeSet.new([{:tuple, Enum.map(elements, &replace(&1, replacer, rep))}], rep.store)
   end
 
   defp replace_parts({:fun, ref, returned}, replacer, rep) do
-    ShapeSet.new([{:fun, ref, replace(returned, replacer, rep)}])
+    ShapeSet.new([{:fun, ref, replace(returned, replacer, rep)}], rep.store)
   end
 
   defp replace_parts({:call, fun, args}, replacer, rep) do
@@ -1855,19 +1937,19 @@ defmodule Hologram.Compiler.DataFlow do
   defp replace_parts({:as_map, shapes}, replacer, rep) do
     shapes
     |> replace(replacer, rep)
-    |> as_maps()
+    |> as_maps(rep.store)
   end
 
   defp replace_parts({:contents, shapes}, replacer, rep) do
     shapes
     |> replace(replacer, rep)
-    |> contents()
+    |> contents(rep.store)
   end
 
   defp replace_parts({:part, shapes}, replacer, rep) do
     shapes
     |> replace(replacer, rep)
-    |> parts()
+    |> parts(rep.store)
   end
 
   defp replace_parts({:dot, shapes, name}, replacer, rep) do
@@ -1876,7 +1958,7 @@ defmodule Hologram.Compiler.DataFlow do
     if rep.ctx do
       dot(new_shapes, name, rep.ctx)
     else
-      ShapeSet.new([{:dot, new_shapes, name}])
+      ShapeSet.new([{:dot, new_shapes, name}], rep.store)
     end
   end
 
@@ -1887,13 +1969,13 @@ defmodule Hologram.Compiler.DataFlow do
     if rep.ctx do
       call_dyn(new_module, name, arity, new_args, rep.ctx)
     else
-      ShapeSet.new([{:dyn, new_module, name, arity, new_args}])
+      ShapeSet.new([{:dyn, new_module, name, arity, new_args}], rep.store)
     end
   end
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex, which holds none of them.
-  defp replace_parts(shape, _replacer, _rep), do: ShapeSet.new([shape])
+  defp replace_parts(shape, _replacer, rep), do: ShapeSet.new([shape], rep.store)
 
   defp replace_shape(shape, replacer, rep) do
     case replacer.(shape) do
@@ -1904,23 +1986,37 @@ defmodule Hologram.Compiler.DataFlow do
 
   # The params and anonymous function arguments the shapes start from, when every alternative is one
   # of them or a step of only them (see collapse_route/1); :error otherwise.
-  defp route_roots(shapes) do
-    ShapeSet.reduce(shapes, {:ok, ShapeSet.new()}, fn
-      _shape, :error -> :error
-      {:param, _index} = root, {:ok, roots} -> {:ok, ShapeSet.put(roots, root)}
-      {:arg, _ref, _index} = root, {:ok, roots} -> {:ok, ShapeSet.put(roots, root)}
-      {step, inner}, {:ok, roots} when step in @route_steps -> route_step_roots(inner, roots)
-      _other, {:ok, _roots} -> :error
-    end)
+  defp route_roots(shapes, store) do
+    ShapeSet.reduce(
+      shapes,
+      {:ok, ShapeSet.new(store)},
+      fn
+        _shape, :error ->
+          :error
+
+        {:param, _index} = root, {:ok, roots} ->
+          {:ok, ShapeSet.put(roots, root, store)}
+
+        {:arg, _ref, _index} = root, {:ok, roots} ->
+          {:ok, ShapeSet.put(roots, root, store)}
+
+        {step, inner}, {:ok, roots} when step in @route_steps ->
+          route_step_roots(inner, roots, store)
+
+        _other, {:ok, _roots} ->
+          :error
+      end,
+      store
+    )
   end
 
   defp route_step?({step, _inner}) when step in @route_steps, do: true
 
   defp route_step?(_shape), do: false
 
-  defp route_step_roots(inner, roots) do
-    case route_roots(inner) do
-      {:ok, inner_roots} -> {:ok, ShapeSet.union(roots, inner_roots)}
+  defp route_step_roots(inner, roots, store) do
+    case route_roots(inner, store) do
+      {:ok, inner_roots} -> {:ok, ShapeSet.union(roots, inner_roots, store)}
       :error -> :error
     end
   end
@@ -1971,89 +2067,89 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  defp shape_contents({:atom, _atom}), do: ShapeSet.new()
+  defp shape_contents({:atom, _atom}, store), do: ShapeSet.new(store)
 
-  defp shape_contents(:prim), do: ShapeSet.new([:prim])
+  defp shape_contents(:prim, store), do: ShapeSet.new([:prim], store)
 
-  defp shape_contents({:struct, _module, fields}), do: fields
+  defp shape_contents({:struct, _module, fields}, _store), do: fields
 
-  defp shape_contents({:tuple, elements}), do: ShapeSet.union_all(elements)
+  defp shape_contents({:tuple, elements}, store), do: ShapeSet.union_all(elements, store)
 
-  defp shape_contents({kind, inner}) when kind in [:bag, :list, :map], do: inner
+  defp shape_contents({kind, inner}, _store) when kind in [:bag, :list, :map], do: inner
 
-  defp shape_contents(shape) when elem(shape, 0) in @pending_kinds do
-    ShapeSet.new([{:contents, ShapeSet.new([shape])}])
+  defp shape_contents(shape, store) when elem(shape, 0) in @pending_kinds do
+    ShapeSet.new([{:contents, ShapeSet.new([shape], store)}], store)
   end
 
   # The rule before this module applied from a vertex holds itself; a function holds nothing to
   # take apart.
-  defp shape_contents({:reach, _vertex} = reach), do: ShapeSet.new([reach])
+  defp shape_contents({:reach, _vertex} = reach, store), do: ShapeSet.new([reach], store)
 
-  defp shape_contents({:fun, _ref, _returned}), do: ShapeSet.new()
+  defp shape_contents({:fun, _ref, _returned}, store), do: ShapeSet.new(store)
 
-  defp shape_leaves({:struct, module, fields}) do
+  defp shape_leaves({:struct, module, fields}, store) do
     field_leaves =
       fields
-      |> leaves()
-      |> ShapeSet.to_list()
+      |> leaves(store)
+      |> ShapeSet.to_list(store)
 
-    [{:struct, module, ShapeSet.new()} | field_leaves]
+    [{:struct, module, ShapeSet.new(store)} | field_leaves]
   end
 
-  defp shape_leaves({kind, inner}) when kind in [:bag, :list, :map] do
+  defp shape_leaves({kind, inner}, store) when kind in [:bag, :list, :map] do
     inner
-    |> leaves()
-    |> ShapeSet.to_list()
+    |> leaves(store)
+    |> ShapeSet.to_list(store)
   end
 
-  defp shape_leaves({:tuple, elements}) do
+  defp shape_leaves({:tuple, elements}, store) do
     elements
-    |> ShapeSet.union_all()
-    |> leaves()
-    |> ShapeSet.to_list()
+    |> ShapeSet.union_all(store)
+    |> leaves(store)
+    |> ShapeSet.to_list(store)
   end
 
-  defp shape_leaves({:fun, _ref, returned}) do
+  defp shape_leaves({:fun, _ref, returned}, store) do
     returned
-    |> leaves()
-    |> ShapeSet.to_list()
+    |> leaves(store)
+    |> ShapeSet.to_list(store)
   end
 
-  defp shape_leaves({:call, fun, args}) do
+  defp shape_leaves({:call, fun, args}, store) do
     [fun | args]
-    |> Enum.map(&leaves/1)
-    |> ShapeSet.union_all()
-    |> ShapeSet.to_list()
+    |> Enum.map(&leaves(&1, store))
+    |> ShapeSet.union_all(store)
+    |> ShapeSet.to_list(store)
   end
 
-  defp shape_leaves({:dot, shapes, name}), do: [{:dot, leaves(shapes), name}]
+  defp shape_leaves({:dot, shapes, name}, store), do: [{:dot, leaves(shapes, store), name}]
 
-  defp shape_leaves({:dyn, module, name, arity, args}) do
-    [{:dyn, leaves(module), name, arity, Enum.map(args, &bag_of_leaves/1)}]
+  defp shape_leaves({:dyn, module, name, arity, args}, store) do
+    [{:dyn, leaves(module, store), name, arity, Enum.map(args, &bag_of_leaves(&1, store))}]
   end
 
-  defp shape_leaves({kind, shapes}) when kind in [:as_map, :contents, :part] do
-    [{kind, leaves(shapes)}]
+  defp shape_leaves({kind, shapes}, store) when kind in [:as_map, :contents, :part] do
+    [{kind, leaves(shapes, store)}]
   end
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex.
-  defp shape_leaves(shape), do: [shape]
+  defp shape_leaves(shape, _store), do: [shape]
 
-  defp shape_parts(shape) when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
-    ShapeSet.new([{:part, ShapeSet.new([shape])}])
+  defp shape_parts(shape, store) when is_tuple(shape) and elem(shape, 0) in @pending_kinds do
+    ShapeSet.new([{:part, ShapeSet.new([shape], store)}], store)
   end
 
-  defp shape_parts({:atom, _atom}), do: ShapeSet.new()
+  defp shape_parts({:atom, _atom}, store), do: ShapeSet.new(store)
 
-  defp shape_parts({:fun, _ref, _returned}), do: ShapeSet.new()
+  defp shape_parts({:fun, _ref, _returned}, store), do: ShapeSet.new(store)
 
-  defp shape_parts(shape) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
-    ShapeSet.new([{:bag, nested_shapes(shape)}])
+  defp shape_parts(shape, store) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
+    ShapeSet.new([{:bag, nested_shapes(shape, store)}], store)
   end
 
   # A value of unknown structure, the rule before this module from a vertex, or a primitive.
-  defp shape_parts(shape), do: ShapeSet.new([shape])
+  defp shape_parts(shape, store), do: ShapeSet.new([shape], store)
 
   # Evaluates the functions of the work list until it is empty (see evaluate/2): the deepest first, a
   # function met while evaluating another one being one deeper, and among equals in the order they were
@@ -2091,7 +2187,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp solving_summary({_module, _function, arity} = mfa, ctx) do
     if function_clauses(mfa, ctx) == nil or
          CallGraph.protocol_function_mfa?(mfa, ctx.flow.module_info_plt) do
-      ShapeSet.new([{:bag, params(arity)}])
+      ShapeSet.from_tree([{:bag, params(arity)}], ctx.flow.store)
     else
       if ctx.node, do: :ets.insert(ctx.dependents, {mfa, ctx.node})
       :ets.insert(ctx.memo, {:unsettled, true})
@@ -2101,10 +2197,10 @@ defmodule Hologram.Compiler.DataFlow do
           answer
 
         [] ->
-          :ets.insert(ctx.answers, {mfa, ShapeSet.new()})
+          :ets.insert(ctx.answers, {mfa, ShapeSet.new(ctx.flow.store)})
           :ets.insert(ctx.memo, {{:depth, mfa}, reader_depth(ctx) + 1})
           enqueue(mfa, ctx)
-          ShapeSet.new()
+          ShapeSet.new(ctx.flow.store)
       end
     end
   end
@@ -2114,35 +2210,37 @@ defmodule Hologram.Compiler.DataFlow do
   defp struct_fields(arg, ctx) do
     arg
     |> eval(ctx)
-    |> contents()
-    |> contents()
+    |> contents(ctx.flow.store)
+    |> contents(ctx.flow.store)
   end
 
-  defp structurally_may_match?({:atom, value}, %IR.AtomType{value: value}), do: true
+  defp structurally_may_match?({:atom, value}, %IR.AtomType{value: value}, _store), do: true
 
-  defp structurally_may_match?({:tuple, elements}, %IR.TupleType{data: patterns})
+  defp structurally_may_match?({:tuple, elements}, %IR.TupleType{data: patterns}, store)
        when length(elements) == length(patterns) do
     elements
     |> Enum.zip(patterns)
-    |> Enum.all?(fn {element, pattern} -> ShapeSet.any?(element, &may_match?(&1, pattern)) end)
+    |> Enum.all?(fn {element, pattern} ->
+      ShapeSet.any?(element, &may_match?(&1, pattern, store), store)
+    end)
   end
 
-  defp structurally_may_match?({:list, _elements}, %IR.ListType{}), do: true
+  defp structurally_may_match?({:list, _elements}, %IR.ListType{}, _store), do: true
 
-  defp structurally_may_match?({:list, _elements}, %IR.ConsOperator{}), do: true
+  defp structurally_may_match?({:list, _elements}, %IR.ConsOperator{}, _store), do: true
 
-  defp structurally_may_match?({:map, _inner}, %IR.MapType{}), do: true
+  defp structurally_may_match?({:map, _inner}, %IR.MapType{}, _store), do: true
 
-  defp structurally_may_match?({:struct, module, _fields}, %IR.MapType{data: pairs}) do
+  defp structurally_may_match?({:struct, module, _fields}, %IR.MapType{data: pairs}, _store) do
     case List.keyfind(pairs, %IR.AtomType{value: :__struct__}, 0) do
       {_key, %IR.AtomType{value: pattern_module}} -> pattern_module == module
       _no_named_module -> true
     end
   end
 
-  defp structurally_may_match?(:prim, _pattern), do: true
+  defp structurally_may_match?(:prim, _pattern, _store), do: true
 
-  defp structurally_may_match?(_shape, _pattern), do: false
+  defp structurally_may_match?(_shape, _pattern, _store), do: false
 
   # The value a binding matches its pattern against.
   defp subject_shapes({:expr, expr}, ctx), do: eval(expr, ctx)
@@ -2153,26 +2251,27 @@ defmodule Hologram.Compiler.DataFlow do
   defp subject_shapes({:elements, expr}, ctx) do
     expr
     |> eval(ctx)
-    |> contents()
+    |> contents(ctx.flow.store)
   end
 
-  defp subject_shapes({:arg, _ref, _index} = arg, _ctx), do: ShapeSet.new([arg])
+  defp subject_shapes({:arg, _ref, _index} = arg, ctx), do: ShapeSet.new([arg], ctx.flow.store)
 
-  defp subject_shapes({:param, index}, _ctx), do: ShapeSet.new([{:param, index}])
+  defp subject_shapes({:param, index}, ctx), do: ShapeSet.new([{:param, index}], ctx.flow.store)
 
   # A rescue without modules takes any exception, raised anywhere the function reaches: a struct.
-  defp subject_shapes({:rescue, []}, ctx), do: ShapeSet.new([{:as_map, top(ctx.mfa)}])
+  defp subject_shapes({:rescue, []}, ctx),
+    do: ShapeSet.new([{:as_map, top_set(ctx.mfa, ctx.flow.store)}], ctx.flow.store)
 
   # An exception raised where the function reaches, of one of the modules, holding anything.
   defp subject_shapes({:rescue, modules}, ctx) do
-    fields = top(ctx.mfa)
+    fields = top_set(ctx.mfa, ctx.flow.store)
 
     modules
     |> Enum.map(&{:struct, &1, fields})
-    |> ShapeSet.new()
+    |> ShapeSet.new(ctx.flow.store)
   end
 
-  defp subject_shapes(:top, ctx), do: top(ctx.mfa)
+  defp subject_shapes(:top, ctx), do: top_set(ctx.mfa, ctx.flow.store)
 
   # The shapes and the arguments to put in for them: every argument bounded (see bounded/2), and the
   # shapes a bag of their leaves when putting the arguments in would make a value larger than the
@@ -2188,11 +2287,13 @@ defmodule Hologram.Compiler.DataFlow do
 
     estimate =
       Enum.reduce(counts, :erlang.external_size(shapes), fn {index, count}, acc ->
-        acc + count * :erlang.external_size(Enum.at(bounded_args, index, ShapeSet.new()))
+        acc +
+          count *
+            :erlang.external_size(Enum.at(bounded_args, index, ShapeSet.new(ctx.flow.store)))
       end)
 
     if estimate > ctx.flow.max_summary_size do
-      {bag_of_leaves(shapes), bounded_args}
+      {bag_of_leaves(shapes, ctx.flow.store), bounded_args}
     else
       {shapes, bounded_args}
     end
@@ -2205,12 +2306,21 @@ defmodule Hologram.Compiler.DataFlow do
     |> put_args(args, ctx)
   end
 
+  # The top of the function (see top/1) as a set of the given store.
+  defp top_set(mfa, store) do
+    mfa
+    |> top()
+    |> ShapeSet.from_tree(store)
+  end
+
   defp variable_shapes(frame, var, ctx) do
     frame.bindings
     |> Map.get(var, [])
-    |> Enum.map(fn {pattern, subject} -> extract(subject_shapes(subject, ctx), pattern, var) end)
-    |> ShapeSet.union_all()
-    |> ShapeSet.union(Map.get(frame.extras, var, ShapeSet.new()))
+    |> Enum.map(fn {pattern, subject} ->
+      extract(subject_shapes(subject, ctx), pattern, var, ctx.flow.store)
+    end)
+    |> ShapeSet.union_all(ctx.flow.store)
+    |> ShapeSet.union(Map.get(frame.extras, var, ShapeSet.new(ctx.flow.store)), ctx.flow.store)
   end
 
   # Keeps the given shapes from growing without end: a set nested @max_depth deep that holds shapes
@@ -2218,49 +2328,54 @@ defmodule Hologram.Compiler.DataFlow do
   # of its leaves (see leaves/1), which holds the same types. A recursive function whose answer
   # nests deeper on every pass then settles. A set of leaves stays as it is: an empty one is no value
   # at all (a branch that never returns), which a bag is not.
-  defp widen(shapes) do
+  defp widen(shapes, store) do
     shapes
-    |> collapse_routes()
-    |> widen(0)
+    |> collapse_routes(store)
+    |> widen(0, store)
   end
 
-  defp widen(shapes, depth) do
+  defp widen(shapes, depth, store) do
     cond do
-      ShapeSet.size(shapes) > @max_alternatives -> bag_of_leaves(shapes)
-      depth < @max_depth -> ShapeSet.map(shapes, &widen_shape(&1, depth + 1))
-      ShapeSet.all?(shapes, &(shape_leaves(&1) == [&1])) -> shapes
-      true -> bag_of_leaves(shapes)
+      ShapeSet.size(shapes, store) > @max_alternatives -> bag_of_leaves(shapes, store)
+      depth < @max_depth -> ShapeSet.map(shapes, &widen_shape(&1, depth + 1, store), store)
+      ShapeSet.all?(shapes, &(shape_leaves(&1, store) == [&1]), store) -> shapes
+      true -> bag_of_leaves(shapes, store)
     end
   end
 
-  defp widen_shape({:struct, module, fields}, depth), do: {:struct, module, widen(fields, depth)}
+  defp widen_shape({:struct, module, fields}, depth, store),
+    do: {:struct, module, widen(fields, depth, store)}
 
-  defp widen_shape({kind, inner}, depth) when kind in [:as_map, :contents, :list, :map, :part] do
-    {kind, widen(inner, depth)}
+  defp widen_shape({kind, inner}, depth, store)
+       when kind in [:as_map, :contents, :list, :map, :part] do
+    {kind, widen(inner, depth, store)}
   end
 
-  defp widen_shape({:bag, inner}, _depth), do: {:bag, leaves(inner)}
+  defp widen_shape({:bag, inner}, _depth, store), do: {:bag, leaves(inner, store)}
 
-  defp widen_shape({:tuple, elements}, depth), do: {:tuple, Enum.map(elements, &widen(&1, depth))}
+  defp widen_shape({:tuple, elements}, depth, store),
+    do: {:tuple, Enum.map(elements, &widen(&1, depth, store))}
 
-  defp widen_shape({:fun, ref, returned}, depth), do: {:fun, ref, widen(returned, depth)}
+  defp widen_shape({:fun, ref, returned}, depth, store),
+    do: {:fun, ref, widen(returned, depth, store)}
 
-  defp widen_shape({:call, fun, args}, depth) do
-    {:call, widen(fun, depth), Enum.map(args, &widen(&1, depth))}
+  defp widen_shape({:call, fun, args}, depth, store) do
+    {:call, widen(fun, depth, store), Enum.map(args, &widen(&1, depth, store))}
   end
 
-  defp widen_shape({:dot, shapes, name}, depth), do: {:dot, widen(shapes, depth), name}
+  defp widen_shape({:dot, shapes, name}, depth, store),
+    do: {:dot, widen(shapes, depth, store), name}
 
-  defp widen_shape({:dyn, module, name, arity, args}, depth) do
-    {:dyn, widen(module, depth), name, arity, Enum.map(args, &widen(&1, depth))}
+  defp widen_shape({:dyn, module, name, arity, args}, depth, store) do
+    {:dyn, widen(module, depth, store), name, arity, Enum.map(args, &widen(&1, depth, store))}
   end
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex.
-  defp widen_shape(shape, _depth), do: shape
+  defp widen_shape(shape, _depth, _store), do: shape
 
-  defp with_nested_shapes(shapes) do
-    ShapeSet.flat_map(shapes, &ShapeSet.new([&1 | nested_shape_list(&1)]))
+  defp with_nested_shapes(shapes, store) do
+    ShapeSet.flat_map(shapes, &ShapeSet.new([&1 | nested_shape_list(&1, store)], store), store)
   end
 
   defp within_cap?(shapes, ctx) do

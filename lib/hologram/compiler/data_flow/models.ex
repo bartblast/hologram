@@ -15,9 +15,11 @@ defmodule Hologram.Compiler.DataFlow.Models do
   # a struct, so an updated struct keeps its protocol implementations.
   #
   # A model must not be smaller than what the function can return.
+  #
+  # A model is a plain tree (see Hologram.Compiler.DataFlow.tree/0): it is a constant over the params,
+  # so it needs no store, and the analysis interns it once where it takes it.
 
   alias Hologram.Compiler.DataFlow
-  alias Hologram.Compiler.DataFlow.ShapeSet
 
   # Erlang functions that never return.
   @diverging_mfas [
@@ -219,12 +221,13 @@ defmodule Hologram.Compiler.DataFlow.Models do
   def listed_elixir_mfas, do: @primitive_mfas ++ @unchanged_first_arg_mfas
 
   @doc """
-  Returns the model of the given function: the shapes of what it returns, or nil when it has none.
+  Returns the model of the given function: the shapes of what it returns, as a tree, or nil when it
+  has none.
   """
-  @spec summary(mfa) :: DataFlow.shapes() | nil
+  @spec summary(mfa) :: DataFlow.tree() | nil
   def summary({module, function, _arity} = mfa) do
     cond do
-      mfa in @diverging_mfas -> ShapeSet.new()
+      mfa in @diverging_mfas -> []
       module == :erlang and function in @primitive_erlang_functions -> prim()
       module in @primitive_modules or mfa in @primitive_mfas -> prim()
       mfa in @unchanged_first_arg_mfas -> param(0)
@@ -233,15 +236,15 @@ defmodule Hologram.Compiler.DataFlow.Models do
   end
 
   # The map and struct alternatives of the given shapes (see Hologram.Compiler.DataFlow.shape/0).
-  defp as_map(shapes), do: ShapeSet.new([{:as_map, shapes}])
+  defp as_map(shapes), do: set([{:as_map, shapes}])
 
-  defp atom(value), do: ShapeSet.new([{:atom, value}])
+  defp atom(value), do: set([{:atom, value}])
 
-  defp bag(shapes), do: ShapeSet.new([{:bag, shapes}])
+  defp bag(shapes), do: set([{:bag, shapes}])
 
-  defp call(fun, args), do: ShapeSet.new([{:call, fun, args}])
+  defp call(fun, args), do: set([{:call, fun, args}])
 
-  defp contents(shapes), do: ShapeSet.new([{:contents, shapes}])
+  defp contents(shapes), do: set([{:contents, shapes}])
 
   # What folding the function over the elements gives, from the accumulator: two rounds of calling
   # the function with the args the given function builds around what the rounds before gave. The
@@ -252,9 +255,9 @@ defmodule Hologram.Compiler.DataFlow.Models do
     union([round_1, call(fun, args_around.(round_1))])
   end
 
-  defp list(elements), do: ShapeSet.new([{:list, elements}])
+  defp list(elements), do: set([{:list, elements}])
 
-  defp map(inner), do: ShapeSet.new([{:map, inner}])
+  defp map(inner), do: set([{:map, inner}])
 
   # What :lists.mapfoldl/3 and :lists.mapfoldr/3 give: the mapped elements and the accumulator,
   # from two rounds of calling the function, which returns a tuple of both.
@@ -268,11 +271,14 @@ defmodule Hologram.Compiler.DataFlow.Models do
     tuple([list(mapped), acc_2])
   end
 
-  defp param(index), do: ShapeSet.new([{:param, index}])
+  defp param(index), do: set([{:param, index}])
 
-  defp part(shapes), do: ShapeSet.new([{:part, shapes}])
+  defp part(shapes), do: set([{:part, shapes}])
 
-  defp prim, do: ShapeSet.new([:prim])
+  defp prim, do: set([:prim])
+
+  # A set of the given shapes, in the form of a tree: sorted, each once.
+  defp set(shapes), do: :lists.usort(shapes)
 
   defp structural({:erlang, :++, 2}), do: list(union([contents(param(0)), contents(param(1))]))
   defp structural({:erlang, :--, 2}), do: param(0)
@@ -385,7 +391,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
     union([as_map(union([param(1), param(2)])), map(call(param(0), [values, values, values]))])
   end
 
-  defp structural({:maps, :new, 0}), do: map(ShapeSet.new())
+  defp structural({:maps, :new, 0}), do: map([])
 
   defp structural({:maps, :put, 3}) do
     union([as_map(param(2)), map(union([param(0), param(1)]))])
@@ -423,7 +429,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
 
   defp structural(_mfa), do: nil
 
-  defp tuple(elements), do: ShapeSet.new([{:tuple, elements}])
+  defp tuple(elements), do: set([{:tuple, elements}])
 
-  defp union(sets), do: ShapeSet.union_all(sets)
+  defp union(sets), do: :ordsets.union(sets)
 end
