@@ -1231,6 +1231,15 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module18, :stepped, 2) == top({Module18, :stepped, 2})
     end
 
+    test "a function evaluated many times, its answer not changing, keeps its answer" do
+      flow = flow()
+      summary({Module18, :pairs, 1}, flow)
+
+      # steady is evaluated again on every change of a pair, more than 16 times; its answer holds.
+      assert {:ok, steady} = PLT.get(flow.summaries, {Module18, :steady, 1})
+      assert to_tree(steady, flow) == tree_set([@struct_1_stored])
+    end
+
     test "a call of a param nested too deep dissolves into the function and its arguments" do
       leaves = tree_set([{:bag, tree_set([:prim, {:param, 0}])}])
       level_3 = tree_set([{:tuple, [leaves]}])

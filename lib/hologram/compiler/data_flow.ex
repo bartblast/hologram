@@ -55,17 +55,19 @@ defmodule Hologram.Compiler.DataFlow do
   # sets, before widen/1 makes it a bag.
   @max_depth 3
 
-  # How many times the solver evaluates a function before its answer becomes a bag of its leaves (see
-  # evaluate/2): a recursive function whose value nests one level deeper on every evaluation would grow
-  # without end, while a loop of functions whose answers settle needs far fewer evaluations.
-  @evaluations_before_leaves 8
+  # How many times a function's answer changes before it becomes a bag of its leaves (see evaluate/2): a
+  # recursive function whose value nests one level deeper on every evaluation would grow without end,
+  # while a loop of functions whose answers settle changes far fewer times. Changes are counted, not
+  # evaluations: a function evaluated again on every change of a function it calls, its own answer
+  # not changing, has not grown (such functions reached the top after a callee's many changes).
+  @changes_before_leaves 8
 
-  # How many times the solver evaluates a function before its answer is its top (see top/1), which never
+  # How many times a function's answer changes before it is its top (see top/1), which never
   # changes, so the solve ends (see evaluate/2). With pending calls and anonymous functions dissolved
   # into their parts (see shape_leaves/1), a bag of leaves stops growing unless a call on a module not
   # known yet nests inside another one on every evaluation; this is for that, and for what else keeps
   # an answer changing.
-  @evaluations_before_top 16
+  @changes_before_top 16
 
   # How many calls of anonymous functions one substitution makes in total, in all its branches, before
   # the rest are left unmade (see call_fun/3): a function given itself can call itself without end,
@@ -385,8 +387,8 @@ defmodule Hologram.Compiler.DataFlow do
 
   Functions that call each other are solved together: each is evaluated again when an answer it read
   changes, until none changes, the first evaluation reading nothing for a function not evaluated yet.
-  An answer that keeps growing becomes a bag of its leaves after a few evaluations, and the function's
-  top after more (see `top/1`). Every function a run solves is kept for the rest of the compile. A
+  An answer that keeps growing becomes a bag of its leaves after it changed a few times, and the
+  function's top after more (see `top/1`). Every function a run solves is kept for the rest of the compile. A
   summary, or the value of a call, larger than the cap given to `start/3` (each distinct set counted
   once) becomes a bag of its leaves, which keeps the types it names and drops its structure, or the
   top of the function being read when even that is larger.
@@ -711,6 +713,14 @@ defmodule Hologram.Compiler.DataFlow do
       broadcast_params(clause.body, %{ctx | frames: [frame]})
     end)
     |> ShapeSet.union_all(ctx.flow.store)
+  end
+
+  # How many times the function's answer changed in this run (see evaluate/2).
+  defp changes(mfa, ctx) do
+    case :ets.lookup(ctx.memo, {:changes, mfa}) do
+      [{_key, changes}] -> changes
+      [] -> 0
+    end
   end
 
   # The variables of a function clause or an anonymous function's clause, each with the places it is
@@ -1212,14 +1222,13 @@ defmodule Hologram.Compiler.DataFlow do
   # again, so once the work list is empty every answer is what its code gives with the final answers.
   # The answer so far is not joined in: an evaluation made while a callee answered nothing yet gives
   # alternatives (a list of nothing, a tuple of nothing) that a later answer does not absorb (see
-  # evaluated_answer/4 for the answers after many evaluations).
+  # evaluated_answer/4 for the answers after many changes).
   defp evaluate(mfa, ctx) do
     [{^mfa, old}] = :ets.lookup(ctx.answers, mfa)
-    evaluations = :ets.update_counter(ctx.memo, {:evaluations, mfa}, 1, {{:evaluations, mfa}, 0})
-
-    answer = evaluated_answer(mfa, old, evaluations, ctx)
+    answer = evaluated_answer(mfa, old, changes(mfa, ctx), ctx)
 
     if answer != old do
+      :ets.update_counter(ctx.memo, {:changes, mfa}, 1, {{:changes, mfa}, 0})
       :ets.insert(ctx.answers, {mfa, answer})
 
       for {^mfa, dependent} <- :ets.lookup(ctx.dependents, mfa) do
@@ -1228,23 +1237,21 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # The answer of an evaluation, by how many evaluations the function had: what its code gives; past
-  # @evaluations_before_leaves, a bag of the leaves of the answer so far and what its code gives, so
-  # the answer only grows and its growth ends with its leaves (see shape_leaves/1); past
-  # @evaluations_before_top, its top, which never changes, so the solve ends whatever keeps the answer
+  # The answer of an evaluation, by how many times the function's answer changed: what its code gives;
+  # from @changes_before_leaves, a bag of the leaves of the answer so far and what its code gives, so
+  # the answer only grows and its growth ends with its leaves (see shape_leaves/1); from
+  # @changes_before_top, its top, which never changes, so the solve ends whatever keeps the answer
   # changing. The top holds every type the function can give (see the contract).
-  defp evaluated_answer(mfa, _old, evaluations, ctx)
-       when evaluations > @evaluations_before_top do
+  defp evaluated_answer(mfa, _old, changes, ctx) when changes >= @changes_before_top do
     top_set(mfa, ctx.flow.store)
   end
 
-  defp evaluated_answer(mfa, old, evaluations, ctx)
-       when evaluations > @evaluations_before_leaves do
+  defp evaluated_answer(mfa, old, changes, ctx) when changes >= @changes_before_leaves do
     new = code_summary(mfa, %{ctx | node: mfa})
     bag_of_leaves(ShapeSet.union(old, new, ctx.flow.store), ctx.flow.store)
   end
 
-  defp evaluated_answer(mfa, _old, _evaluations, ctx), do: code_summary(mfa, %{ctx | node: mfa})
+  defp evaluated_answer(mfa, _old, _changes, ctx), do: code_summary(mfa, %{ctx | node: mfa})
 
   # The part of a value of the given shapes that the pattern binds to the variable, from the
   # alternatives the pattern can match.
@@ -1526,7 +1533,7 @@ defmodule Hologram.Compiler.DataFlow do
   # gives what that module's function builds, which its parts don't hold. So a function's bag can only
   # hold its params, the atoms and struct modules its code names, the vertices the rule before this
   # module applies from, and dots and dynamic calls over those: a finite set, which an answer that
-  # keeps growing reaches in a few evaluations.
+  # keeps growing reaches in a few changes.
   defp leaves(shapes, store) do
     Store.memo(store, {:leaves, shapes}, fn ->
       ShapeSet.flat_map(shapes, &ShapeSet.new(shape_leaves(&1, store), store), store)
@@ -2160,7 +2167,7 @@ defmodule Hologram.Compiler.DataFlow do
   # `{mfa, answer}` for the functions the run is solving; `dependents` holds `{callee, caller}` when the
   # caller's evaluation read the callee's answer (a bag, so each pair once); `work` holds
   # `{{-depth, sequence}, mfa}`, the functions to evaluate (see solve/1); `memo` holds the
-  # variables' shapes once read (see read_variable/2), `{:queued, mfa}`, `{:depth, mfa}`, `{:evaluations, mfa}`,
+  # variables' shapes once read (see read_variable/2), `{:queued, mfa}`, `{:depth, mfa}`, `{:changes, mfa}`,
   # `:sequence` and `:unsettled`. `ctx.mfa` is the function whose code is read, and `ctx.node` the
   # function the solver evaluates, nil in the entry itself. Forgets the modules' functions it read
   # (see module_functions/2) when done. An entry never runs inside another one.
@@ -2325,10 +2332,9 @@ defmodule Hologram.Compiler.DataFlow do
   # Evaluates the functions of the work list until it is empty (see evaluate/2): the deepest first, a
   # function met while evaluating another one being one deeper, and among equals in the order they were
   # put there. The deepest first answers the functions a function calls before the function is
-  # evaluated again, so a caller is not evaluated once for every change of a callee still settling
-  # (which made callers reach @evaluations_before_top on their own); in the order they were put there,
-  # the functions of a loop are each evaluated once per sweep (the latest first evaluated a ring of four
-  # functions 38 times, against 18).
+  # evaluated again, so a caller is not evaluated once for every change of a callee still settling; in
+  # the order they were put there, the functions of a loop are each evaluated once per sweep (the latest
+  # first evaluated a ring of four functions 38 times, against 18).
   # Then every answer the run holds is final: none changed since the evaluations that read it. They go
   # to the analysis, kept for the rest of the compile.
   defp solve(ctx) do
