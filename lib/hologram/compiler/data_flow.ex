@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.DataFlow do
   alias Hologram.Compiler.DataFlow.ShapeSet
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Reflection
 
   # How many alternatives a set of shapes can hold before widen/1 makes it a bag.
   @max_alternatives 32
@@ -163,6 +164,7 @@ defmodule Hologram.Compiler.DataFlow do
   @type t :: %{
           ir_plt: PLT.t(),
           max_summary_size: pos_integer,
+          module_atoms: PLT.t(),
           module_info_plt: PLT.t(),
           summaries: PLT.t()
         }
@@ -284,8 +286,8 @@ defmodule Hologram.Compiler.DataFlow do
       of its external term format, before the function's top stands for it (see `top/1`); defaults
       to 32 KiB.
 
-  The other opts are given to the PLT it keeps its summaries in (see `Hologram.Commons.PLT.start/1`:
-  a `:supervisor` stops it with the supervisor).
+  The other opts are given to the PLTs it keeps its summaries and its module checks in (see
+  `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
   """
   @spec start(PLT.t(), PLT.t(), T.opts()) :: t
   def start(ir_plt, module_info_plt, opts \\ []) do
@@ -294,6 +296,7 @@ defmodule Hologram.Compiler.DataFlow do
     %{
       ir_plt: ir_plt,
       max_summary_size: max_summary_size,
+      module_atoms: PLT.start(plt_opts),
       module_info_plt: module_info_plt,
       summaries: PLT.start(plt_opts)
     }
@@ -303,7 +306,10 @@ defmodule Hologram.Compiler.DataFlow do
   Stops the given analysis.
   """
   @spec stop(t) :: :ok
-  def stop(%{summaries: summaries}), do: PLT.stop(summaries)
+  def stop(%{module_atoms: module_atoms, summaries: summaries}) do
+    PLT.stop(module_atoms)
+    PLT.stop(summaries)
+  end
 
   @doc """
   Returns the summary of the given function: the shapes of the value it returns, in terms of its
@@ -616,6 +622,7 @@ defmodule Hologram.Compiler.DataFlow do
     end)
     |> ShapeSet.union_all()
     |> widen()
+    |> compress_atoms(ctx)
     |> capped_summary(mfa, ctx)
   end
 
@@ -672,6 +679,51 @@ defmodule Hologram.Compiler.DataFlow do
   defp collapse_route(shape), do: ShapeSet.new([shape])
 
   defp collapse_routes(shapes), do: ShapeSet.flat_map(shapes, &collapse_route/1)
+
+  # Turns an atom that is not a module into a primitive, at any depth, except the atoms of a tuple's
+  # first element, which patterns choose on (`{:ok, value}` against `{:error, reason}`). Stored answers
+  # only need the atoms that can name a struct, a component or a module whose functions are called; the
+  # others were most of an answer's atoms (option values, map keys) and cost walks for nothing.
+  defp compress_atom({:atom, atom} = shape, ctx) do
+    if module_atom?(atom, ctx), do: shape, else: :prim
+  end
+
+  defp compress_atom({:tuple, []} = shape, _ctx), do: shape
+
+  defp compress_atom({:tuple, [first | rest]}, ctx) do
+    kept_first =
+      ShapeSet.map(first, fn
+        {:atom, _atom} = tag -> tag
+        shape -> compress_atom(shape, ctx)
+      end)
+
+    {:tuple, [kept_first | Enum.map(rest, &compress_atoms(&1, ctx))]}
+  end
+
+  defp compress_atom({:struct, module, fields}, ctx) do
+    {:struct, module, compress_atoms(fields, ctx)}
+  end
+
+  defp compress_atom({kind, inner}, ctx)
+       when kind in [:as_map, :bag, :contents, :list, :map, :part] do
+    {kind, compress_atoms(inner, ctx)}
+  end
+
+  defp compress_atom({:fun, ref, returned}, ctx), do: {:fun, ref, compress_atoms(returned, ctx)}
+
+  defp compress_atom({:call, fun, args}, ctx) do
+    {:call, compress_atoms(fun, ctx), Enum.map(args, &compress_atoms(&1, ctx))}
+  end
+
+  defp compress_atom({:dot, inner, name}, ctx), do: {:dot, compress_atoms(inner, ctx), name}
+
+  defp compress_atom({:dyn, module, name, arity, args}, ctx) do
+    {:dyn, compress_atoms(module, ctx), name, arity, Enum.map(args, &compress_atoms(&1, ctx))}
+  end
+
+  defp compress_atom(shape, _ctx), do: shape
+
+  defp compress_atoms(shapes, ctx), do: ShapeSet.map(shapes, &compress_atom(&1, ctx))
 
   # What can be inside a value of the given shapes, one level down. An atom holds nothing, a part of
   # a primitive is a primitive, and a shape of unknown structure holds itself.
@@ -1271,6 +1323,25 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp may_match?(shape, pattern) do
     opaque?(shape) or structurally_may_match?(shape, pattern)
+  end
+
+  # Whether the atom names a module, Elixir or Erlang, remembered for the whole compile in the flow
+  # context: deciding that an atom is no module ends in a code path scan (see
+  # Hologram.Reflection.module?/1), and the same atoms come up in many functions' answers.
+  defp module_atom?(atom, ctx) do
+    case PLT.get(ctx.flow.module_atoms, atom) do
+      {:ok, module?} ->
+        module?
+
+      :error ->
+        ir_plt = ctx.flow.ir_plt
+
+        module? =
+          Reflection.elixir_module?(atom, ir_plt) or Reflection.erlang_module?(atom, ir_plt)
+
+        PLT.put(ctx.flow.module_atoms, atom, module?)
+        module?
+    end
   end
 
   # The clauses of each function of the module, by name and arity, none for a module with no IR. A

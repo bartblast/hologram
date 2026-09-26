@@ -45,6 +45,12 @@ defmodule Hologram.Compiler.DataFlowTest do
   @struct_1 {:struct, Struct1, @defaults}
   @struct_2 {:struct, Struct2, @defaults}
 
+  # A stored answer's atoms that are not modules are primitives (see summary/2): a struct literal's
+  # defaults, its field name and nil, become one primitive.
+  @stored_defaults ShapeSet.new([:prim])
+  @struct_1_stored {:struct, Struct1, @stored_defaults}
+  @struct_2_stored {:struct, Struct2, @stored_defaults}
+
   # What a pattern naming Struct1 with no fields names.
   @struct_1_named {:struct, Struct1, ShapeSet.new()}
 
@@ -598,13 +604,17 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert flow.max_summary_size == 100
     end
+
+    test "starts a PLT for the module checks" do
+      assert %PLT{} = flow().module_atoms
+    end
   end
 
   describe "summary/2" do
     test "a set nested too deep becomes a bag of its leaves, with the same types" do
       flow = flow()
       summary = summary({Module9, :deep, 0}, flow)
-      leaves = ShapeSet.new([{:struct, Struct1, ShapeSet.new()}, {:atom, :field}, {:atom, nil}])
+      leaves = ShapeSet.new([{:struct, Struct1, ShapeSet.new()}, :prim])
       level_3 = ShapeSet.new([{:tuple, [ShapeSet.new([{:bag, leaves}])]}])
       level_2 = ShapeSet.new([{:tuple, [level_3]}])
 
@@ -613,10 +623,9 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "a set with too many alternatives becomes a bag of them" do
-      atoms = Enum.map(Module9.wide(), &{:atom, &1})
-
+      # The bag holds the 33 atoms, which a stored answer turns into one primitive.
       assert summary_of(Module9, :wide, 0) ==
-               ShapeSet.new([{:list, ShapeSet.new([{:bag, ShapeSet.new(atoms)}])}])
+               ShapeSet.new([{:list, ShapeSet.new([{:bag, ShapeSet.new([:prim])}])}])
     end
 
     test "call on each module of a list param is made once the list is known" do
@@ -625,7 +634,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module8, :call_each, 1) == ShapeSet.new([{:list, ShapeSet.new([call])}])
 
       assert summary_of(Module8, :calls_modules, 0) ==
-               ShapeSet.new([{:list, ShapeSet.new([@struct_1])}])
+               ShapeSet.new([{:list, ShapeSet.new([@struct_1_stored])}])
     end
 
     test "Elixir functions that build on the structural models" do
@@ -680,7 +689,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "a primitive in a tuple doesn't keep a pattern from matching the tuple" do
-      assert summary_of(Module7, :pairs_with_parts, 1) == ShapeSet.new([@struct_1])
+      assert summary_of(Module7, :pairs_with_parts, 1) == ShapeSet.new([@struct_1_stored])
     end
 
     test "model of a function that never returns" do
@@ -688,11 +697,11 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "a branch that raises gives nothing" do
-      assert summary_of(Module7, :raises_or_struct, 1) == ShapeSet.new([@struct_1])
+      assert summary_of(Module7, :raises_or_struct, 1) == ShapeSet.new([@struct_1_stored])
     end
 
     test "apply/2 with the argument list written out" do
-      assert summary_of(Module6, :apply_fun, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module6, :apply_fun, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "apply/3 with a function name known only at runtime gives everything it is given" do
@@ -703,13 +712,13 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "apply/3 with the function name and the argument list written out" do
-      fields = ShapeSet.new([{:atom, :field}, @struct_2])
+      fields = ShapeSet.new([:prim, @struct_2_stored])
 
       assert summary_of(Module6, :apply_written, 0) == ShapeSet.new([{:struct, Struct1, fields}])
     end
 
     test "call on a module in a variable" do
-      assert summary_of(Module6, :on_literal_module, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module6, :on_literal_module, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "call on a param is made once the param is known" do
@@ -717,11 +726,11 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "call on a module passed as an argument" do
-      assert summary_of(Module6, :calls_on_param, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module6, :calls_on_param, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "dot on a struct gives what its fields hold" do
-      assert summary_of(Module6, :field, 0) == ShapeSet.new([{:atom, :field}, @struct_2])
+      assert summary_of(Module6, :field, 0) == ShapeSet.new([:prim, @struct_2_stored])
     end
 
     test "dot on a param is made once the param is known" do
@@ -730,7 +739,7 @@ defmodule Hologram.Compiler.DataFlowTest do
 
     test "dot on a struct passed as an argument gives its fields, not the struct" do
       assert summary_of(Module6, :calls_field_of_param, 0) ==
-               ShapeSet.new([{:atom, :field}, @struct_2])
+               ShapeSet.new([:prim, @struct_2_stored])
     end
 
     test "__struct__ dot on a struct gives its module" do
@@ -741,7 +750,7 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module6, :dot_on_param, 1) ==
                ShapeSet.new([{:dot, @param_0, :__struct__}])
 
-      assert summary_of(Module6, :calls_dot_on_param, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module6, :calls_dot_on_param, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "protocol function gives everything it is given" do
@@ -758,7 +767,7 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert [{:fun, {{Module5, :closure, 0}, _hash}, returned}] = ShapeSet.to_list(summary)
 
-      assert returned == ShapeSet.new([@struct_1])
+      assert returned == ShapeSet.new([@struct_1_stored])
     end
 
     test "an anonymous function is the same on every pass" do
@@ -766,20 +775,23 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "call of an anonymous function" do
-      assert summary_of(Module5, :calls_closure, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module5, :calls_closure, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "call of an anonymous function with an argument" do
       assert summary_of(Module5, :closure_arg, 0) ==
-               ShapeSet.new([{:tuple, [ShapeSet.new([{:atom, :ok}]), ShapeSet.new([@struct_1])]}])
+               ShapeSet.new([
+                 {:tuple, [ShapeSet.new([{:atom, :ok}]), ShapeSet.new([@struct_1_stored])]}
+               ])
     end
 
     test "anonymous function with two clauses" do
-      assert summary_of(Module5, :closure_clauses, 1) == ShapeSet.new([@struct_1, @struct_2])
+      assert summary_of(Module5, :closure_clauses, 1) ==
+               ShapeSet.new([@struct_1_stored, @struct_2_stored])
     end
 
     test "anonymous function reading a variable of its function" do
-      assert summary_of(Module5, :closure_free_variable, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module5, :closure_free_variable, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "anonymous function returning its function's param" do
@@ -798,58 +810,63 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "call of an anonymous function a call returned" do
-      assert summary_of(Module5, :calls_closure_of_param, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module5, :calls_closure_of_param, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "anonymous function's param shadowing its function's" do
       assert summary_of(Module5, :closure_shadowing_param, 1) ==
                ShapeSet.new([
-                 {:tuple, [@param_0, ShapeSet.new([{:tuple, [ShapeSet.new([@struct_1])]}])]}
+                 {:tuple,
+                  [@param_0, ShapeSet.new([{:tuple, [ShapeSet.new([@struct_1_stored])]}])]}
                ])
     end
 
     test "capture of a local function" do
       assert summary_of(Module5, :capture_local, 0) ==
-               ShapeSet.new([{:tuple, [ShapeSet.new([{:atom, :ok}]), ShapeSet.new([@struct_1])]}])
+               ShapeSet.new([
+                 {:tuple, [ShapeSet.new([{:atom, :ok}]), ShapeSet.new([@struct_1_stored])]}
+               ])
     end
 
     test "capture of a remote function" do
-      assert summary_of(Module5, :capture_remote, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module5, :capture_remote, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "call of a param is made once the param is known" do
       assert summary_of(Module5, :higher_order, 1) ==
-               ShapeSet.new([{:call, @param_0, [ShapeSet.new([@struct_1])]}])
+               ShapeSet.new([{:call, @param_0, [ShapeSet.new([@struct_1_stored])]}])
     end
 
     test "anonymous function given to a function that calls it" do
       assert summary_of(Module5, :calls_higher_order, 0) ==
-               ShapeSet.new([{:tuple, [ShapeSet.new([@struct_1]), ShapeSet.new([@struct_2])]}])
+               ShapeSet.new([
+                 {:tuple, [ShapeSet.new([@struct_1_stored]), ShapeSet.new([@struct_2_stored])]}
+               ])
     end
 
     test "recursive function returning an anonymous function settles" do
       summary = summary_of(Module5, :recursive_closure, 1)
 
       assert [{:fun, _ref, returned}] = ShapeSet.to_list(summary)
-      assert returned == ShapeSet.new([@struct_1])
+      assert returned == ShapeSet.new([@struct_1_stored])
     end
 
     test "function building a struct" do
-      assert summary_of(Module3, :build, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module3, :build, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "function building a struct from its param" do
-      fields = ShapeSet.new([{:atom, :field}, {:param, 0}])
+      fields = ShapeSet.new([:prim, {:param, 0}])
 
       assert summary_of(Module3, :build_from, 1) == ShapeSet.new([{:struct, Struct1, fields}])
     end
 
     test "call of a local function" do
-      assert summary_of(Module3, :calls_build, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module3, :calls_build, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "call puts its arguments in the callee's summary" do
-      fields = ShapeSet.new([{:atom, :field}, @struct_2])
+      fields = ShapeSet.new([:prim, @struct_2_stored])
 
       assert summary_of(Module3, :calls_build_from, 0) ==
                ShapeSet.new([{:struct, Struct1, fields}])
@@ -860,24 +877,24 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "call of a remote function" do
-      assert summary_of(Module3, :calls_remote, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module3, :calls_remote, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "call whose value a pattern takes apart" do
-      assert summary_of(Module3, :calls_wrap, 0) == ShapeSet.new([@struct_1])
+      assert summary_of(Module3, :calls_wrap, 0) == ShapeSet.new([@struct_1_stored])
     end
 
     test "an argument the callee's value doesn't hold is not followed" do
       flow = flow()
 
-      assert summary({Module3, :calls_ignores, 0}, flow) == ShapeSet.new([{:atom, :ok}])
+      assert summary({Module3, :calls_ignores, 0}, flow) == ShapeSet.new([:prim])
       refute PLT.member?(flow.summaries, {Module3, :build, 0})
     end
 
     test "a call whose value is dropped is not followed" do
       flow = flow()
 
-      assert summary({Module3, :drops_result, 0}, flow) == ShapeSet.new([{:atom, :ok}])
+      assert summary({Module3, :drops_result, 0}, flow) == ShapeSet.new([:prim])
       refute PLT.member?(flow.summaries, {Module3, :build, 0})
     end
 
@@ -896,7 +913,9 @@ defmodule Hologram.Compiler.DataFlowTest do
       summary = summary({Module3, :calls_build, 0}, flow)
 
       assert PLT.get(flow.summaries, {Module3, :calls_build, 0}) == {:ok, summary}
-      assert PLT.get(flow.summaries, {Module3, :build, 0}) == {:ok, ShapeSet.new([@struct_1])}
+
+      assert PLT.get(flow.summaries, {Module3, :build, 0}) ==
+               {:ok, ShapeSet.new([@struct_1_stored])}
     end
 
     test "param" do
@@ -904,11 +923,11 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "recursive function" do
-      assert summary_of(Module3, :recursive, 1) == ShapeSet.new([@struct_1])
+      assert summary_of(Module3, :recursive, 1) == ShapeSet.new([@struct_1_stored])
     end
 
     test "recursive function whose answer is found on a later pass" do
-      assert summary_of(Module4, :direct, 1) == ShapeSet.new([@struct_1])
+      assert summary_of(Module4, :direct, 1) == ShapeSet.new([@struct_1_stored])
     end
 
     test "recursive function passing its param on" do
@@ -918,13 +937,16 @@ defmodule Hologram.Compiler.DataFlowTest do
     test "a caller of a recursive function gets its final answer, and both are kept" do
       flow = flow()
 
-      assert summary({Module4, :calls_direct, 0}, flow) == ShapeSet.new([@struct_1])
-      assert PLT.get(flow.summaries, {Module4, :direct, 1}) == {:ok, ShapeSet.new([@struct_1])}
+      assert summary({Module4, :calls_direct, 0}, flow) == ShapeSet.new([@struct_1_stored])
+
+      assert PLT.get(flow.summaries, {Module4, :direct, 1}) ==
+               {:ok, ShapeSet.new([@struct_1_stored])}
+
       assert PLT.member?(flow.summaries, {Module4, :calls_direct, 0})
     end
 
     test "mutually recursive functions" do
-      assert summary_of(Module4, :mutual_a, 1) == ShapeSet.new([{:atom, :done}, @struct_2])
+      assert summary_of(Module4, :mutual_a, 1) == ShapeSet.new([:prim, @struct_2_stored])
     end
 
     test "a loop inside a loop is read again until neither changes" do
@@ -955,17 +977,17 @@ defmodule Hologram.Compiler.DataFlowTest do
       summary = summary({Module4, :growing, 1}, flow)
 
       # Three levels of tuples, then a bag of the leaves of what is deeper.
-      leaves = {:bag, ShapeSet.new([{:atom, :field}, {:atom, nil}, @struct_1_named])}
+      leaves = {:bag, ShapeSet.new([:prim, @struct_1_named])}
       level_3 = {:tuple, [ShapeSet.new([leaves])]}
-      level_2 = {:tuple, [ShapeSet.new([level_3, @struct_1])]}
-      level_1 = {:tuple, [ShapeSet.new([level_2, @struct_1])]}
+      level_2 = {:tuple, [ShapeSet.new([level_3, @struct_1_stored])]}
+      level_1 = {:tuple, [ShapeSet.new([level_2, @struct_1_stored])]}
 
-      assert summary == ShapeSet.new([level_1, @struct_1])
+      assert summary == ShapeSet.new([level_1, @struct_1_stored])
       assert types(summary, flow) == types_fixture([], [], [Struct1])
     end
 
     test "a chain of calls deeper than 64 functions is followed to its end" do
-      assert summary_of(Module18, :chain_0, 1) == ShapeSet.new([@struct_1])
+      assert summary_of(Module18, :chain_0, 1) == ShapeSet.new([@struct_1_stored])
     end
 
     test "calls on a module passed in, nested by recursion, settle once flattened" do
@@ -982,7 +1004,7 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "a call of a param nested too deep dissolves into the function and its arguments" do
-      leaves = ShapeSet.new([{:bag, ShapeSet.new([{:atom, :item}, {:param, 0}])}])
+      leaves = ShapeSet.new([{:bag, ShapeSet.new([:prim, {:param, 0}])}])
       level_3 = ShapeSet.new([{:tuple, [leaves]}])
       level_2 = ShapeSet.new([{:tuple, [level_3]}])
 
@@ -1001,6 +1023,27 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module19, :field, 1) == ShapeSet.new([{:dot, @param_0, :title}])
     end
 
+    test "a stored answer turns an atom that is not a module into a primitive" do
+      assert summary_of(Module19, :bare, 0) == ShapeSet.new([:prim])
+    end
+
+    test "a tuple's first element keeps its atoms" do
+      assert summary_of(Module19, :tagged, 0) ==
+               ShapeSet.new([{:tuple, [ShapeSet.new([{:atom, :ok}]), ShapeSet.new([:prim])]}])
+    end
+
+    test "a module atom stays" do
+      assert summary_of(Module19, :module, 0) == ShapeSet.new([{:atom, Struct1}])
+      assert summary_of(Module19, :erlang_module, 0) == ShapeSet.new([{:atom, :lists}])
+    end
+
+    test "whether an atom is a module is kept in the analysis" do
+      flow = flow()
+      summary({Module19, :bare, 0}, flow)
+
+      assert PLT.get(flow.module_atoms, :done) == {:ok, false}
+    end
+
     test "a summary larger than the cap is the function's top" do
       flow = start(PLT.start(), module_info_plt_fixture(), max_summary_size: 1)
 
@@ -1008,7 +1051,8 @@ defmodule Hologram.Compiler.DataFlowTest do
     end
 
     test "function with two clauses" do
-      assert summary_of(Module3, :two_clauses, 1) == ShapeSet.new([@struct_1, @struct_2])
+      assert summary_of(Module3, :two_clauses, 1) ==
+               ShapeSet.new([@struct_1_stored, @struct_2_stored])
     end
 
     test "function returning its param in a tuple" do
