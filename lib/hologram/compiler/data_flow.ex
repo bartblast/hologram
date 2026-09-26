@@ -362,13 +362,6 @@ defmodule Hologram.Compiler.DataFlow do
     ShapeSet.flat_map(fun_shapes, &call_fun(&1, args, rep))
   end
 
-  # The alternatives of the given shapes that are maps or structs: a value not known yet, or of unknown
-  # structure, becomes `{:as_map, ...}`; an atom, a list, a tuple or a function is dropped (a map
-  # pattern does not match it).
-  defp as_maps(shapes) do
-    ShapeSet.flat_map(shapes, &ShapeSet.new(as_map_shapes(&1)))
-  end
-
   defp as_map_shapes({kind, _inner} = shape) when kind in [:as_map, :map], do: [shape]
 
   defp as_map_shapes({:struct, _module, _fields} = shape), do: [shape]
@@ -380,6 +373,13 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp as_map_shapes(_shape), do: []
+
+  # The alternatives of the given shapes that are maps or structs: a value not known yet, or of unknown
+  # structure, becomes `{:as_map, ...}`; an atom, a list, a tuple or a function is dropped (a map
+  # pattern does not match it).
+  defp as_maps(shapes) do
+    ShapeSet.flat_map(shapes, &ShapeSet.new(as_map_shapes(&1)))
+  end
 
   defp bag_of_leaves(shapes), do: ShapeSet.new([{:bag, leaves(shapes)}])
 
@@ -402,7 +402,7 @@ defmodule Hologram.Compiler.DataFlow do
   # of the next call in the same function.
   defp bounded(shapes, ctx) do
     if :erlang.external_size(shapes) > ctx.flow.max_summary_size do
-      ShapeSet.new([{:bag, leaves(shapes)}])
+      bag_of_leaves(shapes)
     else
       shapes
     end
@@ -590,10 +590,6 @@ defmodule Hologram.Compiler.DataFlow do
     |> Map.put(:id, make_ref())
   end
 
-  defp component?(module, module_info_plt) do
-    match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
-  end
-
   # What the function's code returns, the union over its clauses, read with the answers of the
   # functions it calls as the run's solve has them now (see evaluate/2).
   defp code_summary(mfa, ctx) do
@@ -664,6 +660,10 @@ defmodule Hologram.Compiler.DataFlow do
   defp collapse_route(shape), do: ShapeSet.new([shape])
 
   defp collapse_routes(shapes), do: ShapeSet.flat_map(shapes, &collapse_route/1)
+
+  defp component?(module, module_info_plt) do
+    match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
+  end
 
   # Turns an atom that is not a module into a primitive, at any depth, except the atoms of a tuple's
   # first element, which patterns choose on (`{:ok, value}` against `{:error, reason}`). Stored answers
@@ -1045,7 +1045,7 @@ defmodule Hologram.Compiler.DataFlow do
   defp evaluated_answer(mfa, old, evaluations, ctx)
        when evaluations > @evaluations_before_leaves do
     new = code_summary(mfa, %{ctx | node: mfa})
-    ShapeSet.new([{:bag, leaves(ShapeSet.union(old, new))}])
+    bag_of_leaves(ShapeSet.union(old, new))
   end
 
   defp evaluated_answer(mfa, _old, _evaluations, ctx), do: code_summary(mfa, %{ctx | node: mfa})
@@ -1298,6 +1298,16 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp map_shape?(_shape), do: false
 
+  # Whether the pattern is the given variable and the other side of the match a map or struct pattern.
+  defp matched_as_map?(
+         %IR.Variable{name: name, version: version},
+         %IR.MapType{},
+         {name, version}
+       ),
+       do: true
+
+  defp matched_as_map?(_pattern, _other_side, _var), do: false
+
   defp may_match?(_shape, %IR.MatchPlaceholder{}), do: true
 
   defp may_match?(_shape, %IR.PinOperator{}), do: true
@@ -1344,16 +1354,6 @@ defmodule Hologram.Compiler.DataFlow do
       functions
     end
   end
-
-  # Whether the pattern is the given variable and the other side of the match a map or struct pattern.
-  defp matched_as_map?(
-         %IR.Variable{name: name, version: version},
-         %IR.MapType{},
-         {name, version}
-       ),
-       do: true
-
-  defp matched_as_map?(_pattern, _other_side, _var), do: false
 
   # Whether a pattern names a type: an alias, or a struct, whose module is one.
   defp names_type?(%IR.AtomType{value: value}) do
@@ -2093,10 +2093,10 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp widen(shapes, depth) do
     cond do
-      ShapeSet.size(shapes) > @max_alternatives -> ShapeSet.new([{:bag, leaves(shapes)}])
+      ShapeSet.size(shapes) > @max_alternatives -> bag_of_leaves(shapes)
       depth < @max_depth -> ShapeSet.map(shapes, &widen_shape(&1, depth + 1))
       ShapeSet.all?(shapes, &(shape_leaves(&1) == [&1])) -> shapes
-      true -> ShapeSet.new([{:bag, leaves(shapes)}])
+      true -> bag_of_leaves(shapes)
     end
   end
 
