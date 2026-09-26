@@ -1,19 +1,23 @@
 defmodule Hologram.Compiler.DataFlow.ModelsTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.DataFlow.Models
+  import Hologram.Test.DataFlowTrees
 
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler.DataFlow
-  alias Hologram.Compiler.DataFlow.ShapeSet
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
 
-  @struct_1 {:struct, Struct1, ShapeSet.new()}
+  @struct_1 {:struct, Struct1, tree_set()}
 
-  # What a call of the modelled function with arguments of the given shapes gives.
+  # The tree of what a call of the modelled function with arguments of the given shapes gives.
   defp call_model(mfa, args) do
+    flow = DataFlow.start(PLT.start(), PLT.start())
+
     mfa
     |> summary()
-    |> DataFlow.apply_summary(Enum.map(args, &ShapeSet.new/1))
+    |> DataFlow.apply_summary(Enum.map(args, &tree_set/1))
+    |> DataFlow.to_tree(flow)
   end
 
   test "listed_elixir_mfas/0" do
@@ -27,26 +31,26 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
 
   describe "summary/1" do
     test "Erlang function that never returns" do
-      assert summary({:erlang, :error, 1}) == ShapeSet.new()
-      assert summary({:erlang, :throw, 1}) == ShapeSet.new()
+      assert summary({:erlang, :error, 1}) == tree_set()
+      assert summary({:erlang, :throw, 1}) == tree_set()
     end
 
     test "Erlang function returning a primitive" do
-      assert summary({:erlang, :+, 2}) == ShapeSet.new([:prim])
-      assert summary({:erlang, :iolist_to_binary, 1}) == ShapeSet.new([:prim])
+      assert summary({:erlang, :+, 2}) == tree_set([:prim])
+      assert summary({:erlang, :iolist_to_binary, 1}) == tree_set([:prim])
     end
 
     test "function of an Erlang module returning primitives" do
-      assert summary({:binary, :split, 2}) == ShapeSet.new([:prim])
+      assert summary({:binary, :split, 2}) == tree_set([:prim])
     end
 
     test "function of an Elixir module returning primitives" do
-      assert summary({String, :split, 2}) == ShapeSet.new([:prim])
+      assert summary({String, :split, 2}) == tree_set([:prim])
     end
 
     test "Elixir function returning a primitive" do
-      assert summary({Enum, :join, 2}) == ShapeSet.new([:prim])
-      assert summary({String.Chars, :to_string, 1}) == ShapeSet.new([:prim])
+      assert summary({Enum, :join, 2}) == tree_set([:prim])
+      assert summary({String.Chars, :to_string, 1}) == tree_set([:prim])
     end
 
     test "Erlang function without a model" do
@@ -58,69 +62,69 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
     end
 
     test "Erlang function taking a value out of what it is given" do
-      assert call_model({:maps, :get, 2}, [[{:atom, :a}], [{:map, ShapeSet.new([@struct_1])}]]) ==
-               ShapeSet.new([@struct_1])
+      assert call_model({:maps, :get, 2}, [[{:atom, :a}], [{:map, tree_set([@struct_1])}]]) ==
+               tree_set([@struct_1])
 
-      assert call_model({:erlang, :element, 2}, [[:prim], [{:tuple, [ShapeSet.new([@struct_1])]}]]) ==
-               ShapeSet.new([@struct_1])
+      assert call_model({:erlang, :element, 2}, [[:prim], [{:tuple, [tree_set([@struct_1])]}]]) ==
+               tree_set([@struct_1])
     end
 
     test "Erlang function putting what it is given in a new value" do
-      args = [[{:atom, :a}], [@struct_1], [{:map, ShapeSet.new()}]]
+      args = [[{:atom, :a}], [@struct_1], [{:map, tree_set()}]]
 
       assert call_model({:maps, :put, 3}, args) ==
-               ShapeSet.new([
-                 {:map, ShapeSet.new()},
-                 {:map, ShapeSet.new([{:atom, :a}, @struct_1])}
+               tree_set([
+                 {:map, tree_set()},
+                 {:map, tree_set([{:atom, :a}, @struct_1])}
                ])
     end
 
     test "Erlang function giving back the struct it is given" do
-      map = {:map, ShapeSet.new([{:atom, :a}])}
+      map = {:map, tree_set([{:atom, :a}])}
 
       assert call_model({:maps, :merge, 2}, [[@struct_1], [map]]) ==
-               ShapeSet.new([@struct_1, map])
+               tree_set([@struct_1, map])
 
       assert call_model({:maps, :put, 3}, [[{:atom, :a}], [:prim], [@struct_1]]) ==
-               ShapeSet.new([@struct_1, {:map, ShapeSet.new([{:atom, :a}, :prim])}])
+               tree_set([@struct_1, {:map, tree_set([{:atom, :a}, :prim])}])
 
       assert call_model({:maps, :remove, 2}, [[{:atom, :a}], [@struct_1]]) ==
-               ShapeSet.new([@struct_1])
+               tree_set([@struct_1])
     end
 
     test "Erlang function calling a function it is given" do
       ref = {{Struct1, :fun, 0}, 1}
-      fun = {:fun, ref, ShapeSet.new([{:tuple, [ShapeSet.new([{:arg, ref, 0}])]}])}
-      args = [[fun], [{:list, ShapeSet.new([@struct_1])}]]
+      fun = {:fun, ref, tree_set([{:tuple, [tree_set([{:arg, ref, 0}])]}])}
+      args = [[fun], [{:list, tree_set([@struct_1])}]]
 
       assert call_model({:lists, :map, 2}, args) ==
-               ShapeSet.new([{:list, ShapeSet.new([{:tuple, [ShapeSet.new([@struct_1])]}])}])
+               tree_set([{:list, tree_set([{:tuple, [tree_set([@struct_1])]}])}])
     end
 
     test "Erlang function folding a function it is given over a list" do
       ref = {{Struct1, :fun, 2}, 1}
 
       pair =
-        ShapeSet.new([{:tuple, [ShapeSet.new([{:arg, ref, 0}]), ShapeSet.new([{:arg, ref, 1}])]}])
+        tree_set([{:tuple, [tree_set([{:arg, ref, 0}]), tree_set([{:arg, ref, 1}])]}])
 
-      args = [[{:fun, ref, pair}], [{:atom, nil}], [{:list, ShapeSet.new([@struct_1])}]]
+      args = [[{:fun, ref, pair}], [{:atom, nil}], [{:list, tree_set([@struct_1])}]]
 
       round_1 =
-        ShapeSet.new([
+        tree_set([
           {:atom, nil},
-          {:tuple, [ShapeSet.new([@struct_1]), ShapeSet.new([{:atom, nil}])]}
+          {:tuple, [tree_set([@struct_1]), tree_set([{:atom, nil}])]}
         ])
 
-      round_2 = ShapeSet.put(round_1, {:tuple, [ShapeSet.new([@struct_1]), round_1]})
+      round_2 = :ordsets.add_element({:tuple, [tree_set([@struct_1]), round_1]}, round_1)
 
       assert call_model({:lists, :foldl, 3}, args) == round_2
     end
 
     test "Hologram function that returns the server as it was" do
-      args = [[{:struct, Server, ShapeSet.new()}], [:prim]]
+      args = [[{:struct, Server, tree_set()}], [:prim]]
 
       assert call_model({Server, :put_status, 2}, args) ==
-               ShapeSet.new([{:struct, Server, ShapeSet.new()}])
+               tree_set([{:struct, Server, tree_set()}])
     end
 
     test "a Hologram function that puts a value in the session has no model" do

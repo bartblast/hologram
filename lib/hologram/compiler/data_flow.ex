@@ -159,6 +159,11 @@ defmodule Hologram.Compiler.DataFlow do
 
   @type shapes :: ShapeSet.t()
 
+  # A set of shapes written out in full, its nested sets written out too: a sorted list without
+  # duplicates (see to_tree/2). The readable form of an answer, for tests; the analysis itself never
+  # writes a value out.
+  @type tree :: [shape]
+
   # What a compile's analysis works with: the IR PLT the code is read from (and where missing IR is
   # built), the module info PLT, and the summaries of the functions it has followed so far.
   @type t :: %{
@@ -330,6 +335,13 @@ defmodule Hologram.Compiler.DataFlow do
   def summary(mfa, flow) do
     run(flow, fn ctx -> settle(ctx, fn -> callee_summary(mfa, ctx) end) end)
   end
+
+  @doc """
+  Returns the given shapes, made in the given flow context, written out as a tree: a sorted list of
+  shapes whose nested sets are trees too. Tests compare answers in this form.
+  """
+  @spec to_tree(shapes, t) :: tree
+  def to_tree(shapes, _flow), do: shapes
 
   @doc """
   Returns what the given function's value is when the analysis cannot follow it: the rule before
