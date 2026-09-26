@@ -38,7 +38,6 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct5
-  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct7
 
   # The fields an empty Struct1 or Struct2 literal holds: its one field, holding the default value.
   @defaults %{field: tree_set([{:atom, nil}])}
