@@ -2190,11 +2190,15 @@ defmodule Hologram.Compiler.DataFlow do
   # Runs the entry's function and returns what it gives; when it read an answer that is not final,
   # solves the work list first and runs it again, until a run reads only final answers. The function
   # makes its own frames, so that each run reads its variables again.
+  # Remembered per set and function: the sets nested in dynamic calls and bags are shared, and walked
+  # as a tree they would cost as much as the copies the store avoids.
   defp set_without_args(set, ref, store) do
-    set
-    |> ShapeSet.to_list(store)
-    |> without_args(ref, store)
-    |> ShapeSet.new(store)
+    Store.memo(store, {:without_args, set, ref}, fn ->
+      set
+      |> ShapeSet.to_list(store)
+      |> without_args(ref, store)
+      |> ShapeSet.new(store)
+    end)
   end
 
   defp settle(ctx, fun) do

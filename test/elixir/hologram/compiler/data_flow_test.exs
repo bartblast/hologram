@@ -349,6 +349,30 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert to_tree(value, flow) == tree_set([{:tuple, [level_1, level_1]}])
     end
 
+    # 30 dynamic calls, each given the one before twice, in an anonymous function dissolved into a bag:
+    # dropping the function's placeholders walks each distinct set once, not the 2^30 paths to them.
+    @tag timeout: 10_000
+    test "a dissolved function's placeholders are dropped walking each set once" do
+      flow = flow()
+      store = flow.store
+      ref = {{Module1, :fun, 0}, 1}
+      module = ShapeSet.new([{:arg, {{Module1, :other, 0}, 1}, 0}], store)
+
+      calls =
+        Enum.reduce(1..30, ShapeSet.new([{:arg, ref, 0}], store), fn _index, set ->
+          ShapeSet.new([{:dyn, module, :build, 2, [set, set]}], store)
+        end)
+
+      value =
+        Enum.reduce(1..3, ShapeSet.new([{:fun, ref, calls}], store), fn _level, inner ->
+          ShapeSet.new([{:tuple, [inner]}], store)
+        end)
+
+      apply_summary(value, [], flow)
+
+      assert Store.memo_count(store, :without_args) in 1..100
+    end
+
     @tag timeout: 10_000
     test "a set widened twice at one depth is widened once" do
       flow = flow()
