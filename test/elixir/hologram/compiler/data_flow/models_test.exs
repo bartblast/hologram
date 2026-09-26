@@ -69,7 +69,23 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
       args = [[{:atom, :a}], [@struct_1], [{:map, ShapeSet.new()}]]
 
       assert call_model({:maps, :put, 3}, args) ==
-               ShapeSet.new([{:map, ShapeSet.new([{:atom, :a}, @struct_1])}])
+               ShapeSet.new([
+                 {:map, ShapeSet.new()},
+                 {:map, ShapeSet.new([{:atom, :a}, @struct_1])}
+               ])
+    end
+
+    test "Erlang function giving back the struct it is given" do
+      map = {:map, ShapeSet.new([{:atom, :a}])}
+
+      assert call_model({:maps, :merge, 2}, [[@struct_1], [map]]) ==
+               ShapeSet.new([@struct_1, map])
+
+      assert call_model({:maps, :put, 3}, [[{:atom, :a}], [:prim], [@struct_1]]) ==
+               ShapeSet.new([@struct_1, {:map, ShapeSet.new([{:atom, :a}, :prim])}])
+
+      assert call_model({:maps, :remove, 2}, [[{:atom, :a}], [@struct_1]]) ==
+               ShapeSet.new([@struct_1])
     end
 
     test "Erlang function calling a function it is given" do

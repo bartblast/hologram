@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module18
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module19
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module20
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -1042,6 +1043,16 @@ defmodule Hologram.Compiler.DataFlowTest do
       summary({Module19, :bare, 0}, flow)
 
       assert PLT.get(flow.module_atoms, :done) == {:ok, false}
+    end
+
+    test "an updated struct keeps its struct type" do
+      for function <- [:deleted, :merged, :put, :updated] do
+        flow = flow()
+        summary = summary({Module20, function, 0}, flow)
+
+        assert types(summary, flow).structs == MapSet.new([Struct1]),
+               "#{function}: #{inspect(summary)}"
+      end
     end
 
     test "a summary larger than the cap is a bag of its leaves" do

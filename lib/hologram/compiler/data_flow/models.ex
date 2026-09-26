@@ -6,8 +6,13 @@ defmodule Hologram.Compiler.DataFlow.Models do
   # functions are worth not following. A model says that a function returns a value holding no
   # types (:prim), never returns (it raises, throws or exits), or returns what it is given, in the
   # shapes of Hologram.Compiler.DataFlow over its params: `{:contents, ...}` for what is inside an
-  # argument, `{:call, ...}` for what calling a function argument gives. A function without a model
-  # is followed through its code, or returns everything it is given when it has none.
+  # argument, `{:as_map, ...}` for the map and struct alternatives of an argument, `{:call, ...}` for
+  # what calling a function argument gives. A function without a model is followed through its code,
+  # or returns everything it is given when it has none.
+  #
+  # A function that gives its map argument back with entries added, changed or removed returns that
+  # argument as a map (`{:as_map, ...}`), joined with a map of the new keys and values: a struct stays
+  # a struct, so an updated struct keeps its protocol implementations.
   #
   # A model must not be smaller than what the function can return.
 
@@ -227,6 +232,9 @@ defmodule Hologram.Compiler.DataFlow.Models do
     end
   end
 
+  # The map and struct alternatives of the given shapes (see Hologram.Compiler.DataFlow.shape/0).
+  defp as_map(shapes), do: ShapeSet.new([{:as_map, shapes}])
+
   defp atom(value), do: ShapeSet.new([{:atom, value}])
 
   defp bag(shapes), do: ShapeSet.new([{:bag, shapes}])
@@ -348,7 +356,7 @@ defmodule Hologram.Compiler.DataFlow.Models do
 
   defp structural({:lists, :zip, 2}), do: list(tuple([contents(param(0)), contents(param(1))]))
 
-  defp structural({:maps, :filter, 2}), do: map(contents(param(1)))
+  defp structural({:maps, :filter, 2}), do: as_map(param(1))
 
   defp structural({:maps, :find, 2}) do
     union([tuple([atom(:ok), contents(param(1))]), atom(:error)])
@@ -367,19 +375,23 @@ defmodule Hologram.Compiler.DataFlow.Models do
 
   defp structural({:maps, :map, 2}) do
     values = contents(param(1))
-    map(union([values, call(param(0), [values, values])]))
+    union([as_map(param(1)), map(call(param(0), [values, values]))])
   end
 
-  defp structural({:maps, :merge, 2}), do: map(union([contents(param(0)), contents(param(1))]))
+  defp structural({:maps, :merge, 2}), do: as_map(union([param(0), param(1)]))
 
   defp structural({:maps, :merge_with, 3}) do
     values = union([contents(param(1)), contents(param(2))])
-    map(union([values, call(param(0), [values, values, values])]))
+    union([as_map(union([param(1), param(2)])), map(call(param(0), [values, values, values]))])
   end
 
   defp structural({:maps, :new, 0}), do: map(ShapeSet.new())
-  defp structural({:maps, :put, 3}), do: map(union([param(0), param(1), contents(param(2))]))
-  defp structural({:maps, :remove, 2}), do: map(contents(param(1)))
+
+  defp structural({:maps, :put, 3}) do
+    union([as_map(param(2)), map(union([param(0), param(1)]))])
+  end
+
+  defp structural({:maps, :remove, 2}), do: as_map(param(1))
   defp structural({:maps, :size, 1}), do: prim()
 
   defp structural({:maps, :take, 2}) do
@@ -391,21 +403,23 @@ defmodule Hologram.Compiler.DataFlow.Models do
     list(tuple([inner, inner]))
   end
 
-  defp structural({:maps, :update, 3}), do: map(union([param(0), param(1), contents(param(2))]))
+  defp structural({:maps, :update, 3}) do
+    union([as_map(param(2)), map(union([param(0), param(1)]))])
+  end
 
   defp structural({:maps, :update_with, 3}) do
     values = contents(param(2))
-    map(union([param(0), values, call(param(1), [values])]))
+    union([as_map(param(2)), map(union([param(0), call(param(1), [values])]))])
   end
 
   defp structural({:maps, :update_with, 4}) do
     values = contents(param(3))
-    map(union([param(0), param(2), values, call(param(1), [values])]))
+    union([as_map(param(3)), map(union([param(0), param(2), call(param(1), [values])]))])
   end
 
   defp structural({:maps, :values, 1}), do: list(contents(param(0)))
-  defp structural({:maps, :with, 2}), do: map(contents(param(1)))
-  defp structural({:maps, :without, 2}), do: map(contents(param(1)))
+  defp structural({:maps, :with, 2}), do: as_map(param(1))
+  defp structural({:maps, :without, 2}), do: as_map(param(1))
 
   defp structural(_mfa), do: nil
 
