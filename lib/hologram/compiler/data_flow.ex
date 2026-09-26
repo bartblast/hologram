@@ -797,231 +797,16 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  defp eval(%IR.AnonymousFunctionCall{function: function, args: args}, ctx) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    function
-    |> eval(ctx)
-    |> apply_fun(arg_shapes, new_rep(ctx))
+  # The shapes of the expression's value, bounded (see bounded/2): every expression's value is checked
+  # against the cap, so no value is larger than the cap plus what one expression joins or nests (a
+  # case of values under the cap, a tuple of them), wherever it is built. Checked only on calls and
+  # answers, values built inside one function (variables joined and nested, literals of them) grew
+  # without end.
+  defp eval(expr, ctx) do
+    expr
+    |> eval_node(ctx)
+    |> bounded(ctx)
   end
-
-  # An anonymous function returns what its clauses give, its parameters being its arguments. A
-  # capture comes with a clause that calls the captured function.
-  defp eval(%IR.AnonymousFunctionType{clauses: clauses} = ir, ctx) do
-    ref = fun_ref(ir, ctx)
-
-    returned =
-      clauses
-      |> Enum.map(fn clause ->
-        frame = clause_frame(clause, &{:arg, ref, &1})
-        eval(clause.body, %{ctx | frames: [frame | ctx.frames]})
-      end)
-      |> ShapeSet.union_all()
-
-    ShapeSet.new([{:fun, ref, returned}])
-  end
-
-  defp eval(%IR.AtomType{value: value}, _ctx), do: ShapeSet.new([{:atom, value}])
-
-  defp eval(%IR.Block{expressions: []}, _ctx), do: ShapeSet.new([{:atom, nil}])
-
-  defp eval(%IR.Block{expressions: expressions}, ctx) do
-    expressions
-    |> List.last()
-    |> eval(ctx)
-  end
-
-  defp eval(%IR.Case{clauses: clauses}, ctx) do
-    clauses
-    |> Enum.map(& &1.body)
-    |> eval_all(ctx)
-  end
-
-  defp eval(%IR.Comprehension{reducer: nil, collectable: collectable, mapper: mapper}, ctx) do
-    mapped = eval(mapper, ctx)
-
-    case collectable do
-      %IR.ListType{data: []} ->
-        ShapeSet.new([{:list, mapped}])
-
-      %IR.MapType{data: []} ->
-        ShapeSet.new([{:map, contents(mapped)}])
-
-      _other ->
-        inner =
-          collectable
-          |> eval(ctx)
-          |> ShapeSet.union(mapped)
-
-        ShapeSet.new([{:bag, inner}])
-    end
-  end
-
-  defp eval(%IR.Comprehension{reducer: %{initial_value: initial_value, clauses: clauses}}, ctx) do
-    inner = eval_all([initial_value | Enum.map(clauses, & &1.body)], ctx)
-    ShapeSet.new([{:bag, inner}])
-  end
-
-  defp eval(%IR.Cond{clauses: clauses}, ctx) do
-    clauses
-    |> Enum.map(& &1.body)
-    |> eval_all(ctx)
-  end
-
-  defp eval(%IR.ConsOperator{head: head, tail: tail}, ctx) do
-    elements =
-      tail
-      |> eval(ctx)
-      |> contents()
-      |> ShapeSet.union(eval(head, ctx))
-
-    ShapeSet.new([{:list, elements}])
-  end
-
-  defp eval(%IR.ListType{data: data}, ctx) do
-    ShapeSet.new([{:list, eval_all(data, ctx)}])
-  end
-
-  defp eval(%IR.DotOperator{left: left, right: %IR.AtomType{value: name}}, ctx) do
-    left
-    |> eval(ctx)
-    |> dot(name, ctx)
-  end
-
-  defp eval(%IR.LocalFunctionCall{function: function, args: args}, ctx) do
-    {module, _function, _arity} = ctx.mfa
-    eval_call({module, function, length(args)}, args, ctx)
-  end
-
-  defp eval(%IR.MapType{data: data}, ctx) do
-    ShapeSet.new([map_shape(data, &eval(&1, ctx))])
-  end
-
-  # The value of a match is its right side.
-  defp eval(%IR.MatchOperator{right: right}, ctx), do: eval(right, ctx)
-
-  # apply/3 with the module, the function name and the argument list written out is a call.
-  defp eval(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: :erlang},
-           function: :apply,
-           args: [
-             %IR.AtomType{value: module},
-             %IR.AtomType{value: name},
-             %IR.ListType{data: args}
-           ]
-         },
-         ctx
-       ) do
-    eval_call({module, name, length(args)}, args, ctx)
-  end
-
-  # apply/3 with the function name and the argument list written out is a call on the module.
-  defp eval(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: :erlang},
-           function: :apply,
-           args: [module, %IR.AtomType{value: name}, %IR.ListType{data: args}]
-         },
-         ctx
-       ) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    module
-    |> eval(ctx)
-    |> call_dyn(name, length(args), arg_shapes, ctx)
-  end
-
-  # apply/2 with the argument list written out is a call of the function.
-  defp eval(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: :erlang},
-           function: :apply,
-           args: [fun, %IR.ListType{data: args}]
-         },
-         ctx
-       ) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    fun
-    |> eval(ctx)
-    |> apply_fun(arg_shapes, new_rep(ctx))
-  end
-
-  # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
-  # default fields filled in.
-  defp eval(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: module},
-           function: :__struct__,
-           args: args
-         },
-         ctx
-       )
-       when length(args) in [0, 1] do
-    fields =
-      args
-      |> Enum.map(&struct_fields(&1, ctx))
-      |> ShapeSet.union_all()
-
-    ShapeSet.new([{:struct, module, fields}])
-  end
-
-  defp eval(
-         %IR.RemoteFunctionCall{
-           module: %IR.AtomType{value: module},
-           function: function,
-           args: args
-         },
-         ctx
-       ) do
-    eval_call({module, function, length(args)}, args, ctx)
-  end
-
-  # A call on a module the code does not name.
-  defp eval(%IR.RemoteFunctionCall{module: module, function: function, args: args}, ctx) do
-    arg_shapes = Enum.map(args, &eval(&1, ctx))
-
-    module
-    |> eval(ctx)
-    |> call_dyn(function, length(args), arg_shapes, ctx)
-  end
-
-  # With else clauses, the body's value goes through them; a rescue or a catch gives its own.
-  defp eval(%IR.Try{} = ir, ctx) do
-    value_bodies =
-      if ir.else_clauses == [] do
-        [ir.body]
-      else
-        Enum.map(ir.else_clauses, & &1.body)
-      end
-
-    handler_bodies = Enum.map(ir.rescue_clauses ++ ir.catch_clauses, & &1.body)
-
-    eval_all(value_bodies ++ handler_bodies, ctx)
-  end
-
-  defp eval(%IR.TupleType{data: data}, ctx) do
-    ShapeSet.new([{:tuple, Enum.map(data, &eval(&1, ctx))}])
-  end
-
-  defp eval(%IR.Variable{name: name, version: version}, ctx) do
-    read_variable({name, version}, ctx)
-  end
-
-  # Without else clauses, a value a clause does not match is the with's value.
-  defp eval(%IR.With{clauses: clauses, body: body, else_clauses: []}, ctx) do
-    unmatched_exprs = for %IR.WithMatchClause{expression: expr} <- clauses, do: expr
-    eval_all([body | unmatched_exprs], ctx)
-  end
-
-  defp eval(%IR.With{body: body, else_clauses: else_clauses}, ctx) do
-    eval_all([body | Enum.map(else_clauses, & &1.body)], ctx)
-  end
-
-  defp eval(%type{}, _ctx) when type in @primitive_types, do: ShapeSet.new([:prim])
-
-  defp eval(_expr, ctx), do: top(ctx.mfa)
 
   defp eval_all(exprs, ctx) do
     exprs
@@ -1046,6 +831,235 @@ defmodule Hologram.Compiler.DataFlow do
     |> put_args(arg_shapes, counts, ctx)
     |> bounded(ctx)
   end
+
+  defp eval_node(%IR.AnonymousFunctionCall{function: function, args: args}, ctx) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    function
+    |> eval(ctx)
+    |> apply_fun(arg_shapes, new_rep(ctx))
+  end
+
+  # An anonymous function returns what its clauses give, its parameters being its arguments. A
+  # capture comes with a clause that calls the captured function.
+  defp eval_node(%IR.AnonymousFunctionType{clauses: clauses} = ir, ctx) do
+    ref = fun_ref(ir, ctx)
+
+    returned =
+      clauses
+      |> Enum.map(fn clause ->
+        frame = clause_frame(clause, &{:arg, ref, &1})
+        eval(clause.body, %{ctx | frames: [frame | ctx.frames]})
+      end)
+      |> ShapeSet.union_all()
+
+    ShapeSet.new([{:fun, ref, returned}])
+  end
+
+  defp eval_node(%IR.AtomType{value: value}, _ctx), do: ShapeSet.new([{:atom, value}])
+
+  defp eval_node(%IR.Block{expressions: []}, _ctx), do: ShapeSet.new([{:atom, nil}])
+
+  defp eval_node(%IR.Block{expressions: expressions}, ctx) do
+    expressions
+    |> List.last()
+    |> eval(ctx)
+  end
+
+  defp eval_node(%IR.Case{clauses: clauses}, ctx) do
+    clauses
+    |> Enum.map(& &1.body)
+    |> eval_all(ctx)
+  end
+
+  defp eval_node(%IR.Comprehension{reducer: nil, collectable: collectable, mapper: mapper}, ctx) do
+    mapped = eval(mapper, ctx)
+
+    case collectable do
+      %IR.ListType{data: []} ->
+        ShapeSet.new([{:list, mapped}])
+
+      %IR.MapType{data: []} ->
+        ShapeSet.new([{:map, contents(mapped)}])
+
+      _other ->
+        inner =
+          collectable
+          |> eval(ctx)
+          |> ShapeSet.union(mapped)
+
+        ShapeSet.new([{:bag, inner}])
+    end
+  end
+
+  defp eval_node(
+         %IR.Comprehension{reducer: %{initial_value: initial_value, clauses: clauses}},
+         ctx
+       ) do
+    inner = eval_all([initial_value | Enum.map(clauses, & &1.body)], ctx)
+    ShapeSet.new([{:bag, inner}])
+  end
+
+  defp eval_node(%IR.Cond{clauses: clauses}, ctx) do
+    clauses
+    |> Enum.map(& &1.body)
+    |> eval_all(ctx)
+  end
+
+  defp eval_node(%IR.ConsOperator{head: head, tail: tail}, ctx) do
+    elements =
+      tail
+      |> eval(ctx)
+      |> contents()
+      |> ShapeSet.union(eval(head, ctx))
+
+    ShapeSet.new([{:list, elements}])
+  end
+
+  defp eval_node(%IR.ListType{data: data}, ctx) do
+    ShapeSet.new([{:list, eval_all(data, ctx)}])
+  end
+
+  defp eval_node(%IR.DotOperator{left: left, right: %IR.AtomType{value: name}}, ctx) do
+    left
+    |> eval(ctx)
+    |> dot(name, ctx)
+  end
+
+  defp eval_node(%IR.LocalFunctionCall{function: function, args: args}, ctx) do
+    {module, _function, _arity} = ctx.mfa
+    eval_call({module, function, length(args)}, args, ctx)
+  end
+
+  defp eval_node(%IR.MapType{data: data}, ctx) do
+    ShapeSet.new([map_shape(data, &eval(&1, ctx))])
+  end
+
+  # The value of a match is its right side.
+  defp eval_node(%IR.MatchOperator{right: right}, ctx), do: eval(right, ctx)
+
+  # apply/3 with the module, the function name and the argument list written out is a call.
+  defp eval_node(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [
+             %IR.AtomType{value: module},
+             %IR.AtomType{value: name},
+             %IR.ListType{data: args}
+           ]
+         },
+         ctx
+       ) do
+    eval_call({module, name, length(args)}, args, ctx)
+  end
+
+  # apply/3 with the function name and the argument list written out is a call on the module.
+  defp eval_node(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [module, %IR.AtomType{value: name}, %IR.ListType{data: args}]
+         },
+         ctx
+       ) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    module
+    |> eval(ctx)
+    |> call_dyn(name, length(args), arg_shapes, ctx)
+  end
+
+  # apply/2 with the argument list written out is a call of the function.
+  defp eval_node(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :apply,
+           args: [fun, %IR.ListType{data: args}]
+         },
+         ctx
+       ) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    fun
+    |> eval(ctx)
+    |> apply_fun(arg_shapes, new_rep(ctx))
+  end
+
+  # A struct literal outside a pattern: `%Mod{a: 1}` is `Mod.__struct__([a: 1])` in IR, with the
+  # default fields filled in.
+  defp eval_node(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: :__struct__,
+           args: args
+         },
+         ctx
+       )
+       when length(args) in [0, 1] do
+    fields =
+      args
+      |> Enum.map(&struct_fields(&1, ctx))
+      |> ShapeSet.union_all()
+
+    ShapeSet.new([{:struct, module, fields}])
+  end
+
+  defp eval_node(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: function,
+           args: args
+         },
+         ctx
+       ) do
+    eval_call({module, function, length(args)}, args, ctx)
+  end
+
+  # A call on a module the code does not name.
+  defp eval_node(%IR.RemoteFunctionCall{module: module, function: function, args: args}, ctx) do
+    arg_shapes = Enum.map(args, &eval(&1, ctx))
+
+    module
+    |> eval(ctx)
+    |> call_dyn(function, length(args), arg_shapes, ctx)
+  end
+
+  # With else clauses, the body's value goes through them; a rescue or a catch gives its own.
+  defp eval_node(%IR.Try{} = ir, ctx) do
+    value_bodies =
+      if ir.else_clauses == [] do
+        [ir.body]
+      else
+        Enum.map(ir.else_clauses, & &1.body)
+      end
+
+    handler_bodies = Enum.map(ir.rescue_clauses ++ ir.catch_clauses, & &1.body)
+
+    eval_all(value_bodies ++ handler_bodies, ctx)
+  end
+
+  defp eval_node(%IR.TupleType{data: data}, ctx) do
+    ShapeSet.new([{:tuple, Enum.map(data, &eval(&1, ctx))}])
+  end
+
+  defp eval_node(%IR.Variable{name: name, version: version}, ctx) do
+    read_variable({name, version}, ctx)
+  end
+
+  # Without else clauses, a value a clause does not match is the with's value.
+  defp eval_node(%IR.With{clauses: clauses, body: body, else_clauses: []}, ctx) do
+    unmatched_exprs = for %IR.WithMatchClause{expression: expr} <- clauses, do: expr
+    eval_all([body | unmatched_exprs], ctx)
+  end
+
+  defp eval_node(%IR.With{body: body, else_clauses: else_clauses}, ctx) do
+    eval_all([body | Enum.map(else_clauses, & &1.body)], ctx)
+  end
+
+  defp eval_node(%type{}, _ctx) when type in @primitive_types, do: ShapeSet.new([:prim])
+
+  defp eval_node(_expr, ctx), do: top(ctx.mfa)
 
   # Evaluates a function the run is solving: its answer is what its code gives with the current answers
   # of the functions it calls. When the answer changed, the functions that read it are evaluated

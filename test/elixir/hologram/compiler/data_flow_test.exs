@@ -394,6 +394,21 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert shapes(clause.body, clause, mfa, flow) == value
     end
 
+    test "an expression whose value is larger than the cap is a bag of its leaves" do
+      clause = clause(Module21, :nested)
+      mfa = {Module21, :nested, 0}
+      structs = ShapeSet.new([{:tuple, List.duplicate(ShapeSet.new([@struct_1]), 4)}])
+      nested = ShapeSet.new([{:tuple, List.duplicate(structs, 4)}])
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(),
+          max_summary_size: :erlang.external_size(nested) - 1
+        )
+
+      assert shapes(clause.body, clause, mfa, flow) ==
+               ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
+    end
+
     test "an argument larger than the cap is flattened before it is put in" do
       clause = clause(Module21, :calls_wrap)
       mfa = {Module21, :calls_wrap, 0}

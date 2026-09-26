@@ -6,6 +6,11 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
 
   def calls_wrap, do: wrap({%Struct1{}, %Struct1{}, %Struct1{}, %Struct1{}})
 
+  def nested do
+    value = {%Struct1{}, %Struct1{}, %Struct1{}, %Struct1{}}
+    {value, value, value, value}
+  end
+
   def repeat(value), do: {value, value, value, value}
 
   def twice(value, fun) do
