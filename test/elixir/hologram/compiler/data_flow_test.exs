@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module15
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module16
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module17
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module18
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
@@ -924,28 +925,59 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert types(summary, flow).structs == MapSet.new([Struct1])
     end
 
-    test "functions that call each other are read once per pass of the loop's entry" do
+    test "a loop of functions is evaluated a bounded number of times" do
       flow = flow()
       count = count_code_summaries(fn -> summary({Module15, :ring_a, 1}, flow) end)
 
-      # 4 functions, at most 4 passes and the last one.
+      # 4 functions, each evaluated once per sweep of the work list while the answers change.
       assert count <= 20
     end
 
-    test "a summary that read an answer still in the making is not kept" do
+    test "every function a run solves is kept" do
       flow = flow()
       summary({Module4, :mutual_a, 1}, flow)
 
       assert PLT.member?(flow.summaries, {Module4, :mutual_a, 1})
-      refute PLT.member?(flow.summaries, {Module4, :mutual_b, 1})
+      assert PLT.member?(flow.summaries, {Module4, :mutual_b, 1})
     end
 
-    test "recursive function whose answer never settles takes its recursive calls' arguments" do
-      # count - 1 is a primitive.
-      recursive_call = {:bag, ShapeSet.new([:prim])}
+    test "a recursive function whose answer keeps growing settles" do
+      flow = flow()
+      summary = summary({Module4, :growing, 1}, flow)
 
-      assert summary_of(Module4, :growing, 1) ==
-               ShapeSet.new([@struct_1, {:tuple, [ShapeSet.new([recursive_call])]}])
+      # Three levels of tuples, then a bag of the leaves of what is deeper.
+      leaves = {:bag, ShapeSet.new([{:atom, :field}, {:atom, nil}, @struct_1_named])}
+      level_3 = {:tuple, [ShapeSet.new([leaves])]}
+      level_2 = {:tuple, [ShapeSet.new([level_3, @struct_1])]}
+      level_1 = {:tuple, [ShapeSet.new([level_2, @struct_1])]}
+
+      assert summary == ShapeSet.new([level_1, @struct_1])
+      assert types(summary, flow) == types_fixture([], [], [Struct1])
+    end
+
+    test "a chain of calls deeper than 64 functions is followed to its end" do
+      assert summary_of(Module18, :chain_0, 1) == ShapeSet.new([@struct_1])
+    end
+
+    test "calls on a module passed in, nested by recursion, settle once flattened" do
+      flow = flow()
+      summary = summary({Module18, :wrapped, 2}, flow)
+
+      assert [{:bag, leaves}] = summary
+      assert {:param, 0} in leaves
+      assert types(summary, flow) == types_fixture([], [], [])
+    end
+
+    test "an answer that keeps changing ends as the function's top" do
+      assert summary_of(Module18, :stepped, 2) == top({Module18, :stepped, 2})
+    end
+
+    test "a call of a param nested too deep dissolves into the function and its arguments" do
+      leaves = ShapeSet.new([{:bag, ShapeSet.new([{:atom, :item}, {:param, 0}])}])
+      level_3 = ShapeSet.new([{:tuple, [leaves]}])
+      level_2 = ShapeSet.new([{:tuple, [level_3]}])
+
+      assert summary_of(Module9, :deep_call, 1) == ShapeSet.new([{:tuple, [level_2]}])
     end
 
     test "a summary larger than the cap is the function's top" do

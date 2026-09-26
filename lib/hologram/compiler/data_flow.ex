@@ -49,23 +49,27 @@ defmodule Hologram.Compiler.DataFlow do
     {Hologram.Realtime, :broadcast_action_except, 4} => 3
   }
 
-  # How many summaries can be in the making at once, one inside another. A call past it gives the
-  # callee's top.
-  @max_call_depth 64
-
   # How deep a set of shapes can be inside structs, maps, lists, tuples and the other shapes that hold
   # sets, before widen/1 makes it a bag.
   @max_depth 3
+
+  # How many times the solver evaluates a function before its answer becomes a bag of its leaves (see
+  # evaluate/2): a recursive function whose value nests one level deeper on every evaluation would grow
+  # without end, while a loop of functions whose answers settle needs far fewer evaluations.
+  @evaluations_before_leaves 8
+
+  # How many times the solver evaluates a function before its answer is its top (see top/1), which never
+  # changes, so the solve ends (see evaluate/2). With pending calls and anonymous functions dissolved
+  # into their parts (see shape_leaves/1), a bag of leaves stops growing unless a call on a module not
+  # known yet nests inside another one on every evaluation; this is for that, and for what else keeps
+  # an answer changing.
+  @evaluations_before_top 16
 
   # How many calls of anonymous functions one substitution makes in total, in all its branches, before
   # the rest are left unmade (see call_fun/3): a function given itself can call itself without end,
   # and one of several functions given itself calls each of them at every level, so a count of the
   # calls one inside another would still let the work double at every level.
   @max_fun_calls 32
-
-  # How many passes the entry of a loop of functions makes before its last one, which takes the
-  # answers of the calls back into the loop from their arguments (see fixpoint_round/5).
-  @max_rounds 4
 
   # How large a function's summary, or the value of a call, can be, in bytes of its external term
   # format (see :erlang.external_size/1, a walk of the whole term like every walk the analysis makes
@@ -189,17 +193,10 @@ defmodule Hologram.Compiler.DataFlow do
   @spec broadcast_analysis(Digraph.t(), mfa, t) :: CallGraph.broadcast_caller_analysis()
   def broadcast_analysis(graph, caller, flow) do
     sent =
-      run(fn memo ->
-        ctx = %{flow: flow, frames: [], memo: memo, mfa: caller, stack: [caller]}
+      run(flow, fn ctx ->
+        caller_ctx = %{ctx | mfa: caller}
 
-        caller
-        |> function_clauses(ctx)
-        |> List.wrap()
-        |> Enum.map(fn clause ->
-          frame = clause_frame(clause, &{:param, &1})
-          broadcast_params(clause.body, %{ctx | frames: [frame]})
-        end)
-        |> ShapeSet.union_all()
+        settle(caller_ctx, fn -> caller_broadcast_params(caller, caller_ctx) end)
       end)
 
     {dispatch_types, components} = reaching_types(sent, graph, flow)
@@ -243,13 +240,14 @@ defmodule Hologram.Compiler.DataFlow do
   @spec server_callback_analysis(Digraph.t(), module, t) :: CallGraph.server_callback_analysis()
   def server_callback_analysis(graph, templatable, flow) do
     returned =
-      run(fn memo ->
-        ctx = %{flow: flow, frames: [], memo: memo, mfa: nil, stack: []}
+      run(flow, fn ctx ->
         no_args = [ShapeSet.new(), ShapeSet.new(), ShapeSet.new()]
 
-        [{templatable, :command, 3}, {templatable, :init, 3}]
-        |> Enum.map(&summary_with_args(&1, no_args, ctx))
-        |> ShapeSet.union_all()
+        settle(ctx, fn ->
+          [{templatable, :command, 3}, {templatable, :init, 3}]
+          |> Enum.map(&summary_with_args(&1, no_args, ctx))
+          |> ShapeSet.union_all()
+        end)
       end)
 
     {dispatch_types, components} = reaching_types(returned, graph, flow)
@@ -263,10 +261,13 @@ defmodule Hologram.Compiler.DataFlow do
   """
   @spec shapes(IR.t(), IR.FunctionClause.t(), mfa, t) :: shapes
   def shapes(expr, clause, mfa, flow) do
-    run(fn memo ->
-      frame = clause_frame(clause, &{:param, &1})
-      ctx = %{flow: flow, frames: [frame], memo: memo, mfa: mfa, stack: [mfa]}
-      eval(expr, ctx)
+    run(flow, fn ctx ->
+      expr_ctx = %{ctx | mfa: mfa}
+
+      settle(expr_ctx, fn ->
+        frame = clause_frame(clause, &{:param, &1})
+        eval(expr, %{expr_ctx | frames: [frame]})
+      end)
     end)
   end
 
@@ -307,18 +308,15 @@ defmodule Hologram.Compiler.DataFlow do
   Erlang module, or of a module with no beam) or that its module doesn't define returns everything
   it is given. A summary is kept in the analysis once made, for the rest of the compile.
 
-  A recursive function, or a group of functions that call each other, is read again as a whole
-  until no answer in it changes, each call back into the group giving the answer of the pass
-  before, the first one nothing. Past a few passes, one last pass answers every call back into the
-  group with whatever its arguments hold. A call made with too many summaries in the making, one
-  inside another, gives the callee's top. A summary, or the value of a call, larger than the cap
-  given to `start/3` is the function's top as well, with the arguments put in for a call.
+  Functions that call each other are solved together: each is evaluated again when an answer it read
+  changes, until none changes, the first evaluation reading nothing for a function not evaluated yet.
+  An answer that keeps growing becomes a bag of its leaves after a few evaluations. Every function a
+  run solves is kept for the rest of the compile. A summary, or the value of a call, larger than the
+  cap given to `start/3` is the function's top, with the arguments put in for a call.
   """
   @spec summary(mfa, t) :: shapes
   def summary(mfa, flow) do
-    run(fn memo ->
-      callee_summary(mfa, %{flow: flow, frames: [], memo: memo, mfa: mfa, stack: []})
-    end)
+    run(flow, fn ctx -> settle(ctx, fn -> callee_summary(mfa, ctx) end) end)
   end
 
   @doc """
@@ -466,10 +464,6 @@ defmodule Hologram.Compiler.DataFlow do
     |> broadcast_params(ctx)
   end
 
-  # Records that an answer of a summary in the making changed, which a provisional summary that read
-  # it no longer holds (see fixpoint_summary/2).
-  defp bump_answers_version(ctx), do: :ets.update_counter(ctx.memo, :answers_version, 1)
-
   # A call of the named function on a module of the given shapes, for each alternative: a module
   # atom gives the function's summary with the arguments put in; a value that depends on a param or
   # on an anonymous function's argument keeps the call for when that is known; a value of unknown
@@ -533,14 +527,27 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp call_fun(_shape, _args, _rep), do: ShapeSet.new()
 
-  # The summary of a function a call reaches: from the analysis when made already, else the current
-  # answer when it is in the making (a recursive call, see fixpoint_summary/2), else a provisional
-  # summary still valid, else made now.
+  # The summary of a function a call reaches: from the analysis when solved already, else its model
+  # (see Hologram.Compiler.DataFlow.Models), else its current answer in the run's solve (see
+  # solving_summary/2).
   defp callee_summary(mfa, ctx) do
     case PLT.get(ctx.flow.summaries, mfa) do
       {:ok, summary} -> summary
-      :error -> in_progress_summary(mfa, ctx)
+      :error -> Models.summary(mfa) || solving_summary(mfa, ctx)
     end
+  end
+
+  # What the params of the broadcasts in the given function's clauses give, each clause read in a frame
+  # of its own made now (see settle/2).
+  defp caller_broadcast_params(caller, ctx) do
+    caller
+    |> function_clauses(ctx)
+    |> List.wrap()
+    |> Enum.map(fn clause ->
+      frame = clause_frame(clause, &{:param, &1})
+      broadcast_params(clause.body, %{ctx | frames: [frame]})
+    end)
+    |> ShapeSet.union_all()
   end
 
   # The callee's summary with the arguments put in, or the callee's top with them when that value is
@@ -593,26 +600,20 @@ defmodule Hologram.Compiler.DataFlow do
     match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
   end
 
-  # What the function's code returns. A protocol function returns everything it is given (see the
-  # contract): which implementation runs depends on the type of a value, and following every one
-  # would follow code the value never meets. A function with no IR returns everything it is given.
-  defp code_summary({_module, _function, arity} = mfa, ctx) do
-    clauses = function_clauses(mfa, ctx)
+  # What the function's code returns, the union over its clauses, read with the answers of the
+  # functions it calls as the run's solve has them now (see evaluate/2).
+  defp code_summary(mfa, ctx) do
+    function_ctx = %{ctx | mfa: mfa}
 
-    if clauses == nil or CallGraph.protocol_function_mfa?(mfa, ctx.flow.module_info_plt) do
-      ShapeSet.new([{:bag, params(arity)}])
-    else
-      function_ctx = %{ctx | mfa: mfa, stack: [mfa | ctx.stack]}
-
-      clauses
-      |> Enum.map(fn clause ->
-        frame = clause_frame(clause, &{:param, &1})
-        eval(clause.body, %{function_ctx | frames: [frame]})
-      end)
-      |> ShapeSet.union_all()
-      |> widen()
-      |> capped_summary(mfa, ctx)
-    end
+    mfa
+    |> function_clauses(ctx)
+    |> Enum.map(fn clause ->
+      frame = clause_frame(clause, &{:param, &1})
+      eval(clause.body, %{function_ctx | frames: [frame]})
+    end)
+    |> ShapeSet.union_all()
+    |> widen()
+    |> capped_summary(mfa, ctx)
   end
 
   # What can be inside a value of the given shapes, one level down. An atom holds nothing, a part of
@@ -655,6 +656,16 @@ defmodule Hologram.Compiler.DataFlow do
   defp dot_shape({:reach, _vertex} = reach, _name, _ctx), do: ShapeSet.new([reach])
 
   defp dot_shape(_shape, _name, _ctx), do: ShapeSet.new()
+
+  # Puts the function on the run's work list (see solve/1), unless it is there already, keyed by its
+  # depth and then by when it was put there.
+  defp enqueue(mfa, ctx) do
+    if :ets.insert_new(ctx.memo, {{:queued, mfa}, true}) do
+      [{_key, depth}] = :ets.lookup(ctx.memo, {:depth, mfa})
+      sequence = :ets.update_counter(ctx.memo, :sequence, 1, {:sequence, 0})
+      :ets.insert(ctx.work, {{-depth, sequence}, mfa})
+    end
+  end
 
   defp eval(%IR.AnonymousFunctionCall{function: function, args: args}, ctx) do
     arg_shapes = Enum.map(args, &eval(&1, ctx))
@@ -904,6 +915,45 @@ defmodule Hologram.Compiler.DataFlow do
     capped_call(summary, mfa, arg_shapes, ctx)
   end
 
+  # Evaluates a function the run is solving: its answer is what its code gives with the current answers
+  # of the functions it calls. When the answer changed, the functions that read it are evaluated
+  # again, so once the work list is empty every answer is what its code gives with the final answers.
+  # The answer so far is not joined in: an evaluation made while a callee answered nothing yet gives
+  # alternatives (a list of nothing, a tuple of nothing) that a later answer does not absorb (see
+  # evaluated_answer/4 for the answers after many evaluations).
+  defp evaluate(mfa, ctx) do
+    [{^mfa, old}] = :ets.lookup(ctx.answers, mfa)
+    evaluations = :ets.update_counter(ctx.memo, {:evaluations, mfa}, 1, {{:evaluations, mfa}, 0})
+
+    answer = evaluated_answer(mfa, old, evaluations, ctx)
+
+    if answer != old do
+      :ets.insert(ctx.answers, {mfa, answer})
+
+      for {^mfa, dependent} <- :ets.lookup(ctx.dependents, mfa) do
+        enqueue(dependent, ctx)
+      end
+    end
+  end
+
+  # The answer of an evaluation, by how many evaluations the function had: what its code gives; past
+  # @evaluations_before_leaves, a bag of the leaves of the answer so far and what its code gives, so
+  # the answer only grows and its growth ends with its leaves (see shape_leaves/1); past
+  # @evaluations_before_top, its top, which never changes, so the solve ends whatever keeps the answer
+  # changing. The top holds every type the function can give (see the contract).
+  defp evaluated_answer(mfa, _old, evaluations, _ctx)
+       when evaluations > @evaluations_before_top do
+    top(mfa)
+  end
+
+  defp evaluated_answer(mfa, old, evaluations, ctx)
+       when evaluations > @evaluations_before_leaves do
+    new = code_summary(mfa, %{ctx | node: mfa})
+    ShapeSet.new([{:bag, leaves(ShapeSet.union(old, new))}])
+  end
+
+  defp evaluated_answer(mfa, _old, _evaluations, ctx), do: code_summary(mfa, %{ctx | node: mfa})
+
   # The part of a value of the given shapes that the pattern binds to the variable, from the
   # alternatives the pattern can match.
   defp extract(shapes, pattern, var) do
@@ -981,80 +1031,6 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # Makes the function's summary. A function that calls itself, directly or through others, is read
-  # again until its answer stops changing, each call back into it giving the answer of the pass
-  # before. The function's entry in the memo table holds its depth (the number of summaries in the
-  # making below it), its current answer and whether a call read it.
-  #
-  # Functions that call each other form a loop, which the lowest of them on the stack, its entry,
-  # reads again as a whole: a function of the loop above the entry makes one pass each time the entry
-  # makes one, starting from the answer it gave in the pass before, and records in the memo table
-  # when its answer changes (`:group_changed`). The entry reads again while its own answer or one of
-  # the loop's changed (see fixpoint_round/5). What changes in a loop inside the loop, which has an
-  # entry of its own, does not make the outer entry read again. Reading each function of the loop
-  # once per pass keeps the work to the passes times the functions of the loop.
-  #
-  # A summary that read the answer of a function lower on the stack (one it is called from, still
-  # in the making) is provisional: that answer can change. It is not kept in the analysis, only in the
-  # memo table, stamped with the answers version (see bump_answers_version/1), and reused while the
-  # version is the same. The lowest depth read so far is kept in the memo table, per summary in the
-  # making, and a reused provisional summary counts as a read of the depth it read.
-  defp fixpoint_summary(mfa, ctx) do
-    depth = length(ctx.stack)
-    [{:lowest_read_depth, outer_lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
-    [{:group_changed, outer_changed?}] = :ets.lookup(ctx.memo, :group_changed)
-    :ets.insert(ctx.memo, {:lowest_read_depth, :none})
-
-    previous = previous_answer(mfa, ctx)
-    summary = fixpoint_round(mfa, depth, previous, 1, ctx)
-
-    [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
-    [{:group_changed, changed?}] = :ets.lookup(ctx.memo, :group_changed)
-    :ets.delete(ctx.memo, {:in_progress, mfa})
-
-    if lowest < depth do
-      [{:answers_version, version}] = :ets.lookup(ctx.memo, :answers_version)
-      group_changed? = outer_changed? or changed? or summary != previous
-
-      :ets.insert(ctx.memo, [
-        {{:provisional, mfa}, version, summary, lowest},
-        {:lowest_read_depth, min(outer_lowest, lowest)},
-        {:group_changed, group_changed?}
-      ])
-    else
-      :ets.insert(ctx.memo, [{:lowest_read_depth, outer_lowest}, {:group_changed, outer_changed?}])
-
-      PLT.put(ctx.flow.summaries, mfa, summary)
-    end
-
-    summary
-  end
-
-  # One pass of fixpoint_summary/2, calls back into the function giving the given answer. A function
-  # that read one lower on the stack is above its loop's entry and makes one pass. The entry makes
-  # another while a call read its answer and the answer changed, or a function of the loop changed
-  # its answer; past @max_rounds passes, it makes the last one (see last_round/3). Every new pass
-  # changes what the loop's functions read.
-  defp fixpoint_round(mfa, depth, answer, round, ctx) do
-    :ets.insert(ctx.memo, [{{:in_progress, mfa}, depth, answer, false}, {:group_changed, false}])
-    summary = function_summary(mfa, ctx)
-    [{_key, _depth, _answer, read?}] = :ets.lookup(ctx.memo, {:in_progress, mfa})
-    [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
-    [{:group_changed, changed?}] = :ets.lookup(ctx.memo, :group_changed)
-
-    cond do
-      lowest < depth or not (changed? or (read? and summary != answer)) ->
-        summary
-
-      round < @max_rounds ->
-        bump_answers_version(ctx)
-        fixpoint_round(mfa, depth, summary, round + 1, ctx)
-
-      true ->
-        last_round(mfa, depth, ctx)
-    end
-  end
-
   # What tells an anonymous function apart: the function it is written in and a hash of its IR, the
   # same on every pass over that function.
   defp fun_ref(ir, ctx), do: {ctx.mfa, :erlang.phash2(ir, @fun_hash_range)}
@@ -1063,30 +1039,6 @@ defmodule Hologram.Compiler.DataFlow do
     module
     |> module_functions(ctx)
     |> Map.get({function, arity})
-  end
-
-  # A function's model (see Hologram.Compiler.DataFlow.Models), else what its code returns.
-  defp function_summary(mfa, ctx), do: Models.summary(mfa) || code_summary(mfa, ctx)
-
-  # The current answer of a function in the making, which is a read of it, or its provisional summary.
-  # In the last pass of a loop's entry (see last_round/3), a function in the making at or above the
-  # entry gives whatever its arguments hold, which counts as a read of the entry.
-  defp in_progress_summary({_module, _function, arity} = mfa, ctx) do
-    [{:last_round_depth, last_round_depth}] = :ets.lookup(ctx.memo, :last_round_depth)
-
-    case :ets.lookup(ctx.memo, {:in_progress, mfa}) do
-      [{_key, depth, _answer, _read?}] when depth >= last_round_depth ->
-        note_read_depth(last_round_depth, ctx)
-        ShapeSet.new([{:bag, params(arity)}])
-
-      [{key, depth, answer, _read?}] ->
-        :ets.insert(ctx.memo, {key, depth, answer, true})
-        note_read_depth(depth, ctx)
-        answer
-
-      [] ->
-        provisional_summary(mfa, ctx)
-    end
   end
 
   # Collects the bindings of the variables in the given IR (see clause_frame/1). The places a
@@ -1222,23 +1174,13 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp index_with_clause(%IR.WithBareClause{expression: expr}, acc), do: index(expr, acc)
 
-  # The last pass of a loop's entry at the given depth (see fixpoint_round/5): every call back into
-  # the loop, into the entry or a function above it, gives whatever its arguments hold. A function
-  # that reads such an answer counts as reading the entry, so its summary is not kept in the analysis.
-  defp last_round(mfa, depth, ctx) do
-    [{:last_round_depth, outer_depth}] = :ets.lookup(ctx.memo, :last_round_depth)
-    bump_answers_version(ctx)
-    :ets.insert(ctx.memo, {:last_round_depth, min(outer_depth, depth)})
-    summary = function_summary(mfa, ctx)
-    :ets.insert(ctx.memo, {:last_round_depth, outer_depth})
-    bump_answers_version(ctx)
-    summary
-  end
-
   # Every shape the given shapes hold, at any depth, flat: a struct with no fields besides what its
-  # fields hold, and the contents of maps, lists, tuples and bags. A shape that stands for a value not
-  # known yet stays, with the sets it holds made bags of their leaves too; an anonymous function
-  # stays, with what it returns made a bag of its leaves.
+  # fields hold, and the contents of maps, lists, tuples and bags. An anonymous function and a call of
+  # one not made yet dissolve into their parts: what the function returns, the function called and the
+  # arguments. That holds every type the call can give, since a function returns what it builds or
+  # what it is given, and a bag is called the same way either way (see call_fun/3). A dynamic call, a
+  # dot and a step into a value not known yet stay, with the sets they hold made leaves too: a call on
+  # a module not known yet gives what that module's function builds, which its parts don't hold.
   defp leaves(shapes) do
     ShapeSet.flat_map(shapes, &ShapeSet.new(shape_leaves(&1)))
   end
@@ -1348,13 +1290,6 @@ defmodule Hologram.Compiler.DataFlow do
   # anonymous functions it made, one cell every branch adds to (see @max_fun_calls).
   defp new_rep(ctx), do: %{calls: :counters.new(1, []), ctx: ctx}
 
-  # Records that the summary in the making read the answer of a function in the making at the given
-  # depth (see fixpoint_summary/2). Any integer is less than :none.
-  defp note_read_depth(depth, ctx) do
-    [{:lowest_read_depth, lowest}] = :ets.lookup(ctx.memo, :lowest_read_depth)
-    :ets.insert(ctx.memo, {:lowest_read_depth, min(lowest, depth)})
-  end
-
   defp opaque?(shape) when is_tuple(shape), do: elem(shape, 0) in @opaque_kinds
 
   defp opaque?(_shape), do: false
@@ -1456,33 +1391,6 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp pattern_variables(_ir, vars), do: vars
-
-  # The answer a function of a loop gave in the pass before, which its next pass starts from (see
-  # fixpoint_summary/2): its provisional summary of any version, else nothing.
-  defp previous_answer(mfa, ctx) do
-    case :ets.lookup(ctx.memo, {:provisional, mfa}) do
-      [{_key, _version, summary, _lowest}] -> summary
-      [] -> ShapeSet.new()
-    end
-  end
-
-  # The provisional summary of the function while nothing it read changed (see fixpoint_summary/2),
-  # which is a read of the depth it read, else the summary made now.
-  defp provisional_summary(mfa, ctx) do
-    [{:answers_version, version}] = :ets.lookup(ctx.memo, :answers_version)
-
-    case :ets.lookup(ctx.memo, {:provisional, mfa}) do
-      [{_key, ^version, summary, lowest}] ->
-        note_read_depth(lowest, ctx)
-        summary
-
-      _none_or_stale when length(ctx.stack) >= @max_call_depth ->
-        top(mfa)
-
-      _none_or_stale ->
-        fixpoint_summary(mfa, ctx)
-    end
-  end
 
   # The summary with the arguments put in for its params (see apply_summary/2). With a ctx, the
   # dynamic calls and dots on a module an argument makes known are made too.
@@ -1671,6 +1579,14 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  # How deep the function whose evaluation reads an answer is: nil in an entry, below every function.
+  defp reader_depth(%{node: nil}), do: -1
+
+  defp reader_depth(ctx) do
+    [{_key, depth}] = :ets.lookup(ctx.memo, {:depth, ctx.node})
+    depth
+  end
+
   # Replaces, at any depth, each shape the replacer gives shapes for (it gives nil for a shape it
   # leaves as it is), and makes the calls that the replacing resolves: a call of an anonymous
   # function, and, when rep holds a ctx, a dynamic call or a dot whose module became known (see
@@ -1762,28 +1678,49 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # Runs a public entry with an ETS table the variables' shapes are kept in once read (see
-  # read_variable/2), with the summaries in the making (see fixpoint_summary/2), and forgets the
-  # modules' functions it read (see module_functions/2) when done. An entry never runs inside
-  # another one.
-  defp run(fun) do
-    memo = :ets.new(__MODULE__, [:set, :private])
-
-    :ets.insert(memo, [
-      {:answers_version, 0},
-      {:group_changed, false},
-      {:last_round_depth, :none},
-      {:lowest_read_depth, :none}
-    ])
+  # Runs a public entry with the tables of a solve (see solve/1), given in the ctx: `answers` holds
+  # `{mfa, answer}` for the functions the run is solving; `dependents` holds `{callee, caller}` when the
+  # caller's evaluation read the callee's answer (a bag, so each pair once); `work` holds
+  # `{{-depth, sequence}, mfa}`, the functions to evaluate (see solve/1); `memo` holds the
+  # variables' shapes once read (see read_variable/2), `{:queued, mfa}`, `{:depth, mfa}`, `{:evaluations, mfa}`,
+  # `:sequence` and `:unsettled`. `ctx.mfa` is the function whose code is read, and `ctx.node` the
+  # function the solver evaluates, nil in the entry itself. Forgets the modules' functions it read
+  # (see module_functions/2) when done. An entry never runs inside another one.
+  defp run(flow, fun) do
+    ctx = %{
+      answers: :ets.new(__MODULE__, [:set, :private]),
+      dependents: :ets.new(__MODULE__, [:bag, :private]),
+      flow: flow,
+      frames: [],
+      memo: :ets.new(__MODULE__, [:set, :private]),
+      mfa: nil,
+      node: nil,
+      work: :ets.new(__MODULE__, [:ordered_set, :private])
+    }
 
     try do
-      fun.(memo)
+      fun.(ctx)
     after
-      :ets.delete(memo)
+      Enum.each([ctx.answers, ctx.dependents, ctx.memo, ctx.work], &:ets.delete/1)
 
       for {{__MODULE__, :functions, _module} = key, _functions} <- Process.get() do
         Process.delete(key)
       end
+    end
+  end
+
+  # Runs the entry's function and returns what it gives; when it read an answer that is not final,
+  # solves the work list first and runs it again, until a run reads only final answers. The function
+  # makes its own frames, so that each run reads its variables again.
+  defp settle(ctx, fun) do
+    :ets.insert(ctx.memo, {:unsettled, false})
+    result = fun.()
+
+    if :ets.lookup_element(ctx.memo, :unsettled, 2) do
+      solve(ctx)
+      settle(ctx, fun)
+    else
+      result
     end
   end
 
@@ -1829,10 +1766,17 @@ defmodule Hologram.Compiler.DataFlow do
     |> ShapeSet.to_list()
   end
 
-  defp shape_leaves({:fun, ref, returned}), do: [{:fun, ref, bag_of_leaves(returned)}]
+  defp shape_leaves({:fun, _ref, returned}) do
+    returned
+    |> leaves()
+    |> ShapeSet.to_list()
+  end
 
   defp shape_leaves({:call, fun, args}) do
-    [{:call, leaves(fun), Enum.map(args, &bag_of_leaves/1)}]
+    [fun | args]
+    |> Enum.map(&leaves/1)
+    |> ShapeSet.union_all()
+    |> ShapeSet.to_list()
   end
 
   defp shape_leaves({:dot, shapes, name}), do: [{:dot, leaves(shapes), name}]
@@ -1863,6 +1807,60 @@ defmodule Hologram.Compiler.DataFlow do
 
   # A value of unknown structure, the rule before this module from a vertex, or a primitive.
   defp shape_parts(shape), do: ShapeSet.new([shape])
+
+  # Evaluates the functions of the work list until it is empty (see evaluate/2): the deepest first, a
+  # function met while evaluating another one being one deeper, and among equals in the order they were
+  # put there. The deepest first answers the functions a function calls before the function is
+  # evaluated again, so a caller is not evaluated once for every change of a callee still settling
+  # (which made callers reach @evaluations_before_top on their own); in the order they were put there,
+  # the functions of a loop are each evaluated once per sweep (the latest first evaluated a ring of four
+  # functions 38 times, against 18).
+  # Then every answer the run holds is final: none changed since the evaluations that read it. They go
+  # to the analysis, kept for the rest of the compile.
+  defp solve(ctx) do
+    case :ets.first(ctx.work) do
+      :"$end_of_table" ->
+        for {mfa, answer} <- :ets.tab2list(ctx.answers) do
+          PLT.put(ctx.flow.summaries, mfa, answer)
+        end
+
+        :ets.delete_all_objects(ctx.answers)
+        :ets.delete_all_objects(ctx.dependents)
+        :ok
+
+      key ->
+        [{^key, mfa}] = :ets.take(ctx.work, key)
+        :ets.delete(ctx.memo, {:queued, mfa})
+        evaluate(mfa, ctx)
+        solve(ctx)
+    end
+  end
+
+  # The current answer of a function the run is solving; the evaluation reading it is made again when
+  # it changes (see evaluate/2). A function met for the first time answers nothing until it is
+  # evaluated. A function with no IR, or a protocol function, gives everything it is given (see the
+  # contract): which implementation runs depends on the type of a value, and following every one
+  # would follow code the value never meets.
+  defp solving_summary({_module, _function, arity} = mfa, ctx) do
+    if function_clauses(mfa, ctx) == nil or
+         CallGraph.protocol_function_mfa?(mfa, ctx.flow.module_info_plt) do
+      ShapeSet.new([{:bag, params(arity)}])
+    else
+      if ctx.node, do: :ets.insert(ctx.dependents, {mfa, ctx.node})
+      :ets.insert(ctx.memo, {:unsettled, true})
+
+      case :ets.lookup(ctx.answers, mfa) do
+        [{^mfa, answer}] ->
+          answer
+
+        [] ->
+          :ets.insert(ctx.answers, {mfa, ShapeSet.new()})
+          :ets.insert(ctx.memo, {{:depth, mfa}, reader_depth(ctx) + 1})
+          enqueue(mfa, ctx)
+          ShapeSet.new()
+      end
+    end
+  end
 
   # What the fields argument of a __struct__/1 call puts in the struct: the keys and values of the
   # keyword list or map it is, two levels down.

@@ -4,6 +4,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module9 do
 
   def deep, do: {{{{{%Struct1{}}}}}}
 
+  def deep_call(fun), do: {{{{fun.(:item)}}}}
+
   def wide do
     [
       :a01,
