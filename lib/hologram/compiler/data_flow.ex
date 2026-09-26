@@ -1369,10 +1369,6 @@ defmodule Hologram.Compiler.DataFlow do
   # The indexes of the params the shapes hold, at any depth.
   defp param_indexes({:param, index}, acc), do: MapSet.put(acc, index)
 
-  defp param_indexes(set, acc) when is_struct(set, MapSet) do
-    Enum.reduce(set, acc, &param_indexes/2)
-  end
-
   defp param_indexes(list, acc) when is_list(list), do: Enum.reduce(list, acc, &param_indexes/2)
 
   defp param_indexes(tuple, acc) when is_tuple(tuple) do
@@ -1554,7 +1550,7 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # Adds the types the shapes hold to the accumulator (see types/2).
-  defp put_types(shapes, acc, module_info_plt) when is_struct(shapes, MapSet) do
+  defp put_types(shapes, acc, module_info_plt) when is_list(shapes) do
     ShapeSet.reduce(shapes, acc, &put_types(&1, &2, module_info_plt))
   end
 

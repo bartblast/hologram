@@ -86,6 +86,10 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
     test "drops duplicates" do
       assert size(new([:prim, {:atom, :a}, :prim])) == 2
     end
+
+    test "a set is a sorted list without duplicates" do
+      assert new([{:param, 0}, :prim, :prim]) == [:prim, {:param, 0}]
+    end
   end
 
   describe "put/2" do
