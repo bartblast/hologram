@@ -376,9 +376,10 @@ defmodule Hologram.Compiler.DataFlowTest do
                ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
     end
 
-    # The inner call gives four copies of the four structs, over the cap, so it is flattened as soon as
-    # it is made (see call_fun/3); the outer call's four copies of that bag fit, so they keep their
-    # tuple. Flattened only once the whole call is made, the value would be one bag.
+    # The inner call would make four copies of the four structs, over the cap, so the function's value
+    # is flattened before its arguments are put in (see substitution_inputs/4); the outer call's four
+    # copies of that bag fit, so they keep their tuple. The cap is twice the value's size, between the
+    # two. Flattened only once the whole call is made, the value would be one bag.
     test "a call of a function argument is bounded as soon as it is made" do
       clause = clause(Module21, :calls_twice)
       mfa = {Module21, :calls_twice, 0}
@@ -387,10 +388,25 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       flow =
         start(PLT.start(), module_info_plt_fixture(),
-          max_summary_size: :erlang.external_size(value)
+          max_summary_size: 2 * :erlang.external_size(value)
         )
 
       assert shapes(clause.body, clause, mfa, flow) == value
+    end
+
+    test "an argument larger than the cap is flattened before it is put in" do
+      clause = clause(Module21, :calls_wrap)
+      mfa = {Module21, :calls_wrap, 0}
+      structs = ShapeSet.new([{:tuple, List.duplicate(ShapeSet.new([@struct_1]), 4)}])
+      bag = ShapeSet.new([{:bag, ShapeSet.union(@defaults, ShapeSet.new([@struct_1_named]))}])
+
+      flow =
+        start(PLT.start(), module_info_plt_fixture(),
+          max_summary_size: :erlang.external_size(structs) - 1
+        )
+
+      assert shapes(clause.body, clause, mfa, flow) ==
+               ShapeSet.new([{:tuple, [ShapeSet.new([{:atom, :ok}]), bag]}])
     end
 
     test "a call whose leaves are larger than the cap is the caller's top" do

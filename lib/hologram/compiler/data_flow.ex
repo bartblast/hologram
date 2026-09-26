@@ -77,7 +77,7 @@ defmodule Hologram.Compiler.DataFlow do
   # over it), before it becomes a bag of its leaves, or the top of the function being read when even
   # that is larger (see bounded/2). Without a cap a summary can grow to megabytes: a bag holds any
   # number of leaves, and a pending call or an anonymous function in it keeps its own sets. Every call
-  # that uses a summary walks it several times (param_indexes/2, replace/3, widen/1), so a few such
+  # that uses a summary walks it several times (occurrence_counts/3, replace/3, widen/1), so a few such
   # summaries stall a compile. A start/3 opt can set another cap.
   @max_summary_size 32_768
 
@@ -365,6 +365,10 @@ defmodule Hologram.Compiler.DataFlow do
     ShapeSet.flat_map(fun_shapes, &call_fun(&1, args, rep))
   end
 
+  defp arg_index({:arg, ref, index}, ref), do: index
+
+  defp arg_index(_shape, _ref), do: nil
+
   defp as_map_shapes({kind, _inner} = shape) when kind in [:as_map, :map], do: [shape]
 
   defp as_map_shapes({:struct, _module, _fields} = shape), do: [shape]
@@ -540,16 +544,23 @@ defmodule Hologram.Compiler.DataFlow do
   # substitution ends: when a call's value is the argument of the next call, as in a fold's rounds,
   # each call multiplies the value by how many times the function holds its argument, so three calls
   # can reach gigabytes before the end. Bounded, each call starts from a value near the cap, and a
-  # flattened value holds the same types. Without a context (apply_summary/2) nothing is bounded.
+  # flattened value holds the same types; widened first (see widen/1), a bag the arguments were put
+  # into is its leaves, so the next call's estimate (see substitution_inputs/4) sees their size.
+  # Without a context (apply_summary/2) nothing is bounded.
   defp call_fun({:fun, ref, returned} = fun, args, rep) do
     if :counters.get(rep.calls, 1) < @max_fun_calls do
       :counters.add(rep.calls, 1, 1)
-      value = replace(returned, &replace_arg(&1, ref, args), rep)
 
       if rep.ctx do
-        bounded(value, rep.ctx)
+        counts = occurrence_counts(returned, &arg_index(&1, ref), %{})
+        {shapes, bounded_args} = substitution_inputs(returned, args, counts, rep.ctx)
+
+        shapes
+        |> replace(&replace_arg(&1, ref, bounded_args), rep)
+        |> widen()
+        |> bounded(rep.ctx)
       else
-        value
+        replace(returned, &replace_arg(&1, ref, args), rep)
       end
     else
       ShapeSet.new([{:call, ShapeSet.new([fun]), args}])
@@ -1022,17 +1033,17 @@ defmodule Hologram.Compiler.DataFlow do
   # followed: whatever it holds can't reach the call's value.
   defp eval_call(mfa, args, ctx) do
     summary = callee_summary(mfa, ctx)
-    used_indexes = param_indexes(summary, MapSet.new())
+    counts = occurrence_counts(summary, &param_index/1, %{})
 
     arg_shapes =
       args
       |> Enum.with_index()
       |> Enum.map(fn {arg, index} ->
-        if MapSet.member?(used_indexes, index), do: eval(arg, ctx), else: ShapeSet.new()
+        if Map.has_key?(counts, index), do: eval(arg, ctx), else: ShapeSet.new()
       end)
 
     summary
-    |> put_args(arg_shapes, ctx)
+    |> put_args(arg_shapes, counts, ctx)
     |> bounded(ctx)
   end
 
@@ -1430,6 +1441,35 @@ defmodule Hologram.Compiler.DataFlow do
   # anonymous functions it made, one cell every branch adds to (see @max_fun_calls).
   defp new_rep(ctx), do: %{calls: :counters.new(1, []), ctx: ctx}
 
+  # How many copies of each index the given function gives for a shape (the index of a param, or of
+  # an anonymous function's argument) putting values in for them makes, at any depth, each index the
+  # shapes hold at least with 0. A function called is not copied into the value (what calling it gives
+  # is, see call_fun/3), so an index held in a call's function counts as held, not as a copy.
+  defp occurrence_counts(term, index_of, acc), do: occurrence_counts(term, index_of, 1, acc)
+
+  defp occurrence_counts(list, index_of, weight, acc) when is_list(list) do
+    Enum.reduce(list, acc, &occurrence_counts(&1, index_of, weight, &2))
+  end
+
+  defp occurrence_counts({:call, fun, args}, index_of, weight, acc) do
+    counts = occurrence_counts(fun, index_of, 0, acc)
+    occurrence_counts(args, index_of, weight, counts)
+  end
+
+  defp occurrence_counts(tuple, index_of, weight, acc) when is_tuple(tuple) do
+    case index_of.(tuple) do
+      nil ->
+        tuple
+        |> Tuple.to_list()
+        |> occurrence_counts(index_of, weight, acc)
+
+      index ->
+        Map.update(acc, index, weight, &(&1 + weight))
+    end
+  end
+
+  defp occurrence_counts(_term, _index_of, _weight, acc), do: acc
+
   defp opaque?(shape) when is_tuple(shape), do: elem(shape, 0) in @opaque_kinds
 
   defp opaque?(_shape), do: false
@@ -1441,18 +1481,9 @@ defmodule Hologram.Compiler.DataFlow do
     |> ShapeSet.union_all()
   end
 
-  # The indexes of the params the shapes hold, at any depth.
-  defp param_indexes({:param, index}, acc), do: MapSet.put(acc, index)
+  defp param_index({:param, index}), do: index
 
-  defp param_indexes(list, acc) when is_list(list), do: Enum.reduce(list, acc, &param_indexes/2)
-
-  defp param_indexes(tuple, acc) when is_tuple(tuple) do
-    tuple
-    |> Tuple.to_list()
-    |> param_indexes(acc)
-  end
-
-  defp param_indexes(_term, acc), do: acc
+  defp param_index(_shape), do: nil
 
   defp params(arity) do
     0..(arity - 1)//1
@@ -1534,9 +1565,24 @@ defmodule Hologram.Compiler.DataFlow do
 
   # The summary with the arguments put in for its params (see apply_summary/2). With a ctx, the
   # dynamic calls and dots on a module an argument makes known are made too.
-  defp put_args(summary, args, ctx) do
+  # The summary with the arguments put in for its params. With a context, the arguments are bounded
+  # and the summary is flattened first when putting them in would make a value larger than the cap
+  # (see substitution_inputs/4); the counts are how many times the summary holds each param.
+  defp put_args(summary, args, nil) do
     summary
-    |> replace(&replace_param(&1, args), new_rep(ctx))
+    |> replace(&replace_param(&1, args), new_rep(nil))
+    |> widen()
+  end
+
+  defp put_args(summary, args, ctx) do
+    put_args(summary, args, occurrence_counts(summary, &param_index/1, %{}), ctx)
+  end
+
+  defp put_args(summary, args, counts, ctx) do
+    {shapes, bounded_args} = substitution_inputs(summary, args, counts, ctx)
+
+    shapes
+    |> replace(&replace_param(&1, bounded_args), new_rep(ctx))
     |> widen()
   end
 
@@ -2089,6 +2135,30 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp subject_shapes(:top, ctx), do: top(ctx.mfa)
+
+  # The shapes and the arguments to put in for them: every argument bounded (see bounded/2), and the
+  # shapes a bag of their leaves when putting the arguments in would make a value larger than the
+  # cap. The estimate is the shapes' size plus each argument's size as many times as the shapes hold
+  # it: shapes holding a param a thousand times make a thousand copies of the argument, and every walk
+  # after goes through each copy (sharing saves the memory, not the walks), so a check after the
+  # substitution comes too late. Flattened, the shapes hold each param in fewer places, and the value
+  # holds the same types. The estimate is exact for plain copies and more than the value where the
+  # shapes take small parts of an argument (a field, a struct's module), which then lose their
+  # structure too.
+  defp substitution_inputs(shapes, args, counts, ctx) do
+    bounded_args = Enum.map(args, &bounded(&1, ctx))
+
+    estimate =
+      Enum.reduce(counts, :erlang.external_size(shapes), fn {index, count}, acc ->
+        acc + count * :erlang.external_size(Enum.at(bounded_args, index, ShapeSet.new()))
+      end)
+
+    if estimate > ctx.flow.max_summary_size do
+      {bag_of_leaves(shapes), bounded_args}
+    else
+      {shapes, bounded_args}
+    end
+  end
 
   # The summary of the function with the given arguments put in.
   defp summary_with_args(mfa, args, ctx) do

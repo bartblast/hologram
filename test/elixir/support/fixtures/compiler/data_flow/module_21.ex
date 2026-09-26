@@ -4,6 +4,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
 
   def calls_twice, do: twice({%Struct1{}, %Struct1{}, %Struct1{}, %Struct1{}}, &repeat/1)
 
+  def calls_wrap, do: wrap({%Struct1{}, %Struct1{}, %Struct1{}, %Struct1{}})
+
   def repeat(value), do: {value, value, value, value}
 
   def twice(value, fun) do
@@ -11,4 +13,6 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module21 do
     |> fun.()
     |> fun.()
   end
+
+  def wrap(value), do: {:ok, value}
 end
