@@ -35,6 +35,7 @@ defmodule Hologram.Compiler.DataFlow do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.DataFlow.Models
+  alias Hologram.Compiler.DataFlow.Rules
   alias Hologram.Compiler.DataFlow.ShapeSet
   alias Hologram.Compiler.DataFlow.Store
   alias Hologram.Compiler.Digraph
@@ -181,13 +182,16 @@ defmodule Hologram.Compiler.DataFlow do
   @type tree :: [shape]
 
   # What a compile's analysis works with: the IR PLT the code is read from (and where missing IR is
-  # built), the module info PLT, the store its sets are in (see Store), and the summaries of the
-  # functions it has followed so far.
+  # built), the module info PLT, the store its sets are in (see Store), the summaries of the
+  # functions it has followed so far, the rules modules it asks before following a function (see
+  # Rules), and the PLT where those keep what they compute once per compile.
   @type t :: %{
           ir_plt: PLT.t(),
           max_summary_size: pos_integer,
           module_atoms: PLT.t(),
           module_info_plt: PLT.t(),
+          rule_cache: PLT.t(),
+          rules: [module],
           store: Store.t(),
           summaries: PLT.t()
         }
@@ -375,19 +379,26 @@ defmodule Hologram.Compiler.DataFlow do
       of the distinct sets it reaches, each counted once, before it becomes a bag of its leaves, which
       keeps the types it names and drops its structure, or the top of the function being read when
       even that is larger (see `top/1`); defaults to 32 KiB.
+    * `:rules` - the rules modules asked before a function's code is followed (see
+      `Hologram.Compiler.DataFlow.Rules`); defaults to the built-in ones. For tests: the compiler
+      never passes it.
 
-  The other opts are given to the PLTs it keeps its summaries, its module checks and its store in
+  The other opts are given to the PLTs it keeps its summaries, its module checks, its rules' caches
+  and its store in
   (see `Hologram.Commons.PLT.start/1`: a `:supervisor` stops them with the supervisor).
   """
   @spec start(PLT.t(), PLT.t(), T.opts()) :: t
   def start(ir_plt, module_info_plt, opts \\ []) do
-    {max_summary_size, plt_opts} = Keyword.pop(opts, :max_summary_size, @max_summary_size)
+    {max_summary_size, opts} = Keyword.pop(opts, :max_summary_size, @max_summary_size)
+    {rules, plt_opts} = Keyword.pop(opts, :rules, Rules.built_in())
 
     %{
       ir_plt: ir_plt,
       max_summary_size: max_summary_size,
       module_atoms: PLT.start(plt_opts),
       module_info_plt: module_info_plt,
+      rule_cache: PLT.start(plt_opts),
+      rules: rules,
       store: Store.start(plt_opts),
       summaries: PLT.start(plt_opts)
     }
@@ -397,8 +408,14 @@ defmodule Hologram.Compiler.DataFlow do
   Stops the given analysis.
   """
   @spec stop(t) :: :ok
-  def stop(%{module_atoms: module_atoms, store: store, summaries: summaries}) do
+  def stop(%{
+        module_atoms: module_atoms,
+        rule_cache: rule_cache,
+        store: store,
+        summaries: summaries
+      }) do
     PLT.stop(module_atoms)
+    PLT.stop(rule_cache)
     Store.stop(store)
     PLT.stop(summaries)
   end
@@ -711,17 +728,17 @@ defmodule Hologram.Compiler.DataFlow do
   defp call_fun(_shape, _args, rep), do: ShapeSet.new(rep.store)
 
   # The summary of a function a call reaches: from the analysis when solved already, else its model
-  # (see Hologram.Compiler.DataFlow.Models), else its current answer in the run's solve (see
-  # solving_summary/2).
+  # (see Hologram.Compiler.DataFlow.Models), else the rules modules' answer (see Rules), else its
+  # current answer in the run's solve (see solving_summary/2).
   defp callee_summary(mfa, ctx) do
     case PLT.get(ctx.flow.summaries, mfa) do
       {:ok, summary} ->
         summary
 
       :error ->
-        case model_summary(mfa, ctx.flow.store) do
+        case model_summary(mfa, ctx.flow.store) || ruled_summary(mfa, ctx.flow) do
           nil -> solving_summary(mfa, ctx)
-          model -> model
+          answer -> answer
         end
     end
   end
@@ -2280,6 +2297,17 @@ defmodule Hologram.Compiler.DataFlow do
   # `:sequence` and `:unsettled`. `ctx.mfa` is the function whose code is read, and `ctx.node` the
   # function the solver evaluates, nil in the entry itself. Forgets the modules' functions it read
   # (see module_functions/2) when done. An entry never runs inside another one.
+  # The rules modules' answer for the function (see Rules), interned in the store once per compile, or
+  # nil.
+  defp ruled_summary(mfa, flow) do
+    Store.memo(flow.store, {:ruled, mfa}, fn ->
+      case Rules.summary(mfa, flow) do
+        nil -> nil
+        tree -> ShapeSet.from_tree(tree, flow.store)
+      end
+    end)
+  end
+
   defp run(flow, fun) do
     ctx = %{
       answers: :ets.new(__MODULE__, [:set, :private]),

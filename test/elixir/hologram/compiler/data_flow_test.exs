@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.DataFlow
+  alias Hologram.Compiler.DataFlow.Rules
   alias Hologram.Compiler.DataFlow.ShapeSet
   alias Hologram.Compiler.DataFlow.Store
   alias Hologram.Compiler.IR
@@ -26,6 +27,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module20
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module21
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module24
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module25
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -33,6 +35,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module7
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module8
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module9
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Rules1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct3
@@ -842,9 +845,30 @@ defmodule Hologram.Compiler.DataFlowTest do
     test "starts a PLT for the module checks" do
       assert %PLT{} = flow().module_atoms
     end
+
+    test "starts a PLT for the rules' caches" do
+      assert %PLT{} = flow().rule_cache
+    end
+
+    test "asks the built-in rules modules by default" do
+      assert flow().rules == Rules.built_in()
+    end
+
+    test "keeps the rules modules given" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert flow.rules == [Rules1]
+    end
   end
 
   describe "summary/2" do
+    test "a function a rules module answers is not followed" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :calls_ruled, 0}, flow) == tree_set([@struct_1_stored])
+      assert summary_of(Module25, :calls_ruled, 0) == tree_set([:prim])
+    end
+
     test "a set nested too deep becomes a bag of its leaves, with the same types" do
       flow = flow()
       summary = summary({Module9, :deep, 0}, flow)
