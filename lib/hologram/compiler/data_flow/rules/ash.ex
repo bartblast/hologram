@@ -42,6 +42,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
                module_entries: 1,
                module_tree: 3,
                resource_entries: 1,
+               resources: 1,
+               resources_among: 1,
                subject_module: 2,
                reachable_resources: 2,
                relationship_fields: 3,
@@ -84,11 +86,27 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   # The structs of the calendar types, whose calendar field holds the calendar module.
   @calendar_structs [Date, DateTime, NaiveDateTime, Time]
 
+  # Ash's functions by what they give (see api_tree/1): a list of records, one record or nil, the
+  # record a create or an update gives, a destroy's, the records given back loaded, what an action
+  # or a calculation gives, a bulk result, and primitives.
+  @api_bulk [:bulk_create, :bulk_destroy, :bulk_update]
+  @api_destroys [:destroy, :destroy!]
+  @api_lists [:read, :read!]
+  @api_loads [:load, :load!]
+  @api_ones [:get, :get!, :read_one, :read_one!]
+  @api_primitives [:aggregate, :aggregate!, :count, :count!, :exists, :exists?]
+  @api_runs [:calculate, :calculate!, :run_action, :run_action!]
+  @api_writes [:create, :create!, :update, :update!]
+
   # Ash's error classes, which an interface function's `{:error, error}` holds.
   @error_classes [Ash.Error.Forbidden, Ash.Error.Framework, Ash.Error.Invalid, Ash.Error.Unknown]
 
+  # The modules whose functions build a query, a changeset or an action input.
+  @subjects [Ash.ActionInput, Ash.Changeset, Ash.Query]
+
   # How deep records nest through relationships before a related record is a bag of the types every
-  # record reachable from it holds, so relationships in a cycle (an item's notes, a note's item) end.
+  # record reachable from it holds, so relationships in a cycle (an item's notes, a note's item)
+  # end.
   @record_depth 2
 
   # The process dictionary key of the resources whose records are being built, so a resource that
@@ -105,33 +123,61 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   Returns, as a tree, the records of the given Ash resource: its struct, with a field for each
   attribute (its type's shapes, nil or a forbidden field), calculation and aggregate (its type's
   shapes, nil or not loaded) and relationship (the related record, a list of them for a to-many
-  relationship, nil or not loaded), and Ash's own fields. Related records nest #{@record_depth} deep,
-  then are a bag of the types every record reachable from them holds. Remembered in the flow
+  relationship, nil or not loaded), and Ash's own fields. Related records nest #{@record_depth}
+  deep, then are a bag of the types every record reachable from them holds. Remembered in the flow
   context's rule cache for the compile.
   """
   @spec record_shapes(module, DataFlow.t()) :: DataFlow.tree()
   def record_shapes(resource, flow), do: record_tree(resource, 0, flow)
 
+  @doc """
+  Returns what a rule shape of this module (see `summary/2`) gives once the atoms and struct modules
+  among its arguments are known: `:records`, the records of the resources among them (every
+  resource's, as a bag of their types, when there is none); `:errors`, the errors of those
+  resources; `:subject`, a query, a changeset or an action input (the module the first argument
+  names) holding those resources and their records.
+  """
   @impl Hologram.Compiler.DataFlow.Rules
-  def resolve(_part, _modules, _flow), do: []
+  def resolve(:records, [modules], flow), do: records_of(modules, flow)
+
+  def resolve(:errors, [modules], flow) do
+    case resources_among(modules) do
+      [] ->
+        error_tree(nil, flow)
+
+      resources ->
+        resources
+        |> Enum.map(&error_tree(&1, flow))
+        |> union()
+    end
+  end
+
+  def resolve(:subject, [[module], modules], flow) do
+    atoms =
+      modules
+      |> resources_among()
+      |> Enum.map(&{:atom, &1})
+
+    rest = union([[:prim], atoms, records_of(modules, flow)])
+    [{:struct, module, DataFlow.rest_fields(rest)}]
+  end
 
   @doc """
   Returns what a function Ash generates from a resource's or a domain's code interface gives (its
   `define` and `define_calculation`, in every form: `name`, `name!`, `can_name`, `can_name?` and
-  `query_to_name`, `changeset_to_name` or `input_to_name`), by the interface's action: the records of
-  a read, a list of them or a page, the record a create or an update gives, and so on, `{:ok, ...}`
-  or `{:error, error}` for the forms that do not raise; nil for any other function, or without Ash.
+  `query_to_name`, `changeset_to_name` or `input_to_name`), by the interface's action: the records
+  of a read, a list of them or a page, the record a create or an update gives, and so on, `{:ok,
+  ...}` or `{:error, error}` for the forms that do not raise. Ash's own functions (`Ash.read!/2`,
+  `Ash.get/3`, `Ash.update!/3` and the like) give a rule shape over the argument that names the
+  resource (a resource, a query, a changeset or a record, never the options: an `actor:` there must
+  not bring its records in), wrapped the same way; `Ash.count/2` and the like a primitive. A
+  function of `Ash.Query`, `Ash.Changeset` or `Ash.ActionInput` gives that struct, holding the
+  resources and the records of its first argument (see `resolve/3`). Nil for any other function, or
+  without Ash.
   """
   @impl Hologram.Compiler.DataFlow.Rules
-  def summary({module, function, _arity}, flow) do
-    if loaded?(flow) do
-      index = interface_index(flow)
-
-      case Map.fetch(index, {module, Atom.to_string(function)}) do
-        {:ok, {resource, interface, form}} -> interface_tree(resource, interface, form, flow)
-        :error -> nil
-      end
-    end
+  def summary({module, function, arity}, flow) do
+    if loaded?(flow), do: loaded_summary(module, function, arity, flow)
   end
 
   @doc """
@@ -139,9 +185,9 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   primitive for Ash's primitive types; the struct for its calendar, decimal, duration,
   case-insensitive string and money types, each field by what it holds; for a union, a map, a
   keyword list, a tuple and a struct type, their fields by their own types; a new type as its
-  subtype; an embedded resource as its record (see `record_shapes/2`). Any other type, one of the app or of another library,
-  holds what its `cast_stored/2` gives, followed by the analysis. Remembered in the flow context's
-  rule cache for the compile.
+  subtype; an embedded resource as its record (see `record_shapes/2`). Any other type, one of the
+  app or of another library, holds what its `cast_stored/2` gives, followed by the analysis.
+  Remembered in the flow context's rule cache for the compile.
   """
   @spec type_shapes(atom | {:array, atom}, keyword, DataFlow.t()) :: DataFlow.tree()
   def type_shapes(type, constraints, flow) do
@@ -150,17 +196,10 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end)
   end
 
-  # Whether the module is one of Ash's exceptions, by its name.
-  defp ash_exception?(module) do
-    module
-    |> Atom.to_string()
-    |> String.starts_with?("Elixir.Ash.Error.")
-  end
-
-  # What running the action gives, as the forms that raise give it: a read's record or nil when it gets
-  # one, else a list of records or, when it paginates, a page of them; a create's or an update's
-  # record, with its notifications when asked for them; a destroy's `:ok` or the destroyed record; a
-  # generic action's return type, or `:ok` without one.
+  # What running the action gives, as the forms that raise give it: a read's record or nil when it
+  # gets one, else a list of records or, when it paginates, a page of them; a create's or an
+  # update's record, with its notifications when asked for them; a destroy's `:ok` or the destroyed
+  # record; a generic action's return type, or `:ok` without one.
   defp action_tree(resource, interface, flow) do
     action = interface_action(resource, interface)
     record = record_shapes(resource, flow)
@@ -170,14 +209,102 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         read_tree(record, interface, action)
 
       type when type in [:create, :update] ->
-        union([record, notified(resource, record)])
+        union([record, notified([{:atom, resource}], record)])
 
       :destroy ->
-        union([[{:atom, :ok}], record, notified(resource, record)])
+        union([[{:atom, :ok}], record, notified([{:atom, resource}], record)])
 
       :action ->
         returns_tree(action, flow)
     end
+  end
+
+  # Every resource's records, as a bag of the types they hold: what a call gives when nothing in its
+  # arguments names a resource.
+  defp all_records(flow) do
+    cached({__MODULE__, :all_records}, flow, fn ->
+      leaves =
+        flow
+        |> resources()
+        |> Enum.flat_map(&reachable_leaves(&1, flow))
+        |> :lists.usort()
+
+      [{:bag, leaves}]
+    end)
+  end
+
+  # What Ash's function gives before it is wrapped (see api_tree/1).
+  defp api_result(function, records, _errors) when function in @api_lists,
+    do: paged([{:list, records}])
+
+  defp api_result(function, records, _errors) when function in @api_ones,
+    do: union([records, [:prim]])
+
+  defp api_result(function, records, _errors) when function in @api_writes,
+    do: union([records, notified([:prim], records)])
+
+  defp api_result(function, records, _errors) when function in @api_destroys,
+    do: union([[{:atom, :ok}], records, notified([:prim], records)])
+
+  defp api_result(function, records, _errors) when function in @api_loads,
+    do: union([records, [{:list, records}]])
+
+  defp api_result(function, records, _errors) when function in @api_runs,
+    do: union([[:prim], records])
+
+  defp api_result(function, records, errors) when function in @api_bulk do
+    struct_tree(Ash.BulkResult, %{
+      errors: union([[:prim], [{:list, errors}]]),
+      records: union([[:prim], [{:list, records}]])
+    })
+  end
+
+  defp api_result(:stream!, records, _errors),
+    do: [{:struct, Stream, DataFlow.rest_fields(records)}]
+
+  defp api_result(function, _records, _errors) when function in @api_primitives, do: [:prim]
+
+  defp api_result(_function, _records, _errors), do: nil
+
+  # What Ash's function gives (see summary/2), over a rule shape of the records of the resource its
+  # subject argument names (param 1 of `bulk_create`, whose first is its inputs; param 0 of the
+  # others), the forms that do not raise wrapped with the errors of those resources; nil for another
+  # function.
+  defp api_tree(function) do
+    subject = if function == :bulk_create, do: 1, else: 0
+    records = [{:rule, __MODULE__, :records, [[{:param, subject}]]}]
+    errors = [{:rule, __MODULE__, :errors, [[{:param, subject}]]}]
+
+    function
+    |> api_result(records, errors)
+    |> api_wrapped(function, errors)
+  end
+
+  # The result as the function gives it: as it is for the forms that raise (a name ending in `!` or
+  # `?`) and for the bulk ones, else `{:ok, result}` or `{:error, error}`, and `:ok` for a destroy
+  # or an action.
+  defp api_wrapped(nil, _function, _errors), do: nil
+
+  defp api_wrapped(result, function, errors) do
+    name = Atom.to_string(function)
+
+    cond do
+      String.ends_with?(name, ["!", "?"]) or function in @api_bulk ->
+        result
+
+      function in [:destroy, :run_action] ->
+        union([[{:atom, :ok}], wrapped_with(result, errors)])
+
+      true ->
+        wrapped_with(result, errors)
+    end
+  end
+
+  # Whether the module is one of Ash's exceptions, by its name.
+  defp ash_exception?(module) do
+    module
+    |> Atom.to_string()
+    |> String.starts_with?("Elixir.Ash.Error.")
   end
 
   # What a calculation interface's calculation gives: its type's shapes.
@@ -186,7 +313,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     type_shapes(calculation.type, calculation.constraints || [], flow)
   end
 
-  # The tree remembered under the key in the flow context's rule cache, or the function's, remembered.
+  # The tree remembered under the key in the flow context's rule cache, or the function's,
+  # remembered.
   defp cached(key, flow, fun) do
     case PLT.get(flow.rule_cache, key) do
       {:ok, tree} ->
@@ -208,8 +336,9 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         do: entry
   end
 
-  # What `{:error, error}` holds: each of Ash's error classes, its errors a list of Ash's exceptions,
-  # its changeset, query or action input one of the resource's (see subject_tree/3), nil or not.
+  # What `{:error, error}` holds: each of Ash's error classes, its errors a list of Ash's
+  # exceptions, its changeset, query or action input one of the resource's (see subject_tree/3), nil
+  # or not.
   defp error_tree(resource, flow) do
     cached({__MODULE__, :error, resource}, flow, fn ->
       exceptions =
@@ -230,8 +359,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end)
   end
 
-  # Ash's exceptions among the compile's modules (the module info's `exception?` flag), which an error
-  # class can hold.
+  # Ash's exceptions among the compile's modules (the module info's `exception?` flag), which an
+  # error class can hold.
   defp exceptions(flow) do
     cached({__MODULE__, :exceptions}, flow, fn ->
       modules =
@@ -262,8 +391,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     do: Info.action(resource, interface.action || interface.name)
 
   # The functions an interface generates, each keyed by the module it is generated on (the host, or
-  # the host's namespace module) and its name as a string, with the resource, the interface and the form. A name
-  # ending in `?` is the form that raises, as Ash names it.
+  # the host's namespace module) and its name as a string, with the resource, the interface and the
+  # form. A name ending in `?` is the form that raises, as Ash names it.
   defp interface_entries(host, resource, interface, default_namespace) do
     case interface_module(host, Map.get(interface, :namespace) || default_namespace) do
       nil ->
@@ -276,17 +405,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end
   end
 
-  # The module an interface's functions are generated on: the host, or its namespace module, nil when
-  # Ash generated none (its name was never made an atom).
-  defp interface_module(host, nil), do: host
-
-  defp interface_module(host, namespace) do
-    Module.safe_concat(host, namespace)
-  rescue
-    ArgumentError -> nil
-  end
-
-  # The functions of every resource's and domain's code interface in the compile, by module and name.
+  # The functions of every resource's and domain's code interface in the compile, by module and
+  # name.
   defp interface_index(flow) do
     cached({__MODULE__, :interfaces}, flow, fn ->
       flow.module_info_plt
@@ -295,6 +415,16 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
       |> Enum.flat_map(&module_entries/1)
       |> Map.new()
     end)
+  end
+
+  # The module an interface's functions are generated on: the host, or its namespace module, nil
+  # when Ash generated none (its name was never made an atom).
+  defp interface_module(host, nil), do: host
+
+  defp interface_module(host, namespace) do
+    Module.safe_concat(host, namespace)
+  rescue
+    ArgumentError -> nil
   end
 
   # The interface's function names, as strings, by form (see summary/2).
@@ -361,13 +491,31 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   defp interface_tree(resource, interface, :subject, flow),
     do: subject_tree(subject_module(resource, interface), resource, flow)
 
-  # A record's field that Ash can leave not loaded: the field's shapes, nil, or `Ash.NotLoaded`, which
-  # names the resource.
+  # A record's field that Ash can leave not loaded: the field's shapes, nil, or `Ash.NotLoaded`,
+  # which names the resource.
   defp loadable(tree, resource), do: union([tree, [:prim], not_loaded(resource)])
 
   # Whether Ash is loaded, asked once per compile (see available?/0): a compile without it asks for
   # every function.
   defp loaded?(flow), do: cached({__MODULE__, :available}, flow, &available?/0)
+
+  # What the function gives, with Ash loaded (see summary/2).
+  defp loaded_summary(Ash, function, _arity, _flow), do: api_tree(function)
+
+  defp loaded_summary(module, _function, 0, _flow) when module in @subjects,
+    do: [{:struct, module, DataFlow.rest_fields([:prim])}]
+
+  defp loaded_summary(module, _function, _arity, _flow) when module in @subjects,
+    do: [{:rule, __MODULE__, :subject, [[{:atom, module}], [{:param, 0}]]}]
+
+  defp loaded_summary(module, function, _arity, flow) do
+    index = interface_index(flow)
+
+    case Map.fetch(index, {module, Atom.to_string(function)}) do
+      {:ok, {resource, interface, form}} -> interface_tree(resource, interface, form, flow)
+      :error -> nil
+    end
+  end
 
   defp map_tree(constraints, flow) do
     case constraints[:fields] do
@@ -472,15 +620,22 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
 
   defp not_loaded(resource), do: struct_tree(Ash.NotLoaded, %{resource: [{:atom, resource}]})
 
-  # A record with its notifications, as a create, an update or a destroy gives it when asked for them.
+  # A record with its notifications, as a create, an update or a destroy gives it when asked for
+  # them; the notification names the resource the given tree holds.
   defp notified(resource, record) do
     notification =
-      struct_tree(Ash.Notifier.Notification, %{
-        data: union([[:prim], record]),
-        resource: [{:atom, resource}]
-      })
+      struct_tree(Ash.Notifier.Notification, %{data: union([[:prim], record]), resource: resource})
 
     [{:tuple, [record, [{:list, notification}]]}]
+  end
+
+  # A list of records, or a page of them.
+  defp paged(list) do
+    union([
+      list,
+      struct_tree(Ash.Page.Keyset, %{results: list}),
+      struct_tree(Ash.Page.Offset, %{results: list})
+    ])
   end
 
   # The types every record reachable from the resource holds, as leaves: each reachable resource's
@@ -518,8 +673,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end
   end
 
-  # A read's records: the record or nil when it gets one, else a list of them, or a page of them when
-  # the action paginates.
+  # A read's records: the record or nil when it gets one, else a list of them, or a page of them
+  # when the action paginates.
   defp read_tree(record, interface, action) do
     list = [{:list, record}]
 
@@ -528,11 +683,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         union([record, [:prim]])
 
       action.pagination ->
-        union([
-          list,
-          struct_tree(Ash.Page.Keyset, %{results: list}),
-          struct_tree(Ash.Page.Offset, %{results: list})
-        ])
+        paged(list)
 
       true ->
         list
@@ -566,6 +717,19 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end
   end
 
+  # The records of the resources among the modules, or every resource's when there is none.
+  defp records_of(modules, flow) do
+    case resources_among(modules) do
+      [] ->
+        all_records(flow)
+
+      resources ->
+        resources
+        |> Enum.map(&record_shapes(&1, flow))
+        |> union()
+    end
+  end
+
   # A record's relationships: the related record, a list of them for a to-many relationship, below
   # @record_depth a bag of the types every record reachable from it holds; nil or not loaded.
   defp relationship_fields(resource, depth, flow) do
@@ -585,14 +749,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end)
   end
 
-  # What a generic action returns: its return type's shapes, or `:ok` without one.
-  defp returns_tree(action, flow) do
-    case action.returns do
-      nil -> [{:atom, :ok}]
-      type -> type_shapes(type, action.constraints || [], flow)
-    end
-  end
-
   # The functions a resource's code interface generates, on the resource or on its namespace module.
   defp resource_entries(resource) do
     namespace = Extension.get_opt(resource, [:code_interface], :namespace, nil)
@@ -600,6 +756,28 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     for interface <- Info.interfaces(resource) ++ Info.calculation_interfaces(resource),
         entry <- interface_entries(resource, resource, interface, namespace),
         do: entry
+  end
+
+  # The resources among the compile's modules.
+  defp resources(flow) do
+    cached({__MODULE__, :resources}, flow, fn ->
+      flow.module_info_plt
+      |> PLT.get_all()
+      |> Map.keys()
+      |> Enum.filter(&Info.resource?/1)
+      |> Enum.sort()
+    end)
+  end
+
+  # The resources among the modules.
+  defp resources_among(modules), do: Enum.filter(modules, &Info.resource?/1)
+
+  # What a generic action returns: its return type's shapes, or `:ok` without one.
+  defp returns_tree(action, flow) do
+    case action.returns do
+      nil -> [{:atom, :ok}]
+      type -> type_shapes(type, action.constraints || [], flow)
+    end
   end
 
   # A name and the name of its form that raises, as Ash names them (a name ending in `?` raises), as
@@ -653,7 +831,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     [{:struct, module, fields}]
   end
 
-  # The module of the subject the interface's action runs on: a query, a changeset or an action input.
+  # The module of the subject the interface's action runs on: a query, a changeset or an action
+  # input.
   defp subject_module(resource, interface) do
     case interface_action(resource, interface).type do
       :read -> Ash.Query
@@ -662,8 +841,17 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end
   end
 
-  # A query, a changeset or an action input of the resource: its fields a rest holding the resource's
-  # module (which Ash's functions called with it find it by) and its records.
+  # A query, a changeset or an action input of the resource: its fields a rest holding the
+  # resource's module (which Ash's functions called with it find it by) and its records.
+  defp subject_tree(module, nil, flow) do
+    rest =
+      [[:prim], all_records(flow)]
+      |> union()
+      |> DataFlow.rest_fields()
+
+    [{:struct, module, rest}]
+  end
+
   defp subject_tree(module, resource, flow) do
     rest = union([[:prim, {:atom, resource}], record_shapes(resource, flow)])
     [{:struct, module, DataFlow.rest_fields(rest)}]
@@ -690,8 +878,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     |> module_tree(constraints, flow)
   end
 
-  # The given trees as one, sorted, each shape once (the analysis merges the shapes of a kind when it
-  # interns the tree).
+  # The given trees as one, sorted, each shape once (the analysis merges the shapes of a kind when
+  # it interns the tree).
   defp union(trees) do
     trees
     |> Enum.concat()
@@ -699,8 +887,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   end
 
   # A record's attributes, calculations and aggregates: each type's shapes and nil; an attribute can
-  # also be a forbidden field, which may hold its original value, and a calculation or an aggregate not
-  # loaded.
+  # also be a forbidden field, which may hold its original value, and a calculation or an aggregate
+  # not loaded.
   defp value_fields(resource, flow) do
     attributes =
       resource
@@ -734,10 +922,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   end
 
   # The tree as the forms that do not raise give it: `{:ok, tree}` or `{:error, error}`.
-  defp wrapped(tree, resource, flow) do
-    [
-      {:tuple, [[{:atom, :ok}], tree]},
-      {:tuple, [[{:atom, :error}], error_tree(resource, flow)]}
-    ]
-  end
+  defp wrapped(tree, resource, flow), do: wrapped_with(tree, error_tree(resource, flow))
+
+  defp wrapped_with(tree, errors),
+    do: [{:tuple, [[{:atom, :ok}], tree]}, {:tuple, [[{:atom, :error}], errors]}]
 end

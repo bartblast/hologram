@@ -504,6 +504,25 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp arg_index(_shape, _ref), do: nil
 
+  # What a rule is given for one argument of its call (see Rules): the argument's atoms and struct
+  # modules, the atoms right inside its structs' fields (a query holds its resource there), and every
+  # atom and struct module among a bag's leaves, its structure lost; sorted, each once. Not what is
+  # deeper in a struct: a record's related records are not what the call is about.
+  defp arg_names(set, store) do
+    set
+    |> ShapeSet.reduce(
+      [],
+      fn
+        {:atom, atom}, names -> [atom | names]
+        {:struct, module, fields}, names -> [module | field_atoms(fields, store)] ++ names
+        {:bag, inner}, names -> leaf_atoms(inner, store) ++ names
+        _shape, names -> names
+      end,
+      store
+    )
+    |> :lists.usort()
+  end
+
   defp as_map_shapes({kind, _inner} = shape, _store) when kind in [:as_map, :map], do: [shape]
 
   defp as_map_shapes({:struct, _module, _fields} = shape, _store), do: [shape]
@@ -1426,6 +1445,11 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  # The atoms right inside a struct's or a map's fields (see arg_names/2).
+  defp field_atoms(fields, store) do
+    for set <- Map.values(fields), {:atom, atom} <- ShapeSet.to_list(set, store), do: atom
+  end
+
   # `value.name` on a struct's or a map's fields (see fields/0): the name's entry and the rest; every
   # entry when the name has none, as it may be in the rest, or the value is not what the code expects.
   defp field(fields, name, store) do
@@ -1641,13 +1665,14 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp index_with_clause(%IR.WithBareClause{expression: expr}, acc), do: index(expr, acc)
 
-  # The atoms among the given leaves, sorted, each once.
+  # The atoms among the given leaves and the modules of the structs among them, sorted, each once.
   defp leaf_atoms(leaves, store) do
     leaves
     |> ShapeSet.reduce(
       [],
       fn
         {:atom, atom}, atoms -> [atom | atoms]
+        {:struct, module, _fields}, atoms -> [module | atoms]
         _leaf, atoms -> atoms
       end,
       store
@@ -2300,14 +2325,14 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # What the rules module answers for the named part, from the module atoms among each argument's
-  # leaves (see Rules), interned once per compile; and the rule shape beside it while an argument
+  # What the rules module answers for the named part, from the atoms and the struct modules of each
+  # argument (see arg_names/2 and Rules), interned once per compile; and the rule shape beside it while an argument
   # still holds a value not known yet (a param, an anonymous function's argument, a call not made),
   # so a rule is resolved as far as its arguments allow, and again once they are known.
   defp resolve_rule(rules_module, name, args, ctx) do
     store = ctx.flow.store
     arg_leaves = Enum.map(args, &leaves(&1, store))
-    atoms = Enum.map(arg_leaves, &leaf_atoms(&1, store))
+    atoms = Enum.map(args, &arg_names(&1, store))
 
     answer =
       Store.memo(store, {:resolved, rules_module, name, atoms}, fn ->

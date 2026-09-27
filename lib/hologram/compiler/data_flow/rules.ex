@@ -20,9 +20,10 @@ defmodule Hologram.Compiler.DataFlow.Rules do
   @callback summary(mfa, DataFlow.t()) :: DataFlow.tree() | nil
 
   @doc """
-  Returns, as a tree, what the named part of an answer gives, from the atoms among the leaves of each
-  argument of the call, sorted (the analysis computes them on its shared values, so a rule never
-  walks one); the rule takes the modules it knows among them.
+  Returns, as a tree, what the named part of an answer gives, from what each argument of the call is:
+  its atoms and struct modules, the atoms right inside its structs' fields, and a bag's atoms and
+  struct modules at any depth, sorted (the analysis computes them on its shared values, so a rule
+  never walks one); the rule takes the modules it knows among them.
   """
   @callback resolve(atom, [[atom]], DataFlow.t()) :: DataFlow.tree()
 
@@ -33,8 +34,8 @@ defmodule Hologram.Compiler.DataFlow.Rules do
   def built_in, do: [Hologram.Compiler.DataFlow.Rules.Ash]
 
   @doc """
-  Returns what the given rules module answers for the named part of an answer, from the atoms among
-  the leaves of each argument of the call (see `c:resolve/3`).
+  Returns what the given rules module answers for the named part of an answer, from what each
+  argument of the call is (see `c:resolve/3`).
   """
   @spec resolve(module, atom, [[atom]], DataFlow.t()) :: DataFlow.tree()
   def resolve(rules_module, name, atoms_per_arg, flow),
