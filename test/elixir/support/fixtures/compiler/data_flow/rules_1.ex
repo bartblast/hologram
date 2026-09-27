@@ -8,8 +8,16 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Rules1 do
   @impl Hologram.Compiler.DataFlow.Rules
   def summary({Module25, :ruled, 0}, _flow), do: [{:struct, Struct1, %{field: [:prim]}}]
 
+  def summary({Module25, :structs_of, 1}, _flow),
+    do: [{:rule, __MODULE__, :structs, [[{:param, 0}]]}]
+
   def summary(_mfa, _flow), do: nil
 
+  # A struct with no fields for each struct module among the first argument's atoms.
   @impl Hologram.Compiler.DataFlow.Rules
-  def resolve(_part, _modules, _flow), do: raise("not used")
+  def resolve(:structs, [atoms], _flow) do
+    for atom <- atoms, Code.ensure_loaded?(atom), function_exported?(atom, :__struct__, 0) do
+      {:struct, atom, %{}}
+    end
+  end
 end

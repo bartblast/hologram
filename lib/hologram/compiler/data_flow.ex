@@ -94,7 +94,7 @@ defmodule Hologram.Compiler.DataFlow do
 
   # Shapes that stand for a value not known yet, which a caller's arguments or an anonymous
   # function's arguments make known (see replace/3).
-  @pending_kinds [:arg, :as_map, :call, :contents, :dot, :dyn, :param, :part]
+  @pending_kinds [:arg, :as_map, :call, :contents, :dot, :dyn, :param, :part, :rule]
 
   # Shapes of unknown structure: they can hold anything, so they can match any pattern.
   @opaque_kinds [:bag, :reach | @pending_kinds]
@@ -146,6 +146,9 @@ defmodule Hologram.Compiler.DataFlow do
   #     map or a struct, or a call of a zero-arity function of a module.
   #   * `{:dyn, shapes, name, arity, [shapes]}` - a call of the named function on a module that
   #     depends on a parameter.
+  #   * `{:rule, rules_module, name, [shapes]}` - what the rules module answers for the named part of
+  #     an answer, from the module atoms its arguments hold, once they are known (see resolve_rule/4
+  #     and Rules).
   @type shape ::
           {:atom, atom}
           | :prim
@@ -164,6 +167,7 @@ defmodule Hologram.Compiler.DataFlow do
           | {:part, shapes}
           | {:dot, shapes, atom}
           | {:dyn, shapes, atom, arity, [shapes]}
+          | {:rule, module, atom, [shapes]}
 
   # What a struct's fields or a map's keys hold: under a literal atom key, what the value of that key
   # holds; under the rest key (see rest_fields/1), the keys and the values of the pairs whose key is
@@ -281,6 +285,9 @@ defmodule Hologram.Compiler.DataFlow do
     {:dyn, fun.(module), name, arity, Enum.map(args, fun)}
   end
 
+  def map_nested({:rule, rules_module, name, args}, fun),
+    do: {:rule, rules_module, name, Enum.map(args, fun)}
+
   def map_nested(shape, _fun), do: shape
 
   @doc """
@@ -303,6 +310,8 @@ defmodule Hologram.Compiler.DataFlow do
   def nested_sets({:dot, inner, _name}), do: [inner]
 
   def nested_sets({:dyn, module, _name, _arity, args}), do: [module | args]
+
+  def nested_sets({:rule, _rules_module, _name, args}), do: args
 
   def nested_sets(_shape), do: []
 
@@ -864,6 +873,9 @@ defmodule Hologram.Compiler.DataFlow do
     )
   end
 
+  defp collapse_route({:rule, _rules_module, _name, _args} = shape, store),
+    do: ShapeSet.new([map_nested(shape, &collapse_routes(&1, store))], store)
+
   defp collapse_route(shape, store), do: ShapeSet.new([shape], store)
 
   defp collapse_routes(shapes, store) do
@@ -912,6 +924,9 @@ defmodule Hologram.Compiler.DataFlow do
   defp compress_atom({:dyn, module, name, arity, args}, ctx) do
     {:dyn, compress_atoms(module, ctx), name, arity, Enum.map(args, &compress_atoms(&1, ctx))}
   end
+
+  defp compress_atom({:rule, _rules_module, _name, _args} = shape, ctx),
+    do: map_nested(shape, &compress_atoms(&1, ctx))
 
   defp compress_atom(shape, _ctx), do: shape
 
@@ -1626,6 +1641,20 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp index_with_clause(%IR.WithBareClause{expression: expr}, acc), do: index(expr, acc)
 
+  # The atoms among the given leaves, sorted, each once.
+  defp leaf_atoms(leaves, store) do
+    leaves
+    |> ShapeSet.reduce(
+      [],
+      fn
+        {:atom, atom}, atoms -> [atom | atoms]
+        _leaf, atoms -> atoms
+      end,
+      store
+    )
+    |> :lists.usort()
+  end
+
   # Every shape the given shapes hold, at any depth, flat: a struct with no fields besides what its
   # fields hold, and the contents of maps (their atom keys too), lists, tuples and bags. An anonymous
   # function and a call of one not made yet dissolve into their parts: what the function returns, the
@@ -1874,6 +1903,10 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp pattern_variables(_ir, vars), do: vars
 
+  # Whether the leaf is a value not known yet: a param, an anonymous function's argument, or a step,
+  # a field read, a call or a rule shape over one (see shape_leaves/2).
+  defp pending_leaf?(leaf), do: is_tuple(leaf) and elem(leaf, 0) in @pending_kinds
+
   # The summary with the arguments put in for its params (without a context, see apply_summary/3):
   # the dynamic calls and dots on a module an argument makes known are made too, the arguments are
   # bounded, and the summary is flattened first when putting them in would make a value larger than
@@ -2033,6 +2066,11 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp put_types({:dyn, module, _name, _arity, args}, acc, module_info_plt, store) do
     Enum.reduce([module | args], acc, &put_types(&1, &2, module_info_plt, store))
+  end
+
+  # The types a rule shape's arguments hold: its answer so far is beside it (see resolve_rule/4).
+  defp put_types({:rule, _rules_module, _name, args}, acc, module_info_plt, store) do
+    Enum.reduce(args, acc, &put_types(&1, &2, module_info_plt, store))
   end
 
   # A primitive, a param or an anonymous function's argument.
@@ -2228,6 +2266,16 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  defp replace_parts({:rule, rules_module, name, args}, replacer, rep) do
+    new_args = Enum.map(args, &replace(&1, replacer, rep))
+
+    if rep.ctx do
+      resolve_rule(rules_module, name, new_args, rep.ctx)
+    else
+      ShapeSet.new([{:rule, rules_module, name, new_args}], rep.store)
+    end
+  end
+
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex, which holds none of them.
   defp replace_parts(shape, _replacer, rep), do: ShapeSet.new([shape], rep.store)
@@ -2249,6 +2297,29 @@ defmodule Hologram.Compiler.DataFlow do
     case replacer.(shape) do
       nil -> replace_parts(shape, replacer, rep)
       replaced -> replaced
+    end
+  end
+
+  # What the rules module answers for the named part, from the module atoms among each argument's
+  # leaves (see Rules), interned once per compile; and the rule shape beside it while an argument
+  # still holds a value not known yet (a param, an anonymous function's argument, a call not made),
+  # so a rule is resolved as far as its arguments allow, and again once they are known.
+  defp resolve_rule(rules_module, name, args, ctx) do
+    store = ctx.flow.store
+    arg_leaves = Enum.map(args, &leaves(&1, store))
+    atoms = Enum.map(arg_leaves, &leaf_atoms(&1, store))
+
+    answer =
+      Store.memo(store, {:resolved, rules_module, name, atoms}, fn ->
+        rules_module
+        |> Rules.resolve(name, atoms, ctx.flow)
+        |> ShapeSet.from_tree(store)
+      end)
+
+    if Enum.any?(arg_leaves, &ShapeSet.any?(&1, fn leaf -> pending_leaf?(leaf) end, store)) do
+      ShapeSet.put(answer, {:rule, rules_module, name, args}, store)
+    else
+      answer
     end
   end
 
@@ -2430,6 +2501,9 @@ defmodule Hologram.Compiler.DataFlow do
     [{:dyn, leaves(module, store), name, arity, Enum.map(args, &bag_of_leaves(&1, store))}]
   end
 
+  defp shape_leaves({:rule, rules_module, name, args}, store),
+    do: [{:rule, rules_module, name, Enum.map(args, &bag_of_leaves(&1, store))}]
+
   defp shape_leaves({kind, shapes}, store) when kind in [:as_map, :contents, :part] do
     shapes
     |> leaves(store)
@@ -2474,6 +2548,9 @@ defmodule Hologram.Compiler.DataFlow do
       [{:dyn, module, name, arity, Enum.map(args, &set_without_args(&1, ref, store))}]
     end
   end
+
+  defp shape_without_args({:rule, rules_module, name, args}, ref, store),
+    do: [{:rule, rules_module, name, Enum.map(args, &set_without_args(&1, ref, store))}]
 
   defp shape_without_args(shape, _ref, _store), do: [shape]
 
@@ -2734,6 +2811,9 @@ defmodule Hologram.Compiler.DataFlow do
   defp widen_shape({:dyn, module, name, arity, args}, depth, store) do
     {:dyn, widen(module, depth, store), name, arity, Enum.map(args, &widen(&1, depth, store))}
   end
+
+  defp widen_shape({:rule, _rules_module, _name, _args} = shape, depth, store),
+    do: map_nested(shape, &widen(&1, depth, store))
 
   # An atom, a primitive, a param, an anonymous function's argument, or the rule before this module
   # applied from a vertex.

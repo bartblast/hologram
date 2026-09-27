@@ -869,6 +869,27 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module25, :calls_ruled, 0) == tree_set([:prim])
     end
 
+    test "a rule shape is resolved once its arguments are known" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :calls_structs_of, 0}, flow) == tree_set([@struct_1_named])
+    end
+
+    test "a rule shape waits while its arguments are not known" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :structs_of, 1}, flow) ==
+               tree_set([{:rule, Rules1, :structs, [@param_0]}])
+    end
+
+    test "a rule shape answers for what its arguments show and waits for the rest" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+      rule = {:rule, Rules1, :structs, [tree_set([{:atom, Struct1}, {:param, 0}])]}
+
+      assert summary_tree({Module25, :structs_of_mixed, 2}, flow) ==
+               tree_set([@struct_1_named, rule])
+    end
+
     test "a set nested too deep becomes a bag of its leaves, with the same types" do
       flow = flow()
       summary = summary({Module9, :deep, 0}, flow)
@@ -1444,6 +1465,12 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "types/2" do
+    test "a rule shape holds the types its arguments show" do
+      rule = {:rule, Rules1, :structs, [tree_set([{:atom, Struct1}, {:param, 0}])]}
+
+      assert types_of([rule]) == types_fixture([Struct1], [], [Struct1])
+    end
+
     test "struct" do
       assert types_of([@struct_1]) == types_fixture([], [], [Struct1])
     end
