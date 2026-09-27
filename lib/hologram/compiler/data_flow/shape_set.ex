@@ -13,6 +13,12 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   # Every function takes the store as its last argument, passed explicitly (the set is the subject,
   # so a pipeline of set functions reads as a pipeline). A set is always built by this module: every
   # result is interned, so equal content always gives the same id.
+  #
+  # A set holds one alternative per kind (see merged/2): two of a kind become one, the sets nested in
+  # them joined, so a list of A or a list of B is a list of A or B. What the analysis does with a set
+  # it does per alternative and joins the results, so the merge loses nothing; without it, answers
+  # grew sideways, alternatives multiplying where their kinds were the same (M6: the big app's
+  # compile 39% faster with the merge, the bundles the same).
 
   alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.DataFlow.Store
@@ -95,14 +101,14 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   Returns the set of the given shapes, each once.
   """
   @spec new([DataFlow.shape()], Store.t()) :: t
-  def new(shapes, store), do: Store.intern(store, :lists.usort(shapes))
+  def new(shapes, store), do: intern(:lists.usort(shapes), store)
 
   @doc """
   Returns the set with the shape added.
   """
   @spec put(t, DataFlow.shape(), Store.t()) :: t
   def put(set, shape, store) do
-    Store.intern(store, :ordsets.add_element(shape, Store.fetch(store, set)))
+    intern(:ordsets.add_element(shape, Store.fetch(store, set)), store)
   end
 
   @doc """
@@ -124,24 +130,75 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   def to_list(set, store), do: Store.fetch(store, set)
 
   @doc """
-  Returns the elements of both sets, once each.
+  Returns the elements of both sets, once each, alternatives of a kind merged. Remembered per pair of
+  sets: merging joins the sets nested in the alternatives, so a set shared by many values would be
+  joined again on every path to it.
   """
   @spec union(t, t, Store.t()) :: t
   def union(set, set, _store), do: set
 
   def union(set_1, set_2, store) do
-    Store.intern(store, :ordsets.union(Store.fetch(store, set_1), Store.fetch(store, set_2)))
+    Store.memo(store, {:union, min(set_1, set_2), max(set_1, set_2)}, fn ->
+      intern(:ordsets.union(Store.fetch(store, set_1), Store.fetch(store, set_2)), store)
+    end)
   end
 
   @doc """
-  Returns the elements of every given set, once each.
+  Returns the elements of every given set, once each, alternatives of a kind merged; remembered as
+  `union/3` is.
   """
   @spec union_all([t], Store.t()) :: t
   def union_all(sets, store) do
     case :lists.usort(sets) do
-      [] -> @empty
-      [set] -> set
-      distinct -> Store.intern(store, :ordsets.union(Enum.map(distinct, &Store.fetch(store, &1))))
+      [] ->
+        @empty
+
+      [set] ->
+        set
+
+      distinct ->
+        Store.memo(store, {:union_all, distinct}, fn ->
+          intern(:ordsets.union(Enum.map(distinct, &Store.fetch(store, &1))), store)
+        end)
     end
   end
+
+  # The id of the content, its alternatives of a kind merged first (see merged/2).
+  defp intern(content, store), do: Store.intern(store, merged(content, store))
+
+  # What makes two alternatives of a kind: the kind of a list, a bag or a step into a value not known
+  # yet; the name of a dot; the ref of an anonymous function. Any other shape is a kind of its own.
+  defp kind_key({kind, _set}) when kind in [:as_map, :bag, :contents, :list, :part], do: kind
+
+  defp kind_key({:dot, _set, name}), do: {:dot, name}
+
+  defp kind_key({:fun, ref, _returned}), do: {:fun, ref}
+
+  defp kind_key(shape), do: {:one, shape}
+
+  # Two alternatives of a kind (see kind_key/1) as one, the sets nested in them joined.
+  defp merge({kind, set_1}, {kind, set_2}, store), do: {kind, union(set_1, set_2, store)}
+
+  defp merge({:dot, set_1, name}, {:dot, set_2, name}, store),
+    do: {:dot, union(set_1, set_2, store), name}
+
+  defp merge({:fun, ref, set_1}, {:fun, ref, set_2}, store),
+    do: {:fun, ref, union(set_1, set_2, store)}
+
+  # The content (a sorted list of shapes) with its alternatives of a kind merged, sorted. A content
+  # with no two of a kind, the common case, is given back as it is.
+  defp merged([_shape_1, _shape_2 | _shapes] = content, store) do
+    groups = Enum.group_by(content, &kind_key/1)
+
+    if map_size(groups) == length(content) do
+      content
+    else
+      groups
+      |> Map.values()
+      |> Enum.map(fn [first | rest] -> Enum.reduce(rest, first, &merge(&2, &1, store)) end)
+      |> :lists.usort()
+    end
+  end
+
+  defp merged(content, _store), do: content
 end

@@ -107,6 +107,22 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
   end
 
   describe "new/2" do
+    test "alternatives of different kinds stay apart", %{store: store} do
+      a = new([:prim], store)
+
+      assert size(new([{:list, a}, {:bag, a}, {:param, 0}], store), store) == 3
+    end
+
+    test "bags, parts, contents and maps not known yet merge per kind", %{store: store} do
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      for kind <- [:as_map, :bag, :contents, :part] do
+        assert to_list(new([{kind, a}, {kind, b}], store), store) == [{kind, both}]
+      end
+    end
+
     test "drops duplicates", %{store: store} do
       assert size(new([:prim, {:atom, :a}, :prim], store), store) == 2
     end
@@ -118,9 +134,65 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
     test "equal sets are one id", %{store: store} do
       assert new([:prim, {:atom, :a}], store) == new([{:atom, :a}, :prim, :prim], store)
     end
+
+    test "dots of different names stay apart", %{store: store} do
+      a = new([{:param, 0}], store)
+
+      assert size(new([{:dot, a, :title}, {:dot, a, :note}], store), store) == 2
+    end
+
+    test "functions of different refs stay apart", %{store: store} do
+      a = new([:prim], store)
+
+      assert size(new([{:fun, {{M, :f, 0}, 1}, a}, {:fun, {{M, :f, 0}, 2}, a}], store), store) ==
+               2
+    end
+
+    test "nested sets merge too", %{store: store} do
+      a = new([{:list, new([:prim], store)}], store)
+      b = new([{:list, new([{:atom, :x}], store)}], store)
+      inner = new([{:list, new([:prim, {:atom, :x}], store)}], store)
+
+      assert to_list(new([{:list, a}, {:list, b}], store), store) == [{:list, inner}]
+    end
+
+    test "two dots of one name become one", %{store: store} do
+      a = new([{:param, 0}], store)
+      b = new([{:param, 1}], store)
+      both = new([{:param, 0}, {:param, 1}], store)
+
+      assert to_list(new([{:dot, a, :title}, {:dot, b, :title}], store), store) ==
+               [{:dot, both, :title}]
+    end
+
+    test "two functions of one ref become one", %{store: store} do
+      ref = {{M, :f, 0}, 1}
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(new([{:fun, ref, a}, {:fun, ref, b}], store), store) == [{:fun, ref, both}]
+    end
+
+    test "two lists become a list of both", %{store: store} do
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(new([{:list, a}, {:list, b}], store), store) == [{:list, both}]
+    end
   end
 
   describe "put/3" do
+    test "an alternative of a kind in the set merges into it", %{store: store} do
+      set = new([{:list, new([:prim], store)}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(put(set, {:list, new([{:atom, :x}], store)}, store), store) == [
+               {:list, both}
+             ]
+    end
+
     test "new element", %{store: store} do
       assert put(new([:prim], store), {:atom, :a}, store) == new([:prim, {:atom, :a}], store)
     end
@@ -160,6 +232,14 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
   end
 
   describe "union/3" do
+    test "alternatives of a kind merge", %{store: store} do
+      set_1 = new([{:list, new([:prim], store)}], store)
+      set_2 = new([{:list, new([{:atom, :x}], store)}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(union(set_1, set_2, store), store) == [{:list, both}]
+    end
+
     test "elements of both sets, once each", %{store: store} do
       assert union(
                new([:prim, {:atom, :a}], store),
@@ -174,9 +254,29 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
 
       assert union(set, set, store) == set
     end
+
+    test "is remembered per pair of sets", %{store: store} do
+      set_1 = new([:prim], store)
+      set_2 = new([{:atom, :x}], store)
+      union(set_1, set_2, store)
+      union(set_2, set_1, store)
+
+      assert Store.memo_count(store, :union) == 1
+    end
   end
 
   describe "union_all/2" do
+    test "alternatives of a kind merge", %{store: store} do
+      sets = [
+        new([{:bag, new([:prim], store)}], store),
+        new([{:bag, new([{:atom, :x}], store)}], store)
+      ]
+
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(union_all(sets, store), store) == [{:bag, both}]
+    end
+
     test "elements of every set", %{store: store} do
       assert union_all(
                [new([:prim], store), new([{:atom, :a}], store), new([:prim], store)],
