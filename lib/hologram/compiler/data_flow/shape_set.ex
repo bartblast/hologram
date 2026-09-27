@@ -168,7 +168,15 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
 
   # What makes two alternatives of a kind: the kind of a list, a bag or a step into a value not known
   # yet; the name of a dot; the ref of an anonymous function; the module of a struct; being a map; a
-  # tuple's size and tag (see tuple_tag/2). Any other shape is a kind of its own.
+  # tuple's size and tag (see tuple_tag/2); the number of arguments of a call of a function value, the
+  # name and arity of a dynamic call, the rules module and name of a rule shape. Any other shape is a
+  # kind of its own.
+  #
+  # Calls merged stand for every function or module with every argument (`m1.f(a)` or `m2.f(b)` is
+  # `(m1 or m2).f(a or b)`), which can give types neither call gives when two modules not known yet
+  # get crossed with each other's arguments; calls of one callee lose nothing, since an answer is
+  # built from each argument on its own. Kept apart, calls like these filled page helpers' answers
+  # past the cap (M6: 26 functions too large to flatten apart, 4 merged).
   defp kind_key({kind, _set}, _store) when kind in [:as_map, :bag, :contents, :list, :part],
     do: kind
 
@@ -183,10 +191,17 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   defp kind_key({:tuple, elements}, store),
     do: {:tuple, length(elements), tuple_tag(elements, store)}
 
+  defp kind_key({:call, _fun, args}, _store), do: {:call, length(args)}
+
+  defp kind_key({:dyn, _module, name, arity, _args}, _store), do: {:dyn, name, arity}
+
+  defp kind_key({:rule, rules_module, name, _args}, _store), do: {:rule, rules_module, name}
+
   defp kind_key(shape, _store), do: {:one, shape}
 
   # Two alternatives of a kind (see kind_key/2) as one, the sets nested in them joined; a struct's or a
-  # map's fields key by key (see merge_fields/3); a tuple's elements position by position.
+  # map's fields key by key (see merge_fields/3); a tuple's elements, and a call's arguments, position
+  # by position (see union_each/3).
   defp merge({kind, set_1}, {kind, set_2}, store)
        when kind in [:as_map, :bag, :contents, :list, :part],
        do: {kind, union(set_1, set_2, store)}
@@ -203,10 +218,18 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   defp merge({:map, fields_1}, {:map, fields_2}, store),
     do: {:map, merge_fields(fields_1, fields_2, store)}
 
-  defp merge({:tuple, elements_1}, {:tuple, elements_2}, store) do
-    elements = Enum.zip_with(elements_1, elements_2, &union(&1, &2, store))
-    {:tuple, elements}
+  defp merge({:tuple, elements_1}, {:tuple, elements_2}, store),
+    do: {:tuple, union_each(elements_1, elements_2, store)}
+
+  defp merge({:call, fun_1, args_1}, {:call, fun_2, args_2}, store),
+    do: {:call, union(fun_1, fun_2, store), union_each(args_1, args_2, store)}
+
+  defp merge({:dyn, module_1, name, arity, args_1}, {:dyn, module_2, name, arity, args_2}, store) do
+    {:dyn, union(module_1, module_2, store), name, arity, union_each(args_1, args_2, store)}
   end
+
+  defp merge({:rule, rules_module, name, args_1}, {:rule, rules_module, name, args_2}, store),
+    do: {:rule, rules_module, name, union_each(args_1, args_2, store)}
 
   # Two structs' or maps' fields as one (see Hologram.Compiler.DataFlow.fields/0): a key both have
   # holds the join of the two, a key one has holds what it holds there, the rest key like any other.
@@ -245,4 +268,7 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   end
 
   defp tuple_tag([], _store), do: :none
+
+  # The given lists of sets joined position by position.
+  defp union_each(sets_1, sets_2, store), do: Enum.zip_with(sets_1, sets_2, &union(&1, &2, store))
 end

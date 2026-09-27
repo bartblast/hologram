@@ -156,6 +156,52 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
       assert to_list(new([{:list, a}, {:list, b}], store), store) == [{:list, inner}]
     end
 
+    test "calls of a function value with one number of arguments merge", %{store: store} do
+      a = new([{:param, 0}], store)
+      b = new([{:param, 1}], store)
+      x = new([:prim], store)
+      y = new([{:atom, :y}], store)
+
+      assert to_list(new([{:call, a, [x]}, {:call, b, [y]}], store), store) ==
+               [{:call, union(a, b, store), [union(x, y, store)]}]
+    end
+
+    test "calls with different numbers of arguments stay apart", %{store: store} do
+      a = new([{:param, 0}], store)
+
+      assert size(new([{:call, a, [a]}, {:call, a, [a, a]}], store), store) == 2
+    end
+
+    test "dynamic calls of different names stay apart", %{store: store} do
+      a = new([{:param, 0}], store)
+
+      assert size(new([{:dyn, a, :load, 1, [a]}, {:dyn, a, :save, 1, [a]}], store), store) == 2
+    end
+
+    test "dynamic calls of one name and arity merge", %{store: store} do
+      m1 = new([{:param, 0}], store)
+      m2 = new([{:param, 1}], store)
+      x = new([:prim], store)
+      y = new([{:atom, :y}], store)
+
+      assert to_list(new([{:dyn, m1, :load, 1, [x]}, {:dyn, m2, :load, 1, [y]}], store), store) ==
+               [{:dyn, union(m1, m2, store), :load, 1, [union(x, y, store)]}]
+    end
+
+    test "rule shapes of one rules module and name merge", %{store: store} do
+      x = new([{:param, 0}], store)
+      y = new([{:param, 1}], store)
+
+      assert to_list(new([{:rule, R, :records, [x]}, {:rule, R, :records, [y]}], store), store) ==
+               [{:rule, R, :records, [union(x, y, store)]}]
+    end
+
+    test "rule shapes of different names stay apart", %{store: store} do
+      x = new([{:param, 0}], store)
+
+      assert size(new([{:rule, R, :records, [x]}, {:rule, R, :types, [x]}], store), store) == 2
+    end
+
     test "a tuple whose first element holds an atom and more is untagged", %{store: store} do
       a = new([:prim], store)
       b = new([{:atom, :x}], store)

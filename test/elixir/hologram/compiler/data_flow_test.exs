@@ -1034,6 +1034,12 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module24, :map_literal, 0) == tree_set([{:map, fields}])
     end
 
+    test "calls of one name on a module not known yet, in two branches, are one call" do
+      args = [tree_set([:prim, @struct_1_stored])]
+
+      assert summary_of(Module24, :either_load, 2) == tree_set([{:dyn, @param_0, :load, 1, args}])
+    end
+
     test "tuples of one tag in two branches are one tuple" do
       list = {:list, tree_set([@struct_1_stored])}
 
