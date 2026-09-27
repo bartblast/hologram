@@ -16,10 +16,11 @@ defmodule HologramEcosystemTests.MixProject do
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0"},
+      {:ecto_sql, "~> 3.0"},
       {:ex_money_sql, "~> 2.0"},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "11b51b404d614497056d67fbf77b6e33a23584bf"},
+       ref: "76e98d460b8bd3ab32ddfba99688ee252a2762f0"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:wallaby, "~> 0.30", only: :test}
