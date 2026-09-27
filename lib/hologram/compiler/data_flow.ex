@@ -247,7 +247,11 @@ defmodule Hologram.Compiler.DataFlow do
       run(flow, fn ctx ->
         caller_ctx = %{ctx | mfa: caller}
 
-        settle(caller_ctx, fn -> caller_broadcast_params(caller, caller_ctx) end)
+        settle(caller_ctx, fn ->
+          caller
+          |> caller_broadcast_params(caller_ctx)
+          |> close_rules(caller_ctx)
+        end)
       end)
 
     {dispatch_types, components} = reaching_types(sent, graph, flow)
@@ -362,6 +366,7 @@ defmodule Hologram.Compiler.DataFlow do
           [{templatable, :command, 3}, {templatable, :init, 3}]
           |> Enum.map(&summary_with_args(&1, no_args, ctx))
           |> ShapeSet.union_all(flow.store)
+          |> close_rules(ctx)
         end)
       end)
 
@@ -821,6 +826,44 @@ defmodule Hologram.Compiler.DataFlow do
     |> index(acc)
     |> Map.put(:id, make_ref())
   end
+
+  # The shapes with every rule shape still waiting (see resolve_rule/4) answered by what its
+  # arguments name now: the rules module's fallback when they name nothing. What a public entry gives
+  # goes through it, so a rule whose argument is never known (an anonymous function's argument, a
+  # call on a module never known) still gives every record it may: a rule waiting inside a summary
+  # gets its answer once its caller's arguments are put in instead, so no caller keeps the fallback
+  # after naming a module. The walk makes no other call (its substitution has no ctx); each answer
+  # is made with the ctx (see rule_answer/4), and the rule shapes it holds are closed too, a rule
+  # already being closed answering nothing more. The rule shape stays beside its answer (see
+  # put_types/4).
+  defp close_rules(shapes, ctx), do: close_rules(shapes, %{}, ctx)
+
+  defp close_rules(shapes, closing, ctx) do
+    store = ctx.flow.store
+
+    if holds?(shapes, :rules, &match?({:rule, _rules_module, _name, _args}, &1), store) do
+      replace_root(shapes, &closed_rule(&1, closing, ctx), new_rep(nil, store))
+    else
+      shapes
+    end
+  end
+
+  defp closed_rule({:rule, rules_module, name, args} = rule, closing, ctx) do
+    store = ctx.flow.store
+
+    if Map.has_key?(closing, rule) do
+      ShapeSet.new([rule], store)
+    else
+      atoms = Enum.map(args, &arg_names(&1, store))
+
+      rules_module
+      |> rule_answer(name, atoms, ctx)
+      |> close_rules(Map.put(closing, rule, true), ctx)
+      |> ShapeSet.put(rule, store)
+    end
+  end
+
+  defp closed_rule(_shape, _closing, _ctx), do: nil
 
   # What the function's code returns, the union over its clauses, read with the answers of the
   # functions it calls as the run's solve has them now (see evaluate/2).
@@ -1540,6 +1583,14 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
+  # Whether the shapes hold, at any depth, a shape the predicate is true for; remembered per set
+  # under the given key, which names the predicate.
+  defp holds?(shapes, key, pred, store) do
+    Store.memo(store, {key, shapes}, fn ->
+      ShapeSet.any?(shapes, &(pred.(&1) or nested_holds?(&1, key, pred, store)), store)
+    end)
+  end
+
   # Collects the bindings of the variables in the given IR (see clause_frame/1). The places a
   # variable is bound at: a match, a case clause, a with clause and its else clauses, a comprehension
   # generator and its reducer, a rescue, a catch and a try's else clauses. An anonymous function's
@@ -1820,6 +1871,12 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp names_type?(_ir), do: false
 
+  defp nested_holds?(shape, key, pred, store) do
+    shape
+    |> nested_sets()
+    |> Enum.any?(&holds?(&1, key, pred, store))
+  end
+
   defp nested_shape_list(shape, store) when is_tuple(shape) and elem(shape, 0) in @data_kinds do
     shape
     |> nested_shapes(store)
@@ -1843,12 +1900,6 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp nested_shapes({:list, inner}, store), do: with_nested_shapes(inner, store)
-
-  defp nested_waiting?(shape, store) do
-    shape
-    |> nested_sets()
-    |> Enum.any?(&waiting?(&1, store))
-  end
 
   # What a substitution carries through replace/3: the ctx, or nil, the store its sets are in, and a
   # counter of the calls of anonymous functions it made, one cell every branch adds to (see
@@ -2339,37 +2390,42 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # What the rules module answers for the named part, from the atoms and the struct modules of each
-  # argument (see arg_names/2 and Rules), interned once per compile; and the rule shape beside it
-  # while an argument still holds a value not known yet (a param, an anonymous function's argument, a
-  # call not made), so a rule is resolved as far as its arguments allow, and again once they are
-  # known. The calls an answer holds (a record's field of a custom type holds what the type's module
-  # gives) are made on every resolve, not once per compile: a function met for the first time
-  # answers nothing until it has been evaluated (see solving_summary/2), so calls made once could
-  # keep that nothing.
+  # What the rules module answers for the named part (see rule_answer/4), and the rule shape beside
+  # it while an argument still holds a value not known yet (a param, an anonymous function's
+  # argument, a call not made), so a rule is resolved as far as its arguments allow, and again once
+  # they are known. While an argument names nothing and is not known yet, the rule shape alone: the
+  # answer for no names is the rules module's fallback (every record it knows), which a caller would
+  # keep after its argument names one; a rule shape still waiting when the analysis ends gets it then
+  # (see close_rules/2).
   defp resolve_rule(rules_module, name, args, ctx) do
     store = ctx.flow.store
-    arg_leaves = Enum.map(args, &leaves(&1, store))
     atoms = Enum.map(args, &arg_names(&1, store))
 
-    plain =
-      Store.memo(store, {:resolved, rules_module, name, atoms}, fn ->
-        rules_module
-        |> Rules.resolve(name, atoms, ctx.flow)
-        |> ShapeSet.from_tree(store)
+    pending =
+      Enum.map(args, fn arg ->
+        arg
+        |> leaves(store)
+        |> ShapeSet.any?(&pending_leaf?/1, store)
       end)
 
-    answer =
-      if waiting?(plain, store) do
-        replace_root(plain, fn _shape -> nil end, new_rep(ctx, store))
-      else
-        plain
-      end
+    rule = {:rule, rules_module, name, args}
 
-    if Enum.any?(arg_leaves, &ShapeSet.any?(&1, fn leaf -> pending_leaf?(leaf) end, store)) do
-      ShapeSet.put(answer, {:rule, rules_module, name, args}, store)
-    else
-      answer
+    unnamed_pending? =
+      atoms
+      |> Enum.zip(pending)
+      |> Enum.any?(&match?({[], true}, &1))
+
+    cond do
+      unnamed_pending? ->
+        ShapeSet.new([rule], store)
+
+      Enum.any?(pending) ->
+        rules_module
+        |> rule_answer(name, atoms, ctx)
+        |> ShapeSet.put(rule, store)
+
+      true ->
+        rule_answer(rules_module, name, atoms, ctx)
     end
   end
 
@@ -2410,14 +2466,28 @@ defmodule Hologram.Compiler.DataFlow do
     end
   end
 
-  # Runs a public entry with the tables of a solve (see solve/1), given in the ctx: `answers` holds
-  # `{mfa, answer}` for the functions the run is solving; `dependents` holds `{callee, caller}` when the
-  # caller's evaluation read the callee's answer (a bag, so each pair once); `work` holds
-  # `{{-depth, sequence}, mfa}`, the functions to evaluate (see solve/1); `memo` holds the
-  # variables' shapes once read (see read_variable/2), `{:queued, mfa}`, `{:depth, mfa}`, `{:changes, mfa}`,
-  # `:sequence` and `:unsettled`. `ctx.mfa` is the function whose code is read, and `ctx.node` the
-  # function the solver evaluates, nil in the entry itself. Forgets the modules' functions it read
-  # (see module_functions/2) when done. An entry never runs inside another one.
+  # What the rules module answers for the named part, from the atoms and the struct modules of each
+  # argument (see arg_names/2 and Rules), interned once per compile. The calls the answer holds (a
+  # record's field of a custom type holds what the type's module gives) are made on every resolve,
+  # not once per compile: a function met for the first time answers nothing until it has been
+  # evaluated (see solving_summary/2), so calls made once could keep that nothing.
+  defp rule_answer(rules_module, name, atoms, ctx) do
+    store = ctx.flow.store
+
+    plain =
+      Store.memo(store, {:resolved, rules_module, name, atoms}, fn ->
+        rules_module
+        |> Rules.resolve(name, atoms, ctx.flow)
+        |> ShapeSet.from_tree(store)
+      end)
+
+    if holds?(plain, :waiting, &pending_leaf?/1, store) do
+      replace_root(plain, fn _shape -> nil end, new_rep(ctx, store))
+    else
+      plain
+    end
+  end
+
   # The rules modules' answer for the function (see Rules), interned in the store once per compile, or
   # nil.
   defp ruled_summary(mfa, flow) do
@@ -2429,6 +2499,14 @@ defmodule Hologram.Compiler.DataFlow do
     end)
   end
 
+  # Runs a public entry with the tables of a solve (see solve/1), given in the ctx: `answers` holds
+  # `{mfa, answer}` for the functions the run is solving; `dependents` holds `{callee, caller}` when the
+  # caller's evaluation read the callee's answer (a bag, so each pair once); `work` holds
+  # `{{-depth, sequence}, mfa}`, the functions to evaluate (see solve/1); `memo` holds the
+  # variables' shapes once read (see read_variable/2), `{:queued, mfa}`, `{:depth, mfa}`, `{:changes, mfa}`,
+  # `:sequence` and `:unsettled`. `ctx.mfa` is the function whose code is read, and `ctx.node` the
+  # function the solver evaluates, nil in the entry itself. Forgets the modules' functions it read
+  # (see module_functions/2) when done. An entry never runs inside another one.
   defp run(flow, fun) do
     ctx = %{
       answers: :ets.new(__MODULE__, [:set, :private]),
@@ -2807,14 +2885,6 @@ defmodule Hologram.Compiler.DataFlow do
     end)
     |> ShapeSet.union_all(ctx.flow.store)
     |> ShapeSet.union(Map.get(frame.extras, var, ShapeSet.new(ctx.flow.store)), ctx.flow.store)
-  end
-
-  # Whether the shapes hold a value not known yet at any depth (see pending_leaf?/1); remembered per
-  # set.
-  defp waiting?(shapes, store) do
-    Store.memo(store, {:waiting, shapes}, fn ->
-      ShapeSet.any?(shapes, &(pending_leaf?(&1) or nested_waiting?(&1, store)), store)
-    end)
   end
 
   # Keeps the given shapes from growing without end: a set nested @max_depth deep that holds shapes

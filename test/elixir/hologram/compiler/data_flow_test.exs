@@ -28,6 +28,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module21
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module24
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module25
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module26
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -535,6 +536,20 @@ defmodule Hologram.Compiler.DataFlowTest do
              }
     end
 
+    test "a rule still waiting when the analysis ends gives the rules module's fallback" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+      graph = graph_of([Module25, Module26])
+
+      assert Struct2 in server_callback_analysis(graph, Module26, flow).dispatch_types
+    end
+
+    test "a rule still waiting when the analysis ends has the calls in its fallback made" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+      graph = graph_of([Module25, Module26])
+
+      assert Struct1 in server_callback_analysis(graph, Module26, flow).dispatch_types
+    end
+
     test "where the analysis can't follow the code, the rule before it applies from there", %{
       graph: graph
     } do
@@ -902,6 +917,19 @@ defmodule Hologram.Compiler.DataFlowTest do
 
       assert summary_tree({Module25, :structs_of_mixed, 2}, flow) ==
                tree_set([@struct_1_named, rule])
+    end
+
+    test "a rule shape waits alone while an argument names nothing and is not known yet" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :reads_via, 1}, flow) ==
+               tree_set([{:rule, Rules1, :read, [@param_0]}])
+    end
+
+    test "a caller naming a module gets the rule's answer for it, not the rule's fallback" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :calls_reads, 0}, flow) == tree_set([@struct_1_named])
     end
 
     test "a rule's answer has its calls made" do

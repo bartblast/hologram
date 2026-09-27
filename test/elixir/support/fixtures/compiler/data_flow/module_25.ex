@@ -7,6 +7,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module25 do
 
   def calls_loads, do: loads(__MODULE__)
 
+  def calls_reads, do: reads_via(Struct1)
+
   def calls_ruled, do: ruled()
 
   def calls_structs_of, do: structs_of(Struct1)
@@ -16,6 +18,12 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module25 do
   def calls_structs_of_nested, do: structs_of(%Struct1{field: %Struct2{}})
 
   def loads(module), do: module
+
+  def reads(query), do: query
+
+  def reads_loaded(query), do: query
+
+  def reads_via(query), do: reads(query)
 
   def ruled, do: :followed
 
