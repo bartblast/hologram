@@ -62,6 +62,26 @@ defmodule HologramEcosystemTests.Ash.InterfacesTest do
     assert [{:list, [{:struct, Ash.Error.Invalid.NoSuchInput, _fields}]}] = fields.errors
   end
 
+  test "an error's changeset holds the resource and a bag of the types its records hold", %{
+    flow: flow
+  } do
+    [errors] = for {:tuple, [[{:atom, :error}], errors]} <- answer(:get, 1, flow), do: errors
+
+    [{:struct, Ash.Error.Invalid, fields}] =
+      Enum.filter(errors, &match?({:struct, Ash.Error.Invalid, _fields}, &1))
+
+    [{:struct, Ash.Changeset, %{{:rest} => rest}}] =
+      Enum.filter(fields.changeset, &match?({:struct, Ash.Changeset, _fields}, &1))
+
+    assert {:atom, Item} in rest
+    refute Enum.any?(rest, &match?({:struct, Item, _fields}, &1))
+    assert [{:bag, leaves}] = Enum.filter(rest, &match?({:bag, _leaves}, &1))
+
+    for module <- [Ash.NotLoaded, Ecto.Schema.Metadata, Item, Money, Note] do
+      assert {:struct, module, %{}} in leaves
+    end
+  end
+
   # Ash's default read action paginates when asked to.
   test "a read gives a list of records or a page of them", %{flow: flow} do
     answer = answer(:list!, 0, flow)
