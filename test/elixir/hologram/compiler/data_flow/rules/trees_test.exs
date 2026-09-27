@@ -73,4 +73,17 @@ defmodule Hologram.Compiler.DataFlow.Rules.TreesTest do
       assert union([]) == []
     end
   end
+
+  describe "value_struct_tree/1" do
+    test "a calendar struct's calendar field holds the ISO calendar module" do
+      assert value_struct_tree(Date) == [
+               {:struct, Date,
+                %{calendar: [{:atom, Calendar.ISO}], day: [:prim], month: [:prim], year: [:prim]}}
+             ]
+    end
+
+    test "any other struct's fields are primitives" do
+      assert value_struct_tree(Struct7) == [{:struct, Struct7, %{name: [:prim], note: [:prim]}}]
+    end
+  end
 end

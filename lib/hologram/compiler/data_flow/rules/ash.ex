@@ -86,9 +86,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     Ash.Type.UtcDatetimeUsec => DateTime
   }
 
-  # The structs of the calendar types, whose calendar field holds the calendar module.
-  @calendar_structs [Date, DateTime, NaiveDateTime, Time]
-
   # Ash's functions by what they give (see api_tree/1): a list of records, one record or nil, the
   # record a create or an update gives, a destroy's, the records given back loaded, what an action
   # or a calculation gives, a bulk result, and primitives.
@@ -524,15 +521,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
 
   defp module_tree(type, _constraints, _flow) when type in @primitive_types, do: [:prim]
 
-  defp module_tree(type, _constraints, _flow) when is_map_key(@struct_types, type) do
-    struct = Map.fetch!(@struct_types, type)
-
-    if struct in @calendar_structs do
-      struct_tree(struct, %{calendar: [{:atom, Calendar.ISO}]})
-    else
-      struct_tree(struct, %{})
-    end
-  end
+  defp module_tree(type, _constraints, _flow) when is_map_key(@struct_types, type),
+    do: value_struct_tree(Map.fetch!(@struct_types, type))
 
   defp module_tree(AshMoney.Types.Money, _constraints, _flow) do
     struct_tree(Money, %{amount: struct_tree(Decimal, %{})})

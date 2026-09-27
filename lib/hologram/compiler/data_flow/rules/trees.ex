@@ -7,6 +7,9 @@ defmodule Hologram.Compiler.DataFlow.Rules.Trees do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.DataFlow
 
+  # The structs of the calendar types, whose calendar field holds the calendar module.
+  @calendar_structs [Date, DateTime, NaiveDateTime, Time]
+
   @doc """
   Returns what is remembered under the key in the flow context's rule cache, or the function's
   result, remembered.
@@ -70,6 +73,17 @@ defmodule Hologram.Compiler.DataFlow.Rules.Trees do
     |> Enum.concat()
     |> :lists.usort()
   end
+
+  @doc """
+  Returns the struct of a value type of the standard library or of a library (a date, a decimal and
+  the like): a calendar struct's calendar field holds the ISO calendar module, every other field a
+  primitive.
+  """
+  @spec value_struct_tree(module) :: DataFlow.tree()
+  def value_struct_tree(module) when module in @calendar_structs,
+    do: struct_tree(module, %{calendar: [{:atom, Calendar.ISO}]})
+
+  def value_struct_tree(module), do: struct_tree(module, %{})
 
   defp fields_leaves(fields) do
     fields
