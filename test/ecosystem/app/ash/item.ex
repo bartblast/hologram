@@ -23,6 +23,7 @@ defmodule HologramEcosystemTests.Ash.Item do
 
     attribute :available_on, :date, public?: true
     attribute :price, :money, public?: true
+    attribute :stamp, HologramEcosystemTests.Ash.Types.Stamp, public?: true
     attribute :title, :string, public?: true
     attribute :window, Window, public?: true
   end
