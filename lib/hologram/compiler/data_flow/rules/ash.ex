@@ -114,7 +114,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   @record_depth 2
 
   # The process dictionary key of the resources whose records are being built, so a resource that
-  # embeds itself, directly or through another, ends (see record_tree/3).
+  # embeds itself, directly or through another, ends (see embedded_tree/2).
   @building_key {__MODULE__, :building}
 
   @doc """
@@ -325,6 +325,19 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         interface <- reference.definitions,
         entry <- interface_entries(domain, reference.resource, interface, reference.namespace),
         do: entry
+  end
+
+  # An embedded resource's record; one already being built (a resource embedding itself, directly
+  # or through another) is its struct and the rule before the analysis applied from its module,
+  # which covers what its records hold.
+  defp embedded_tree(resource, flow) do
+    building = Process.get(@building_key, %{})
+
+    if Map.has_key?(building, resource) do
+      [{:bag, [{:reach, resource}, {:struct, resource, %{}}]}]
+    else
+      record_tree(resource, 0, flow)
+    end
   end
 
   # What `{:error, error}` holds: each of Ash's error classes, its errors a list of Ash's
@@ -590,7 +603,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         [:prim]
 
       Info.resource?(type) ->
-        record_tree(type, 0, flow)
+        embedded_tree(type, flow)
 
       true ->
         [{:contents, [{:dyn, [{:atom, type}], :cast_stored, 2, [[:prim], [:prim]]}]}]
@@ -691,31 +704,26 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end
   end
 
-  # The record of the resource, its relationships nested to the given depth (see @record_depth). A
-  # resource already being built (an embedded resource holding itself) is its struct and the rule
-  # before the analysis applied from its module, which covers what its records hold.
+  # The record of the resource, its relationships nested to the given depth (see @record_depth),
+  # which ends them; the resource is marked as being built meanwhile, which ends embeds (see
+  # embedded_tree/2). A resource related to itself holds its record at the next depth.
   defp record_tree(resource, depth, flow) do
-    building = Process.get(@building_key, %{})
+    cached({__MODULE__, :record, resource, depth}, flow, fn ->
+      building = Process.get(@building_key, %{})
+      Process.put(@building_key, Map.put(building, resource, true))
 
-    if Map.has_key?(building, resource) do
-      [{:bag, [{:reach, resource}, {:struct, resource, %{}}]}]
-    else
-      cached({__MODULE__, :record, resource, depth}, flow, fn ->
-        Process.put(@building_key, Map.put(building, resource, true))
+      try do
+        fields =
+          resource
+          |> value_fields(flow)
+          |> Map.merge(relationship_fields(resource, depth, flow))
+          |> Map.merge(status_fields(resource, flow))
 
-        try do
-          fields =
-            resource
-            |> value_fields(flow)
-            |> Map.merge(relationship_fields(resource, depth, flow))
-            |> Map.merge(status_fields(resource, flow))
-
-          [{:struct, resource, fields}]
-        after
-          Process.put(@building_key, building)
-        end
-      end)
-    end
+        [{:struct, resource, fields}]
+      after
+        Process.put(@building_key, building)
+      end
+    end)
   end
 
   # The records of the resources among the modules, or every resource's when there is none.
