@@ -33,6 +33,11 @@ defmodule HologramEcosystemTests.Ash.Item do
 
   calculations do
     calculate :label, :string, expr("item: " <> title), public?: true
+
+    calculate :greeting, :string, expr("hello " <> ^arg(:name)) do
+      argument :name, :string, allow_nil?: false
+      public? true
+    end
   end
 
   aggregates do
@@ -42,6 +47,7 @@ defmodule HologramEcosystemTests.Ash.Item do
   code_interface do
     define :archive, action: :destroy
     define :create
+    define_calculation :greeting, args: [:name]
     define :get, action: :read, get_by: [:id]
     define :list, action: :read
     define :list_all, action: :read, namespace: Admin
