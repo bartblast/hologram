@@ -149,41 +149,49 @@ defmodule Hologram.Compiler.DataFlow do
   #   * `{:rule, rules_module, name, [shapes]}` - what the rules module answers for the named part of
   #     an answer, from the module atoms its arguments hold, once they are known (see resolve_rule/4
   #     and Rules).
-  @type shape ::
+  #
+  # A shape nests sets of shapes: set ids in the analysis (shape/0), trees when written out (see
+  # tree/0).
+  @type shape :: shape(shapes)
+
+  @type shape(nested) ::
           {:atom, atom}
           | :prim
-          | {:struct, module, fields}
-          | {:map, fields}
-          | {:tuple, [shapes]}
-          | {:list, shapes}
-          | {:bag, shapes}
-          | {:fun, fun_ref, shapes}
+          | {:struct, module, fields(nested)}
+          | {:map, fields(nested)}
+          | {:tuple, [nested]}
+          | {:list, nested}
+          | {:bag, nested}
+          | {:fun, fun_ref, nested}
           | {:param, non_neg_integer}
           | {:arg, fun_ref, non_neg_integer}
           | {:reach, CallGraph.vertex()}
-          | {:call, shapes, [shapes]}
-          | {:as_map, shapes}
-          | {:contents, shapes}
-          | {:part, shapes}
-          | {:dot, shapes, atom}
-          | {:dyn, shapes, atom, arity, [shapes]}
-          | {:rule, module, atom, [shapes]}
+          | {:call, nested, [nested]}
+          | {:as_map, nested}
+          | {:contents, nested}
+          | {:part, nested}
+          | {:dot, nested, atom}
+          | {:dyn, nested, atom, arity, [nested]}
+          | {:rule, module, atom, [nested]}
 
   # What a struct's fields or a map's keys hold: under a literal atom key, what the value of that key
   # holds; under the rest key (see rest_fields/1), the keys and the values of the pairs whose key is
   # no literal atom (a map built at runtime, a struct built from data), together. A read of a field
   # takes its own entry and the rest (see field/3), so `product.title` does not hold what the price
   # field holds.
-  @type fields :: %{optional(atom | {:rest}) => shapes}
+  @type fields :: fields(shapes)
+
+  @type fields(nested) :: %{optional(atom | {:rest}) => nested}
 
   @type fun_ref :: {mfa, non_neg_integer}
 
   @type shapes :: ShapeSet.t()
 
   # A set of shapes written out in full, its nested sets written out too: a sorted list without
-  # duplicates (see to_tree/2). The readable form of an answer, for tests; the analysis itself never
-  # writes a value out.
-  @type tree :: [shape]
+  # duplicates (see to_tree/2). The readable form of an answer, for tests, and what the models and
+  # the rules modules answer with, which the analysis interns (see ShapeSet.from_tree/2); the
+  # analysis itself never writes a value out.
+  @type tree :: [shape(tree)]
 
   # What a compile's analysis works with: the IR PLT the code is read from (and where missing IR is
   # built), the module info PLT, the store its sets are in (see Store), the summaries of the
@@ -263,7 +271,7 @@ defmodule Hologram.Compiler.DataFlow do
   place that knows where sets sit in a shape (see `nested_sets/1`). A shape with no nested sets (an
   atom, a primitive, a param, an anonymous function's argument, a vertex) is given back as it is.
   """
-  @spec map_nested(shape, (term -> term)) :: shape
+  @spec map_nested(shape(from), (from -> to)) :: shape(to) when from: term, to: term
   def map_nested({:struct, module, fields}, fun), do: {:struct, module, map_fields(fields, fun)}
 
   def map_nested({:map, fields}, fun), do: {:map, map_fields(fields, fun)}

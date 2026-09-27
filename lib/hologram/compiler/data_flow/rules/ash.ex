@@ -12,6 +12,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
 
   @behaviour Hologram.Compiler.DataFlow.Rules
 
+  import Hologram.Compiler.DataFlow.Rules.Trees
+
   alias Ash.Domain.Info, as: DomainInfo
   alias Ash.Resource.Info
   alias Ash.Type.NewType
@@ -319,20 +321,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     type_shapes(calculation.type, calculation.constraints || [], flow)
   end
 
-  # The tree remembered under the key in the flow context's rule cache, or the function's,
-  # remembered.
-  defp cached(key, flow, fun) do
-    case PLT.get(flow.rule_cache, key) do
-      {:ok, tree} ->
-        tree
-
-      :error ->
-        tree = fun.()
-        PLT.put(flow.rule_cache, key, tree)
-        tree
-    end
-  end
-
   # The functions a domain's code interface generates: its definitions for each of its resources, on
   # the domain or on its namespace module (see interface_entries/3).
   defp domain_entries(domain) do
@@ -384,12 +372,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     Map.new(fields, fn {name, opts} ->
       {name, type_shapes(opts[:type], Keyword.get(opts, :constraints, []), flow)}
     end)
-  end
-
-  defp fields_leaves(fields) do
-    fields
-    |> Map.values()
-    |> Enum.flat_map(&tree_leaves/1)
   end
 
   # The action an interface runs: the one it names, or the one of its own name.
@@ -843,23 +825,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     }
   end
 
-  # The struct of the module with the given fields' trees, every other field of it a primitive; with
-  # the struct not loaded, its other fields are not known and are a rest of primitives.
-  defp struct_tree(module, overrides) do
-    fields =
-      if Code.ensure_loaded?(module) and function_exported?(module, :__struct__, 0) do
-        module.__struct__()
-        |> Map.delete(:__struct__)
-        |> Map.new(fn {key, _default} -> {key, Map.get(overrides, key, [:prim])} end)
-      else
-        [:prim]
-        |> DataFlow.rest_fields()
-        |> Map.merge(overrides)
-      end
-
-    [{:struct, module, fields}]
-  end
-
   # The module of the subject the interface's action runs on: a query, a changeset or an action
   # input.
   defp subject_module(resource, interface) do
@@ -886,17 +851,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     [{:struct, module, DataFlow.rest_fields(rest)}]
   end
 
-  # A tree's shapes flattened: a struct with no fields, and what every nested tree holds.
-  defp tree_leaves(tree) do
-    Enum.flat_map(tree, fn
-      {:struct, module, fields} -> [{:struct, module, %{}} | fields_leaves(fields)]
-      {:map, fields} -> fields_leaves(fields)
-      {:tuple, elements} -> Enum.flat_map(elements, &tree_leaves/1)
-      {kind, inner} when kind in [:bag, :list] -> tree_leaves(inner)
-      shape -> [shape]
-    end)
-  end
-
   defp type_tree({:array, type}, constraints, flow) do
     [{:list, type_shapes(type, Keyword.get(constraints, :items, []), flow)}]
   end
@@ -905,14 +859,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     type
     |> Ash.Type.get_type()
     |> module_tree(constraints, flow)
-  end
-
-  # The given trees as one, sorted, each shape once (the analysis merges the shapes of a kind when
-  # it interns the tree).
-  defp union(trees) do
-    trees
-    |> Enum.concat()
-    |> :lists.usort()
   end
 
   # A record's attributes, calculations and aggregates: each type's shapes and nil; an attribute can
