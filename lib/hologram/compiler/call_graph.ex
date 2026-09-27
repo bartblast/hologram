@@ -2116,6 +2116,10 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.sort()
   end
 
+  # TODO: Library-specific call graph knowledge (these Ecto schema edges, the schema reflection
+  # functions in Hologram.Compiler.DynamicCallSites and the dynamic call gate's check of a schema
+  # type) could live with the rules modules (see Hologram.Compiler.DataFlow.Rules), next to what they
+  # know of a library's values, once a second library needs call graph knowledge of its own.
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
     if module_flag?(call_graph, module, :ecto_schema?) do
       add_edges(call_graph, [
