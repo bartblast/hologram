@@ -11,6 +11,12 @@ defmodule Hologram.Compiler.DataFlow.RulesTest do
 
   defp flow(rules), do: DataFlow.start(PLT.start(), PLT.start(), rules: rules)
 
+  describe "built_in/0" do
+    test "lists the Ash rules" do
+      assert built_in() == [Hologram.Compiler.DataFlow.Rules.Ash]
+    end
+  end
+
   describe "summary/2" do
     test "the first rules module's answer wins" do
       assert summary({Module25, :ruled, 0}, flow([Rules1, Rules2])) ==
