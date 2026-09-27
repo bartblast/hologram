@@ -38,16 +38,14 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
              [
                action_tree: 3,
                calculation_tree: 3,
+               domain?: 1,
                domain_entries: 1,
                interface_action: 2,
                interface_names: 2,
                interface_tree: 4,
-               module_entries: 1,
                module_tree: 3,
-               record: 2,
+               resource?: 1,
                resource_entries: 1,
-               resources: 1,
-               resources_among: 1,
                subject_module: 2,
                reachable_resources: 2,
                relationship_fields: 3,
@@ -126,7 +124,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   """
   @impl Hologram.Compiler.DataFlow.Rules
   def record(module, flow) do
-    if loaded?(flow) and Info.resource?(module), do: record_shapes(module, flow)
+    if loaded?(flow) and resource?(module), do: record_shapes(module, flow)
   end
 
   @doc """
@@ -324,6 +322,9 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     type_shapes(calculation.type, calculation.constraints || [], flow)
   end
 
+  # Whether the module is a domain of Ash's (see resource?/1).
+  defp domain?(module), do: spark?(module) and Spark.Dsl.is?(module, Ash.Domain)
+
   # The functions a domain's code interface generates: its definitions for each of its resources, on
   # the domain or on its namespace module (see interface_entries/3).
   defp domain_entries(domain) do
@@ -389,12 +390,44 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end)
   end
 
+  # The module of the given name segments when an atom of that name exists, else nil: no atom is
+  # made for a name no module has.
+  defp existing_module(segments) do
+    Module.safe_concat(segments)
+  rescue
+    ArgumentError -> nil
+  end
+
   # The fields of a union's members, or of a map, a keyword list, a tuple or a struct type, by name:
   # what each field's type holds.
   defp field_trees(fields, flow) do
     Map.new(fields, fn {name, opts} ->
       {name, type_shapes(opts[:type], Keyword.get(opts, :constraints, []), flow)}
     end)
+  end
+
+  # The module and every prefix of its name that is a module of the compile, longest first: the
+  # hosts a namespace module's interfaces can be generated from (see interfaces_of/2).
+  defp host_candidates(module, flow) do
+    elixir_module? =
+      module
+      |> Atom.to_string()
+      |> String.starts_with?("Elixir.")
+
+    if elixir_module? do
+      segments = Module.split(module)
+
+      length(segments)..1//-1
+      |> Enum.map(&existing_module(Enum.take(segments, &1)))
+      |> Enum.filter(&(&1 && PLT.member?(flow.module_info_plt, &1)))
+    else
+      []
+    end
+  end
+
+  # The functions a host's code interfaces generate (see module_entries/1), remembered per host.
+  defp host_entries(host, flow) do
+    cached({__MODULE__, :host_entries, host}, flow, fn -> module_entries(host) end)
   end
 
   # The action an interface runs: the one it names, or the one of its own name.
@@ -414,18 +447,6 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         |> interface_names(resource)
         |> Enum.map(fn {function, form} -> {{module, function}, {resource, interface, form}} end)
     end
-  end
-
-  # The functions of every resource's and domain's code interface in the compile, by module and
-  # name.
-  defp interface_index(flow) do
-    cached({__MODULE__, :interfaces}, flow, fn ->
-      flow.module_info_plt
-      |> PLT.get_all()
-      |> Map.keys()
-      |> Enum.flat_map(&module_entries/1)
-      |> Map.new()
-    end)
   end
 
   # The module an interface's functions are generated on: the host, or its namespace module, nil
@@ -504,6 +525,25 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
 
   # A record's field that Ash can leave not loaded: the field's shapes, nil, or `Ash.NotLoaded`,
   # which names the resource.
+  # The functions of the code interfaces generated on the module, by name as a string (see
+  # interface_entries/4). The module is looked up as a host (a resource or a domain) and as a
+  # namespace module of one, whose name is the host's with the namespace appended, so every prefix of
+  # its name is a candidate host. Remembered per module, and each host's functions per host, so a
+  # compile asks Ash only about the modules its analysis calls: an index of every module's took 180 s
+  # of the big app's compile (M2), Spark answering whether a module is its own by calling the module.
+  defp interfaces_of(module, flow) do
+    cached({__MODULE__, :interfaces, module}, flow, fn ->
+      module
+      |> host_candidates(flow)
+      |> Enum.flat_map(&host_entries(&1, flow))
+      |> Enum.flat_map(fn
+        {{^module, name}, entry} -> [{name, entry}]
+        _other -> []
+      end)
+      |> Map.new()
+    end)
+  end
+
   defp loadable(tree, resource), do: union([tree, [:prim], not_loaded(resource)])
 
   # Whether Ash is loaded, asked once per compile (see available?/0): a compile without it asks for
@@ -521,9 +561,9 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     do: [{:rule, __MODULE__, :subject, [[{:atom, module}], [{:param, 0}]]}]
 
   defp loaded_summary(module, function, arity, flow) do
-    index = interface_index(flow)
+    interfaces = interfaces_of(module, flow)
 
-    case Map.fetch(index, {module, Atom.to_string(function)}) do
+    case Map.fetch(interfaces, Atom.to_string(function)) do
       {:ok, {resource, interface, form}} -> interface_tree(resource, interface, form, flow)
       :error -> if opaque?(module, flow), do: DataFlow.top({module, function, arity})
     end
@@ -539,8 +579,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   # The functions the module's code interface generates, when it is a resource or a domain.
   defp module_entries(module) do
     cond do
-      Info.resource?(module) -> resource_entries(module)
-      Spark.Dsl.is?(module, Ash.Domain) -> domain_entries(module)
+      resource?(module) -> resource_entries(module)
+      domain?(module) -> domain_entries(module)
       true -> []
     end
   end
@@ -617,7 +657,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
 
       # No guard against a resource embedding itself, as Rules.Ecto has: Ash resolves every type
       # when the resource compiles, before the resource exists, so it compiles no such resource.
-      Info.resource?(type) ->
+      resource?(type) ->
         record_tree(type, 0, flow)
 
       true ->
@@ -765,6 +805,10 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     end)
   end
 
+  # Whether the module is a resource of Ash's: only a module Spark builds can be one, which its export
+  # table shows (see spark?/1); only then is Spark asked.
+  defp resource?(module), do: spark?(module) and Info.resource?(module)
+
   # The functions a resource's code interface generates, on the resource or on its namespace module.
   defp resource_entries(resource) do
     namespace = Extension.get_opt(resource, [:code_interface], :namespace, nil)
@@ -780,13 +824,13 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
       flow.module_info_plt
       |> PLT.get_all()
       |> Map.keys()
-      |> Enum.filter(&Info.resource?/1)
+      |> Enum.filter(&resource?/1)
       |> Enum.sort()
     end)
   end
 
   # The resources among the modules.
-  defp resources_among(modules), do: Enum.filter(modules, &Info.resource?/1)
+  defp resources_among(modules), do: Enum.filter(modules, &resource?/1)
 
   # What a generic action returns: its return type's shapes, or `:ok` without one.
   defp returns_tree(action, flow) do
@@ -797,7 +841,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   end
 
   # A name and the name of its form that raises, as Ash names them (a name ending in `?` raises), as
-  # strings: the index is keyed by strings, so no atom is made for a name nothing calls.
+  # strings: the interfaces are keyed by strings (see interfaces_of/2), so no atom is made for a
+  # name nothing calls.
   defp safe_and_bang(name) do
     string = Atom.to_string(name)
 
@@ -805,6 +850,11 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
       do: {String.trim_trailing(string, "?"), string},
       else: {string, string <> "!"}
   end
+
+  # Whether Spark built the module, by its export table (see Hologram.Reflection.has_function?/3):
+  # the module is neither loaded nor called to find out, where Spark's own check calls it and rescues
+  # the error a module of anything else raises.
+  defp spark?(module), do: Reflection.has_function?(module, :spark_is, 0)
 
   # Ash's own fields of a record: the Ecto metadata (naming the resource), the metadata map, the
   # maps of calculations and aggregates loaded under other names, and two primitives.
