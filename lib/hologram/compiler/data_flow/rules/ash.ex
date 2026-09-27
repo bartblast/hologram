@@ -17,6 +17,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   alias Ash.Type.NewType
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.DataFlow
+  alias Hologram.Reflection
   alias Spark.Dsl.Extension
 
   @compile {:no_warn_undefined,
@@ -101,6 +102,10 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   # Ash's error classes, which an interface function's `{:error, error}` holds.
   @error_classes [Ash.Error.Forbidden, Ash.Error.Framework, Ash.Error.Invalid, Ash.Error.Unknown]
 
+  # The prefixes of the modules of Ash and its extensions whose functions no rule answers: the
+  # analysis does not follow them (see opaque?/2).
+  @opaque_prefixes ["Elixir.Ash.", "Elixir.AshMoney.", "Elixir.AshPostgres.", "Elixir.Spark."]
+
   # The modules whose functions build a query, a changeset or an action input.
   @subjects [Ash.ActionInput, Ash.Changeset, Ash.Query]
 
@@ -172,8 +177,9 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   resource (a resource, a query, a changeset or a record, never the options: an `actor:` there must
   not bring its records in), wrapped the same way; `Ash.count/2` and the like a primitive. A
   function of `Ash.Query`, `Ash.Changeset` or `Ash.ActionInput` gives that struct, holding the
-  resources and the records of its first argument (see `resolve/3`). Nil for any other function, or
-  without Ash.
+  resources and the records of its first argument (see `resolve/3`). A function of Ash's or its
+  extensions' modules that none of these answers gives its top: the analysis does not follow the
+  framework's internals. Nil for any other function, or without Ash.
   """
   @impl Hologram.Compiler.DataFlow.Rules
   def summary({module, function, arity}, flow) do
@@ -500,7 +506,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   defp loaded?(flow), do: cached({__MODULE__, :available}, flow, &available?/0)
 
   # What the function gives, with Ash loaded (see summary/2).
-  defp loaded_summary(Ash, function, _arity, _flow), do: api_tree(function)
+  defp loaded_summary(Ash, function, arity, _flow),
+    do: api_tree(function) || DataFlow.top({Ash, function, arity})
 
   defp loaded_summary(module, _function, 0, _flow) when module in @subjects,
     do: [{:struct, module, DataFlow.rest_fields([:prim])}]
@@ -508,12 +515,12 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   defp loaded_summary(module, _function, _arity, _flow) when module in @subjects,
     do: [{:rule, __MODULE__, :subject, [[{:atom, module}], [{:param, 0}]]}]
 
-  defp loaded_summary(module, function, _arity, flow) do
+  defp loaded_summary(module, function, arity, flow) do
     index = interface_index(flow)
 
     case Map.fetch(index, {module, Atom.to_string(function)}) do
       {:ok, {resource, interface, form}} -> interface_tree(resource, interface, form, flow)
-      :error -> nil
+      :error -> if opaque?(module, flow), do: DataFlow.top({module, function, arity})
     end
   end
 
@@ -629,6 +636,16 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     [{:tuple, [record, [{:list, notification}]]}]
   end
 
+  # Whether the module is one of Ash's or its extensions' that no rule answers, and the app did not
+  # define (its source under the project root, outside `deps`): its functions give their top (see
+  # `Hologram.Compiler.DataFlow.top/1`), every type their code can give by the rule before the
+  # analysis, instead of being followed through the framework's internals, where the analysis spent
+  # minutes (M1, M4).
+  defp opaque?(module, flow) do
+    name = Atom.to_string(module)
+    String.starts_with?(name, @opaque_prefixes) and not project_module?(module, flow)
+  end
+
   # A list of records, or a page of them.
   defp paged(list) do
     union([
@@ -636,6 +653,18 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
       struct_tree(Ash.Page.Keyset, %{results: list}),
       struct_tree(Ash.Page.Offset, %{results: list})
     ])
+  end
+
+  # Whether the module's source is the project's own: under its root, outside `deps`.
+  defp project_module?(module, flow) do
+    source =
+      case PLT.get(flow.module_info_plt, module) do
+        {:ok, %{source_path: source}} when is_binary(source) -> source
+        _other -> Reflection.source_path(module)
+      end
+
+    root = Reflection.root_dir() <> "/"
+    String.starts_with?(source, root) and not String.starts_with?(source, root <> "deps/")
   end
 
   # The types every record reachable from the resource holds, as leaves: each reachable resource's
