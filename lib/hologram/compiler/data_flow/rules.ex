@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.DataFlow.Rules do
   Returns the built-in rules modules, which the analysis asks unless it is given others.
   """
   @spec built_in() :: [module]
-  def built_in, do: [Hologram.Compiler.DataFlow.Rules.Ash]
+  def built_in, do: [Hologram.Compiler.DataFlow.Rules.Ash, Hologram.Compiler.DataFlow.Rules.Ecto]
 
   @doc """
   Returns the records of the given module that the first of the given flow context's rules modules

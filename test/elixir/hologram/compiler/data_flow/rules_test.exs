@@ -14,8 +14,11 @@ defmodule Hologram.Compiler.DataFlow.RulesTest do
   defp flow(rules), do: DataFlow.start(PLT.start(), PLT.start(), rules: rules)
 
   describe "built_in/0" do
-    test "lists the Ash rules" do
-      assert built_in() == [Hologram.Compiler.DataFlow.Rules.Ash]
+    test "lists the Ash rules, then the Ecto rules, which Ash is built on" do
+      assert built_in() == [
+               Hologram.Compiler.DataFlow.Rules.Ash,
+               Hologram.Compiler.DataFlow.Rules.Ecto
+             ]
     end
   end
 
