@@ -5,10 +5,10 @@ defmodule Hologram.Compiler.DataFlow.Rules.AshTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.DataFlow
 
-  # Hologram's own tests run without the data framework; the rules are tested with it in the
-  # ecosystem tests app (test/ecosystem).
+  # Hologram's own tests run without Ash; the rules are tested with it in the ecosystem tests app
+  # (test/ecosystem).
 
-  test "available?/0 is false without the data framework" do
+  test "available?/0 is false without Ash" do
     refute available?()
   end
 

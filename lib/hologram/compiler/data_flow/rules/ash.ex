@@ -1,13 +1,12 @@
 defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   @moduledoc false
 
-  # The rules for the data framework (see Hologram.Compiler.DataFlow.Rules). The framework builds
-  # its records at runtime from what it introspects, so the analysis, following its code, loses
-  # track of which records and which types a call gives. These rules answer from the introspection
-  # instead: what a value of each type holds (type_shapes/3); the records and the interface
-  # functions come on top of it.
+  # The rules for Ash (see Hologram.Compiler.DataFlow.Rules). Ash builds its records at runtime from
+  # what it introspects, so the analysis, following its code, loses track of which records and which
+  # types a call gives. These rules answer from the introspection instead: what a value of each type
+  # holds (type_shapes/3); the records and the interface functions come on top of it.
   #
-  # Hologram compiles without the framework: every call into it is made only when it is loaded (see
+  # Hologram compiles without Ash: every call into it is made only when it is loaded (see
   # available?/0).
 
   @behaviour Hologram.Compiler.DataFlow.Rules
@@ -19,11 +18,11 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
 
   @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Type, Ash.Type.NewType, Spark]}
 
-  # The framework is not in the Dialyzer PLT either (Hologram does not depend on it).
+  # Ash is not in the Dialyzer PLT either (Hologram does not depend on it).
   @dialyzer {:no_unknown, [module_tree: 3, type_tree: 3]}
 
-  # The framework's types whose values hold no types: numbers, binaries, atoms (a module name
-  # included: a value from storage, not a module the code names) and terms decoded from storage.
+  # Ash's types whose values hold no types: numbers, binaries, atoms (a module name included: a
+  # value from storage, not a module the code names) and terms decoded from storage.
   @primitive_types [
     Ash.Type.Atom,
     Ash.Type.Binary,
@@ -40,8 +39,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     Ash.Type.UrlEncodedBinary
   ]
 
-  # The framework's types whose values are structs of the standard library or of the framework, by
-  # the struct's module.
+  # Ash's types whose values are structs of the standard library or of Ash, by the struct's module.
   @struct_types %{
     Ash.Type.CiString => Ash.CiString,
     Ash.Type.Date => Date,
@@ -59,7 +57,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   @calendar_structs [Date, DateTime, NaiveDateTime, Time]
 
   @doc """
-  Returns whether the data framework is loaded. Without it no rule of this module applies.
+  Returns whether Ash is loaded. Without it no rule of this module applies.
   """
   @spec available?() :: boolean
   def available?, do: Code.ensure_loaded?(Ash.Resource.Info)
@@ -71,10 +69,10 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   def summary(_mfa, _flow), do: nil
 
   @doc """
-  Returns, as a tree, what a value of the given type of the data framework holds, with the given
-  constraints: a primitive for the framework's primitive types; the struct for its calendar, decimal,
-  duration, case-insensitive string and money types, each field by what it holds; for a union, a map,
-  a keyword list, a tuple and a struct type, their fields by their own types; a new type as its
+  Returns, as a tree, what a value of the given Ash type holds, with the given constraints: a
+  primitive for Ash's primitive types; the struct for its calendar, decimal, duration,
+  case-insensitive string and money types, each field by what it holds; for a union, a map, a
+  keyword list, a tuple and a struct type, their fields by their own types; a new type as its
   subtype; an embedded resource as its struct. Any other type, one of the app or of another library,
   holds what its `cast_stored/2` gives, followed by the analysis. Remembered in the flow context's
   rule cache for the compile.
