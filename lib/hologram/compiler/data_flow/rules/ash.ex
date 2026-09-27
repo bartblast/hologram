@@ -19,7 +19,14 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Type, Ash.Type.NewType, Spark]}
 
   # Ash is not in the Dialyzer PLT either (Hologram does not depend on it).
-  @dialyzer {:no_unknown, [module_tree: 3, type_tree: 3]}
+  @dialyzer {:no_unknown,
+             [
+               module_tree: 3,
+               reachable_resources: 2,
+               relationship_fields: 3,
+               type_tree: 3,
+               value_fields: 2
+             ]}
 
   # Ash's types whose values hold no types: numbers, binaries, atoms (a module name included: a
   # value from storage, not a module the code names) and terms decoded from storage.
@@ -56,11 +63,30 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   # The structs of the calendar types, whose calendar field holds the calendar module.
   @calendar_structs [Date, DateTime, NaiveDateTime, Time]
 
+  # How deep records nest through relationships before a related record is a bag of the types every
+  # record reachable from it holds, so relationships in a cycle (an item's notes, a note's item) end.
+  @record_depth 2
+
+  # The process dictionary key of the resources whose records are being built, so a resource that
+  # embeds itself, directly or through another, ends (see record_tree/3).
+  @building_key {__MODULE__, :building}
+
   @doc """
   Returns whether Ash is loaded. Without it no rule of this module applies.
   """
   @spec available?() :: boolean
   def available?, do: Code.ensure_loaded?(Ash.Resource.Info)
+
+  @doc """
+  Returns, as a tree, the records of the given Ash resource: its struct, with a field for each
+  attribute (its type's shapes, nil or a forbidden field), calculation and aggregate (its type's
+  shapes, nil or not loaded) and relationship (the related record, a list of them for a to-many
+  relationship, nil or not loaded), and Ash's own fields. Related records nest #{@record_depth} deep,
+  then are a bag of the types every record reachable from them holds. Remembered in the flow
+  context's rule cache for the compile.
+  """
+  @spec record_shapes(module, DataFlow.t()) :: DataFlow.tree()
+  def record_shapes(resource, flow), do: record_tree(resource, 0, flow)
 
   @impl Hologram.Compiler.DataFlow.Rules
   def resolve(_part, _modules, _flow), do: []
@@ -73,20 +99,25 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   primitive for Ash's primitive types; the struct for its calendar, decimal, duration,
   case-insensitive string and money types, each field by what it holds; for a union, a map, a
   keyword list, a tuple and a struct type, their fields by their own types; a new type as its
-  subtype; an embedded resource as its struct. Any other type, one of the app or of another library,
+  subtype; an embedded resource as its record (see `record_shapes/2`). Any other type, one of the app or of another library,
   holds what its `cast_stored/2` gives, followed by the analysis. Remembered in the flow context's
   rule cache for the compile.
   """
   @spec type_shapes(atom | {:array, atom}, keyword, DataFlow.t()) :: DataFlow.tree()
   def type_shapes(type, constraints, flow) do
-    key = {__MODULE__, :type, type, constraints}
+    cached({__MODULE__, :type, type, constraints}, flow, fn ->
+      type_tree(type, constraints, flow)
+    end)
+  end
 
+  # The tree remembered under the key in the flow context's rule cache, or the function's, remembered.
+  defp cached(key, flow, fun) do
     case PLT.get(flow.rule_cache, key) do
       {:ok, tree} ->
         tree
 
       :error ->
-        tree = type_tree(type, constraints, flow)
+        tree = fun.()
         PLT.put(flow.rule_cache, key, tree)
         tree
     end
@@ -99,6 +130,16 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
       {name, type_shapes(opts[:type], Keyword.get(opts, :constraints, []), flow)}
     end)
   end
+
+  defp fields_leaves(fields) do
+    fields
+    |> Map.values()
+    |> Enum.flat_map(&tree_leaves/1)
+  end
+
+  # A record's field that Ash can leave not loaded: the field's shapes, nil, or `Ash.NotLoaded`, which
+  # names the resource.
+  defp loadable(tree, resource), do: union([tree, [:prim], not_loaded(resource)])
 
   defp map_tree(constraints, flow) do
     case constraints[:fields] do
@@ -185,11 +226,118 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         [:prim]
 
       Info.resource?(type) ->
-        [{:struct, type, %{}}]
+        record_tree(type, 0, flow)
 
       true ->
         [{:contents, [{:dyn, [{:atom, type}], :cast_stored, 2, [[:prim], [:prim]]}]}]
     end
+  end
+
+  defp not_loaded(resource), do: struct_tree(Ash.NotLoaded, %{resource: [{:atom, resource}]})
+
+  # The types every record reachable from the resource holds, as leaves: each reachable resource's
+  # struct and what its attributes, calculations and aggregates hold.
+  defp reachable_leaves(resource, flow) do
+    cached({__MODULE__, :reachable, resource}, flow, fn ->
+      [resource]
+      |> reachable_resources(%{})
+      |> Enum.flat_map(fn reachable ->
+        leaves =
+          reachable
+          |> value_fields(flow)
+          |> Map.values()
+          |> Enum.flat_map(&tree_leaves/1)
+
+        [{:struct, reachable, %{}} | leaves]
+      end)
+      |> :lists.usort()
+    end)
+  end
+
+  # The resources the given ones reach through relationships, themselves included.
+  defp reachable_resources([], visited), do: Map.keys(visited)
+
+  defp reachable_resources([resource | resources], visited) do
+    if Map.has_key?(visited, resource) do
+      reachable_resources(resources, visited)
+    else
+      destinations =
+        resource
+        |> Info.relationships()
+        |> Enum.map(& &1.destination)
+
+      reachable_resources(destinations ++ resources, Map.put(visited, resource, true))
+    end
+  end
+
+  # The record of the resource, its relationships nested to the given depth (see @record_depth). A
+  # resource already being built (an embedded resource holding itself) is its struct and the rule
+  # before the analysis applied from its module, which covers what its records hold.
+  defp record_tree(resource, depth, flow) do
+    building = Process.get(@building_key, %{})
+
+    if Map.has_key?(building, resource) do
+      [{:bag, [{:reach, resource}, {:struct, resource, %{}}]}]
+    else
+      cached({__MODULE__, :record, resource, depth}, flow, fn ->
+        Process.put(@building_key, Map.put(building, resource, true))
+
+        try do
+          fields =
+            resource
+            |> value_fields(flow)
+            |> Map.merge(relationship_fields(resource, depth, flow))
+            |> Map.merge(status_fields(resource, flow))
+
+          [{:struct, resource, fields}]
+        after
+          Process.put(@building_key, building)
+        end
+      end)
+    end
+  end
+
+  # A record's relationships: the related record, a list of them for a to-many relationship, below
+  # @record_depth a bag of the types every record reachable from it holds; nil or not loaded.
+  defp relationship_fields(resource, depth, flow) do
+    resource
+    |> Info.relationships()
+    |> Map.new(fn relationship ->
+      related =
+        if depth + 1 < @record_depth do
+          record_tree(relationship.destination, depth + 1, flow)
+        else
+          [{:bag, reachable_leaves(relationship.destination, flow)}]
+        end
+
+      related = if relationship.cardinality == :many, do: [{:list, related}], else: related
+
+      {relationship.name, loadable(related, resource)}
+    end)
+  end
+
+  # Ash's own fields of a record: the Ecto metadata (naming the resource), the metadata map, the
+  # maps of calculations and aggregates loaded under other names, and two primitives.
+  defp status_fields(resource, flow) do
+    loaded =
+      resource
+      |> value_fields(flow)
+      |> Map.values()
+      |> union()
+
+    loaded_rest =
+      [[:prim], loaded]
+      |> union()
+      |> DataFlow.rest_fields()
+
+    %{
+      __lateral_join_source__: [:prim],
+      __meta__: struct_tree(Ecto.Schema.Metadata, %{schema: [{:atom, resource}]}),
+      __metadata__: [{:map, DataFlow.rest_fields([:prim])}],
+      __order__: [:prim],
+      aggregates: [{:map, loaded_rest}],
+      calculations: [{:map, loaded_rest}]
+    }
   end
 
   # The struct of the module with the given fields' trees, every other field of it a primitive; with
@@ -209,6 +357,17 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     [{:struct, module, fields}]
   end
 
+  # A tree's shapes flattened: a struct with no fields, and what every nested tree holds.
+  defp tree_leaves(tree) do
+    Enum.flat_map(tree, fn
+      {:struct, module, fields} -> [{:struct, module, %{}} | fields_leaves(fields)]
+      {:map, fields} -> fields_leaves(fields)
+      {:tuple, elements} -> Enum.flat_map(elements, &tree_leaves/1)
+      {kind, inner} when kind in [:bag, :list] -> tree_leaves(inner)
+      shape -> [shape]
+    end)
+  end
+
   defp type_tree({:array, type}, constraints, flow) do
     [{:list, type_shapes(type, Keyword.get(constraints, :items, []), flow)}]
   end
@@ -217,5 +376,48 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
     type
     |> Ash.Type.get_type()
     |> module_tree(constraints, flow)
+  end
+
+  # The given trees as one, sorted, each shape once (the analysis merges the shapes of a kind when it
+  # interns the tree).
+  defp union(trees) do
+    trees
+    |> Enum.concat()
+    |> :lists.usort()
+  end
+
+  # A record's attributes, calculations and aggregates: each type's shapes and nil; an attribute can
+  # also be a forbidden field, which may hold its original value, and a calculation or an aggregate not
+  # loaded.
+  defp value_fields(resource, flow) do
+    attributes =
+      resource
+      |> Info.attributes()
+      |> Map.new(fn attribute ->
+        tree = type_shapes(attribute.type, attribute.constraints || [], flow)
+        forbidden = struct_tree(Ash.ForbiddenField, %{original_value: union([tree, [:prim]])})
+        {attribute.name, union([tree, [:prim], forbidden])}
+      end)
+
+    calculations =
+      resource
+      |> Info.calculations()
+      |> Map.new(fn calculation ->
+        tree = type_shapes(calculation.type, calculation.constraints || [], flow)
+        {calculation.name, loadable(tree, resource)}
+      end)
+
+    aggregates =
+      resource
+      |> Info.aggregates()
+      |> Map.new(fn aggregate ->
+        {:ok, type} = Info.aggregate_type(resource, aggregate)
+        tree = type_shapes(type, aggregate.constraints || [], flow)
+        {aggregate.name, loadable(tree, resource)}
+      end)
+
+    attributes
+    |> Map.merge(calculations)
+    |> Map.merge(aggregates)
   end
 end
