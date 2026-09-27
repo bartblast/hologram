@@ -1034,6 +1034,10 @@ defmodule Hologram.Compiler.DataFlowTest do
       assert summary_of(Module24, :map_literal, 0) == tree_set([{:map, fields}])
     end
 
+    test "a field read of maps merged holds the field, not the other map's fields" do
+      assert summary_of(Module24, :either, 1) == tree_set([:prim])
+    end
+
     test "a field read holds what the pairs with keys other than atoms hold" do
       assert summary_of(Module24, :mixed_keys, 0) == tree_set([:prim, @struct_1_stored])
     end

@@ -85,12 +85,9 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
     test "Erlang function putting what it is given in a new value" do
       args = [[{:atom, :a}], [@struct_1], [{:map, %{}}]]
 
-      # The key is a param, so the new pair goes to the rest (see DataFlow.fields/0).
-      assert call_model({:maps, :put, 3}, args) ==
-               tree_set([
-                 {:map, %{}},
-                 rest_map([{:atom, :a}, @struct_1])
-               ])
+      # The key is a param, so the new pair goes to the rest (see DataFlow.fields/0); the map given
+      # and the map with the pair are one map (see ShapeSet).
+      assert call_model({:maps, :put, 3}, args) == tree_set([rest_map([{:atom, :a}, @struct_1])])
     end
 
     test "Erlang function giving back the struct it is given" do

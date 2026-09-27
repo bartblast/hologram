@@ -174,6 +174,41 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
       assert to_list(new([{:fun, ref, a}, {:fun, ref, b}], store), store) == [{:fun, ref, both}]
     end
 
+    test "structs of different modules stay apart", %{store: store} do
+      a = new([:prim], store)
+
+      assert size(new([{:struct, S1, %{a: a}}, {:struct, S2, %{a: a}}], store), store) == 2
+    end
+
+    test "two maps merge key by key, the rest too", %{store: store} do
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+      map_1 = {:map, %{:title => a, {:rest} => a}}
+      map_2 = {:map, %{:item => b, {:rest} => b}}
+
+      assert to_list(new([map_1, map_2], store), store) ==
+               [{:map, %{:item => b, :title => a, {:rest} => both}}]
+    end
+
+    test "two structs of one module merge field by field", %{store: store} do
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(new([{:struct, S1, %{a: a}}, {:struct, S1, %{a: b, b: b}}], store), store) ==
+               [{:struct, S1, %{a: both, b: b}}]
+    end
+
+    test "a struct with no fields and one with fields become the one with fields", %{
+      store: store
+    } do
+      a = new([:prim], store)
+
+      assert to_list(new([{:struct, S1, %{}}, {:struct, S1, %{a: a}}], store), store) ==
+               [{:struct, S1, %{a: a}}]
+    end
+
     test "two lists become a list of both", %{store: store} do
       a = new([:prim], store)
       b = new([{:atom, :x}], store)

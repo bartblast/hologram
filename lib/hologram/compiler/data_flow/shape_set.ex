@@ -167,23 +167,45 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   defp intern(content, store), do: Store.intern(store, merged(content, store))
 
   # What makes two alternatives of a kind: the kind of a list, a bag or a step into a value not known
-  # yet; the name of a dot; the ref of an anonymous function. Any other shape is a kind of its own.
+  # yet; the name of a dot; the ref of an anonymous function; the module of a struct; being a map. Any
+  # other shape is a kind of its own.
   defp kind_key({kind, _set}) when kind in [:as_map, :bag, :contents, :list, :part], do: kind
 
   defp kind_key({:dot, _set, name}), do: {:dot, name}
 
   defp kind_key({:fun, ref, _returned}), do: {:fun, ref}
 
+  defp kind_key({:struct, module, _fields}), do: {:struct, module}
+
+  defp kind_key({:map, _fields}), do: :map
+
   defp kind_key(shape), do: {:one, shape}
 
-  # Two alternatives of a kind (see kind_key/1) as one, the sets nested in them joined.
-  defp merge({kind, set_1}, {kind, set_2}, store), do: {kind, union(set_1, set_2, store)}
+  # Two alternatives of a kind (see kind_key/1) as one, the sets nested in them joined; a struct's or a
+  # map's fields key by key (see merge_fields/3).
+  defp merge({kind, set_1}, {kind, set_2}, store)
+       when kind in [:as_map, :bag, :contents, :list, :part],
+       do: {kind, union(set_1, set_2, store)}
 
   defp merge({:dot, set_1, name}, {:dot, set_2, name}, store),
     do: {:dot, union(set_1, set_2, store), name}
 
   defp merge({:fun, ref, set_1}, {:fun, ref, set_2}, store),
     do: {:fun, ref, union(set_1, set_2, store)}
+
+  defp merge({:struct, module, fields_1}, {:struct, module, fields_2}, store),
+    do: {:struct, module, merge_fields(fields_1, fields_2, store)}
+
+  defp merge({:map, fields_1}, {:map, fields_2}, store),
+    do: {:map, merge_fields(fields_1, fields_2, store)}
+
+  # Two structs' or maps' fields as one (see Hologram.Compiler.DataFlow.fields/0): a key both have
+  # holds the join of the two, a key one has holds what it holds there, the rest key like any other.
+  # Which field value went with which is lost (`%S{a: X, b: 1}` or `%S{a: 1, b: Y}` is
+  # `%S{a: X or 1, b: 1 or Y}`), and no question the analysis answers depends on it.
+  defp merge_fields(fields_1, fields_2, store) do
+    Map.merge(fields_1, fields_2, fn _key, set_1, set_2 -> union(set_1, set_2, store) end)
+  end
 
   # The content (a sorted list of shapes) with its alternatives of a kind merged, sorted. A content
   # with no two of a kind, the common case, is given back as it is.
