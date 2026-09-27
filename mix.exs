@@ -67,7 +67,6 @@ defmodule Hologram.MixProject do
       {:decimal, "~> 3.0", only: [:dev, :test], runtime: false, override: true},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
-      {:ecto, "~> 3.0", only: :test, runtime: false},
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:file_system, "~> 1.0"},
