@@ -333,9 +333,29 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
         do: entry
   end
 
+  # A query, a changeset or an action input of the resource as an error holds it: its fields a rest
+  # holding the resource's module and a bag of the types the resource's records hold, their
+  # structure lost (see subject_tree/3). The record itself would be written out once per subject and
+  # error class, twelve times in an error, which the rule cache stores and every read copies in full
+  # (M2: 42 MB for one resource of the big app).
+  defp error_subject(module, nil, flow), do: subject_tree(module, nil, flow)
+
+  defp error_subject(module, resource, flow) do
+    leaves =
+      cached({__MODULE__, :record_leaves, resource}, flow, fn ->
+        resource
+        |> record_shapes(flow)
+        |> tree_leaves()
+        |> :lists.usort()
+      end)
+
+    rest = union([[:prim, {:atom, resource}], [{:bag, leaves}]])
+    [{:struct, module, DataFlow.rest_fields(rest)}]
+  end
+
   # What `{:error, error}` holds: each of Ash's error classes, its errors a list of Ash's
-  # exceptions, its changeset, query or action input one of the resource's (see subject_tree/3), nil
-  # or not.
+  # exceptions, its changeset, query or action input one of the resource's (see error_subject/3),
+  # nil or not.
   defp error_tree(resource, flow) do
     cached({__MODULE__, :error, resource}, flow, fn ->
       exceptions =
@@ -346,10 +366,10 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
       @error_classes
       |> Enum.map(fn class ->
         struct_tree(class, %{
-          action_input: union([[:prim], subject_tree(Ash.ActionInput, resource, flow)]),
-          changeset: union([[:prim], subject_tree(Ash.Changeset, resource, flow)]),
+          action_input: union([[:prim], error_subject(Ash.ActionInput, resource, flow)]),
+          changeset: union([[:prim], error_subject(Ash.Changeset, resource, flow)]),
           errors: [{:list, exceptions}],
-          query: union([[:prim], subject_tree(Ash.Query, resource, flow)])
+          query: union([[:prim], error_subject(Ash.Query, resource, flow)])
         })
       end)
       |> union()
