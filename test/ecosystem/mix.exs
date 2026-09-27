@@ -18,7 +18,7 @@ defmodule HologramEcosystemTests.MixProject do
       {:ex_money_sql, "~> 2.0"},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "3fada4b7f0cf5ab185cd8f840fe54b13551d35d0"},
+       ref: "1e9da40c7c0ff4e016ec2d62b34c04188bc9f637"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:wallaby, "~> 0.30", only: :test}
