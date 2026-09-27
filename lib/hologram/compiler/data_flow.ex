@@ -674,19 +674,24 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # A call of the named function on a module of the given shapes, for each alternative: a module
-  # atom gives the function's summary with the arguments put in; a value that depends on a param or
-  # on an anonymous function's argument keeps the call for when that is known; a value of unknown
-  # structure gives itself and the arguments, and the calls on the module atoms it holds; a primitive
-  # gives a primitive. Any other value is no module: the call raises.
+  # atom gives the function's summary with the arguments put in, or nothing when the module does not
+  # export the function (see exported?/4); a value that depends on a param or on an anonymous
+  # function's argument keeps the call for when that is known; a value of unknown structure gives
+  # itself and the arguments, and the calls on the module atoms it holds; a primitive gives a
+  # primitive. Any other value is no module: the call raises.
   defp call_dyn(module_shapes, name, arity, args, ctx) do
     ShapeSet.flat_map(module_shapes, &call_dyn_shape(&1, name, arity, args, ctx), ctx.flow.store)
   end
 
   defp call_dyn_shape({:atom, module}, name, arity, args, ctx) do
-    {module, name, arity}
-    |> callee_summary(ctx)
-    |> put_args(args, ctx)
-    |> bounded(ctx)
+    if exported?(module, name, arity, ctx) do
+      {module, name, arity}
+      |> callee_summary(ctx)
+      |> put_args(args, ctx)
+      |> bounded(ctx)
+    else
+      ShapeSet.new(ctx.flow.store)
+    end
   end
 
   defp call_dyn_shape(shape, name, arity, args, ctx)
@@ -1387,6 +1392,17 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   defp evaluated_answer(mfa, _old, _changes, ctx), do: code_summary(mfa, %{ctx | node: mfa})
+
+  # Whether the module exports the function, from its export table (see Reflection.has_function?/3);
+  # remembered per function. A call on a module value can only reach a public function, so one the
+  # module does not export gives nothing, and its IR is never read to find that out: a field read of
+  # a value holding many module atoms (the records of a data framework name their modules) is a call
+  # of that name on each of them.
+  defp exported?(module, name, arity, ctx) do
+    Store.memo(ctx.flow.store, {:exported, module, name, arity}, fn ->
+      Reflection.has_function?(module, name, arity)
+    end)
+  end
 
   # The part of a value of the given shapes that the pattern binds to the variable, from the
   # alternatives the pattern can match.

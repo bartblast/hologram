@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.DataFlowTest do
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module24
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module25
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module26
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module27
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module3
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module4
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Module5
@@ -877,6 +878,14 @@ defmodule Hologram.Compiler.DataFlowTest do
   end
 
   describe "summary/2" do
+    test "a call on a module that does not export the function gives nothing, its IR never read" do
+      ir_plt = PLT.start()
+      flow = start(ir_plt, module_info_plt_fixture())
+
+      assert summary_tree({Module27, :calls_missing, 0}, flow) == tree_set()
+      assert PLT.get(ir_plt, Struct3) == :error
+    end
+
     test "a function a rules module answers is not followed" do
       flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
 
