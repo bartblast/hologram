@@ -167,22 +167,26 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   defp intern(content, store), do: Store.intern(store, merged(content, store))
 
   # What makes two alternatives of a kind: the kind of a list, a bag or a step into a value not known
-  # yet; the name of a dot; the ref of an anonymous function; the module of a struct; being a map. Any
-  # other shape is a kind of its own.
-  defp kind_key({kind, _set}) when kind in [:as_map, :bag, :contents, :list, :part], do: kind
+  # yet; the name of a dot; the ref of an anonymous function; the module of a struct; being a map; a
+  # tuple's size and tag (see tuple_tag/2). Any other shape is a kind of its own.
+  defp kind_key({kind, _set}, _store) when kind in [:as_map, :bag, :contents, :list, :part],
+    do: kind
 
-  defp kind_key({:dot, _set, name}), do: {:dot, name}
+  defp kind_key({:dot, _set, name}, _store), do: {:dot, name}
 
-  defp kind_key({:fun, ref, _returned}), do: {:fun, ref}
+  defp kind_key({:fun, ref, _returned}, _store), do: {:fun, ref}
 
-  defp kind_key({:struct, module, _fields}), do: {:struct, module}
+  defp kind_key({:struct, module, _fields}, _store), do: {:struct, module}
 
-  defp kind_key({:map, _fields}), do: :map
+  defp kind_key({:map, _fields}, _store), do: :map
 
-  defp kind_key(shape), do: {:one, shape}
+  defp kind_key({:tuple, elements}, store),
+    do: {:tuple, length(elements), tuple_tag(elements, store)}
 
-  # Two alternatives of a kind (see kind_key/1) as one, the sets nested in them joined; a struct's or a
-  # map's fields key by key (see merge_fields/3).
+  defp kind_key(shape, _store), do: {:one, shape}
+
+  # Two alternatives of a kind (see kind_key/2) as one, the sets nested in them joined; a struct's or a
+  # map's fields key by key (see merge_fields/3); a tuple's elements position by position.
   defp merge({kind, set_1}, {kind, set_2}, store)
        when kind in [:as_map, :bag, :contents, :list, :part],
        do: {kind, union(set_1, set_2, store)}
@@ -199,6 +203,11 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   defp merge({:map, fields_1}, {:map, fields_2}, store),
     do: {:map, merge_fields(fields_1, fields_2, store)}
 
+  defp merge({:tuple, elements_1}, {:tuple, elements_2}, store) do
+    elements = Enum.zip_with(elements_1, elements_2, &union(&1, &2, store))
+    {:tuple, elements}
+  end
+
   # Two structs' or maps' fields as one (see Hologram.Compiler.DataFlow.fields/0): a key both have
   # holds the join of the two, a key one has holds what it holds there, the rest key like any other.
   # Which field value went with which is lost (`%S{a: X, b: 1}` or `%S{a: 1, b: Y}` is
@@ -210,7 +219,7 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   # The content (a sorted list of shapes) with its alternatives of a kind merged, sorted. A content
   # with no two of a kind, the common case, is given back as it is.
   defp merged([_shape_1, _shape_2 | _shapes] = content, store) do
-    groups = Enum.group_by(content, &kind_key/1)
+    groups = Enum.group_by(content, &kind_key(&1, store))
 
     if map_size(groups) == length(content) do
       content
@@ -223,4 +232,17 @@ defmodule Hologram.Compiler.DataFlow.ShapeSet do
   end
 
   defp merged(content, _store), do: content
+
+  # The tag of a tuple of the given elements: its first element when that is a single atom (`:ok` in
+  # `{:ok, value}`), which patterns choose on, so tuples of different tags stay apart; `:none` for any
+  # other tuple (untagged tuples of a size merge: a pattern choosing on a later element of one then
+  # takes the others' too, the same loss as a struct's fields merged).
+  defp tuple_tag([first | _rest], store) do
+    case Store.fetch(store, first) do
+      [{:atom, atom}] -> atom
+      _other -> :none
+    end
+  end
+
+  defp tuple_tag([], _store), do: :none
 end

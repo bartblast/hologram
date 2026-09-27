@@ -156,6 +156,43 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
       assert to_list(new([{:list, a}, {:list, b}], store), store) == [{:list, inner}]
     end
 
+    test "a tuple whose first element holds an atom and more is untagged", %{store: store} do
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+      first = new([{:atom, :ok}, :prim], store)
+
+      assert to_list(new([{:tuple, [first, a]}, {:tuple, [a, b]}], store), store) ==
+               [{:tuple, [new([{:atom, :ok}, :prim], store), both]}]
+    end
+
+    test "tuples of different sizes stay apart", %{store: store} do
+      a = new([:prim], store)
+
+      assert size(new([{:tuple, [a]}, {:tuple, [a, a]}], store), store) == 2
+    end
+
+    test "tuples of different tags stay apart", %{store: store} do
+      a = new([:prim], store)
+
+      tuples = [
+        {:tuple, [new([{:atom, :ok}], store), a]},
+        {:tuple, [new([{:atom, :error}], store), a]}
+      ]
+
+      assert size(new(tuples, store), store) == 2
+    end
+
+    test "tuples of one tag merge element by element", %{store: store} do
+      ok = new([{:atom, :ok}], store)
+      a = new([:prim], store)
+      b = new([{:atom, :x}], store)
+      both = new([:prim, {:atom, :x}], store)
+
+      assert to_list(new([{:tuple, [ok, a]}, {:tuple, [ok, b]}], store), store) ==
+               [{:tuple, [ok, both]}]
+    end
+
     test "two dots of one name become one", %{store: store} do
       a = new([{:param, 0}], store)
       b = new([{:param, 1}], store)
@@ -189,6 +226,15 @@ defmodule Hologram.Compiler.DataFlow.ShapeSetTest do
 
       assert to_list(new([map_1, map_2], store), store) ==
                [{:map, %{:item => b, :title => a, {:rest} => both}}]
+    end
+
+    test "untagged tuples of a size merge", %{store: store} do
+      a = new([:prim], store)
+      b = new([{:param, 0}], store)
+      both = new([:prim, {:param, 0}], store)
+
+      assert to_list(new([{:tuple, [a, a]}, {:tuple, [b, a]}], store), store) ==
+               [{:tuple, [both, a]}]
     end
 
     test "two structs of one module merge field by field", %{store: store} do

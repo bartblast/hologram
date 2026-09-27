@@ -5,6 +5,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module24 do
 
   def built_field(value), do: struct(Struct7, value).name
 
+  def either_ok(flag), do: if(flag, do: {:ok, []}, else: {:ok, [%Struct1{}]})
+
   def either(flag) do
     map = if flag, do: %{title: "text"}, else: %{item: %Struct1{}}
     map.title

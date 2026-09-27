@@ -126,7 +126,8 @@ defmodule Hologram.Compiler.DataFlow.ModelsTest do
           {:tuple, [tree_set([@struct_1]), tree_set([{:atom, nil}])]}
         ])
 
-      round_2 = :ordsets.add_element({:tuple, [tree_set([@struct_1]), round_1]}, round_1)
+      # The second round's tuple and the first's, untagged, merge (see ShapeSet).
+      round_2 = tree_set([{:atom, nil}, {:tuple, [tree_set([@struct_1]), round_1]}])
 
       assert call_model({:lists, :foldl, 3}, args) == round_2
     end
