@@ -904,6 +904,19 @@ defmodule Hologram.Compiler.DataFlowTest do
                tree_set([@struct_1_named, rule])
     end
 
+    test "a rule's answer has its calls made" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+      summary_tree({Module25, :built, 0}, flow)
+
+      assert summary_tree({Module25, :calls_loads, 0}, flow) == tree_set([@struct_1_stored])
+    end
+
+    test "a rule's answer has its calls made when the callee has not been evaluated yet" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :calls_loads, 0}, flow) == tree_set([@struct_1_stored])
+    end
+
     test "a set nested too deep becomes a bag of its leaves, with the same types" do
       flow = flow()
       summary = summary({Module9, :deep, 0}, flow)

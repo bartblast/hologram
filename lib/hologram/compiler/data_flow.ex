@@ -1836,6 +1836,12 @@ defmodule Hologram.Compiler.DataFlow do
 
   defp nested_shapes({:list, inner}, store), do: with_nested_shapes(inner, store)
 
+  defp nested_waiting?(shape, store) do
+    shape
+    |> nested_sets()
+    |> Enum.any?(&waiting?(&1, store))
+  end
+
   # What a substitution carries through replace/3: the ctx, or nil, the store its sets are in, and a
   # counter of the calls of anonymous functions it made, one cell every branch adds to (see
   # @max_fun_calls).
@@ -2326,20 +2332,31 @@ defmodule Hologram.Compiler.DataFlow do
   end
 
   # What the rules module answers for the named part, from the atoms and the struct modules of each
-  # argument (see arg_names/2 and Rules), interned once per compile; and the rule shape beside it while an argument
-  # still holds a value not known yet (a param, an anonymous function's argument, a call not made),
-  # so a rule is resolved as far as its arguments allow, and again once they are known.
+  # argument (see arg_names/2 and Rules), interned once per compile; and the rule shape beside it
+  # while an argument still holds a value not known yet (a param, an anonymous function's argument, a
+  # call not made), so a rule is resolved as far as its arguments allow, and again once they are
+  # known. The calls an answer holds (a record's field of a custom type holds what the type's module
+  # gives) are made on every resolve, not once per compile: a function met for the first time
+  # answers nothing until it has been evaluated (see solving_summary/2), so calls made once could
+  # keep that nothing.
   defp resolve_rule(rules_module, name, args, ctx) do
     store = ctx.flow.store
     arg_leaves = Enum.map(args, &leaves(&1, store))
     atoms = Enum.map(args, &arg_names(&1, store))
 
-    answer =
+    plain =
       Store.memo(store, {:resolved, rules_module, name, atoms}, fn ->
         rules_module
         |> Rules.resolve(name, atoms, ctx.flow)
         |> ShapeSet.from_tree(store)
       end)
+
+    answer =
+      if waiting?(plain, store) do
+        replace_root(plain, fn _shape -> nil end, new_rep(ctx, store))
+      else
+        plain
+      end
 
     if Enum.any?(arg_leaves, &ShapeSet.any?(&1, fn leaf -> pending_leaf?(leaf) end, store)) do
       ShapeSet.put(answer, {:rule, rules_module, name, args}, store)
@@ -2782,6 +2799,14 @@ defmodule Hologram.Compiler.DataFlow do
     end)
     |> ShapeSet.union_all(ctx.flow.store)
     |> ShapeSet.union(Map.get(frame.extras, var, ShapeSet.new(ctx.flow.store)), ctx.flow.store)
+  end
+
+  # Whether the shapes hold a value not known yet at any depth (see pending_leaf?/1); remembered per
+  # set.
+  defp waiting?(shapes, store) do
+    Store.memo(store, {:waiting, shapes}, fn ->
+      ShapeSet.any?(shapes, &(pending_leaf?(&1) or nested_waiting?(&1, store)), store)
+    end)
   end
 
   # Keeps the given shapes from growing without end: a set nested @max_depth deep that holds shapes
