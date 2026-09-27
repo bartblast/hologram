@@ -110,8 +110,8 @@ defmodule HologramEcosystemTests.Ash.TypesTest do
     assert shapes(Window, flow) == [{:map, %{from: [@date_time], to: [@date_time]}}]
   end
 
-  test "an embedded resource is its struct", %{flow: flow} do
-    assert shapes(Address, flow) == [{:struct, Address, %{}}]
+  test "an embedded resource is its record", %{flow: flow} do
+    assert [{:struct, Address, %{street: _street}}] = shapes(Address, flow)
   end
 
   test "a type of the app holds what its cast gives", %{flow: flow} do
