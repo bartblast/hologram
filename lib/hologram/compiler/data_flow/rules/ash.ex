@@ -44,6 +44,7 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
                interface_tree: 4,
                module_entries: 1,
                module_tree: 3,
+               record: 2,
                resource_entries: 1,
                resources: 1,
                resources_among: 1,
@@ -118,6 +119,15 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ash do
   """
   @spec available?() :: boolean
   def available?, do: Code.ensure_loaded?(Ash.Resource.Info)
+
+  @doc """
+  Returns, as a tree, the records of the given module when it is an Ash resource (see
+  `record_shapes/2`), or nil; nil for any module without Ash.
+  """
+  @impl Hologram.Compiler.DataFlow.Rules
+  def record(module, flow) do
+    if loaded?(flow) and Info.resource?(module), do: record_shapes(module, flow)
+  end
 
   @doc """
   Returns, as a tree, the records of the given Ash resource: its struct, with a field for each

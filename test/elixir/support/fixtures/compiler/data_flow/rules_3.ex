@@ -1,17 +1,17 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Rules2 do
+defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Rules3 do
   @behaviour Hologram.Compiler.DataFlow.Rules
 
-  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module25
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
   @impl Hologram.Compiler.DataFlow.Rules
-  def summary({Module25, :ruled, 0}, _flow), do: [:prim]
-
   def summary(_mfa, _flow), do: nil
 
   @impl Hologram.Compiler.DataFlow.Rules
-  def record(Struct1, _flow), do: [{:struct, Struct1, %{}}]
+  def record(Struct1, _flow), do: [{:struct, Struct1, %{field: [:prim]}}]
+
+  def record(Struct2, _flow), do: [{:struct, Struct2, %{}}]
 
   def record(_module, _flow), do: nil
 

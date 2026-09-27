@@ -6,6 +6,12 @@ defmodule Hologram.Compiler.DataFlow.Rules do
   # values at runtime from what it introspects is answered by what its introspection says. The
   # compiler finds the rules modules with no configuration: the built-in ones (see built_in/0).
   #
+  # The rules modules are asked in order, the first answer winning: a library built on another (Ash
+  # on Ecto) comes before it, so what it knows of its own modules wins over what the other's
+  # reflection says of them. Two questions are asked: what a function gives (summary/2), and what a
+  # record of a module holds (record/2), which a rules module asks when it needs a record another
+  # library may know better, so a record has one answer however it was loaded.
+  #
   # A rules module answers with plain trees (see Hologram.Compiler.DataFlow.tree/0), which the
   # analysis interns once per function: a rule never walks or expands a shared value. What it
   # computes once per compile (records, type shapes) it keeps in the flow context's rule cache.
@@ -28,10 +34,30 @@ defmodule Hologram.Compiler.DataFlow.Rules do
   @callback resolve(atom, [[atom]], DataFlow.t()) :: DataFlow.tree()
 
   @doc """
+  Returns, as a tree, the records of the given module when the rules module's library builds them
+  (for Ash, a resource), or nil.
+  """
+  @callback record(module, DataFlow.t()) :: DataFlow.tree() | nil
+
+  @optional_callbacks record: 2
+
+  @doc """
   Returns the built-in rules modules, which the analysis asks unless it is given others.
   """
   @spec built_in() :: [module]
   def built_in, do: [Hologram.Compiler.DataFlow.Rules.Ash]
+
+  @doc """
+  Returns the records of the given module that the first of the given flow context's rules modules
+  that knows them answers (see `c:record/2`), or nil when none does.
+  """
+  @spec record(module, DataFlow.t()) :: DataFlow.tree() | nil
+  def record(module, flow) do
+    Enum.find_value(flow.rules, fn rules_module ->
+      if Code.ensure_loaded?(rules_module) and function_exported?(rules_module, :record, 2),
+        do: rules_module.record(module, flow)
+    end)
+  end
 
   @doc """
   Returns what the given rules module answers for the named part of an answer, from what each
