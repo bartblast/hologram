@@ -14,6 +14,11 @@ defmodule HologramEcosystemTests.Ash.Domain do
       define :get_item, action: :read, get_by: [:id]
     end
 
-    resource Note
+    resource Note do
+      namespace Notes
+
+      define :list_notes, action: :read
+      define :list_archived_notes, action: :read, namespace: Notes.Archive
+    end
   end
 end

@@ -147,6 +147,22 @@ defmodule HologramEcosystemTests.Ash.InterfacesTest do
     assert answer(:get_item!, 1, flow, Domain) == Enum.sort([:prim | record(flow)])
   end
 
+  test "an interface generated on a domain's namespace module gives the resource's records", %{
+    flow: flow
+  } do
+    notes = {:list, AshRules.record_shapes(Note, flow)}
+
+    assert notes in answer(:list_notes!, 0, flow, Domain.Notes)
+  end
+
+  test "an interface generated on a namespace module of several segments gives the records", %{
+    flow: flow
+  } do
+    notes = {:list, AshRules.record_shapes(Note, flow)}
+
+    assert notes in answer(:list_archived_notes!, 0, flow, Domain.Notes.Archive)
+  end
+
   test "a function no interface generates has no answer", %{flow: flow} do
     assert answer(:unknown, 0, flow) == nil
   end
