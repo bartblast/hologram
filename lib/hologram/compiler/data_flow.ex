@@ -518,9 +518,10 @@ defmodule Hologram.Compiler.DataFlow do
   defp arg_index(_shape, _ref), do: nil
 
   # What a rule is given for one argument of its call (see Rules): the argument's atoms and struct
-  # modules, the atoms right inside its structs' fields (a query holds its resource there), and every
-  # atom and struct module among a bag's leaves, its structure lost; sorted, each once. Not what is
-  # deeper in a struct: a record's related records are not what the call is about.
+  # modules, the atoms right inside its structs' fields (a query holds its resource there), and
+  # every atom and struct module among a bag's leaves, its structure lost, the leaves of a bag
+  # inside it too (a value flattened in part, see widen/2); sorted, each once. Not what is deeper in
+  # a struct: a record's related records are not what the call is about.
   defp arg_names(set, store) do
     set
     |> ShapeSet.reduce(
@@ -528,7 +529,7 @@ defmodule Hologram.Compiler.DataFlow do
       fn
         {:atom, atom}, names -> [atom | names]
         {:struct, module, fields}, names -> [module | field_atoms(fields, store)] ++ names
-        {:bag, inner}, names -> leaf_atoms(inner, store) ++ names
+        {:bag, inner}, names -> leaf_atoms(leaves(inner, store), store) ++ names
         _shape, names -> names
       end,
       store

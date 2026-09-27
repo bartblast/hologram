@@ -904,6 +904,13 @@ defmodule Hologram.Compiler.DataFlowTest do
                tree_set([@struct_1_named])
     end
 
+    test "a rule shape finds a struct's module in a bag inside a bag of its argument's parts" do
+      flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
+
+      assert summary_tree({Module25, :calls_structs_in_deep, 0}, flow) ==
+               tree_set([@struct_1_named])
+    end
+
     test "a rule shape waits while its arguments are not known" do
       flow = start(PLT.start(), module_info_plt_fixture(), rules: [Rules1])
 

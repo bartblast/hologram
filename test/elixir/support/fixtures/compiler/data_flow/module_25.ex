@@ -1,5 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module25 do
+  alias Hologram.Test.Fixtures.Compiler.DataFlow.Module9
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct1
   alias Hologram.Test.Fixtures.Compiler.DataFlow.Struct2
 
@@ -10,6 +11,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module25 do
   def calls_reads, do: reads_via(Struct1)
 
   def calls_ruled, do: ruled()
+
+  def calls_structs_in_deep, do: structs_in(Module9.deep())
 
   def calls_structs_of, do: structs_of(Struct1)
 
@@ -26,6 +29,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Module25 do
   def reads_via(query), do: reads(query)
 
   def ruled, do: :followed
+
+  def structs_in(value), do: value
 
   def structs_of(module), do: module
 

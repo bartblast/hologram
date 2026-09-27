@@ -5,7 +5,8 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
   # runtime from what it loads, each field by its type, so the analysis, following its code, loses
   # track of which types a record's fields hold. These rules answer from the schema's reflection
   # instead: what a value of each Ecto type holds (type_shapes/2), a schema's records
-  # (record_shapes/2), and what a repo's functions give (summary/2).
+  # (record_shapes/2), and what a repo's functions, and the functions building a query or a
+  # changeset, give (summary/2).
   #
   # A schema whose records another rules module knows (an Ash resource is an Ecto schema too) has
   # those records wherever these rules need one (see Rules.record/2), so a record has one answer
@@ -52,6 +53,54 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
     utc_datetime_usec: DateTime
   }
 
+  # The functions of Ecto.Changeset that give a changeset (by their specs), and those that give the
+  # data with the changes applied.
+  @changeset_functions [
+    :add_error,
+    :assoc_constraint,
+    :cast,
+    :cast_assoc,
+    :cast_embed,
+    :change,
+    :check_constraint,
+    :delete_change,
+    :force_change,
+    :foreign_key_constraint,
+    :merge,
+    :no_assoc_constraint,
+    :optimistic_lock,
+    :prepare_changes,
+    :put_assoc,
+    :put_change,
+    :put_embed,
+    :reorder_assoc,
+    :unique_constraint,
+    :unsafe_validate_unique,
+    :update_change,
+    :validate_acceptance,
+    :validate_change,
+    :validate_confirmation,
+    :validate_exclusion,
+    :validate_format,
+    :validate_inclusion,
+    :validate_length,
+    :validate_number,
+    :validate_required,
+    :validate_subset
+  ]
+  @changeset_applies [:apply_action!, :apply_changes]
+
+  # The functions of Ecto.Query that give a query.
+  @query_functions [
+    :exclude,
+    :first,
+    :last,
+    :put_query_prefix,
+    :recursive_ctes,
+    :reverse_order,
+    :with_named_binding
+  ]
+
   # A repo's functions by what they give (see repo_tree/1): a list of records, what they are given
   # reloaded or with its associations loaded, one record, one record or nil, and `{:ok, record}` or
   # `{:error, changeset}`.
@@ -61,10 +110,11 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
   @repo_optional_ones [:get, :get_by, :one]
   @repo_writes [:delete, :insert, :insert_or_update, :update]
 
-  # What a repo function's rule shapes read the schemas from: its first argument (a schema module, a
-  # record, a list of them, a changeset) and what is inside it (a list's records, a changeset's
-  # data).
-  @repo_subject [{:param, 0}, {:contents, [{:param, 0}]}]
+  # What a rule shape of a repo's or a changeset's function reads the schemas from: its first
+  # argument (a schema module, a record, a list of them, a query, a changeset) and every part of it
+  # (a list's records, a query's source and joins, a changeset's data). A record's parts name the
+  # schemas of its related records too, which adds no type: those records are inside its own.
+  @subject [{:param, 0}, {:part, [{:param, 0}]}]
 
   # How deep records nest through associations before a related record is a bag of the types every
   # record reachable from it holds, so associations in a cycle (a post's comments, a comment's post)
@@ -90,10 +140,14 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
   @doc """
   Returns what a rule shape of this module (see `summary/2`) gives once the atoms and struct modules
   among its arguments are known: `:records`, the records of the schemas among them (every schema's,
-  as a bag of the types they hold, when there is none); `:changeset`, a changeset holding them.
+  as a bag of the types they hold, when there is none); `:named_records`, the same without the
+  fallback (what a changeset's own values cannot hold, when it names no schema);
+  `:changeset`, a changeset holding the records.
   """
   @impl Hologram.Compiler.DataFlow.Rules
   def resolve(:records, [modules], flow), do: records_of(modules, flow)
+
+  def resolve(:named_records, [modules], flow), do: schema_records(modules, flow)
 
   def resolve(:changeset, [modules], flow) do
     records = records_of(modules, flow)
@@ -109,14 +163,26 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
 
   @doc """
   Returns what a repo's function (of a module defining `__adapter__/0`) gives: the records of the
-  schemas its first argument names (a schema module, a record, a list of them, a changeset), a list
-  of them, one, or one or nil, as the function gives them; `{:ok, record}` or `{:error, changeset}`
-  for the writes that do not raise; what it is given, reloaded or with its associations loaded, for
-  `preload/3` and `reload/2`. Nil for a repo's other functions and for any other module's.
+  schemas its first argument names (a schema module, a record, a list of them, a query, a
+  changeset), a list of them, one, or one or nil, as the function gives them; `{:ok, record}` or
+  `{:error, changeset}` for the writes that do not raise; what it is given, reloaded or with its
+  associations loaded, for `preload/3` and `reload/2`. A function building a query (of
+  `Ecto.Query`, or the `apply` of an `Ecto.Query.Builder` module, which Ecto's query macros expand
+  to) gives the query holding what it is given; a function of `Ecto.Changeset` giving a changeset
+  gives one holding what it is given and the records of the schema its first argument names, and
+  one applying the changes gives the data. Nil for any other function.
   """
   @impl Hologram.Compiler.DataFlow.Rules
-  def summary({module, function, _arity}, flow) do
-    if repo?(module, flow), do: repo_tree(function)
+  def summary({Ecto.Changeset, function, arity}, _flow), do: changeset_summary(function, arity)
+
+  def summary({Ecto.Query, function, arity}, _flow), do: query_summary(function, arity)
+
+  def summary({module, function, arity}, flow) do
+    cond do
+      function == :apply and query_builder?(module) -> query_tree(Ecto.Query, arity)
+      repo?(module, flow) -> repo_tree(function)
+      true -> nil
+    end
   end
 
   @doc """
@@ -145,6 +211,12 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
     end)
   end
 
+  # What applying a changeset's changes gives: the record of the schema its first argument names,
+  # and every type the changeset holds.
+  defp applied_tree do
+    union([[{:bag, [{:param, 0}]}], [{:rule, __MODULE__, :named_records, [@subject]}]])
+  end
+
   # A record's associations: the related record (the one another rules module knows, see
   # Rules.record/2), a list of them for a to-many association, below @record_depth a bag of the
   # types every record reachable from it holds; nil or not loaded.
@@ -169,6 +241,26 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
     end)
   end
 
+  # What a function of Ecto.Changeset gives (see summary/2), or nil for one these rules do not answer.
+  defp changeset_summary(function, arity) when function in @changeset_functions,
+    do: changeset_tree(arity)
+
+  defp changeset_summary(function, _arity) when function in @changeset_applies, do: applied_tree()
+
+  defp changeset_summary(:apply_action, _arity),
+    do: [{:tuple, [[{:atom, :ok}], applied_tree()]}, {:tuple, [[{:atom, :error}], [{:param, 0}]]}]
+
+  defp changeset_summary(_function, _arity), do: nil
+
+  # A changeset holding what the function is given and the records of the schema its first argument
+  # names, which its cast values hold types of (a field of a custom type holds what the type casts
+  # to).
+  defp changeset_tree(arity) do
+    rest = union([[:prim], params(arity), [{:rule, __MODULE__, :named_records, [@subject]}]])
+
+    [{:struct, Ecto.Changeset, DataFlow.rest_fields(rest)}]
+  end
+
   # The metadata of a schema with a source, naming the schema; an embedded schema has none.
   defp meta_fields(schema) do
     if Map.has_key?(schema.__struct__(), :__meta__) do
@@ -176,6 +268,34 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
     else
       %{}
     end
+  end
+
+  # The params of a function of the given arity.
+  defp params(arity), do: for(index <- 0..(arity - 1)//1, do: {:param, index})
+
+  # Whether the module is one of Ecto's query builders, whose `apply` Ecto's query macros call.
+  defp query_builder?(module) do
+    module
+    |> Atom.to_string()
+    |> String.starts_with?("Elixir.Ecto.Query.Builder.")
+  end
+
+  # What a function of Ecto.Query gives (see summary/2), or nil for one these rules do not answer.
+  defp query_summary(function, arity) when function in @query_functions,
+    do: query_tree(Ecto.Query, arity)
+
+  defp query_summary(:subquery, arity), do: query_tree(Ecto.SubQuery, arity)
+
+  defp query_summary(:has_named_binding?, _arity), do: [:prim]
+
+  defp query_summary(_function, _arity), do: nil
+
+  # The struct of a query (or a subquery) holding what the function is given, in its rest, where the
+  # rules of a repo's functions find the schemas it names (see @subject), however deep the queries
+  # it is given nest.
+  defp query_tree(module, arity) do
+    rest = union([[:prim], params(arity)])
+    [{:struct, module, DataFlow.rest_fields(rest)}]
   end
 
   # The types every record reachable from the schema holds, as leaves (see record_leaves/2).
@@ -242,19 +362,14 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
   end
 
   # The rule shape of the records of the schemas a repo function's first argument names.
-  defp records, do: [{:rule, __MODULE__, :records, [@repo_subject]}]
+  defp records, do: [{:rule, __MODULE__, :records, [@subject]}]
 
-  # The records of the schemas among the modules, each the one another rules module knows or these
-  # rules' own (see Rules.record/2); every schema's when there is none.
+  # The records of the schemas among the modules (see schema_records/2); every schema's when there is
+  # none.
   defp records_of(modules, flow) do
-    case Enum.filter(modules, &Reflection.ecto_schema?/1) do
-      [] ->
-        all_records(flow)
-
-      schemas ->
-        schemas
-        |> Enum.map(&(Rules.record(&1, flow) || record_shapes(&1, flow)))
-        |> union()
+    case schema_records(modules, flow) do
+      [] -> all_records(flow)
+      records -> records
     end
   end
 
@@ -290,11 +405,20 @@ defmodule Hologram.Compiler.DataFlow.Rules.Ecto do
   defp repo_tree(function) when function in @repo_optional_ones, do: union([records(), [:prim]])
 
   defp repo_tree(function) when function in @repo_writes do
-    changeset = [{:rule, __MODULE__, :changeset, [@repo_subject]}]
+    changeset = [{:rule, __MODULE__, :changeset, [@subject]}]
     [{:tuple, [[{:atom, :ok}], records()]}, {:tuple, [[{:atom, :error}], changeset]}]
   end
 
   defp repo_tree(_function), do: nil
+
+  # The records of the schemas among the modules, each the one another rules module knows or these
+  # rules' own (see Rules.record/2); none when no module is a schema.
+  defp schema_records(modules, flow) do
+    modules
+    |> Enum.filter(&Reflection.ecto_schema?/1)
+    |> Enum.map(&(Rules.record(&1, flow) || record_shapes(&1, flow)))
+    |> union()
+  end
 
   # The schemas among the compile's modules, by the module info's flag.
   defp schemas(flow) do

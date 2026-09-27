@@ -16,6 +16,9 @@ defmodule Hologram.Test.Fixtures.Compiler.DataFlow.Rules1 do
 
   def summary({Module25, :ruled, 0}, _flow), do: [{:struct, Struct1, %{field: [:prim]}}]
 
+  def summary({Module25, :structs_in, 1}, _flow),
+    do: [{:rule, __MODULE__, :structs, [[{:part, [{:param, 0}]}]]}]
+
   def summary({Module25, :structs_of, 1}, _flow),
     do: [{:rule, __MODULE__, :structs, [[{:param, 0}]]}]
 
