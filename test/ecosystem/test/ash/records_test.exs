@@ -4,6 +4,7 @@ defmodule HologramEcosystemTests.Ash.RecordsTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.DataFlow
   alias Hologram.Compiler.DataFlow.Rules.Ash, as: AshRules
+  alias HologramEcosystemTests.Ash.Category
   alias HologramEcosystemTests.Ash.Item
   alias HologramEcosystemTests.Ash.Note
 
@@ -70,6 +71,18 @@ defmodule HologramEcosystemTests.Ash.RecordsTest do
     assert {:struct, Note, %{}} in leaves
     assert {:struct, Money, %{}} in leaves
     assert {:struct, Decimal, %{}} in leaves
+  end
+
+  test "a resource related to itself holds its record at the next depth", %{flow: flow} do
+    parent = fields(Category, flow).parent
+
+    assert :prim in parent
+    assert not_loaded(Category) in parent
+
+    assert [{:struct, Category, parent_fields}] =
+             Enum.filter(parent, &match?({:struct, Category, _fields}, &1))
+
+    assert parent_fields.name == fields(Category, flow).name
   end
 
   test "Ash's own fields", %{flow: flow} do
