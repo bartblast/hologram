@@ -19,6 +19,8 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page23
   alias HologramFeatureTests.Actions.Page24
   alias HologramFeatureTests.Actions.Page25
+  alias HologramFeatureTests.Actions.Page26
+  alias HologramFeatureTests.Actions.Page27
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -545,6 +547,33 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(link("Page 24 link"))
       |> assert_page(Page24, via: "link")
       |> assert_text(css("#log"), ~s/[init: "link", script: "link"]/)
+    end
+  end
+
+  describe "one action at a time, per component" do
+    # The page's action is still awaiting when the component's is dispatched. Only the page is
+    # held: the component's action writes the component's state, which nothing is about to
+    # overwrite.
+    feature "another component's action runs while one awaits", %{session: session} do
+      session
+      |> visit(Page26)
+      |> click(button("Await slowly"))
+      |> click(button("Increment component 22"))
+      |> assert_text(css("#component_22_count"), "1")
+      |> assert_text(css("#page_result"), "nil")
+    end
+
+    # The awaiting action belongs to the page being left. The destination's page actions share
+    # its cid and must not inherit its wait.
+    feature "the destination is not held by an action awaiting on the page left",
+            %{session: session} do
+      session
+      |> visit(Page26)
+      |> click(button("Await forever"))
+      |> click(link("Page 27 link"))
+      |> assert_page(Page27)
+      |> click(button("Put page 27 result"))
+      |> assert_text(css("#page_result"), ~s/"Page 27 result"/)
     end
   end
 end
