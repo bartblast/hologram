@@ -112,16 +112,19 @@ export default class Hologram {
   // In-memory cache for page snapshots (fastest access)
   static #pageSnapshots = new Map();
 
+  // Component ids whose action is running asynchronously, each with the epoch of the page it
+  // belongs to, from the action's start to the commit of its result. The queue waits for it on
+  // that component only: the next action for the component reads its state, and the state it must
+  // read is the one the running action is about to write. Other components' actions are not held -
+  // an action never writes another component's struct, so there is nothing for them to wait for.
+  // Emptied when the page is left: what was awaiting belongs to the page being left, and the
+  // destination may hold the same cids.
+  static #awaitingTargets = new Map();
+
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
   static #historyId = null;
-
-  // True while an asynchronous action runs, from its start to the commit of its result. The queue
-  // waits for it: the next action reads the component state, and the state it must read is the one
-  // the running action is about to write.
-  static #isAwaitingAction = false;
-
   static #isInitiated = false;
 
   // True while #runActions walks the queue. A running action can enqueue another one synchronously
@@ -1084,6 +1087,10 @@ export default class Hologram {
     Debouncer.cancelAll();
     Throttler.cancelAll();
 
+    // What was awaiting belongs to the page being left, and the destination may hold the same
+    // cids. Emptied here for the same reason the timers are cancelled here.
+    $.#awaitingTargets.clear();
+
     await $.#savePageSnapshot();
 
     const pageSnapshot = await $.#getPageSnapshot(event.state);
@@ -1529,6 +1536,10 @@ export default class Hologram {
     Debouncer.cancelAll();
     Throttler.cancelAll();
 
+    // What was awaiting belongs to the page being left, and the destination may hold the same
+    // cids. Emptied here for the same reason the timers are cancelled here.
+    $.#awaitingTargets.clear();
+
     // The patch below puts the destination's markup on screen and runs its scripts, so the epoch
     // of what is displayed advances here, ahead of the registry - the mount brings the registry
     // level. What the destination's script dispatches from here on carries that epoch and waits
@@ -1725,25 +1736,26 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
   }
 
-  // Runs the queue from its head, one action at a time, until the queue is empty or its head has to
-  // wait. The head waits while an asynchronous action has not committed yet, while the client is
-  // mid-transition (the page the head belongs to is the one being moved to, and it cannot answer
-  // until it mounts), while the page is mounting (its first render has not written the props yet),
-  // and while a render is on the stack (the DOM it walks is mid-update, and the head's own render
-  // would walk the same tree behind it). Whoever ends the wait runs the queue again: the settled
-  // action, the mount, the finished render.
+  // Walks the queue and runs every entry that can run, in order, until the walk is over or the
+  // page has to wait. The page waits while the client is mid-transition (the entries belong to the
+  // page being moved to, which cannot answer until it mounts), while the page is mounting (its
+  // first render has not written the props yet), and while a render is on the stack (the DOM it
+  // walks is mid-update, and an action's own render would walk the same tree behind it). A
+  // component waits while an action of its own is awaiting, and so do its later entries: a later
+  // entry never overtakes an earlier one for the same component. Whoever ends a wait runs the
+  // queue again: the settled action, the mount, the finished render.
   //
   // An action stamped with a page that has been left, or whose navigation failed before it could
-  // mount, is dropped when it reaches the head - nothing can answer for it any more. The warning is
+  // mount, is dropped when the walk reaches it - nothing can answer for it any more. The warning is
   // the trace a button that appears to do nothing leaves behind.
   //
   // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
   // element at once, so a run of several is the ordinary case, and they have nothing to do with one
-  // another. Every one is delivered and the first error is raised once the run is over - the same
+  // another. Every one is delivered and the first error is raised once the walk is over - the same
   // bargain the debouncer makes with the callbacks it flushes.
   // Deps: [:maps.get/2]
   static #runActions() {
-    if ($.#isRunningActions || $.#isAwaitingAction) {
+    if ($.#isRunningActions) {
       return;
     }
 
@@ -1752,12 +1764,18 @@ export default class Hologram {
     let firstError;
 
     try {
-      while (!ActionQueue.isEmpty()) {
-        const {action, epoch} = ActionQueue.peek();
+      // The components this walk may not run an action for: one whose action is awaiting, and one
+      // whose earlier entry was passed over, so that a later entry for it does not overtake it.
+      const blockedTargets = new Set($.#awaitingTargets.keys());
+      let index = 0;
+
+      while (index < ActionQueue.entries.length) {
+        const {action, epoch} = ActionQueue.entries[index];
         const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
 
+        // Dropped whatever the page is doing: a stale entry has nothing to wait for.
         if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
-          ActionQueue.shift();
+          ActionQueue.removeAt(index);
 
           console.warn(
             "Hologram: dropped an action dispatched on a page that has been left:",
@@ -1773,7 +1791,18 @@ export default class Hologram {
           break;
         }
 
-        ActionQueue.shift();
+        // A cid is text by construction, and reading a bitstring's text fills in nothing on it -
+        // encoding it as a map key would cache its bytes on the action's own struct.
+        const targetKey = Bitstring.toText(
+          Erlang_Maps["get/2"](Type.atom("target"), action),
+        );
+
+        if (blockedTargets.has(targetKey)) {
+          index++;
+          continue;
+        }
+
+        ActionQueue.removeAt(index);
 
         let result;
 
@@ -1785,7 +1814,8 @@ export default class Hologram {
         }
 
         if (result instanceof Promise) {
-          $.#isAwaitingAction = true;
+          $.#awaitingTargets.set(targetKey, epoch);
+          blockedTargets.add(targetKey);
 
           // Resumed from a macrotask rather than from the promise's own continuation, so that an
           // action raising in the resumed run surfaces as an uncaught error, the way every
@@ -1793,11 +1823,14 @@ export default class Hologram {
           // promise's own rejection still reaches the "unhandledrejection" listener: finally()
           // passes it through.
           result.finally(() => {
-            $.#isAwaitingAction = false;
+            // The page may have been left since, which empties the map, and the destination may
+            // be awaiting an action of its own under the same cid - that entry is not this one's.
+            if ($.#awaitingTargets.get(targetKey) === epoch) {
+              $.#awaitingTargets.delete(targetKey);
+            }
+
             setTimeout(() => Hologram.#runActions(), 0);
           });
-
-          break;
         }
       }
     } finally {

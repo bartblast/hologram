@@ -15,6 +15,11 @@ describe("ActionQueue", () => {
     ActionQueue.entries = [];
   });
 
+  // The entries here are plain strings, which the runner in another file would read as actions.
+  afterEach(() => {
+    ActionQueue.entries = [];
+  });
+
   describe("append()", () => {
     it("adds the entries at the end, in their order", () => {
       ActionQueue.enqueue(action1, 3);

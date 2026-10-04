@@ -37,6 +37,7 @@ registerWebApis();
 defineModule7Fixture();
 
 const cid1 = Type.bitstring("my_component_1");
+const cid2 = Type.bitstring("my_component_2");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
@@ -85,22 +86,38 @@ describe("Hologram", () => {
   });
 
   describe("enqueueAction()", () => {
-    let clock, executeActionStub, warnStub;
+    let clock, executeActionStub, pendingSettles, warnStub;
 
-    const actionNamed = (name) =>
+    const actionNamed = (name, target = cid1) =>
       Type.actionStruct({
         name: Type.atom(name),
         params: Type.map(),
-        target: cid1,
+        target: target,
       });
 
     const action1 = actionNamed("action_1");
     const action2 = actionNamed("action_2");
     const action3 = actionNamed("action_3");
+    const otherComponentAction = actionNamed("other_component_action", cid2);
+
+    // A promise a test settles when it chooses to - or the teardown does, so that a component left
+    // awaiting in one test is not still awaiting in the next.
+    const pendingPromise = () => {
+      let settle;
+
+      const promise = new Promise((resolve) => {
+        settle = resolve;
+      });
+
+      pendingSettles.push(settle);
+
+      return promise;
+    };
 
     beforeEach(() => {
       clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
       ActionQueue.entries = [];
+      pendingSettles = [];
 
       executeActionStub = sinon
         .stub(Hologram, "executeAction")
@@ -109,7 +126,10 @@ describe("Hologram", () => {
       warnStub = sinon.stub(console, "warn");
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+      pendingSettles.forEach((settle) => settle());
+      await clock.tickAsync(0);
+
       ActionQueue.entries = [];
       Hologram.domEpoch = 0;
       Hologram.registryEpoch = 0;
@@ -148,27 +168,96 @@ describe("Hologram", () => {
       assert.deepStrictEqual(calls, ["action_1 done", "action_2"]);
     });
 
-    // The reason the queue exists: the next action reads the component state, so it must not start
-    // before the running one has written it.
-    it("waits for an asynchronous action to settle before running the next one", async () => {
-      let settle;
-
-      executeActionStub.onFirstCall().returns(
-        new Promise((resolve) => {
-          settle = resolve;
-        }),
-      );
+    // The reason the queue exists: the component's next action reads its state, so it must not
+    // start before the running one has written it.
+    it("waits for a component's asynchronous action before running its next one", async () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
 
       Hologram.enqueueAction(action1, 0);
       Hologram.enqueueAction(action2, 0);
 
       sinon.assert.calledOnce(executeActionStub);
 
-      settle();
+      pendingSettles[0]();
       await clock.tickAsync(0);
 
       sinon.assert.calledTwice(executeActionStub);
       assert.deepStrictEqual(executeActionStub.secondCall.args, [action2, 0]);
+    });
+
+    // An action never writes another component's struct, so another component has nothing to wait
+    // for - and a promise that never settles must not hold the rest of the page.
+    it("runs another component's action while one is awaiting", () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(otherComponentAction, 0);
+
+      sinon.assert.calledTwice(executeActionStub);
+
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [
+        otherComponentAction,
+        0,
+      ]);
+    });
+
+    it("keeps a component's later actions behind its awaiting one", () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(action2, 0);
+      Hologram.enqueueAction(otherComponentAction, 0);
+
+      sinon.assert.calledTwice(executeActionStub);
+
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [
+        otherComponentAction,
+        0,
+      ]);
+
+      assert.deepStrictEqual(ActionQueue.entries, [
+        {action: action2, epoch: 0},
+      ]);
+    });
+
+    // A later entry never overtakes an earlier one for the same component, whatever held the
+    // earlier one back.
+    it("keeps a component's later actions behind one that was passed over", async () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+
+      Hologram.isRendering = true;
+      Hologram.enqueueAction(action2, 0);
+      Hologram.enqueueAction(action3, 0);
+      Hologram.isRendering = false;
+
+      pendingSettles[0]();
+      await clock.tickAsync(0);
+
+      assert.deepStrictEqual(
+        executeActionStub.getCalls().map((call) => call.args[0]),
+        [action1, action2, action3],
+      );
+    });
+
+    // The settle of an action awaited on a page that has been left finds the epochs moved on. It
+    // still releases its own component, since the wait it ends is its own.
+    it("releases the component when its action settles after a navigation", async () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+
+      Hologram.domEpoch = 1;
+      Hologram.registryEpoch = 1;
+
+      pendingSettles[0]();
+      await clock.tickAsync(0);
+
+      Hologram.enqueueAction(action2, 1);
+
+      sinon.assert.calledTwice(executeActionStub);
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [action2, 1]);
     });
 
     // The two sides disagree, so the client is mid-transition: the page the action belongs to is
