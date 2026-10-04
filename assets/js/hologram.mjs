@@ -153,6 +153,9 @@ export default class Hologram {
   // Promises, breaking ChromeDriver/Wallaby error detection which relies on the
   // synchronous "error" event. Async action errors are caught separately via the
   // "unhandledrejection" event listener in #init().
+  //
+  // Returns the promise of an asynchronous action, settled once its result has been processed, so
+  // that a caller can wait for the commit. A synchronous action returns nothing.
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2]
   static executeAction(action, epoch = $.registryEpoch) {
@@ -194,18 +197,18 @@ export default class Hologram {
     );
 
     if (resultComponentStruct instanceof Promise) {
-      resultComponentStruct.then((resolved) =>
+      return resultComponentStruct.then((resolved) =>
         Hologram.#processActionResult(resolved, name, target, startTime, epoch),
       );
-    } else {
-      Hologram.#processActionResult(
-        resultComponentStruct,
-        name,
-        target,
-        startTime,
-        epoch,
-      );
     }
+
+    Hologram.#processActionResult(
+      resultComponentStruct,
+      name,
+      target,
+      startTime,
+      epoch,
+    );
   }
 
   // Made public to make tests easier

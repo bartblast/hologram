@@ -154,6 +154,45 @@ describe("Hologram", () => {
       );
     });
 
+    it("returns nothing for a synchronous action", () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      assert.isUndefined(Hologram.executeAction(actionFor(cid1)));
+    });
+
+    // What the promise settles on is the commit, not the action's own return: a caller waiting on
+    // it reads the state the action wrote.
+    it("returns a promise that settles once an asynchronous action's result is processed", async () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Promise.resolve(
+          Type.componentStruct({nextAction: Type.nil(), state: Type.map()}),
+        ),
+      );
+
+      const result = Hologram.executeAction(actionFor(cid1));
+
+      assert.instanceOf(result, Promise);
+      sinon.assert.notCalled(renderStub);
+
+      await result;
+
+      sinon.assert.calledOnce(renderStub);
+    });
+
     // A next action is a continuation of the one that produced it, so it belongs to the same page
     // - which is not necessarily the page current by the time it is scheduled, since the parent
     // may have been asynchronous.
