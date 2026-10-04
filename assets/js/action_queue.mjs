@@ -24,16 +24,9 @@ export default class ActionQueue {
     $.entries.push({action: action, epoch: epoch});
   }
 
-  static isEmpty() {
-    return $.entries.length === 0;
-  }
-
-  static peek() {
-    return $.entries[0];
-  }
-
-  static shift() {
-    return $.entries.shift();
+  // Removes the entry at the given position and returns it.
+  static removeAt(index) {
+    return $.entries.splice(index, 1)[0];
   }
 }
 

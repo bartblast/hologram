@@ -81,49 +81,30 @@ describe("ActionQueue", () => {
     });
   });
 
-  describe("isEmpty()", () => {
-    it("is true with no entries", () => {
-      assert.isTrue(ActionQueue.isEmpty());
-    });
-
-    it("is false with an entry", () => {
-      ActionQueue.enqueue(action1, 3);
-
-      assert.isFalse(ActionQueue.isEmpty());
-    });
-  });
-
-  describe("peek()", () => {
-    it("returns the first entry without removing it", () => {
+  describe("removeAt()", () => {
+    it("removes and returns the entry at the position", () => {
       ActionQueue.enqueue(action1, 3);
       ActionQueue.enqueue(action2, 4);
+      ActionQueue.enqueue(action3, 5);
 
-      assert.deepStrictEqual(ActionQueue.peek(), {action: action1, epoch: 3});
+      assert.deepStrictEqual(ActionQueue.removeAt(1), {
+        action: action2,
+        epoch: 4,
+      });
 
       assert.deepStrictEqual(ActionQueue.entries, [
         {action: action1, epoch: 3},
-        {action: action2, epoch: 4},
+        {action: action3, epoch: 5},
       ]);
     });
 
-    it("returns undefined with no entries", () => {
-      assert.isUndefined(ActionQueue.peek());
-    });
-  });
-
-  describe("shift()", () => {
-    it("removes and returns the first entry", () => {
+    it("returns undefined for a position past the end", () => {
       ActionQueue.enqueue(action1, 3);
-      ActionQueue.enqueue(action2, 4);
 
-      assert.deepStrictEqual(ActionQueue.shift(), {action: action1, epoch: 3});
+      assert.isUndefined(ActionQueue.removeAt(1));
       assert.deepStrictEqual(ActionQueue.entries, [
-        {action: action2, epoch: 4},
+        {action: action1, epoch: 3},
       ]);
-    });
-
-    it("returns undefined with no entries", () => {
-      assert.isUndefined(ActionQueue.shift());
     });
   });
 });
