@@ -6,7 +6,8 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
   def init(_props, component, _server) do
     put_state(component,
       reach: 0,
-      resize: 0
+      resize: 0,
+      window_resize: 0
     )
   end
 
@@ -24,6 +25,9 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
     {%if @kind == "resize"}
       <div $resize="record_resize" id="resize_box" style="height: 100px">Content</div>
     {/if}
+    {%if @kind == "window_resize"}
+      <window $resize="record_window_resize" />
+    {/if}
     """
   end
 
@@ -33,5 +37,9 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
 
   def action(:record_resize, _params, component) do
     put_state(component, :resize, component.state.resize + 1)
+  end
+
+  def action(:record_window_resize, _params, component) do
+    put_state(component, :window_resize, component.state.window_resize + 1)
   end
 end

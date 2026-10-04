@@ -35,4 +35,21 @@ defmodule HologramFeatureTests.Navigation.LeftListenersTest do
     |> click(button("Put destination result"))
     |> assert_text(css("#destination_result"), ~s/"resize"/)
   end
+
+  # A window listener observes nothing of the patch by itself, so the event is driven: the title
+  # appearing says the destination is patched in, the held-back bundle says it is not mounted, and
+  # the resize lands between the two. A key press, or the scroll a shorter destination causes by
+  # clamping the offset, would reach the same listener.
+  feature "a window binding of the page being left does not dispatch into the destination",
+          %{session: session} do
+    session
+    |> simulate_slow_page_bundle(4_000)
+    |> visit(LeftListenersPage, kind: "window_resize")
+    |> click(link("Destination link"))
+    |> assert_has(css("#destination_title"))
+    |> resize_window(700, 500)
+    |> assert_page(LeftListenersDestinationPage, kind: "window_resize")
+    |> click(button("Put destination result"))
+    |> assert_text(css("#destination_result"), ~s/"window_resize"/)
+  end
 end
