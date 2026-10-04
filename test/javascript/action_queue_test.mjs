@@ -9,9 +9,56 @@ defineRuntimeGlobals();
 describe("ActionQueue", () => {
   const action1 = "action_1";
   const action2 = "action_2";
+  const action3 = "action_3";
 
   beforeEach(() => {
     ActionQueue.entries = [];
+  });
+
+  describe("append()", () => {
+    it("adds the entries at the end, in their order", () => {
+      ActionQueue.enqueue(action1, 3);
+
+      ActionQueue.append([
+        {action: action2, epoch: 4},
+        {action: action3, epoch: 5},
+      ]);
+
+      assert.deepStrictEqual(ActionQueue.entries, [
+        {action: action1, epoch: 3},
+        {action: action2, epoch: 4},
+        {action: action3, epoch: 5},
+      ]);
+    });
+
+    it("leaves the queue as it is given no entries", () => {
+      ActionQueue.enqueue(action1, 3);
+
+      ActionQueue.append([]);
+
+      assert.deepStrictEqual(ActionQueue.entries, [
+        {action: action1, epoch: 3},
+      ]);
+    });
+  });
+
+  describe("drain()", () => {
+    it("returns the entries in their order and empties the queue", () => {
+      ActionQueue.enqueue(action1, 3);
+      ActionQueue.enqueue(action2, 4);
+
+      assert.deepStrictEqual(ActionQueue.drain(), [
+        {action: action1, epoch: 3},
+        {action: action2, epoch: 4},
+      ]);
+
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
+
+    it("returns an empty list with no entries", () => {
+      assert.deepStrictEqual(ActionQueue.drain(), []);
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
   });
 
   describe("enqueue()", () => {

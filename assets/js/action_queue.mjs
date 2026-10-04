@@ -7,6 +7,19 @@ export default class ActionQueue {
   // Made public to make tests easier
   static entries = [];
 
+  // Adds the given entries at the end of the queue, in their order.
+  static append(entries) {
+    $.entries.push(...entries);
+  }
+
+  // Empties the queue and returns the entries it held, in their order.
+  static drain() {
+    const entries = $.entries;
+    $.entries = [];
+
+    return entries;
+  }
+
   static enqueue(action, epoch) {
     $.entries.push({action: action, epoch: epoch});
   }
