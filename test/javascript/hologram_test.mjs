@@ -21,7 +21,6 @@ import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
-import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
@@ -2484,7 +2483,7 @@ describe("Hologram", () => {
 
     beforeEach(() => {
       ComponentRegistry.clear();
-      InitActionQueue.dequeueAll();
+      ActionQueue.entries = [];
 
       entry1 = Type.map([
         [Type.atom("module"), Type.alias("Module1")],
@@ -2517,6 +2516,12 @@ describe("Hologram", () => {
       ]);
     });
 
+    // Nothing runs the queue in these tests, so what they enqueue would be ahead of the next
+    // test's dispatch.
+    afterEach(() => {
+      ActionQueue.entries = [];
+    });
+
     it("queues actions from all components that have next_action set", () => {
       ComponentRegistry.entries = Type.map([
         [cid1, entry1],
@@ -2525,7 +2530,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 2);
 
       assert.deepStrictEqual(queuedActions[0], action1);
@@ -2541,7 +2546,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 2);
 
       assert.deepStrictEqual(queuedActions[0], action1);
@@ -2551,7 +2556,7 @@ describe("Hologram", () => {
     it("handles empty component registry", () => {
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 0);
     });
 
@@ -2563,7 +2568,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 0);
     });
 
@@ -2572,10 +2577,12 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
 
       // Should not modify the action
       assert.deepStrictEqual(queuedActions[0], action1);
+
+      assert.equal(ActionQueue.entries[0].epoch, Hologram.registryEpoch);
     });
 
     it("adds component ID as target when action has nil target", () => {
@@ -2583,7 +2590,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
 
       const expectedAction = Erlang_Maps["put/3"](
         Type.atom("target"),
@@ -2603,7 +2610,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 3);
 
       assert.deepStrictEqual(queuedActions[0], action2);
@@ -2648,19 +2655,28 @@ describe("Hologram", () => {
     });
 
     beforeEach(() => {
-      InitActionQueue.dequeueAll();
+      ActionQueue.entries = [];
+    });
+
+    // Nothing runs the queue in these tests, so what they enqueue would be ahead of the next
+    // test's dispatch.
+    afterEach(() => {
+      ActionQueue.entries = [];
     });
 
     it("does not enqueue anything when the list is empty", () => {
       Hologram.queueSelfEchoes(Type.list([]));
 
-      assert.deepStrictEqual(InitActionQueue.dequeueAll(), []);
+      assert.deepStrictEqual(ActionQueue.entries, []);
     });
 
-    it("enqueues each action in order", () => {
+    it("enqueues each action in order, stamped with the page the registry answers for", () => {
       Hologram.queueSelfEchoes(Type.list([action1, action2]));
 
-      assert.deepStrictEqual(InitActionQueue.dequeueAll(), [action1, action2]);
+      assert.deepStrictEqual(ActionQueue.entries, [
+        {action: action1, epoch: Hologram.registryEpoch},
+        {action: action2, epoch: Hologram.registryEpoch},
+      ]);
     });
   });
 

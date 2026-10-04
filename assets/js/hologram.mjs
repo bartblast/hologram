@@ -16,7 +16,6 @@ import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
-import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
 import LiveReload from "./live_reload.mjs";
@@ -160,10 +159,11 @@ export default class Hologram {
     Hologram.scheduleAction(action, $.domEpoch);
   }
 
-  // The one way an action enters the queue, from every path: a DOM event's dispatch, a timer
-  // scheduleAction set, a command's reply, a server push, a mount's own actions. An action carries
-  // the epoch of the page it was reasoning about when it was created, and #runActions compares that
-  // against where the client has got to by the time the action reaches the head of the queue.
+  // Puts an action on the queue and runs the queue: a DOM event's dispatch, a timer scheduleAction
+  // set, a command's reply, a server push. A mount and a render put their own actions on the queue
+  // directly, since they run it themselves once they are done. An action carries the epoch of the
+  // page it was reasoning about when it was created, and #runActions compares that against where
+  // the client has got to by the time the action reaches the head of the queue.
   static enqueueAction(action, epoch = $.registryEpoch) {
     ActionQueue.enqueue(action, epoch);
     Hologram.#runActions();
@@ -530,7 +530,7 @@ export default class Hologram {
           );
         }
 
-        InitActionQueue.enqueue(actionWithTarget);
+        ActionQueue.enqueue(actionWithTarget, $.registryEpoch);
       }
     }
   }
@@ -538,7 +538,7 @@ export default class Hologram {
   // Made public to make tests easier
   static queueSelfEchoes(selfEchoes) {
     for (const action of selfEchoes.data) {
-      InitActionQueue.enqueue(action);
+      ActionQueue.enqueue(action, $.registryEpoch);
     }
   }
 
@@ -640,8 +640,8 @@ export default class Hologram {
   // Execute action asynchronously to allow animations and prevent blocking the event loop
   // Deps: [:maps.get/3]
   // The default stamp covers every caller that reasoned about the registry rather than about the
-  // markup - server-pushed actions, command responses, and the queues the mount drains. A caller
-  // whose action came from the DOM passes the displayed page's epoch instead.
+  // markup - server-pushed actions and command responses. A caller whose action came from the DOM
+  // passes the displayed page's epoch instead.
   static scheduleAction(action, epoch = $.registryEpoch) {
     const delay = Erlang_Maps["get/3"](
       Type.atom("delay"),
@@ -918,19 +918,6 @@ export default class Hologram {
     );
   }
 
-  // A document load leaves a shim that buffers whatever the page's script dispatches before the
-  // runtime exists, since there is nothing yet to dispatch it to. The mount is the first moment
-  // any of it can be answered, so that is where it drains. A dispatch made once the runtime is up
-  // needs no buffer - it carries the epoch of the page that made it and waits on that instead.
-  static #dispatchPendingJsInteropActions() {
-    const actions = Hologram.#pendingJsInteropActions;
-    Hologram.#pendingJsInteropActions = [];
-
-    actions.forEach(([actionName, target, params]) => {
-      Hologram.dispatchAction(actionName, target, params);
-    });
-  }
-
   // Takes the page's own bundle out of the document the server described, leaving every other
   // script it carries to be patched in and run.
   //
@@ -954,6 +941,26 @@ export default class Hologram {
         (childVnode) => childVnode?.key !== key,
       );
     }
+  }
+
+  // A document load leaves a shim that buffers whatever the page's script dispatches before the
+  // runtime exists, since there is nothing yet to dispatch it to. The mount is the first moment
+  // any of it can be answered, so that is where it enters the queue, stamped with the mount's
+  // page. A dispatch made once the runtime is up needs no buffer - it carries the epoch of the
+  // page that made it and waits on that instead.
+  static #enqueuePendingJsInteropActions() {
+    const actions = Hologram.#pendingJsInteropActions;
+    Hologram.#pendingJsInteropActions = [];
+
+    actions.forEach(([actionName, target, params]) => {
+      const action = Type.actionStruct({
+        name: Type.atom(actionName),
+        params: JsInterop.boxActionParam(params),
+        target: Type.bitstring(target),
+      });
+
+      ActionQueue.enqueue(action, $.registryEpoch);
+    });
   }
 
   static #ensureDomNodeHasHologramId(eventNode) {
@@ -1362,6 +1369,9 @@ export default class Hologram {
     // here the page on screen and the page the registry answers for are the same page.
     $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
 
+    // Nothing runs until the first render below has written the props - see the flag.
+    $.isMounting = true;
+
     let mountData = null;
 
     if ($.#shouldLoadMountData) {
@@ -1379,6 +1389,11 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
+    // What arrived during the transition waits behind the mount's own actions, so that a page
+    // starts the same way however it was reached: on a document load the page's script dispatches
+    // into the shim's buffer, which is enqueued below, after the server inits' actions.
+    const waitingEntries = ActionQueue.drain();
+
     Hologram.queueActionsFromServerInits();
 
     if (mountData) {
@@ -1390,12 +1405,22 @@ export default class Hologram {
       );
     }
 
+    Hologram.#enqueuePendingJsInteropActions();
+
+    ActionQueue.append(waitingEntries);
+
     window.requestAnimationFrame(() => {
       // The registry arrives with every struct's props empty - this render is what writes them, so
       // that the payload doesn't carry each prop value a second time - which is one more reason
-      // nothing above may run a handler before this call, and why every drain below it stays below
-      // it.
-      $.render();
+      // nothing above may run a handler before this call, and why the queue is held until it is
+      // done.
+      try {
+        $.render();
+      } finally {
+        // A template expression is app code and can raise, so the flag is cleared on the way out
+        // either way. Leaving it set would hold every action from here on.
+        $.isMounting = false;
+      }
 
       if ($.#scrollPosition) {
         window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
@@ -1404,8 +1429,7 @@ export default class Hologram {
 
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
 
-      Hologram.#scheduleQueuedInitActions();
-      Hologram.#dispatchPendingJsInteropActions();
+      Hologram.#runActions();
     });
   }
 
@@ -1618,8 +1642,6 @@ export default class Hologram {
     );
 
     Hologram.render();
-
-    Hologram.#scheduleQueuedInitActions();
 
     if (!Type.isNil(nextAction)) {
       if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
@@ -1878,14 +1900,6 @@ export default class Hologram {
         );
       }
     }
-  }
-
-  static #scheduleQueuedInitActions() {
-    const actions = InitActionQueue.dequeueAll();
-
-    actions.forEach((action) => {
-      Hologram.scheduleAction(action);
-    });
   }
 }
 
