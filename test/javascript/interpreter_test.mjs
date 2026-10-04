@@ -380,6 +380,68 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("returns the items without Enum.into/2 when the collectable is an empty list", async () => {
+      // for x <- [1, 2], do: x
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const stub = sinon
+        .stub(Elixir_Enum, "into/2")
+        .callsFake((enumerable, _collectable) => enumerable);
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+      assert.isTrue(stub.notCalled);
+
+      Elixir_Enum["into/2"].restore();
+    });
+
+    it("uses Enum.into/2 to insert the comprehension result into a collectable", async () => {
+      // for x <- [1, 2], into: %{}, do: {x, x}
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const stub = sinon
+        .stub(Elixir_Enum, "into/2")
+        .callsFake((enumerable, _collectable) => enumerable);
+
+      await Interpreter.asyncComprehension(
+        [generator],
+        Type.map(),
+        false,
+        async (context) => Type.tuple([context.vars.x, context.vars.x]),
+        context,
+      );
+
+      const expectedArg = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(1)]),
+        Type.tuple([Type.integer(2), Type.integer(2)]),
+      ]);
+
+      assert.isTrue(stub.calledOnceWith(expectedArg, Type.map()));
+
+      Elixir_Enum["into/2"].restore();
+    });
   });
 
   describe("asyncComprehensionReduce()", () => {
@@ -2786,8 +2848,38 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(result, expected);
       });
 
+      it("returns the items without Enum.into/2 when the collectable is an empty list", () => {
+        // for x <- [1, 2], do: x
+
+        const generator = {
+          type: "generator",
+          match: Type.variablePattern("x"),
+          guards: [],
+          body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+        };
+
+        const stub = sinon
+          .stub(Elixir_Enum, "into/2")
+          .callsFake((enumerable, _collectable) => enumerable);
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+        assert.deepStrictEqual(result, expected);
+        assert.isTrue(stub.notCalled);
+
+        Elixir_Enum["into/2"].restore();
+      });
+
       it("uses Enum.into/2 to insert the comprehension result into a collectable", () => {
-        // for x <- [1, 2], y <- [3, 4], do: {x, y}
+        // for x <- [1, 2], y <- [3, 4], into: %{}, do: {x, y}
 
         const enumerable1 = (_context) =>
           Type.list([Type.integer(1), Type.integer(2)]);

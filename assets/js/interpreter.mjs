@@ -365,7 +365,7 @@ export default class Interpreter {
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehension().
-  // Deps: [Enum.into/2, Enum.to_list/1]
+  // Deps: [Enum.into/2 (collectable other than []), Enum.to_list/1]
   static comprehension(qualifiers, collectable, unique, mapper, context) {
     let items = [];
 
@@ -377,11 +377,18 @@ export default class Interpreter {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
     }
 
+    // Collecting into an empty list, which is what a comprehension with no `into:` does, gives the
+    // items as they are, so Enum.into/2 and the Collectable protocol behind it are needed only by
+    // code that collects into something else.
+    if (Type.isList(collectable) && collectable.data.length === 0) {
+      return Type.list(items);
+    }
+
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update comprehension().
-  // Deps: [Enum.into/2, Enum.to_list/1]
+  // Deps: [Enum.into/2 (collectable other than []), Enum.to_list/1]
   static async asyncComprehension(
     qualifiers,
     collectable,
@@ -400,6 +407,11 @@ export default class Interpreter {
 
     if (unique) {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
+    }
+
+    // See comprehension().
+    if (Type.isList(collectable) && collectable.data.length === 0) {
+      return Type.list(items);
     }
 
     return Elixir_Enum["into/2"](Type.list(items), collectable);
