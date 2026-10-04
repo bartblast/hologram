@@ -3556,7 +3556,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert modules(call_graph) == MapSet.new([Module9])
   end
 
-  describe "reachable_mfas/4" do
+  describe "reachable_mfas/5" do
     test "drops MFAs of Elixir-named modules the module info PLT does not know and keeps Erlang ones" do
       graph =
         Digraph.new()
@@ -3649,6 +3649,79 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert {struct_1_impl, :__impl__, 1} in result
       assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is reachable with enter_struct_impls?: false",
+         %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          enter_struct_impls?: false
+        )
+
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {Protocol1, :my_fun, 1} in result
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is in the extra types with enter_struct_impls?: false",
+         %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      extra_types = MapSet.new([Struct1])
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          extra_types,
+          module_info_plt_fixture(),
+          enter_struct_impls?: false
+        )
+
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations for built-in types with enter_struct_impls?: false", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          enter_struct_impls?: false
+        )
+
+      assert {Protocol1.Integer, :__impl__, 1} in result
+      assert {Protocol1.Integer, :my_fun, 1} in result
     end
 
     test "reaches fixpoint when implementation code makes further types reachable", %{

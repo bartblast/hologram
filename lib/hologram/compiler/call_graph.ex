@@ -57,7 +57,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
-  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 4}]}
+  @dialyzer {:no_opaque,
+             [{:empty_reach, 0}, {:start_reachable_state, 4}, {:start_reachable_state, 5}]}
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -1245,10 +1246,17 @@ defmodule Hologram.Compiler.CallGraph do
   app, whose code bounds the types that can occur at protocol dispatch. For
   app-agnostic analyses, where any implementation could be exercised, see
   unbounded_reachable_mfas/2.
+
+  ## Options
+
+    * `:enter_struct_impls?` - whether the implementations for struct types are entered. With
+      `false` only the implementations for the built-in types are, whatever struct types the code
+      reaches: the listing of a bundle that carries no struct implementation, since those ship in
+      chunks of their own (default: `true`).
   """
-  @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module), PLT.t() | nil) :: [mfa]
-  def reachable_mfas(graph, entry_vertices, extra_types, module_info_plt) do
-    state = start_reachable_state(graph, entry_vertices, extra_types, module_info_plt)
+  @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module), PLT.t() | nil, T.opts()) :: [mfa]
+  def reachable_mfas(graph, entry_vertices, extra_types, module_info_plt, opts \\ []) do
+    state = start_reachable_state(graph, entry_vertices, extra_types, module_info_plt, opts)
     finalize_reachable_mfas(graph, state, module_info_plt)
   end
 
@@ -1866,6 +1874,16 @@ defmodule Hologram.Compiler.CallGraph do
       Enum.any?(@module_vertex_edge_flags, &flag?(module_info_plt, module, &1))
   end
 
+  # Whether the walk enters the implementation: its target type is among the types the walk reached,
+  # and the walk enters the implementations for struct types or the type is a built-in one. A state
+  # that says nothing about struct implementations (the reach of build_reach/3, which a dump can
+  # hold) enters them.
+  defp impl_enterable?(impl, state, module_info_plt) do
+    protocol_implementation_reachable?(impl, state.types, module_info_plt) and
+      (Map.get(state, :enter_struct_impls?, true) or
+         implementation_for(impl, module_info_plt) in @built_in_protocol_types)
+  end
+
   # The reached functions of the protocol an added or edited implementation implements, walked
   # again so that the dispatch edges the patch refreshed are read as implementation candidates.
   defp implementation_entries(module, graph_modules, reach, module_info_plt) do
@@ -2123,7 +2141,7 @@ defmodule Hologram.Compiler.CallGraph do
   defp promote_pending_impl_candidates(graph, state, module_info_plt) do
     {ready_candidates, pending_impl_candidates} =
       Enum.split_with(state.pending_impl_candidates, fn {impl, _impl_entry_vertices} ->
-        protocol_implementation_reachable?(impl, state.types, module_info_plt)
+        impl_enterable?(impl, state, module_info_plt)
       end)
 
     impl_entry_vertices =
@@ -2358,14 +2376,17 @@ defmodule Hologram.Compiler.CallGraph do
 
   # Runs the protocol-aware fixpoint from the given entry vertices and returns the
   # resulting state: the reached vertex set, the accumulated dispatch types, and the
-  # implementation candidates whose target types are not reachable yet.
-  defp start_reachable_state(graph, entry_vertices, extra_types, module_info_plt) do
+  # implementation candidates the walk has not entered: those whose target types are not
+  # reachable yet, and with `enter_struct_impls?: false` (see reachable_mfas/5) those for
+  # struct types, which stay there.
+  defp start_reachable_state(graph, entry_vertices, extra_types, module_info_plt, opts \\ []) do
     initial_types =
       @built_in_protocol_types
       |> MapSet.new()
       |> MapSet.union(extra_types)
 
     state = %{
+      enter_struct_impls?: Keyword.get(opts, :enter_struct_impls?, true),
       reached_vertices: MapSet.new(),
       types: initial_types,
       pending_impl_candidates: []
