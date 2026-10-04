@@ -16,6 +16,9 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page20
   alias HologramFeatureTests.Actions.Page21
   alias HologramFeatureTests.Actions.Page22
+  alias HologramFeatureTests.Actions.Page23
+  alias HologramFeatureTests.Actions.Page24
+  alias HologramFeatureTests.Actions.Page25
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -489,6 +492,59 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_page(Page21)
       |> sleep(3_000)
       |> assert_text("Page 21 title")
+    end
+  end
+
+  describe "one action at a time" do
+    # A burst of events dispatched faster than a microtask tick, the way fast keyboard repeat
+    # dispatches them. Each one must read the state the one before it wrote. The page's action/3
+    # has a clause that awaits, which makes every clause of it commit its result a tick after
+    # reading the state - the increment clause included.
+    feature "every dispatch of a burst lands", %{session: session} do
+      session
+      |> visit(Page23)
+      |> execute_script("""
+      const button = document.getElementById("increment");
+
+      for (let i = 0; i < 30; i++) {
+        button.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+      }
+      """)
+      |> assert_text(css("#count"), "30")
+    end
+
+    # The slow action is still awaiting when the fast one is dispatched. Run side by side, the
+    # fast one would read the log before the slow one wrote to it, and the slow one's write would
+    # then replace the fast one's.
+    feature "an action dispatched behind an asynchronous one waits for it", %{session: session} do
+      session
+      |> visit(Page23)
+      |> execute_script("""
+      for (const id of ["append_slow", "append_fast"]) {
+        document.getElementById(id).dispatchEvent(new MouseEvent("click", {bubbles: true}));
+      }
+      """)
+      |> assert_text(css("#log"), "[:slow, :fast]")
+    end
+  end
+
+  # A page can start an action in two ways: by queueing one in init/3, and by dispatching one from
+  # a script in its template. The script's dispatch is buffered on a document load and waits for
+  # the page's code after a client-side navigation, and the order of the two actions is the same
+  # either way.
+  describe "actions a page starts with" do
+    feature "run in the same order on a document load", %{session: session} do
+      session
+      |> visit(Page24, via: "load")
+      |> assert_text(css("#log"), ~s/[init: "load", script: "load"]/)
+    end
+
+    feature "run in the same order after a client-side navigation", %{session: session} do
+      session
+      |> visit(Page25)
+      |> click(link("Page 24 link"))
+      |> assert_page(Page24, via: "link")
+      |> assert_text(css("#log"), ~s/[init: "link", script: "link"]/)
     end
   end
 end
