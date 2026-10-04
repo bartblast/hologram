@@ -1809,6 +1809,12 @@ Common use cases include:
 
 Note: The delay parameter is only available for actions, not commands.
 
+#### Execution Order
+
+A component's actions run one at a time, in the order they were dispatched. Each action sees the state the previous one left, so two clicks in quick succession never overwrite each other's updates.
+
+An action that awaits a `Task` (see JavaScript Interop) holds back later actions for the same component until it finishes. Actions for other components keep running. A delayed action takes its place in the order when its delay elapses.
+
 #### Putting It All Together
 
 Here's a simple example that demonstrates how actions work in Hologram. The counter component shows:
