@@ -4,11 +4,27 @@ defmodule HologramFeatureTests.Navigation.LeftListenersTest do
   alias HologramFeatureTests.Navigation.LeftListenersDestinationPage
   alias HologramFeatureTests.Navigation.LeftListenersPage
 
-  # The destination's bundle is held back so the stretch between its patch and its mount is wide
-  # enough for the browser to deliver what the left page's listeners observe of the patch - here the
-  # resize observer reporting its detached element at 0x0. Left attached, that dispatch carries the
-  # destination's epoch, is held for the mount, and raises there against a registry that no longer
-  # has the box. The destination's result proves the mount ran and released the click's own dispatch.
+  # Every feature here holds the destination's bundle back, so the stretch between its patch and
+  # its mount is wide enough for the browser to deliver what the left page's listeners observe in
+  # it. Left attached, such a dispatch carries the destination's epoch, is held for the mount, and
+  # raises there against a registry that no longer has the box. The destination's result proves
+  # the mount ran and released the click's own dispatch.
+
+  # The container is 900px short of its bottom edge at the mount, so it does not fire there. Once
+  # detached, every one of its scroll metrics reads 0, which puts the edge at a distance of 0 -
+  # within range - and the observer watching it reports the change.
+  feature "a reach observer of the page being left does not dispatch into the destination",
+          %{session: session} do
+    session
+    |> simulate_slow_page_bundle(4_000)
+    |> visit(LeftListenersPage, kind: "reach")
+    |> click(link("Destination link"))
+    |> assert_page(LeftListenersDestinationPage, kind: "reach")
+    |> click(button("Put destination result"))
+    |> assert_text(css("#destination_result"), ~s/"reach"/)
+  end
+
+  # The observer reports its detached element at 0x0.
   feature "a resize observer of the page being left does not dispatch into the destination",
           %{session: session} do
     session

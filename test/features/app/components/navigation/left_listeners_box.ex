@@ -4,7 +4,10 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
   prop :kind, :string
 
   def init(_props, component, _server) do
-    put_state(component, :resize, 0)
+    put_state(component,
+      reach: 0,
+      resize: 0
+    )
   end
 
   # Each kind is a binding the listener registry holds, rather than the element it is written on,
@@ -13,10 +16,19 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
   # them on the page no feature could say which listener it was about.
   def template do
     ~HOLO"""
+    {%if @kind == "reach"}
+      <div $reach_bottom="record_reach" id="reach_container" style="height: 100px; overflow: auto">
+        <div style="height: 1000px">Content</div>
+      </div>
+    {/if}
     {%if @kind == "resize"}
       <div $resize="record_resize" id="resize_box" style="height: 100px">Content</div>
     {/if}
     """
+  end
+
+  def action(:record_reach, _params, component) do
+    put_state(component, :reach, component.state.reach + 1)
   end
 
   def action(:record_resize, _params, component) do
