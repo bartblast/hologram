@@ -748,6 +748,71 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{from_vertex, Module1}]
     end
 
+    test "comprehension IR, with a collectable other than an empty list", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.Comprehension{
+        qualifiers: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.AtomType{value: Module5}
+          }
+        ],
+        collectable: %IR.MapType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: %IR.Block{expressions: [%IR.AtomType{value: Module6}]},
+        reducer: nil,
+        line: 1
+      }
+
+      from_vertex = {Module1, :my_fun, 2}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               Module6,
+               {Enum, :into, 2},
+               from_vertex
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {from_vertex, Module5},
+               {from_vertex, Module6},
+               {from_vertex, {Enum, :into, 2}}
+             ]
+    end
+
+    test "comprehension IR, with an empty list collectable", %{empty_call_graph: call_graph} do
+      ir = %IR.Comprehension{
+        qualifiers: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.AtomType{value: Module5}
+          }
+        ],
+        collectable: %IR.ListType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: %IR.Block{expressions: [%IR.AtomType{value: Module6}]},
+        reducer: nil,
+        line: 1
+      }
+
+      from_vertex = {Module1, :my_fun, 2}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module5, Module6, from_vertex]
+
+      assert sorted_edges(call_graph) == [
+               {from_vertex, Module5},
+               {from_vertex, Module6}
+             ]
+    end
+
     test "function definition IR, with outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
@@ -2620,6 +2685,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert {:re, :import, 1} in result
 
     refute {:unicode, :characters_to_binary, 1} in result
+    refute {Enum, :into, 2} in result
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
 
