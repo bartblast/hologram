@@ -9,6 +9,7 @@ import {
   UUID_REGEX,
 } from "./support/helpers.mjs";
 
+import ActionQueue from "../../assets/js/action_queue.mjs";
 import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
@@ -81,6 +82,164 @@ describe("Hologram", () => {
         Erlang_Maps["get/2"](Type.atom("params"), action),
         Type.map([[Type.atom("a"), Type.integer(1)]]),
       );
+    });
+  });
+
+  describe("enqueueAction()", () => {
+    let clock, executeActionStub, warnStub;
+
+    const actionNamed = (name) =>
+      Type.actionStruct({
+        name: Type.atom(name),
+        params: Type.map(),
+        target: cid1,
+      });
+
+    const action1 = actionNamed("action_1");
+    const action2 = actionNamed("action_2");
+    const action3 = actionNamed("action_3");
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+      ActionQueue.entries = [];
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake(() => undefined);
+
+      warnStub = sinon.stub(console, "warn");
+    });
+
+    afterEach(() => {
+      ActionQueue.entries = [];
+      Hologram.domEpoch = 0;
+      Hologram.registryEpoch = 0;
+      Hologram.isMounting = false;
+      Hologram.isRendering = false;
+      clock.restore();
+      sinon.restore();
+    });
+
+    // The ordinary case: nothing is in flight, so the action runs on the enqueuer's own stack -
+    // which is what keeps a DOM dispatch synchronous.
+    it("runs the action at once when nothing is ahead of it", () => {
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1, 0);
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
+
+    // An action's own code can enqueue the next one before it returns, e.g. by firing an event on
+    // the DOM. The walk already on the stack takes it once its parent is done, rather than a nested
+    // walk running it in the middle of the parent.
+    it("runs an action enqueued by a running action after it", () => {
+      const calls = [];
+
+      executeActionStub.callsFake((action) => {
+        if (action === action1) {
+          Hologram.enqueueAction(action2, 0);
+          calls.push("action_1 done");
+        } else {
+          calls.push("action_2");
+        }
+      });
+
+      Hologram.enqueueAction(action1, 0);
+
+      assert.deepStrictEqual(calls, ["action_1 done", "action_2"]);
+    });
+
+    // The reason the queue exists: the next action reads the component state, so it must not start
+    // before the running one has written it.
+    it("waits for an asynchronous action to settle before running the next one", async () => {
+      let settle;
+
+      executeActionStub.onFirstCall().returns(
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+      );
+
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(action2, 0);
+
+      sinon.assert.calledOnce(executeActionStub);
+
+      settle();
+      await clock.tickAsync(0);
+
+      sinon.assert.calledTwice(executeActionStub);
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [action2, 0]);
+    });
+
+    // The two sides disagree, so the client is mid-transition: the page the action belongs to is
+    // the one being moved to, and it cannot answer until it mounts.
+    it("holds the queue while the client is mid-transition", () => {
+      Hologram.domEpoch = 1;
+
+      Hologram.enqueueAction(action1, 1);
+
+      sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(warnStub);
+      assert.equal(ActionQueue.entries.length, 1);
+    });
+
+    it("holds the queue while the page is mounting", () => {
+      Hologram.isMounting = true;
+
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.notCalled(executeActionStub);
+      assert.equal(ActionQueue.entries.length, 1);
+    });
+
+    it("holds the queue while a render is on the stack", () => {
+      Hologram.isRendering = true;
+
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.notCalled(executeActionStub);
+      assert.equal(ActionQueue.entries.length, 1);
+    });
+
+    // The shape a history restoration leaves behind: the registry has moved on while the page the
+    // action came from is still on screen, so the page it was aimed at is already gone.
+    it("drops an action whose page has been left, with a warning", () => {
+      Hologram.registryEpoch = 1;
+
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.notCalled(executeActionStub);
+      sinon.assert.calledOnce(warnStub);
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
+
+    // A single focusout flushes every pending slot on the element at once, so a run of several is
+    // the ordinary case and they have nothing to do with one another - the same bargain the
+    // debouncer makes with the callbacks it flushes.
+    it("delivers every action when one raises, and raises the first error", () => {
+      const executed = [];
+
+      executeActionStub.callsFake((action) => {
+        executed.push(action);
+
+        if (action === action1) {
+          throw new Error("action failed");
+        }
+      });
+
+      Hologram.isRendering = true;
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(action2, 0);
+      Hologram.isRendering = false;
+
+      assert.throws(
+        () => Hologram.enqueueAction(action3, 0),
+        Error,
+        "action failed",
+      );
+
+      assert.deepStrictEqual(executed, [action1, action2, action3]);
     });
   });
 
@@ -654,6 +813,9 @@ describe("Hologram", () => {
       Hologram.executeLoadPrefetchedPageAction.restore();
       Hologram.executePrefetchPageAction.restore();
       Hologram.scheduleAction.restore();
+
+      // A dispatch made mid-transition waits in the queue, and would be ahead of the next test's.
+      ActionQueue.entries = [];
     });
 
     it("event is ignored", () => {
@@ -1467,9 +1629,12 @@ describe("Hologram", () => {
       assignStub.restore();
 
       // A navigation opens a transition window and only a mount closes it, which these tests
-      // never reach - so it is closed here rather than left open for whatever runs next.
+      // never reach - so it is closed here rather than left open for whatever runs next. The
+      // same goes for the queue a held action waits in and the gate a reached mount sets.
       Hologram.domEpoch = 0;
       Hologram.registryEpoch = 0;
+      Hologram.isMounting = false;
+      ActionQueue.entries = [];
     });
 
     // A page the client cannot ask for is one only the browser can reach.
@@ -2517,6 +2682,7 @@ describe("Hologram", () => {
     afterEach(() => {
       clock?.restore();
       clock = null;
+      ActionQueue.entries = [];
       Hologram.isRendering = false;
       Hologram.virtualDocument = null;
       Renderer.listenerBindings = [];
@@ -2525,7 +2691,7 @@ describe("Hologram", () => {
 
     // The seam for a dispatch that arrives from inside the patch: a scheduled action whose timer
     // is fired by hand while the patch stub is on the stack, which is where a focusout flush
-    // reaches the settle rule in a real page.
+    // reaches the queue in a real page.
     const stubRender = (patchFake) => {
       clock = sinon.useFakeTimers();
 
@@ -2683,7 +2849,7 @@ describe("Hologram", () => {
       assert.deepStrictEqual(calls, ["finish patch", "execute action"]);
     });
 
-    it("runs held dispatches in the order they arrived", () => {
+    it("runs waiting dispatches in the order they arrived", () => {
       const executeActionStub = sinon.stub(Hologram, "executeAction");
 
       stubRender(() => {
@@ -2710,7 +2876,7 @@ describe("Hologram", () => {
     // A single focusout flushes every pending slot on the element at once, so a queue of several
     // is the ordinary case and they have nothing to do with one another - the same bargain the
     // debouncer makes with the callbacks it flushes.
-    it("delivers every held dispatch when one of them raises, and raises the first error", () => {
+    it("delivers every waiting dispatch when one of them raises, and raises the first error", () => {
       const executed = [];
 
       sinon.stub(Hologram, "executeAction").callsFake((action) => {
@@ -2734,7 +2900,7 @@ describe("Hologram", () => {
 
     // A render that raised left the DOM and the virtual document describing different pages, so
     // running the queue against that repairs nothing. It waits for a render that finishes.
-    it("keeps a held dispatch when the render raises, and runs it on the next render", () => {
+    it("keeps a waiting dispatch when the render raises, and runs it on the next render", () => {
       const executeActionStub = sinon.stub(Hologram, "executeAction");
 
       let patchCount = 0;

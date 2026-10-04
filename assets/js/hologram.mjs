@@ -1,5 +1,6 @@
 "use strict";
 
+import ActionQueue from "./action_queue.mjs";
 import App from "./app.mjs";
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
@@ -77,6 +78,12 @@ export default class Hologram {
   static domEpoch = 0;
 
   // Made public to make tests easier
+  // True from the start of a mount to the end of its first render. The registry arrives with every
+  // struct's props empty and that render is what writes them, so no action may run before it. Set
+  // and cleared by #mountPage.
+  static isMounting = false;
+
+  // Made public to make tests easier
   // Whether a render is on the stack - its patch walking the live DOM, or its event bindings
   // being reconciled onto it. Set by render() alone: a patch made outside a render is not
   // covered, and has to keep a dispatch out by its own means.
@@ -109,14 +116,20 @@ export default class Hologram {
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
-  // Actions that arrived while a render was on the stack, waiting for it to finish.
-  static #deferredActions = [];
-
-  // Actions belonging to a page that cannot answer for them yet, waiting for its mount.
-  static #heldActions = [];
-
   static #historyId = null;
+
+  // True while an asynchronous action runs, from its start to the commit of its result. The queue
+  // waits for it: the next action reads the component state, and the state it must read is the one
+  // the running action is about to write.
+  static #isAwaitingAction = false;
+
   static #isInitiated = false;
+
+  // True while #runActions walks the queue. A running action can enqueue another one synchronously
+  // (an event its own code fires on the DOM, a debounce flush), and that one is picked up by the
+  // walk already on the stack rather than by a nested one, which would run it in the middle of its
+  // parent.
+  static #isRunningActions = false;
 
   // A navigation's mount data, held between #showNewPage and the mount. The two are not always
   // adjacent: when the destination's code has not loaded yet the mount runs from the bundle's
@@ -147,6 +160,15 @@ export default class Hologram {
     Hologram.scheduleAction(action, $.domEpoch);
   }
 
+  // The one way an action enters the queue, from every path: a DOM event's dispatch, a timer
+  // scheduleAction set, a command's reply, a server push, a mount's own actions. An action carries
+  // the epoch of the page it was reasoning about when it was created, and #runActions compares that
+  // against where the client has got to by the time the action reaches the head of the queue.
+  static enqueueAction(action, epoch = $.registryEpoch) {
+    ActionQueue.enqueue(action, epoch);
+    Hologram.#runActions();
+  }
+
   // This function is intentionally NOT async. Actions that use Task.await/1 return
   // a Promise, but we handle it with .then() instead of async/await. Making this
   // function async would wrap ALL errors (including from sync actions) in rejected
@@ -169,7 +191,7 @@ export default class Hologram {
     // getComponentModule() answers with plain null for a cid the registry does not hold, and null
     // reaching callNamedFunction faults on reading a module name off it - a raw TypeError naming
     // neither the cid nor the action, which handleUncaughtError drops because it isn't boxed.
-    // An action reaches here only through #settleAction, which admits it when its epoch is the
+    // An action reaches here only through #runActions, which runs it when its epoch is the
     // current one and the two epochs agree - so it was created while the registry answered for
     // the page it answers for now. A target that does not resolve is therefore a cid that page
     // never held, not a dispatch that outlived its own page - raised boxed, the way the error
@@ -389,10 +411,11 @@ export default class Hologram {
               Type.integer(0),
             );
 
-            // Settling directly keeps an undelayed dispatch synchronous on a stable page, which
-            // is what lets a raising action reach the "error" event the feature tests read.
+            // Enqueuing directly keeps an undelayed dispatch synchronous on a stable page - an
+            // idle queue runs it at once - which is what lets a raising action reach the "error"
+            // event the feature tests read.
             if (delay.value === 0n) {
-              return Hologram.#settleAction(operation, epoch);
+              return Hologram.enqueueAction(operation, epoch);
             } else {
               return Hologram.scheduleAction(operation, epoch);
             }
@@ -577,7 +600,7 @@ export default class Hologram {
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
 
-    // Drained after the reconcile above rather than straight after the patch: a deferred action
+    // Run after the reconcile above rather than straight after the patch: a waiting action
     // renders, and a render collects the page's <window>/<document> bindings into
     // Renderer.listenerBindings. Running one earlier would leave this render reconciling the
     // other render's bindings.
@@ -585,7 +608,7 @@ export default class Hologram {
     // Reached only when the render finished. A render that raised left the DOM and the virtual
     // document describing different pages, and running the queue against that repairs nothing -
     // it waits for the next render that finishes.
-    $.#drainDeferredActions();
+    Hologram.#runActions();
   }
 
   static run() {
@@ -627,7 +650,7 @@ export default class Hologram {
     );
 
     setTimeout(() => {
-      Hologram.#settleAction(action, epoch);
+      Hologram.enqueueAction(action, epoch);
     }, Number(delay.value));
   }
 
@@ -906,32 +929,6 @@ export default class Hologram {
     actions.forEach(([actionName, target, params]) => {
       Hologram.dispatchAction(actionName, target, params);
     });
-  }
-
-  // Runs what a render held back, in the order it arrived. Settled rather than executed: a
-  // deferred action never got an answer from the settle rule, so it meets the same rules as any
-  // other, against the page the client is on by the time it runs.
-  //
-  // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
-  // element at once, so a queue of several is the ordinary case, and they have nothing to do with
-  // one another. Every one is delivered and the first error is raised once the queue is empty -
-  // the same bargain the debouncer makes with the callbacks it flushes.
-  static #drainDeferredActions() {
-    let firstError;
-
-    while ($.#deferredActions.length > 0) {
-      const {action, epoch} = $.#deferredActions.shift();
-
-      try {
-        $.#settleAction(action, epoch);
-      } catch (error) {
-        firstError ??= error;
-      }
-    }
-
-    if (firstError !== undefined) {
-      throw firstError;
-    }
   }
 
   // Takes the page's own bundle out of the document the server described, leaving every other
@@ -1341,7 +1338,7 @@ export default class Hologram {
     script.fetchpriority = "high";
 
     script.onerror = () => {
-      // The mount that would have released this epoch's held dispatches is never going to run.
+      // The mount that would have let this epoch's waiting actions run is never going to run.
       $.#deadEpochs.add(epoch);
 
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
@@ -1409,7 +1406,6 @@ export default class Hologram {
 
       Hologram.#scheduleQueuedInitActions();
       Hologram.#dispatchPendingJsInteropActions();
-      Hologram.#releaseHeldActions();
     });
   }
 
@@ -1650,29 +1646,6 @@ export default class Hologram {
     $.#registeredPageModules.add(pageModule.value);
   }
 
-  static #releaseHeldActions() {
-    const held = $.#heldActions;
-    $.#heldActions = [];
-
-    for (const {action, epoch} of held) {
-      // An entry from a transition that never reached this mount belongs to a page that will
-      // never answer for it.
-      if (epoch !== $.registryEpoch) {
-        continue;
-      }
-
-      // A held action already served its own delay before it was held - the timer is what
-      // delivered it to the settle rule in the first place - so releasing it goes through a bare
-      // macrotask rather than scheduleAction, which would serve that delay a second time. The
-      // macrotask is not incidental: it puts the release behind the init-action and JS-interop
-      // drains, which ride timers of their own, and keeps a raising action surfacing the way
-      // every other timer-driven action does.
-      setTimeout(() => {
-        Hologram.#settleAction(action, epoch);
-      }, 0);
-    }
-  }
-
   static async #restoreEts() {
     const storageKey = $.#ETS_STORAGE_KEY;
 
@@ -1728,6 +1701,90 @@ export default class Hologram {
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
+  }
+
+  // Runs the queue from its head, one action at a time, until the queue is empty or its head has to
+  // wait. The head waits while an asynchronous action has not committed yet, while the client is
+  // mid-transition (the page the head belongs to is the one being moved to, and it cannot answer
+  // until it mounts), while the page is mounting (its first render has not written the props yet),
+  // and while a render is on the stack (the DOM it walks is mid-update, and the head's own render
+  // would walk the same tree behind it). Whoever ends the wait runs the queue again: the settled
+  // action, the mount, the finished render.
+  //
+  // An action stamped with a page that has been left, or whose navigation failed before it could
+  // mount, is dropped when it reaches the head - nothing can answer for it any more. The warning is
+  // the trace a button that appears to do nothing leaves behind.
+  //
+  // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
+  // element at once, so a run of several is the ordinary case, and they have nothing to do with one
+  // another. Every one is delivered and the first error is raised once the run is over - the same
+  // bargain the debouncer makes with the callbacks it flushes.
+  // Deps: [:maps.get/2]
+  static #runActions() {
+    if ($.#isRunningActions || $.#isAwaitingAction) {
+      return;
+    }
+
+    $.#isRunningActions = true;
+
+    let firstError;
+
+    try {
+      while (!ActionQueue.isEmpty()) {
+        const {action, epoch} = ActionQueue.peek();
+        const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
+
+        if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+          ActionQueue.shift();
+
+          console.warn(
+            "Hologram: dropped an action dispatched on a page that has been left:",
+            Interpreter.inspect(
+              Erlang_Maps["get/2"](Type.atom("name"), action),
+            ),
+          );
+
+          continue;
+        }
+
+        if ($.domEpoch !== $.registryEpoch || $.isMounting || $.isRendering) {
+          break;
+        }
+
+        ActionQueue.shift();
+
+        let result;
+
+        try {
+          result = Hologram.executeAction(action, epoch);
+        } catch (error) {
+          firstError ??= error;
+          continue;
+        }
+
+        if (result instanceof Promise) {
+          $.#isAwaitingAction = true;
+
+          // Resumed from a macrotask rather than from the promise's own continuation, so that an
+          // action raising in the resumed run surfaces as an uncaught error, the way every
+          // timer-driven action does, and not as the rejection of a promise nobody holds. The
+          // promise's own rejection still reaches the "unhandledrejection" listener: finally()
+          // passes it through.
+          result.finally(() => {
+            $.#isAwaitingAction = false;
+            setTimeout(() => Hologram.#runActions(), 0);
+          });
+
+          break;
+        }
+      }
+    } finally {
+      $.#isRunningActions = false;
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
+    }
   }
 
   // The path of the runtime bundle this document runs, digest included, from the asset manifest the
@@ -1829,41 +1886,6 @@ export default class Hologram {
     actions.forEach((action) => {
       Hologram.scheduleAction(action);
     });
-  }
-
-  // The one place an action meets the registry, and the only thing that decides whether it runs.
-  // An action carries the epoch of the page it was reasoning about when it was created, and this
-  // compares that against where the client has got to since.
-  static #settleAction(action, epoch) {
-    const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
-
-    // The page the action belonged to has been left, or its navigation failed before it could
-    // mount - either way nothing can answer for it any more. The warning is the trace a button
-    // that appears to do nothing leaves behind.
-    if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
-      console.warn(
-        "Hologram: dropped an action dispatched on a page that has been left:",
-        Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), action)),
-      );
-
-      return;
-    }
-
-    // The two sides disagree, so the client is mid-transition: the page this action belongs to is
-    // the one being moved to, and it cannot answer until it mounts.
-    if ($.domEpoch !== $.registryEpoch) {
-      $.#heldActions.push({action: action, epoch: epoch});
-      return;
-    }
-
-    // A render is on the stack, so the DOM it is walking is mid-update and this action's own
-    // render would walk the same tree behind it. It waits, and runs when that render is done.
-    if ($.isRendering) {
-      $.#deferredActions.push({action: action, epoch: epoch});
-      return;
-    }
-
-    return Hologram.executeAction(action, epoch);
   }
 }
 
