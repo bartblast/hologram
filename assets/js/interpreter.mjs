@@ -365,7 +365,7 @@ export default class Interpreter {
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehension().
-  // Deps: [Enum.into/2 (collectable other than []), Enum.to_list/1]
+  // Deps: [Enum.into/2, Enum.to_list/1]
   static comprehension(qualifiers, collectable, unique, mapper, context) {
     let items = [];
 
@@ -388,7 +388,7 @@ export default class Interpreter {
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update comprehension().
-  // Deps: [Enum.into/2 (collectable other than []), Enum.to_list/1]
+  // Deps: [Enum.into/2, Enum.to_list/1]
   static async asyncComprehension(
     qualifiers,
     collectable,
