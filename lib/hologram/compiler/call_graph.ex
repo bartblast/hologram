@@ -451,6 +451,7 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     interpreter_class: [
+      {Enum, :into, 2},
       {Enum, :to_list, 1},
       {Exception, :blame, 3},
       {Exception, :message, 1},
@@ -650,17 +651,6 @@ defmodule Hologram.Compiler.CallGraph do
     end
 
     call_graph
-  end
-
-  # The interpreter collects a comprehension's items with Enum.into/2, unless the collectable is an
-  # empty list, which is what a comprehension with no `into:` has. So Enum.into/2, and Collectable
-  # behind it, are reached from the code that holds a comprehension collecting into anything else.
-  def build(call_graph, %IR.Comprehension{collectable: collectable} = comprehension, from_vertex) do
-    if !match?(%IR.ListType{data: []}, collectable) do
-      add_edge(call_graph, from_vertex, {Enum, :into, 2})
-    end
-
-    build(call_graph, Map.from_struct(comprehension), from_vertex)
   end
 
   def build(

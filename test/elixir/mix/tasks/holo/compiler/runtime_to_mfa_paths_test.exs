@@ -7,12 +7,12 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPathsTest do
 
   describe "run/1" do
     test "destination included in the runtime" do
-      output = capture_io(fn -> Task.run(["{Enum, :reduce, 3}"]) end)
+      output = capture_io(fn -> Task.run(["{Enum, :into_protocol, 2}"]) end)
 
       expected =
         normalize_newlines("""
-        {Enum, :reverse, 1} -> {Enum, :reduce, 3}
-        [{Enum, :reverse, 1}, {Enum, :reduce, 3}]
+        {Enum, :into, 2} -> {Enum, :into_protocol, 2}
+        [{Enum, :into, 2}, {Enum, :into_protocol, 2}]
         """)
 
       assert String.contains?(output, expected)
