@@ -331,6 +331,49 @@ describe("Hologram", () => {
     });
   });
 
+  describe("enqueueActionAfterDelay()", () => {
+    let scheduleActionStub;
+
+    const action = Type.actionStruct({
+      name: Type.atom("my_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const delayedAction = Type.actionStruct({
+      name: Type.atom("my_delayed_action"),
+      params: Type.map(),
+      target: cid1,
+      delay: Type.integer(500),
+    });
+
+    beforeEach(() => {
+      ActionQueue.entries = [];
+      scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+    });
+
+    afterEach(() => {
+      ActionQueue.entries = [];
+      sinon.restore();
+    });
+
+    it("puts an action without a delay on the queue at once", () => {
+      Hologram.enqueueActionAfterDelay(action, 3);
+
+      assert.deepStrictEqual(ActionQueue.entries, [{action: action, epoch: 3}]);
+      sinon.assert.notCalled(scheduleActionStub);
+    });
+
+    // The same timer every other delayed action serves: the queue runs an entry as soon as it can,
+    // so a delayed action must not be an entry until its delay has elapsed.
+    it("puts an action with a delay through the timer", () => {
+      Hologram.enqueueActionAfterDelay(delayedAction, 3);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, delayedAction, 3);
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
+  });
+
   describe("executeAction()", () => {
     let callNamedFunctionStub, renderStub;
 
@@ -2568,7 +2611,14 @@ describe("Hologram", () => {
       target: Type.bitstring("my_target_6"),
     });
 
-    let entry1, entry2, entry3, entry4, entry5, entry6;
+    const delayedAction = Type.actionStruct({
+      name: Type.atom("delayed_action"),
+      params: Type.map(),
+      target: Type.nil(),
+      delay: Type.integer(3000),
+    });
+
+    let entry1, entry2, entry3, entry4, entry5, entry6, delayedEntry;
 
     beforeEach(() => {
       ComponentRegistry.clear();
@@ -2602,6 +2652,14 @@ describe("Hologram", () => {
       entry6 = Type.map([
         [Type.atom("module"), Type.alias("Module6")],
         [Type.atom("struct"), Type.componentStruct({nextAction: action6})],
+      ]);
+
+      delayedEntry = Type.map([
+        [Type.atom("module"), Type.alias("DelayedModule")],
+        [
+          Type.atom("struct"),
+          Type.componentStruct({nextAction: delayedAction}),
+        ],
       ]);
     });
 
@@ -2728,6 +2786,33 @@ describe("Hologram", () => {
         Type.nil(),
       );
     });
+
+    // A delay in init/3 means "this long after the mount", and an entry runs as soon as it can.
+    it("schedules a delayed action instead of queueing it", () => {
+      const scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+
+      try {
+        ComponentRegistry.entries = Type.map([[cid1, delayedEntry]]);
+
+        Hologram.queueActionsFromServerInits();
+
+        const expectedAction = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          cid1,
+          delayedAction,
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          scheduleActionStub,
+          expectedAction,
+          Hologram.registryEpoch,
+        );
+
+        assert.deepStrictEqual(ActionQueue.entries, []);
+      } finally {
+        scheduleActionStub.restore();
+      }
+    });
   });
 
   describe("queueSelfEchoes()", () => {
@@ -2766,6 +2851,33 @@ describe("Hologram", () => {
         {action: action1, epoch: Hologram.registryEpoch},
         {action: action2, epoch: Hologram.registryEpoch},
       ]);
+    });
+
+    it("schedules a delayed self echo instead of queueing it", () => {
+      const scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+
+      const delayedAction = Type.actionStruct({
+        name: Type.atom("delayed_self_echo"),
+        params: Type.map(),
+        target: Type.bitstring("page"),
+        delay: Type.integer(3000),
+      });
+
+      try {
+        Hologram.queueSelfEchoes(Type.list([action1, delayedAction]));
+
+        sinon.assert.calledOnceWithExactly(
+          scheduleActionStub,
+          delayedAction,
+          Hologram.registryEpoch,
+        );
+
+        assert.deepStrictEqual(ActionQueue.entries, [
+          {action: action1, epoch: Hologram.registryEpoch},
+        ]);
+      } finally {
+        scheduleActionStub.restore();
+      }
     });
   });
 

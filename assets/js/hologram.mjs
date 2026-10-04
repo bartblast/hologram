@@ -164,12 +164,32 @@ export default class Hologram {
 
   // Puts an action on the queue and runs the queue: a DOM event's dispatch, a timer scheduleAction
   // set, a command's reply, a server push. A mount and a render put their own actions on the queue
-  // directly, since they run it themselves once they are done. An action carries the epoch of the
-  // page it was reasoning about when it was created, and #runActions compares that against where
-  // the client has got to by the time the action reaches the head of the queue.
+  // directly, through enqueueActionAfterDelay, since they run it themselves once they are done. An
+  // action carries the epoch of the page it was reasoning about when it was created, and
+  // #runActions compares that against where the client has got to by the time the action reaches
+  // the head of the queue.
   static enqueueAction(action, epoch = $.registryEpoch) {
     ActionQueue.enqueue(action, epoch);
     Hologram.#runActions();
+  }
+
+  // Puts an action the mount or a render brings on the queue: at once, or once its delay has
+  // elapsed, like any delayed action. The queue is not run here - the mount and the render run it
+  // themselves once they are done, and a delayed one enters through scheduleAction's timer, which
+  // runs it.
+  // Deps: [:maps.get/3]
+  static enqueueActionAfterDelay(action, epoch = $.registryEpoch) {
+    const delay = Erlang_Maps["get/3"](
+      Type.atom("delay"),
+      action,
+      Type.integer(0),
+    );
+
+    if (delay.value === 0n) {
+      ActionQueue.enqueue(action, epoch);
+    } else {
+      Hologram.scheduleAction(action, epoch);
+    }
   }
 
   // This function is intentionally NOT async. Actions that use Task.await/1 return
@@ -533,7 +553,7 @@ export default class Hologram {
           );
         }
 
-        ActionQueue.enqueue(actionWithTarget, $.registryEpoch);
+        Hologram.enqueueActionAfterDelay(actionWithTarget, $.registryEpoch);
       }
     }
   }
@@ -541,7 +561,7 @@ export default class Hologram {
   // Made public to make tests easier
   static queueSelfEchoes(selfEchoes) {
     for (const action of selfEchoes.data) {
-      ActionQueue.enqueue(action, $.registryEpoch);
+      Hologram.enqueueActionAfterDelay(action, $.registryEpoch);
     }
   }
 
