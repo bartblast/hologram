@@ -10,6 +10,22 @@ defmodule HologramFeatureTests.Navigation.LeftListenersTest do
   # raises there against a registry that no longer has the box. The destination's result proves
   # the mount ran and released the click's own dispatch.
 
+  # The link sits outside the panel, so the click on it is an outside click the page being left
+  # handles as its own, before it navigates. The click on the destination's title is the one in
+  # question: the binding is a document-level listener, so it is still the left page's until the
+  # mount, and a click on the markup patched in reaches it.
+  feature "a click_outside binding of the page being left does not dispatch into the destination",
+          %{session: session} do
+    session
+    |> simulate_slow_page_bundle(4_000)
+    |> visit(LeftListenersPage, kind: "click_outside")
+    |> click(link("Destination link"))
+    |> click(css("#destination_title"))
+    |> assert_page(LeftListenersDestinationPage, kind: "click_outside")
+    |> click(button("Put destination result"))
+    |> assert_text(css("#destination_result"), ~s/"click_outside"/)
+  end
+
   # The container is 900px short of its bottom edge at the mount, so it does not fire there. Once
   # detached, every one of its scroll metrics reads 0, which puts the edge at a distance of 0 -
   # within range - and the observer watching it reports the change.

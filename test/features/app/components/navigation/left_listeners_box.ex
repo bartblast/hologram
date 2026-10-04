@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
 
   def init(_props, component, _server) do
     put_state(component,
+      click_outside: 0,
       reach: 0,
       resize: 0,
       window_resize: 0
@@ -17,6 +18,9 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
   # them on the page no feature could say which listener it was about.
   def template do
     ~HOLO"""
+    {%if @kind == "click_outside"}
+      <div $click_outside="record_click_outside" id="panel">Panel</div>
+    {/if}
     {%if @kind == "reach"}
       <div $reach_bottom="record_reach" id="reach_container" style="height: 100px; overflow: auto">
         <div style="height: 1000px">Content</div>
@@ -29,6 +33,10 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
       <window $resize="record_window_resize" />
     {/if}
     """
+  end
+
+  def action(:record_click_outside, _params, component) do
+    put_state(component, :click_outside, component.state.click_outside + 1)
   end
 
   def action(:record_reach, _params, component) do
