@@ -79,6 +79,7 @@ import {defineModule91Fixture} from "./support/fixtures/renderer/module_91.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
 import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client_only/module_3.mjs";
+import {defineClientOnlyModule4Fixture} from "./support/fixtures/renderer/client_only/module_4.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -158,6 +159,7 @@ defineModule9Fixture();
 defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
 defineClientOnlyModule3Fixture();
+defineClientOnlyModule4Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -10568,6 +10570,50 @@ describe("Renderer", () => {
         Erlang_Maps["get/2"](Type.atom("next_action"), struct),
         Type.nil(),
       );
+    });
+
+    // A delay in init/2 means "this long after the render", and an entry runs as soon as it can.
+    it("schedules a delayed action instead of queueing it", () => {
+      const scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+
+      try {
+        const cid = Type.bitstring("my_component");
+
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.alias(
+            "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module4",
+          ),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid]]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+
+        Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+        sinon.assert.calledOnce(scheduleActionStub);
+
+        const [scheduledAction, epoch] = scheduleActionStub.firstCall.args;
+
+        assert.deepStrictEqual(
+          Erlang_Maps["get/2"](Type.atom("name"), scheduledAction),
+          Type.atom("delayed_action_from_init"),
+        );
+
+        assert.deepStrictEqual(
+          Erlang_Maps["get/2"](Type.atom("target"), scheduledAction),
+          cid,
+        );
+
+        assert.equal(epoch, Hologram.registryEpoch);
+        assert.strictEqual(ActionQueue.entries.length, 0);
+      } finally {
+        scheduleActionStub.restore();
+      }
     });
   });
 });

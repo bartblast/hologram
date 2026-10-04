@@ -2,7 +2,6 @@
 
 "use strict";
 
-import ActionQueue from "./action_queue.mjs";
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
@@ -1450,8 +1449,11 @@ export default class Renderer {
       }
 
       // The render on the stack holds the queue, so the action runs once this render is done, with
-      // the page it rendered into.
-      ActionQueue.enqueue(actionWithTarget, Hologram.registryEpoch);
+      // the page it rendered into - or once its delay has elapsed, when it has one.
+      Hologram.enqueueActionAfterDelay(
+        actionWithTarget,
+        Hologram.registryEpoch,
+      );
     }
   }
 
