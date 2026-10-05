@@ -927,7 +927,8 @@ defmodule Hologram.Compiler.CallGraph do
   Returns, for each struct type that has an implementation of one of the given protocols, the entry
   vertices of those implementations: `__impl__/1` and the protocol's functions of each, sorted. The
   types are read from the module info PLT, so a type no code names is among them. An implementation
-  for a built-in type is left out.
+  for a built-in type is left out, and so are the implementations of Hex, the build tool, which a
+  dev build has loaded.
   """
   @spec list_chunk_entries(Enumerable.t(module), PLT.t()) :: %{module => [vertex]}
   def list_chunk_entries(protocols, module_info_plt) do
@@ -944,7 +945,38 @@ defmodule Hologram.Compiler.CallGraph do
 
     entries
     |> Enum.group_by(fn {type, _vertex} -> type end, fn {_type, vertex} -> vertex end)
-    |> Map.new(fn {type, vertices} -> {type, Enum.sort(vertices)} end)
+    |> Map.new(fn {type, vertices} -> {type, Enum.sort(reject_hex_mfas(vertices))} end)
+    |> Map.reject(fn {_type, vertices} -> vertices == [] end)
+  end
+
+  @doc """
+  Returns the MFAs of each struct type's chunks: what the given entry vertices of the type's
+  implementations (see list_chunk_entries/2) reach, sorted, without the given runtime MFAs, which
+  every page has loaded. A type none of whose MFAs is left is not among the keys.
+
+  The walk follows edges with the rules of reachable_mfas/5 from the type alone, so the
+  implementations for the struct types the reached code names are entered too: code that turns a
+  struct of the type into text can build a struct of another type on the way and dispatch on it,
+  and nothing announces that one to the client.
+  """
+  @spec list_chunk_mfas_by_type(t, %{module => [vertex]}, [mfa]) :: %{module => [mfa]}
+  def list_chunk_mfas_by_type(
+        %{module_info_plt: module_info_plt} = call_graph,
+        entries_by_type,
+        runtime_mfas
+      ) do
+    runtime_mfa_set = MapSet.new(runtime_mfas)
+
+    # The tasks get the reader, which captures only the shared graph's key (see with_shared_graph/2).
+    with_shared_graph(call_graph, fn read_graph ->
+      entries_by_type
+      |> Map.to_list()
+      |> TaskUtils.map_concurrently(fn {type, entries} ->
+        {type, list_chunk_mfas(read_graph.(), type, entries, runtime_mfa_set, module_info_plt)}
+      end)
+      |> Enum.reject(fn {_type, mfas} -> mfas == [] end)
+      |> Map.new()
+    end)
   end
 
   @doc """
@@ -2031,6 +2063,14 @@ defmodule Hologram.Compiler.CallGraph do
     # the result is only used for MapSet.member? lookups against already-included MFAs.
     |> Enum.filter(&is_tuple/1)
     |> MapSet.new()
+  end
+
+  defp list_chunk_mfas(graph, type, entries, runtime_mfa_set, module_info_plt) do
+    graph
+    |> reachable_mfas(entries, MapSet.new([type]), module_info_plt)
+    |> reject_hex_mfas()
+    |> Enum.reject(&MapSet.member?(runtime_mfa_set, &1))
+    |> Enum.sort()
   end
 
   defp list_modules_reaching_in_graph(graph, target_modules, module_info_plt) do

@@ -2037,6 +2037,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute Map.has_key?(result, Module12)
     end
 
+    test "leaves out the implementations of the Hex build tool" do
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, String.Chars.Hex.NoSuchStruct, %{
+        protocol_implementation?: true,
+        implementation_for: Hex.NoSuchStruct,
+        implemented_protocol: String.Chars
+      })
+
+      result = list_chunk_entries([String.Chars], module_info_plt)
+
+      refute Map.has_key?(result, Hex.NoSuchStruct)
+    end
+
     test "lists the implementation of a struct type" do
       struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
@@ -2076,6 +2090,103 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "returns an empty map for no protocols" do
       assert list_chunk_entries([], module_info_plt_fixture()) == %{}
+    end
+  end
+
+  describe "list_chunk_mfas_by_type/3" do
+    setup do
+      modules = reach_modules()
+      call_graph = reach_full(modules)
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      [call_graph: call_graph, entries_by_type: entries_by_type]
+    end
+
+    test "includes the implementation for a struct type the type's code names" do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Proto.TypeB,
+          {%{
+             protocol_implementation?: true,
+             implementation_for: ReachTest.TypeB,
+             implemented_protocol: ReachTest.Proto
+           },
+           [
+             {:__impl__, 1, []},
+             {:fun, 1, [{ReachTest.Proto, :fun, 1}, {ReachTest.TypeA, :__struct__, 0}]}
+           ]}
+        )
+
+      call_graph = reach_full(modules)
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, [])
+
+      assert result[ReachTest.TypeB] == [
+               {ReachTest.ImplHelper, :fun, 0},
+               {ReachTest.Proto, :fun, 1},
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1},
+               {ReachTest.Proto.TypeB, :__impl__, 1},
+               {ReachTest.Proto.TypeB, :fun, 1},
+               {ReachTest.TypeA, :__struct__, 0}
+             ]
+    end
+
+    test "leaves out a type whose every MFA the runtime holds", %{
+      call_graph: call_graph,
+      entries_by_type: entries_by_type
+    } do
+      runtime_mfas = [
+        {ReachTest.ImplHelper, :fun, 0},
+        {ReachTest.Proto.TypeA, :__impl__, 1},
+        {ReachTest.Proto.TypeA, :fun, 1}
+      ]
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, runtime_mfas)
+
+      assert Map.keys(result) == [ReachTest.TypeB]
+    end
+
+    test "leaves out the MFAs the runtime holds", %{
+      call_graph: call_graph,
+      entries_by_type: entries_by_type
+    } do
+      runtime_mfas = [{ReachTest.ImplHelper, :fun, 0}, {ReachTest.Unreached, :fun, 0}]
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, runtime_mfas)
+
+      assert result == %{
+               ReachTest.TypeA => [
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1}
+               ]
+             }
+    end
+
+    test "lists what each type's implementations reach, sorted", %{
+      call_graph: call_graph,
+      entries_by_type: entries_by_type
+    } do
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, [])
+
+      assert result == %{
+               ReachTest.TypeA => [
+                 {ReachTest.ImplHelper, :fun, 0},
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1},
+                 {ReachTest.Unreached, :fun, 0}
+               ]
+             }
     end
   end
 
