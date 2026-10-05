@@ -7,6 +7,7 @@ defmodule Hologram.ApplicationTest do
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
 
@@ -17,6 +18,8 @@ defmodule Hologram.ApplicationTest do
 
     setup_asset_path_registry(AssetPathRegistryStub, false)
     setup_asset_manifest_cache(AssetManifestCacheStub, false)
+
+    setup_chunk_registry(ChunkRegistryStub, false)
 
     setup_page_digest_registry(PageDigestRegistryStub, false)
 
@@ -41,6 +44,7 @@ defmodule Hologram.ApplicationTest do
       children = Supervisor.which_children(pid)
       child_modules = Enum.map(children, fn {module, _pid, _type, _modules} -> module end)
 
+      assert Hologram.Assets.ChunkRegistry in child_modules
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
       assert Hologram.Assets.ManifestCache in child_modules
