@@ -3,6 +3,11 @@
 # are named in the page's document, and a command sends another price, whose chunks are named in
 # the command's reply. Client-reachable code on this page (template, actions) must not name the
 # money type, so that its chunks are loaded through the state and the reply, never preloaded.
+#
+# The template prints the price's currency and amount rather than the price itself. Turning a
+# money struct into text formats it for a locale, and the localization library reads its locale
+# data through a process, which has no counterpart in the browser. The amount is a decimal, whose
+# String.Chars implementation is plain code from one of its own chunks.
 defmodule HologramEcosystemTests.Ash.PricedItemPage do
   use Hologram.Page
 
@@ -24,7 +29,7 @@ defmodule HologramEcosystemTests.Ash.PricedItemPage do
       <button $click="reprice"> Reprice </button>
     </p>
     <p>
-      Price: <strong id="price">{@price}</strong>
+      Price: <strong id="price">{@price.currency} {@price.amount}</strong>
     </p>
     """
   end
