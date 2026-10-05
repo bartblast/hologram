@@ -2,6 +2,8 @@ defmodule Hologram.Realtime.SSETest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Realtime.SSE
+  import Hologram.Test.Stubs
+  import Mox
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
@@ -11,7 +13,13 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Test.Fixtures.Realtime.SSE.Module1
 
+  use_module_stub :chunk_registry
+
+  setup :set_mox_global
+
   setup do
+    setup_chunk_registry(ChunkRegistryStub)
+
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
@@ -22,6 +30,13 @@ defmodule Hologram.Realtime.SSETest do
     start_supervised!(SubscriptionRegistry)
 
     :ok
+  end
+
+  # The event name, the id and the decoded JSON data of an SSE event-stream chunk.
+  defp decode_envelope(envelope) do
+    ["event: " <> event, "id: " <> id, "data: " <> data, "", ""] = String.split(envelope, "\n")
+
+    {event, String.to_integer(id), Jason.decode!(data)}
   end
 
   defp conn_with_identities(opts) do
@@ -158,11 +173,27 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "encode_action_envelope/2" do
+    test "names the chunks the struct types in the action need" do
+      action = %Action{name: :my_action, params: %{date: ~D[2026-10-05]}, target: "c1"}
+      {:ok, encoded} = Encoder.encode_term(action)
+
+      assert 42
+             |> encode_action_envelope(action)
+             |> decode_envelope() ==
+               {"action", 42,
+                %{
+                  "action" => encoded,
+                  "chunks" => ["/hologram/chunk-BBBBBBBB.js", "/hologram/chunk-CCCCCCCC.js"]
+                }}
+    end
+
     test "wraps an encoded action in the SSE event envelope" do
       action = %Action{name: :my_action, target: "c1"}
       {:ok, encoded} = Encoder.encode_term(action)
 
-      assert encode_action_envelope(42, action) == "event: action\nid: 42\ndata: #{encoded}\n\n"
+      assert 42
+             |> encode_action_envelope(action)
+             |> decode_envelope() == {"action", 42, %{"action" => encoded, "chunks" => []}}
     end
   end
 
@@ -177,26 +208,43 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "encode_broadcast_envelope/4" do
+    test "names the chunks the struct types in the params need" do
+      params = %{time: ~T[12:34:56]}
+      {:ok, encoded} = Encoder.encode_term({:append, params, ["chat"]})
+
+      assert 42
+             |> encode_broadcast_envelope(:append, params, ["chat"])
+             |> decode_envelope() ==
+               {"broadcast", 42,
+                %{
+                  "chunks" => ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-CCCCCCCC.js"],
+                  "data" => encoded
+                }}
+    end
+
     test "wraps a single-cid payload in a broadcast SSE event envelope" do
       {:ok, encoded} = Encoder.encode_term({:append, %{text: "hi"}, ["chat"]})
 
-      assert encode_broadcast_envelope(42, :append, %{text: "hi"}, ["chat"]) ==
-               "event: broadcast\nid: 42\ndata: #{encoded}\n\n"
+      assert 42
+             |> encode_broadcast_envelope(:append, %{text: "hi"}, ["chat"])
+             |> decode_envelope() == {"broadcast", 42, %{"chunks" => [], "data" => encoded}}
     end
 
     test "wraps a multi-cid payload in a broadcast SSE event envelope" do
       cids = ["chat", "sidebar", "minimap"]
       {:ok, encoded} = Encoder.encode_term({:append, %{text: "hi"}, cids})
 
-      assert encode_broadcast_envelope(42, :append, %{text: "hi"}, cids) ==
-               "event: broadcast\nid: 42\ndata: #{encoded}\n\n"
+      assert 42
+             |> encode_broadcast_envelope(:append, %{text: "hi"}, cids)
+             |> decode_envelope() == {"broadcast", 42, %{"chunks" => [], "data" => encoded}}
     end
 
     test "handles empty params" do
       {:ok, encoded} = Encoder.encode_term({:ping, %{}, ["page"]})
 
-      assert encode_broadcast_envelope(1, :ping, %{}, ["page"]) ==
-               "event: broadcast\nid: 1\ndata: #{encoded}\n\n"
+      assert 1
+             |> encode_broadcast_envelope(:ping, %{}, ["page"])
+             |> decode_envelope() == {"broadcast", 1, %{"chunks" => [], "data" => encoded}}
     end
   end
 
@@ -582,7 +630,9 @@ defmodule Hologram.Realtime.SSETest do
       assert length(String.split(updated_conn.resp_body, "event: broadcast\n", trim: true)) == 1
 
       {:ok, encoded} = Encoder.encode_term({:my_action, %{}, ["chat", "sidebar"]})
-      assert updated_conn.resp_body =~ "data: #{encoded}\n"
+
+      assert {"broadcast", _id, %{"chunks" => [], "data" => ^encoded}} =
+               decode_envelope(updated_conn.resp_body)
     end
 
     test "emits nothing when no binding matches the broadcast's channel" do
