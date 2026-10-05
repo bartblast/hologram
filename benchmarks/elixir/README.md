@@ -198,19 +198,6 @@ server_callback_analysis_by_templatable/3        6.73 K      148.57 μs    ±13.
 ```
 
 
-### ✅ compiler » call_graph » server_protocol_dispatch_types_3
-
-```
-Name                       ips        average  deviation         median         99th %
-1 templatable           3.51 K      284.68 μs    ±18.39%      279.79 μs      319.46 μs
-all templatables        3.01 K      332.74 μs    ±18.98%      325.88 μs      392.50 μs
-
-Comparison: 
-1 templatable           3.51 K
-all templatables        3.01 K - 1.17x slower +48.06 μs
-```
-
-
 ### ✅ compiler » create_page_entry_files_7
 
 ```

@@ -63,23 +63,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   @tmp_dir Reflection.tmp_dir()
 
-  defp app_protocol_dispatch_types_with_analysis(graph) do
-    module_info_plt = module_info_plt_fixture()
-
-    app_protocol_dispatch_types(
-      graph,
-      Reflection.list_pages(),
-      broadcast_caller_analysis(graph, module_info_plt),
-      module_info_plt
-    )
-  end
-
-  # The Erlang functions each ported module calls, taken from the "Deps" comment
-  # every port carries under its End marker. The comment is what a port author
-  # writes down, so it is the statement the edge table has to answer to.
-  # Runs the function in a process of its own, traced with this one as the tracer (a process cannot
-  # be its own tracer), checks that CallGraph.get_graph/1 was not called there, and returns its
-  # result. A walk that copied the graph out would copy it in that process, not in the agent.
   defp call_without_copying_graph(fun) do
     test_pid = self()
 
@@ -389,85 +372,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
-  describe "app_protocol_dispatch_types/4" do
-    test "includes types reachable from page client code" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types created in server-executed code of pages" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types created in server-executed code of components used by pages" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :template, 0}, {Module4, :template, 0})
-        |> Digraph.add_edge({Module4, :init, 3}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types reachable from broadcast callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
-        |> Digraph.add_edge({Module13, :my_fun, 0}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types created in server-executed code of broadcast-referenced components" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
-        |> Digraph.add_edge({Module13, :my_fun, 0}, Module4)
-        |> Digraph.add_edge({Module4, :command, 3}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "returns only built-in types for a graph without app type references" do
-      graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
-
-      assert app_protocol_dispatch_types_with_analysis(graph) ==
-               protocol_dispatch_types([], module_info_plt_fixture())
-    end
-  end
-
   describe "broadcast_caller_analysis/2" do
-    test "includes struct types reachable from broadcast_action callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action, 3})
-        |> Digraph.add_edge({Module6, :my_fun, 0}, {Module7, :my_fun, 0})
-        |> Digraph.add_edge({Module7, :my_fun, 0}, Module12)
-
-      result = broadcast_caller_analysis(graph, module_info_plt_fixture())
-
-      assert Struct1 in result.dispatch_types
-      assert Module12 in result.dispatch_types
-    end
-
-    test "includes struct types reachable from broadcast_action_except callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 4})
-        |> Digraph.add_edge({Module6, :my_fun, 0}, Module12)
-
-      result = broadcast_caller_analysis(graph, module_info_plt_fixture())
-
-      assert Struct1 in result.dispatch_types
-      assert Module12 in result.dispatch_types
-    end
-
     test "collects component modules referenced in broadcast caller code" do
       graph =
         Digraph.new()
@@ -529,15 +434,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result.referenced_components == []
     end
 
-    test "returns only built-in types and no components when there are no broadcast callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Module15)
+    test "returns no components when there are no broadcast callers" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Module15)
 
       result = broadcast_caller_analysis(graph, module_info_plt_fixture())
 
-      assert result.dispatch_types == protocol_dispatch_types([], module_info_plt_fixture())
       assert result.referenced_components == []
     end
 
@@ -546,12 +447,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         Digraph.new()
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Module15)
 
       result = broadcast_caller_analysis(graph, module_info_plt_fixture())
 
-      refute Struct1 in result.dispatch_types
       refute Module15 in result.referenced_components
     end
 
@@ -562,10 +461,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         Digraph.new()
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module5, :my_fun, 0}, {protocol, :my_fun, 1})
-        |> Digraph.add_edge({protocol, :my_fun, 1}, Struct1)
+        |> Digraph.add_edge({protocol, :my_fun, 1}, Module15)
 
       without_entry = broadcast_caller_analysis(graph, module_info_plt_fixture())
-      assert Struct1 in without_entry.dispatch_types
+      assert Module15 in without_entry.referenced_components
 
       module_info_plt = PLT.clone(module_info_plt_fixture())
 
@@ -575,7 +474,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       })
 
       with_entry = broadcast_caller_analysis(graph, module_info_plt)
-      refute Struct1 in with_entry.dispatch_types
+      refute Module15 in with_entry.referenced_components
     end
   end
 
@@ -4114,85 +4013,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result[Module2].server_referenced_components == []
     end
-  end
-
-  describe "server_protocol_dispatch_types/3" do
-    test "includes struct types reachable from init/3" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-
-      assert Struct1 in server_protocol_dispatch_types(
-               graph,
-               [Module2],
-               module_info_plt_fixture()
-             )
-    end
-
-    test "includes struct types reachable from command/3" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Struct1, :__struct__, 1})
-
-      assert Struct1 in server_protocol_dispatch_types(
-               graph,
-               [Module2],
-               module_info_plt_fixture()
-             )
-    end
-
-    test "harvests types from all given templatables" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
-        |> Digraph.add_edge({Module4, :command, 3}, Module12)
-
-      result =
-        server_protocol_dispatch_types(graph, [Module2, Module4], module_info_plt_fixture())
-
-      assert Struct1 in result
-      assert Module12 in result
-    end
-
-    test "returns only built-in types when init/3 and command/3 vertices don't exist" do
-      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
-
-      assert server_protocol_dispatch_types(graph, [Module2], module_info_plt_fixture()) ==
-               protocol_dispatch_types([], module_info_plt_fixture())
-    end
-
-    test "doesn't traverse through protocol function vertices" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
-        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
-
-      refute Struct1 in server_protocol_dispatch_types(
-               graph,
-               [Module2],
-               module_info_plt_fixture()
-             )
-    end
-  end
-
-  test "sorted_edges/1", %{empty_call_graph: call_graph} do
-    call_graph
-    |> add_edge(:vertex_4, :vertex_5)
-    |> add_vertex(:vertex_1)
-    |> add_edge(:vertex_2, :vertex_3)
-
-    assert sorted_edges(call_graph) == [
-             {:vertex_2, :vertex_3},
-             {:vertex_4, :vertex_5}
-           ]
-  end
-
-  test "sorted_vertices/1", %{empty_call_graph: call_graph} do
-    call_graph
-    |> add_edge(:vertex_4, :vertex_5)
-    |> add_vertex(:vertex_1)
-    |> add_edge(:vertex_2, :vertex_3)
-
-    assert sorted_vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
   end
 
   describe "start/1" do

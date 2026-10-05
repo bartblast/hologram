@@ -19,10 +19,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type t :: %CallGraph{pid: pid, module_info_plt: PLT.t() | nil}
 
-  @type broadcast_caller_analysis :: %{
-          dispatch_types: MapSet.t(module),
-          referenced_components: [module]
-        }
+  @type broadcast_caller_analysis :: %{referenced_components: [module]}
 
   @type edge :: {vertex, vertex}
 
@@ -570,55 +567,14 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the set of types that can appear at protocol dispatch anywhere in an
-  app with the given pages: types reachable from the client code of the pages,
-  types created in server-executed code of the pages, their components, and the
-  broadcast-referenced components, and types reachable from action broadcasting
-  code (taken from the given precomputed broadcast caller analysis).
-  """
-  @spec app_protocol_dispatch_types(
-          Digraph.t(),
-          [module],
-          broadcast_caller_analysis,
-          PLT.t() | nil
-        ) :: MapSet.t(module)
-  def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis, module_info_plt) do
-    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas(&1, module_info_plt))
-
-    page_vertices =
-      Digraph.reachable(graph, page_entry_mfas,
-        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
-      )
-
-    components =
-      page_vertices
-      |> Enum.filter(&match?({_module, _function, _arity}, &1))
-      |> extract_uniq_components(module_info_plt)
-
-    # A broadcast-referenced component executes its server callbacks like any other
-    # rendered component (e.g. command/3 triggered while it is mounted), so its
-    # server-created types count as app types.
-    templatables =
-      Enum.uniq(pages ++ components ++ broadcast_caller_analysis.referenced_components)
-
-    client_types = protocol_dispatch_types(page_vertices, module_info_plt)
-    server_types = server_protocol_dispatch_types(graph, templatables, module_info_plt)
-
-    client_types
-    |> MapSet.union(server_types)
-    |> MapSet.union(broadcast_caller_analysis.dispatch_types)
-  end
-
-  @doc """
   Returns the analysis of code reachable from the callers of the functions that
   broadcast actions: Hologram.Component.put_broadcast/3,4,
   put_broadcast_except/4,5 and Hologram.Realtime.broadcast_action/2,3,
-  broadcast_action_except/3,4. Returns the protocol dispatch types that can
-  appear in that code and the component modules referenced in it. A broadcast
-  can deliver its payload to any connected client, so referenced components must
-  be available in the runtime bundle and the types count as app-wide dispatch types.
+  broadcast_action_except/3,4. Returns the component modules referenced in that
+  code. A broadcast can deliver its payload to any connected client, so referenced
+  components must be available in the runtime bundle.
   Protocol function vertices are opaque during the traversal, so consolidated
-  dispatch edges don't make every loaded implementation's type count as reachable.
+  dispatch edges don't make code referenced only in an implementation count as reachable.
   """
   @spec broadcast_caller_analysis(Digraph.t(), PLT.t() | nil) :: broadcast_caller_analysis
   def broadcast_caller_analysis(graph, module_info_plt) do
@@ -634,7 +590,6 @@ defmodule Hologram.Compiler.CallGraph do
       )
 
     %{
-      dispatch_types: protocol_dispatch_types(broadcast_vertices, module_info_plt),
       referenced_components:
         extract_component_module_vertices(broadcast_vertices, module_info_plt)
     }
@@ -1387,9 +1342,7 @@ defmodule Hologram.Compiler.CallGraph do
           %{module => server_callback_analysis}
   def server_callback_analysis_by_templatable(graph, templatables, module_info_plt) do
     Map.new(templatables, fn templatable ->
-      # One traversal feeds both the dispatch types and the referenced components,
-      # matching what server_protocol_dispatch_types/2 would traverse for a single
-      # templatable.
+      # One traversal feeds both the dispatch types and the referenced components.
       server_vertices =
         Digraph.reachable(
           graph,
@@ -1405,27 +1358,6 @@ defmodule Hologram.Compiler.CallGraph do
 
       {templatable, analysis}
     end)
-  end
-
-  @doc """
-  Returns the set of types that can appear at protocol dispatch in server-executed
-  code of the given templatable modules, i.e. code reachable from their init/3 and
-  command/3 functions.
-  Protocol function vertices are opaque during the traversal, so consolidated
-  dispatch edges don't make every loaded implementation's type count as reachable.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_protocol_dispatch_types_3/README.md
-  """
-  @spec server_protocol_dispatch_types(Digraph.t(), [module], PLT.t() | nil) :: MapSet.t(module)
-  def server_protocol_dispatch_types(graph, templatables, module_info_plt) do
-    entry_mfas =
-      for templatable <- templatables, function <- [:command, :init] do
-        {templatable, function, 3}
-      end
-
-    graph
-    |> Digraph.reachable(entry_mfas, opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt))
-    |> protocol_dispatch_types(module_info_plt)
   end
 
   @doc """
