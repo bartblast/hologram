@@ -315,7 +315,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert dump_compile_state(path, false) == :written
 
       assert read_compile_state_dump(path) ==
-               {2,
+               {1,
                 %{
                   app_versions: [hologram: "1.0.0"],
                   bundle_inputs: %{client_stacktraces?: true},
@@ -368,7 +368,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       dump_compile_state(path, false)
 
-      {2, compile_state} = read_compile_state_dump(path)
+      {1, compile_state} = read_compile_state_dump(path)
       refute Map.has_key?(compile_state, :page_mfas)
     end
 
@@ -396,7 +396,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert dump_compile_state(path, false) == :written
 
-      {2, compile_state} = read_compile_state_dump(path)
+      {1, compile_state} = read_compile_state_dump(path)
       assert compile_state.pending_pages == MapSet.new([Module3])
     end
 
@@ -406,7 +406,7 @@ defmodule Hologram.Compiler.CacheTest do
       File.write!(path, "stale")
 
       assert dump_compile_state(path, true) == :written
-      assert {2, _compile_state} = read_compile_state_dump(path)
+      assert {1, _compile_state} = read_compile_state_dump(path)
     end
 
     test "creates the path's directory", %{path: path} do
@@ -426,7 +426,7 @@ defmodule Hologram.Compiler.CacheTest do
              |> Path.dirname()
              |> File.ls!() == ["compile_state.bin"]
 
-      assert {2, _compile_state} = read_compile_state_dump(path)
+      assert {1, _compile_state} = read_compile_state_dump(path)
     end
   end
 
@@ -767,6 +767,26 @@ defmodule Hologram.Compiler.CacheTest do
       load_compile_state(path)
 
       assert dump_compile_state(path, false) == :unchanged
+    end
+
+    test "a dump written before the chunk state existed loads with no chunk state", %{
+      path: path
+    } do
+      put_full_state()
+      dump_compile_state(path, false)
+
+      {1, compile_state} = read_compile_state_dump(path)
+
+      File.write!(
+        path,
+        SerializationUtils.serialize({1, Map.delete(compile_state, :chunks)})
+      )
+
+      stop_cache()
+
+      assert load_compile_state(path) == :ok
+      assert %{chunks: nil, pending_pages: pending_pages} = get()
+      assert pending_pages == MapSet.new([Module2])
     end
 
     test "a dump of another version is not loaded", %{path: path} do

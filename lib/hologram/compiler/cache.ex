@@ -39,7 +39,7 @@ defmodule Hologram.Compiler.Cache do
   # inputs it was written with, which include the digests of Hologram's own modules, so the compile
   # task forgets those parts of a compile state another Hologram build wrote before it reads them
   # (see keep_bundle_inputs/2 there).
-  @dump_version 2
+  @dump_version 1
 
   # What the chunk bundles were built from: each chunk's bundle info and MFAs by its signature (see
   # Hologram.Compiler.group_mfas_by_signature/1), and the modules of all the chunks' MFAs.
@@ -238,7 +238,8 @@ defmodule Hologram.Compiler.Cache do
           state
           | app_versions: compile_state.app_versions,
             bundle_inputs: compile_state.bundle_inputs,
-            chunks: compile_state.chunks,
+            # A dump written before the chunk state existed has no such key.
+            chunks: Map.get(compile_state, :chunks),
             compile_state_changed?: false,
             encoding_inputs: compile_state.encoding_inputs,
             js_input_paths: compile_state.js_input_paths,
