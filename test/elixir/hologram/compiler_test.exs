@@ -1016,6 +1016,91 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_chunk_registry_plt/4" do
+    setup do
+      # Date's own code, the code Date and DateTime share, and Time's own code.
+      bundle_infos_by_signature = %{
+        MapSet.new([Date]) => %{bundle_name: "chunk", digest: "AAAAAAAA", entry_name: "59b80f19"},
+        MapSet.new([Date, DateTime]) => %{
+          bundle_name: "chunk",
+          digest: "BBBBBBBB",
+          entry_name: "0a1b2c3d"
+        },
+        MapSet.new([Time]) => %{bundle_name: "chunk", digest: "CCCCCCCC", entry_name: "a6274391"}
+      }
+
+      build_dir = Path.join("/", "my_build_dir")
+
+      [
+        build_dir: build_dir,
+        bundle_infos_by_signature: bundle_infos_by_signature,
+        opts: [build_dir: build_dir]
+      ]
+    end
+
+    test "gives a page that preloads no chunk an empty list", %{
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      {plt, _dump_path} =
+        build_chunk_registry_plt(bundle_infos_by_signature, %{MyPage1 => []}, [], opts)
+
+      assert PLT.get(plt, {:page, MyPage1}) == {:ok, []}
+    end
+
+    test "lists for a page the chunks its types and the runtime's types need", %{
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      chunk_types_by_page = %{MyPage1 => [DateTime], MyPage2 => [Date, Version]}
+
+      {plt, _dump_path} =
+        build_chunk_registry_plt(bundle_infos_by_signature, chunk_types_by_page, [Time], opts)
+
+      assert PLT.get(plt, {:page, MyPage1}) ==
+               {:ok,
+                [
+                  "/hologram/chunk-0a1b2c3d-BBBBBBBB.js",
+                  "/hologram/chunk-a6274391-CCCCCCCC.js"
+                ]}
+
+      assert PLT.get(plt, {:page, MyPage2}) ==
+               {:ok,
+                [
+                  "/hologram/chunk-0a1b2c3d-BBBBBBBB.js",
+                  "/hologram/chunk-59b80f19-AAAAAAAA.js",
+                  "/hologram/chunk-a6274391-CCCCCCCC.js"
+                ]}
+    end
+
+    test "lists for a type every chunk whose signature holds it", %{
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      {plt, _dump_path} = build_chunk_registry_plt(bundle_infos_by_signature, %{}, [], opts)
+
+      assert PLT.get_all(plt) == %{
+               {:type, Date} => [
+                 "/hologram/chunk-0a1b2c3d-BBBBBBBB.js",
+                 "/hologram/chunk-59b80f19-AAAAAAAA.js"
+               ],
+               {:type, DateTime} => ["/hologram/chunk-0a1b2c3d-BBBBBBBB.js"],
+               {:type, Time} => ["/hologram/chunk-a6274391-CCCCCCCC.js"]
+             }
+    end
+
+    test "returns the path of the dump in the build dir", %{
+      build_dir: build_dir,
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      expected_dump_path = Path.join(build_dir, "chunk_registry.plt")
+
+      assert {%PLT{}, ^expected_dump_path} =
+               build_chunk_registry_plt(bundle_infos_by_signature, %{}, [], opts)
+    end
+  end
+
   describe "build_ir_plt/1" do
     test "module has BEAM path" do
       assert %PLT{} = ir_plt = build_ir_plt()
