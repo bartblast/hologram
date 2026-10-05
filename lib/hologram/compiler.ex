@@ -194,6 +194,50 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds JavaScript code for a chunk: a script holding the given MFAs, which are the protocol
+  implementation code a set of struct types shares (see `group_mfas_by_signature/1`).
+
+  The script does not define its functions when it runs: it leaves them, with its own path, for
+  the runtime to define, and announces itself with a `hologram:scriptLoaded` event. A chunk can
+  run before the runtime does, and neither needs to know the other's name: the path is read from
+  the script element running it.
+
+  It carries no timing code, unlike the page and runtime scripts: a document can load many chunks,
+  and the bundler would put a copy of the timer in each.
+
+  Takes the options `build_page_js/5` takes.
+  """
+  @spec build_chunk_js([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) :: String.t()
+  def build_chunk_js(mfas, ir_plt, encode_plt, async_mfas, opts) do
+    %{defs: defs, import_statements: import_statements} =
+      render_script_parts(mfas, ir_plt, encode_plt, async_mfas, opts)
+
+    """
+    "use strict";#{import_statements}
+
+    globalThis.Hologram.pendingScripts ??= [];
+
+    globalThis.Hologram.pendingScripts.push({
+      path: new URL(document.currentScript.src).pathname,
+      define: (deps) => {
+        const {
+          Bitstring,
+          ERTS,
+          HologramBoxedError,
+          HologramInterpreterError,
+          Interpreter,
+          MemoryStorage,
+          Type,
+          Utils,
+        } = deps;#{defs}
+      },
+    });
+
+    document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));\
+    """
+  end
+
+  @doc """
   Grows the call graph until it holds the code of every chunk (see `CallGraph.build_chunk_reach/4`),
   building the IR of each module the walk asks for into the IR PLT first, and returns what that
   walk returns: the chunks' entry vertices by type and the modules built. The walk asks only for
@@ -351,37 +395,9 @@ defmodule Hologram.Compiler do
   @spec build_page_js([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) :: String.t()
   def build_page_js(mfas, ir_plt, encode_plt, async_mfas, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
-    runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
 
-    %{imports: imports, bindings: bindings} =
-      aggregate_js_imports(mfas, ir_plt, opts[:module_info_plt], runtime_js_binding_modules)
-
-    import_statements =
-      imports
-      |> render_js_import_statements()
-      |> render_block()
-
-    js_bindings_registration_call =
-      bindings
-      |> render_js_bindings_registration_call()
-      |> render_block()
-
-    erlang_js_dir = Path.join(js_dir, "erlang")
-
-    erlang_function_defs =
-      mfas
-      |> render_erlang_function_defs(ir_plt, erlang_js_dir)
-      |> render_block()
-
-    elixir_function_defs =
-      mfas
-      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
-      |> render_block()
-
-    module_metadata_registration =
-      mfas
-      |> render_module_metadata_registration(ir_plt, opts[:module_metadata])
-      |> render_block()
+    %{defs: defs, import_statements: import_statements} =
+      render_script_parts(mfas, ir_plt, encode_plt, async_mfas, opts)
 
     """
     "use strict";
@@ -400,7 +416,7 @@ defmodule Hologram.Compiler do
         MemoryStorage,
         Type,
         Utils,
-      } = deps;#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
+      } = deps;#{defs}
     }
 
     globalThis.Hologram.pageScriptLoaded = true;
@@ -629,6 +645,24 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the digest of a chunk's signature (see `group_mfas_by_signature/1`), which names the
+  chunk's files: the first 8 hex digits of the MD5 of its type names, sorted. The same signature
+  gives the same digest in every compile.
+  """
+  @spec chunk_signature_digest(MapSet.t(module)) :: String.t()
+  def chunk_signature_digest(signature) do
+    type_names =
+      signature
+      |> Enum.sort()
+      |> Enum.map_join(",", &Atom.to_string/1)
+
+    :md5
+    |> :crypto.hash(type_names)
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 8)
+  end
+
+  @doc """
   Returns the client config the runtime bundle sets as `globalThis.Hologram.config`: whether the
   error overlay is on, whether live reload is (it runs in dev only, and in test, so that the feature
   tests can drive it, as the SSE stream's live reload subscription does), and whether client stack
@@ -642,6 +676,47 @@ defmodule Hologram.Compiler do
 
     "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
       "stacktraces: #{Hologram.client_stacktraces?()}}"
+  end
+
+  @doc """
+  Creates the chunk bundle entry files, one per signature of the given MFAs by signature (see
+  `group_mfas_by_signature/1`), and returns each signature with its digest (see
+  `chunk_signature_digest/1`) and its entry file's path, sorted by digest. The functions of all
+  the chunks are encoded into the encode PLT first, with one IR read per module
+  (`encode_reachable_functions/5`), and then each chunk is rendered from that cache. Takes the
+  options `create_page_entry_files/6` takes, with the modules whose JS bindings the runtime script
+  registers as the `runtime_js_binding_modules:` opt.
+  """
+  @spec create_chunk_entry_files(
+          %{MapSet.t(module) => [mfa]},
+          PLT.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          T.opts()
+        ) :: list({MapSet.t(module), String.t(), T.file_path()})
+  def create_chunk_entry_files(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
+    module_info_plt = opts[:module_info_plt]
+
+    mfas_by_signature
+    |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
+    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
+
+    mfas_by_signature
+    |> Enum.map(fn {signature, mfas} -> {signature, chunk_signature_digest(signature), mfas} end)
+    |> Enum.sort_by(fn {_signature, signature_digest, _mfas} -> signature_digest end)
+    |> TaskUtils.map_concurrently(fn {signature, signature_digest, mfas} ->
+      entry_file_path =
+        mfas
+        |> build_chunk_js(ir_plt, encode_plt, async_mfas,
+          js_dir: opts[:js_dir],
+          module_info_plt: module_info_plt,
+          module_metadata: opts[:module_metadata],
+          runtime_js_binding_modules: opts[:runtime_js_binding_modules] || MapSet.new()
+        )
+        |> create_entry_file("chunk-" <> signature_digest, opts[:tmp_dir])
+
+      {signature, signature_digest, entry_file_path}
+    end)
   end
 
   @doc """
@@ -2290,6 +2365,50 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Encoder.encode_module_metadata_registration(module_metadata)
+  end
+
+  # What a script holding the given MFAs is made of besides its wrapper: the import statements of
+  # the JavaScript its modules bind (none for the modules whose bindings the runtime script
+  # registers, the `runtime_js_binding_modules:` opt), and the definitions, each a block of its
+  # own: the modules' stack trace metadata, the JS bindings, the Erlang and the Elixir functions.
+  defp render_script_parts(mfas, ir_plt, encode_plt, async_mfas, opts) do
+    js_dir = Keyword.fetch!(opts, :js_dir)
+    runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
+
+    %{imports: imports, bindings: bindings} =
+      aggregate_js_imports(mfas, ir_plt, opts[:module_info_plt], runtime_js_binding_modules)
+
+    import_statements =
+      imports
+      |> render_js_import_statements()
+      |> render_block()
+
+    js_bindings_registration_call =
+      bindings
+      |> render_js_bindings_registration_call()
+      |> render_block()
+
+    erlang_function_defs =
+      mfas
+      |> render_erlang_function_defs(ir_plt, Path.join(js_dir, "erlang"))
+      |> render_block()
+
+    elixir_function_defs =
+      mfas
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
+      |> render_block()
+
+    module_metadata_registration =
+      mfas
+      |> render_module_metadata_registration(ir_plt, opts[:module_metadata])
+      |> render_block()
+
+    %{
+      defs:
+        module_metadata_registration <>
+          js_bindings_registration_call <> erlang_function_defs <> elixir_function_defs,
+      import_statements: import_statements
+    }
   end
 
   defp render_erlang_function_defs(mfas, ir_plt, erlang_js_dir) do

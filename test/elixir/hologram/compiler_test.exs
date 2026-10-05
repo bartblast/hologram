@@ -874,6 +874,89 @@ defmodule Hologram.CompilerTest do
              PLT.get!(ir_plt, Hologram.Compiler)
   end
 
+  describe "build_chunk_js/5" do
+    test "has both Erlang and Elixir function defs", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}, {:lists, :reverse, 1}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      assert String.contains?(
+               result,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
+             )
+
+      assert String.contains?(result, ~s/Interpreter.defineErlangFunction("lists", "reverse", 1/)
+    end
+
+    test "has no timing code", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      refute String.contains?(result, "PerformanceTimer")
+      refute String.contains?(result, "console.debug")
+    end
+
+    test "leaves its function defs for the runtime to define, under its own path", %{
+      ir_plt: ir_plt
+    } do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      js_fragment_1 = "globalThis.Hologram.pendingScripts ??= [];"
+      js_fragment_2 = "globalThis.Hologram.pendingScripts.push({"
+      js_fragment_3 = "path: new URL(document.currentScript.src).pathname,"
+      js_fragment_4 = "define: (deps) => {"
+      js_fragment_5 = ~s/document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));/
+
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      assert String.contains?(result, js_fragment_3)
+      assert String.contains?(result, js_fragment_4)
+      assert String.ends_with?(result, js_fragment_5)
+    end
+
+    test "single JS import", %{ir_plt: ir_plt} do
+      mfas = [{Module18, :my_fun, 0}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_path}";')
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}});'
+             )
+    end
+
+    test "skips the JS imports of the modules the runtime script registers", %{ir_plt: ir_plt} do
+      mfas = [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+
+      result =
+        build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(),
+          js_dir: @js_dir,
+          runtime_js_binding_modules: MapSet.new([Module18])
+        )
+
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { export_2 as $1 } from "#{js_fixture_2_path}";')
+
+      refute String.contains?(result, js_fixture_1_path)
+
+      assert String.contains?(
+               result,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+             )
+    end
+  end
+
   describe "build_chunk_reach!/4" do
     setup %{module_info_plt: module_info_plt} do
       page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
@@ -2020,6 +2103,18 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "chunk_signature_digest/1" do
+    test "is the first 8 hex digits of the MD5 of the sorted type names" do
+      assert chunk_signature_digest(MapSet.new([Date])) == "59b80f19"
+      assert chunk_signature_digest(MapSet.new([Date, Time])) == "59fbfa6b"
+    end
+
+    test "is the same whatever order the types were put in" do
+      assert chunk_signature_digest(MapSet.new([Time, Date])) ==
+               chunk_signature_digest(MapSet.new([Date, Time]))
+    end
+  end
+
   describe "client_config/0" do
     setup do
       hologram_env = System.get_env("HOLOGRAM_ENV")
@@ -2065,6 +2160,106 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(js, "globalThis.Hologram.config = #{client_config()};")
+    end
+  end
+
+  describe "create_chunk_entry_files/5" do
+    setup %{module_info_plt: module_info_plt} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      [
+        mfas_by_signature: mfas_by_signature,
+        opts: [js_dir: @js_dir, module_info_plt: module_info_plt]
+      ]
+    end
+
+    test "creates an entry file for each signature, named by its digest", %{
+      ir_plt: ir_plt,
+      mfas_by_signature: mfas_by_signature,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5"])
+      clean_dir(tmp_dir)
+
+      result =
+        create_chunk_entry_files(
+          mfas_by_signature,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          Keyword.put(opts, :tmp_dir, tmp_dir)
+        )
+
+      entry_file_path_1 = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      entry_file_path_2 = Path.join(tmp_dir, "chunk-59fbfa6b.entry.js")
+
+      assert result == [
+               {MapSet.new([Date]), "59b80f19", entry_file_path_1},
+               {MapSet.new([Date, Time]), "59fbfa6b", entry_file_path_2}
+             ]
+
+      entry_file_1 = File.read!(entry_file_path_1)
+      entry_file_2 = File.read!(entry_file_path_2)
+
+      js_fragment_1 =
+        ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+
+      js_fragment_2 =
+        ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
+
+      assert String.contains?(entry_file_1, js_fragment_1)
+      refute String.contains?(entry_file_1, js_fragment_2)
+
+      assert String.contains?(entry_file_2, js_fragment_2)
+      refute String.contains?(entry_file_2, js_fragment_1)
+    end
+
+    test "encodes the chunks' functions into the encode PLT", %{
+      ir_plt: ir_plt,
+      mfas_by_signature: mfas_by_signature,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_encode"])
+      clean_dir(tmp_dir)
+
+      encode_plt = PLT.start()
+
+      create_chunk_entry_files(
+        mfas_by_signature,
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        Keyword.put(opts, :tmp_dir, tmp_dir)
+      )
+
+      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
+      assert PLT.member?(encode_plt, {Module22, :my_fun, 0})
+    end
+
+    test "skips the JS imports of the modules the runtime script registers", %{
+      ir_plt: ir_plt,
+      mfas_by_signature: mfas_by_signature,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_imports"])
+      clean_dir(tmp_dir)
+
+      chunk_opts =
+        opts
+        |> Keyword.put(:runtime_js_binding_modules, MapSet.new([Module18]))
+        |> Keyword.put(:tmp_dir, tmp_dir)
+
+      [{_signature, _signature_digest, entry_file_path} | _rest] =
+        create_chunk_entry_files(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), chunk_opts)
+
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+
+      refute entry_file_path
+             |> File.read!()
+             |> String.contains?(js_fixture_1_path)
     end
   end
 
