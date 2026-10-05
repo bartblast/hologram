@@ -57,8 +57,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
-  @dialyzer {:no_opaque,
-             [{:empty_reach, 0}, {:start_reachable_state, 4}, {:start_reachable_state, 5}]}
+  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 5}]}
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -917,6 +916,25 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the sorted list of the struct types the client code of the given page names: the code
+  reachable from the page's entry MFAs and the client code of the components its templatables'
+  server callbacks reference. That code can build a struct of such a type on the client, where
+  nothing announces it. A type only the server callbacks name is not among them.
+
+  The graph and `analyses` are taken as list_page_mfas/5 takes them.
+  """
+  # TODO: read the types off the walk list_page_mfas/5 already does, if a benchmark shows the second
+  # walk of the page matters.
+  @spec list_page_chunk_types(Digraph.t(), module, PLT.t(), PLT.t() | nil) :: [module]
+  def list_page_chunk_types(graph, page_module, analyses, module_info_plt) do
+    {state, _templatables} = page_client_state(graph, page_module, analyses, module_info_plt)
+
+    state.types
+    |> MapSet.difference(MapSet.new(@built_in_protocol_types))
+    |> Enum.sort()
+  end
+
+  @doc """
   Lists the entry MFAs {module, function, arity} for a given page module.
 
   This function returns a list of MFAs that are considered entry points for a page,
@@ -960,12 +978,16 @@ defmodule Hologram.Compiler.CallGraph do
   The graph is taken as it is, so that callers running many pages at once
   can share one graph (see with_shared_graph/2) instead of each copying it out of the call graph.
 
+  The protocol implementations for the built-in types are listed, those for struct types are not,
+  whichever code names the type: they ship in chunks of their own (see list_page_chunk_types/4).
+
   The reflection functions (`__struct__/0,1` of a struct, `__changeset__/0` and `__schema__/1,2` of
-  an Ecto schema) of the types that can appear at protocol dispatch on the page are listed the way
-  the protocol implementations of those types are, but only the ones the page can call on a module
-  its code does not name: the `:gate` opt (see `Hologram.Compiler.DynamicCallGate`) says which,
-  from the dynamic calls the page's client code reaches and the ones the runtime holds. With no
-  gate, every reflection function of every such type is listed.
+  an Ecto schema) of the types that can appear at protocol dispatch on the page (the ones its
+  client code names and the ones its templatables' server callbacks name) are listed, but only the
+  ones the page can call on a module its code does not name: the `:gate` opt (see
+  `Hologram.Compiler.DynamicCallGate`) says which, from the dynamic calls the page's client code
+  reaches and the ones the runtime holds. With no gate, every reflection function of every such
+  type is listed.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
@@ -973,18 +995,8 @@ defmodule Hologram.Compiler.CallGraph do
   def list_page_mfas(graph, page_module, analyses, module_info_plt, opts \\ []) do
     entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
 
-    initial_state = start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt)
-    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-    initial_templatables = [page_module | extract_uniq_components(initial_mfas, module_info_plt)]
-
     {expanded_state, templatables} =
-      expand_reachable_state_with_server_referenced_components(
-        graph,
-        initial_state,
-        initial_templatables,
-        analyses,
-        module_info_plt
-      )
+      page_client_state(graph, page_module, analyses, module_info_plt)
 
     server_types =
       Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
@@ -2016,6 +2028,30 @@ defmodule Hologram.Compiler.CallGraph do
     flag?(module_info_plt, module, flag)
   end
 
+  # The walk of a page's client code: from its entry MFAs, then through the client code of the
+  # components its templatables' server callbacks reference. Returns the state and the
+  # templatables. Implementations for struct types are not entered (see reachable_mfas/5): a page
+  # bundle carries none.
+  defp page_client_state(graph, page_module, analyses, module_info_plt) do
+    entry_mfas = list_page_entry_mfas(page_module, module_info_plt)
+
+    initial_state =
+      start_reachable_state(graph, entry_mfas, MapSet.new(), module_info_plt,
+        enter_struct_impls?: false
+      )
+
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
+    initial_templatables = [page_module | extract_uniq_components(initial_mfas, module_info_plt)]
+
+    expand_reachable_state_with_server_referenced_components(
+      graph,
+      initial_state,
+      initial_templatables,
+      analyses,
+      module_info_plt
+    )
+  end
+
   # A page's client entries (its own and its layout's) and its server callbacks.
   defp page_entries(module, module_info_plt) do
     if flag?(module_info_plt, module, :page?) do
@@ -2322,7 +2358,7 @@ defmodule Hologram.Compiler.CallGraph do
   # implementation candidates the walk has not entered: those whose target types are not
   # reachable yet, and with `enter_struct_impls?: false` (see reachable_mfas/5) those for
   # struct types, which stay there.
-  defp start_reachable_state(graph, entry_vertices, extra_types, module_info_plt, opts \\ []) do
+  defp start_reachable_state(graph, entry_vertices, extra_types, module_info_plt, opts) do
     initial_types =
       @built_in_protocol_types
       |> MapSet.new()

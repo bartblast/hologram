@@ -116,6 +116,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     end)
   end
 
+  defp list_page_chunk_types_with_analysis(call_graph, page_module) do
+    call_graph
+    |> CallGraph.get_graph()
+    |> list_page_chunk_types(page_module, PLT.start(), CallGraph.module_info_plt(call_graph))
+  end
+
   defp list_page_mfas_with_analysis(call_graph, page_module) do
     call_graph
     |> CallGraph.get_graph()
@@ -1895,6 +1901,65 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_page_chunk_types/4" do
+    test "excludes built-in types", %{full_call_graph: full_call_graph} do
+      result = list_page_chunk_types_with_analysis(full_call_graph, Module17)
+
+      refute Integer in result
+      refute List in result
+    end
+
+    test "excludes a type only the page's server callbacks name", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :command, 3}, Struct1)
+        |> add_edge({Module17, :init, 3}, Module12)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      refute Module12 in result
+      refute Struct1 in result
+    end
+
+    test "includes a type the client code of a server-referenced component names", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module15)
+        |> add_edge({Module15, :template, 0}, Module12)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      assert Module12 in result
+    end
+
+    test "includes a type the page's client code names", %{full_call_graph: full_call_graph} do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :action, 3}, {Struct1, :__struct__, 1})
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      assert Module12 in result
+      assert Struct1 in result
+    end
+
+    test "results are sorted", %{full_call_graph: full_call_graph} do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> add_edge({Module17, :template, 0}, Struct1)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      assert result == Enum.sort(result)
+    end
+  end
+
   describe "list_page_entry_mfas/2" do
     test "with the module info PLT of the app" do
       assert list_page_entry_mfas(Module19, module_info_plt_fixture()) ==
@@ -2103,7 +2168,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose concrete type is reachable", %{
+    test "excludes protocol implementations whose concrete type is reachable", %{
       full_call_graph: full_call_graph
     } do
       result =
@@ -2113,8 +2178,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "reads an implementation target from the PLT without calling the implementation", %{
@@ -2126,7 +2191,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       PLT.put(module_info_plt, impl, %{
         protocol_implementation?: true,
-        implementation_for: Module12
+        implementation_for: Integer
       })
 
       call_graph = %{CallGraph.clone(full_call_graph) | module_info_plt: module_info_plt}
@@ -2136,14 +2201,13 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
         |> add_edge({String.Chars, :to_string, 1}, {impl, :__impl__, 1})
         |> add_edge({String.Chars, :to_string, 1}, {impl, :to_string, 1})
-        |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
         |> list_page_mfas_with_analysis(Module17)
 
       assert {impl, :__impl__, 1} in result
       assert {impl, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is created only in server init", %{
+    test "excludes protocol implementations whose type is created only in server init", %{
       full_call_graph: full_call_graph
     } do
       result =
@@ -2153,11 +2217,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :init, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is created only in commands", %{
+    test "excludes protocol implementations whose type is created only in commands", %{
       full_call_graph: full_call_graph
     } do
       result =
@@ -2167,17 +2231,18 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :command, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations unlocked transitively by server-created types", %{
+    test "excludes protocol implementations unlocked transitively by server-created types", %{
       full_call_graph: full_call_graph
     } do
       struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
-      # Struct1 is created only in server init, its Protocol1 implementation code
-      # creates Module12, and Module12's String.Chars implementation must follow
+      # Struct1 is created only in server init and its Protocol1 implementation code
+      # creates Module12. Neither implementation is listed: an implementation for a
+      # struct type is in no page bundle.
       result =
         full_call_graph
         |> CallGraph.clone()
@@ -2187,11 +2252,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {struct_1_impl, :__impl__, 1} in result
-      assert {struct_1_impl, :my_fun, 1} in result
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "excludes MFAs reachable only from server-executed code", %{
@@ -2266,7 +2331,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module4, :template, 0} in result
     end
 
-    test "includes protocol implementations whose type is created in a server-referenced component's server code",
+    test "excludes protocol implementations whose type is created in a server-referenced component's server code",
          %{full_call_graph: full_call_graph} do
       result =
         full_call_graph
@@ -2276,15 +2341,16 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module15, :init, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "treats components reached from a server-referenced component's client code as templatables",
          %{full_call_graph: full_call_graph} do
       # Module17's server init references Module15, whose template statically renders
-      # Module4, whose own server init creates Module12 - so Module12's String.Chars
-      # implementation must follow
+      # Module4, whose own server init creates Module12 - so Module12 counts as a type
+      # of the page and its reflection functions follow. Its String.Chars implementation
+      # does not: an implementation for a struct type is in no page bundle.
       result =
         full_call_graph
         |> CallGraph.clone()
@@ -2294,8 +2360,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module4, :init, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      assert {Module12, :__struct__, 0} in result
+      assert {Module12, :__struct__, 1} in result
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
