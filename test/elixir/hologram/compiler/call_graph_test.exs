@@ -2720,7 +2720,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Protocol.UndefinedError, :exception, 1} in result
     end
 
-    test "includes protocol implementations whose type is used only by a page", %{
+    test "excludes protocol implementations whose type is used only by a page", %{
       full_call_graph: call_graph
     } do
       result =
@@ -2729,11 +2729,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :template, 0}, Module12)
         |> list_runtime_mfas(Reflection.list_pages())
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is created only in a page's server init",
+    test "excludes protocol implementations whose type is created only in a page's server init",
          %{
            full_call_graph: call_graph
          } do
@@ -2743,11 +2743,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :init, 3}, Module12)
         |> list_runtime_mfas(Reflection.list_pages())
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is reachable from broadcast callers", %{
+    test "excludes protocol implementations whose type is reachable from broadcast callers", %{
       full_call_graph: call_graph
     } do
       result =
@@ -2757,8 +2757,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, Module12)
         |> list_runtime_mfas(Reflection.list_pages())
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
 
       refute {Module13, :my_fun, 0} in result
     end
@@ -2813,7 +2813,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {Module14, :template, 0} in result
     end
 
-    test "includes protocol implementations whose type is created in a broadcast-referenced component's server code",
+    test "excludes protocol implementations whose type is created in a broadcast-referenced component's server code",
          %{full_call_graph: call_graph} do
       result =
         call_graph
@@ -2823,8 +2823,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module38, :command, 3}, Module12)
         |> list_runtime_mfas(Reflection.list_pages())
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
 
       refute {Module38, :command, 3} in result
     end
@@ -2850,7 +2850,8 @@ defmodule Hologram.Compiler.CallGraphTest do
       # Module13 broadcasts and references Module38, whose template statically renders
       # Module39, whose own server command creates Module12. The broadcast caller
       # traversal crosses static client code, so Module39 is collected by the analysis
-      # itself and Module12's String.Chars implementation must follow.
+      # itself. Module12's String.Chars implementation does not follow: an implementation
+      # for a struct type is in no runtime.
       result =
         call_graph
         |> CallGraph.clone()
@@ -2860,16 +2861,18 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module39, :command, 3}, Module12)
         |> list_runtime_mfas(Reflection.list_pages())
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      assert {Module39, :template, 0} in result
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "treats components reached from a broadcast-chained component's client code as templatables",
          %{full_call_graph: call_graph} do
       # Module13 broadcasts and references Module38, whose server command references
       # Module39 (fixpoint hop), whose template statically renders Module40, whose own
-      # server command creates Module12 - so Module12's String.Chars implementation
-      # must follow
+      # server command creates Module12. Module12's String.Chars implementation does not
+      # follow: an implementation for a struct type is in no runtime.
       result =
         call_graph
         |> CallGraph.clone()
@@ -2882,8 +2885,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert {Module40, :template, 0} in result
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     # Guards the type-bounded implementation inclusion in both directions: missing
@@ -3930,6 +3933,58 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   # How the runtime's dynamic calls are resolved is tested with Hologram.Compiler.DynamicCallGate.
+  describe "runtime_analysis/1" do
+    setup %{full_call_graph: call_graph} do
+      [runtime_analysis: runtime_analysis(call_graph)]
+    end
+
+    test "mfas are the runtime's MFAs", %{
+      full_call_graph: call_graph,
+      runtime_analysis: result
+    } do
+      assert result.mfas == list_runtime_mfas(call_graph, Reflection.list_pages())
+    end
+
+    test "mfas hold implementations for built-in types", %{runtime_analysis: result} do
+      assert {Enumerable.List, :__impl__, 1} in result.mfas
+      assert {Enumerable.List, :reduce, 3} in result.mfas
+    end
+
+    test "mfas hold no implementation for a struct type the runtime's code names", %{
+      runtime_analysis: result
+    } do
+      refute {Enumerable.Range, :__impl__, 1} in result.mfas
+      refute {Enumerable.Range, :reduce, 3} in result.mfas
+    end
+
+    test "types hold a struct type a broadcast-referenced component's client code names", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> add_edge({Module38, :template, 0}, Module12)
+        |> runtime_analysis()
+
+      assert Module12 in result.types
+
+      refute {StringCharsModule12, :__impl__, 1} in result.mfas
+      refute {StringCharsModule12, :to_string, 1} in result.mfas
+    end
+
+    test "types hold no built-in type", %{runtime_analysis: result} do
+      refute Integer in result.types
+      refute List in result.types
+    end
+
+    test "types hold the struct types the runtime's code names", %{runtime_analysis: result} do
+      assert MapSet in result.types
+      assert Range in result.types
+    end
+  end
+
   describe "runtime_dynamic_calls/3" do
     test "opens the reflection functions the runtime's functions call on unnamed modules", %{
       empty_call_graph: call_graph
