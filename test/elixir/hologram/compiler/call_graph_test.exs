@@ -1901,6 +1901,61 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_chunk_entries/2" do
+    test "leaves out an implementation for a built-in type" do
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      refute Map.has_key?(result, Integer)
+    end
+
+    test "leaves out an implementation of a protocol not given" do
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      refute Map.has_key?(result, Module12)
+    end
+
+    test "lists the implementation of a struct type" do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      assert result == %{
+               Struct1 => [{struct_1_impl, :__impl__, 1}, {struct_1_impl, :my_fun, 1}]
+             }
+    end
+
+    test "lists the implementations of every given protocol under their type" do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+      string_chars_impl = Hologram.Test.Fixtures.Compiler.CallGraph.NoSuchImpl
+
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, string_chars_impl, %{
+        protocol_implementation?: true,
+        implementation_for: Struct1,
+        implemented_protocol: String.Chars
+      })
+
+      result = list_chunk_entries([Protocol1, String.Chars], module_info_plt)
+
+      assert result[Struct1] == [
+               {string_chars_impl, :__impl__, 1},
+               {string_chars_impl, :to_string, 1},
+               {struct_1_impl, :__impl__, 1},
+               {struct_1_impl, :my_fun, 1}
+             ]
+
+      assert result[Module12] == [
+               {StringCharsModule12, :__impl__, 1},
+               {StringCharsModule12, :to_string, 1}
+             ]
+    end
+
+    test "returns an empty map for no protocols" do
+      assert list_chunk_entries([], module_info_plt_fixture()) == %{}
+    end
+  end
+
   describe "list_client_protocols/4" do
     test "excludes a protocol called only by a function of another protocol" do
       graph =

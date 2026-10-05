@@ -889,6 +889,39 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns, for each struct type that has an implementation of one of the given protocols, the entry
+  vertices of those implementations: `__impl__/1` and the protocol's functions of each, sorted. The
+  types are read from the module info PLT, so a type no code names is among them. An implementation
+  for a built-in type is left out.
+  """
+  @spec list_chunk_entries(Enumerable.t(module), PLT.t()) :: %{module => [vertex]}
+  def list_chunk_entries(protocols, module_info_plt) do
+    protocol_set = MapSet.new(protocols)
+
+    module_info_plt
+    |> PLT.get_all()
+    |> Enum.filter(fn {_module, info} -> info[:protocol_implementation?] end)
+    |> Enum.reduce(%{}, fn {impl, _info}, acc ->
+      protocol = implemented_protocol(impl, module_info_plt)
+      type = implementation_for(impl, module_info_plt)
+
+      if MapSet.member?(protocol_set, protocol) and type not in @built_in_protocol_types do
+        vertices =
+          for {function, arity} <- [
+                {:__impl__, 1} | protocol_functions(protocol, module_info_plt)
+              ] do
+            {impl, function, arity}
+          end
+
+        Map.update(acc, type, vertices, &(vertices ++ &1))
+      else
+        acc
+      end
+    end)
+    |> Map.new(fn {type, vertices} -> {type, Enum.sort(vertices)} end)
+  end
+
+  @doc """
   Returns the protocols the client code of an app with the given pages and components can dispatch:
   the protocol modules whose functions are reachable from the pages' entry MFAs, the components'
   client code, the client code of the components referenced in broadcast caller code, and the
