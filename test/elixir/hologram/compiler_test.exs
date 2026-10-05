@@ -897,7 +897,7 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(result, "console.debug")
     end
 
-    test "leaves its function defs for the runtime to define, under its own path", %{
+    test "leaves its function defs for the runtime to define, under its own digest", %{
       ir_plt: ir_plt
     } do
       mfas = [{Module22, :my_fun, 0}]
@@ -906,7 +906,10 @@ defmodule Hologram.CompilerTest do
 
       js_fragment_1 = "globalThis.Hologram.pendingScripts ??= [];"
       js_fragment_2 = "globalThis.Hologram.pendingScripts.push({"
-      js_fragment_3 = "path: new URL(document.currentScript.src).pathname,"
+
+      js_fragment_3 =
+        ~S"digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\.js$/)[1],"
+
       js_fragment_4 = "define: (deps) => {"
       js_fragment_5 = ~s/document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));/
 

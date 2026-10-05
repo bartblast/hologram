@@ -19,7 +19,6 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
         globalThis.Hologram.csrfToken = "{@csrf_token}";
         globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;
-        globalThis.Hologram.initialPageBundlePath = "{RouterHelpers.page_bundle_path(@page_module, @page_digest)}";
         globalThis.Hologram.initialPageDigest = "{@page_digest}";
         globalThis.Hologram.instanceId = "{@instance_id}";
 

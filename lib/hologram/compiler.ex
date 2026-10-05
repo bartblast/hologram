@@ -206,10 +206,12 @@ defmodule Hologram.Compiler do
   Builds JavaScript code for a chunk: a script holding the given MFAs, which are the protocol
   implementation code a set of struct types shares (see `group_mfas_by_signature/1`).
 
-  The script does not define its functions when it runs: it leaves them, with its own path, for
+  The script does not define its functions when it runs: it leaves them, with its own digest, for
   the runtime to define, and announces itself with a `hologram:scriptLoaded` event. A chunk can
-  run before the runtime does, and neither needs to know the other's name: the path is read from
-  the script element running it.
+  run before the runtime does, and neither needs to know the other's name: the digest is read
+  from the file name of the script element running it (see
+  `Hologram.Router.Helpers.chunk_bundle_path/1`), since a file cannot hold the hash of its own
+  content.
 
   It carries no timing code, unlike the page and runtime scripts: a document can load many chunks,
   and the bundler would put a copy of the timer in each.
@@ -227,7 +229,7 @@ defmodule Hologram.Compiler do
     globalThis.Hologram.pendingScripts ??= [];
 
     globalThis.Hologram.pendingScripts.push({
-      path: new URL(document.currentScript.src).pathname,
+      digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\\.js$/)[1],
       define: (deps) => {
         const {
           Bitstring,
