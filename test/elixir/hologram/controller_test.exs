@@ -66,6 +66,7 @@ defmodule Hologram.ControllerTest do
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
 
@@ -281,6 +282,7 @@ defmodule Hologram.ControllerTest do
 
     setup_asset_manifest_cache(AssetManifestCacheStub)
 
+    setup_chunk_registry(ChunkRegistryStub)
     setup_page_digest_registry(PageDigestRegistryStub)
   end
 

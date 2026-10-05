@@ -1,6 +1,7 @@
 defmodule Hologram.Template.Renderer do
   @moduledoc false
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.StringUtils
@@ -173,6 +174,22 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Substitutes the chunk tokens in the given HTML with the chunk paths supplied by the caller:
+  `$CHUNK_PATHS_JS_PLACEHOLDER` with the paths as a JavaScript array of strings, and
+  `$CHUNK_SCRIPT_TAGS_PLACEHOLDER` with a script tag per path. The paths are the compiler's own
+  file names, which need no escaping.
+  """
+  @spec interpolate_chunks(String.t(), [String.t()]) :: String.t()
+  def interpolate_chunks(html, chunk_paths) do
+    chunk_paths_js = Jason.encode!(chunk_paths)
+    chunk_script_tags = Enum.map_join(chunk_paths, &~s(<script async src="#{&1}"></script>))
+
+    html
+    |> String.replace("$CHUNK_PATHS_JS_PLACEHOLDER", chunk_paths_js)
+    |> String.replace("$CHUNK_SCRIPT_TAGS_PLACEHOLDER", chunk_script_tags)
+  end
+
+  @doc """
   Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
   the encoded list of actions supplied by the caller.
   """
@@ -265,12 +282,15 @@ defmodule Hologram.Template.Renderer do
   Only the HTML has the mount data interpolated into it, since a cold document has no channel for
   that state but the markup it is sent. The tree keeps the placeholders verbatim and the mount
   data is returned beside it, for a caller that carries the two as separate fields. Both
-  projections leave the Realtime placeholders for the caller to substitute.
+  projections leave the Realtime placeholders for the caller to substitute, and the chunk
+  placeholders too: the chunks the struct types in the component registry need are returned as
+  paths, and the caller knows of more (see `interpolate_chunks/2`).
 
   ## Examples
 
       iex> render_page(MyPage, %{param: "value"}, %Server{}, initial_page?: true)
       %{
+        chunk_paths: ["/hologram/chunk-ABCDEFGH.js"],
         component_registry: %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
         html: "<div>full page content including layout</div>",
         mount_data: %{
@@ -284,6 +304,7 @@ defmodule Hologram.Template.Renderer do
       }
   """
   @spec render_page(module, %{atom => any}, Server.t(), T.opts()) :: %{
+          chunk_paths: [String.t()],
           component_registry: %{String.t() => %{module: module, struct: Component.t()}},
           html: String.t(),
           mount_data: %{
@@ -363,6 +384,7 @@ defmodule Hologram.Template.Renderer do
     # script element's text would only mean escaping encoder output into the tree's encoding and
     # unescaping it again on arrival.
     %{
+      chunk_paths: ChunkRegistry.lookup_term(component_registry_for_client),
       component_registry: component_registry_with_page_struct,
       html: html_with_interpolated_js,
       mount_data: mount_data_js,
