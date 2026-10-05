@@ -1463,6 +1463,129 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  describe "build_chunk_reach/4" do
+    test "asks for nothing when the graph holds every module" do
+      modules = reach_modules()
+      call_graph = reach_full(modules)
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.built_modules == []
+    end
+
+    test "builds the implementation for a type no code names and what only it calls" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      refute MapSet.member?(modules(call_graph), ReachTest.Proto.TypeB)
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.built_modules == [ReachTest.Proto.TypeB, ReachTest.Unreached]
+
+      assert MapSet.member?(modules(call_graph), ReachTest.Proto.TypeB)
+      assert MapSet.member?(modules(call_graph), ReachTest.Unreached)
+
+      assert has_edge?(
+               call_graph,
+               {ReachTest.Proto.TypeB, :fun, 1},
+               {ReachTest.Unreached, :fun, 0}
+             )
+    end
+
+    test "builds the implementations of a protocol only an implementation calls" do
+      modules =
+        Map.merge(reach_modules(), %{
+          ReachTest.Proto.TypeB =>
+            {%{
+               protocol_implementation?: true,
+               implementation_for: ReachTest.TypeB,
+               implemented_protocol: ReachTest.Proto
+             }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.Proto2, :fun, 1}]}]},
+          ReachTest.Proto2 => {%{protocol?: true, protocol_functions: [fun: 1]}, [{:fun, 1, []}]},
+          ReachTest.Proto2.TypeC =>
+            {%{
+               protocol_implementation?: true,
+               implementation_for: ReachTest.TypeC,
+               implemented_protocol: ReachTest.Proto2
+             }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.ImplHelper, :fun, 0}]}]},
+          ReachTest.TypeC => {%{struct?: true}, [{:__struct__, 0, []}]}
+        })
+
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.built_modules == [
+               ReachTest.Proto.TypeB,
+               ReachTest.Proto2,
+               ReachTest.Proto2.TypeC
+             ]
+
+      assert result.entries_by_type[ReachTest.TypeC] == [
+               {ReachTest.Proto2.TypeC, :__impl__, 1},
+               {ReachTest.Proto2.TypeC, :fun, 1}
+             ]
+    end
+
+    test "leaves the reach of build_reach/3 as it is" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+      reach = reach_state(call_graph)
+
+      build_chunk_reach(
+        call_graph,
+        [ReachTest.Page],
+        [ReachTest.Layout, ReachTest.Named],
+        &reach_build(call_graph, modules, &1)
+      )
+
+      assert reach_state(call_graph) == reach
+    end
+
+    test "returns the entry vertices of every struct type's implementations by type" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.entries_by_type == %{
+               ReachTest.TypeA => [
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1}
+               ]
+             }
+    end
+  end
+
   describe "build_reach/3" do
     test "the walk's graph lists every fixture page and the runtime as the full graph does", %{
       full_call_graph: full_call_graph,

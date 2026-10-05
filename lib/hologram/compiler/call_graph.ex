@@ -56,8 +56,9 @@ defmodule Hologram.Compiler.CallGraph do
   @type vertex :: module | mfa | dynamic_call
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
-  # with the opaque `MapSet.t()` inferred for the state fields.
-  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 5}]}
+  # with the opaque `MapSet.t()` inferred for the state fields. Neither does the reach
+  # walk_chunk_reach/3 starts from, which is empty_reach/0 with its types replaced.
+  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 5}, {:walk_chunk_reach, 3}]}
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -763,6 +764,40 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Grows the graph until it holds the code of every chunk: what the implementations of the client
+  protocols (see list_client_protocols/4) for struct types reach. Returns those implementations'
+  entry vertices by type (see list_chunk_entries/2) and the modules it asked to build, in the
+  order asked.
+
+  The graph build_reach/3 leaves holds what the pages and the runtime reach, so the implementation
+  for a type no page names, and what only such an implementation calls, are not in it. The walk
+  starts from every entry vertex with every such type reachable, follows edges with the rules of
+  reachable_mfas/5, and runs in rounds like build_reach/3: `build_modules` is called with the
+  modules a round needs built, and the next round walks the graph again. A protocol whose function
+  only chunk code calls joins the protocols, which adds its implementations' entries. When a
+  round asks for no module and finds no new protocol, the graph holds everything a chunk can hold.
+
+  What the walk reached is not kept: build_reach/3's reach is left as it is.
+  """
+  @spec build_chunk_reach(t, [module], [module], ([module] -> any)) :: %{
+          built_modules: [module],
+          entries_by_type: %{module => [vertex]}
+        }
+  def build_chunk_reach(
+        %{pid: pid, module_info_plt: module_info_plt} = call_graph,
+        pages,
+        components,
+        build_modules
+      ) do
+    # Taken once: every module the client code reaches is built already (see build_reach/3), so no
+    # module a round builds can add a call to it.
+    client_protocols =
+      read_graph(pid, &list_client_protocols(&1, pages, components, module_info_plt))
+
+    build_chunk_reach_rounds(call_graph, client_protocols, build_modules, [])
+  end
+
+  @doc """
   Grows the graph until it holds every module the pages, the runtime and the broadcast callers
   reach, and returns the modules it asked to build, in the order asked.
 
@@ -896,28 +931,19 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec list_chunk_entries(Enumerable.t(module), PLT.t()) :: %{module => [vertex]}
   def list_chunk_entries(protocols, module_info_plt) do
-    protocol_set = MapSet.new(protocols)
-
-    module_info_plt
-    |> PLT.get_all()
-    |> Enum.filter(fn {_module, info} -> info[:protocol_implementation?] end)
-    |> Enum.reduce(%{}, fn {impl, _info}, acc ->
-      protocol = implemented_protocol(impl, module_info_plt)
-      type = implementation_for(impl, module_info_plt)
-
-      if MapSet.member?(protocol_set, protocol) and type not in @built_in_protocol_types do
-        vertices =
-          for {function, arity} <- [
-                {:__impl__, 1} | protocol_functions(protocol, module_info_plt)
-              ] do
-            {impl, function, arity}
-          end
-
-        Map.update(acc, type, vertices, &(vertices ++ &1))
-      else
-        acc
+    entries =
+      for protocol <- protocols,
+          functions = [{:__impl__, 1} | protocol_functions(protocol, module_info_plt)],
+          # The implementations the protocol's dispatch edges are built from (see build/3).
+          impl <- Reflection.list_protocol_implementations(protocol, module_info_plt),
+          type = implementation_for(impl, module_info_plt),
+          type not in @built_in_protocol_types,
+          {function, arity} <- functions do
+        {type, {impl, function, arity}}
       end
-    end)
+
+    entries
+    |> Enum.group_by(fn {type, _vertex} -> type end, fn {_type, vertex} -> vertex end)
     |> Map.new(fn {type, vertices} -> {type, Enum.sort(vertices)} end)
   end
 
@@ -1647,6 +1673,38 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
+  # Walks a round from the entries of the given protocols' implementations, builds the modules it
+  # asks for, and goes on until a round asks for none and reaches no protocol function of a
+  # protocol not among them.
+  defp build_chunk_reach_rounds(call_graph, protocols, build_modules, built_modules) do
+    %{pid: pid, module_info_plt: module_info_plt} = call_graph
+
+    entries_by_type = list_chunk_entries(protocols, module_info_plt)
+
+    {frontier_modules, reached_protocols} =
+      Agent.get(pid, &walk_chunk_reach(&1, entries_by_type, module_info_plt), :infinity)
+
+    new_protocols = MapSet.union(protocols, reached_protocols)
+
+    cond do
+      frontier_modules != [] ->
+        build_modules.(frontier_modules)
+
+        build_chunk_reach_rounds(
+          call_graph,
+          new_protocols,
+          build_modules,
+          built_modules ++ frontier_modules
+        )
+
+      not MapSet.equal?(new_protocols, protocols) ->
+        build_chunk_reach_rounds(call_graph, new_protocols, build_modules, built_modules)
+
+      true ->
+        %{built_modules: built_modules, entries_by_type: entries_by_type}
+    end
+  end
+
   # Walks a round, builds the modules it asks for, and goes on until a round asks for none.
   defp build_reach_rounds(call_graph, entries, build_modules, built_modules) do
     %{pid: pid, module_info_plt: module_info_plt} = call_graph
@@ -1875,6 +1933,24 @@ defmodule Hologram.Compiler.CallGraph do
       {module, _function, _arity} -> existing_module?(module, module_info_plt)
       _module_vertex -> false
     end)
+  end
+
+  # What a round of a graph-growing walk needs built: the newly reached vertices whose modules must
+  # be built before their edges are complete (see frontier_vertex?/3), and the modules of those
+  # vertices and of the entries that are no vertices of the graph, as far as the module info PLT
+  # knows them and the graph holds no definition of them.
+  defp frontier(new_vertices, missing_entries, graph_modules, module_info_plt) do
+    frontier_vertices =
+      Enum.filter(new_vertices, &frontier_vertex?(&1, graph_modules, module_info_plt))
+
+    frontier_modules =
+      frontier_vertices
+      |> Enum.concat(missing_entries)
+      |> Enum.map(&vertex_module/1)
+      |> Enum.filter(&unbuilt_module?(&1, graph_modules, module_info_plt))
+      |> Enum.uniq()
+
+    {frontier_vertices, frontier_modules}
   end
 
   # Whether a reached vertex needs its module built before its edges are complete: a function of a
@@ -2449,6 +2525,35 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.cast(pid, fn state -> %{state | graph: fun.(state.graph)} end)
   end
 
+  # One round of build_chunk_reach/4, run inside the agent: walks from the given entries with every
+  # type they belong to reachable, on a reach of its own, and returns the modules the reached
+  # vertices need built (see frontier/4) with the protocols whose functions the walk reached.
+  defp walk_chunk_reach(
+         %{graph: graph, modules: graph_modules},
+         entries_by_type,
+         module_info_plt
+       ) do
+    entries =
+      entries_by_type
+      |> Map.values()
+      |> Enum.concat()
+
+    types = MapSet.new(@built_in_protocol_types ++ Map.keys(entries_by_type))
+    reach = %{empty_reach() | types: types}
+
+    {new_reach, missing_entries} = expand_reach(graph, reach, entries, module_info_plt)
+
+    {_frontier_vertices, frontier_modules} =
+      frontier(new_reach.reached_vertices, missing_entries, graph_modules, module_info_plt)
+
+    reached_protocols =
+      new_reach.reached_vertices
+      |> Enum.filter(&protocol_function_mfa?(&1, module_info_plt))
+      |> MapSet.new(fn {protocol, _function, _arity} -> protocol end)
+
+    {frontier_modules, reached_protocols}
+  end
+
   # One round of build_reach/3, run inside the agent: walks from the given entries, and returns the
   # modules the reached vertices need built (see frontier_vertex?/3) with the entries of the next
   # round: the reached vertices of those modules, taken out of the reach so that the next round walks
@@ -2461,17 +2566,10 @@ defmodule Hologram.Compiler.CallGraph do
        ) do
     {new_reach, missing_entries} = expand_reach(graph, reach, entries, module_info_plt)
 
-    frontier_vertices =
-      new_reach.reached_vertices
-      |> MapSet.difference(reach.reached_vertices)
-      |> Enum.filter(&frontier_vertex?(&1, graph_modules, module_info_plt))
+    new_vertices = MapSet.difference(new_reach.reached_vertices, reach.reached_vertices)
 
-    frontier_modules =
-      frontier_vertices
-      |> Enum.concat(missing_entries)
-      |> Enum.map(&vertex_module/1)
-      |> Enum.filter(&unbuilt_module?(&1, graph_modules, module_info_plt))
-      |> Enum.uniq()
+    {frontier_vertices, frontier_modules} =
+      frontier(new_vertices, missing_entries, graph_modules, module_info_plt)
 
     frontier_module_set = MapSet.new(frontier_modules)
 
