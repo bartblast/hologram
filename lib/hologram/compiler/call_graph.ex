@@ -596,6 +596,12 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the types consolidated protocols can dispatch on besides structs.
+  """
+  @spec built_in_protocol_types :: [module]
+  def built_in_protocol_types, do: @built_in_protocol_types
+
+  @doc """
   Builds a call graph from IR.
   """
   # WARNING: a change in what this adds to the graph needs a bump of @dump_version (see the warning

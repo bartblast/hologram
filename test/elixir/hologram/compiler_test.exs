@@ -1387,7 +1387,17 @@ defmodule Hologram.CompilerTest do
                ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
              )
 
-      refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+      # The implementation for a struct type is not in the runtime, and the dispatcher names it:
+      # it is loaded in a chunk.
+      refute String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12"/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/Type.atom("Elixir.String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12")/
+             )
 
       assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
 
@@ -4881,7 +4891,7 @@ defmodule Hologram.CompilerTest do
     assert checks_with_plt == 0
   end
 
-  test "prune_module_def/4 prunes protocol dispatcher clauses to included implementations", %{
+  test "prune_module_def/4 keeps the protocol dispatcher clauses for struct types", %{
     module_info_plt: module_info_plt
   } do
     module_mfas = [
@@ -4891,7 +4901,34 @@ defmodule Hologram.CompilerTest do
       {String.Chars, :to_string, 1}
     ]
 
-    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom, String.Chars.URI])
+    # No implementation for a struct type is among the modules.
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom])
+
+    js =
+      String.Chars
+      |> IR.for_module()
+      |> prune_module_def(module_mfas, reachable_modules, module_info_plt)
+      |> Encoder.encode_ir(%Context{module: String.Chars, async_mfas: MapSet.new()})
+
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.URI")/)
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.Version")/)
+
+    assert String.contains?(
+             js,
+             ~s/Type.atom("Elixir.String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12")/
+           )
+  end
+
+  test "prune_module_def/4 prunes the protocol dispatcher clauses for built-in types to the included implementations",
+       %{module_info_plt: module_info_plt} do
+    module_mfas = [
+      {String.Chars, :impl_for, 1},
+      {String.Chars, :impl_for!, 1},
+      {String.Chars, :struct_impl_for, 1},
+      {String.Chars, :to_string, 1}
+    ]
+
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom])
 
     js =
       String.Chars
@@ -4905,10 +4942,9 @@ defmodule Hologram.CompilerTest do
            )
 
     assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.Atom")/)
-    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.URI")/)
 
-    refute String.contains?(js, "Elixir.String.Chars.Version")
-    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+    refute String.contains?(js, "Elixir.String.Chars.Integer")
+    refute String.contains?(js, "Elixir.String.Chars.List")
   end
 
   describe "validate_prop_usages/2" do

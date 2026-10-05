@@ -1463,6 +1463,16 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "built_in_protocol_types/0" do
+    result = built_in_protocol_types()
+
+    assert Any in result
+    assert Integer in result
+    assert Map in result
+
+    refute MapSet in result
+  end
+
   describe "build_chunk_reach/4" do
     test "asks for nothing when the graph holds every module" do
       modules = reach_modules()

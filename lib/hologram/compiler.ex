@@ -1935,20 +1935,19 @@ defmodule Hologram.Compiler do
     |> MapSet.new()
   end
 
-  # The catch-all clause returns nil and every included implementation ships in the bundle, so
-  # only a clause naming another module needs the module info PLT to say whether it is an
-  # implementation of this protocol (dropped) or something else (kept).
+  # Only a clause naming the protocol's implementation for a built-in type can be dropped, when
+  # that implementation is not in the bundle. An implementation is named after its protocol and its
+  # type, so the ones for the built-in types are known without asking any module.
   defp keep_protocol_dispatcher_function_def?(
          %IR.FunctionDefinition{name: function, arity: 1, clause: clause},
-         protocol,
-         included_impls,
-         module_info_plt
+         built_in_impl_names,
+         included_impls
        )
        when function in [:impl_for, :struct_impl_for] do
     case clause do
       %IR.FunctionClause{body: %IR.Block{expressions: [%IR.AtomType{value: value}]}} ->
-        is_nil(value) or MapSet.member?(included_impls, value) or
-          Reflection.protocol_implementation(value, module_info_plt) != protocol
+        not MapSet.member?(built_in_impl_names, Atom.to_string(value)) or
+          MapSet.member?(included_impls, value)
 
       _clause ->
         true
@@ -1957,9 +1956,8 @@ defmodule Hologram.Compiler do
 
   defp keep_protocol_dispatcher_function_def?(
          _function_def,
-         _protocol,
-         _included_impls,
-         _module_info_plt
+         _built_in_impl_names,
+         _included_impls
        ),
        do: true
 
@@ -2096,9 +2094,13 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # Consolidated protocol dispatchers list every loaded implementation. Keep only
-  # clauses for implementations that ship in the same bundle, so dispatch on other
-  # types falls through to the catch-all clause and raises Protocol.UndefinedError.
+  # Consolidated protocol dispatchers list every loaded implementation. A clause for a struct
+  # type always stays: the implementation for a struct type is in no runtime or page bundle, it is
+  # loaded in a chunk once a struct of the type is on the client, and by then the dispatcher has to
+  # name it, or dispatch would fall through to Any or raise Protocol.UndefinedError with the
+  # implementation loaded. A clause for a built-in type stays only when its implementation ships
+  # in the same bundle, so dispatch on a built-in type the bundle has no implementation for falls
+  # through to the catch-all clause.
   defp maybe_prune_protocol_dispatcher_function_defs(
          function_defs,
          module,
@@ -2106,12 +2108,20 @@ defmodule Hologram.Compiler do
          module_info_plt
        ) do
     if Reflection.protocol?(module, module_info_plt) do
+      # As names, not as modules: a protocol has no implementation for most built-in types, and
+      # no atom is made for one that does not exist.
+      built_in_impl_names =
+        MapSet.new(
+          CallGraph.built_in_protocol_types(),
+          &"#{module}.#{Reflection.module_name(&1)}"
+        )
+
       included_impls =
         included_protocol_implementations(reachable_modules, module, module_info_plt)
 
       Enum.filter(
         function_defs,
-        &keep_protocol_dispatcher_function_def?(&1, module, included_impls, module_info_plt)
+        &keep_protocol_dispatcher_function_def?(&1, built_in_impl_names, included_impls)
       )
     else
       function_defs
