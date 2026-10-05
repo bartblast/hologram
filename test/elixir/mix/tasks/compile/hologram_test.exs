@@ -1505,7 +1505,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "dumps the compile state with the bundles it built", %{opts: opts} do
       run(opts)
 
-      {1, compile_state} = load_compile_state_dump(opts)
+      {2, compile_state} = load_compile_state_dump(opts)
       state = cache_state()
 
       assert compile_state.pages == PLT.get_all(state.pages_plt)
@@ -1526,7 +1526,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
 
-      {1, compile_state} = load_compile_state_dump(opts)
+      {2, compile_state} = load_compile_state_dump(opts)
       assert compile_state.pending_pages == pending_pages
     end
 
@@ -1740,7 +1740,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_recompile()
 
       assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
-      assert {1, _compile_state} = load_compile_state_dump(opts)
+      assert {2, _compile_state} = load_compile_state_dump(opts)
     end
 
     test "a compile state dump without a call graph dump is not loaded", %{opts: opts} do
@@ -1831,7 +1831,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       %{js_input_paths: js_input_paths, pages_plt: pages_plt, runtime: runtime} = cache_state()
       {:ok, page_state} = PLT.get(pages_plt, Module3)
-      {1, compile_state} = load_compile_state_dump(opts)
+      {2, compile_state} = load_compile_state_dump(opts)
 
       fixture_paths =
         Enum.map(
