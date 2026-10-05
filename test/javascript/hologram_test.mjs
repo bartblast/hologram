@@ -1845,6 +1845,7 @@ describe("Hologram", () => {
         globalThis.Hologram.assetManifest = originalAssetManifest;
         delete window.requestAnimationFrame;
         serializeStub.restore();
+        removeBundleScripts();
       });
 
       it("is stamped with the code it was taken with", async () => {
@@ -1865,6 +1866,21 @@ describe("Hologram", () => {
         const snapshot = serializeStub.firstCall.args[0];
 
         assert.isNull(snapshot.runtimeDigest);
+      });
+
+      // The state a snapshot holds can carry values of struct types whose protocol implementations
+      // only chunks have, so the snapshot names the chunks to load before it is restored.
+      it("names the chunks the tab has loaded", async () => {
+        Hologram.requestChunks(["SNAPSHOT1", "SNAPSHOT2", "SNAPSHOT3"]);
+
+        ScriptRegistry.statuses.set("SNAPSHOT1", "loaded");
+        ScriptRegistry.statuses.set("SNAPSHOT2", "failed");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.deepStrictEqual(snapshot.chunkDigests, ["SNAPSHOT1"]);
       });
     });
 

@@ -123,6 +123,10 @@ export default class Hologram {
   // destination may hold the same cids.
   static #awaitingTargets = new Map();
 
+  // The digests of the chunks this document was told of: the ones the document the server sent
+  // carries and the ones requested since. A snapshot saves the loaded ones.
+  static #chunkDigests = new Set();
+
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
@@ -146,6 +150,11 @@ export default class Hologram {
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
+
+  // The chunks the snapshot last restored was taken with, which its mount waits for: the state it
+  // holds can carry values of struct types whose protocol implementations only those chunks have.
+  // None when the page on its way was not restored from a snapshot.
+  static #snapshotChunkDigests = [];
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -640,6 +649,8 @@ export default class Hologram {
   // A chunk holds the protocol implementations of struct types that no bundle carries, and is
   // named when a value of such a type is on its way to the browser.
   static requestChunks(digests) {
+    digests.forEach((digest) => $.#chunkDigests.add(digest));
+
     ScriptRegistry.request(
       digests.map((digest) => ({
         digest: digest,
@@ -656,8 +667,15 @@ export default class Hologram {
       }
 
       // The document's own page bundle and chunks are what its mount waits for. Their script
-      // elements are in the document the server sent, so they are not requested here.
-      MountGate.require($.#initialScriptDigests());
+      // elements are in the document the server sent, so they are not requested here. A snapshot
+      // restored into the document can need more chunks than the server rendered the page with:
+      // those are requested.
+      MountGate.require([
+        ...$.#initialScriptDigests(),
+        ...$.#snapshotChunkDigests,
+      ]);
+
+      $.requestChunks($.#snapshotChunkDigests);
 
       Hologram.#mountWhenReady(false);
     });
@@ -1149,10 +1167,15 @@ export default class Hologram {
       // so it advances the same way - otherwise an action armed before this point would settle
       // against state that has been reset underneath it.
       $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+      $.#snapshotChunkDigests = [];
     }
 
+    // The tab still holds the chunks a snapshot of its own was taken with, unless one failed to
+    // load back then.
+    $.requestChunks($.#snapshotChunkDigests);
+
     if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
-      MountGate.require([]);
+      MountGate.require($.#snapshotChunkDigests);
 
       return $.#mountWhenReady(true);
     }
@@ -1172,7 +1195,7 @@ export default class Hologram {
 
         LiveReload.recordPageBundle(Hologram.#pageModule, pageDigest);
 
-        MountGate.require([pageDigest]);
+        MountGate.require([pageDigest, ...$.#snapshotChunkDigests]);
         $.#requestPageBundle(Hologram.#pageModule, pageDigest);
         $.#mountWhenReady(false);
       },
@@ -1301,6 +1324,10 @@ export default class Hologram {
     );
 
     ScriptRegistry.markRequested($.#initialScriptDigests());
+
+    (globalThis.Hologram.initialChunkDigests ?? []).forEach((digest) =>
+      $.#chunkDigests.add(digest),
+    );
 
     Hologram.#defineLoadedScripts();
 
@@ -1795,6 +1822,7 @@ export default class Hologram {
 
   static #restorePageSnapshot(pageSnapshot) {
     const {
+      chunkDigests,
       componentRegistryEntries,
       instanceId,
       pageModule,
@@ -1818,6 +1846,9 @@ export default class Hologram {
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
+
+    // A snapshot taken before snapshots saved their chunks holds none.
+    $.#snapshotChunkDigests = chunkDigests ?? [];
   }
 
   // Walks the queue and runs every entry that can run, in order, until the walk is over or the
@@ -1963,6 +1994,11 @@ export default class Hologram {
 
   static async #savePageSnapshot(forceSync = false) {
     const pageSnapshot = {
+      // Every chunk the tab has loaded, not only the ones this page's state needs: which of them
+      // the state needs is not known here, and a chunk too many costs a restore one cached fetch.
+      chunkDigests: Array.from($.#chunkDigests).filter((digest) =>
+        ScriptRegistry.isLoaded([digest]),
+      ),
       componentRegistryEntries: ComponentRegistry.entries,
       instanceId: App.instanceId,
       pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
