@@ -207,11 +207,11 @@ defmodule Hologram.Compiler do
   implementation code a set of struct types shares (see `group_mfas_by_signature/1`).
 
   The script does not define its functions when it runs: it leaves them, with its own digest, for
-  the runtime to define, and announces itself with a `hologram:scriptLoaded` event. A chunk can
-  run before the runtime does, and neither needs to know the other's name: the digest is read
-  from the file name of the script element running it (see
-  `Hologram.Router.Helpers.chunk_bundle_path/1`), since a file cannot hold the hash of its own
-  content.
+  the runtime to define, and announces itself with a `hologram:scriptLoaded` event (see
+  `assets/js/script_registry.mjs`). A chunk can run before the runtime does, and neither needs to
+  know the other's name: the digest is read from the file name of the script element running it
+  (see `Hologram.Router.Helpers.chunk_bundle_path/1`), since a file cannot hold the hash of its
+  own content.
 
   It carries no timing code, unlike the page and runtime scripts: a document can load many chunks,
   and the bundler would put a copy of the timer in each.
@@ -226,25 +226,7 @@ defmodule Hologram.Compiler do
     """
     "use strict";#{import_statements}
 
-    globalThis.Hologram.pendingScripts ??= [];
-
-    globalThis.Hologram.pendingScripts.push({
-      digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\\.js$/)[1],
-      define: (deps) => {
-        const {
-          Bitstring,
-          ERTS,
-          HologramBoxedError,
-          HologramInterpreterError,
-          Interpreter,
-          MemoryStorage,
-          Type,
-          Utils,
-        } = deps;#{defs}
-      },
-    });
-
-    document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));\
+    #{render_script_announcement(defs)}\
     """
   end
 
@@ -447,6 +429,10 @@ defmodule Hologram.Compiler do
   many pages can encode their functions first with `encode_reachable_functions/5` and render every
   page from the encode PLT.
 
+  The script announces itself the way a chunk does (see `build_chunk_js/5`): it leaves its
+  function definitions, with its own digest, for the runtime to define. Its digest is in its file
+  name too (see `Hologram.Router.Helpers.page_bundle_path/2`).
+
   ## Options
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the page script imports
@@ -475,21 +461,7 @@ defmodule Hologram.Compiler do
 
     const startTime = performance.now();
 
-    globalThis.Hologram.pageReachableFunctionDefs = (deps) => {
-      const {
-        Bitstring,
-        ERTS,
-        HologramBoxedError,
-        HologramInterpreterError,
-        Interpreter,
-        MemoryStorage,
-        Type,
-        Utils,
-      } = deps;#{defs}
-    }
-
-    globalThis.Hologram.pageScriptLoaded = true;
-    document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
+    #{render_script_announcement(defs)}
 
     console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));\
     """
@@ -508,6 +480,10 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds Hologram runtime JavaScript source code.
+
+  The script starts the runtime once it has run. It waits for no page script: the runtime mounts
+  the page when the scripts the page needs have announced themselves (see
+  `assets/js/script_registry.mjs`).
 
   ## Options
 
@@ -585,11 +561,7 @@ defmodule Hologram.Compiler do
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
-    document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
-
-    if (globalThis.Hologram.pageScriptLoaded) {
-      document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
-    }
+    Hologram.run();
 
     console.debug("Hologram: runtime script executed in", PerformanceTimer.diff(startTime));\
     """
@@ -2554,6 +2526,34 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Encoder.encode_module_metadata_registration(module_metadata)
+  end
+
+  # The part of a page or chunk script that leaves the script's definitions for the runtime to
+  # define, with the script's digest, and announces the script (see assets/js/script_registry.mjs).
+  # The digest is read from the file name of the script element running the script: both kinds of
+  # file end in a dash, the digest and `.js`.
+  defp render_script_announcement(defs) do
+    """
+    globalThis.Hologram.pendingScripts ??= [];
+
+    globalThis.Hologram.pendingScripts.push({
+      digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\\.js$/)[1],
+      define: (deps) => {
+        const {
+          Bitstring,
+          ERTS,
+          HologramBoxedError,
+          HologramInterpreterError,
+          Interpreter,
+          MemoryStorage,
+          Type,
+          Utils,
+        } = deps;#{defs}
+      },
+    });
+
+    document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));\
+    """
   end
 
   # What a script holding the given MFAs is made of besides its wrapper: the import statements of

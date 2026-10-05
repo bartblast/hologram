@@ -450,7 +450,7 @@ defmodule Hologram.CompilerTest do
           js_dir: @js_dir
         )
 
-      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pendingScripts.push({/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
@@ -483,13 +483,43 @@ defmodule Hologram.CompilerTest do
           js_dir: @js_dir
         )
 
-      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pendingScripts.push({/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
       assert String.contains?(result, js_fragment_1)
       assert String.contains?(result, js_fragment_2)
       refute String.contains?(result, js_fragment_3)
+    end
+
+    test "leaves its function defs for the runtime to define, under its own digest", %{
+      ir_plt: ir_plt
+    } do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      js_fragment_1 = "globalThis.Hologram.pendingScripts ??= [];"
+      js_fragment_2 = "globalThis.Hologram.pendingScripts.push({"
+
+      js_fragment_3 =
+        ~S"digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\.js$/)[1],"
+
+      js_fragment_4 = "define: (deps) => {"
+      js_fragment_5 = ~s/document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));/
+
+      js_fragment_6 =
+        ~s/console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));/
+
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      assert String.contains?(result, js_fragment_3)
+      assert String.contains?(result, js_fragment_4)
+      assert String.contains?(result, js_fragment_5)
+      assert String.ends_with?(result, js_fragment_6)
+
+      refute String.contains?(result, "pageReachableFunctionDefs")
+      refute String.contains?(result, "pageScriptLoaded")
     end
 
     test "no JS imports", %{
@@ -1608,6 +1638,18 @@ defmodule Hologram.CompilerTest do
         :binary.match(js, ~s/defineElixirFunction("Enum", "into_protocol", 2/)
 
       assert into_pos < into_protocol_pos
+    end
+
+    test "starts the runtime without waiting for a page script", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+
+      assert String.contains?(result, "\n\nHologram.run();\n\n")
+      refute String.contains?(result, "pageScriptLoaded")
     end
 
     test "renders the clause heads of manually ported functions", %{
