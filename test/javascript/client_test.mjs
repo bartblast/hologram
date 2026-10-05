@@ -477,7 +477,7 @@ describe("Client", () => {
 
   describe("sendCommand()", () => {
     let fetchStub,
-      hologramScheduleActionStub,
+      schedulePushedActionStub,
       originalHologram,
       originalInstanceId;
 
@@ -503,7 +503,7 @@ describe("Client", () => {
       const entry = componentRegistryEntryFixture({module: module});
       ComponentRegistry.putEntry(Type.bitstring("my_target"), entry);
 
-      hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+      schedulePushedActionStub = sinon.stub(Hologram, "schedulePushedAction");
 
       originalHologram = globalThis.Hologram;
       globalThis.Hologram = {csrfToken: "test-csrf-token-123"};
@@ -581,9 +581,43 @@ describe("Client", () => {
       await waitForEventLoop();
 
       sinon.assert.calledOnceWithExactly(
-        hologramScheduleActionStub,
+        schedulePushedActionStub,
         Type.actionStruct({name: Type.atom("dummy_action")}),
+        [],
       );
+    });
+
+    // The reply names the chunks the struct types in its actions need, and no action may run
+    // before they are in.
+    it("schedules the next action and the self-echoed actions with the reply's chunks", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("next_action")})',
+          chunks: ["AAAAAAAA", "BBBBBBBB"],
+          selfEchoes:
+            'Type.list([Type.actionStruct({name: Type.atom("self_echo")})])',
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+      await waitForEventLoop();
+
+      assert.deepStrictEqual(schedulePushedActionStub.args, [
+        [
+          Type.actionStruct({name: Type.atom("next_action")}),
+          ["AAAAAAAA", "BBBBBBBB"],
+        ],
+        [
+          Type.actionStruct({name: Type.atom("self_echo")}),
+          ["AAAAAAAA", "BBBBBBBB"],
+        ],
+      ]);
     });
 
     it("command succeeds, next action is nil", async () => {
@@ -602,7 +636,7 @@ describe("Client", () => {
 
       await Client.sendCommand(command);
 
-      sinon.assert.notCalled(hologramScheduleActionStub);
+      sinon.assert.notCalled(schedulePushedActionStub);
     });
 
     it("command fails due to response status code", async () => {
@@ -625,7 +659,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramScheduleActionStub);
+      sinon.assert.notCalled(schedulePushedActionStub);
     });
 
     it("command fails due to result status code", async () => {
@@ -654,7 +688,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramScheduleActionStub);
+      sinon.assert.notCalled(schedulePushedActionStub);
     });
 
     it("dispatches each self-echoed action from the selfEchoes field", async () => {
@@ -675,15 +709,15 @@ describe("Client", () => {
       await Client.sendCommand(command);
       await waitForEventLoop();
 
-      sinon.assert.calledTwice(hologramScheduleActionStub);
+      sinon.assert.calledTwice(schedulePushedActionStub);
 
       sinon.assert.calledWith(
-        hologramScheduleActionStub,
+        schedulePushedActionStub,
         Type.actionStruct({name: Type.atom("self_echo_a")}),
       );
 
       sinon.assert.calledWith(
-        hologramScheduleActionStub,
+        schedulePushedActionStub,
         Type.actionStruct({name: Type.atom("self_echo_b")}),
       );
     });
@@ -704,7 +738,7 @@ describe("Client", () => {
 
       await Client.sendCommand(command);
 
-      sinon.assert.notCalled(hologramScheduleActionStub);
+      sinon.assert.notCalled(schedulePushedActionStub);
     });
 
     it("dispatches next_action before self-echoed actions", async () => {
@@ -725,15 +759,15 @@ describe("Client", () => {
       await Client.sendCommand(command);
       await waitForEventLoop();
 
-      sinon.assert.calledTwice(hologramScheduleActionStub);
+      sinon.assert.calledTwice(schedulePushedActionStub);
 
       assert.deepStrictEqual(
-        hologramScheduleActionStub.firstCall.args[0],
+        schedulePushedActionStub.firstCall.args[0],
         Type.actionStruct({name: Type.atom("next_action")}),
       );
 
       assert.deepStrictEqual(
-        hologramScheduleActionStub.secondCall.args[0],
+        schedulePushedActionStub.secondCall.args[0],
         Type.actionStruct({name: Type.atom("self_echo")}),
       );
     });
@@ -758,7 +792,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramScheduleActionStub);
+      sinon.assert.notCalled(schedulePushedActionStub);
     });
 
     it("merges adds and drops from the subReceiptAdds and subReceiptDrops fields into the registry", async () => {
