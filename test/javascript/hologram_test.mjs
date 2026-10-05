@@ -23,7 +23,9 @@ import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
+import MountGate from "../../assets/js/mount_gate.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
+import ScriptRegistry from "../../assets/js/script_registry.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1740,10 +1742,16 @@ describe("Hologram", () => {
       );
     };
 
-    const removeBundleScripts = () =>
+    // Takes the fetched bundles out of the document and forgets them, with what waited for them.
+    const removeBundleScripts = () => {
       document.head
         .querySelectorAll("script[src^='/hologram/page-']")
         .forEach((script) => script.remove());
+
+      ScriptRegistry.statuses.clear();
+      MountGate.require([]);
+      MountGate.cancel();
+    };
 
     beforeEach(() => {
       assignedUrls = [];
@@ -1918,7 +1926,6 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
-        delete globalThis.Hologram.pageScriptLoaded;
         Hologram.virtualDocument = null;
 
         patchStub?.restore();
@@ -1932,7 +1939,6 @@ describe("Hologram", () => {
       // it. No mount data script exists in this tree at all.
       it("makes the page's mount data readable before the patch", async () => {
         delete globalThis.Hologram.pageMountData;
-        globalThis.Hologram.pageScriptLoaded = true;
 
         await Hologram.loadNewPage("/target", payloadFor("mount-data"));
 
@@ -1946,8 +1952,6 @@ describe("Hologram", () => {
       // announce itself. What is provable here is that the payload's fields are decoded during
       // the swap: a field that cannot be evaluated fails it.
       it("decodes the payload's mount data during the swap", async () => {
-        globalThis.Hologram.pageScriptLoaded = true;
-
         const payload = {
           ...payloadFor("bad-registry"),
           componentRegistry: "Type.map([[[",
@@ -1967,12 +1971,10 @@ describe("Hologram", () => {
       // The property the whole feature rests on: what the server described is on screen while the
       // page's own code is still in flight.
       it("puts the page on screen before its bundle has run", async () => {
-        globalThis.Hologram.pageScriptLoaded = true;
-
         await Hologram.loadNewPage("/target", payloadFor("aaa", "new content"));
 
         assert.include(document.body.textContent, "new content");
-        assert.isFalse(globalThis.Hologram.pageScriptLoaded);
+        assert.equal(ScriptRegistry.statuses.get("aaa"), "requested");
       });
 
       // The swap advances the epoch of what is displayed while the registry's epoch stays put -
@@ -2270,6 +2272,18 @@ describe("Hologram", () => {
         await Hologram.loadNewPage("/target", payloadFor("bbb"));
 
         assert.isNotNull(bundleScript("bbb"));
+        assert.equal(ScriptRegistry.statuses.get("bbb"), "requested");
+      });
+
+      // The mount is what registers the page's code and converges the two epochs, and it cannot
+      // run before the code it mounts is defined.
+      it("holds the mount until the page's bundle has announced itself", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("held"));
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), ["held"]);
+        assert.isNotNull(MountGate.pendingMount);
+        assert.equal(Hologram.domEpoch, 1);
+        assert.equal(Hologram.registryEpoch, 0);
       });
 
       // A script is keyed by the source it loads, so a bundle already in the document would be
@@ -2290,8 +2304,8 @@ describe("Hologram", () => {
       });
     });
 
-    // A bundle that never loads would otherwise end the navigation in silence: nothing dispatches
-    // hologram:pageScriptLoaded, so the mount never runs and the page on screen stays put.
+    // A bundle that never loads would otherwise end the navigation in silence: it never announces
+    // itself, so the mount never runs and the page on screen stays put.
     describe("page bundle that fails to load", () => {
       beforeEach(() => {
         window.requestAnimationFrame = (callback) => callback();
@@ -2300,7 +2314,6 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
-        delete globalThis.Hologram.pageScriptLoaded;
         Hologram.virtualDocument = null;
         removeBundleScripts();
       });
@@ -2315,8 +2328,50 @@ describe("Hologram", () => {
         assert.throws(
           () => script.onerror(),
           HologramRuntimeError,
-          `Failed to load page bundle: ${bundlePath("eee")}`,
+          `Failed to load script: ${bundlePath("eee")}`,
         );
+      });
+
+      it("forgets the mount that waited for the bundle", async () => {
+        await Hologram.loadNewPage("/target-fff", payloadFor("fff"));
+
+        assert.isNotNull(MountGate.pendingMount);
+
+        assert.throws(
+          () => bundleScript("fff").onerror(),
+          HologramRuntimeError,
+        );
+
+        assert.isNull(MountGate.pendingMount);
+      });
+
+      // The bundle of a page left behind by a later navigation is no longer what the mount waits
+      // for, so its failure says nothing about the navigation now in flight.
+      it("leaves a later navigation's mount waiting", async () => {
+        await Hologram.loadNewPage("/target-iii", payloadFor("iii"));
+        const supersededScript = bundleScript("iii");
+
+        await Hologram.loadNewPage("/target-jjj", payloadFor("jjj"));
+
+        assert.throws(() => supersededScript.onerror(), HologramRuntimeError);
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), ["jjj"]);
+        assert.isNotNull(MountGate.pendingMount);
+      });
+
+      // A new need for the bundle is a new attempt at it.
+      it("fetches the bundle again on the next navigation to the page", async () => {
+        await Hologram.loadNewPage("/target-kkk", payloadFor("kkk"));
+
+        const failedScript = bundleScript("kkk");
+        assert.throws(() => failedScript.onerror(), HologramRuntimeError);
+        failedScript.remove();
+
+        await Hologram.loadNewPage("/target-kkk", payloadFor("kkk"));
+
+        assert.isNotNull(bundleScript("kkk"));
+        assert.equal(ScriptRegistry.statuses.get("kkk"), "requested");
+        assert.isNotNull(MountGate.pendingMount);
       });
 
       // The mount that would have answered for this page is never going to run, so nothing it
@@ -2337,7 +2392,7 @@ describe("Hologram", () => {
           assert.throws(
             () => bundleScript("hhh").onerror(),
             HologramRuntimeError,
-            `Failed to load page bundle: ${bundlePath("hhh")}`,
+            `Failed to load script: ${bundlePath("hhh")}`,
           );
 
           Hologram.scheduleAction(

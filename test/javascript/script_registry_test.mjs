@@ -164,7 +164,7 @@ describe("ScriptRegistry", () => {
     const scriptB = {digest: "BBBBBBBB", path: "/hologram/chunk-BBBBBBBB.js"};
 
     it("appends a script element for each script with no status", () => {
-      ScriptRegistry.request([scriptA, scriptB]);
+      ScriptRegistry.request([scriptA, scriptB], () => null);
 
       const scripts = requestedScripts();
 
@@ -177,8 +177,23 @@ describe("ScriptRegistry", () => {
       assert.isTrue(scripts.every((script) => script.fetchPriority === "high"));
     });
 
+    it("fetches a script that failed again", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "failed");
+
+      ScriptRegistry.request([scriptA], () => null);
+
+      assert.deepStrictEqual(
+        requestedScripts().map((script) => script.getAttribute("src")),
+        ["/hologram/chunk-AAAAAAAA.js"],
+      );
+
+      assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
+        ["AAAAAAAA", "requested"],
+      ]);
+    });
+
     it("marks each script requested", () => {
-      ScriptRegistry.request([scriptA, scriptB]);
+      ScriptRegistry.request([scriptA, scriptB], () => null);
 
       assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
         ["AAAAAAAA", "requested"],
@@ -186,47 +201,39 @@ describe("ScriptRegistry", () => {
       ]);
     });
 
-    it("passes over a script that has a status", () => {
+    it("passes over a script that is loaded or requested", () => {
       ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
-      ScriptRegistry.statuses.set("BBBBBBBB", "failed");
+      ScriptRegistry.statuses.set("BBBBBBBB", "requested");
 
-      ScriptRegistry.request([scriptA, scriptB]);
+      ScriptRegistry.request([scriptA, scriptB], () => null);
 
       assert.deepStrictEqual(requestedScripts(), []);
 
       assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
         ["AAAAAAAA", "loaded"],
-        ["BBBBBBBB", "failed"],
+        ["BBBBBBBB", "requested"],
       ]);
     });
 
-    it("a script that fails to load is marked failed, announced and raised", () => {
-      const listener = sinon.spy();
-      document.addEventListener("hologram:scriptFailed", listener);
+    it("a script that fails to load is marked failed, reported to the caller and raised", () => {
+      const onFailure = sinon.spy();
 
-      try {
-        ScriptRegistry.request([scriptA, scriptB]);
+      ScriptRegistry.request([scriptA, scriptB], onFailure);
 
-        const [script] = requestedScripts();
+      const [script] = requestedScripts();
 
-        assert.throws(
-          () => script.onerror(),
-          HologramRuntimeError,
-          "Failed to load script: /hologram/chunk-AAAAAAAA.js",
-        );
+      assert.throws(
+        () => script.onerror(),
+        HologramRuntimeError,
+        "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+      );
 
-        assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
-          ["AAAAAAAA", "failed"],
-          ["BBBBBBBB", "requested"],
-        ]);
+      assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
+        ["AAAAAAAA", "failed"],
+        ["BBBBBBBB", "requested"],
+      ]);
 
-        sinon.assert.calledOnce(listener);
-        assert.deepStrictEqual(listener.firstCall.args[0].detail, {
-          digest: "AAAAAAAA",
-        });
-      } finally {
-        document.removeEventListener("hologram:scriptFailed", listener);
-      }
+      sinon.assert.calledOnceWithExactly(onFailure, "AAAAAAAA");
     });
   });
 });

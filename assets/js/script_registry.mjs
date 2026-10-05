@@ -51,20 +51,20 @@ export default class ScriptRegistry {
     }
   }
 
-  // Fetches the given scripts, each given as {digest, path}, unless they have a status already.
+  // Fetches the given scripts, each given as {digest, path}, unless they are requested or loaded
+  // already. A script that failed is fetched again: a new need for it is a new attempt.
   //
   // Without the failure path a script that never loads would leave whatever waits for it waiting
-  // in silence: the hologram:scriptFailed event, which carries the digest, is what lets the page
-  // stop waiting.
+  // in silence: the given function, called with the digest, is what lets the caller stop waiting.
   //
   // Throwing from the handler does not reach whoever asked for the script, since the handler runs
   // off the event loop. It surfaces as an uncaught error instead, which is what the console and
   // the feature tests read.
-  //
-  // A failed script is not fetched again: its status stays, so a later request passes it over.
-  static request(scripts) {
+  static request(scripts, onFailure) {
     for (const {digest, path} of scripts) {
-      if ($.statuses.has(digest)) {
+      const status = $.statuses.get(digest);
+
+      if (status === "requested" || status === "loaded") {
         continue;
       }
 
@@ -78,10 +78,7 @@ export default class ScriptRegistry {
 
       script.onerror = () => {
         $.statuses.set(digest, "failed");
-
-        document.dispatchEvent(
-          new CustomEvent("hologram:scriptFailed", {detail: {digest: digest}}),
-        );
+        onFailure(digest);
 
         throw new HologramRuntimeError(`Failed to load script: ${path}`);
       };

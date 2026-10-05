@@ -20,9 +20,11 @@ import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
 import LiveReload from "./live_reload.mjs";
 import MemoryStorage from "./memory_storage.mjs";
+import MountGate from "./mount_gate.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
+import ScriptRegistry from "./script_registry.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
 import Throttler from "./throttler.mjs";
@@ -640,23 +642,15 @@ export default class Hologram {
         await Hologram.#init();
       }
 
-      try {
-        Hologram.#mountPage();
-      } catch (error) {
-        if (error instanceof HologramBoxedError) {
-          error.name = error.type;
-          error.message = error.text;
-        }
+      // The document's own page bundle is what its mount waits for. Its script element is in the
+      // document the server sent, so it is not requested here.
+      MountGate.require(
+        [globalThis.Hologram.initialPageDigest].filter(
+          (digest) => digest !== undefined,
+        ),
+      );
 
-        throw error;
-      }
-
-      // SSE must open AFTER `#mountPage()` because the handshake payload
-      // includes the receipts merged from `pageMountData.subReceiptAdds` -
-      // connecting earlier would send an empty receipts list.
-      if (Sse.eventSource === null) {
-        Sse.connect();
-      }
+      Hologram.#mountWhenReady(false);
     });
   }
 
@@ -685,6 +679,13 @@ export default class Hologram {
 
   static #buildPrefetchedPagesMapKey(eventTargetNode, pagePath) {
     return `${eventTargetNode.__hologramId__}:${pagePath}`;
+  }
+
+  // Defines the functions of the scripts that announced themselves (see ScriptRegistry), and lets
+  // the waiting mount through when they were the last ones it waited for.
+  static #defineLoadedScripts() {
+    ScriptRegistry.defineLoaded(Hologram.#deps);
+    MountGate.settle();
   }
 
   static #defineManuallyPortedFunctions() {
@@ -945,7 +946,7 @@ export default class Hologram {
   // script it carries to be patched in and run.
   //
   // The bundle is fetched here rather than through the patch so that a failure to load is
-  // noticed - #loadPageBundle gives it a failure path, which a script the patch creates would
+  // noticed - ScriptRegistry gives it a failure path, which a script the patch creates would
   // not have. It also settles what a script element cannot express on its own: a script is keyed
   // by the source it loads, so navigating back to a page whose bundle is already in the document
   // would adopt that element and never run it, while navigating to a page whose bundle is in
@@ -1137,23 +1138,29 @@ export default class Hologram {
     }
 
     if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
-      return $.#mountPage(true);
+      MountGate.require([]);
+
+      return $.#mountWhenReady(true);
     }
 
     // The epoch of the navigation this restore opened. The fetch below is a round trip, and a
-    // later navigation may supersede this one before it answers - the failure of a superseded
-    // fetch says nothing about the navigation now in flight.
+    // later navigation may supersede this one before it answers - neither the answer nor the
+    // failure of a superseded fetch says anything about the navigation now in flight.
     const epoch = Math.max($.domEpoch, $.registryEpoch);
 
     await Client.fetchPageDigest(
       Hologram.#pageModule,
       (pageDigest) => {
+        // The scripts required and the mount waiting are the later navigation's by now.
+        if (Math.max($.domEpoch, $.registryEpoch) !== epoch) {
+          return;
+        }
+
         LiveReload.recordPageBundle(Hologram.#pageModule, pageDigest);
 
-        $.#loadPageBundle(
-          $.#pageBundlePath(Hologram.#pageModule, pageDigest),
-          epoch,
-        );
+        MountGate.require([pageDigest]);
+        $.#requestPageBundle(Hologram.#pageModule, pageDigest);
+        $.#mountWhenReady(false);
       },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
@@ -1165,6 +1172,17 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // A script could not be fetched. When the mount waits for it, the mount is never going to run,
+  // so the epoch is recorded dead: what belongs to it is dropped rather than held (see
+  // #runActions). A script no longer required belongs to a navigation a later one superseded, and
+  // its failure says nothing about the one now in flight.
+  static #handleScriptFailure(digest) {
+    if (MountGate.requires(digest)) {
+      MountGate.cancel();
+      $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+    }
   }
 
   // Executed only once, on the initial page load.
@@ -1261,6 +1279,19 @@ export default class Hologram {
     globalThis.Hologram.dispatchAction = $.dispatchAction;
     delete globalThis.Hologram._pendingJsInteropActions;
 
+    // A page bundle announces itself when it has run (see ScriptRegistry), which can be before or
+    // after this point: the ones that ran already are defined here, the rest as they announce
+    // themselves.
+    document.addEventListener("hologram:scriptLoaded", () =>
+      Hologram.#defineLoadedScripts(),
+    );
+
+    if (globalThis.Hologram.initialPageDigest !== undefined) {
+      ScriptRegistry.markRequested([globalThis.Hologram.initialPageDigest]);
+    }
+
+    Hologram.#defineLoadedScripts();
+
     Hologram.#isInitiated = true;
   }
 
@@ -1349,38 +1380,6 @@ export default class Hologram {
     return mountData;
   }
 
-  // Fetches a page's own code. Running it is what announces the page is ready to mount, by
-  // dispatching hologram:pageScriptLoaded, which the runtime listens for.
-  //
-  // Without the failure path a bundle that never loads ends the navigation in silence: nothing
-  // dispatches the event, so the mount never runs, the URL is never pushed, and the page already
-  // on screen stays with no sign that anything went wrong.
-  //
-  // Throwing from the handler does not reach whoever started the navigation, since the handler
-  // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
-  // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
-  // overlay, that being reserved for errors a page raised.
-  // The epoch defaults to an at-call capture, which is right for the forward path, where the
-  // call follows the transition's epoch advance synchronously. The popstate path reaches here a
-  // round trip after its advance and passes the epoch it captured before that trip - a later
-  // navigation may have started in between, and the failure of a superseded fetch says nothing
-  // about the navigation now in flight.
-  static #loadPageBundle(src, epoch = Math.max($.domEpoch, $.registryEpoch)) {
-    const script = document.createElement("script");
-
-    script.src = src;
-    script.fetchpriority = "high";
-
-    script.onerror = () => {
-      // The mount that would have let this epoch's waiting actions run is never going to run.
-      $.#deadEpochs.add(epoch);
-
-      throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
-    };
-
-    document.head.appendChild(script);
-  }
-
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
       AssetPathRegistry.populate(globalThis.Hologram.assetManifest);
@@ -1408,7 +1407,6 @@ export default class Hologram {
     }
 
     if (!isPageModuleRegistered) {
-      globalThis.Hologram.pageReachableFunctionDefs(Hologram.#deps);
       $.#registerPageModule($.#pageModule);
     }
 
@@ -1469,6 +1467,30 @@ export default class Hologram {
       (payload) => Hologram.loadNewPage(pagePath, payload),
       () => Hologram.navigateBrowserTo(pagePath),
     );
+  }
+
+  // Mounts the page once the scripts it requires are loaded (see MountGate): at once when they
+  // are, and otherwise when the last of them announces itself.
+  static #mountWhenReady(isPageModuleRegistered) {
+    MountGate.mountWhenReady(() => {
+      try {
+        Hologram.#mountPage(isPageModuleRegistered);
+      } catch (error) {
+        if (error instanceof HologramBoxedError) {
+          error.name = error.type;
+          error.message = error.text;
+        }
+
+        throw error;
+      }
+
+      // SSE must open AFTER `#mountPage()` because the handshake payload
+      // includes the receipts merged from `pageMountData.subReceiptAdds` -
+      // connecting earlier would send an empty receipts list.
+      if (Sse.eventSource === null) {
+        Sse.connect();
+      }
+    });
   }
 
   static #onReady(callback) {
@@ -1575,9 +1597,11 @@ export default class Hologram {
     // The fetch is started before the patch, which is local work, so the network has a head start
     // on it. Nothing the bundle does can run before the patch is done, since it cannot execute
     // until this frame's work ends.
-    if (!isPageModuleRegistered) {
-      globalThis.Hologram.pageScriptLoaded = false;
-      $.#loadPageBundle($.#pageBundlePath(pageModule, payload.pageDigest));
+    if (isPageModuleRegistered) {
+      MountGate.require([]);
+    } else {
+      MountGate.require([payload.pageDigest]);
+      $.#requestPageBundle(pageModule, payload.pageDigest);
     }
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
@@ -1609,9 +1633,9 @@ export default class Hologram {
       newVirtualDocument,
     );
 
-    if (isPageModuleRegistered) {
-      $.#mountPage(true);
-    }
+    // A page whose code the tab holds mounts now. The mount of any other waits for its bundle to
+    // announce itself.
+    $.#mountWhenReady(isPageModuleRegistered);
   }
 
   // Deps: [:maps.get/2, :maps.put/3]
@@ -1697,6 +1721,15 @@ export default class Hologram {
 
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
+  }
+
+  // Fetches a page's own code, which announces itself when it has run (see ScriptRegistry). A
+  // bundle that cannot be fetched ends the navigation: see #handleScriptFailure.
+  static #requestPageBundle(pageModule, pageDigest) {
+    ScriptRegistry.request(
+      [{digest: pageDigest, path: $.#pageBundlePath(pageModule, pageDigest)}],
+      (digest) => $.#handleScriptFailure(digest),
+    );
   }
 
   static async #restoreEts() {
