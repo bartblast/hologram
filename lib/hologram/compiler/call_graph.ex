@@ -1683,12 +1683,13 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   # The reflection functions (see Hologram.Compiler.DynamicCallSites) of the types that can appear
-  # at protocol dispatch on the page, the way protocol implementations are entered for them: a
-  # type's __struct__/0,1 when it is a struct, its __changeset__/0 and __schema__/1,2 when it is an
-  # Ecto schema, and only the functions the gate opens (see Hologram.Compiler.DynamicCallGate). A
-  # named call of a reflection function reaches it through an ordinary edge and needs none of this.
-  # TODO: #938. The types come from every module the server callbacks name. Once the compiler knows
-  # which types can reach the client, this set shrinks with the protocol implementations' one.
+  # at protocol dispatch on the page, the ones its client code names and the ones its templatables'
+  # server callbacks name: a type's __struct__/0,1 when it is a struct, its __changeset__/0 and
+  # __schema__/1,2 when it is an Ecto schema, and only the functions the gate opens (see
+  # Hologram.Compiler.DynamicCallGate). A named call of a reflection function reaches it through an
+  # ordinary edge and needs none of this.
+  # TODO: the server callbacks' types are every module they name, which is more than the types
+  # whose values reach the client. A narrower set would list fewer functions.
   defp add_reflection_mfas(page_mfas, types, open_functions, module_info_plt) do
     added_mfas =
       for type <- types,
