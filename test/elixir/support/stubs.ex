@@ -211,8 +211,8 @@ defmodule Hologram.Test.Stubs do
     file_4d_path = dir_4 <> "/page-Elixir.MyPage2-CCCCCCCC.js.map"
     file_4e_path = dir_4 <> "/runtime-AAAAAAAA.js"
     file_4f_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
-    file_4g_path = dir_4 <> "/chunk-59b80f19-DDDDDDDD.js"
-    file_4h_path = dir_4 <> "/chunk-59b80f19-DDDDDDDD.js.map"
+    file_4g_path = dir_4 <> "/chunk-DDDDDDDD.js"
+    file_4h_path = dir_4 <> "/chunk-DDDDDDDD.js.map"
 
     File.mkdir_p!(dir_2)
     File.mkdir_p!(dir_3)

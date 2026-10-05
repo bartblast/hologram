@@ -32,8 +32,8 @@ defmodule Hologram.Router.HelpersTest do
     end
   end
 
-  test "chunk_bundle_path/2" do
-    assert chunk_bundle_path("59b80f19", "ABCDEFGH") == "/hologram/chunk-59b80f19-ABCDEFGH.js"
+  test "chunk_bundle_path/1" do
+    assert chunk_bundle_path("ABCDEFGH") == "/hologram/chunk-ABCDEFGH.js"
   end
 
   test "page_bundle_path/2" do

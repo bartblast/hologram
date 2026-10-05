@@ -70,8 +70,8 @@ defmodule Hologram.Assets.PathRegistryTest do
     end
 
     test "chunk bundle named by esbuild" do
-      assert lookup("hologram/chunk-59b80f19.js") == :error
-      assert lookup("hologram/chunk-59b80f19-DDDDDDDD.js") == :error
+      assert lookup("hologram/chunk.js") == :error
+      assert lookup("hologram/chunk-DDDDDDDD.js") == :error
     end
 
     test "page bundle named by esbuild" do

@@ -295,7 +295,7 @@ defmodule Hologram.Compiler do
     paths_by_type =
       bundle_infos_by_signature
       |> Enum.flat_map(fn {signature, bundle_info} ->
-        path = RouterHelpers.chunk_bundle_path(bundle_info.entry_name, bundle_info.digest)
+        path = RouterHelpers.chunk_bundle_path(bundle_info.digest)
         Enum.map(signature, &{&1, path})
       end)
       |> Enum.sort()
@@ -610,11 +610,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Bundles the given entry file with esbuild, which names the output `<bundle_name>-<hash>.js` and
-  its source map `<bundle_name>-<hash>.js.map` by the content hash, with the entry name between the
-  bundle name and the hash when one is given: a module, written without its `Elixir.` prefix, or a
-  string, written as it is. A bundle name shared by many entries (the page bundles, the chunks)
-  needs it to tell them apart, one with a single entry (the runtime) does not. The returned digest
-  is the hash.
+  its source map `<bundle_name>-<hash>.js.map` by the content hash. An entry name that is a module
+  goes between the bundle name and the hash, written without its `Elixir.` prefix: the page
+  bundles share a bundle name, and the name says which page a file is for. An entry name that is a
+  string names the build only, its output dir under the `:tmp_dir` opt, which keeps the entries of
+  a shared bundle name apart while they are bundled at once: the chunks' files are named by the
+  bundle name and the hash alone, since no two chunks have the same content. The returned digest is
+  the hash.
 
   A bundle bigger than the `:max_bundle_size` config value fails the build, unless its bundle name
   is `"chunk"`: a chunk is downloaded only once a struct of one of its types is on the client, and
@@ -633,7 +635,8 @@ defmodule Hologram.Compiler do
     # dir: the name is only known once esbuild has run, so the dir is listed for it, and it is
     # recreated so that a bundle left there by a run that failed the size check is not listed too.
     output_name = bundle_output_name(bundle_name, entry_name)
-    output_dir = Path.join(opts[:tmp_dir], "#{output_name}.output")
+    output_dir_name = bundle_output_dir_name(bundle_name, entry_name)
+    output_dir = Path.join(opts[:tmp_dir], "#{output_dir_name}.output")
     FileUtils.recreate_dir(output_dir)
     metafile_path = Path.join(output_dir, "meta.json")
 
@@ -718,8 +721,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the digest of a chunk's signature (see `group_mfas_by_signature/1`), which names the
-  chunk's files: the first 8 hex digits of the MD5 of its type names, sorted. The same signature
+  Returns the digest of a chunk's signature (see `group_mfas_by_signature/1`): the first 8 hex
+  digits of the MD5 of its type names, sorted. It names the chunk while it is built, its entry
+  file and its output dir, and not the file that is served (see `bundle/4`). The same signature
   gives the same digest in every compile.
   """
   @spec chunk_signature_digest(MapSet.t(module)) :: String.t()
@@ -1712,10 +1716,19 @@ defmodule Hologram.Compiler do
     TaskUtils.map_concurrently(modules, &CallGraph.build_for_module(call_graph, ir_plt, &1))
   end
 
-  defp bundle_output_name(bundle_name, nil), do: bundle_name
-
-  defp bundle_output_name(bundle_name, entry_name) when is_binary(entry_name) do
+  # The name of a bundle's output dir in the tmp dir, one per entry.
+  defp bundle_output_dir_name(bundle_name, entry_name) when is_binary(entry_name) do
     "#{bundle_name}-#{entry_name}"
+  end
+
+  defp bundle_output_dir_name(bundle_name, entry_name) do
+    bundle_output_name(bundle_name, entry_name)
+  end
+
+  # The name esbuild puts in front of the hash in a bundle's file name.
+  defp bundle_output_name(bundle_name, entry_name)
+       when is_nil(entry_name) or is_binary(entry_name) do
+    bundle_name
   end
 
   defp bundle_output_name(bundle_name, entry_name) do

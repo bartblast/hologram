@@ -183,14 +183,13 @@ defmodule Hologram.Assets.PathRegistry do
     end)
   end
 
-  # The bundles the compiler names by what they hold: a page bundle's name carries its page
-  # module (hologram/page-<module>-<hash>.js), a chunk's the digest of its signature
-  # (hologram/chunk-<signature digest>-<hash>.js). Neither is looked up by a static path: the
-  # page digest and chunk registries say which to load.
+  # The bundles no static path looks up, since the page digest and chunk registries say which to
+  # load: a page bundle, whose name carries its page module (hologram/page-<module>-<hash>.js),
+  # and a chunk (hologram/chunk-<hash>.js), which all share the name left once the hash is taken
+  # off.
   defp stream_reject_compiler_bundles(file_infos) do
     Stream.reject(file_infos, fn {_file_path, prefix, _digest, _suffix} ->
-      String.starts_with?(prefix, "hologram/chunk-") or
-        String.starts_with?(prefix, "hologram/page-")
+      prefix == "hologram/chunk" or String.starts_with?(prefix, "hologram/page-")
     end)
   end
 

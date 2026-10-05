@@ -1060,16 +1060,16 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(plt, {:page, MyPage1}) ==
                {:ok,
                 [
-                  "/hologram/chunk-0a1b2c3d-BBBBBBBB.js",
-                  "/hologram/chunk-a6274391-CCCCCCCC.js"
+                  "/hologram/chunk-BBBBBBBB.js",
+                  "/hologram/chunk-CCCCCCCC.js"
                 ]}
 
       assert PLT.get(plt, {:page, MyPage2}) ==
                {:ok,
                 [
-                  "/hologram/chunk-0a1b2c3d-BBBBBBBB.js",
-                  "/hologram/chunk-59b80f19-AAAAAAAA.js",
-                  "/hologram/chunk-a6274391-CCCCCCCC.js"
+                  "/hologram/chunk-AAAAAAAA.js",
+                  "/hologram/chunk-BBBBBBBB.js",
+                  "/hologram/chunk-CCCCCCCC.js"
                 ]}
     end
 
@@ -1081,11 +1081,11 @@ defmodule Hologram.CompilerTest do
 
       assert PLT.get_all(plt) == %{
                {:type, Date} => [
-                 "/hologram/chunk-0a1b2c3d-BBBBBBBB.js",
-                 "/hologram/chunk-59b80f19-AAAAAAAA.js"
+                 "/hologram/chunk-AAAAAAAA.js",
+                 "/hologram/chunk-BBBBBBBB.js"
                ],
-               {:type, DateTime} => ["/hologram/chunk-0a1b2c3d-BBBBBBBB.js"],
-               {:type, Time} => ["/hologram/chunk-a6274391-CCCCCCCC.js"]
+               {:type, DateTime} => ["/hologram/chunk-BBBBBBBB.js"],
+               {:type, Time} => ["/hologram/chunk-CCCCCCCC.js"]
              }
     end
 
@@ -2006,10 +2006,50 @@ defmodule Hologram.CompilerTest do
              } = bundle("59b80f19", entry_file_path, "chunk", opts)
 
       assert digest =~ ~r/^[A-Z2-7]{8}$/
-      assert static_bundle_path == Path.join(opts[:static_dir], "chunk-59b80f19-#{digest}.js")
+      # The entry name names the build, not the file.
+      assert static_bundle_path == Path.join(opts[:static_dir], "chunk-#{digest}.js")
+      assert File.read!(static_bundle_path) =~ "//# sourceMappingURL=chunk-#{digest}.js.map"
+    end
 
-      assert File.read!(static_bundle_path) =~
-               "//# sourceMappingURL=chunk-59b80f19-#{digest}.js.map"
+    test "string entry names keep the bundles of one bundle name apart" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_string_entry_names"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path_1 = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      File.write(entry_file_path_1, "export const myVar = 123;\n")
+
+      entry_file_path_2 = Path.join(tmp_dir, "chunk-a6274391.entry.js")
+      File.write(entry_file_path_2, "export const myVar = 456;\n")
+
+      assert [
+               %{digest: digest_1, entry_name: "59b80f19", static_bundle_path: path_1},
+               %{digest: digest_2, entry_name: "a6274391", static_bundle_path: path_2}
+             ] =
+               bundle(
+                 [
+                   {"59b80f19", entry_file_path_1, "chunk"},
+                   {"a6274391", entry_file_path_2, "chunk"}
+                 ],
+                 opts
+               )
+
+      assert digest_1 != digest_2
+      assert path_1 == Path.join(opts[:static_dir], "chunk-#{digest_1}.js")
+      assert path_2 == Path.join(opts[:static_dir], "chunk-#{digest_2}.js")
+      assert File.read!(path_1) =~ "123"
+      assert File.read!(path_2) =~ "456"
     end
 
     test "the same entry file bundles to the same digest" do
