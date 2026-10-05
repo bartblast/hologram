@@ -872,6 +872,34 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Groups the MFAs of the given types' chunks (see `CallGraph.list_chunk_mfas_by_type/3`) by their
+  signature: the set of types whose MFAs hold them. Each group is the MFAs of one chunk, sorted, so
+  that an MFA several types need is in one chunk those types share, and in no other.
+
+  ## Examples
+
+      iex> group_mfas_by_signature(%{
+      ...>   Date => [{Calendar.ISO, :date_to_string, 3}, {String.Chars.Date, :to_string, 1}],
+      ...>   Time => [{Calendar.ISO, :time_to_string, 4}, {String.Chars.Time, :to_string, 1}],
+      ...>   DateTime => [{Calendar.ISO, :date_to_string, 3}, {Calendar.ISO, :time_to_string, 4}]
+      ...> })
+      %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([DateTime, Time]) => [{Calendar.ISO, :time_to_string, 4}],
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}]
+      }
+  """
+  @spec group_mfas_by_signature(%{module => [mfa]}) :: %{MapSet.t(module) => [mfa]}
+  def group_mfas_by_signature(mfas_by_type) do
+    mfas_by_type
+    |> Enum.flat_map(fn {type, mfas} -> Enum.map(mfas, &{&1, type}) end)
+    |> Enum.group_by(fn {mfa, _type} -> mfa end, fn {_mfa, type} -> type end)
+    |> Enum.group_by(fn {_mfa, types} -> MapSet.new(types) end, fn {mfa, _types} -> mfa end)
+    |> Map.new(fn {signature, mfas} -> {signature, Enum.sort(mfas)} end)
+  end
+
+  @doc """
   Installs JavaScript deps which are specified in package.json located in assets_dir.
   Saves the package.json digest to package_json_digest.bin file in build_dir.
   """

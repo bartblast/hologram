@@ -2726,6 +2726,53 @@ defmodule Hologram.CompilerTest do
            }
   end
 
+  describe "group_mfas_by_signature/1" do
+    test "gives a single type one group holding its MFAs, sorted" do
+      mfas_by_type = %{
+        Date => [{String.Chars.Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}]
+      }
+
+      assert group_mfas_by_signature(mfas_by_type) == %{
+               MapSet.new([Date]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ]
+             }
+    end
+
+    test "puts an MFA several types hold in a group of those types alone" do
+      mfas_by_type = %{
+        Date => [
+          {Calendar.ISO, :date_to_string, 3},
+          {Calendar.ISO, :zero_pad, 2},
+          {String.Chars.Date, :to_string, 1}
+        ],
+        DateTime => [
+          {Calendar.ISO, :date_to_string, 3},
+          {Calendar.ISO, :time_to_string, 4},
+          {Calendar.ISO, :zero_pad, 2}
+        ],
+        Time => [
+          {Calendar.ISO, :time_to_string, 4},
+          {Calendar.ISO, :zero_pad, 2},
+          {String.Chars.Time, :to_string, 1}
+        ]
+      }
+
+      assert group_mfas_by_signature(mfas_by_type) == %{
+               MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+               MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+               MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+               MapSet.new([DateTime, Time]) => [{Calendar.ISO, :time_to_string, 4}],
+               MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}]
+             }
+    end
+
+    test "returns an empty map for no types" do
+      assert group_mfas_by_signature(%{}) == %{}
+    end
+  end
+
   describe "install_js_deps/1" do
     setup do
       setup_js_deps_test("install_js_deps_1")
