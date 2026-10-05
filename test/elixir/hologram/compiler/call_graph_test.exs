@@ -4295,14 +4295,19 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {StringCharsModule12, :to_string, 1} in result.mfas
     end
 
+    # Which structs the runtime's functions name depends on the Elixir version (Enum.into/2 names
+    # MapSet from 1.20 on), so a runtime entry is made to name a fixture struct.
     test "mfas hold the implementations for the struct types the runtime's code names", %{
-      runtime_analysis: result
+      full_call_graph: call_graph
     } do
-      assert {Enumerable.MapSet, :__impl__, 1} in result.mfas
-      assert {Enumerable.MapSet, :reduce, 3} in result.mfas
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Enum, :to_list, 1}, Module12)
+        |> runtime_analysis()
 
-      assert {Enumerable.Range, :__impl__, 1} in result.mfas
-      assert {Enumerable.Range, :reduce, 3} in result.mfas
+      assert {StringCharsModule12, :__impl__, 1} in result.mfas
+      assert {StringCharsModule12, :to_string, 1} in result.mfas
     end
 
     # A broadcast-referenced component's client code is runtime code, so a struct it names is one
@@ -4329,9 +4334,16 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute List in result.types
     end
 
-    test "types hold the struct types the runtime's code names", %{runtime_analysis: result} do
-      assert MapSet in result.types
-      assert Range in result.types
+    test "types hold the struct types the runtime's code names", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Enum, :to_list, 1}, Module12)
+        |> runtime_analysis()
+
+      assert Module12 in result.types
     end
   end
 
