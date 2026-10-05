@@ -126,8 +126,12 @@ export default class Sse {
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
+      // An action or a broadcast arrives as JSON holding the encoded term and the digests of the
+      // chunks the struct types in it need, which are loaded before the action runs (see
+      // Hologram.schedulePushedAction).
       $.eventSource.addEventListener("action", (event) => {
-        const action = Interpreter.evaluateJavaScriptExpression(event.data);
+        const {action: encodedAction, chunks} = JSON.parse(event.data);
+        const action = Interpreter.evaluateJavaScriptExpression(encodedAction);
         const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
         // Hologram realtime is fire-and-forget: silently drop actions
@@ -138,7 +142,7 @@ export default class Sse {
           return;
         }
 
-        Hologram.scheduleAction(action);
+        Hologram.schedulePushedAction(action, chunks);
       });
 
       $.eventSource.addEventListener("add_sub_receipts", (event) => {
@@ -147,7 +151,8 @@ export default class Sse {
       });
 
       $.eventSource.addEventListener("broadcast", (event) => {
-        const decoded = Interpreter.evaluateJavaScriptExpression(event.data);
+        const {chunks, data} = JSON.parse(event.data);
+        const decoded = Interpreter.evaluateJavaScriptExpression(data);
         const [actionName, params, cidsList] = decoded.data;
 
         for (const cid of cidsList.data) {
@@ -159,7 +164,7 @@ export default class Sse {
             target: cid,
           });
 
-          Hologram.scheduleAction(action);
+          Hologram.schedulePushedAction(action, chunks);
         }
       });
 
