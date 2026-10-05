@@ -24,12 +24,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
 
     call_graph = CallGraph.remove_manually_ported_mfas(Compiler.build_call_graph())
 
-    page_modules =
-      call_graph
-      |> CallGraph.module_info_plt()
-      |> Compiler.list_pages()
-
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
 
     if dest_mfa in runtime_mfas do
       print_runtime_mfa_paths(call_graph, dest_mfa)

@@ -282,7 +282,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       runtime_mfas =
-        list_runtime_mfas(cache.runtime, call_graph_for_runtime, page_modules, runtime_kept?)
+        list_runtime_mfas(cache.runtime, call_graph_for_runtime, runtime_kept?)
 
       # What the runtime's dynamic calls open for every page, taken while the runtime graph still
       # holds the runtime's MFAs (build_pages_graph/2 below takes them out), and kept when they are.
@@ -1106,10 +1106,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)
   # finds the ones the runtime bundle on disk was built from.
-  defp list_runtime_mfas(kept_runtime, _call_graph, _page_modules, true), do: kept_runtime.mfas
+  defp list_runtime_mfas(kept_runtime, _call_graph, true), do: kept_runtime.mfas
 
-  defp list_runtime_mfas(_kept_runtime, call_graph, page_modules, false) do
-    CallGraph.list_runtime_mfas(call_graph, page_modules)
+  defp list_runtime_mfas(_kept_runtime, call_graph, false) do
+    CallGraph.list_runtime_mfas(call_graph)
   end
 
   # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which

@@ -1639,7 +1639,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       mfas = [
         {CallGraph, :clone, 2},
         {CallGraph, :list_page_mfas, 5},
-        {CallGraph, :list_runtime_mfas, 2}
+        {CallGraph, :list_runtime_mfas, 1}
       ]
 
       Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
@@ -2226,7 +2226,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with no changes lists no runtime MFAs", %{opts: opts} do
       run(opts)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+      assert count_calls({CallGraph, :list_runtime_mfas, 1}, fn -> run(opts) end) == 0
     end
 
     test "an edit of a module the graph does not hold lists no runtime MFAs", %{opts: opts} do
@@ -2234,7 +2234,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(@unreached_module)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+      assert count_calls({CallGraph, :list_runtime_mfas, 1}, fn -> run(opts) end) == 0
     end
 
     test "an edit of a page lists the runtime MFAs again", %{opts: opts} do
@@ -2242,7 +2242,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(Module1)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 1
+      assert count_calls({CallGraph, :list_runtime_mfas, 1}, fn -> run(opts) end) == 1
     end
 
     test "the kept runtime MFAs are the ones a walk finds", %{opts: opts} do
@@ -2260,9 +2260,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         |> CallGraph.clone()
         |> CallGraph.remove_manually_ported_mfas()
 
-      pages = Compiler.list_pages(module_info_plt)
-
-      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph, pages)
+      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph)
 
       CallGraph.stop(call_graph)
       PLT.stop(module_info_plt)

@@ -96,12 +96,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
   end
 
   defp remove_runtime_mfas(call_graph, ir_plt) do
-    page_modules =
-      call_graph
-      |> CallGraph.module_info_plt()
-      |> Compiler.list_pages()
-
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
     runtime_dynamic_calls = CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
     gate = %{ir_plt: ir_plt, runtime: runtime_dynamic_calls}
 

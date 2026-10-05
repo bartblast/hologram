@@ -112,11 +112,11 @@ list_page_mfas/4        570.04        1.75 ms     ±7.29%        1.74 ms        
 ```
 
 
-### ✅ compiler » call_graph » list_runtime_mfas_2
+### ✅ compiler » call_graph » list_runtime_mfas_1
 
 ```
 Name                          ips        average  deviation         median         99th %
-list_runtime_mfas/2         42.80       23.37 ms    ±18.60%       25.17 ms       29.31 ms
+list_runtime_mfas/1         42.80       23.37 ms    ±18.60%       25.17 ms       29.31 ms
 ```
 
 

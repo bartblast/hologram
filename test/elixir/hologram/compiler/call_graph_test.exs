@@ -318,7 +318,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     module_info_plt = module_info_plt_fixture()
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt, module_info_plt)
-    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph, Reflection.list_pages())
+    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph)
 
     [
       full_call_graph: full_call_graph,
@@ -1476,7 +1476,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         Enum.each(modules, &build_for_module(call_graph, ir_plt, &1))
       end)
 
-      assert list_runtime_mfas(call_graph, pages) == full_runtime_mfas
+      assert list_runtime_mfas(call_graph) == full_runtime_mfas
 
       graph = get_graph(call_graph)
       full_graph = get_graph(full_call_graph)
@@ -1506,8 +1506,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                  module_info_plt
                )
 
-      assert list_runtime_mfas(call_graph, [ReachTest.Page]) ==
-               list_runtime_mfas(full_call_graph, [ReachTest.Page])
+      assert list_runtime_mfas(call_graph) == list_runtime_mfas(full_call_graph)
     end
 
     test "builds what the pages, their server callbacks and the broadcast callers reach" do
@@ -2522,9 +2521,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
 
-  describe "list_runtime_mfas/2" do
+  describe "list_runtime_mfas/1" do
     setup %{full_call_graph: call_graph} do
-      [runtime_mfas: list_runtime_mfas(call_graph, Reflection.list_pages())]
+      [runtime_mfas: list_runtime_mfas(call_graph)]
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
@@ -2548,7 +2547,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
       |> add_edge({Enum, :into, 2}, {:non_existing_module_fixture, :dummy_function_4, 4})
 
-      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Calendar.ISO, :dummy_function_1, 1} in result
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
@@ -2563,7 +2562,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex, :start, 2})
       |> add_edge({Enum, :into, 2}, {Hex, :version, 0})
 
-      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Enum, :into, 2} in result
 
@@ -2578,7 +2577,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex.API, :request, 4})
       |> add_edge({Enum, :into, 2}, {Hex.Registry.Server, :versions, 2})
 
-      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Enum, :into, 2} in result
 
@@ -2626,7 +2625,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       refute {StringCharsModule12, :__impl__, 1} in result
       refute {StringCharsModule12, :to_string, 1} in result
@@ -2640,7 +2639,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :init, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       refute {StringCharsModule12, :__impl__, 1} in result
       refute {StringCharsModule12, :to_string, 1} in result
@@ -2654,7 +2653,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       refute {StringCharsModule12, :__impl__, 1} in result
       refute {StringCharsModule12, :to_string, 1} in result
@@ -2670,7 +2669,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module38)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module38, :__props__, 0} in result
       assert {Module38, :action, 3} in result
@@ -2688,7 +2687,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module38, :command, 3}, {Component, :put_broadcast, 4})
         |> add_edge({Module38, :command, 3}, Module39)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module39, :__props__, 0} in result
       assert {Module39, :action, 3} in result
@@ -2706,7 +2705,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module14)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       refute {Module14, :action, 3} in result
       refute {Module14, :template, 0} in result
@@ -2720,7 +2719,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module38)
         |> add_edge({Module38, :command, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       refute {StringCharsModule12, :__impl__, 1} in result
       refute {StringCharsModule12, :to_string, 1} in result
@@ -2736,7 +2735,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module38)
         |> add_edge({Module38, :command, 3}, Module39)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module39, :__props__, 0} in result
       assert {Module39, :action, 3} in result
@@ -2758,7 +2757,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, Module38)
         |> add_edge({Module38, :template, 0}, Module39)
         |> add_edge({Module39, :command, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module39, :template, 0} in result
 
@@ -2780,7 +2779,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module38, :command, 3}, Module39)
         |> add_edge({Module39, :template, 0}, Module40)
         |> add_edge({Module40, :command, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module40, :template, 0} in result
 
@@ -2824,7 +2823,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "stops the analyses PLT it starts", %{full_call_graph: call_graph} do
       {:links, links_before} = Process.info(call_graph.pid, :links)
 
-      list_runtime_mfas(call_graph, Reflection.list_pages())
+      list_runtime_mfas(call_graph)
 
       {:links, links_after} = Process.info(call_graph.pid, :links)
 
@@ -2837,7 +2836,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     } do
       walked_mfas =
         call_without_copying_graph(fn ->
-          list_runtime_mfas(call_graph, Reflection.list_pages())
+          list_runtime_mfas(call_graph)
         end)
 
       assert walked_mfas == runtime_mfas
@@ -3742,7 +3741,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   describe "remove_runtime_mfas!/2" do
     test "removes the runtime MFAs and keeps the rest", %{ir_plt: ir_plt} do
       call_graph = Compiler.build_call_graph(ir_plt)
-      runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
+      runtime_mfas = list_runtime_mfas(call_graph)
 
       CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 
@@ -3841,7 +3840,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       full_call_graph: call_graph,
       runtime_analysis: result
     } do
-      assert result.mfas == list_runtime_mfas(call_graph, Reflection.list_pages())
+      assert result.mfas == list_runtime_mfas(call_graph)
     end
 
     test "mfas hold implementations for built-in types", %{runtime_analysis: result} do

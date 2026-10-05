@@ -46,12 +46,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPaths do
   end
 
   defp remove_runtime_mfas(call_graph) do
-    page_modules =
-      call_graph
-      |> CallGraph.module_info_plt()
-      |> Compiler.list_pages()
-
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
     CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
   end
 end

@@ -1024,12 +1024,10 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Lists MFAs required by the runtime JS script of an app, sorted (see runtime_analysis/1).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_1/README.md
   """
-  # TODO: drop the pages argument, which the listing no longer reads: the runtime carries no
-  # implementation for the struct types the pages' code names.
-  @spec list_runtime_mfas(t, [module]) :: [mfa]
-  def list_runtime_mfas(call_graph, _pages) do
+  @spec list_runtime_mfas(t) :: [mfa]
+  def list_runtime_mfas(call_graph) do
     runtime_analysis(call_graph).mfas
   end
 
