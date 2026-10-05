@@ -15,11 +15,13 @@ describe("ScriptRegistry", () => {
 
   beforeEach(() => {
     ScriptRegistry.statuses.clear();
+    ScriptRegistry.waiters = [];
     delete globalThis.Hologram.pendingScripts;
   });
 
   afterEach(() => {
     ScriptRegistry.statuses.clear();
+    ScriptRegistry.waiters = [];
     delete globalThis.Hologram.pendingScripts;
     requestedScripts().forEach((script) => script.remove());
   });
@@ -234,6 +236,114 @@ describe("ScriptRegistry", () => {
       ]);
 
       sinon.assert.calledOnceWithExactly(onFailure, "AAAAAAAA");
+    });
+  });
+
+  describe("whenLoaded()", () => {
+    const scriptA = {digest: "AAAAAAAA", path: "/hologram/chunk-AAAAAAAA.js"};
+    const scriptB = {digest: "BBBBBBBB", path: "/hologram/chunk-BBBBBBBB.js"};
+
+    // Lets the continuations of the promises settled so far run.
+    const flushPromises = () =>
+      new Promise((resolve) => setTimeout(resolve, 0));
+
+    const announce = (digest) => {
+      globalThis.Hologram.pendingScripts = [
+        {define: () => null, digest: digest},
+      ];
+      ScriptRegistry.defineLoaded(deps);
+    };
+
+    it("forgets a promise once it is settled", async () => {
+      ScriptRegistry.request([scriptA, scriptB], () => null);
+
+      const promise = ScriptRegistry.whenLoaded(["AAAAAAAA"]);
+      const otherPromise = ScriptRegistry.whenLoaded(["BBBBBBBB"]);
+
+      announce("AAAAAAAA");
+      await promise;
+
+      assert.deepStrictEqual(
+        ScriptRegistry.waiters.map((waiter) => waiter.digests),
+        [["BBBBBBBB"]],
+      );
+
+      announce("BBBBBBBB");
+      await otherPromise;
+
+      assert.deepStrictEqual(ScriptRegistry.waiters, []);
+    });
+
+    it("is resolved already for no script", async () => {
+      await ScriptRegistry.whenLoaded([]);
+
+      assert.deepStrictEqual(ScriptRegistry.waiters, []);
+    });
+
+    it("is resolved already for scripts that are loaded", async () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+      ScriptRegistry.statuses.set("BBBBBBBB", "loaded");
+
+      await ScriptRegistry.whenLoaded(["AAAAAAAA", "BBBBBBBB"]);
+
+      assert.deepStrictEqual(ScriptRegistry.waiters, []);
+    });
+
+    it("resolves when the last of the scripts is loaded, and not before", async () => {
+      const onResolved = sinon.spy();
+
+      ScriptRegistry.request([scriptA, scriptB], () => null);
+      ScriptRegistry.whenLoaded(["AAAAAAAA", "BBBBBBBB"]).then(onResolved);
+
+      announce("AAAAAAAA");
+      await flushPromises();
+
+      sinon.assert.notCalled(onResolved);
+
+      announce("BBBBBBBB");
+      await flushPromises();
+
+      sinon.assert.calledOnce(onResolved);
+    });
+
+    it("is rejected already, with the digest, for a script that has failed", async () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+      ScriptRegistry.statuses.set("BBBBBBBB", "failed");
+
+      let rejectedWith = null;
+
+      try {
+        await ScriptRegistry.whenLoaded(["AAAAAAAA", "BBBBBBBB"]);
+      } catch (digest) {
+        rejectedWith = digest;
+      }
+
+      assert.equal(rejectedWith, "BBBBBBBB");
+      assert.deepStrictEqual(ScriptRegistry.waiters, []);
+    });
+
+    it("rejects with the digest when one of the scripts fails to load", async () => {
+      const onRejected = sinon.spy();
+      const onOtherResolved = sinon.spy();
+
+      ScriptRegistry.request([scriptA, scriptB], () => null);
+      ScriptRegistry.whenLoaded(["AAAAAAAA", "BBBBBBBB"]).catch(onRejected);
+      ScriptRegistry.whenLoaded(["AAAAAAAA"]).then(onOtherResolved);
+
+      const failedScript = requestedScripts().find(
+        (script) => script.getAttribute("src") === scriptB.path,
+      );
+
+      assert.throws(() => failedScript.onerror(), HologramRuntimeError);
+      await flushPromises();
+
+      sinon.assert.calledOnceWithExactly(onRejected, "BBBBBBBB");
+      sinon.assert.notCalled(onOtherResolved);
+
+      assert.deepStrictEqual(
+        ScriptRegistry.waiters.map((waiter) => waiter.digests),
+        [["AAAAAAAA"]],
+      );
     });
   });
 });

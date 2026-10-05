@@ -698,6 +698,43 @@ export default class Hologram {
     }, Number(delay.value));
   }
 
+  // Schedules an action the server pushed: a command reply's next action or self echo, or an action
+  // or a broadcast that came over SSE. Such an action can carry a value of a struct type whose
+  // protocol implementations the tab has not loaded, and must not run before the chunks that hold
+  // them are in. The server names those chunks, by digest.
+  //
+  // The wait happens here, before the action queue, since an action still waiting for its chunks
+  // has not arrived as far as the page is concerned: nothing the user does queues up behind it.
+  // An action triggered on the client never waits, because the state only ever holds values whose
+  // chunks the tab has.
+  //
+  // Realtime promises no order, so two pushed actions can run in the other order than the one
+  // they were sent in, when the first of them waits for a chunk.
+  // Deps: [:maps.get/2]
+  static schedulePushedAction(action, chunkDigests) {
+    // Captured on arrival: a navigation while the chunks are fetched must leave the action stamped
+    // with the page it was sent to, so that the queue drops it as stale.
+    const epoch = $.registryEpoch;
+
+    $.requestChunks(chunkDigests);
+
+    if (ScriptRegistry.isLoaded(chunkDigests)) {
+      $.scheduleAction(action, epoch);
+      return;
+    }
+
+    ScriptRegistry.whenLoaded(chunkDigests).then(
+      () => $.scheduleAction(action, epoch),
+      (digest) => {
+        console.warn(
+          "Hologram: dropped a pushed action whose chunk failed to load:",
+          Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), action)),
+          digest,
+        );
+      },
+    );
+  }
+
   static #buildPagePath(toParam) {
     return Bitstring.toText(
       Elixir_Hologram_Router_Helpers["page_path/1"](toParam),

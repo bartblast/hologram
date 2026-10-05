@@ -3593,4 +3593,114 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(executeActionStub, actionZeroDelay, 0);
     });
   });
+
+  describe("schedulePushedAction()", () => {
+    let originalRegistryEpoch, scheduleActionStub;
+
+    const action = Type.actionStruct({
+      name: Type.atom("pushed_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const chunkScripts = () =>
+      Array.from(
+        document.head.querySelectorAll("script[src^='/hologram/chunk-']"),
+      );
+
+    // Lets the continuations of the promises settled so far run.
+    const flushPromises = () =>
+      new Promise((resolve) => setTimeout(resolve, 0));
+
+    const announce = (digest) => {
+      globalThis.Hologram.pendingScripts = [
+        {define: () => null, digest: digest},
+      ];
+      ScriptRegistry.defineLoaded({});
+    };
+
+    beforeEach(() => {
+      originalRegistryEpoch = Hologram.registryEpoch;
+      Hologram.registryEpoch = 3;
+
+      scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+    });
+
+    afterEach(() => {
+      Hologram.registryEpoch = originalRegistryEpoch;
+      scheduleActionStub.restore();
+
+      chunkScripts().forEach((script) => script.remove());
+      ScriptRegistry.statuses.clear();
+      ScriptRegistry.waiters = [];
+      delete globalThis.Hologram.pendingScripts;
+    });
+
+    it("fetches the chunks the tab lacks", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+      Hologram.schedulePushedAction(action, ["AAAAAAAA", "BBBBBBBB"]);
+
+      assert.deepStrictEqual(
+        chunkScripts().map((script) => script.getAttribute("src")),
+        ["/hologram/chunk-BBBBBBBB.js"],
+      );
+    });
+
+    it("schedules the action at once when it needs no chunk", () => {
+      Hologram.schedulePushedAction(action, []);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+    });
+
+    it("schedules the action at once when the tab has its chunks", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+      Hologram.schedulePushedAction(action, ["AAAAAAAA"]);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+      assert.deepStrictEqual(chunkScripts(), []);
+    });
+
+    // A navigation while the chunk is fetched must leave the action stamped with the page it was
+    // sent to, so that the queue drops it as stale.
+    it("schedules the action once its chunks have loaded, stamped with the epoch it arrived in", async () => {
+      Hologram.schedulePushedAction(action, ["AAAAAAAA", "BBBBBBBB"]);
+      Hologram.registryEpoch = 4;
+
+      announce("AAAAAAAA");
+      await flushPromises();
+
+      sinon.assert.notCalled(scheduleActionStub);
+
+      announce("BBBBBBBB");
+      await flushPromises();
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+    });
+
+    it("drops the action, and says so, when one of its chunks fails to load", async () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        Hologram.schedulePushedAction(action, ["AAAAAAAA"]);
+
+        const [script] = chunkScripts();
+
+        assert.throws(() => script.onerror(), HologramRuntimeError);
+        await flushPromises();
+
+        sinon.assert.notCalled(scheduleActionStub);
+
+        sinon.assert.calledOnceWithExactly(
+          warnStub,
+          "Hologram: dropped a pushed action whose chunk failed to load:",
+          ":pushed_action",
+          "AAAAAAAA",
+        );
+      } finally {
+        warnStub.restore();
+      }
+    });
+  });
 });
