@@ -183,7 +183,7 @@ defmodule Hologram.Realtime.SSETest do
                {"action", 42,
                 %{
                   "action" => encoded,
-                  "chunks" => ["/hologram/chunk-BBBBBBBB.js", "/hologram/chunk-CCCCCCCC.js"]
+                  "chunks" => ["BBBBBBBB", "CCCCCCCC"]
                 }}
     end
 
@@ -217,7 +217,7 @@ defmodule Hologram.Realtime.SSETest do
              |> decode_envelope() ==
                {"broadcast", 42,
                 %{
-                  "chunks" => ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-CCCCCCCC.js"],
+                  "chunks" => ["AAAAAAAA", "CCCCCCCC"],
                   "data" => encoded
                 }}
     end

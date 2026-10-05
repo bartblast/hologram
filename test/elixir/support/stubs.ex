@@ -315,10 +315,10 @@ defmodule Hologram.Test.Stubs do
     File.rm(dump_path)
 
     PLT.start()
-    |> PLT.put({:page, :module_a}, ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-CCCCCCCC.js"])
+    |> PLT.put({:page, :module_a}, ["AAAAAAAA", "CCCCCCCC"])
     |> PLT.put({:page, :module_b}, [])
-    |> PLT.put({:type, Date}, ["/hologram/chunk-BBBBBBBB.js", "/hologram/chunk-CCCCCCCC.js"])
-    |> PLT.put({:type, Time}, ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-CCCCCCCC.js"])
+    |> PLT.put({:type, Date}, ["BBBBBBBB", "CCCCCCCC"])
+    |> PLT.put({:type, Time}, ["AAAAAAAA", "CCCCCCCC"])
     |> PLT.dump(dump_path)
 
     :ok

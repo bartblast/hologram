@@ -33,7 +33,7 @@ defmodule Hologram.Realtime.SSE do
   @doc """
   Builds the SSE event-stream chunk for an `action` broadcast: the standard
   `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
-  object holding the encoded `%Action{}` struct under `action` and the paths of the
+  object holding the encoded `%Action{}` struct under `action` and the digests of the
   chunks its struct types need under `chunks` (see `Hologram.Assets.ChunkRegistry`),
   which the client loads before it runs the action.
   """
@@ -61,7 +61,7 @@ defmodule Hologram.Realtime.SSE do
   Builds the SSE event-stream chunk for a `broadcast` event: the standard
   `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
   object holding the encoded `{action_name, params, [cid1, cid2, ...]}` tuple under
-  `data` and the paths of the chunks the struct types in the params need under
+  `data` and the digests of the chunks the struct types in the params need under
   `chunks` (see `Hologram.Assets.ChunkRegistry`), which the client loads before it
   runs the actions.
 

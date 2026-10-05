@@ -39,7 +39,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
-    refute String.contains?(markup, "globalThis.Hologram.initialChunkPaths")
+    refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
     refute String.contains?(markup, "globalThis.Hologram.initialPageBundlePath")
     refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
@@ -60,7 +60,7 @@ defmodule Hologram.UI.RuntimeTest do
 
     assert String.contains?(
              markup,
-             "globalThis.Hologram.initialChunkPaths = $CHUNK_PATHS_JS_PLACEHOLDER;"
+             "globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;"
            )
 
     assert String.contains?(
@@ -93,7 +93,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
-    refute String.contains?(markup, "globalThis.Hologram.initialChunkPaths")
+    refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
     refute String.contains?(markup, "globalThis.Hologram.initialPageBundlePath")
     refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
@@ -118,7 +118,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
-    refute String.contains?(markup, "globalThis.Hologram.initialChunkPaths")
+    refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
     refute String.contains?(markup, "globalThis.Hologram.initialPageBundlePath")
     refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")

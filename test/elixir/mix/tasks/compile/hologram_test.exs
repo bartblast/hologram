@@ -479,19 +479,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp test_chunk_registry_plt(opts) do
     items = load_chunk_registry_items(opts)
 
-    page_modules = for {{:page, page_module}, _paths} <- items, do: page_module
-    type_paths = for {{:type, _type}, paths} <- items, path <- paths, uniq: true, do: path
-    page_paths = for {{:page, _page_module}, paths} <- items, path <- paths, uniq: true, do: path
+    page_modules = for {{:page, page_module}, _digests} <- items, do: page_module
 
-    served_paths =
+    type_digests =
+      for {{:type, _type}, digests} <- items, digest <- digests, uniq: true, do: digest
+
+    page_digests =
+      for {{:page, _page_module}, digests} <- items, digest <- digests, uniq: true, do: digest
+
+    served_digests =
       opts[:static_dir]
       |> Path.join("chunk-????????.js")
       |> Path.wildcard()
-      |> Enum.map(&("/hologram/" <> Path.basename(&1)))
+      |> Enum.map(&Path.basename(&1, ".js"))
+      |> Enum.map(&String.replace_prefix(&1, "chunk-", ""))
 
     assert Enum.sort(page_modules) == Enum.sort(Reflection.list_pages())
-    assert Enum.sort(type_paths) == Enum.sort(served_paths)
-    assert page_paths -- served_paths == []
+    assert Enum.sort(type_digests) == Enum.sort(served_digests)
+    assert page_digests -- served_digests == []
   end
 
   defp test_dirs(opts) do
@@ -2355,10 +2360,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "the chunk registry names the chunks of a struct type no page names", %{opts: opts} do
       run(opts)
 
-      assert [path] = load_chunk_registry_items(opts)[{:type, @chunk_only_type}]
+      assert [digest] = load_chunk_registry_items(opts)[{:type, @chunk_only_type}]
 
       assert opts[:static_dir]
-             |> Path.join(Path.basename(path))
+             |> Path.join("chunk-#{digest}.js")
              |> defines_chunk_only_impl?()
 
       test_chunk_registry_plt(opts)
@@ -2370,28 +2375,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       {type, old_bundle_info} = put_kept_chunk_bundle_under_old_digest(opts)
-      old_path = "/hologram/chunk-#{old_bundle_info.digest}.js"
 
       fake_edit(@chunk_only_impl)
       Cache.put_pending_pages([Module1])
 
-      {record_paths, recorded_paths} = record_calls()
+      {record_digests, recorded_digests} = record_calls()
 
       # The chunk registry dump is read as the first batch is asked for, and as it is reported.
       next_batch = fn remaining_pages, _links ->
-        record_paths.(load_chunk_registry_items(opts)[{:type, type}])
+        record_digests.(load_chunk_registry_items(opts)[{:type, type}])
         MapSet.to_list(remaining_pages)
       end
 
       bundles_built = fn _built ->
-        record_paths.(load_chunk_registry_items(opts)[{:type, type}])
+        record_digests.(load_chunk_registry_items(opts)[{:type, type}])
       end
 
       run(Keyword.merge(opts, bundles_built: bundles_built, next_batch: next_batch))
 
-      assert [paths_before, paths_after] = recorded_paths.()
-      assert old_path in paths_before
-      refute old_path in paths_after
+      assert [digests_before, digests_after] = recorded_digests.()
+      assert old_bundle_info.digest in digests_before
+      refute old_bundle_info.digest in digests_after
       test_chunk_registry_plt(opts)
     end
 
@@ -2402,9 +2406,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       items = load_chunk_registry_items(opts)
 
       assert page_state.chunk_types == [@page_named_type]
-      assert [path] = items[{:type, @page_named_type}]
-      assert path in items[{:page, Module7}]
-      refute path in items[{:page, Module1}]
+      assert [digest] = items[{:type, @page_named_type}]
+      assert digest in items[{:page, Module7}]
+      refute digest in items[{:page, Module1}]
     end
 
     test "a new VM keeps the chunks each page preloads", %{opts: opts} do

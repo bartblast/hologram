@@ -15,7 +15,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
-  alias Hologram.Router.Helpers, as: RouterHelpers
 
   @type js_input_fingerprint ::
           {:digest, integer} | {:stat, non_neg_integer, non_neg_integer} | :fresh | :missing
@@ -270,11 +269,13 @@ defmodule Hologram.Compiler do
   Builds the chunk registry PLT, which says which chunks to load, and returns it with the path of
   its dump in the `:build_dir` opt:
 
-    * `{:type, type}` - the paths of the chunks a struct type needs, sorted: every chunk whose
+    * `{:type, type}` - the digests of the chunks a struct type needs, sorted: every chunk whose
       signature holds the type. A type no chunk's signature holds has no entry.
 
-    * `{:page, page}` - the paths of the chunks a page preloads, sorted: the ones its own types
+    * `{:page, page}` - the digests of the chunks a page preloads, sorted: the ones its own types
       need and the ones the given runtime types need. A page that preloads none has an empty list.
+
+  A chunk's digest names its file (see `Hologram.Router.Helpers.chunk_bundle_path/1`).
 
   Takes the chunks' bundle infos by signature (see `bundle/4`), each page's types (see
   `CallGraph.list_page_chunk_types/4`) and the struct types the runtime's code names (see
@@ -292,27 +293,26 @@ defmodule Hologram.Compiler do
         runtime_types,
         opts
       ) do
-    paths_by_type =
+    digests_by_type =
       bundle_infos_by_signature
       |> Enum.flat_map(fn {signature, bundle_info} ->
-        path = RouterHelpers.chunk_bundle_path(bundle_info.digest)
-        Enum.map(signature, &{&1, path})
+        Enum.map(signature, &{&1, bundle_info.digest})
       end)
       |> Enum.sort()
-      |> Enum.group_by(fn {type, _path} -> type end, fn {_type, path} -> path end)
+      |> Enum.group_by(fn {type, _digest} -> type end, fn {_type, digest} -> digest end)
 
-    type_items = Enum.map(paths_by_type, fn {type, paths} -> {{:type, type}, paths} end)
+    type_items = Enum.map(digests_by_type, fn {type, digests} -> {{:type, type}, digests} end)
 
     page_items =
       Enum.map(chunk_types_by_page, fn {page, types} ->
-        paths =
+        digests =
           types
           |> Enum.concat(runtime_types)
-          |> Enum.flat_map(&Map.get(paths_by_type, &1, []))
+          |> Enum.flat_map(&Map.get(digests_by_type, &1, []))
           |> Enum.uniq()
           |> Enum.sort()
 
-        {{:page, page}, paths}
+        {{:page, page}, digests}
       end)
 
     chunk_registry_plt = PLT.start(items: type_items ++ page_items, supervisor: opts[:supervisor])

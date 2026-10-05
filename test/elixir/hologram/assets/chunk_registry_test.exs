@@ -11,10 +11,10 @@ defmodule Hologram.Assets.ChunkRegistryTest do
   use_module_stub :chunk_registry
 
   @items %{
-    {:page, :module_a} => ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-CCCCCCCC.js"],
+    {:page, :module_a} => ["AAAAAAAA", "CCCCCCCC"],
     {:page, :module_b} => [],
-    {:type, Date} => ["/hologram/chunk-BBBBBBBB.js", "/hologram/chunk-CCCCCCCC.js"],
-    {:type, Time} => ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-CCCCCCCC.js"]
+    {:type, Date} => ["BBBBBBBB", "CCCCCCCC"],
+    {:type, Time} => ["AAAAAAAA", "CCCCCCCC"]
   }
 
   setup :set_mox_global
@@ -40,8 +40,8 @@ defmodule Hologram.Assets.ChunkRegistryTest do
 
     test "page entry exists" do
       assert lookup_page(:module_a) == [
-               "/hologram/chunk-AAAAAAAA.js",
-               "/hologram/chunk-CCCCCCCC.js"
+               "AAAAAAAA",
+               "CCCCCCCC"
              ]
     end
 
@@ -72,16 +72,16 @@ defmodule Hologram.Assets.ChunkRegistryTest do
 
     test "term holding structs of a type that has chunks" do
       assert lookup_term([~D[2026-10-05], ~D[2026-10-06]]) == [
-               "/hologram/chunk-BBBBBBBB.js",
-               "/hologram/chunk-CCCCCCCC.js"
+               "BBBBBBBB",
+               "CCCCCCCC"
              ]
     end
 
     test "term holding structs of two types that share a chunk" do
       assert lookup_term(%{date: ~D[2026-10-05], times: [~T[12:34:56]]}) == [
-               "/hologram/chunk-AAAAAAAA.js",
-               "/hologram/chunk-BBBBBBBB.js",
-               "/hologram/chunk-CCCCCCCC.js"
+               "AAAAAAAA",
+               "BBBBBBBB",
+               "CCCCCCCC"
              ]
     end
   end
@@ -93,7 +93,7 @@ defmodule Hologram.Assets.ChunkRegistryTest do
     end
 
     test "type entry exists" do
-      assert lookup_type(Date) == ["/hologram/chunk-BBBBBBBB.js", "/hologram/chunk-CCCCCCCC.js"]
+      assert lookup_type(Date) == ["BBBBBBBB", "CCCCCCCC"]
     end
 
     test "type entry doesn't exist" do

@@ -50,7 +50,8 @@ defmodule Hologram.Assets.ChunkRegistry do
   end
 
   @doc """
-  Returns the paths of the chunks the given page module preloads, sorted.
+  Returns the digests of the chunks the given page module preloads, sorted. A chunk's digest names
+  its file (see `Hologram.Router.Helpers.chunk_bundle_path/1`).
   """
   @spec lookup_page(module) :: [String.t()]
   def lookup_page(page_module) do
@@ -60,7 +61,7 @@ defmodule Hologram.Assets.ChunkRegistry do
   end
 
   @doc """
-  Returns the paths of the chunks the struct types found in the given term need (see
+  Returns the digests of the chunks the struct types found in the given term need (see
   `struct_types/1`), each once, sorted.
   """
   @spec lookup_term(term) :: [String.t()]
@@ -73,7 +74,7 @@ defmodule Hologram.Assets.ChunkRegistry do
   end
 
   @doc """
-  Returns the paths of the chunks the given struct type needs, sorted. A type that needs none has
+  Returns the digests of the chunks the given struct type needs, sorted. A type that needs none has
   no entry, and gives an empty list.
   """
   @spec lookup_type(module) :: [String.t()]
@@ -81,7 +82,7 @@ defmodule Hologram.Assets.ChunkRegistry do
     plt = plt(impl().ets_table_name())
 
     case PLT.get(plt, {:type, type}) do
-      {:ok, paths} -> paths
+      {:ok, digests} -> digests
       :error -> []
     end
   end

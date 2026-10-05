@@ -495,7 +495,7 @@ defmodule Hologram.ControllerTest do
   describe "build_page_data_payload/1" do
     setup do
       fields = %{
-        chunk_paths: ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-BBBBBBBB.js"],
+        chunk_digests: ["AAAAAAAA", "BBBBBBBB"],
         mount_data: %{
           asset_manifest: "{\"/hologram/runtime.js\": \"/hologram/runtime-1234.js\"};",
           component_registry: ~s/Type.map([[Type.bitstring("page"), Type.map([])]])/,
@@ -514,8 +514,8 @@ defmodule Hologram.ControllerTest do
 
     test "carries the chunks the page needs before it mounts", %{fields: fields} do
       assert build_page_data_payload(fields).chunks == [
-               "/hologram/chunk-AAAAAAAA.js",
-               "/hologram/chunk-BBBBBBBB.js"
+               "AAAAAAAA",
+               "BBBBBBBB"
              ]
     end
 
@@ -1529,8 +1529,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
 
       assert Jason.decode!(conn.resp_body)["chunks"] == [
-               "/hologram/chunk-BBBBBBBB.js",
-               "/hologram/chunk-CCCCCCCC.js"
+               "BBBBBBBB",
+               "CCCCCCCC"
              ]
     end
 
@@ -1550,8 +1550,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
 
       assert Jason.decode!(conn.resp_body)["chunks"] == [
-               "/hologram/chunk-AAAAAAAA.js",
-               "/hologram/chunk-CCCCCCCC.js"
+               "AAAAAAAA",
+               "CCCCCCCC"
              ]
     end
 
@@ -1888,7 +1888,7 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module33)
 
       assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkPaths = ["/hologram/chunk-BBBBBBBB.js","/hologram/chunk-CCCCCCCC.js"];'
+               ~s'globalThis.Hologram.initialChunkDigests = ["BBBBBBBB","CCCCCCCC"];'
 
       assert conn.resp_body =~
                ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script>' <>
@@ -1905,14 +1905,14 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module35)
 
       assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkPaths = ["/hologram/chunk-AAAAAAAA.js","/hologram/chunk-CCCCCCCC.js"];'
+               ~s'globalThis.Hologram.initialChunkDigests = ["AAAAAAAA","CCCCCCCC"];'
     end
 
     test "names the chunks the page preloads" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
 
       ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
-        "/hologram/chunk-DDDDDDDD.js"
+        "DDDDDDDD"
       ])
 
       conn =
@@ -1922,7 +1922,7 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module34)
 
       assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkPaths = ["/hologram/chunk-DDDDDDDD.js"];'
+               ~s'globalThis.Hologram.initialChunkDigests = ["DDDDDDDD"];'
 
       assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
     end
@@ -1936,7 +1936,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module34)
 
-      assert conn.resp_body =~ "globalThis.Hologram.initialChunkPaths = [];"
+      assert conn.resp_body =~ "globalThis.Hologram.initialChunkDigests = [];"
       refute conn.resp_body =~ "/hologram/chunk-"
       refute conn.resp_body =~ "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
     end
@@ -2714,7 +2714,7 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module33, :dummy_module_33_digest)
 
       ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module33}, [
-        "/hologram/chunk-DDDDDDDD.js"
+        "DDDDDDDD"
       ])
 
       conn =
@@ -2723,9 +2723,9 @@ defmodule Hologram.ControllerTest do
         |> handle_subsequent_page_request(Module33)
 
       assert Jason.decode!(conn.resp_body)["chunks"] == [
-               "/hologram/chunk-BBBBBBBB.js",
-               "/hologram/chunk-CCCCCCCC.js",
-               "/hologram/chunk-DDDDDDDD.js"
+               "BBBBBBBB",
+               "CCCCCCCC",
+               "DDDDDDDD"
              ]
     end
 

@@ -1060,16 +1060,16 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(plt, {:page, MyPage1}) ==
                {:ok,
                 [
-                  "/hologram/chunk-BBBBBBBB.js",
-                  "/hologram/chunk-CCCCCCCC.js"
+                  "BBBBBBBB",
+                  "CCCCCCCC"
                 ]}
 
       assert PLT.get(plt, {:page, MyPage2}) ==
                {:ok,
                 [
-                  "/hologram/chunk-AAAAAAAA.js",
-                  "/hologram/chunk-BBBBBBBB.js",
-                  "/hologram/chunk-CCCCCCCC.js"
+                  "AAAAAAAA",
+                  "BBBBBBBB",
+                  "CCCCCCCC"
                 ]}
     end
 
@@ -1081,11 +1081,11 @@ defmodule Hologram.CompilerTest do
 
       assert PLT.get_all(plt) == %{
                {:type, Date} => [
-                 "/hologram/chunk-AAAAAAAA.js",
-                 "/hologram/chunk-BBBBBBBB.js"
+                 "AAAAAAAA",
+                 "BBBBBBBB"
                ],
-               {:type, DateTime} => ["/hologram/chunk-BBBBBBBB.js"],
-               {:type, Time} => ["/hologram/chunk-CCCCCCCC.js"]
+               {:type, DateTime} => ["BBBBBBBB"],
+               {:type, Time} => ["CCCCCCCC"]
              }
     end
 

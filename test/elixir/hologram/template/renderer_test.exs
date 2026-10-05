@@ -1965,17 +1965,17 @@ defmodule Hologram.Template.RendererTest do
     test "name the chunks the struct types in the page state need" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module93, :dummy_module_93_digest)
 
-      assert render_page(Module93, @params, @server, @opts).chunk_paths == [
-               "/hologram/chunk-AAAAAAAA.js",
-               "/hologram/chunk-BBBBBBBB.js",
-               "/hologram/chunk-CCCCCCCC.js"
+      assert render_page(Module93, @params, @server, @opts).chunk_digests == [
+               "AAAAAAAA",
+               "BBBBBBBB",
+               "CCCCCCCC"
              ]
     end
 
     test "name no chunk when the page state holds no struct of a type that needs one" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
 
-      assert render_page(Module21, @params, @server, @opts).chunk_paths == []
+      assert render_page(Module21, @params, @server, @opts).chunk_digests == []
     end
 
     test "merge the page params into the page component struct" do
@@ -3088,23 +3088,23 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "interpolate_chunks/2" do
-    test "substitutes the placeholders with the paths and a script tag per path" do
+    test "substitutes the placeholders with the digests and a script tag per chunk" do
       html =
-        "before chunkPaths: $CHUNK_PATHS_JS_PLACEHOLDER; $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
+        "before chunkDigests: $CHUNK_DIGESTS_JS_PLACEHOLDER; $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
 
-      chunk_paths = ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-BBBBBBBB.js"]
+      chunk_digests = ["AAAAAAAA", "BBBBBBBB"]
 
-      assert Renderer.interpolate_chunks(html, chunk_paths) ==
-               ~s'before chunkPaths: ["/hologram/chunk-AAAAAAAA.js","/hologram/chunk-BBBBBBBB.js"]; ' <>
+      assert Renderer.interpolate_chunks(html, chunk_digests) ==
+               ~s'before chunkDigests: ["AAAAAAAA","BBBBBBBB"]; ' <>
                  ~s'<script async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
                  ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script> after'
     end
 
-    test "substitutes the placeholders with an empty array and no script tag when no paths are provided" do
+    test "substitutes the placeholders with an empty array and no script tag when no chunks are provided" do
       html =
-        "before chunkPaths: $CHUNK_PATHS_JS_PLACEHOLDER; $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
+        "before chunkDigests: $CHUNK_DIGESTS_JS_PLACEHOLDER; $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
 
-      assert Renderer.interpolate_chunks(html, []) == "before chunkPaths: [];  after"
+      assert Renderer.interpolate_chunks(html, []) == "before chunkDigests: [];  after"
     end
   end
 
