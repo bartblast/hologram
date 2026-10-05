@@ -1901,6 +1901,80 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_client_protocols/4" do
+    test "excludes a protocol called only by a function of another protocol" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module14, :action, 3}, {String.Chars, :to_string, 1})
+        |> Digraph.add_edge({String.Chars, :to_string, 1}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [Module14], [], module_info_plt_fixture())
+
+      assert String.Chars in result
+      refute Protocol1 in result
+    end
+
+    test "excludes a protocol only a page's server callbacks call" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module14, :command, 3}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Module14, :init, 3}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [Module14], [], module_info_plt_fixture())
+
+      refute Protocol1 in result
+    end
+
+    test "includes a protocol a component's client code calls" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge(Module15, {Module15, :action, 3})
+        |> Digraph.add_edge({Module15, :action, 3}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [], [Module15], module_info_plt_fixture())
+
+      assert Protocol1 in result
+    end
+
+    test "includes a protocol a page's client code calls" do
+      graph = Digraph.add_edge(Digraph.new(), {Module14, :action, 3}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [Module14], [], module_info_plt_fixture())
+
+      assert Protocol1 in result
+    end
+
+    test "includes a protocol the client code of a broadcast-referenced component calls" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module13, :my_fun, 0}, Module38)
+        |> Digraph.add_edge(Module38, {Module38, :template, 0})
+        |> Digraph.add_edge({Module38, :template, 0}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [], [], module_info_plt_fixture())
+
+      assert Protocol1 in result
+    end
+
+    test "includes a protocol the runtime's entry MFAs reach", %{full_call_graph: call_graph} do
+      result =
+        call_graph
+        |> get_graph()
+        |> list_client_protocols([], [], module_info_plt_fixture())
+
+      assert Enumerable in result
+      assert String.Chars in result
+    end
+
+    test "returns no protocol for a graph that calls none" do
+      graph = Digraph.add_edge(Digraph.new(), {Module14, :action, 3}, {Module5, :my_fun, 0})
+
+      assert list_client_protocols(graph, [Module14], [], module_info_plt_fixture()) ==
+               MapSet.new()
+    end
+  end
+
   describe "list_page_chunk_types/4" do
     test "excludes built-in types", %{full_call_graph: full_call_graph} do
       result = list_page_chunk_types_with_analysis(full_call_graph, Module17)

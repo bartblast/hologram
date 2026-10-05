@@ -889,6 +889,35 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the protocols the client code of an app with the given pages and components can dispatch:
+  the protocol modules whose functions are reachable from the pages' entry MFAs, the components'
+  client code, the client code of the components referenced in broadcast caller code, and the
+  runtime's entry MFAs.
+  Protocol function vertices are opaque during the traversal, so a protocol called only by an
+  implementation of another protocol is not among them.
+  """
+  # TODO: a set per page would let a page's chunks leave out the implementations of the protocols
+  # only other pages call.
+  @spec list_client_protocols(Digraph.t(), [module], [module], PLT.t() | nil) :: MapSet.t(module)
+  def list_client_protocols(graph, pages, components, module_info_plt) do
+    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas(&1, module_info_plt))
+    broadcast_caller_analysis = broadcast_caller_analysis(graph, module_info_plt)
+
+    # A component's module vertex carries the edges to its client functions.
+    entry_vertices =
+      page_entry_mfas ++
+        components ++
+        broadcast_caller_analysis.referenced_components ++ list_runtime_entry_mfas()
+
+    graph
+    |> Digraph.reachable(entry_vertices,
+      opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
+    )
+    |> Enum.filter(&protocol_function_mfa?(&1, module_info_plt))
+    |> MapSet.new(fn {protocol, _function, _arity} -> protocol end)
+  end
+
+  @doc """
   Returns the modules of every vertex from which a vertex of the given modules can be reached, the
   given modules included. The compile task uses it, before the graph is patched, to find the pages
   and components a change to those modules can affect: every way a page's bundle depends on a module
