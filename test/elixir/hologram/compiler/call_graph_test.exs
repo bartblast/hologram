@@ -1483,7 +1483,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       modules = reach_modules()
       {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
 
-      refute MapSet.member?(modules(call_graph), ReachTest.Proto.TypeB)
+      refute ReachTest.Proto.TypeB in modules(call_graph)
 
       result =
         build_chunk_reach(
@@ -1495,8 +1495,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result.built_modules == [ReachTest.Proto.TypeB, ReachTest.Unreached]
 
-      assert MapSet.member?(modules(call_graph), ReachTest.Proto.TypeB)
-      assert MapSet.member?(modules(call_graph), ReachTest.Unreached)
+      assert ReachTest.Proto.TypeB in modules(call_graph)
+      assert ReachTest.Unreached in modules(call_graph)
 
       assert has_edge?(
                call_graph,

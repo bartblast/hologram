@@ -943,9 +943,11 @@ defmodule Hologram.Compiler.CallGraph do
         {type, {impl, function, arity}}
       end
 
+    # Sorted before the grouping, which keeps each type's vertices in that order.
     entries
+    |> Enum.sort()
     |> Enum.group_by(fn {type, _vertex} -> type end, fn {_type, vertex} -> vertex end)
-    |> Map.new(fn {type, vertices} -> {type, Enum.sort(reject_hex_mfas(vertices))} end)
+    |> Map.new(fn {type, vertices} -> {type, reject_hex_mfas(vertices)} end)
     |> Map.reject(fn {_type, vertices} -> vertices == [] end)
   end
 
