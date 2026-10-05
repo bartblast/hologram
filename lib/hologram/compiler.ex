@@ -19,6 +19,15 @@ defmodule Hologram.Compiler do
   @type js_input_fingerprint ::
           {:digest, integer} | {:stat, non_neg_integer, non_neg_integer} | :fresh | :missing
 
+  # A chunk whose rendered definitions are smaller than this many bytes is folded into another
+  # chunk (see fold_small_chunks/2), because shipping it as a file of its own costs more than it
+  # holds. The measured part: a bundled chunk with no function is 403 bytes, and the response
+  # headers of a static script are about 185 bytes, so a file costs about 590 bytes on the wire
+  # before its first function. Rendered definitions minify to about 0.69 of their size (measured on
+  # the chunks under 2 KB of Hologram's own test build), which makes 590 bytes on the wire about 850
+  # rendered ones. The policy part: a request is counted as costing those bytes and nothing else.
+  @chunk_fold_bound 850
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers. The module info PLT says which
@@ -680,10 +689,11 @@ defmodule Hologram.Compiler do
 
   @doc """
   Creates the chunk bundle entry files, one per signature of the given MFAs by signature (see
-  `group_mfas_by_signature/1`), and returns each signature with its digest (see
-  `chunk_signature_digest/1`) and its entry file's path, sorted by digest. The functions of all
-  the chunks are encoded into the encode PLT first, with one IR read per module
-  (`encode_reachable_functions/5`), and then each chunk is rendered from that cache. Takes the
+  `group_mfas_by_signature/1`) once the small chunks are folded (see `fold_small_chunks/2`), and
+  returns each signature left with its digest (see `chunk_signature_digest/1`) and its entry
+  file's path, sorted by digest. The functions of all the chunks are encoded into the encode PLT
+  first, with one IR read per module (`encode_reachable_functions/5`), and then each chunk is
+  rendered from that cache. Takes the
   options `create_page_entry_files/6` takes, with the modules whose JS bindings the runtime script
   registers as the `runtime_js_binding_modules:` opt.
   """
@@ -697,22 +707,35 @@ defmodule Hologram.Compiler do
   def create_chunk_entry_files(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
     module_info_plt = opts[:module_info_plt]
 
+    script_opts = [
+      js_dir: opts[:js_dir],
+      module_info_plt: module_info_plt,
+      module_metadata: opts[:module_metadata],
+      runtime_js_binding_modules: opts[:runtime_js_binding_modules] || MapSet.new()
+    ]
+
     mfas_by_signature
     |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
     |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
 
+    # A chunk's size is the size of its definitions as rendered, which holds the Erlang functions
+    # and the protocol dispatchers too: the encode PLT holds neither.
+    size_by_signature =
+      mfas_by_signature
+      |> TaskUtils.map_concurrently(fn {signature, mfas} ->
+        %{defs: defs} = render_script_parts(mfas, ir_plt, encode_plt, async_mfas, script_opts)
+        {signature, byte_size(defs)}
+      end)
+      |> Map.new()
+
     mfas_by_signature
+    |> fold_small_chunks(size_by_signature)
     |> Enum.map(fn {signature, mfas} -> {signature, chunk_signature_digest(signature), mfas} end)
     |> Enum.sort_by(fn {_signature, signature_digest, _mfas} -> signature_digest end)
     |> TaskUtils.map_concurrently(fn {signature, signature_digest, mfas} ->
       entry_file_path =
         mfas
-        |> build_chunk_js(ir_plt, encode_plt, async_mfas,
-          js_dir: opts[:js_dir],
-          module_info_plt: module_info_plt,
-          module_metadata: opts[:module_metadata],
-          runtime_js_binding_modules: opts[:runtime_js_binding_modules] || MapSet.new()
-        )
+        |> build_chunk_js(ir_plt, encode_plt, async_mfas, script_opts)
         |> create_entry_file("chunk-" <> signature_digest, opts[:tmp_dir])
 
       {signature, signature_digest, entry_file_path}
@@ -903,6 +926,49 @@ defmodule Hologram.Compiler do
         }
   def fingerprint_js_inputs(paths, started_at) do
     Map.new(paths, &{&1, fingerprint_js_input(&1, started_at)})
+  end
+
+  @doc """
+  Folds each chunk that is smaller than what a separate file costs into another chunk, given the
+  MFAs by signature (see `group_mfas_by_signature/1`) and each signature's size, the bytes of its
+  definitions as rendered. A small chunk is merged into the chunk whose signature is its smallest
+  strict superset, so that every type that needs its MFAs still loads them: those types save a
+  request, and the other types of the superset load a few bytes they have no use for. A small
+  chunk with no superset stays.
+
+  The smallest chunks are folded first, and a chunk that grew to the bound by what was folded into
+  it stays.
+
+  ## Examples
+
+      iex> fold_small_chunks(
+      ...>   %{
+      ...>     MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+      ...>     MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}]
+      ...>   },
+      ...>   %{MapSet.new([Date]) => 300, MapSet.new([Date, DateTime]) => 4_000}
+      ...> )
+      %{
+        MapSet.new([Date, DateTime]) => [
+          {Calendar.ISO, :date_to_string, 3},
+          {String.Chars.Date, :to_string, 1}
+        ]
+      }
+  """
+  @spec fold_small_chunks(
+          %{MapSet.t(module) => [mfa]},
+          %{MapSet.t(module) => non_neg_integer}
+        ) :: %{MapSet.t(module) => [mfa]}
+  def fold_small_chunks(mfas_by_signature, size_by_signature) do
+    {folded_mfas_by_signature, _sizes} =
+      size_by_signature
+      |> Enum.filter(fn {_signature, size} -> size < @chunk_fold_bound end)
+      |> Enum.sort_by(fn {signature, size} -> {size, Enum.sort(signature)} end)
+      |> Enum.reduce({mfas_by_signature, size_by_signature}, fn {signature, _size}, acc ->
+        fold_small_chunk(signature, acc)
+      end)
+
+    folded_mfas_by_signature
   end
 
   @doc """
@@ -1789,6 +1855,34 @@ defmodule Hologram.Compiler do
       {:error, _reason} ->
         :missing
     end
+  end
+
+  # Merges the chunk of the given signature into its target (see fold_target/2), when it is still
+  # under the bound with what was folded into it and has one.
+  defp fold_small_chunk(signature, {mfas_by_signature, size_by_signature} = acc) do
+    size = Map.fetch!(size_by_signature, signature)
+    target = fold_target(signature, Map.keys(mfas_by_signature))
+
+    if size < @chunk_fold_bound and target do
+      {mfas, remaining_mfas_by_signature} = Map.pop!(mfas_by_signature, signature)
+
+      {
+        Map.update!(remaining_mfas_by_signature, target, &Enum.sort(&1 ++ mfas)),
+        size_by_signature
+        |> Map.delete(signature)
+        |> Map.update!(target, &(&1 + size))
+      }
+    else
+      acc
+    end
+  end
+
+  # The signature a small chunk is folded into: its strict superset with the fewest types, the
+  # first by its sorted types among several. Nil when no signature is a strict superset.
+  defp fold_target(signature, signatures) do
+    signatures
+    |> Enum.filter(&(&1 != signature and MapSet.subset?(signature, &1)))
+    |> Enum.min_by(&{MapSet.size(&1), Enum.sort(&1)}, fn -> nil end)
   end
 
   defp function_encoded?(encode_plt, module, {function, arity}) do

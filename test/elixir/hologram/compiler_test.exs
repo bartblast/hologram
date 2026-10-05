@@ -2165,9 +2165,10 @@ defmodule Hologram.CompilerTest do
 
   describe "create_chunk_entry_files/5" do
     setup %{module_info_plt: module_info_plt} do
+      # Neither signature holds the other, so neither chunk is folded.
       mfas_by_signature = %{
         MapSet.new([Date]) => [{Module18, :my_fun, 0}],
-        MapSet.new([Date, Time]) => [{Module22, :my_fun, 0}]
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
       }
 
       [
@@ -2194,11 +2195,11 @@ defmodule Hologram.CompilerTest do
         )
 
       entry_file_path_1 = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
-      entry_file_path_2 = Path.join(tmp_dir, "chunk-59fbfa6b.entry.js")
+      entry_file_path_2 = Path.join(tmp_dir, "chunk-a6274391.entry.js")
 
       assert result == [
                {MapSet.new([Date]), "59b80f19", entry_file_path_1},
-               {MapSet.new([Date, Time]), "59fbfa6b", entry_file_path_2}
+               {MapSet.new([Time]), "a6274391", entry_file_path_2}
              ]
 
       entry_file_1 = File.read!(entry_file_path_1)
@@ -2215,6 +2216,43 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(entry_file_2, js_fragment_2)
       refute String.contains?(entry_file_2, js_fragment_1)
+    end
+
+    test "creates no entry file for a chunk folded into another", %{ir_plt: ir_plt, opts: opts} do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_fold"])
+      clean_dir(tmp_dir)
+
+      # Module22.my_fun/0 returns an atom, so the chunk holding it alone is a few hundred bytes of
+      # definitions, under what a file of its own costs.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
+      }
+
+      result =
+        create_chunk_entry_files(
+          mfas_by_signature,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          Keyword.put(opts, :tmp_dir, tmp_dir)
+        )
+
+      entry_file_path = Path.join(tmp_dir, "chunk-59fbfa6b.entry.js")
+
+      assert result == [{MapSet.new([Date, Time]), "59fbfa6b", entry_file_path}]
+
+      entry_file = File.read!(entry_file_path)
+
+      assert String.contains?(
+               entry_file,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+             )
+
+      assert String.contains?(
+               entry_file,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
+             )
     end
 
     test "encodes the chunks' functions into the encode PLT", %{
@@ -2782,6 +2820,117 @@ defmodule Hologram.CompilerTest do
 
     test "no paths", _context do
       assert fingerprint_js_inputs([], nil) == %{}
+    end
+  end
+
+  describe "fold_small_chunks/2" do
+    test "folds a chain of small chunks into the first chunk that is not small" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      size_by_signature = %{
+        MapSet.new([Date]) => 100,
+        MapSet.new([Date, DateTime]) => 200,
+        MapSet.new([Date, DateTime, Time]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime, Time]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {Calendar.ISO, :zero_pad, 2},
+                 {String.Chars.Date, :to_string, 1}
+               ]
+             }
+    end
+
+    test "folds a small chunk into its superset, keeping the MFAs sorted" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}]
+      }
+
+      size_by_signature = %{MapSet.new([Date]) => 300, MapSet.new([Date, DateTime]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ]
+             }
+    end
+
+    test "folds a small chunk into the superset with the fewest types" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      size_by_signature = %{
+        MapSet.new([Date]) => 300,
+        MapSet.new([Date, DateTime]) => 4_000,
+        MapSet.new([Date, DateTime, Time]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ],
+               MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+             }
+    end
+
+    test "keeps a chunk that grew to the bound by what was folded into it" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      # 500 + 500 bytes is over the bound of 850.
+      size_by_signature = %{
+        MapSet.new([Date]) => 500,
+        MapSet.new([Date, DateTime]) => 500,
+        MapSet.new([Date, DateTime, Time]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ],
+               MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+             }
+    end
+
+    test "keeps a chunk whose size is the bound" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}]
+      }
+
+      size_by_signature = %{MapSet.new([Date]) => 850, MapSet.new([Date, DateTime]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == mfas_by_signature
+    end
+
+    test "keeps a small chunk no other chunk's signature holds" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}]
+      }
+
+      size_by_signature = %{MapSet.new([Date]) => 300, MapSet.new([Time]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == mfas_by_signature
+    end
+
+    test "returns an empty map for no chunks" do
+      assert fold_small_chunks(%{}, %{}) == %{}
     end
   end
 
