@@ -4280,13 +4280,33 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Enumerable.List, :reduce, 3} in result.mfas
     end
 
-    test "mfas hold no implementation for a struct type the runtime's code names", %{
-      runtime_analysis: result
+    test "mfas hold no implementation for a struct type only a page's code names", %{
+      full_call_graph: call_graph
     } do
-      refute {Enumerable.Range, :__impl__, 1} in result.mfas
-      refute {Enumerable.Range, :reduce, 3} in result.mfas
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> runtime_analysis()
+
+      refute Module12 in result.types
+
+      refute {StringCharsModule12, :__impl__, 1} in result.mfas
+      refute {StringCharsModule12, :to_string, 1} in result.mfas
     end
 
+    test "mfas hold the implementations for the struct types the runtime's code names", %{
+      runtime_analysis: result
+    } do
+      assert {Enumerable.MapSet, :__impl__, 1} in result.mfas
+      assert {Enumerable.MapSet, :reduce, 3} in result.mfas
+
+      assert {Enumerable.Range, :__impl__, 1} in result.mfas
+      assert {Enumerable.Range, :reduce, 3} in result.mfas
+    end
+
+    # A broadcast-referenced component's client code is runtime code, so a struct it names is one
+    # the runtime's code names.
     test "types hold a struct type a broadcast-referenced component's client code names", %{
       full_call_graph: call_graph
     } do
@@ -4300,8 +4320,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert Module12 in result.types
 
-      refute {StringCharsModule12, :__impl__, 1} in result.mfas
-      refute {StringCharsModule12, :to_string, 1} in result.mfas
+      assert {StringCharsModule12, :__impl__, 1} in result.mfas
+      assert {StringCharsModule12, :to_string, 1} in result.mfas
     end
 
     test "types hold no built-in type", %{runtime_analysis: result} do

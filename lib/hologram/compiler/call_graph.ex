@@ -1424,10 +1424,12 @@ defmodule Hologram.Compiler.CallGraph do
   Returns what the runtime JS script of an app carries: its MFAs, sorted, with the client MFAs of
   the components referenced in broadcast caller code, and the struct types that code names.
 
-  The walk enters the protocol implementations for the built-in types only. An implementation for
-  a struct type is not among the MFAs, whichever code names the type: it ships in a chunk of its
-  own. The struct types the runtime's code names are returned because that code builds such
-  structs on the client, where nothing announces them.
+  The walk enters the protocol implementations for the built-in types and for the struct types the
+  runtime's own code names: that code builds such structs on the client, on any page, where nothing
+  announces them. An implementation for a struct type only a page's or a server callback's code
+  names is not among the MFAs: it ships in a chunk of its own. The struct types the runtime's code
+  names are returned, since a protocol the runtime does not call can have an implementation for
+  one of them, which is in a chunk like any other.
 
   The walk runs inside the call graph's agent, so the graph is not copied out. It cannot raise: it
   is a traversal of the graph and reads of the module info PLT. The analyses PLT it starts is
@@ -2468,10 +2470,10 @@ defmodule Hologram.Compiler.CallGraph do
 
     entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
 
+    # No type of the app is given: the implementations entered for struct types are the ones for the
+    # types this walk reaches by itself.
     initial_state =
-      start_reachable_state(graph, entry_vertices, MapSet.new(), module_info_plt,
-        enter_struct_impls?: false
-      )
+      start_reachable_state(graph, entry_vertices, MapSet.new(), module_info_plt, [])
 
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
 
