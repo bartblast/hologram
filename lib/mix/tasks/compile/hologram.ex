@@ -230,6 +230,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       page_modules = Compiler.list_pages(new_module_info_plt)
       Compiler.validate_page_modules(page_modules, new_module_info_plt)
 
+      component_modules = Compiler.list_components(new_module_info_plt)
+
       # The IR of every removed and edited module is dropped, whether or not the graph holds the
       # module: the IR PLT keeps the templatables' IR between compiles, and an edited component no
       # page reaches is read again by the prop usage validation. The IR this compile reads is built
@@ -263,6 +265,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       built_modules =
         if graph_unchanged?, do: [], else: Compiler.build_reach!(call_graph, ir_plt, graph_diff)
 
+      # Grows it further by what the chunks hold and no page reaches: the implementations for the
+      # struct types no page's code names, and what only those call. Before the async MFAs and the
+      # app versions are taken, which read the whole graph.
+      chunk_reach =
+        build_chunk_reach(call_graph, ir_plt, page_modules, component_modules, graph_unchanged?)
+
       # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
       async_mfas = list_async_mfas(cache.encoding_inputs, call_graph, graph_unchanged?)
 
@@ -270,7 +278,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_kept?, sup)
 
-      component_modules = Compiler.list_components(new_module_info_plt)
       templatable_modules = page_modules ++ component_modules
 
       template_modules =
@@ -283,6 +290,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       runtime_mfas =
         list_runtime_mfas(cache.runtime, call_graph_for_runtime, runtime_kept?)
+
+      # The MFAs of each chunk, by its signature, listed while the runtime graph still holds the
+      # runtime's MFAs (build_pages_graph/2 below takes them out).
+      chunk_mfas_by_signature =
+        list_chunk_mfas_by_signature(chunk_reach, call_graph_for_runtime, runtime_mfas)
 
       # What the runtime's dynamic calls open for every page, taken while the runtime graph still
       # holds the runtime's MFAs (build_pages_graph/2 below takes them out), and kept when they are.
@@ -307,7 +319,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           cache.app_versions,
           call_graph_for_runtime,
           module_digests_diff,
-          built_modules
+          built_modules ++ chunk_built_modules(chunk_reach)
         )
 
       call_graph_for_pages = build_pages_graph(call_graph_for_runtime, runtime_mfas)
@@ -378,8 +390,14 @@ defmodule Mix.Tasks.Compile.Hologram do
       # build dir the diff has just built the IR of every module, which pruning it would only have
       # the pages build again. A kept page renders no entry file this time, but its IR stays, so
       # that a later compile that does rebuild it finds the IR it reads.
+      # The chunks' modules are kept like the runtime's: their bundles are rendered from the same
+      # IR and encodings.
       kept_modules =
-        Compiler.list_kept_modules(runtime_mfas, modules_by_page, new_module_info_plt)
+        Compiler.list_kept_modules(
+          runtime_mfas ++ chunk_mfas(chunk_mfas_by_signature),
+          modules_by_page,
+          new_module_info_plt
+        )
 
       dropped_modules = Compiler.prune_ir_plt(ir_plt, kept_modules)
 
@@ -682,6 +700,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
   end
 
+  # Grows the graph to hold the chunks' code (see Hologram.Compiler.build_chunk_reach!/4) and returns
+  # the chunks' entry vertices by type with the modules built. None on a compile that left the graph
+  # as it was: the graph holds the chunks' code since the compile that last changed it.
+  defp build_chunk_reach(_call_graph, _ir_plt, _page_modules, _component_modules, true), do: nil
+
+  defp build_chunk_reach(call_graph, ir_plt, page_modules, component_modules, false) do
+    Compiler.build_chunk_reach!(call_graph, ir_plt, page_modules, component_modules)
+  end
+
   # The copy of the graph the runtime's MFAs are listed on, without the manually ported MFAs. None
   # when the runtime's MFAs are kept (see runtime_kept?/3): nothing lists them then.
   defp build_runtime_graph(_call_graph, true, _sup), do: nil
@@ -729,6 +756,20 @@ defmodule Mix.Tasks.Compile.Hologram do
     context.opts[:bundles_built].(built_entries)
 
     new_bundles
+  end
+
+  defp chunk_built_modules(nil), do: []
+  defp chunk_built_modules(chunk_reach), do: chunk_reach.built_modules
+
+  # Every chunk's MFAs. None while the compile has no chunk analysis.
+  # TODO: take them from the kept chunk state on a compile that left the graph as it was, so that
+  # the IR prune keeps the chunks' modules then.
+  defp chunk_mfas(nil), do: []
+
+  defp chunk_mfas(chunk_mfas_by_signature) do
+    chunk_mfas_by_signature
+    |> Map.values()
+    |> Enum.concat()
   end
 
   defp compile_with_lock(opts) do
@@ -1093,6 +1134,17 @@ defmodule Mix.Tasks.Compile.Hologram do
         :error -> []
       end
     end)
+  end
+
+  # The MFAs of each chunk by its signature (see Hologram.Compiler.group_mfas_by_signature/1): each
+  # chunked type's MFAs without the runtime's, regrouped. None on a compile that did not grow the
+  # graph for the chunks (see build_chunk_reach/5).
+  defp list_chunk_mfas_by_signature(nil, _call_graph_for_runtime, _runtime_mfas), do: nil
+
+  defp list_chunk_mfas_by_signature(chunk_reach, call_graph_for_runtime, runtime_mfas) do
+    call_graph_for_runtime
+    |> CallGraph.list_chunk_mfas_by_type(chunk_reach.entries_by_type, runtime_mfas)
+    |> Compiler.group_mfas_by_signature()
   end
 
   # What the runtime's dynamic calls open is taken from the runtime's MFAs, so a compile that kept

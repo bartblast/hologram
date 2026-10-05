@@ -57,6 +57,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @linked_page Hologram.Test.Fixtures.Page.Module2
   @linking_page Hologram.Test.Fixtures.Page.Module5
 
+  # An implementation of String.Chars for a struct of the test build that no page and no runtime
+  # function names, so that only the chunks reach it.
+  @chunk_only_impl String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12
+
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
@@ -872,12 +876,33 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert MapSet.size(graph_modules) < map_size(module_infos)
     end
 
+    test "a run into an empty build dir holds the chunks' code in the graph and its IR", %{
+      opts: opts
+    } do
+      Cache.reset()
+      run(Keyword.put(opts, :build_dir, setup_empty_build_dir()))
+
+      %{call_graph: call_graph, ir_plt: ir_plt} = cache_state()
+
+      assert @chunk_only_impl in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {@chunk_only_impl, :to_string, 1})
+      assert PLT.member?(ir_plt, @chunk_only_impl)
+    end
+
     test "a run with no changes does not walk the graph", %{opts: opts} do
       run(opts)
 
       Code.ensure_loaded!(CallGraph)
 
       assert count_calls({CallGraph, :build_reach, 3}, fn -> run(opts) end) == 0
+    end
+
+    test "a run with no changes does not walk the graph for the chunks", %{opts: opts} do
+      run(opts)
+
+      Code.ensure_loaded!(CallGraph)
+
+      assert count_calls({CallGraph, :build_chunk_reach, 4}, fn -> run(opts) end) == 0
     end
 
     test "an edit of a module the graph does not hold builds no IR", %{opts: opts} do
