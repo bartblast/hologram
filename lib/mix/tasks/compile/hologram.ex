@@ -1407,7 +1407,11 @@ defmodule Mix.Tasks.Compile.Hologram do
          runtime_mfas
        ) do
     call_graph_for_runtime
-    |> CallGraph.list_chunk_mfas_by_type(chunk_reach.entries_by_type, runtime_mfas)
+    |> CallGraph.list_chunk_mfas_by_type(
+      chunk_reach.entries_by_type,
+      chunk_reach.client_protocols,
+      runtime_mfas
+    )
     |> Compiler.group_mfas_by_signature()
   end
 

@@ -58,7 +58,7 @@ defmodule Hologram.Compiler.CallGraph do
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields. Neither does the reach
   # walk_chunk_reach/3 starts from, which is empty_reach/0 with its types replaced.
-  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 5}, {:walk_chunk_reach, 3}]}
+  @dialyzer {:no_opaque, [{:empty_reach, 0}, {:start_reachable_state, 5}, {:walk_chunk_reach, 4}]}
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -772,21 +772,25 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Grows the graph until it holds the code of every chunk: what the implementations of the client
   protocols (see list_client_protocols/4) for struct types reach. Returns those implementations'
-  entry vertices by type (see list_chunk_entries/2) and the modules it asked to build, in the
-  order asked.
+  entry vertices by type (see list_chunk_entries/2), the client protocols and the modules it asked
+  to build, in the order asked.
 
   The graph build_reach/3 leaves holds what the pages and the runtime reach, so the implementation
   for a type no page names, and what only such an implementation calls, are not in it. The walk
   starts from every entry vertex with every such type reachable, follows edges with the rules of
   reachable_mfas/5, and runs in rounds like build_reach/3: `build_modules` is called with the
-  modules a round needs built, and the next round walks the graph again. A protocol whose function
-  only chunk code calls joins the protocols, which adds its implementations' entries. When a
-  round asks for no module and finds no new protocol, the graph holds everything a chunk can hold.
+  modules a round needs built, and the next round walks the graph again. When a round asks for no
+  module, the graph holds everything a chunk can hold.
+
+  A protocol whose functions only chunk code calls is no client protocol and has no entries of its
+  own: the walk follows its functions to every implementation (the `:opaque_protocols` option of
+  reachable_mfas/5), so those are built too, as part of what the calling chunk reaches.
 
   What the walk reached is not kept: build_reach/3's reach is left as it is.
   """
   @spec build_chunk_reach(t, [module], [module], ([module] -> any)) :: %{
           built_modules: [module],
+          client_protocols: MapSet.t(module),
           entries_by_type: %{module => [vertex]}
         }
   def build_chunk_reach(
@@ -800,7 +804,16 @@ defmodule Hologram.Compiler.CallGraph do
     client_protocols =
       read_graph(pid, &list_client_protocols(&1, pages, components, module_info_plt))
 
-    build_chunk_reach_rounds(call_graph, client_protocols, build_modules, [])
+    entries_by_type = list_chunk_entries(client_protocols, module_info_plt)
+
+    built_modules =
+      build_chunk_reach_rounds(call_graph, entries_by_type, client_protocols, build_modules, [])
+
+    %{
+      built_modules: built_modules,
+      client_protocols: client_protocols,
+      entries_by_type: entries_by_type
+    }
   end
 
   @doc """
@@ -966,21 +979,34 @@ defmodule Hologram.Compiler.CallGraph do
   implementations for the struct types the reached code names are entered too: code that turns a
   struct of the type into text can build a struct of another type on the way and dispatch on it,
   and nothing announces that one to the client.
+
+  Only the given client protocols (see list_client_protocols/4) are dispatched by type that way. A
+  protocol only chunk code calls is followed to every implementation (the `:opaque_protocols`
+  option of reachable_mfas/5): a value of any type can reach the call, the server announces
+  chunks for the client protocols alone, and only the code that calls the protocol can dispatch
+  it, so that code's chunks carry all of its implementations.
   """
-  @spec list_chunk_mfas_by_type(t, %{module => [vertex]}, [mfa]) :: %{module => [mfa]}
+  @spec list_chunk_mfas_by_type(t, %{module => [vertex]}, MapSet.t(module), [mfa]) :: %{
+          module => [mfa]
+        }
   def list_chunk_mfas_by_type(
         %{module_info_plt: module_info_plt} = call_graph,
         entries_by_type,
+        client_protocols,
         runtime_mfas
       ) do
-    runtime_mfa_set = MapSet.new(runtime_mfas)
+    walk = %{
+      client_protocols: client_protocols,
+      module_info_plt: module_info_plt,
+      runtime_mfa_set: MapSet.new(runtime_mfas)
+    }
 
     # The tasks get the reader, which captures only the shared graph's key (see with_shared_graph/2).
     with_shared_graph(call_graph, fn read_graph ->
       entries_by_type
       |> Map.to_list()
       |> TaskUtils.map_concurrently(fn {type, entries} ->
-        {type, list_chunk_mfas(read_graph.(), type, entries, runtime_mfa_set, module_info_plt)}
+        {type, list_chunk_mfas(read_graph.(), type, entries, walk)}
       end)
       |> Enum.reject(fn {_type, mfas} -> mfas == [] end)
       |> Map.new()
@@ -1343,6 +1369,13 @@ defmodule Hologram.Compiler.CallGraph do
       `false` only the implementations for the built-in types are, whatever struct types the code
       reaches: the listing of a bundle that carries no struct implementation, since those ship in
       chunks of their own (default: `true`).
+
+    * `:opaque_protocols` - the protocols whose functions the traversal stops at, entering an
+      implementation only once its type is reachable, as described above. The functions of any
+      other protocol are followed like ordinary calls, to every implementation, whatever its
+      type: the listing of a chunk, whose code is the only code that can dispatch a protocol no
+      page, component or runtime code calls, and so carries all of that protocol's
+      implementations. `:all` or a `MapSet` of protocol modules (default: `:all`).
   """
   @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module), PLT.t() | nil, T.opts()) :: [mfa]
   def reachable_mfas(graph, entry_vertices, extra_types, module_info_plt, opts \\ []) do
@@ -1716,35 +1749,36 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  # Walks a round from the entries of the given protocols' implementations, builds the modules it
-  # asks for, and goes on until a round asks for none and reaches no protocol function of a
-  # protocol not among them.
-  defp build_chunk_reach_rounds(call_graph, protocols, build_modules, built_modules) do
+  # Walks a round from the given entries of the client protocols' implementations, builds the
+  # modules it asks for, and goes on until a round asks for none. Returns the modules built.
+  defp build_chunk_reach_rounds(
+         call_graph,
+         entries_by_type,
+         client_protocols,
+         build_modules,
+         built_modules
+       ) do
     %{pid: pid, module_info_plt: module_info_plt} = call_graph
 
-    entries_by_type = list_chunk_entries(protocols, module_info_plt)
+    frontier_modules =
+      Agent.get(
+        pid,
+        &walk_chunk_reach(&1, entries_by_type, client_protocols, module_info_plt),
+        :infinity
+      )
 
-    {frontier_modules, reached_protocols} =
-      Agent.get(pid, &walk_chunk_reach(&1, entries_by_type, module_info_plt), :infinity)
+    if frontier_modules == [] do
+      built_modules
+    else
+      build_modules.(frontier_modules)
 
-    new_protocols = MapSet.union(protocols, reached_protocols)
-
-    cond do
-      frontier_modules != [] ->
-        build_modules.(frontier_modules)
-
-        build_chunk_reach_rounds(
-          call_graph,
-          new_protocols,
-          build_modules,
-          built_modules ++ frontier_modules
-        )
-
-      not MapSet.equal?(new_protocols, protocols) ->
-        build_chunk_reach_rounds(call_graph, new_protocols, build_modules, built_modules)
-
-      true ->
-        %{built_modules: built_modules, entries_by_type: entries_by_type}
+      build_chunk_reach_rounds(
+        call_graph,
+        entries_by_type,
+        client_protocols,
+        build_modules,
+        built_modules ++ frontier_modules
+      )
     end
   end
 
@@ -1839,18 +1873,29 @@ defmodule Hologram.Compiler.CallGraph do
   # reachable. Each round traverses only vertices not yet in the state, extends the
   # dispatch types only from the newly reached vertices, and evaluates only the new
   # implementation candidates plus the pending ones against the grown type set.
+  #
+  # A state can name the protocols whose functions the walk stops at (see the `:opaque_protocols`
+  # option of reachable_mfas/5). One that names none (the reach of build_reach/3, which a dump can
+  # hold) stops at every protocol's.
   defp expand_reachable_state(graph, state, entry_vertices, module_info_plt) do
+    opaque_protocols = Map.get(state, :opaque_protocols, :all)
+
+    opaque_vertex? =
+      &opaque_protocol_function_mfa?(&1, opaque_protocols, module_info_plt)
+
     new_vertices =
       Digraph.reachable(graph, entry_vertices,
-        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt),
+        opaque_vertex?: opaque_vertex?,
         visited_vertices: state.reached_vertices
       )
 
     reached_vertices = MapSet.union(state.reached_vertices, MapSet.new(new_vertices))
     types = put_protocol_dispatch_types(state.types, new_vertices, module_info_plt)
 
+    # An implementation of a protocol the walk does not stop at was reached through the protocol's
+    # function already, so only the functions it stops at give candidates.
     pending_impl_candidates =
-      extract_impl_candidates(graph, new_vertices, module_info_plt) ++
+      extract_impl_candidates(graph, Enum.filter(new_vertices, opaque_vertex?)) ++
         state.pending_impl_candidates
 
     new_state = %{
@@ -1922,9 +1967,8 @@ defmodule Hologram.Compiler.CallGraph do
   # Implementation candidates are read from the dispatch edges added at build time
   # (and refreshed on patch), which is much cheaper than listing implementations
   # via reflection, since that scans BEAM files on disk.
-  defp extract_impl_candidates(graph, vertices, module_info_plt) do
-    for {_protocol, function, arity} = vertex <- vertices,
-        protocol_function_mfa?(vertex, module_info_plt),
+  defp extract_impl_candidates(graph, protocol_function_vertices) do
+    for {_protocol, function, arity} = vertex <- protocol_function_vertices,
         {_source_vertex, {impl, :__impl__, 1}} <- Digraph.outgoing_edges(graph, vertex),
         impl_entry_vertices =
           Enum.filter(
@@ -2076,11 +2120,13 @@ defmodule Hologram.Compiler.CallGraph do
     |> MapSet.new()
   end
 
-  defp list_chunk_mfas(graph, type, entries, runtime_mfa_set, module_info_plt) do
+  defp list_chunk_mfas(graph, type, entries, walk) do
     graph
-    |> reachable_mfas(entries, MapSet.new([type]), module_info_plt)
+    |> reachable_mfas(entries, MapSet.new([type]), walk.module_info_plt,
+      opaque_protocols: walk.client_protocols
+    )
     |> reject_hex_mfas()
-    |> Enum.reject(&MapSet.member?(runtime_mfa_set, &1))
+    |> Enum.reject(&MapSet.member?(walk.runtime_mfa_set, &1))
     |> Enum.sort()
   end
 
@@ -2293,6 +2339,17 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp protocol_dispatch_helper_mfa?(_vertex, _target_vertex, _module_infos), do: false
+
+  # Whether the vertex is a function of a protocol the walk stops at (see the `:opaque_protocols`
+  # option of reachable_mfas/5).
+  defp opaque_protocol_function_mfa?(vertex, :all, module_info_plt) do
+    protocol_function_mfa?(vertex, module_info_plt)
+  end
+
+  defp opaque_protocol_function_mfa?(vertex, opaque_protocols, module_info_plt) do
+    MapSet.member?(opaque_protocols, vertex_module(vertex)) and
+      protocol_function_mfa?(vertex, module_info_plt)
+  end
 
   # The flag keeps the function list lookup off every module that is not a protocol.
   defp protocol_function_mfa?({module, function, arity}, module_info_plt) do
@@ -2555,6 +2612,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     state = %{
       enter_struct_impls?: Keyword.get(opts, :enter_struct_impls?, true),
+      opaque_protocols: Keyword.get(opts, :opaque_protocols, :all),
       reached_vertices: MapSet.new(),
       types: initial_types,
       pending_impl_candidates: []
@@ -2577,11 +2635,13 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   # One round of build_chunk_reach/4, run inside the agent: walks from the given entries with every
-  # type they belong to reachable, on a reach of its own, and returns the modules the reached
-  # vertices need built (see frontier/4) with the protocols whose functions the walk reached.
+  # type they belong to reachable, on a reach of its own, stopping at the functions of the given
+  # client protocols only, and returns the modules the reached vertices need built (see
+  # frontier/4).
   defp walk_chunk_reach(
          %{graph: graph, modules: graph_modules},
          entries_by_type,
+         client_protocols,
          module_info_plt
        ) do
     entries =
@@ -2590,19 +2650,18 @@ defmodule Hologram.Compiler.CallGraph do
       |> Enum.concat()
 
     types = MapSet.new(@built_in_protocol_types ++ Map.keys(entries_by_type))
-    reach = %{empty_reach() | types: types}
+
+    reach =
+      empty_reach()
+      |> Map.put(:opaque_protocols, client_protocols)
+      |> Map.put(:types, types)
 
     {new_reach, missing_entries} = expand_reach(graph, reach, entries, module_info_plt)
 
     {_frontier_vertices, frontier_modules} =
       frontier(new_reach.reached_vertices, missing_entries, graph_modules, module_info_plt)
 
-    reached_protocols =
-      new_reach.reached_vertices
-      |> Enum.filter(&protocol_function_mfa?(&1, module_info_plt))
-      |> MapSet.new(fn {protocol, _function, _arity} -> protocol end)
-
-    {frontier_modules, reached_protocols}
+    frontier_modules
   end
 
   # One round of build_reach/3, run inside the agent: walks from the given entries, and returns the

@@ -233,11 +233,13 @@ defmodule Hologram.Compiler do
   @doc """
   Grows the call graph until it holds the code of every chunk (see `CallGraph.build_chunk_reach/4`),
   building the IR of each module the walk asks for into the IR PLT first, and returns what that
-  walk returns: the chunks' entry vertices by type and the modules built. The walk asks only for
-  modules the graph's module info PLT holds, so each has a beam to build IR from.
+  walk returns: the chunks' entry vertices by type, the client protocols and the modules built.
+  The walk asks only for modules the graph's module info PLT holds, so each has a beam to build
+  IR from.
   """
   @spec build_chunk_reach!(CallGraph.t(), PLT.t(), [module], [module]) :: %{
           built_modules: [module],
+          client_protocols: MapSet.t(module),
           entries_by_type: %{module => [CallGraph.vertex()]}
         }
   def build_chunk_reach!(call_graph, ir_plt, pages, components) do
@@ -1055,7 +1057,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Groups the MFAs of the given types' chunks (see `CallGraph.list_chunk_mfas_by_type/3`) by their
+  Groups the MFAs of the given types' chunks (see `CallGraph.list_chunk_mfas_by_type/4`) by their
   signature: the set of types whose MFAs hold them. Each group is the MFAs of one chunk, sorted, so
   that an MFA several types need is in one chunk those types share, and in no other.
 

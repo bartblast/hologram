@@ -1036,6 +1036,12 @@ defmodule Hologram.CompilerTest do
       assert ir_modules == Enum.sort([page, protocol | result.built_modules])
     end
 
+    test "returns the client protocols", %{result: result} do
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+
+      assert result.client_protocols == MapSet.new([protocol])
+    end
+
     test "returns the entry vertices of the implementation by its type", %{result: result} do
       struct = Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
 
