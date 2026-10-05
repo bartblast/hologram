@@ -1225,7 +1225,7 @@ export default class Hologram {
         LiveReload.snapshotFits(
           pageSnapshot,
           globalThis.Hologram.initialPageDigest,
-          $.#runtimeBundlePath(),
+          $.#runtimeDigest(),
         )
       ) {
         $.#restorePageSnapshot(pageSnapshot);
@@ -1318,7 +1318,7 @@ export default class Hologram {
       !LiveReload.snapshotFits(
         pageSnapshot,
         currentPageDigest,
-        $.#runtimeBundlePath(),
+        $.#runtimeDigest(),
       ) ||
       LiveReload.holdsOldPageBundle(pageSnapshot.pageModule, currentPageDigest)
     );
@@ -1862,10 +1862,12 @@ export default class Hologram {
     }
   }
 
-  // The path of the runtime bundle this document runs, digest included, from the asset manifest the
-  // boot script left.
-  static #runtimeBundlePath() {
-    return globalThis.Hologram.assetManifest?.["hologram/runtime.js"] ?? null;
+  // The digest of the runtime bundle this document runs, read from the path the asset manifest the
+  // boot script left holds for it.
+  static #runtimeDigest() {
+    const path = globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
+
+    return path?.match(/-([^-]+)\.js$/)?.[1] ?? null;
   }
 
   static async #saveEts() {
@@ -1902,7 +1904,7 @@ export default class Hologram {
       pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
-      runtimeBundlePath: $.#runtimeBundlePath(),
+      runtimeDigest: $.#runtimeDigest(),
       scrollPosition: [window.scrollX, window.scrollY],
       subscriptionReceipts: Array.from(
         App.subscriptionReceiptRegistry.entries.entries(),

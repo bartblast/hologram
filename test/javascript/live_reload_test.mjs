@@ -125,40 +125,34 @@ describe("LiveReload", () => {
   });
 
   describe("snapshotFits()", () => {
-    const snapshot = {pageDigest: "page-1", runtimeBundlePath: "/runtime-1.js"};
+    const snapshot = {pageDigest: "page-1", runtimeDigest: "runtime-1"};
 
     beforeEach(() => {
       globalThis.Hologram.config.liveReload = true;
     });
 
     it("the code it was taken with", () => {
-      assert.isTrue(
-        LiveReload.snapshotFits(snapshot, "page-1", "/runtime-1.js"),
-      );
+      assert.isTrue(LiveReload.snapshotFits(snapshot, "page-1", "runtime-1"));
     });
 
     it("another page bundle", () => {
-      assert.isFalse(
-        LiveReload.snapshotFits(snapshot, "page-2", "/runtime-1.js"),
-      );
+      assert.isFalse(LiveReload.snapshotFits(snapshot, "page-2", "runtime-1"));
     });
 
     it("another runtime bundle", () => {
-      assert.isFalse(
-        LiveReload.snapshotFits(snapshot, "page-1", "/runtime-2.js"),
-      );
+      assert.isFalse(LiveReload.snapshotFits(snapshot, "page-1", "runtime-2"));
     });
 
     it("a snapshot with no stamp", () => {
-      assert.isTrue(LiveReload.snapshotFits({}, "page-2", "/runtime-2.js"));
+      assert.isTrue(LiveReload.snapshotFits({}, "page-2", "runtime-2"));
     });
 
     it("a snapshot stamped with no page bundle", () => {
       assert.isTrue(
         LiveReload.snapshotFits(
-          {pageDigest: null, runtimeBundlePath: "/runtime-1.js"},
+          {pageDigest: null, runtimeDigest: "runtime-1"},
           "page-2",
-          "/runtime-2.js",
+          "runtime-2",
         ),
       );
     });
@@ -166,9 +160,7 @@ describe("LiveReload", () => {
     it("other code, where live reload does not run", () => {
       globalThis.Hologram.config.liveReload = false;
 
-      assert.isTrue(
-        LiveReload.snapshotFits(snapshot, "page-2", "/runtime-2.js"),
-      );
+      assert.isTrue(LiveReload.snapshotFits(snapshot, "page-2", "runtime-2"));
     });
   });
 

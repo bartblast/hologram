@@ -1841,7 +1841,17 @@ describe("Hologram", () => {
 
         // No page is mounted in these tests, so the tab holds no bundle for one.
         assert.isNull(snapshot.pageDigest);
-        assert.equal(snapshot.runtimeBundlePath, "/hologram/runtime-abc.js");
+        assert.equal(snapshot.runtimeDigest, "abc");
+      });
+
+      it("is stamped with no runtime digest when the asset manifest names no runtime bundle", async () => {
+        globalThis.Hologram.assetManifest = {};
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.isNull(snapshot.runtimeDigest);
       });
     });
 
