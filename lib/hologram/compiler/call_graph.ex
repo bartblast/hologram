@@ -801,8 +801,21 @@ defmodule Hologram.Compiler.CallGraph do
       ) do
     # Taken once: every module the client code reaches is built already (see build_reach/3), so no
     # module a round builds can add a call to it.
+    #
+    # Read from the graph without the manually ported functions, which is the graph the runtime and
+    # the pages are listed on (see remove_manually_ported_mfas/1). Such a function runs as
+    # hand-written JavaScript on the client, so what its Elixir body calls is not what the client
+    # can call, and what the JavaScript calls is among the runtime's entries (see
+    # @mfas_used_by_client_runtime). Kernel.inspect/2 is one: its port prints every value itself
+    # and dispatches no protocol, so Inspect is no client protocol on its account. A port that
+    # dispatches a protocol names the protocol's function among its dependencies, which makes the
+    # protocol a client protocol.
     client_protocols =
-      read_graph(pid, &list_client_protocols(&1, pages, components, module_info_plt))
+      read_graph(pid, fn graph ->
+        graph
+        |> Digraph.remove_vertices(@manually_ported_elixir_mfas)
+        |> list_client_protocols(pages, components, module_info_plt)
+      end)
 
     entries_by_type = list_chunk_entries(client_protocols, module_info_plt)
 
@@ -1020,6 +1033,10 @@ defmodule Hologram.Compiler.CallGraph do
   runtime's entry MFAs.
   Protocol function vertices are opaque during the traversal, so a protocol called only by an
   implementation of another protocol is not among them.
+
+  The walk follows the graph it is given. Give it the graph without the manually ported functions
+  (see remove_manually_ported_mfas/1), or the protocols only their Elixir bodies call are among
+  the result, though no client code can dispatch them.
   """
   # TODO: a set per page would let a page's chunks leave out the implementations of the protocols
   # only other pages call.

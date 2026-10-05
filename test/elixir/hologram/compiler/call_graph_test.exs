@@ -318,6 +318,28 @@ defmodule Hologram.Compiler.CallGraphTest do
     }
   end
 
+  # reach_modules/0 with a protocol implemented for TypeA that Kernel.inspect/1 calls, and with the
+  # page's template calling the given functions besides its own.
+  defp reach_modules_with_inspected_protocol(template_callees) do
+    Map.merge(reach_modules(), %{
+      Kernel => {%{}, [{:inspect, 1, [{ReachTest.Proto3, :fun, 1}]}]},
+      ReachTest.Page =>
+        {%{page?: true, layout_module: ReachTest.Layout},
+         [
+           {:init, 3, [{ReachTest.Server, :load, 0}]},
+           {:template, 0,
+            [{ReachTest.Proto, :fun, 1}, {ReachTest.TypeA, :__struct__, 0} | template_callees]}
+         ]},
+      ReachTest.Proto3 => {%{protocol?: true, protocol_functions: [fun: 1]}, [{:fun, 1, []}]},
+      ReachTest.Proto3.TypeA =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeA,
+           implemented_protocol: ReachTest.Proto3
+         }, [{:__impl__, 1, []}, {:fun, 1, []}]}
+    })
+  end
+
   # reach_modules/0 with a second protocol that no page, component or runtime code calls: TypeB's
   # implementation of the first protocol calls it, and it is implemented for TypeC, a struct no
   # code names.
@@ -1562,6 +1584,53 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_vertex?(call_graph, {ReachTest.Proto2.TypeC, :fun, 1})
 
       assert Map.keys(result.entries_by_type) == [ReachTest.TypeA, ReachTest.TypeB]
+    end
+
+    # Kernel.inspect/1 runs as hand-written JavaScript on the client, so the protocol its Elixir
+    # body calls is not one the client can dispatch.
+    test "leaves out a protocol only the Elixir body of a manually ported function calls" do
+      modules = reach_modules_with_inspected_protocol([{Kernel, :inspect, 1}])
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert {Kernel, :inspect, 1} in manually_ported_elixir_mfas()
+      assert has_edge?(call_graph, {Kernel, :inspect, 1}, {ReachTest.Proto3, :fun, 1})
+
+      assert result.client_protocols == MapSet.new([ReachTest.Proto])
+
+      assert result.entries_by_type[ReachTest.TypeA] == [
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1}
+             ]
+    end
+
+    test "counts a protocol the page calls itself among the client protocols" do
+      modules = reach_modules_with_inspected_protocol([{ReachTest.Proto3, :fun, 1}])
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.client_protocols == MapSet.new([ReachTest.Proto, ReachTest.Proto3])
+
+      assert result.entries_by_type[ReachTest.TypeA] == [
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1},
+               {ReachTest.Proto3.TypeA, :__impl__, 1},
+               {ReachTest.Proto3.TypeA, :fun, 1}
+             ]
     end
 
     test "leaves the reach of build_reach/3 as it is" do
