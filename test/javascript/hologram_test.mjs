@@ -1731,6 +1731,11 @@ describe("Hologram", () => {
     const bundleScript = (pageDigest) =>
       document.head.querySelector(`script[src="${bundlePath(pageDigest)}"]`);
 
+    const chunkScript = (chunkDigest) =>
+      document.head.querySelector(
+        `script[src="/hologram/chunk-${chunkDigest}.js"]`,
+      );
+
     // The page a navigation patches against, which on a document load is the render mirrored
     // onto what the server sent.
     const seedCurrentPage = () => {
@@ -1745,7 +1750,7 @@ describe("Hologram", () => {
     // Takes the fetched bundles out of the document and forgets them, with what waited for them.
     const removeBundleScripts = () => {
       document.head
-        .querySelectorAll("script[src^='/hologram/page-']")
+        .querySelectorAll("script[src^='/hologram/']")
         .forEach((script) => script.remove());
 
       ScriptRegistry.statuses.clear();
@@ -2301,6 +2306,145 @@ describe("Hologram", () => {
         );
 
         assert.deepStrictEqual(patchedHead.children, []);
+      });
+    });
+
+    // A value of a struct type whose protocol implementations no bundle carries needs the chunks
+    // that hold them, and so does the page's own code for the types it names. The server says
+    // which, by digest.
+    describe("chunks the page needs", () => {
+      const payloadWithChunks = (pageDigest, chunkDigests) => ({
+        ...payloadFor(pageDigest),
+        chunks: chunkDigests,
+      });
+
+      beforeEach(() => {
+        window.requestAnimationFrame = (callback) => callback();
+        seedCurrentPage();
+      });
+
+      afterEach(() => {
+        delete window.requestAnimationFrame;
+        Hologram.virtualDocument = null;
+        removeBundleScripts();
+      });
+
+      it("are fetched", async () => {
+        await Hologram.loadNewPage(
+          "/target",
+          payloadWithChunks("chunks-1", ["AAAAAAAA", "BBBBBBBB"]),
+        );
+
+        assert.isNotNull(chunkScript("AAAAAAAA"));
+        assert.isNotNull(chunkScript("BBBBBBBB"));
+        assert.equal(ScriptRegistry.statuses.get("AAAAAAAA"), "requested");
+        assert.equal(ScriptRegistry.statuses.get("BBBBBBBB"), "requested");
+      });
+
+      it("are not fetched again when the tab has them", async () => {
+        ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+        await Hologram.loadNewPage(
+          "/target",
+          payloadWithChunks("chunks-2", ["AAAAAAAA", "BBBBBBBB"]),
+        );
+
+        assert.isNull(chunkScript("AAAAAAAA"));
+        assert.isNotNull(chunkScript("BBBBBBBB"));
+      });
+
+      it("hold the mount with the page's bundle until all have announced themselves", async () => {
+        ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+        await Hologram.loadNewPage(
+          "/target",
+          payloadWithChunks("chunks-3", ["AAAAAAAA", "BBBBBBBB"]),
+        );
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "chunks-3",
+          "AAAAAAAA",
+          "BBBBBBBB",
+        ]);
+
+        assert.isNotNull(MountGate.pendingMount);
+      });
+
+      it("are none for a payload that names none", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("chunks-4"));
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "chunks-4",
+        ]);
+      });
+
+      // The mount is never going to run without the chunk, like without the page's bundle.
+      it("end the navigation when one fails to load", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        const warnStub = sinon.stub(console, "warn");
+
+        try {
+          await Hologram.loadNewPage(
+            "/target",
+            payloadWithChunks("chunks-5", ["AAAAAAAA"]),
+          );
+
+          assert.throws(
+            () => chunkScript("AAAAAAAA").onerror(),
+            HologramRuntimeError,
+            "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+          );
+
+          assert.isNull(MountGate.pendingMount);
+
+          Hologram.scheduleAction(
+            Type.actionStruct({
+              name: Type.atom("after_chunk_failure"),
+              params: Type.map(),
+              target: cid1,
+            }),
+            Hologram.domEpoch,
+          );
+
+          clock.tick(5000);
+
+          sinon.assert.notCalled(executeActionStub);
+          sinon.assert.calledOnce(warnStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+          warnStub.restore();
+        }
+      });
+
+      // The chunk of a page left behind by a later navigation is no longer what the mount waits
+      // for, so its failure says nothing about the navigation now in flight.
+      it("leave a later navigation's mount waiting when one of an earlier navigation fails", async () => {
+        await Hologram.loadNewPage(
+          "/target-1",
+          payloadWithChunks("chunks-6", ["AAAAAAAA"]),
+        );
+
+        const supersededScript = chunkScript("AAAAAAAA");
+
+        await Hologram.loadNewPage(
+          "/target-2",
+          payloadWithChunks("chunks-7", ["BBBBBBBB"]),
+        );
+
+        assert.throws(() => supersededScript.onerror(), HologramRuntimeError);
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "chunks-7",
+          "BBBBBBBB",
+        ]);
+
+        assert.isNotNull(MountGate.pendingMount);
       });
     });
 
@@ -3214,6 +3358,54 @@ describe("Hologram", () => {
       Hologram.render();
 
       sinon.assert.calledOnceWithExactly(executeActionStub, deferredAction1, 0);
+    });
+  });
+
+  describe("requestChunks()", () => {
+    const chunkScripts = () =>
+      Array.from(
+        document.head.querySelectorAll("script[src^='/hologram/chunk-']"),
+      );
+
+    afterEach(() => {
+      chunkScripts().forEach((script) => script.remove());
+      ScriptRegistry.statuses.clear();
+    });
+
+    it("fetches each chunk from the path its digest names", () => {
+      Hologram.requestChunks(["AAAAAAAA", "BBBBBBBB"]);
+
+      assert.deepStrictEqual(
+        chunkScripts().map((script) => script.getAttribute("src")),
+        ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-BBBBBBBB.js"],
+      );
+
+      assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
+        ["AAAAAAAA", "requested"],
+        ["BBBBBBBB", "requested"],
+      ]);
+    });
+
+    it("passes over a chunk the tab has", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+      Hologram.requestChunks(["AAAAAAAA"]);
+
+      assert.deepStrictEqual(chunkScripts(), []);
+    });
+
+    it("raises when a chunk fails to load", () => {
+      Hologram.requestChunks(["AAAAAAAA"]);
+
+      const [script] = chunkScripts();
+
+      assert.throws(
+        () => script.onerror(),
+        HologramRuntimeError,
+        "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+      );
+
+      assert.equal(ScriptRegistry.statuses.get("AAAAAAAA"), "failed");
     });
   });
 

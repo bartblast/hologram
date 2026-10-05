@@ -636,19 +636,28 @@ export default class Hologram {
     Hologram.#runActions();
   }
 
+  // Fetches the chunks with the given digests, unless the document has them (see ScriptRegistry).
+  // A chunk holds the protocol implementations of struct types that no bundle carries, and is
+  // named when a value of such a type is on its way to the browser.
+  static requestChunks(digests) {
+    ScriptRegistry.request(
+      digests.map((digest) => ({
+        digest: digest,
+        path: $.#chunkBundlePath(digest),
+      })),
+      (digest) => $.#handleScriptFailure(digest),
+    );
+  }
+
   static run() {
     Hologram.#onReady(async () => {
       if (!Hologram.#isInitiated) {
         await Hologram.#init();
       }
 
-      // The document's own page bundle is what its mount waits for. Its script element is in the
-      // document the server sent, so it is not requested here.
-      MountGate.require(
-        [globalThis.Hologram.initialPageDigest].filter(
-          (digest) => digest !== undefined,
-        ),
-      );
+      // The document's own page bundle and chunks are what its mount waits for. Their script
+      // elements are in the document the server sent, so they are not requested here.
+      MountGate.require($.#initialScriptDigests());
 
       Hologram.#mountWhenReady(false);
     });
@@ -679,6 +688,11 @@ export default class Hologram {
 
   static #buildPrefetchedPagesMapKey(eventTargetNode, pagePath) {
     return `${eventTargetNode.__hologramId__}:${pagePath}`;
+  }
+
+  // Mirrors Hologram.Router.Helpers.chunk_bundle_path/1
+  static #chunkBundlePath(chunkDigest) {
+    return `/hologram/chunk-${chunkDigest}.js`;
   }
 
   // Defines the functions of the scripts that announced themselves (see ScriptRegistry), and lets
@@ -1174,10 +1188,10 @@ export default class Hologram {
     );
   }
 
-  // A script could not be fetched. When the mount waits for it, the mount is never going to run,
-  // so the epoch is recorded dead: what belongs to it is dropped rather than held (see
-  // #runActions). A script no longer required belongs to a navigation a later one superseded, and
-  // its failure says nothing about the one now in flight.
+  // A page bundle or a chunk could not be fetched. When the mount waits for it, the mount is never
+  // going to run, so the epoch is recorded dead: what belongs to it is dropped rather than held
+  // (see #runActions). A script no longer required belongs to a navigation a later one superseded,
+  // and its failure says nothing about the one now in flight.
   static #handleScriptFailure(digest) {
     if (MountGate.requires(digest)) {
       MountGate.cancel();
@@ -1279,20 +1293,30 @@ export default class Hologram {
     globalThis.Hologram.dispatchAction = $.dispatchAction;
     delete globalThis.Hologram._pendingJsInteropActions;
 
-    // A page bundle announces itself when it has run (see ScriptRegistry), which can be before or
-    // after this point: the ones that ran already are defined here, the rest as they announce
-    // themselves.
+    // A page bundle or a chunk announces itself when it has run (see ScriptRegistry), which can be
+    // before or after this point: the ones that ran already are defined here, the rest as they
+    // announce themselves.
     document.addEventListener("hologram:scriptLoaded", () =>
       Hologram.#defineLoadedScripts(),
     );
 
-    if (globalThis.Hologram.initialPageDigest !== undefined) {
-      ScriptRegistry.markRequested([globalThis.Hologram.initialPageDigest]);
-    }
+    ScriptRegistry.markRequested($.#initialScriptDigests());
 
     Hologram.#defineLoadedScripts();
 
     Hologram.#isInitiated = true;
+  }
+
+  // The digests of the scripts the document the server sent carries script elements for, besides
+  // the runtime: its page bundle and the chunks its page needs. A document that names none (a test
+  // one) has none.
+  static #initialScriptDigests() {
+    const pageDigest = globalThis.Hologram.initialPageDigest;
+    const chunkDigests = globalThis.Hologram.initialChunkDigests ?? [];
+
+    return pageDigest === undefined
+      ? chunkDigests
+      : [pageDigest, ...chunkDigests];
   }
 
   static #isPageModuleRegistered(pageModule) {
@@ -1597,12 +1621,19 @@ export default class Hologram {
     // The fetch is started before the patch, which is local work, so the network has a head start
     // on it. Nothing the bundle does can run before the patch is done, since it cannot execute
     // until this frame's work ends.
+    //
+    // The mount waits for the page's bundle, unless the tab holds the page's code already, and for
+    // the chunks the page needs: the ones it preloads and the ones its state holds values for.
+    const chunkDigests = payload.chunks ?? [];
+
     if (isPageModuleRegistered) {
-      MountGate.require([]);
+      MountGate.require(chunkDigests);
     } else {
-      MountGate.require([payload.pageDigest]);
+      MountGate.require([payload.pageDigest, ...chunkDigests]);
       $.#requestPageBundle(pageModule, payload.pageDigest);
     }
+
+    $.requestChunks(chunkDigests);
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
     // the browser then runs. The page module is already decoded above, so it is reused.
