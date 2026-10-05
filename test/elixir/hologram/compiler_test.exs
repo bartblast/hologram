@@ -1894,6 +1894,39 @@ defmodule Hologram.CompilerTest do
                "//# sourceMappingURL=my_bundle_name-#{digest}.js.map"
     end
 
+    test "string entry name" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_string_entry_name"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      File.write(entry_file_path, "export const myVar = 123;\n")
+
+      assert %{
+               bundle_name: "chunk",
+               digest: digest,
+               entry_name: "59b80f19",
+               static_bundle_path: static_bundle_path
+             } = bundle("59b80f19", entry_file_path, "chunk", opts)
+
+      assert digest =~ ~r/^[A-Z2-7]{8}$/
+      assert static_bundle_path == Path.join(opts[:static_dir], "chunk-59b80f19-#{digest}.js")
+
+      assert File.read!(static_bundle_path) =~
+               "//# sourceMappingURL=chunk-59b80f19-#{digest}.js.map"
+    end
+
     test "the same entry file bundles to the same digest" do
       node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
 
@@ -2007,6 +2040,37 @@ defmodule Hologram.CompilerTest do
 
       assert exception.message =~ "early warning system"
       assert File.ls!(opts[:static_dir]) == []
+    end
+
+    test "does not apply :max_bundle_size to a chunk" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_chunk_max_size"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      File.write!(entry_file_path, "export const myVar = 123;\n")
+
+      Application.put_env(:hologram, :max_bundle_size, 10)
+
+      on_exit(fn ->
+        Application.delete_env(:hologram, :max_bundle_size)
+      end)
+
+      assert %{static_bundle_path: static_bundle_path} =
+               bundle("59b80f19", entry_file_path, "chunk", opts)
+
+      assert File.exists?(static_bundle_path)
     end
 
     test "records no input for an entry file that imports nothing" do

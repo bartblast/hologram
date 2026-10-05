@@ -542,7 +542,8 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
   """
-  @spec bundle(list({module | nil, T.file_path(), String.t()}), T.opts()) :: list(map)
+  @spec bundle(list({module | String.t() | nil, T.file_path(), String.t()}), T.opts()) ::
+          list(map)
   def bundle(entry_files_info, opts) do
     TaskUtils.map_concurrently(entry_files_info, fn {entry_name, entry_file_path, bundle_name} ->
       bundle(entry_name, entry_file_path, bundle_name, opts)
@@ -551,17 +552,22 @@ defmodule Hologram.Compiler do
 
   @doc """
   Bundles the given entry file with esbuild, which names the output `<bundle_name>-<hash>.js` and
-  its source map `<bundle_name>-<hash>.js.map` by the content hash, with the entry name, a module
-  written without its `Elixir.` prefix, between the bundle name and the hash when one is given: a
-  bundle name shared by many entries (the page bundles) needs it to tell them apart, one with a
-  single entry (the runtime) does not. The returned digest is the hash.
+  its source map `<bundle_name>-<hash>.js.map` by the content hash, with the entry name between the
+  bundle name and the hash when one is given: a module, written without its `Elixir.` prefix, or a
+  string, written as it is. A bundle name shared by many entries (the page bundles, the chunks)
+  needs it to tell them apart, one with a single entry (the runtime) does not. The returned digest
+  is the hash.
+
+  A bundle bigger than the `:max_bundle_size` config value fails the build, unless its bundle name
+  is `"chunk"`: a chunk is downloaded only once a struct of one of its types is on the client, and
+  an app has chunks for types it never sends there.
 
   The returned `js_inputs` are the files esbuild read for the bundle besides the entry file,
   Hologram's own sources under the `:js_dir` opt and the packages under the `:node_modules_path`
   opt, with their fingerprints (see `fingerprint_js_inputs/2`), taken against the time esbuild
   started: a bundle inlines them, and a kept bundle whose files moved must be built again.
   """
-  @spec bundle(module | nil, T.file_path(), String.t(), T.opts()) :: map
+  @spec bundle(module | String.t() | nil, T.file_path(), String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
   def bundle(entry_name, entry_file_path, bundle_name, opts) do
     # esbuild names the bundle and its source map by their content hash and writes the source map
@@ -625,7 +631,7 @@ defmodule Hologram.Compiler do
 
     output_bundle_path = Path.join(output_dir, bundle_file_name)
 
-    maybe_ensure_bundle_within_size_limit!(output_name, output_bundle_path)
+    maybe_ensure_bundle_within_size_limit!(bundle_name, output_name, output_bundle_path)
 
     digest =
       bundle_file_name
@@ -1650,6 +1656,10 @@ defmodule Hologram.Compiler do
 
   defp bundle_output_name(bundle_name, nil), do: bundle_name
 
+  defp bundle_output_name(bundle_name, entry_name) when is_binary(entry_name) do
+    "#{bundle_name}-#{entry_name}"
+  end
+
   defp bundle_output_name(bundle_name, entry_name) do
     "#{bundle_name}-#{Reflection.module_name(entry_name)}"
   end
@@ -2073,7 +2083,9 @@ defmodule Hologram.Compiler do
     |> Enum.sort()
   end
 
-  defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
+  defp maybe_ensure_bundle_within_size_limit!("chunk", _entry_name, _bundle_path), do: :ok
+
+  defp maybe_ensure_bundle_within_size_limit!(_bundle_name, entry_name, bundle_path) do
     max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
 
     if max_bundle_size do
