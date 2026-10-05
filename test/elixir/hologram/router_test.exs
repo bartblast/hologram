@@ -9,6 +9,7 @@ defmodule Hologram.RouterTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Realtime.Handshake
+  alias Hologram.Reflection
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Router.Module1
   alias Hologram.Test.Fixtures.Router.Module2
@@ -18,6 +19,8 @@ defmodule Hologram.RouterTest do
   use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
+
+  @page_modules Reflection.list_pages()
 
   setup :set_mox_global
 
@@ -39,6 +42,10 @@ defmodule Hologram.RouterTest do
     setup_asset_manifest_cache(AssetManifestCacheStub)
 
     setup_chunk_registry(ChunkRegistryStub)
+
+    # Every page of the test build preloads no chunk.
+    Enum.each(@page_modules, &ETS.put(ChunkRegistryStub.ets_table_name(), {:page, &1}, []))
+
     setup_page_digest_registry(PageDigestRegistryStub)
 
     setup_page_module_resolver(PageModuleResolverStub)
@@ -89,6 +96,7 @@ defmodule Hologram.RouterTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "action" => ~s'Type.atom("nil")',
+               "chunks" => [],
                "selfEchoes" => "Type.list([])",
                "status" => 1,
                "subReceiptAdds" => "Type.list([])",

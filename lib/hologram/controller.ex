@@ -3,6 +3,7 @@ defmodule Hologram.Controller do
 
   require Logger
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
@@ -107,7 +108,9 @@ defmodule Hologram.Controller do
   readable before the render is patched in, rather than as a side effect of a script the patch
   inserts and the browser then runs.
 
-  The digest names the bundle to fetch when this client does not have the page's code yet.
+  The digest names the bundle to fetch when this client does not have the page's code yet, and the
+  chunk paths name the chunks the page needs before it mounts (see `Hologram.Assets.ChunkRegistry`),
+  which the client loads unless it has them.
 
   Every value but the tree is encoded the way a command's response encodes terms, as JavaScript the
   client evaluates, since that is the form its runtime already reads. The tree is not: it holds
@@ -140,6 +143,7 @@ defmodule Hologram.Controller do
   # The wire format for the tree, and the 112 alternatives it was measured against.
   # See: docs/navigation_payload_wire_format.md
   def build_page_data_payload(%{
+        chunk_paths: chunk_paths,
         mount_data: mount_data,
         page_digest: page_digest,
         self_echoes: self_echoes,
@@ -148,6 +152,7 @@ defmodule Hologram.Controller do
         tree: tree
       }) do
     %{
+      chunks: chunk_paths,
       componentRegistry: mount_data.component_registry,
       pageDigest: page_digest,
       pageModule: mount_data.page_module,
@@ -392,6 +397,9 @@ defmodule Hologram.Controller do
       |> maybe_persist_user_id(server_struct, flushed_server_struct)
       |> Controller.json(%{
         action: encoded_next_action,
+        # The chunks the struct types in the action and in the self echoes need, which the client
+        # loads before it runs them.
+        chunks: ChunkRegistry.lookup_term({next_action, self_echoes}),
         selfEchoes: encoded_self_echoes,
         status: command_status,
         subReceiptAdds: encoded_sub_receipt_adds,
@@ -464,6 +472,7 @@ defmodule Hologram.Controller do
       {:rendered, conn, result} ->
         final_html =
           result.html
+          |> Renderer.interpolate_chunks(result.chunk_paths)
           |> Renderer.interpolate_self_echoes_js(result.self_echoes)
           |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
           |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
@@ -568,11 +577,12 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, lifecycle_conn, result} ->
-        # The three values the HTML path substitutes into the served document travel as payload
-        # fields here. Nothing is interpolated into the tree: this path renders no script to
-        # interpolate into, and the client reads the state from the payload before it patches.
+        # The values the HTML path substitutes into the served document travel as payload fields
+        # here. Nothing is interpolated into the tree: this path renders no script to interpolate
+        # into, and the client reads the state from the payload before it patches.
         payload =
           build_page_data_payload(%{
+            chunk_paths: result.chunk_paths,
             mount_data: result.mount_data,
             page_digest: PageDigestRegistry.lookup(page_module),
             self_echoes: result.self_echoes,
@@ -736,6 +746,19 @@ defmodule Hologram.Controller do
     Session.put_user_id(conn, user_id)
   end
 
+  # The chunks a rendered page needs before it mounts: the ones it preloads for the struct types
+  # its client code names, the ones its state needs, and the ones its self echoes need.
+  defp page_chunk_paths(page_module, state_chunk_paths, self_echoes) do
+    [
+      ChunkRegistry.lookup_page(page_module),
+      state_chunk_paths,
+      ChunkRegistry.lookup_term(self_echoes)
+    ]
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   defp process_command_result(command_result, server_struct, default_target) do
     case command_result do
       %Server{next_action: %Action{target: nil} = action} = updated_server_struct ->
@@ -784,6 +807,7 @@ defmodule Hologram.Controller do
        middleware_server_struct}
     else
       %{
+        chunk_paths: state_chunk_paths,
         component_registry: component_registry,
         html: rendered_html,
         mount_data: mount_data,
@@ -810,6 +834,7 @@ defmodule Hologram.Controller do
       flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
 
       result = %{
+        chunk_paths: page_chunk_paths(page_module, state_chunk_paths, self_echoes),
         component_registry: component_registry,
         html: rendered_html,
         mount_data: mount_data,
