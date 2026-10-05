@@ -194,6 +194,25 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Grows the call graph until it holds the code of every chunk (see `CallGraph.build_chunk_reach/4`),
+  building the IR of each module the walk asks for into the IR PLT first, and returns what that
+  walk returns: the chunks' entry vertices by type and the modules built. The walk asks only for
+  modules the graph's module info PLT holds, so each has a beam to build IR from.
+  """
+  @spec build_chunk_reach!(CallGraph.t(), PLT.t(), [module], [module]) :: %{
+          built_modules: [module],
+          entries_by_type: %{module => [CallGraph.vertex()]}
+        }
+  def build_chunk_reach!(call_graph, ir_plt, pages, components) do
+    CallGraph.build_chunk_reach(
+      call_graph,
+      pages,
+      components,
+      &build_graph_modules!(call_graph, ir_plt, &1)
+    )
+  end
+
+  @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
   Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
   module info PLT's keys.
@@ -399,10 +418,7 @@ defmodule Hologram.Compiler do
   """
   @spec build_reach!(CallGraph.t(), PLT.t(), map) :: [module]
   def build_reach!(call_graph, ir_plt, graph_diff) do
-    CallGraph.build_reach(call_graph, graph_diff, fn modules ->
-      build_missing_ir!(ir_plt, modules)
-      TaskUtils.map_concurrently(modules, &CallGraph.build_for_module(call_graph, ir_plt, &1))
-    end)
+    CallGraph.build_reach(call_graph, graph_diff, &build_graph_modules!(call_graph, ir_plt, &1))
   end
 
   @doc """
@@ -1457,6 +1473,12 @@ defmodule Hologram.Compiler do
   # An entry name, a module, tells apart the entries bundled under one bundle name (the pages), so
   # it goes into the file name, without its Elixir prefix like the entry file name; a bundle name
   # with a single entry (the runtime) has none.
+  # Builds the IR of the given modules into the IR PLT, then the modules into the call graph.
+  defp build_graph_modules!(call_graph, ir_plt, modules) do
+    build_missing_ir!(ir_plt, modules)
+    TaskUtils.map_concurrently(modules, &CallGraph.build_for_module(call_graph, ir_plt, &1))
+  end
+
   defp bundle_output_name(bundle_name, nil), do: bundle_name
 
   defp bundle_output_name(bundle_name, entry_name) do

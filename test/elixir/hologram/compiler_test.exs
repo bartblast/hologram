@@ -874,6 +874,65 @@ defmodule Hologram.CompilerTest do
              PLT.get!(ir_plt, Hologram.Compiler)
   end
 
+  describe "build_chunk_reach!/4" do
+    setup %{module_info_plt: module_info_plt} do
+      page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+
+      call_graph = CallGraph.start(module_info_plt: module_info_plt)
+      ir_plt = build_missing_ir!(PLT.start(), [page, protocol])
+      CallGraph.build_for_module(call_graph, ir_plt, page)
+      CallGraph.build_for_module(call_graph, ir_plt, protocol)
+
+      # The page's client code calls the protocol, and no code names the struct it is implemented for.
+      CallGraph.add_edge(call_graph, {page, :action, 3}, {protocol, :my_fun, 1})
+
+      [
+        call_graph: call_graph,
+        ir_plt: ir_plt,
+        result: build_chunk_reach!(call_graph, ir_plt, [page], [])
+      ]
+    end
+
+    test "builds the IR and the vertices of an implementation for a struct type no code names",
+         %{call_graph: call_graph, ir_plt: ir_plt, result: result} do
+      struct_impl =
+        Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1.Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+      assert struct_impl in result.built_modules
+      assert PLT.member?(ir_plt, struct_impl)
+      assert struct_impl in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {struct_impl, :my_fun, 1})
+    end
+
+    test "builds the IR of exactly the modules it returns, besides the ones built before", %{
+      ir_plt: ir_plt,
+      result: result
+    } do
+      page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+
+      ir_modules =
+        ir_plt
+        |> PLT.keys()
+        |> Enum.sort()
+
+      assert ir_modules == Enum.sort([page, protocol | result.built_modules])
+    end
+
+    test "returns the entry vertices of the implementation by its type", %{result: result} do
+      struct = Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+      struct_impl =
+        Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1.Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+      assert result.entries_by_type[struct] == [
+               {struct_impl, :__impl__, 1},
+               {struct_impl, :my_fun, 1}
+             ]
+    end
+  end
+
   describe "build_ir_plt/1" do
     test "module has BEAM path" do
       assert %PLT{} = ir_plt = build_ir_plt()
