@@ -64,7 +64,7 @@ defmodule Hologram.Compiler.Cache do
 
   @type encoding_inputs :: %{async_mfas: MapSet.t(mfa), client_stacktraces?: boolean}
 
-  @type page_state :: %{bundle_info: map, modules: MapSet.t(module)}
+  @type page_state :: %{bundle_info: map, chunk_types: [module], modules: MapSet.t(module)}
 
   @type runtime_state :: %{
           app_versions: keyword(String.t()),
@@ -72,7 +72,8 @@ defmodule Hologram.Compiler.Cache do
           client_config: String.t(),
           js_binding_modules: MapSet.t(module),
           mfas: [mfa],
-          dynamic_calls: CallGraph.runtime_dynamic_calls()
+          dynamic_calls: CallGraph.runtime_dynamic_calls(),
+          types: MapSet.t(module)
         }
 
   @type t :: %{
@@ -418,12 +419,13 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Keeps the modules a page reaches and the info of the bundle built from them, so that the next
-  compile can reuse that bundle when nothing the page reaches has changed, and the page's reachable
-  MFAs in a PLT of their own, which the page partition reads only when the runtime's MFAs changed:
-  the per-compile partition copies the state of every page, and the MFAs are the bulk of it. Put
-  right after the bundle is written, so the state and the file on disk go together. The files the
-  bundle read (`bundle_info.js_inputs`) join the kept paths.
+  Keeps the modules a page reaches, the struct types its client code names and the info of the
+  bundle built from them, so that the next compile can reuse that bundle when nothing the page
+  reaches has changed, and the page's reachable MFAs in a PLT of their own, which the page
+  partition reads only when the runtime's MFAs changed: the per-compile partition copies the state
+  of every page, and the MFAs are the bulk of it. Put right after the bundle is written, so the
+  state and the file on disk go together. The files the bundle read (`bundle_info.js_inputs`) join
+  the kept paths.
   """
   @spec put_page(module, page_state, [mfa]) :: :ok
   def put_page(page_module, page_state, mfas) do
@@ -441,10 +443,10 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Keeps what the runtime bundle was built from: its MFAs, the JS import modules it registers (which
-  every page bundle leaves out), the application versions it carries and the info of its bundle. nil
-  forgets it, so that the next compile rebuilds the runtime bundle. The files the bundle read
-  (`bundle_info.js_inputs`) join the kept paths.
+  Keeps what the runtime bundle was built from: its MFAs, the struct types its code names, the JS
+  import modules it registers (which every page bundle leaves out), the application versions it
+  carries and the info of its bundle. nil forgets it, so that the next compile rebuilds the runtime
+  bundle. The files the bundle read (`bundle_info.js_inputs`) join the kept paths.
   """
   @spec put_runtime(runtime_state | nil) :: :ok
   def put_runtime(runtime_state) do

@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   ## Build dir
 
-  A compile leaves five files in the build dir, so that the first compile in the next VM (the next
+  A compile leaves six files in the build dir, so that the first compile in the next VM (the next
   `mix` command, say) reuses what this one built:
 
     * the call graph dump and the module info dump - the before picture: the graph of what the
@@ -30,10 +30,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       the beams against.
 
     * the compile state dump - the after picture: what each page, the runtime bundle and the
-      chunk bundles were built from, the pages still to build and what the compile derived for the bundles. The next
-      compile keeps the bundles the diff does not reach.
+      chunk bundles were built from, the pages still to build and what the compile derived for the
+      bundles. The next compile keeps the bundles the diff does not reach.
 
     * the page digest dump - the digest of each page's bundle, which the router serves.
+
+    * the chunk registry dump - the chunks each struct type needs and the chunks each page
+      preloads, which the server reads when it renders a page or encodes a value.
 
     * the compile inputs dump - what a compile with nothing to do is decided by, as the last compile
       that built every page saw it (see `Hologram.Compiler.CompileInputs`).
@@ -57,6 +60,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
+  alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
@@ -302,8 +306,8 @@ defmodule Mix.Tasks.Compile.Hologram do
           ir_plt
         )
 
-      runtime_mfas =
-        list_runtime_mfas(cache.runtime, call_graph_for_runtime, runtime_kept?)
+      runtime_analysis = runtime_analysis(cache.runtime, call_graph_for_runtime, runtime_kept?)
+      runtime_mfas = runtime_analysis.mfas
 
       # The MFAs of each chunk, by its signature, listed while the runtime graph still holds the
       # runtime's MFAs (build_pages_graph/2 below takes them out), and kept when the analysis is.
@@ -552,10 +556,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       # belongs in the page digest PLT and among the artifacts the cleanup below keeps. So does the
       # bundle a page still to rebuild had: it is served until its new one replaces it, which is
       # never when the compile stops before the page's batch. The chunk bundles the kept state
-      # names are served too until the first batch replaces them.
+      # names are served too until the first batch replaces them. With them, the struct types the
+      # client code of each page names, as its last built state recorded them, which decide the
+      # chunks the page preloads.
       bundles =
         %{
           chunks: initial_chunk_bundles_info(cache.chunks, chunk_mfas_by_signature),
+          page_chunk_types:
+            Map.new(kept_pages ++ old_page_states, fn {page_module, page_state} ->
+              {page_module, page_state.chunk_types}
+            end),
           pages: initial_page_bundles_info(kept_pages, old_page_states, opts[:static_dir]),
           runtime: if(runtime_entry_files_info == [], do: cache.runtime.bundle_info)
         }
@@ -587,9 +597,13 @@ defmodule Mix.Tasks.Compile.Hologram do
         read_graph: nil,
         runtime_js_binding_modules: runtime_js_binding_modules,
         runtime_mfas: runtime_mfas,
+        runtime_types: runtime_analysis.types,
         supervisor: sup
       }
 
+      # The chunk registry names the chunks the kept state names until the first batch replaces
+      # them, so a page served meanwhile is given chunks that are on disk.
+      dump_chunk_registry_plt(bundles, batch_context)
       dump_page_digest_plt(bundles, batch_context)
 
       remaining_pages = MapSet.new(pages_to_rebuild)
@@ -659,12 +673,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # The pages graph is shared with the batches once, and only when a page is left to list: the
-  # runtime and the chunks alone read no page's reach, and a page listed before the batches has its
-  # list already. So a compile with nothing to rebuild neither waits for the pages graph nor copies
-  # it.
+  # The pages graph is shared with the batches once, and only when a page is left to build: the
+  # runtime and the chunks alone read no page's reach. A page listed before the batches has its
+  # MFAs already, but the struct types it names are listed with its batch. So a compile with no
+  # page to rebuild neither waits for the pages graph nor copies it.
   defp build_batches(remaining_pages, shared_entry_files_info, bundles, context) do
-    if Enum.all?(remaining_pages, &Map.has_key?(context.listed_mfas_by_page, &1)) do
+    if MapSet.size(remaining_pages) == 0 do
       build_page_batches(remaining_pages, shared_entry_files_info, bundles, context)
     else
       CallGraph.with_shared_graph(context.call_graph, fn read_graph ->
@@ -809,9 +823,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # Builds the given pages, and the runtime and the chunks when their entry files are given, and
-  # records them: their states in the cache, the page digest PLT that names them, and the pages no
-  # longer pending. Then the :bundles_built option is told what was built, the runtime first, then
-  # the chunks.
+  # records them: their states in the cache, the chunk registry PLT and the page digest PLT that
+  # name them, and the pages no longer pending. Then the :bundles_built option is told what was
+  # built, the runtime first, then the chunks.
   defp bundle_batch([], [], bundles, _context), do: bundles
 
   defp bundle_batch(page_modules, shared_entry_files_info, bundles, context) do
@@ -833,14 +847,21 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     built_chunk_bundles_info = built_chunk_bundles_info(built_bundles_info, context)
 
-    keep_built_bundles(built_bundles_info, Map.new(batch_mfas_by_page), context)
+    batch = %{
+      chunk_types_by_page: list_batch_chunk_types(page_modules, context),
+      mfas_by_page: Map.new(batch_mfas_by_page)
+    }
+
+    keep_built_bundles(built_bundles_info, batch, context)
     keep_built_chunk_bundles(built_chunk_bundles_info, context)
 
     new_bundles =
       bundles
       |> put_built_bundles_info(built_bundles_info, context)
       |> put_built_chunk_bundles_info(built_chunk_bundles_info)
+      |> Map.update!(:page_chunk_types, &Map.merge(&1, batch.chunk_types_by_page))
 
+    dump_chunk_registry_plt(new_bundles, context)
     dump_page_digest_plt(new_bundles, context)
     Cache.delete_pending_pages(page_modules)
 
@@ -922,6 +943,22 @@ defmodule Mix.Tasks.Compile.Hologram do
     )
   end
 
+  # The chunk registry PLT is dumped with the page digest PLT (see dump_page_digest_plt/2): the
+  # chunks each struct type needs, and the chunks each page a compile has built preloads, the ones
+  # the types its client code names need and the ones the types the runtime's code names need.
+  defp dump_chunk_registry_plt(bundles, context) do
+    {chunk_registry_plt, chunk_registry_plt_dump_path} =
+      Compiler.build_chunk_registry_plt(
+        bundles.chunks,
+        bundles.page_chunk_types,
+        context.runtime_types,
+        Keyword.put(context.opts, :supervisor, context.supervisor)
+      )
+
+    PLT.dump(chunk_registry_plt, chunk_registry_plt_dump_path)
+    PLT.stop(chunk_registry_plt)
+  end
+
   # The page digest PLT is dumped after every batch, so that the build dir names the bundles on disk
   # whenever the batches stop.
   defp dump_page_digest_plt(bundles, context) do
@@ -990,19 +1027,21 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Records what a batch built, so that the next compile can reuse the bundles of the pages an edit
   # does not reach: a state per page bundle it wrote, and the runtime's inputs with its bundle. The
   # chunk bundles are recorded together (see keep_built_chunk_bundles/2).
-  defp keep_built_bundles(built_bundles_info, mfas_by_page, context) do
+  defp keep_built_bundles(built_bundles_info, batch, context) do
     Enum.each(built_bundles_info, fn
       %{bundle_name: "chunk"} ->
         :ok
 
       %{bundle_name: "page", entry_name: page_module} = bundle_info ->
-        mfas = mfas_by_page[page_module]
+        mfas = batch.mfas_by_page[page_module]
 
-        Cache.put_page(
-          page_module,
-          %{bundle_info: bundle_info, modules: page_state_modules(mfas)},
-          mfas
-        )
+        page_state = %{
+          bundle_info: bundle_info,
+          chunk_types: batch.chunk_types_by_page[page_module],
+          modules: page_state_modules(mfas)
+        }
+
+        Cache.put_page(page_module, page_state, mfas)
 
       %{bundle_name: "runtime"} = bundle_info ->
         Cache.put_runtime(%{
@@ -1011,7 +1050,8 @@ defmodule Mix.Tasks.Compile.Hologram do
           client_config: context.client_config,
           js_binding_modules: context.runtime_js_binding_modules,
           mfas: context.runtime_mfas,
-          dynamic_calls: context.gate.runtime
+          dynamic_calls: context.gate.runtime,
+          types: context.runtime_types
         })
     end)
   end
@@ -1233,6 +1273,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The runtime's MFAs and the struct types its code names are a walk of the graph, so a compile
+  # that kept them (see runtime_kept?/3) finds the ones the runtime bundle on disk was built from.
+  defp runtime_analysis(kept_runtime, _call_graph, true) do
+    %{mfas: kept_runtime.mfas, types: kept_runtime.types}
+  end
+
+  defp runtime_analysis(_kept_runtime, call_graph, false) do
+    CallGraph.runtime_analysis(call_graph)
+  end
+
   defp runtime_js_bindings_changed?(nil, _js_binding_modules), do: false
 
   defp runtime_js_bindings_changed?(kept_runtime, js_binding_modules) do
@@ -1313,6 +1363,25 @@ defmodule Mix.Tasks.Compile.Hologram do
     mfas_by_page
   end
 
+  # The struct types each of the batch's pages names in its client code (see
+  # Hologram.Compiler.CallGraph.list_page_chunk_types/4), which decide the chunks the page preloads.
+  # Listed on the graph the pages' MFAs are, with the same analyses.
+  defp list_batch_chunk_types([], _context), do: %{}
+
+  defp list_batch_chunk_types(page_modules, context) do
+    # The tasks get the reader and the PLTs, not the context, which each would copy.
+    %{analyses: analyses, module_info_plt: module_info_plt, read_graph: read_graph} = context
+
+    page_modules
+    |> TaskUtils.map_concurrently(fn page_module ->
+      chunk_types =
+        CallGraph.list_page_chunk_types(read_graph.(), page_module, analyses, module_info_plt)
+
+      {page_module, chunk_types}
+    end)
+    |> Map.new()
+  end
+
   # The states of the pages to rebuild that an earlier compile built. Each still serves its bundle
   # until its new one is written, and its modules say what IR to keep and which pages it links to.
   defp list_old_page_states(page_modules, pages_plt) do
@@ -1349,14 +1418,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp list_runtime_dynamic_calls(_kept_runtime, call_graph, runtime_mfas, ir_plt, false) do
     CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
-  end
-
-  # The runtime's MFAs are a walk of the graph, so a compile that kept them (see runtime_kept?/3)
-  # finds the ones the runtime bundle on disk was built from.
-  defp list_runtime_mfas(kept_runtime, _call_graph, true), do: kept_runtime.mfas
-
-  defp list_runtime_mfas(_kept_runtime, call_graph, false) do
-    CallGraph.list_runtime_mfas(call_graph)
   end
 
   # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which
