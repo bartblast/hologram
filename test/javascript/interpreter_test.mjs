@@ -5505,6 +5505,34 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("literalSet()", () => {
+    it("returns a set that finds the literals the function returns", () => {
+      const set = Interpreter.literalSet(() => [
+        Type.atom("a"),
+        Type.integer(1),
+      ]);
+
+      assert.isTrue(set.has(Type.atom("a")));
+      assert.isTrue(set.has(Type.integer(1)));
+      assert.isFalse(set.has(Type.atom("b")));
+    });
+
+    it("runs the function on the first lookup, not before", () => {
+      let buildCount = 0;
+
+      const set = Interpreter.literalSet(() => {
+        ++buildCount;
+        return [Type.atom("a")];
+      });
+
+      assert.equal(buildCount, 0);
+
+      set.has(Type.atom("a"));
+
+      assert.equal(buildCount, 1);
+    });
+  });
+
   // IMPORTANT!
   // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/match_operator_test.exs
   // Always update both together.

@@ -5,6 +5,7 @@ import CallStack from "./erts/call_stack.mjs";
 import ERTS from "./erts.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import LiteralSet from "./literal_set.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Type from "./type.mjs";
@@ -827,6 +828,12 @@ export default class Interpreter {
       case "port":
         return $.#areIdentifiersEqual(left, right);
     }
+  }
+
+  // A set of the literal terms the given function returns. The function runs
+  // once, on the set's first lookup.
+  static literalSet(build) {
+    return new LiteralSet(build);
   }
 
   // context.vars.__matched__ keeps track of already pattern matched variables,
