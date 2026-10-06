@@ -107,6 +107,8 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       |> JS.call(:asyncSum, [15, 16])
       |> Task.await()
 
+    # apply/3 is the construct under test
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
     is_int = apply(Kernel, :is_integer, [result])
 
     put_state(component, :result, {result, is_int})
