@@ -153,7 +153,9 @@ export default class Hologram {
 
   // The chunks the snapshot last restored was taken with, which its mount waits for: the state it
   // holds can carry values of struct types whose protocol implementations only those chunks have.
-  // None when the page on its way was not restored from a snapshot.
+  // None when the page on its way was not restored from a snapshot. Unlike every other digest the
+  // tab asks for, these were not named by the server just now, so the files they name can be gone
+  // (see #handleScriptFailure).
   static #snapshotChunkDigests = [];
 
   // Public API for dispatching actions from JavaScript.
@@ -574,6 +576,14 @@ export default class Hologram {
     for (const action of selfEchoes.data) {
       Hologram.enqueueActionAfterDelay(action, $.registryEpoch);
     }
+  }
+
+  // Made public to make tests easier
+  //
+  // Loads the page afresh from the server, in place: the same history entry, the state the server
+  // renders, no snapshot restored.
+  static reloadPage() {
+    window.location.reload();
   }
 
   // Made public to make tests easier
@@ -1249,6 +1259,11 @@ export default class Hologram {
 
         MountGate.require([pageDigest, ...$.#snapshotChunkDigests]);
         $.#requestPageBundle(Hologram.#pageModule, pageDigest);
+
+        // Asked for again now that the mount waits for them: one that failed while the server was
+        // answering failed before anything required it, and would be waited for in silence.
+        $.requestChunks($.#snapshotChunkDigests);
+
         $.#mountWhenReady(false);
       },
       (_resp) => {
@@ -1267,10 +1282,21 @@ export default class Hologram {
   // going to run, so the epoch is recorded dead: what belongs to it is dropped rather than held
   // (see #runActions). A script no longer required belongs to a navigation a later one superseded,
   // and its failure says nothing about the one now in flight.
+  //
+  // A chunk a restored snapshot named is the one script whose digest can be out of date: the
+  // snapshot may be older than the build that serves the app now, which no longer has the file.
+  // The snapshot cannot be restored without it, so the page is loaded afresh instead, from the
+  // state the server renders. A reload restores no snapshot (see #init), so it cannot repeat.
   static #handleScriptFailure(digest) {
-    if (MountGate.requires(digest)) {
-      MountGate.cancel();
-      $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+    if (!MountGate.requires(digest)) {
+      return;
+    }
+
+    MountGate.cancel();
+    $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+
+    if ($.#snapshotChunkDigests.includes(digest)) {
+      $.reloadPage();
     }
   }
 
@@ -1700,6 +1726,9 @@ export default class Hologram {
     // The mount waits for the page's bundle, unless the tab holds the page's code already, and for
     // the chunks the page needs: the ones it preloads and the ones its state holds values for.
     const chunkDigests = payload.chunks ?? [];
+
+    // The page on its way comes from the server, not from a snapshot.
+    $.#snapshotChunkDigests = [];
 
     if (isPageModuleRegistered) {
       MountGate.require(chunkDigests);

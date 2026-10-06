@@ -2493,6 +2493,58 @@ describe("Hologram", () => {
         }
       });
 
+      // A navigation from the server takes over from a restore still waiting for its chunks. The
+      // digest is the server's now, so its failure ends the navigation like any other chunk's.
+      it("end the navigation, with no reload, when one a superseded restore named too fails to load", async () => {
+        const instanceId = App.instanceId;
+
+        const pageSnapshot = {
+          chunkDigests: ["AAAAAAAA"],
+          componentRegistryEntries: Type.map(),
+          instanceId: "superseded-restore-instance",
+          pageModule: Type.atom(
+            "Elixir.Hologram.Test.Fixtures.SupersededRestore",
+          ),
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-superseded",
+          Serializer.serialize(pageSnapshot, "client"),
+        );
+
+        const consoleErrorStub = sinon.stub(console, "error");
+        const fetchStub = sinon.stub(Client, "fetchPageDigest");
+        const reloadStub = sinon.stub(Hologram, "reloadPage");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-superseded"});
+
+          await Hologram.loadNewPage(
+            "/target",
+            payloadWithChunks("chunks-8", ["AAAAAAAA"]),
+          );
+
+          assert.throws(
+            () => chunkScript("AAAAAAAA").onerror(),
+            HologramRuntimeError,
+            "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+          );
+
+          assert.isNull(MountGate.pendingMount);
+          sinon.assert.notCalled(reloadStub);
+        } finally {
+          reloadStub.restore();
+          fetchStub.restore();
+          consoleErrorStub.restore();
+          sessionStorage.clear();
+          ComponentRegistry.clear();
+          App.instanceId = instanceId;
+        }
+      });
+
       // The chunk of a page left behind by a later navigation is no longer what the mount waits
       // for, so its failure says nothing about the navigation now in flight.
       it("leave a later navigation's mount waiting when one of an earlier navigation fails", async () => {
@@ -2832,6 +2884,137 @@ describe("Hologram", () => {
         Hologram.domEpoch = 0;
         Hologram.registryEpoch = 0;
       }
+    });
+
+    // A snapshot can be older than the build that serves the app now, and the chunks it was taken
+    // with are named by digest, so the files it names can be gone. The snapshot cannot be restored
+    // without them: the page is loaded afresh instead.
+    describe("chunk a restored snapshot named that fails to load", () => {
+      const pageModule = Type.atom(
+        "Elixir.Hologram.Test.Fixtures.RestoredFromSnapshot",
+      );
+
+      const snapshotChunkScripts = () =>
+        Array.from(
+          document.head.querySelectorAll(
+            'script[src="/hologram/chunk-SNAPSHOT.js"]',
+          ),
+        );
+
+      // Filed under a history id of its own each time: the handler first saves the page being
+      // left under the id it holds, which is the one the last restore went to.
+      const seedSnapshot = (historyId) => {
+        const pageSnapshot = {
+          chunkDigests: ["SNAPSHOT"],
+          componentRegistryEntries: Type.map(),
+          instanceId: "restored-instance",
+          pageModule: pageModule,
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        sessionStorage.setItem(
+          `hologram_page_snapshot_${historyId}`,
+          Serializer.serialize(pageSnapshot, "client"),
+        );
+      };
+
+      let consoleErrorStub, instanceId, reloadStub;
+
+      beforeEach(() => {
+        instanceId = App.instanceId;
+        consoleErrorStub = sinon.stub(console, "error");
+        reloadStub = sinon.stub(Hologram, "reloadPage");
+      });
+
+      afterEach(() => {
+        reloadStub.restore();
+        consoleErrorStub.restore();
+
+        document.head
+          .querySelectorAll("script[src^='/hologram/']")
+          .forEach((script) => script.remove());
+
+        ScriptRegistry.statuses.clear();
+        MountGate.require([]);
+        MountGate.cancel();
+        LiveReload.pageBundleDigests.delete(pageModule.value);
+
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      it("reloads the page", async () => {
+        const fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("restored-1");
+            }
+
+            return Promise.resolve("restored-1");
+          });
+
+        seedSnapshot("history-chunks-1");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-chunks-1"});
+
+          const [script] = snapshotChunkScripts();
+
+          assert.throws(
+            () => script.onerror(),
+            HologramRuntimeError,
+            "Failed to load script: /hologram/chunk-SNAPSHOT.js",
+          );
+
+          assert.isNull(MountGate.pendingMount);
+          sinon.assert.calledOnce(reloadStub);
+        } finally {
+          fetchStub.restore();
+        }
+      });
+
+      // The chunk is asked for at once, for the head start, and the mount starts to wait for it
+      // only when the server has named the page's bundle. One that fails in between fails before
+      // anything requires it, so it is asked for again then.
+      it("reloads the page when it failed before the server named the page's bundle", async () => {
+        let nameBundle;
+
+        const fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              nameBundle = () => onSuccess("restored-2");
+            }
+
+            return Promise.resolve("restored-2");
+          });
+
+        seedSnapshot("history-chunks-2");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-chunks-2"});
+
+          const [firstScript] = snapshotChunkScripts();
+
+          assert.throws(() => firstScript.onerror(), HologramRuntimeError);
+          sinon.assert.notCalled(reloadStub);
+
+          nameBundle();
+
+          const [_firstScript, secondScript] = snapshotChunkScripts();
+
+          assert.throws(() => secondScript.onerror(), HologramRuntimeError);
+          sinon.assert.calledOnce(reloadStub);
+        } finally {
+          fetchStub.restore();
+        }
+      });
     });
   });
 
