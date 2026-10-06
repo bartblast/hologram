@@ -1404,7 +1404,7 @@ export default class Hologram {
 
   static #mountPage(isPageModuleRegistered = false) {
     // Nothing pending from the page the user left is dropped here. It is dropped at the instant
-    // the user leaves instead - in #showNewPage and #handlePopstateEvent - which is the last
+    // the user leaves instead - in #showNewPage and handlePopstateEvent - which is the last
     // point at which every pending timer provably belongs to the page being left.
     //
     // Whichever pointer ran ahead during the transition, the mount is where they converge: from
