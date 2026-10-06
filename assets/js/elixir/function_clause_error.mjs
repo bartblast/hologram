@@ -108,6 +108,21 @@ function renderGuard(guard, parentPrecedence) {
     return renderNode(guard);
   }
 
+  // An operator with its operands side by side. They all sit at the operator's
+  // own precedence, so joining them reads the same as rendering them one
+  // nested in the other, whatever their number.
+  if (guard.data.length === 2) {
+    const [operator, operands] = guard.data;
+    const precedence = PRECEDENCES[operator.value];
+
+    const text = operands.data
+      .map((operand) => renderGuard(operand, precedence))
+      .join(` ${operator.value} `);
+
+    return parentPrecedence > precedence ? `(${text})` : text;
+  }
+
+  // TODO: remove once the interpreter keeps the operands of every operator side by side
   const [operator, left, right] = guard.data;
   const precedence = PRECEDENCES[operator.value];
 

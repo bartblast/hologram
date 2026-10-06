@@ -217,6 +217,132 @@ describe("Elixir_FunctionClauseError", () => {
       );
     });
 
+    it("keeps a chain of ands nested in a chain of ors unparenthesized", () => {
+      const struct = structFixture({
+        args: Type.list([Type.atom("abc"), Type.integer(123)]),
+        kind: Type.atom("def"),
+        clauses: Type.list([
+          Type.tuple([
+            Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
+            Type.list([
+              Type.tuple([
+                Type.atom("or"),
+                Type.list([
+                  blamedNode(false, "x == :infinity"),
+                  Type.tuple([
+                    Type.atom("and"),
+                    Type.list([
+                      blamedNode(true, "is_integer(x)"),
+                      blamedNode(false, "x >= 0"),
+                      blamedNode(true, "x < 9"),
+                    ]),
+                  ]),
+                  blamedNode(false, "is_nil(x)"),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      });
+
+      assert.isTrue(
+        message(struct).endsWith(
+          "    def my_fun(x, y) when -x == :infinity- or is_integer(x) and -x >= 0- and x < 9 or -is_nil(x)-\n",
+        ),
+      );
+    });
+
+    it("parenthesizes a chain of ors nested in a chain of ands", () => {
+      const struct = structFixture({
+        args: Type.list([Type.atom("abc"), Type.integer(123)]),
+        kind: Type.atom("def"),
+        clauses: Type.list([
+          Type.tuple([
+            Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
+            Type.list([
+              Type.tuple([
+                Type.atom("and"),
+                Type.list([
+                  Type.tuple([
+                    Type.atom("or"),
+                    Type.list([
+                      blamedNode(true, "is_integer(x)"),
+                      blamedNode(false, "is_atom(x)"),
+                      blamedNode(false, "is_nil(x)"),
+                    ]),
+                  ]),
+                  blamedNode(false, "x >= 0"),
+                  blamedNode(true, "x < 9"),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      });
+
+      assert.isTrue(
+        message(struct).endsWith(
+          "    def my_fun(x, y) when (is_integer(x) or -is_atom(x)- or -is_nil(x)-) and -x >= 0- and x < 9\n",
+        ),
+      );
+    });
+
+    it("renders a chain of 5,000 operands", () => {
+      const sources = Array.from({length: 5000}, (_value, i) => `x === ${i}`);
+
+      const struct = structFixture({
+        args: Type.list([Type.atom("abc"), Type.integer(123)]),
+        kind: Type.atom("def"),
+        clauses: Type.list([
+          Type.tuple([
+            Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
+            Type.list([
+              Type.tuple([
+                Type.atom("or"),
+                Type.list(sources.map((source) => blamedNode(false, source))),
+              ]),
+            ]),
+          ]),
+        ]),
+      });
+
+      const expectedGuard = sources.map((source) => `-${source}-`).join(" or ");
+
+      assert.isTrue(
+        message(struct).endsWith(
+          `    def my_fun(x, y) when ${expectedGuard}\n`,
+        ),
+      );
+    });
+
+    it("renders the operands of a chain side by side", () => {
+      const struct = structFixture({
+        args: Type.list([Type.atom("abc"), Type.integer(123)]),
+        kind: Type.atom("def"),
+        clauses: Type.list([
+          Type.tuple([
+            Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
+            Type.list([
+              Type.tuple([
+                Type.atom("or"),
+                Type.list([
+                  blamedNode(false, "x === 1"),
+                  blamedNode(true, "x === 2"),
+                  blamedNode(false, "x === 3"),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      });
+
+      assert.isTrue(
+        message(struct).endsWith(
+          "    def my_fun(x, y) when -x === 1- or x === 2 or -x === 3-\n",
+        ),
+      );
+    });
+
     it("counts out a single clause beyond the limit", () => {
       const clause = Type.tuple([
         Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
