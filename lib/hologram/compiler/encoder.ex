@@ -1007,7 +1007,7 @@ defmodule Hologram.Compiler.Encoder do
   # which carries the same and/or structure they were split at. The operands of
   # a chain are written side by side, so the nesting of the output does not grow
   # with the length of the chain. Only the left side of a chain is taken apart,
-  # which is the side the client folds the operands back on.
+  # which is the side `in` and a written-out chain nest on.
   defp encode_clause_blame(%IR.FunctionClause{blame: nil}, _context), do: nil
 
   defp encode_clause_blame(%IR.FunctionClause{blame: blame} = clause, context) do

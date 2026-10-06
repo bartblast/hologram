@@ -10574,9 +10574,16 @@ describe("Interpreter", () => {
       });
 
       // The blamed guards of def my_fun(x) with the given guards, called with the given x
-      const foldedGuards = (guards, x) => {
+      const blamedGuards = (guards, x) => {
+        const clauses = raisedError(guards, x).value.data["atom(clauses)"][1];
+
+        return clauses.data[0].data[1];
+      };
+
+      // The error def my_fun(x) with the given guards raises when called with the given x
+      const raisedError = (guards, x) => {
         Interpreter.defineFunctionClauseHeads(
-          "MyFoldedModule",
+          "MyChainModule",
           "my_fun",
           1,
           "public",
@@ -10589,22 +10596,16 @@ describe("Interpreter", () => {
           ],
         );
 
-        let caught;
-
         try {
-          Interpreter.raiseFunctionClauseError("MyFoldedModule", "my_fun", 1, [
+          Interpreter.raiseFunctionClauseError("MyChainModule", "my_fun", 1, [
             x,
           ]);
-        } catch (e) {
-          caught = e;
+        } catch (error) {
+          return error;
         }
-
-        const clauses = caught.value.data["atom(clauses)"][1];
-
-        return clauses.data[0].data[1];
       };
 
-      it("folds a chain nested in an operand", () => {
+      it("keeps a chain nested in an operand as a chain", () => {
         // def my_fun(x) when is_integer(x) and (x === 1 or x === 2 or x === 3)
         const guards = [
           {
@@ -10620,18 +10621,40 @@ describe("Interpreter", () => {
         ];
 
         assert.deepStrictEqual(
-          foldedGuards(guards, Type.integer(2)),
+          blamedGuards(guards, Type.integer(2)),
           Type.list([
             Type.tuple([
               Type.atom("and"),
-              blamedNode(true, "is_integer(x)"),
-              Type.tuple([
-                Type.atom("or"),
+              Type.list([
+                blamedNode(true, "is_integer(x)"),
                 Type.tuple([
                   Type.atom("or"),
-                  blamedNode(false, "x === 1"),
-                  blamedNode(true, "x === 2"),
+                  Type.list([
+                    blamedNode(false, "x === 1"),
+                    blamedNode(true, "x === 2"),
+                    blamedNode(false, "x === 3"),
+                  ]),
                 ]),
+              ]),
+            ]),
+          ]),
+        );
+      });
+
+      it("keeps three operands side by side", () => {
+        // def my_fun(x) when x === 1 or x === 2 or x === 3
+        const guards = [
+          {operator: "or", operands: [equals(1), equals(2), equals(3)]},
+        ];
+
+        assert.deepStrictEqual(
+          blamedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("or"),
+              Type.list([
+                blamedNode(false, "x === 1"),
+                blamedNode(true, "x === 2"),
                 blamedNode(false, "x === 3"),
               ]),
             ]),
@@ -10639,39 +10662,19 @@ describe("Interpreter", () => {
         );
       });
 
-      it("folds three operands into left-nested tuples", () => {
-        // def my_fun(x) when x === 1 or x === 2 or x === 3
-        const guards = [
-          {operator: "or", operands: [equals(1), equals(2), equals(3)]},
-        ];
-
-        assert.deepStrictEqual(
-          foldedGuards(guards, Type.integer(2)),
-          Type.list([
-            Type.tuple([
-              Type.atom("or"),
-              Type.tuple([
-                Type.atom("or"),
-                blamedNode(false, "x === 1"),
-                blamedNode(true, "x === 2"),
-              ]),
-              blamedNode(false, "x === 3"),
-            ]),
-          ]),
-        );
-      });
-
-      it("folds two operands into one tuple", () => {
+      it("keeps two operands side by side", () => {
         // def my_fun(x) when x === 1 or x === 2
         const guards = [{operator: "or", operands: [equals(1), equals(2)]}];
 
         assert.deepStrictEqual(
-          foldedGuards(guards, Type.integer(2)),
+          blamedGuards(guards, Type.integer(2)),
           Type.list([
             Type.tuple([
               Type.atom("or"),
-              blamedNode(false, "x === 1"),
-              blamedNode(true, "x === 2"),
+              Type.list([
+                blamedNode(false, "x === 1"),
+                blamedNode(true, "x === 2"),
+              ]),
             ]),
           ]),
         );
@@ -10705,8 +10708,10 @@ describe("Interpreter", () => {
               Type.list([
                 Type.tuple([
                   Type.atom("and"),
-                  blamedNode(true, "is_integer(x)"),
-                  blamedNode(false, "x + 1 > y"),
+                  Type.list([
+                    blamedNode(true, "is_integer(x)"),
+                    blamedNode(false, "x + 1 > y"),
+                  ]),
                 ]),
               ]),
             ]),
@@ -10716,6 +10721,21 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(
           caught.value.data["atom(kind)"][1],
           Type.atom("def"),
+        );
+      });
+
+      it("raises a FunctionClauseError with its attempted clause for a guard of 5,000 operands", () => {
+        // def my_fun(x) when x === 0 or x === 1 or ... or x === 4999
+        const operands = Array.from({length: 5000}, (_value, i) => equals(i));
+        const guards = [{operator: "or", operands: operands}];
+
+        const expectedGuard = operands
+          .map((operand) => `-${operand.source}-`)
+          .join(" or ");
+
+        assert.equal(
+          boxedErrorMessage(raisedError(guards, Type.integer(-1))),
+          `(FunctionClauseError) no function clause matching in MyChainModule.my_fun/1\n\nThe following arguments were given to MyChainModule.my_fun/1:\n\n    # 1\n    -1\n\nAttempted function clauses (showing 1 out of 1):\n\n    def my_fun(x) when ${expectedGuard}\n`,
         );
       });
 
@@ -10744,8 +10764,10 @@ describe("Interpreter", () => {
           guard,
           Type.tuple([
             Type.atom("and"),
-            blamedNode(false, "is_integer(x)"),
-            blamedNode(false, "x + 1 > y"),
+            Type.list([
+              blamedNode(false, "is_integer(x)"),
+              blamedNode(false, "x + 1 > y"),
+            ]),
           ]),
         );
       });
