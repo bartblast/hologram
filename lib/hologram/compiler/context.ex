@@ -9,6 +9,8 @@ defmodule Hologram.Compiler.Context do
   # didn't hold, never a raise, so its calls record no line.
   # ir_plt is the IR PLT of the compile being encoded, when there is one; it answers
   # which modules are Elixir modules without consulting their code path.
+  # literal_sets? says the code being encoded has a place where the sets of
+  # literals it looks values up in get declared.
   @type t :: %__MODULE__{
           arity: non_neg_integer | nil,
           async?: bool,
@@ -16,6 +18,7 @@ defmodule Hologram.Compiler.Context do
           function: atom | nil,
           guard?: bool,
           ir_plt: PLT.t() | nil,
+          literal_sets?: bool,
           match_operator?: bool,
           module: module,
           pattern?: bool
@@ -27,6 +30,7 @@ defmodule Hologram.Compiler.Context do
             function: nil,
             guard?: false,
             ir_plt: nil,
+            literal_sets?: false,
             match_operator?: false,
             module: nil,
             pattern?: false
