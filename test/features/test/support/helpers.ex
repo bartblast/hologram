@@ -3,9 +3,12 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Router.Helpers, as: RouterHelpers
+  alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -166,6 +169,44 @@ defmodule HologramFeatureTests.Helpers do
     parent
   end
 
+  @doc """
+  Returns whether the given JavaScript bundle defines the given function.
+
+  A bundle can name a module without holding its code (a protocol's dispatcher
+  names every implementation), so the name alone says nothing.
+  """
+  @spec bundle_defines?(String.t(), mfa) :: boolean
+  def bundle_defines?(bundle, {module, function, arity}) do
+    String.contains?(
+      bundle,
+      ~s/defineElixirFunction("#{inspect(module)}","#{function}",#{arity},/
+    )
+  end
+
+  @doc """
+  Returns whether the chunk bundle with the given digest defines the given
+  function (see `bundle_defines?/2`).
+  """
+  @spec chunk_bundle_defines?(String.t(), mfa) :: boolean
+  def chunk_bundle_defines?(digest, mfa) do
+    digest
+    |> read_chunk_bundle()
+    |> bundle_defines?(mfa)
+  end
+
+  @doc """
+  Returns the digests of every chunk bundle the compiler wrote, sorted.
+  """
+  @spec chunk_digests() :: [String.t()]
+  def chunk_digests do
+    static_dir()
+    |> Path.join("hologram/chunk-????????.js")
+    |> Path.wildcard()
+    |> Enum.map(&Path.basename(&1, ".js"))
+    |> Enum.map(&String.replace_prefix(&1, "chunk-", ""))
+    |> Enum.sort()
+  end
+
   def cookies(session) do
     session
     |> Browser.cookies()
@@ -210,6 +251,28 @@ defmodule HologramFeatureTests.Helpers do
       nil -> nil
       entry -> entry.user_id
     end
+  end
+
+  @doc """
+  Returns the digests of the chunks the document of the given page names: the
+  ones the server tells a browser to load before the page mounts. The document
+  is the one the server answers a request for the page with, before any script
+  has run.
+  """
+  @spec document_chunk_digests(module) :: [String.t()]
+  def document_chunk_digests(page_module) do
+    path = RouterHelpers.page_path(page_module)
+
+    document =
+      :get
+      |> Plug.Test.conn(path)
+      |> Endpoint.call(Endpoint.init([]))
+      |> Map.fetch!(:resp_body)
+
+    [_match, digests_json] =
+      Regex.run(~r/globalThis\.Hologram\.initialChunkDigests = (\[[^\]]*\]);/, document)
+
+    Jason.decode!(digests_json)
   end
 
   @doc """
@@ -272,6 +335,41 @@ defmodule HologramFeatureTests.Helpers do
       {:error, false} ->
         false
     end
+  end
+
+  @doc """
+  Returns the content of the chunk bundle with the given digest.
+  """
+  @spec read_chunk_bundle(String.t()) :: String.t()
+  def read_chunk_bundle(digest) do
+    static_dir()
+    |> Path.join(RouterHelpers.chunk_bundle_path(digest))
+    |> File.read!()
+  end
+
+  @doc """
+  Returns the content of the given page's bundle.
+  """
+  @spec read_page_bundle(module) :: String.t()
+  def read_page_bundle(page_module) do
+    digest = PageDigestRegistry.lookup(page_module)
+
+    static_dir()
+    |> Path.join(RouterHelpers.page_bundle_path(page_module, digest))
+    |> File.read!()
+  end
+
+  @doc """
+  Returns the content of the runtime bundle.
+  """
+  @spec read_runtime_bundle() :: String.t()
+  def read_runtime_bundle do
+    [runtime_bundle_path] =
+      static_dir()
+      |> Path.join("hologram/runtime-????????.js")
+      |> Path.wildcard()
+
+    File.read!(runtime_bundle_path)
   end
 
   @doc """
@@ -750,6 +848,10 @@ defmodule HologramFeatureTests.Helpers do
       [{^instance_id, entry}] -> entry
       [] -> nil
     end
+  end
+
+  defp static_dir do
+    Application.app_dir(:hologram_feature_tests, "priv/static")
   end
 
   defp subscription_count(channel, cid) do
