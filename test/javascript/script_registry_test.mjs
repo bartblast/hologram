@@ -237,6 +237,22 @@ describe("ScriptRegistry", () => {
 
       sinon.assert.calledOnceWithExactly(onFailure, "AAAAAAAA");
     });
+
+    it("a script that fails to load is not raised when the caller says it was prepared for that", () => {
+      const onFailure = sinon.stub().returns(true);
+
+      ScriptRegistry.request([scriptA], onFailure);
+
+      const [script] = requestedScripts();
+
+      assert.doesNotThrow(() => script.onerror());
+
+      assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
+        ["AAAAAAAA", "failed"],
+      ]);
+
+      sinon.assert.calledOnceWithExactly(onFailure, "AAAAAAAA");
+    });
   });
 
   describe("whenLoaded()", () => {

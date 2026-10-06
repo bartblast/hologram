@@ -2494,8 +2494,9 @@ describe("Hologram", () => {
       });
 
       // A navigation from the server takes over from a restore still waiting for its chunks. The
-      // digest is the server's now, so its failure ends the navigation like any other chunk's.
-      it("end the navigation, with no reload, when one a superseded restore named too fails to load", async () => {
+      // chunk is the navigation's now, so its failure ends the navigation like any other chunk's,
+      // and the restore, superseded, does nothing about it.
+      it("end the navigation when one a superseded restore waited for too fails to load", async () => {
         const instanceId = App.instanceId;
 
         const pageSnapshot = {
@@ -2516,8 +2517,17 @@ describe("Hologram", () => {
         );
 
         const consoleErrorStub = sinon.stub(console, "error");
-        const fetchStub = sinon.stub(Client, "fetchPageDigest");
         const reloadStub = sinon.stub(Hologram, "reloadPage");
+
+        const fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("superseded-1");
+            }
+
+            return Promise.resolve("superseded-1");
+          });
 
         try {
           await Hologram.handlePopstateEvent({state: "history-superseded"});
@@ -2533,12 +2543,16 @@ describe("Hologram", () => {
             "Failed to load script: /hologram/chunk-AAAAAAAA.js",
           );
 
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
           assert.isNull(MountGate.pendingMount);
+          assert.strictEqual(App.instanceId, instanceId);
           sinon.assert.notCalled(reloadStub);
         } finally {
-          reloadStub.restore();
           fetchStub.restore();
+          reloadStub.restore();
           consoleErrorStub.restore();
+          LiveReload.pageBundleDigests.delete(pageSnapshot.pageModule.value);
           sessionStorage.clear();
           ComponentRegistry.clear();
           App.instanceId = instanceId;
@@ -2886,13 +2900,25 @@ describe("Hologram", () => {
       }
     });
 
-    // A snapshot can be older than the build that serves the app now, and the chunks it was taken
-    // with are named by digest, so the files it names can be gone. The snapshot cannot be restored
-    // without them: the page is loaded afresh instead.
-    describe("chunk a restored snapshot named that fails to load", () => {
+    // The state a snapshot holds can carry values of struct types whose protocol implementations
+    // only the chunks it was taken with have, so it is restored once they are in. A snapshot can be
+    // older than the build that serves the app now, and its chunks are named by digest, so the
+    // files it names can be gone: the snapshot is then passed over, with the tab left as it was.
+    describe("snapshot that names chunks", () => {
       const pageModule = Type.atom(
         "Elixir.Hologram.Test.Fixtures.RestoredFromSnapshot",
       );
+
+      const announce = (digest) => {
+        globalThis.Hologram.pendingScripts = [
+          {define: () => null, digest: digest},
+        ];
+
+        ScriptRegistry.defineLoaded({});
+      };
+
+      const flushPromises = () =>
+        new Promise((resolve) => setTimeout(resolve, 0));
 
       const snapshotChunkScripts = () =>
         Array.from(
@@ -2920,15 +2946,28 @@ describe("Hologram", () => {
         );
       };
 
-      let consoleErrorStub, instanceId, reloadStub;
+      let consoleErrorStub, fetchStub, instanceId, reloadStub;
 
       beforeEach(() => {
         instanceId = App.instanceId;
         consoleErrorStub = sinon.stub(console, "error");
         reloadStub = sinon.stub(Hologram, "reloadPage");
+
+        // The tab does not hold the page's code, so the server is asked which bundle serves it,
+        // and the mount then waits for that bundle.
+        fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("restored-1");
+            }
+
+            return Promise.resolve("restored-1");
+          });
       });
 
       afterEach(() => {
+        fetchStub.restore();
         reloadStub.restore();
         consoleErrorStub.restore();
 
@@ -2948,72 +2987,57 @@ describe("Hologram", () => {
         Hologram.registryEpoch = 0;
       });
 
-      it("reloads the page", async () => {
-        const fetchStub = sinon
-          .stub(Client, "fetchPageDigest")
-          .callsFake((_pageModule, onSuccess) => {
-            if (onSuccess) {
-              onSuccess("restored-1");
-            }
-
-            return Promise.resolve("restored-1");
-          });
-
+      it("is passed over, and the page loaded afresh, when one of its chunks fails to load", async () => {
         seedSnapshot("history-chunks-1");
 
-        try {
-          await Hologram.handlePopstateEvent({state: "history-chunks-1"});
+        await Hologram.handlePopstateEvent({state: "history-chunks-1"});
 
-          const [script] = snapshotChunkScripts();
+        const [script] = snapshotChunkScripts();
 
-          assert.throws(
-            () => script.onerror(),
-            HologramRuntimeError,
-            "Failed to load script: /hologram/chunk-SNAPSHOT.js",
-          );
+        // The restore is prepared for it, so it is no error.
+        assert.doesNotThrow(() => script.onerror());
 
-          assert.isNull(MountGate.pendingMount);
-          sinon.assert.calledOnce(reloadStub);
-        } finally {
-          fetchStub.restore();
-        }
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        assert.isNull(MountGate.pendingMount);
+        sinon.assert.calledOnce(reloadStub);
       });
 
-      // The chunk is asked for at once, for the head start, and the mount starts to wait for it
-      // only when the server has named the page's bundle. One that fails in between fails before
-      // anything requires it, so it is asked for again then.
-      it("reloads the page when it failed before the server named the page's bundle", async () => {
-        let nameBundle;
-
-        const fetchStub = sinon
-          .stub(Client, "fetchPageDigest")
-          .callsFake((_pageModule, onSuccess) => {
-            if (onSuccess) {
-              nameBundle = () => onSuccess("restored-2");
-            }
-
-            return Promise.resolve("restored-2");
-          });
-
+      it("is restored at once when the tab has its chunks", async () => {
+        ScriptRegistry.statuses.set("SNAPSHOT", "loaded");
         seedSnapshot("history-chunks-2");
 
-        try {
-          await Hologram.handlePopstateEvent({state: "history-chunks-2"});
+        await Hologram.handlePopstateEvent({state: "history-chunks-2"});
+        await flushPromises();
 
-          const [firstScript] = snapshotChunkScripts();
+        assert.deepStrictEqual(snapshotChunkScripts(), []);
+        assert.strictEqual(App.instanceId, "restored-instance");
+        assert.isNotNull(MountGate.pendingMount);
+        sinon.assert.notCalled(reloadStub);
+      });
 
-          assert.throws(() => firstScript.onerror(), HologramRuntimeError);
-          sinon.assert.notCalled(reloadStub);
+      it("is restored once its chunks have loaded", async () => {
+        seedSnapshot("history-chunks-3");
 
-          nameBundle();
+        await Hologram.handlePopstateEvent({state: "history-chunks-3"});
+        await flushPromises();
 
-          const [_firstScript, secondScript] = snapshotChunkScripts();
+        assert.strictEqual(snapshotChunkScripts().length, 1);
+        assert.strictEqual(App.instanceId, instanceId);
+        assert.isNull(MountGate.pendingMount);
 
-          assert.throws(() => secondScript.onerror(), HologramRuntimeError);
-          sinon.assert.calledOnce(reloadStub);
-        } finally {
-          fetchStub.restore();
-        }
+        announce("SNAPSHOT");
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, "restored-instance");
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "restored-1",
+        ]);
+
+        assert.isNotNull(MountGate.pendingMount);
+        sinon.assert.notCalled(reloadStub);
       });
     });
   });

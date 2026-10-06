@@ -64,6 +64,8 @@ export default class ScriptRegistry {
   //
   // Without the failure path a script that never loads would leave whatever waits for it waiting
   // in silence: the given function, called with the digest, is what lets the caller stop waiting.
+  // It answers true when the failure is one its caller is prepared for, and the failure is then
+  // not raised.
   //
   // Throwing from the handler does not reach whoever asked for the script, since the handler runs
   // off the event loop. It surfaces as an uncaught error instead, which is what the console and
@@ -87,7 +89,10 @@ export default class ScriptRegistry {
       script.onerror = () => {
         $.statuses.set(digest, "failed");
         $.#rejectWaiters(digest);
-        onFailure(digest);
+
+        if (onFailure(digest) === true) {
+          return;
+        }
 
         throw new HologramRuntimeError(`Failed to load script: ${path}`);
       };

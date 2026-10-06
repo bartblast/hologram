@@ -130,6 +130,10 @@ export default class Hologram {
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
+  // The snapshot of the history entry this document was loaded for, found while the runtime was
+  // starting and restored by run() once its chunks are in. Null when there is none to restore.
+  static #documentSnapshot = null;
+
   static #historyId = null;
   static #isInitiated = false;
 
@@ -148,15 +152,12 @@ export default class Hologram {
   static #pageParams = null;
   static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
+
+  // For each snapshot restore in flight, the chunks it waits for (see #loadSnapshotChunks).
+  static #restoresInFlight = new Set();
+
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
-
-  // The chunks the snapshot last restored was taken with, which its mount waits for: the state it
-  // holds can carry values of struct types whose protocol implementations only those chunks have.
-  // None when the page on its way was not restored from a snapshot. Unlike every other digest the
-  // tab asks for, these were not named by the server just now, so the files they name can be gone
-  // (see #handleScriptFailure).
-  static #snapshotChunkDigests = [];
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -679,15 +680,30 @@ export default class Hologram {
       }
 
       // The document's own page bundle and chunks are what its mount waits for. Their script
-      // elements are in the document the server sent, so they are not requested here. A snapshot
-      // restored into the document can need more chunks than the server rendered the page with:
-      // those are requested.
-      MountGate.require([
-        ...$.#initialScriptDigests(),
-        ...$.#snapshotChunkDigests,
-      ]);
+      // elements are in the document the server sent, so they are not requested here.
+      MountGate.require($.#initialScriptDigests());
 
-      $.requestChunks($.#snapshotChunkDigests);
+      // A snapshot can need more chunks than the server rendered the page with. It is restored
+      // once they are in. When one cannot be had the snapshot is passed over, and the page mounts
+      // from the state the server has just rendered, which the document carries.
+      const pageSnapshot = $.#documentSnapshot;
+      $.#documentSnapshot = null;
+
+      if (
+        pageSnapshot !== null &&
+        (await $.#loadSnapshotChunks(pageSnapshot))
+      ) {
+        $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+        $.#restorePageSnapshot(pageSnapshot);
+
+        // The mount after a restore reads no mount data, which is where a page's bundle digest is
+        // recorded, so this document's is recorded here: the snapshot it saves on leaving is
+        // stamped with it.
+        LiveReload.recordPageBundle(
+          pageSnapshot.pageModule,
+          globalThis.Hologram.initialPageDigest,
+        );
+      }
 
       Hologram.#mountWhenReady(false);
     });
@@ -1220,51 +1236,86 @@ export default class Hologram {
 
     $.#historyId = event.state;
 
+    // What the registry answers for is about to change either way: a restore swaps it for the
+    // snapshot's, and with no snapshot the mount reads the document's mount data instead and
+    // repopulates the registry from it, putting every component back to the state it was rendered
+    // with. So the epoch advances here - otherwise an action armed before this point would settle
+    // against state that has been replaced underneath it.
+    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+
+    // The epoch of the navigation this popstate opened. What follows waits, for the snapshot's
+    // chunks and for the server, and a later navigation may supersede this one before either
+    // answers - neither the answer nor the failure of a superseded wait says anything about the
+    // navigation now in flight.
+    const epoch = $.registryEpoch;
+    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+
+    // The page on its way: the snapshot's, or with none the one the tab already answers for.
+    const pageModule = pageSnapshot
+      ? pageSnapshot.pageModule
+      : Hologram.#pageModule;
+
+    let snapshotChunksLoaded = null;
+
     if (pageSnapshot) {
-      $.#restorePageSnapshot(pageSnapshot);
-    } else {
-      // With no snapshot to restore, the mount below reads the document's mount data instead and
-      // repopulates the registry from it, putting every component back to the state it was
-      // rendered with. That is as much a change of what the registry answers for as a restore is,
-      // so it advances the same way - otherwise an action armed before this point would settle
-      // against state that has been reset underneath it.
-      $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
-      $.#snapshotChunkDigests = [];
+      // A mount still waiting belongs to a navigation this one supersedes, and nothing is put in
+      // its place until the snapshot's chunks are in.
+      MountGate.cancel();
+      MountGate.require([]);
+
+      // Asked for now, so that they load while the server is asked for the page's bundle.
+      snapshotChunksLoaded = $.#loadSnapshotChunks(pageSnapshot);
     }
 
-    // The tab still holds the chunks a snapshot of its own was taken with, unless one failed to
-    // load back then.
-    $.requestChunks($.#snapshotChunkDigests);
+    // Closes the transition. A snapshot is restored only once its chunks are in, so that one that
+    // cannot be restored leaves the tab as it was.
+    const mount = async (isPageModuleRegistered, pageBundleDigests) => {
+      if (pageSnapshot) {
+        const loaded = await snapshotChunksLoaded;
 
-    if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
-      MountGate.require($.#snapshotChunkDigests);
-
-      return $.#mountWhenReady(true);
-    }
-
-    // The epoch of the navigation this restore opened. The fetch below is a round trip, and a
-    // later navigation may supersede this one before it answers - neither the answer nor the
-    // failure of a superseded fetch says anything about the navigation now in flight.
-    const epoch = Math.max($.domEpoch, $.registryEpoch);
-
-    await Client.fetchPageDigest(
-      Hologram.#pageModule,
-      (pageDigest) => {
-        // The scripts required and the mount waiting are the later navigation's by now.
-        if (Math.max($.domEpoch, $.registryEpoch) !== epoch) {
+        // A later navigation took over meanwhile, or the page's bundle failed to load, which ended
+        // this navigation already.
+        if (isSuperseded() || ScriptRegistry.hasFailed(pageBundleDigests)) {
           return;
         }
 
-        LiveReload.recordPageBundle(Hologram.#pageModule, pageDigest);
+        if (!loaded) {
+          // The mount that would have closed this transition is never going to run.
+          $.#deadEpochs.add(epoch);
+          MountGate.cancel();
 
-        MountGate.require([pageDigest, ...$.#snapshotChunkDigests]);
-        $.#requestPageBundle(Hologram.#pageModule, pageDigest);
+          // TODO: load the page from the server in place instead
+          $.reloadPage();
 
-        // Asked for again now that the mount waits for them: one that failed while the server was
-        // answering failed before anything required it, and would be waited for in silence.
-        $.requestChunks($.#snapshotChunkDigests);
+          return;
+        }
 
-        $.#mountWhenReady(false);
+        $.#restorePageSnapshot(pageSnapshot);
+      }
+
+      $.#mountWhenReady(isPageModuleRegistered);
+    };
+
+    if ($.#isPageModuleRegistered(pageModule)) {
+      MountGate.require([]);
+
+      return mount(true, []);
+    }
+
+    await Client.fetchPageDigest(
+      pageModule,
+      (pageDigest) => {
+        // The scripts required and the mount waiting are the later navigation's by now.
+        if (isSuperseded()) {
+          return null;
+        }
+
+        LiveReload.recordPageBundle(pageModule, pageDigest);
+
+        MountGate.require([pageDigest]);
+        $.#requestPageBundle(pageModule, pageDigest);
+
+        return mount(false, [pageDigest]);
       },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
@@ -1272,7 +1323,7 @@ export default class Hologram {
 
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
-            Interpreter.inspect(Hologram.#pageModule),
+            Interpreter.inspect(pageModule),
         );
       },
     );
@@ -1283,21 +1334,20 @@ export default class Hologram {
   // (see #runActions). A script no longer required belongs to a navigation a later one superseded,
   // and its failure says nothing about the one now in flight.
   //
-  // A chunk a restored snapshot named is the one script whose digest can be out of date: the
-  // snapshot may be older than the build that serves the app now, which no longer has the file.
-  // The snapshot cannot be restored without it, so the page is loaded afresh instead, from the
-  // state the server renders. A reload restores no snapshot (see #init), so it cannot repeat.
+  // Answers whether the failure is one the tab is prepared for, which is what keeps it from being
+  // raised (see ScriptRegistry.request()): a chunk that only a snapshot restore waits for, which
+  // goes on without the snapshot when it cannot have it.
   static #handleScriptFailure(digest) {
-    if (!MountGate.requires(digest)) {
-      return;
+    if (MountGate.requires(digest)) {
+      MountGate.cancel();
+      $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+
+      return false;
     }
 
-    MountGate.cancel();
-    $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
-
-    if ($.#snapshotChunkDigests.includes(digest)) {
-      $.reloadPage();
-    }
+    return Array.from($.#restoresInFlight).some((digests) =>
+      digests.includes(digest),
+    );
   }
 
   // Executed only once, on the initial page load.
@@ -1361,15 +1411,7 @@ export default class Hologram {
           $.#runtimeDigest(),
         )
       ) {
-        $.#restorePageSnapshot(pageSnapshot);
-
-        // The mount after a restore reads no mount data, which is where a page's bundle digest is
-        // recorded, so this document's is recorded here: the snapshot it saves on leaving is stamped
-        // with it.
-        LiveReload.recordPageBundle(
-          pageSnapshot.pageModule,
-          globalThis.Hologram.initialPageDigest,
-        );
+        $.#documentSnapshot = pageSnapshot;
       }
     } else {
       $.#historyId = Utils.randomUUID();
@@ -1482,6 +1524,31 @@ export default class Hologram {
       ) ||
       LiveReload.holdsOldPageBundle(pageSnapshot.pageModule, currentPageDigest)
     );
+  }
+
+  // Fetches the chunks the given snapshot was taken with, unless the tab has them, and answers
+  // whether they are all in. The state a snapshot holds can carry values of struct types whose
+  // protocol implementations only those chunks have, so it cannot be restored without them.
+  //
+  // Unlike every other digest the tab asks for, these were not named by the server just now: a
+  // snapshot can be older than the build that serves the app, which no longer has the files. So
+  // one that fails to load is no error here, and the caller goes on without the snapshot.
+  static async #loadSnapshotChunks(pageSnapshot) {
+    // A snapshot taken before snapshots saved their chunks holds none.
+    const digests = pageSnapshot.chunkDigests ?? [];
+
+    $.#restoresInFlight.add(digests);
+    $.requestChunks(digests);
+
+    try {
+      await ScriptRegistry.whenLoaded(digests);
+
+      return true;
+    } catch {
+      return false;
+    } finally {
+      $.#restoresInFlight.delete(digests);
+    }
   }
 
   // What the page was mounted with, left behind by the script the server wrote into the page.
@@ -1727,9 +1794,6 @@ export default class Hologram {
     // the chunks the page needs: the ones it preloads and the ones its state holds values for.
     const chunkDigests = payload.chunks ?? [];
 
-    // The page on its way comes from the server, not from a snapshot.
-    $.#snapshotChunkDigests = [];
-
     if (isPageModuleRegistered) {
       MountGate.require(chunkDigests);
     } else {
@@ -1899,7 +1963,6 @@ export default class Hologram {
 
   static #restorePageSnapshot(pageSnapshot) {
     const {
-      chunkDigests,
       componentRegistryEntries,
       instanceId,
       pageModule,
@@ -1908,12 +1971,11 @@ export default class Hologram {
       subscriptionReceipts,
     } = pageSnapshot;
 
-    ComponentRegistry.populate(componentRegistryEntries);
-
     // A restore swaps the registry while the previous page is still on screen - the mirror of a
     // forward navigation, where the markup runs ahead instead. The epoch of what the registry
-    // answers for advances here; the mount brings the displayed side level.
-    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+    // answers for was advanced when the restore was decided on; the mount brings the displayed
+    // side level.
+    ComponentRegistry.populate(componentRegistryEntries);
 
     App.instanceId = instanceId;
     App.subscriptionReceiptRegistry.populate(subscriptionReceipts);
@@ -1923,9 +1985,6 @@ export default class Hologram {
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
-
-    // A snapshot taken before snapshots saved their chunks holds none.
-    $.#snapshotChunkDigests = chunkDigests ?? [];
   }
 
   // Walks the queue and runs every entry that can run, in order, until the walk is over or the
