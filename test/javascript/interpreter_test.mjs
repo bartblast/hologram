@@ -10897,6 +10897,114 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("toBoolean()", () => {
+    const callerFrame = () => ({
+      module: "MyModule",
+      function: "my_fun",
+      arityOrArgs: 1,
+      file: "lib/my_module.ex",
+      line: 17,
+      errorInfo: null,
+    });
+
+    const outerFrame = () => ({
+      module: "MyModule",
+      function: "my_outer_fun",
+      arityOrArgs: 0,
+      file: "lib/my_module.ex",
+      line: 5,
+      errorInfo: null,
+    });
+
+    const catchError = (fun) => {
+      try {
+        fun();
+      } catch (error) {
+        return error;
+      }
+    };
+
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    afterEach(() => {
+      CallStack.reset();
+    });
+
+    it("returns false for boxed false", () => {
+      assert.isFalse(Interpreter.toBoolean(Type.boolean(false)));
+    });
+
+    it("returns true for boxed true", () => {
+      assert.isTrue(Interpreter.toBoolean(Type.boolean(true)));
+    });
+
+    it("attributes the error to the function the call is made from", () => {
+      CallStack.push(outerFrame());
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil()));
+
+      assert.deepStrictEqual(caught.stacktrace, [callerFrame(), outerFrame()]);
+    });
+
+    it("keeps the frame's own line when no line is given", () => {
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil()));
+
+      assert.equal(caught.stacktrace[0].line, 17);
+    });
+
+    it("leaves the live frame's line alone", () => {
+      CallStack.push(callerFrame());
+
+      catchError(() => Interpreter.toBoolean(Type.nil(), 16));
+
+      assert.equal(CallStack.peek().line, 17);
+    });
+
+    it("raises ArgumentError for a term that is not a boolean", () => {
+      assertBoxedError(
+        () => Interpreter.toBoolean(Type.integer(2)),
+        "ArgumentError",
+        "argument error: 2",
+      );
+    });
+
+    it("raises ArgumentError for nil", () => {
+      assertBoxedError(
+        () => Interpreter.toBoolean(Type.nil()),
+        "ArgumentError",
+        "argument error: nil",
+      );
+    });
+
+    it("raises with an empty trace when no frame is being tracked", () => {
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil(), 16));
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(ArgumentError) argument error: nil",
+      );
+    });
+
+    it("reports the given line on the frame the call is made from", () => {
+      CallStack.push(outerFrame());
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil(), 16));
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...callerFrame(), line: 16},
+        outerFrame(),
+      ]);
+    });
+  });
+
   // Tests here that mirror an Elixir consistency test in test/elixir/hologram/ex_js_consistency/try_test.exs
   // share its exact name; always update both together.
   describe("try()", () => {

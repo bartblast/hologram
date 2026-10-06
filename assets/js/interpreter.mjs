@@ -1297,6 +1297,39 @@ export default class Interpreter {
     }
   }
 
+  // The JavaScript boolean of a boxed boolean, which is what a short-circuit
+  // operator tests an operand by. Anything else is a badarg carrying the term,
+  // attributed to the function the operator sits in - the operators have no
+  // frame of their own. The line is the operator's, which is the line the BEAM
+  // reports the error on.
+  static toBoolean(term, line) {
+    if (term.type === "atom") {
+      if (term.value === "true") return true;
+      if (term.value === "false") return false;
+    }
+
+    const error = new HologramBoxedError(
+      Interpreter.#boxErrorReason(["badarg", term]),
+    );
+
+    const [enclosingFrame, ...outerFrames] = error.stacktrace;
+
+    // The captured frames are shared with the live call stack, so the line
+    // goes onto a copy - the function may rescue this error and carry on,
+    // recording other lines on its frame.
+    if (enclosingFrame) {
+      const raisingFrame = {
+        ...enclosingFrame,
+        line: line ?? enclosingFrame.line,
+      };
+
+      error.stacktrace = [raisingFrame, ...outerFrames];
+      error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+    }
+
+    throw error;
+  }
+
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
   static try(
     body,
