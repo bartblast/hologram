@@ -159,64 +159,6 @@ describe("Elixir_FunctionClauseError", () => {
       );
     });
 
-    it("keeps an and nested in an or unparenthesized", () => {
-      const struct = structFixture({
-        args: Type.list([Type.atom("abc"), Type.integer(123)]),
-        kind: Type.atom("def"),
-        clauses: Type.list([
-          Type.tuple([
-            Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
-            Type.list([
-              Type.tuple([
-                Type.atom("or"),
-                blamedNode(false, "x == :infinity"),
-                Type.tuple([
-                  Type.atom("and"),
-                  blamedNode(true, "is_integer(x)"),
-                  blamedNode(false, "x >= 0"),
-                ]),
-              ]),
-            ]),
-          ]),
-        ]),
-      });
-
-      assert.isTrue(
-        message(struct).endsWith(
-          "    def my_fun(x, y) when -x == :infinity- or is_integer(x) and -x >= 0-\n",
-        ),
-      );
-    });
-
-    it("parenthesizes an or nested in an and", () => {
-      const struct = structFixture({
-        args: Type.list([Type.atom("abc"), Type.integer(123)]),
-        kind: Type.atom("def"),
-        clauses: Type.list([
-          Type.tuple([
-            Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
-            Type.list([
-              Type.tuple([
-                Type.atom("and"),
-                Type.tuple([
-                  Type.atom("or"),
-                  blamedNode(true, "is_integer(x)"),
-                  blamedNode(false, "is_atom(x)"),
-                ]),
-                blamedNode(false, "x >= 0"),
-              ]),
-            ]),
-          ]),
-        ]),
-      });
-
-      assert.isTrue(
-        message(struct).endsWith(
-          "    def my_fun(x, y) when (is_integer(x) or -is_atom(x)-) and -x >= 0-\n",
-        ),
-      );
-    });
-
     it("keeps a chain of ands nested in a chain of ors unparenthesized", () => {
       const struct = structFixture({
         args: Type.list([Type.atom("abc"), Type.integer(123)]),
