@@ -5505,6 +5505,34 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("literalSet()", () => {
+    it("returns a set that finds the literals the function returns", () => {
+      const set = Interpreter.literalSet(() => [
+        Type.atom("a"),
+        Type.integer(1),
+      ]);
+
+      assert.isTrue(set.has(Type.atom("a")));
+      assert.isTrue(set.has(Type.integer(1)));
+      assert.isFalse(set.has(Type.atom("b")));
+    });
+
+    it("runs the function on the first lookup, not before", () => {
+      let buildCount = 0;
+
+      const set = Interpreter.literalSet(() => {
+        ++buildCount;
+        return [Type.atom("a")];
+      });
+
+      assert.equal(buildCount, 0);
+
+      set.has(Type.atom("a"));
+
+      assert.equal(buildCount, 1);
+    });
+  });
+
   // IMPORTANT!
   // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/match_operator_test.exs
   // Always update both together.
@@ -10511,18 +10539,20 @@ describe("Interpreter", () => {
             guards: [
               {
                 operator: "and",
-                left: {
-                  source: "is_integer(x)",
-                  test: (context) => Erlang["is_integer/1"](context.vars.x),
-                },
-                right: {
-                  source: "x + 1 > y",
-                  test: (context) =>
-                    Erlang[">/2"](
-                      Erlang["+/2"](context.vars.x, Type.integer(1)),
-                      context.vars.y,
-                    ),
-                },
+                operands: [
+                  {
+                    source: "is_integer(x)",
+                    test: (context) => Erlang["is_integer/1"](context.vars.x),
+                  },
+                  {
+                    source: "x + 1 > y",
+                    test: (context) =>
+                      Erlang[">/2"](
+                        Erlang["+/2"](context.vars.x, Type.integer(1)),
+                        context.vars.y,
+                      ),
+                  },
+                ],
               },
             ],
           };
@@ -10536,6 +10566,119 @@ describe("Interpreter", () => {
           [clauseHead],
         );
       };
+
+      // The leaf of a guard that compares x with the given integer
+      const equals = (value) => ({
+        source: `x === ${value}`,
+        test: (context) => Erlang["=:=/2"](context.vars.x, Type.integer(value)),
+      });
+
+      // The blamed guards of def my_fun(x) with the given guards, called with the given x
+      const blamedGuards = (guards, x) => {
+        const clauses = raisedError(guards, x).value.data["atom(clauses)"][1];
+
+        return clauses.data[0].data[1];
+      };
+
+      // The error def my_fun(x) with the given guards raises when called with the given x
+      const raisedError = (guards, x) => {
+        Interpreter.defineFunctionClauseHeads(
+          "MyChainModule",
+          "my_fun",
+          1,
+          "public",
+          [
+            {
+              params: (_context) => [Type.variablePattern("x")],
+              guards: [],
+              blame: {params: ["x"], guards: guards},
+            },
+          ],
+        );
+
+        try {
+          Interpreter.raiseFunctionClauseError("MyChainModule", "my_fun", 1, [
+            x,
+          ]);
+        } catch (error) {
+          return error;
+        }
+      };
+
+      it("keeps a chain nested in an operand as a chain", () => {
+        // def my_fun(x) when is_integer(x) and (x === 1 or x === 2 or x === 3)
+        const guards = [
+          {
+            operator: "and",
+            operands: [
+              {
+                source: "is_integer(x)",
+                test: (context) => Erlang["is_integer/1"](context.vars.x),
+              },
+              {operator: "or", operands: [equals(1), equals(2), equals(3)]},
+            ],
+          },
+        ];
+
+        assert.deepStrictEqual(
+          blamedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("and"),
+              Type.list([
+                blamedNode(true, "is_integer(x)"),
+                Type.tuple([
+                  Type.atom("or"),
+                  Type.list([
+                    blamedNode(false, "x === 1"),
+                    blamedNode(true, "x === 2"),
+                    blamedNode(false, "x === 3"),
+                  ]),
+                ]),
+              ]),
+            ]),
+          ]),
+        );
+      });
+
+      it("keeps three operands side by side", () => {
+        // def my_fun(x) when x === 1 or x === 2 or x === 3
+        const guards = [
+          {operator: "or", operands: [equals(1), equals(2), equals(3)]},
+        ];
+
+        assert.deepStrictEqual(
+          blamedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("or"),
+              Type.list([
+                blamedNode(false, "x === 1"),
+                blamedNode(true, "x === 2"),
+                blamedNode(false, "x === 3"),
+              ]),
+            ]),
+          ]),
+        );
+      });
+
+      it("keeps two operands side by side", () => {
+        // def my_fun(x) when x === 1 or x === 2
+        const guards = [{operator: "or", operands: [equals(1), equals(2)]}];
+
+        assert.deepStrictEqual(
+          blamedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("or"),
+              Type.list([
+                blamedNode(false, "x === 1"),
+                blamedNode(true, "x === 2"),
+              ]),
+            ]),
+          ]),
+        );
+      });
 
       it("marks the parts of the clause head that didn't match", () => {
         defineClauseHeads();
@@ -10565,8 +10708,10 @@ describe("Interpreter", () => {
               Type.list([
                 Type.tuple([
                   Type.atom("and"),
-                  blamedNode(true, "is_integer(x)"),
-                  blamedNode(false, "x + 1 > y"),
+                  Type.list([
+                    blamedNode(true, "is_integer(x)"),
+                    blamedNode(false, "x + 1 > y"),
+                  ]),
                 ]),
               ]),
             ]),
@@ -10576,6 +10721,21 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(
           caught.value.data["atom(kind)"][1],
           Type.atom("def"),
+        );
+      });
+
+      it("raises a FunctionClauseError with its attempted clause for a guard of 5,000 operands", () => {
+        // def my_fun(x) when x === 0 or x === 1 or ... or x === 4999
+        const operands = Array.from({length: 5000}, (_value, i) => equals(i));
+        const guards = [{operator: "or", operands: operands}];
+
+        const expectedGuard = operands
+          .map((operand) => `-${operand.source}-`)
+          .join(" or ");
+
+        assert.equal(
+          boxedErrorMessage(raisedError(guards, Type.integer(-1))),
+          `(FunctionClauseError) no function clause matching in MyChainModule.my_fun/1\n\nThe following arguments were given to MyChainModule.my_fun/1:\n\n    # 1\n    -1\n\nAttempted function clauses (showing 1 out of 1):\n\n    def my_fun(x) when ${expectedGuard}\n`,
         );
       });
 
@@ -10604,8 +10764,10 @@ describe("Interpreter", () => {
           guard,
           Type.tuple([
             Type.atom("and"),
-            blamedNode(false, "is_integer(x)"),
-            blamedNode(false, "x + 1 > y"),
+            Type.list([
+              blamedNode(false, "is_integer(x)"),
+              blamedNode(false, "x + 1 > y"),
+            ]),
           ]),
         );
       });
@@ -10934,6 +11096,114 @@ describe("Interpreter", () => {
       Interpreter.setFrameLine(22);
 
       assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+  });
+
+  describe("toBoolean()", () => {
+    const callerFrame = () => ({
+      module: "MyModule",
+      function: "my_fun",
+      arityOrArgs: 1,
+      file: "lib/my_module.ex",
+      line: 17,
+      errorInfo: null,
+    });
+
+    const outerFrame = () => ({
+      module: "MyModule",
+      function: "my_outer_fun",
+      arityOrArgs: 0,
+      file: "lib/my_module.ex",
+      line: 5,
+      errorInfo: null,
+    });
+
+    const catchError = (fun) => {
+      try {
+        fun();
+      } catch (error) {
+        return error;
+      }
+    };
+
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    afterEach(() => {
+      CallStack.reset();
+    });
+
+    it("returns false for boxed false", () => {
+      assert.isFalse(Interpreter.toBoolean(Type.boolean(false)));
+    });
+
+    it("returns true for boxed true", () => {
+      assert.isTrue(Interpreter.toBoolean(Type.boolean(true)));
+    });
+
+    it("attributes the error to the function the call is made from", () => {
+      CallStack.push(outerFrame());
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil()));
+
+      assert.deepStrictEqual(caught.stacktrace, [callerFrame(), outerFrame()]);
+    });
+
+    it("keeps the frame's own line when no line is given", () => {
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil()));
+
+      assert.equal(caught.stacktrace[0].line, 17);
+    });
+
+    it("leaves the live frame's line alone", () => {
+      CallStack.push(callerFrame());
+
+      catchError(() => Interpreter.toBoolean(Type.nil(), 16));
+
+      assert.equal(CallStack.peek().line, 17);
+    });
+
+    it("raises ArgumentError for a term that is not a boolean", () => {
+      assertBoxedError(
+        () => Interpreter.toBoolean(Type.integer(2)),
+        "ArgumentError",
+        "argument error: 2",
+      );
+    });
+
+    it("raises ArgumentError for nil", () => {
+      assertBoxedError(
+        () => Interpreter.toBoolean(Type.nil()),
+        "ArgumentError",
+        "argument error: nil",
+      );
+    });
+
+    it("raises with an empty trace when no frame is being tracked", () => {
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil(), 16));
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(ArgumentError) argument error: nil",
+      );
+    });
+
+    it("reports the given line on the frame the call is made from", () => {
+      CallStack.push(outerFrame());
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() => Interpreter.toBoolean(Type.nil(), 16));
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...callerFrame(), line: 16},
+        outerFrame(),
+      ]);
     });
   });
 

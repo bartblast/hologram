@@ -693,6 +693,22 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(body, module)
   end
 
+  # :erlang.andalso/2 and :erlang.orelse/2 are not added to the call graph because they are
+  # operators, which the encoder writes with JavaScript's own - there is no function behind
+  # either name, in the runtime or on the BEAM.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: function,
+          args: [_left, _right] = args
+        },
+        from_vertex
+      )
+      when function in [:andalso, :orelse] do
+    build(call_graph, args, from_vertex)
+  end
+
   # :erlang.apply/3 is not added to the call graph because the encoder
   # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
   def build(

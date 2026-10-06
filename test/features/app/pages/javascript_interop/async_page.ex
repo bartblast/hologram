@@ -7,6 +7,11 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
 
   alias HologramFeatureTests.ModuleFixture3
 
+  # :erlang.andalso/2 and :erlang.orelse/2 are short-circuit operators rather than exported
+  # functions, so calling them by name trips the undefined-function check even though they
+  # compile.
+  @compile {:no_warn_undefined, [{:erlang, :andalso, 2}, {:erlang, :orelse, 2}]}
+
   js_import from: "./helpers.mjs", as: :helpers
   js_import :AsyncCounter, from: "./helpers.mjs"
   js_import :promiseValue, from: "./helpers.mjs"
@@ -21,6 +26,9 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
 
   def template do
     ~HOLO"""
+    <p>
+      <button $click="async_andalso"> Async andalso </button>
+    </p>
     <p>
       <button $click="async_anonymous_function_call"> Async anonymous function call </button>
     </p>
@@ -52,6 +60,9 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       <button $click="async_new"> Async new </button>
     </p>
     <p>
+      <button $click="async_orelse"> Async orelse </button>
+    </p>
+    <p>
       <button $click="async_with"> Async with </button>
     </p>
     <p>
@@ -64,6 +75,18 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       Call result: <strong id="call_result"><code>{inspect(@result)}</code></strong>
     </p>
     """
+  end
+
+  # The operator is written out as a call, since `and` in a function body compiles to a case.
+  def action(:async_andalso, _params, component) do
+    sum =
+      :helpers
+      |> JS.call(:asyncSum, [20, 22])
+      |> Task.await()
+
+    result = :erlang.andalso(sum == 42, :andalso_right)
+
+    put_state(component, :result, result)
   end
 
   def action(:async_anonymous_function_call, _params, component) do
@@ -84,6 +107,8 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       |> JS.call(:asyncSum, [15, 16])
       |> Task.await()
 
+    # apply/3 is the construct under test
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
     is_int = apply(Kernel, :is_integer, [result])
 
     put_state(component, :result, {result, is_int})
@@ -186,6 +211,14 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
     put_state(component, :result, {result, is_integer(result)})
   end
 
+  # The operator is written out as a call, since `or` in a function body compiles to a case.
+  # Its left operand is itself a call that awaits.
+  def action(:async_orelse, _params, component) do
+    result = :erlang.orelse(await_sum(20, 23) == 42, :orelse_right)
+
+    put_state(component, :result, result)
+  end
+
   def action(:async_with, _params, component) do
     sum =
       :helpers
@@ -219,5 +252,11 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       |> Task.await()
 
     put_state(component, :result, {result, is_integer(result)})
+  end
+
+  defp await_sum(a, b) do
+    :helpers
+    |> JS.call(:asyncSum, [a, b])
+    |> Task.await()
   end
 end

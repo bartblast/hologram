@@ -10,6 +10,7 @@ import {
 } from "./support/helpers.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
+import App from "../../assets/js/app.mjs";
 import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
@@ -2256,6 +2257,60 @@ describe("Hologram", () => {
         }
       });
 
+      // A registry listener - a <window>/<document> binding, a click_outside, a reach or resize
+      // observer - is attached to a target the patch does not own, so it is the one kind of
+      // listener that outlives the markup it was rendered for. One left alive would observe the
+      // patch itself and dispatch with the destination's epoch.
+      it("detaches the listeners of the page being left", async () => {
+        const handler = sinon.spy();
+
+        try {
+          EventListenerRegistry.reconcile([
+            {
+              target: window,
+              ...EventListeners.domEvent(window, "keydown"),
+              handler,
+            },
+          ]);
+
+          await Hologram.loadNewPage("/target", payloadFor("listeners-left"));
+
+          window.dispatchEvent(new KeyboardEvent("keydown"));
+
+          sinon.assert.notCalled(handler);
+        } finally {
+          EventListenerRegistry.detachAll();
+        }
+      });
+
+      // The order is the design: a synchronous event the patch itself causes (Chrome fires blur
+      // on a focused element being removed) must already find no listener.
+      it("detaches them before the patch", async () => {
+        const handler = sinon.spy();
+
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument").callsFake(() => {
+          window.dispatchEvent(new KeyboardEvent("keydown"));
+          return Hologram.virtualDocument;
+        });
+
+        try {
+          EventListenerRegistry.reconcile([
+            {
+              target: window,
+              ...EventListeners.domEvent(window, "keydown"),
+              handler,
+            },
+          ]);
+
+          await Hologram.loadNewPage("/target", payloadFor("listeners-patch"));
+
+          sinon.assert.calledOnce(patchStub);
+          sinon.assert.notCalled(handler);
+        } finally {
+          EventListenerRegistry.detachAll();
+        }
+      });
+
       it("fetches the bundle of a page this client has not run before", async () => {
         await Hologram.loadNewPage("/target", payloadFor("bbb"));
 
@@ -2499,6 +2554,59 @@ describe("Hologram", () => {
       });
 
       sinon.assert.notCalled(loadNewPageStub);
+    });
+  });
+
+  describe("handlePopstateEvent()", () => {
+    // The history's side of the navigation boundary. The handler needs a page to restore, and
+    // the only way in from outside is the storage it reads: a snapshot is seeded under the key
+    // the handler derives from the history id, and in jsdom the OPFS read throws into the
+    // session storage fallback.
+    it("detaches the listeners of the page being left", async () => {
+      const handler = sinon.spy();
+      const instanceId = App.instanceId;
+
+      const pageSnapshot = {
+        componentRegistryEntries: Type.map(),
+        instanceId: "popstate-instance",
+        pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+        pageParams: Type.map(),
+        scrollPosition: [0, 0],
+        subscriptionReceipts: [],
+      };
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-1",
+        Serializer.serialize(pageSnapshot, "client"),
+      );
+
+      const consoleErrorStub = sinon.stub(console, "error");
+      const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+      try {
+        EventListenerRegistry.reconcile([
+          {
+            target: window,
+            ...EventListeners.domEvent(window, "keydown"),
+            handler,
+          },
+        ]);
+
+        await Hologram.handlePopstateEvent({state: "history-1"});
+
+        window.dispatchEvent(new KeyboardEvent("keydown"));
+
+        sinon.assert.notCalled(handler);
+      } finally {
+        EventListenerRegistry.detachAll();
+        fetchStub.restore();
+        consoleErrorStub.restore();
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
     });
   });
 

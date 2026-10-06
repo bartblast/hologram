@@ -42,6 +42,11 @@ defmodule Hologram.Compiler.Encoder do
   # read it.
   @escapable_chars_pattern_key {__MODULE__, :escapable_chars_pattern}
 
+  # The literal sets of the code being encoded, each list of literals with the number its set
+  # got, kept in the process dictionary: a set is declared once, in front of the code that uses
+  # it, and the place that needs one is deep inside that code.
+  @literal_sets_key {__MODULE__, :literal_sets}
+
   @doc """
   Encodes Elixir or Erlang alias as JavaScript class name.
 
@@ -106,9 +111,12 @@ defmodule Hologram.Compiler.Encoder do
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
     async? = MapSet.member?(context.async_mfas, {context.module, function, arity})
     clause_context = %{context | arity: arity, async?: async?, function: function}
-    clauses_js = encode_as_array(clauses, clause_context)
 
-    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    with_literal_sets(clause_context, fn sets_context ->
+      clauses_js = encode_as_array(clauses, sets_context)
+
+      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    end)
   end
 
   @doc """
@@ -140,9 +148,11 @@ defmodule Hologram.Compiler.Encoder do
         clauses,
         context
       ) do
-    heads_js = encode_as_array(clauses, %{context | async?: false}, &encode_clause_head/2)
+    with_literal_sets(%{context | async?: false}, fn sets_context ->
+      heads_js = encode_as_array(clauses, sets_context, &encode_clause_head/2)
 
-    ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{heads_js});/
+      ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{heads_js});/
+    end)
   end
 
   @doc """
@@ -556,6 +566,21 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(
         %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: function,
+          args: [_left, _right],
+          line: line
+        } = ir,
+        context
+      )
+      when function in [:andalso, :orelse] do
+    ir
+    |> encode_short_circuit(context)
+    |> maybe_encode_frame_line(line, context)
+  end
+
+  def encode_ir(
+        %IR.RemoteFunctionCall{
           module: module,
           function: function,
           args: args,
@@ -768,6 +793,48 @@ defmodule Hologram.Compiler.Encoder do
     IO.puts("\n........................................\n")
   end
 
+  # The operands on the left side of a blamed and/or chain, each paired with its IR, in front of
+  # the given ones. The walk follows the blame tree and takes the IR along with it, so it stops
+  # where the blame tree does: a leaf can stand for a whole chain of the same operator, which the
+  # server renders as one expression.
+  defp collect_blame_operands(
+         operator,
+         {operator, left, right},
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, args: [left_ir, right_ir]},
+         acc
+       ) do
+    collect_blame_operands(operator, left, left_ir, [{right, right_ir} | acc])
+  end
+
+  defp collect_blame_operands(_operator, guard, guard_ir, acc), do: [{guard, guard_ir} | acc]
+
+  # The operands of a chain of calls to the given short-circuit operator, in the order they are
+  # evaluated. The operator is associative, the boolean check on each tested operand included, so
+  # the way the calls are nested in each other makes no difference to the result.
+  #
+  # Each operand comes with the line of the call that tests it, which is the line the BEAM reports
+  # when the operand is not a boolean. A call tests the last operand of its left side. The last
+  # operand of its right side is the call's own result, so it is tested by whatever tests the
+  # call: last_line, which is nil when nothing does.
+  defp collect_chain_operands(function, ir, last_line \\ nil, acc \\ [])
+
+  defp collect_chain_operands(
+         function,
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: function,
+           args: [left, right],
+           line: line
+         },
+         last_line,
+         acc
+       ) do
+    right_acc = collect_chain_operands(function, right, last_line, acc)
+    collect_chain_operands(function, left, line, right_acc)
+  end
+
+  defp collect_chain_operands(_function, ir, last_line, acc), do: [{ir, last_line} | acc]
+
   defp encode_as_array(data, context, encoder \\ &encode_ir/2) do
     data
     |> Enum.map_join(", ", &encoder.(&1, context))
@@ -885,6 +952,43 @@ defmodule Hologram.Compiler.Encoder do
     "\n#{expr_js};"
   end
 
+  # The JavaScript boolean a short-circuit operator tests the given operand by. An operand that
+  # is a chain of the other operator is written with that operator, every one of its operands
+  # tested - the last one too, since the chain's result is what gets tested. The line is that of
+  # the call doing the testing, and the check carries it wherever a call would record its own.
+  defp encode_boolean_test({:literal_run, subject, literals}, _line, context) do
+    encode_literal_set_lookup(subject, literals, context)
+  end
+
+  defp encode_boolean_test(
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, function: function} = ir,
+         line,
+         context
+       )
+       when function in [:andalso, :orelse] do
+    function
+    |> collect_chain_operands(ir, line)
+    |> group_literal_runs(function, context)
+    |> encode_boolean_tests(function, context)
+    |> StringUtils.wrap("(", ")")
+  end
+
+  defp encode_boolean_test(ir, line, context) do
+    term_js = encode_ir(ir, context)
+
+    if frame_line?(line, context) do
+      "Interpreter.toBoolean(#{term_js}, #{line})"
+    else
+      "Interpreter.toBoolean(#{term_js})"
+    end
+  end
+
+  defp encode_boolean_tests(operands, function, context) do
+    Enum.map_join(operands, short_circuit_operator(function), fn {operand, line} ->
+      encode_boolean_test(operand, line, context)
+    end)
+  end
+
   # A string literal carries text and nothing else: the client reads it back through UTF-8, so a
   # byte that is not valid UTF-8 has no spelling in one - an escape naming the byte comes back as
   # the UTF-8 bytes of the character it named. A binary holding such a byte travels as the hex of
@@ -894,10 +998,20 @@ defmodule Hologram.Compiler.Encoder do
     ~s/Type.bitstring("#{Base.encode16(binary, case: :lower)}", "hex")/
   end
 
+  # The last operand of a chain, which is the chain's value as it is.
+  defp encode_chain_value({:literal_run, subject, literals}, context) do
+    "Type.boolean(#{encode_literal_set_lookup(subject, literals, context)})"
+  end
+
+  defp encode_chain_value(ir, context), do: encode_ir(ir, context)
+
   # The clause head is rendered at build time, but which of its parts failed to
   # match is known only at raise time, so each guard leaf travels with its own
   # closure for the client to evaluate. The leaves line up with the guard IR,
-  # which carries the same and/or structure they were split at.
+  # which carries the same and/or structure they were split at. The operands of
+  # a chain are written side by side, so the nesting of the output does not grow
+  # with the length of the chain. Only the left side of a chain is taken apart,
+  # which is the side `in` and a written-out chain nest on.
   defp encode_clause_blame(%IR.FunctionClause{blame: nil}, _context), do: nil
 
   defp encode_clause_blame(%IR.FunctionClause{blame: blame} = clause, context) do
@@ -927,10 +1041,16 @@ defmodule Hologram.Compiler.Encoder do
          %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, args: [left_ir, right_ir]},
          context
        ) do
+    operands =
+      operator
+      |> collect_blame_operands(left, left_ir, [{right, right_ir}])
+      |> Enum.map_join(", ", fn {operand, operand_ir} ->
+        encode_clause_blame_guard(operand, operand_ir, context)
+      end)
+
     encode_as_object(
       operator: encode_as_string(operator, true),
-      left: encode_clause_blame_guard(left, left_ir, context),
-      right: encode_clause_blame_guard(right, right_ir, context)
+      operands: StringUtils.wrap(operands, "[", "]")
     )
   end
 
@@ -1042,6 +1162,27 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{encoded_node}, #{encoded_segments})"
   end
 
+  # One constant per literal set, named after the set's number, in the order of the numbers. A
+  # set builds its literals on its first lookup, so declaring one costs nothing until it is used.
+  defp encode_literal_set_declarations(literal_sets, context) do
+    literal_sets
+    |> Enum.sort_by(fn {_literals, index} -> index end)
+    |> Enum.map_join("", fn {literals, index} ->
+      literals_js = encode_as_array(literals, context)
+
+      "const s#{index} = Interpreter.literalSet(() => #{literals_js});\n"
+    end)
+  end
+
+  # Whether the subject is one of the literals, as a JavaScript boolean. The answer is the one
+  # the comparisons of the run would give, with the subject read once.
+  defp encode_literal_set_lookup(subject, literals, context) do
+    set_name = register_literal_set(literals)
+    subject_js = encode_ir(subject, context)
+
+    "#{set_name}.has(#{subject_js})"
+  end
+
   # Module-level frame metadata: the module's source file (relative to its
   # source root) and the app that owns it, so client frames render the same
   # "(app vsn) file:line" prefix as server frames - the version comes from
@@ -1064,13 +1205,6 @@ defmodule Hologram.Compiler.Encoder do
     "{#{fields}}"
   end
 
-  defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
-    left_js = encode_closure(left, context)
-    right_js = encode_closure(right, context)
-
-    "Erlang[\"andalso/2\"](#{left_js}, #{right_js}, context)"
-  end
-
   # Encoded as Interpreter.callNamedFunction() instead of Erlang["apply/3"]()
   # because we can't pass the runtime context to the ported function.
   defp encode_named_function_call(
@@ -1080,13 +1214,6 @@ defmodule Hologram.Compiler.Encoder do
          context
        ) do
     encode_dynamic_named_function_call(module, function, args, context)
-  end
-
-  defp encode_named_function_call(%IR.AtomType{value: :erlang}, :orelse, [left, right], context) do
-    left_js = encode_closure(left, context)
-    right_js = encode_closure(right, context)
-
-    "Erlang[\"orelse/2\"](#{left_js}, #{right_js}, context)"
   end
 
   defp encode_named_function_call(%IR.AtomType{} = module, function, args, context) do
@@ -1130,6 +1257,30 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_primitive_type(type, value, false) do
     "Type.#{type}(#{value})"
+  end
+
+  # :erlang.andalso/2 and :erlang.orelse/2 are operators, and are written with JavaScript's own.
+  # The operands of a chain sit side by side, so the nesting of the output does not grow with the
+  # length of the chain, and each is a plain expression, which can hold an await. Every operand but
+  # the last is tested as a boolean. The last one is the chain's value as it is.
+  #
+  # A literal run counts as one operand, so a chain that is nothing but a run has no operand to
+  # test and is the run's value.
+  defp encode_short_circuit(%IR.RemoteFunctionCall{function: function} = ir, context) do
+    {tested, [{last, _line}]} =
+      function
+      |> collect_chain_operands(ir)
+      |> group_literal_runs(function, context)
+      |> Enum.split(-1)
+
+    tests_js = encode_boolean_tests(tested, function, context)
+    last_js = encode_chain_value(last, context)
+
+    case {function, tested} do
+      {_function, []} -> last_js
+      {:andalso, _tested} -> "(#{tests_js} ? #{last_js} : Type.boolean(false))"
+      {:orelse, _tested} -> "(#{tests_js} ? Type.boolean(true) : #{last_js})"
+    end
   end
 
   defp encode_var(name, version) do
@@ -1198,6 +1349,27 @@ defmodule Hologram.Compiler.Encoder do
       IR.has_call_to?(clauses, context.module, context.async_mfas)
   end
 
+  # Whether the given line is written into the code: there is one, the code is not a guard, and
+  # the client keeps stacktraces.
+  defp frame_line?(nil, _context), do: false
+
+  defp frame_line?(_line, %Context{guard?: true}), do: false
+
+  defp frame_line?(_line, _context), do: Hologram.client_stacktraces?()
+
+  # Replaces each literal run among the operands of a chain with one operand that stands for the
+  # whole run: {:literal_run, subject, literals}. A literal run is two or more operands in a row
+  # of an :erlang.orelse/2 chain that strictly compare the same subject with a literal, which is
+  # what `subject in [literals]` expands to in a guard. A run becomes a lookup in a set, and a set
+  # is only named where it gets declared, so no run is looked for anywhere else.
+  defp group_literal_runs(operands, :orelse, %Context{literal_sets?: true} = context) do
+    operands
+    |> Enum.chunk_by(fn {ir, _line} -> literal_run_subject(ir, context) end)
+    |> Enum.flat_map(&merge_literal_run(&1, context))
+  end
+
+  defp group_literal_runs(operands, _function, _context), do: operands
+
   defp has_match_operator?(ir)
 
   defp has_match_operator?(%IR.MatchOperator{}), do: true
@@ -1224,6 +1396,39 @@ defmodule Hologram.Compiler.Encoder do
 
   defp has_match_operator?(_ast), do: false
 
+  # Whether the given IR is a term written out in the code, with nothing in it to evaluate.
+  defp literal?(%IR.AtomType{}), do: true
+
+  defp literal?(%IR.FloatType{}), do: true
+
+  defp literal?(%IR.IntegerType{}), do: true
+
+  defp literal?(%IR.ListType{data: data}), do: Enum.all?(data, &literal?/1)
+
+  defp literal?(%IR.StringType{}), do: true
+
+  defp literal?(%IR.TupleType{data: data}), do: Enum.all?(data, &literal?/1)
+
+  defp literal?(_ir), do: false
+
+  # The subject of a strict comparison with a literal that can be part of a literal run, nil for
+  # any other IR. A run reads its subject once where the comparisons read it once each, which
+  # changes nothing for a variable, and nothing in a guard, where no expression has side effects.
+  defp literal_run_subject(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :"=:=",
+           args: [subject, literal]
+         },
+         context
+       ) do
+    if literal?(literal) and (context.guard? or match?(%IR.Variable{}, subject)) do
+      subject
+    end
+  end
+
+  defp literal_run_subject(_ir, _context), do: nil
+
   defp loaded_module_metadata(module) do
     if Code.ensure_loaded?(module) do
       [app: Application.get_application(module), file: Reflection.relative_source_path(module)]
@@ -1236,17 +1441,32 @@ defmodule Hologram.Compiler.Encoder do
   # reached, so each call records its own line before it is made - the way the
   # BEAM does it. A call the AST gave no line to records nothing, and the frame
   # keeps the line it already had.
-  defp maybe_encode_frame_line(js, nil, _context), do: js
-
-  defp maybe_encode_frame_line(js, _line, %Context{guard?: true}), do: js
-
-  defp maybe_encode_frame_line(js, line, _context) do
-    if Hologram.client_stacktraces?() do
+  defp maybe_encode_frame_line(js, line, context) do
+    if frame_line?(line, context) do
       "(Interpreter.setFrameLine(#{line}), #{js})"
     else
       js
     end
   end
+
+  # Turns operands that share a literal run subject into the run's one operand. A single
+  # comparison stays a comparison, and so do operands that are no comparison of that kind.
+  defp merge_literal_run([{first_ir, _first_line}, _second | _rest] = operands, context) do
+    case literal_run_subject(first_ir, context) do
+      nil ->
+        operands
+
+      subject ->
+        literals =
+          Enum.map(operands, fn {%IR.RemoteFunctionCall{args: [_subject, literal]}, _line} ->
+            literal
+          end)
+
+        [{{:literal_run, subject, literals}, nil}]
+    end
+  end
+
+  defp merge_literal_run(operands, _context), do: operands
 
   # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
   # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
@@ -1296,5 +1516,49 @@ defmodule Hologram.Compiler.Encoder do
 
   defp parse_id_words(<<word::32, rest::binary>>, count, acc) do
     parse_id_words(rest, count - 1, [word | acc])
+  end
+
+  # The name of the set of the given literals: the one it already has when the same literals were
+  # looked up in before, a new one otherwise. Sets are numbered in the order they are first used.
+  defp register_literal_set(literals) do
+    literal_sets = Process.get(@literal_sets_key, %{})
+
+    index =
+      case literal_sets do
+        %{^literals => index} ->
+          index
+
+        %{} ->
+          index = map_size(literal_sets)
+          Process.put(@literal_sets_key, Map.put(literal_sets, literals, index))
+
+          index
+      end
+
+    "s#{index}"
+  end
+
+  defp short_circuit_operator(:andalso), do: " && "
+  defp short_circuit_operator(:orelse), do: " || "
+
+  # Encodes a statement whose code can look values up in literal sets, and declares the sets it
+  # used in front of it, in a block that keeps their names to that statement. The encoder is given
+  # the context that says so. The sets collected in the process dictionary on the way are taken
+  # out again whatever happens, so none outlives the statement it belongs to.
+  defp with_literal_sets(context, encoder) do
+    statement_js = encoder.(%{context | literal_sets?: true})
+
+    declarations_js =
+      @literal_sets_key
+      |> Process.get(%{})
+      |> encode_literal_set_declarations(context)
+
+    if declarations_js == "" do
+      statement_js
+    else
+      "{\n#{declarations_js}#{statement_js}\n}"
+    end
+  after
+    Process.delete(@literal_sets_key)
   end
 end

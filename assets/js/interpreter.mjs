@@ -5,6 +5,7 @@ import CallStack from "./erts/call_stack.mjs";
 import ERTS from "./erts.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import LiteralSet from "./literal_set.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Type from "./type.mjs";
@@ -839,6 +840,12 @@ export default class Interpreter {
     }
   }
 
+  // A set of the literal terms the given function returns. The function runs
+  // once, on the set's first lookup.
+  static literalSet(build) {
+    return new LiteralSet(build);
+  }
+
   // context.vars.__matched__ keeps track of already pattern matched variables,
   // which enables to fail pattern matching if the variables with the same name
   // are being pattern matched to different values
@@ -1326,6 +1333,39 @@ export default class Interpreter {
     }
   }
 
+  // The JavaScript boolean of a boxed boolean, which is what a short-circuit
+  // operator tests an operand by. Anything else is a badarg carrying the term,
+  // attributed to the function the operator sits in - the operators have no
+  // frame of their own. The line is the operator's, which is the line the BEAM
+  // reports the error on.
+  static toBoolean(term, line) {
+    if (term.type === "atom") {
+      if (term.value === "true") return true;
+      if (term.value === "false") return false;
+    }
+
+    const error = new HologramBoxedError(
+      Interpreter.#boxErrorReason(["badarg", term]),
+    );
+
+    const [enclosingFrame, ...outerFrames] = error.stacktrace;
+
+    // The captured frames are shared with the live call stack, so the line
+    // goes onto a copy - the function may rescue this error and carry on,
+    // recording other lines on its frame.
+    if (enclosingFrame) {
+      const raisingFrame = {
+        ...enclosingFrame,
+        line: line ?? enclosingFrame.line,
+      };
+
+      error.stacktrace = [raisingFrame, ...outerFrames];
+      error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+    }
+
+    throw error;
+  }
+
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
   static try(
     body,
@@ -1753,10 +1793,16 @@ export default class Interpreter {
       );
     }
 
+    // The operands of a chain stay side by side, the way they arrive, so
+    // nothing built from them is nested once per operand: a or b or c is
+    // {:or, [a, b, c]}.
     return Type.tuple([
       Type.atom(guard.operator),
-      Interpreter.#blameGuard(guard.left, context),
-      Interpreter.#blameGuard(guard.right, context),
+      Type.list(
+        guard.operands.map((operand) =>
+          Interpreter.#blameGuard(operand, context),
+        ),
+      ),
     ]);
   }
 

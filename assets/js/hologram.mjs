@@ -603,8 +603,10 @@ export default class Hologram {
       // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
       // their targets. The deferred bindings are resolved here because their target is a live DOM
       // element, which exists only after patch. Each resolve also drops a binding whose once modifier
-      // has fired, so reconcile tears it down. Every page-entry path reaches render() through
-      // #mountPage, so this also tears down a previous page's listeners on navigation.
+      // has fired, so reconcile tears it down. A navigation has already detached the previous
+      // page's listeners at its boundary, so a mount's reconcile attaches against an empty
+      // registry: every mount attaches fresh, and no listener's private state crosses from one
+      // page to the next.
       EventListenerRegistry.reconcile([
         ...Renderer.resolveListenerBindings(),
         ...Renderer.resolveReachBindings(),
@@ -941,6 +943,20 @@ export default class Hologram {
     );
   }
 
+  // Everything the page being left armed is dropped at the boundary: a debounce or throttle
+  // timer, and every registry listener - a <window>/<document> binding, a click_outside, a reach
+  // or resize observer. A timer outlives the page that armed it, and a listener attached to a
+  // target the patch does not own would observe the patch itself: a detached element's observer
+  // reports it at 0x0, a shortened document fires the scroll the browser clamps, and every such
+  // dispatch would carry the destination's epoch. Nothing of the destination exists yet at
+  // either boundary, so nothing of it is taken, and the mount's render attaches its listeners
+  // afresh. Cancel, not flush: a dispatch must never execute on a page the user has left.
+  static #disarmLeftPage() {
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
+    EventListenerRegistry.detachAll();
+  }
+
   // Takes the page's own bundle out of the document the server described, leaving every other
   // script it carries to be patched in and run.
   //
@@ -1100,12 +1116,11 @@ export default class Hologram {
     );
   }
 
-  static async #handlePopstateEvent(event) {
-    // The same boundary as #showNewPage, on the history's side of it: nothing of the destination
-    // exists yet, so every debounced or throttled dispatch still pending belongs to the page being
-    // left. It cannot wait for the restore below, which a popstate carrying no snapshot skips.
-    Debouncer.cancelAll();
-    Throttler.cancelAll();
+  // Made public to make tests easier
+  static async handlePopstateEvent(event) {
+    // The same boundary as #showNewPage, on the history's side of it. It cannot wait for the
+    // restore below, which a popstate carrying no snapshot skips.
+    $.#disarmLeftPage();
 
     // What was awaiting belongs to the page being left, and the destination may hold the same
     // cids. Emptied here for the same reason the timers are cancelled here.
@@ -1187,7 +1202,7 @@ export default class Hologram {
       Hologram.#saveEts();
     });
 
-    window.addEventListener("popstate", Hologram.#handlePopstateEvent);
+    window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
     window.addEventListener("pageshow", (event) => {
       // Reconnect when page is restored from bfcache OR when navigating back from external page
@@ -1547,14 +1562,10 @@ export default class Hologram {
     // hand.
     $.#pendingJsInteropActions = [];
 
-    // A debounce or a throttle holds its dispatch in a timer rather than in a queue, and a timer
-    // outlives the page that armed it. This line is the last instant that is still only the page
-    // being left - nothing of the destination is on screen, none of its listeners are attached,
-    // none of its scripts have run - so every timer pending here provably belongs to the page
-    // being left, and cancelling all of them takes nothing from the destination. Cancel, not
-    // flush: a dispatch must never execute on a page the user has left.
-    Debouncer.cancelAll();
-    Throttler.cancelAll();
+    // This line is the last instant that is still only the page being left - nothing of the
+    // destination is on screen, none of its listeners are attached, none of its scripts have run
+    // - so everything armed here provably belongs to the page being left.
+    $.#disarmLeftPage();
 
     // What was awaiting belongs to the page being left, and the destination may hold the same
     // cids. Emptied here for the same reason the timers are cancelled here.
