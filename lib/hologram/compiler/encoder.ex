@@ -111,9 +111,12 @@ defmodule Hologram.Compiler.Encoder do
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
     async? = MapSet.member?(context.async_mfas, {context.module, function, arity})
     clause_context = %{context | arity: arity, async?: async?, function: function}
-    clauses_js = encode_as_array(clauses, clause_context)
 
-    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    with_literal_sets(clause_context, fn sets_context ->
+      clauses_js = encode_as_array(clauses, sets_context)
+
+      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    end)
   end
 
   @doc """
@@ -1153,6 +1156,18 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{encoded_node}, #{encoded_segments})"
   end
 
+  # One constant per literal set, named after the set's number, in the order of the numbers. A
+  # set builds its literals on its first lookup, so declaring one costs nothing until it is used.
+  defp encode_literal_set_declarations(literal_sets, context) do
+    literal_sets
+    |> Enum.sort_by(fn {_literals, index} -> index end)
+    |> Enum.map_join("", fn {literals, index} ->
+      literals_js = encode_as_array(literals, context)
+
+      "const s#{index} = Interpreter.literalSet(() => #{literals_js});\n"
+    end)
+  end
+
   # Whether the subject is one of the literals, as a JavaScript boolean. The answer is the one
   # the comparisons of the run would give, with the subject read once.
   defp encode_literal_set_lookup(subject, literals, context) do
@@ -1512,4 +1527,25 @@ defmodule Hologram.Compiler.Encoder do
 
   defp short_circuit_operator(:andalso), do: " && "
   defp short_circuit_operator(:orelse), do: " || "
+
+  # Encodes a statement whose code can look values up in literal sets, and declares the sets it
+  # used in front of it, in a block that keeps their names to that statement. The encoder is given
+  # the context that says so. The sets collected in the process dictionary on the way are taken
+  # out again whatever happens, so none outlives the statement it belongs to.
+  defp with_literal_sets(context, encoder) do
+    statement_js = encoder.(%{context | literal_sets?: true})
+
+    declarations_js =
+      @literal_sets_key
+      |> Process.get(%{})
+      |> encode_literal_set_declarations(context)
+
+    if declarations_js == "" do
+      statement_js
+    else
+      "{\n#{declarations_js}#{statement_js}\n}"
+    end
+  after
+    Process.delete(@literal_sets_key)
+  end
 end

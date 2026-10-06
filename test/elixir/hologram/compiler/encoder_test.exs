@@ -1876,6 +1876,214 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
     end
+
+    test "declares one set for two guards that look up in the same literals" do
+      # def fun_3(x) when x === :a or x === :b, do: :expr_1
+      # def fun_3(x) when x === :a or x === :b, do: :expr_2
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+        },
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_2}]}
+        }
+      ]
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.atom("a"), Type.atom("b")]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_3", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_1");
+        }}, {params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_2");
+        }}]);
+        }\
+        """)
+
+      context = %Context{module: Aaa.Bbb}
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, context) == expected
+    end
+
+    test "declares the literal sets of a guard in a clause body" do
+      # def fun_3(y) do
+      #   case y do
+      #     x when x === 1 or x === 2 -> :expr_1
+      #   end
+      # end
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      case_ir = %IR.Case{
+        condition: %IR.Variable{name: :y},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [guard_ir],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+          }
+        ]
+      }
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :y}],
+          guards: [],
+          body: %IR.Block{expressions: [case_ir]}
+        }
+      ]
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.integer(1n), Type.integer(2n)]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_3", 1, "public", [{params: (context) => [Type.variablePattern("y")], guards: [], body: (context) => {
+        return Interpreter.case(context.vars.y, [{match: Type.variablePattern("x"), guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_1");
+        }}], context);
+        }}]);
+        }\
+        """)
+
+      context = %Context{module: Aaa.Bbb}
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, context) == expected
+    end
+
+    test "declares the literal sets of its guards in front of the definition, in the order they are used" do
+      # def fun_3(x) when x === :a or x === "b", do: :expr_1
+      # def fun_3(x) when x === 1 or x === 2.5, do: :expr_2
+      first_guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.StringType{value: "b"})
+        ])
+
+      second_guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.FloatType{value: 2.5})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [first_guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+        },
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [second_guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_2}]}
+        }
+      ]
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.atom("a"), Type.bitstring("b")]);
+        const s1 = Interpreter.literalSet(() => [Type.integer(1n), Type.float(2.5)]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_3", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_1");
+        }}, {params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s1.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_2");
+        }}]);
+        }\
+        """)
+
+      context = %Context{module: Aaa.Bbb}
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, context) == expected
+    end
+
+    test "leaves nothing in the process dictionary" do
+      # def fun_3(x) when x === :a or x === :b, do: :expr_1
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+        }
+      ]
+
+      keys_before = Process.get_keys()
+
+      encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, %Context{module: Aaa.Bbb})
+
+      assert Process.get_keys() == keys_before
+    end
+
+    test "numbers the sets of each function from zero" do
+      # def fun_3(x) when x === :a or x === :b, do: :expr_1
+      # def fun_4(x) when x === :c or x === :d, do: :expr_1
+      clauses = fn first, second ->
+        guard_ir =
+          orelse_chain_ir([
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: first}),
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: second})
+          ])
+
+        [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [guard_ir],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+          }
+        ]
+      end
+
+      context = %Context{module: Aaa.Bbb}
+
+      encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses.(:a, :b), context)
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_4, 1, :public, clauses.(:c, :d), context) =~
+               ~s'const s0 = Interpreter.literalSet(() => [Type.atom("c"), Type.atom("d")]);'
+    end
+
+    test "leaves nothing in the process dictionary when encoding raises" do
+      # def fun_3(x) when x === :a or x === :b, do: <IR the encoder has no clause for>
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [:not_ir]}
+        }
+      ]
+
+      keys_before = Process.get_keys()
+
+      assert_raise FunctionClauseError, fn ->
+        encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, %Context{module: Aaa.Bbb})
+      end
+
+      assert Process.get_keys() == keys_before
+    end
   end
 
   describe "encode_module_metadata_registration/1" do
