@@ -2113,6 +2113,39 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "encode_elixir_function_clause_heads/6" do
+    test "declares the literal sets of its guards in front of the registration" do
+      # (x) when :erlang.orelse(:erlang.=:=(x, :a), :erlang.=:=(x, :b)) do
+      #  :expr_1
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clause = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [guard_ir],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]},
+        line: 3,
+        blame: %{params: ["x"], guards: [{:or, {:leaf, "x === :a"}, {:leaf, "x === :b"}}]}
+      }
+
+      result =
+        encode_elixir_function_clause_heads("Aaa.Bbb", :my_fun, 1, :public, [clause], %Context{
+          module: Aaa.Bbb
+        })
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.atom("a"), Type.atom("b")]);
+        Interpreter.defineFunctionClauseHeads("Aaa.Bbb", "my_fun", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], blame: {params: ["x"], guards: [{operator: "or", operands: [{source: "x === :a", test: (context) => Erlang["=:=/2"](context.vars.x, Type.atom("a"))}, {source: "x === :b", test: (context) => Erlang["=:=/2"](context.vars.x, Type.atom("b"))}]}]}}]);
+        }\
+        """)
+
+      assert result == expected
+    end
+
     test "encodes the clause heads without their bodies" do
       # (x) when :erlang.is_integer(x) do
       #  :expr_1

@@ -148,9 +148,11 @@ defmodule Hologram.Compiler.Encoder do
         clauses,
         context
       ) do
-    heads_js = encode_as_array(clauses, %{context | async?: false}, &encode_clause_head/2)
+    with_literal_sets(%{context | async?: false}, fn sets_context ->
+      heads_js = encode_as_array(clauses, sets_context, &encode_clause_head/2)
 
-    ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{heads_js});/
+      ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{heads_js});/
+    end)
   end
 
   @doc """
