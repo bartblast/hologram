@@ -1652,7 +1652,9 @@ defmodule Hologram.CompilerTest do
       runtime_mfas: runtime_mfas
     } do
       result =
-        build_runtime_js(runtime_mfas, ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+        runtime_mfas
+        |> build_runtime_js(ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+        |> normalize_newlines()
 
       assert String.contains?(result, "\n\nHologram.run();\n\n")
       refute String.contains?(result, "pageScriptLoaded")
