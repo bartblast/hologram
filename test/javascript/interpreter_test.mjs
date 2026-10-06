@@ -10539,18 +10539,20 @@ describe("Interpreter", () => {
             guards: [
               {
                 operator: "and",
-                left: {
-                  source: "is_integer(x)",
-                  test: (context) => Erlang["is_integer/1"](context.vars.x),
-                },
-                right: {
-                  source: "x + 1 > y",
-                  test: (context) =>
-                    Erlang[">/2"](
-                      Erlang["+/2"](context.vars.x, Type.integer(1)),
-                      context.vars.y,
-                    ),
-                },
+                operands: [
+                  {
+                    source: "is_integer(x)",
+                    test: (context) => Erlang["is_integer/1"](context.vars.x),
+                  },
+                  {
+                    source: "x + 1 > y",
+                    test: (context) =>
+                      Erlang[">/2"](
+                        Erlang["+/2"](context.vars.x, Type.integer(1)),
+                        context.vars.y,
+                      ),
+                  },
+                ],
               },
             ],
           };
