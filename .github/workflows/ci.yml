@@ -845,6 +845,161 @@ jobs:
         with:
           name: cowboy-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/cowboy/tmp/screenshots
+  ecosystem_tests:
+    runs-on: ubuntu-latest
+    name: Ecosystem Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    defaults:
+      run:
+        working-directory: test/ecosystem
+    strategy:
+      fail-fast: false
+      # Specify the Elixir and OTP versions to use when building
+      # and running the workflow steps.
+      matrix:
+        elixir:
+          # Run ecosystem tests on latest pinned stable Elixir version only
+          - "1.20.0"
+        otp:
+          # Run ecosystem tests on latest pinned stable OTP version only
+          - "29.0"
+        node:
+          # Run ecosystem tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### ECOSYSTEM TESTS APP CHECKS ###
+
+      # Step: Define how to cache the ecosystem tests app Elixir dependencies.
+      - name: Cache ecosystem tests app Elixir deps
+        id: cache-ecosystem-tests-app-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-ecosystem-tests-app-elixir-deps
+        with:
+          path: test/ecosystem/deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/ecosystem/mix.lock') }}
+
+      # Step: Define how to cache the ecosystem tests app Elixir build.
+      - name: Cache ecosystem tests app Elixir build
+        id: cache-ecosystem-tests-app-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-ecosystem-tests-app-elixir-build
+        with:
+          path: test/ecosystem/_build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/ecosystem/mix.lock') }}
+
+      # Step: Download ecosystem tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download ecosystem tests app Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
+          command: cd test/ecosystem && mix deps.get
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the ecosystem tests app project treating any warnings as errors.
+      - name: Check ecosystem tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if ecosystem tests app mix.lock has any unused dependencies.
+      - name: Check ecosystem tests app unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any ecosystem tests app Elixir dependencies which have been marked as retired.
+      - name: Check ecosystem tests app retired Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix hex.audit
+
+      # Step: Check that the ecosystem tests app Elixir code has already been formatted.
+      - name: Check ecosystem tests app Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Run ecosystem tests app Elixir static code analysis with Credo.
+      - name: Run ecosystem tests app Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Restore ecosystem tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore ecosystem tests app Dialyzer PLT cache
+        id: restore-ecosystem-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-ecosystem-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/ecosystem/mix.lock') }}
+          path: |
+            test/ecosystem/priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create ecosystem tests app Dialyzer PLTs if no cache was found.
+      - name: Create ecosystem tests app Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-ecosystem-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save ecosystem tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save ecosystem tests app Dialyzer PLT cache
+        id: save-ecosystem-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-ecosystem-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-ecosystem-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/ecosystem/mix.lock') }}
+          path: |
+            test/ecosystem/priv/plts
+
+      # Step: Run ecosystem tests app Elixir static code analysis with Dialyzer.
+      - name: Run ecosystem tests app Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all ecosystem tests app test scripts have valid file names.
+      - name: Check ecosystem tests app test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.test.check_file_names test
+
+      # Step: Execute ecosystem tests app Elixir tests.
+      - name: Run ecosystem tests app Elixir tests
+        run: mix test --warnings-as-errors
+
+      # Step: Archive the browser screenshots of tests that failed.
+      - name: Archive fail screenshots
+        # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ecosystem-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/ecosystem/tmp/screenshots
   umbrella_tests:
     runs-on: ubuntu-latest
     name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
