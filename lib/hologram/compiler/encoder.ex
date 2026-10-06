@@ -779,6 +779,21 @@ defmodule Hologram.Compiler.Encoder do
     IO.puts("\n........................................\n")
   end
 
+  # The operands on the left side of a blamed and/or chain, each paired with its IR, in front of
+  # the given ones. The walk follows the blame tree and takes the IR along with it, so it stops
+  # where the blame tree does: a leaf can stand for a whole chain of the same operator, which the
+  # server renders as one expression.
+  defp collect_blame_operands(
+         operator,
+         {operator, left, right},
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, args: [left_ir, right_ir]},
+         acc
+       ) do
+    collect_blame_operands(operator, left, left_ir, [{right, right_ir} | acc])
+  end
+
+  defp collect_blame_operands(_operator, guard, guard_ir, acc), do: [{guard, guard_ir} | acc]
+
   # The operands of a chain of calls to the given short-circuit operator, in the order they are
   # evaluated. The operator is associative, the boolean check on each tested operand included, so
   # the way the calls are nested in each other makes no difference to the result.
@@ -967,7 +982,10 @@ defmodule Hologram.Compiler.Encoder do
   # The clause head is rendered at build time, but which of its parts failed to
   # match is known only at raise time, so each guard leaf travels with its own
   # closure for the client to evaluate. The leaves line up with the guard IR,
-  # which carries the same and/or structure they were split at.
+  # which carries the same and/or structure they were split at. The operands of
+  # a chain are written side by side, so the nesting of the output does not grow
+  # with the length of the chain. Only the left side of a chain is taken apart,
+  # which is the side the client folds the operands back on.
   defp encode_clause_blame(%IR.FunctionClause{blame: nil}, _context), do: nil
 
   defp encode_clause_blame(%IR.FunctionClause{blame: blame} = clause, context) do
@@ -997,10 +1015,16 @@ defmodule Hologram.Compiler.Encoder do
          %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, args: [left_ir, right_ir]},
          context
        ) do
+    operands =
+      operator
+      |> collect_blame_operands(left, left_ir, [{right, right_ir}])
+      |> Enum.map_join(", ", fn {operand, operand_ir} ->
+        encode_clause_blame_guard(operand, operand_ir, context)
+      end)
+
     encode_as_object(
       operator: encode_as_string(operator, true),
-      left: encode_clause_blame_guard(left, left_ir, context),
-      right: encode_clause_blame_guard(right, right_ir, context)
+      operands: StringUtils.wrap(operands, "[", "]")
     )
   end
 

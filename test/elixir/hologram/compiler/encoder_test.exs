@@ -2160,6 +2160,90 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
+    test "with blame metadata for a chain nested on the right" do
+      # (x) when :erlang.orelse(:erlang.=:=(x, 1), :erlang.orelse(:erlang.=:=(x, 2), :erlang.=:=(x, 3))) do
+      #  :expr_1
+      equals_ir = fn value ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :"=:=",
+          args: [%IR.Variable{name: :x}, %IR.IntegerType{value: value}]
+        }
+      end
+
+      orelse_ir = fn left, right ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :orelse,
+          args: [left, right]
+        }
+      end
+
+      first_ir = equals_ir.(1)
+      second_ir = equals_ir.(2)
+      third_ir = equals_ir.(3)
+
+      right_ir = orelse_ir.(second_ir, third_ir)
+      guard_ir = orelse_ir.(first_ir, right_ir)
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [guard_ir],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x"],
+          guards: [{:or, {:leaf, "x === 1"}, {:or, {:leaf, "x === 2"}, {:leaf, "x === 3"}}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x"], guards: [{operator: "or", operands: [{source: "x === 1", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(1n))}, {operator: "or", operands: [{source: "x === 2", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(2n))}, {source: "x === 3", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(3n))}]}]}]}}/
+    end
+
+    test "with blame metadata for a chain of three operands" do
+      # (x) when :erlang.orelse(:erlang.orelse(:erlang.=:=(x, 1), :erlang.=:=(x, 2)), :erlang.=:=(x, 3)) do
+      #  :expr_1
+      equals_ir = fn value ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :"=:=",
+          args: [%IR.Variable{name: :x}, %IR.IntegerType{value: value}]
+        }
+      end
+
+      orelse_ir = fn left, right ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :orelse,
+          args: [left, right]
+        }
+      end
+
+      first_ir = equals_ir.(1)
+      second_ir = equals_ir.(2)
+      third_ir = equals_ir.(3)
+
+      left_ir = orelse_ir.(first_ir, second_ir)
+      guard_ir = orelse_ir.(left_ir, third_ir)
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [guard_ir],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x"],
+          guards: [{:or, {:or, {:leaf, "x === 1"}, {:leaf, "x === 2"}}, {:leaf, "x === 3"}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x"], guards: [{operator: "or", operands: [{source: "x === 1", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(1n))}, {source: "x === 2", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(2n))}, {source: "x === 3", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(3n))}]}]}}/
+    end
+
     test "with blame metadata for a clause without guards" do
       # (x) do
       #  :expr_1
@@ -2244,7 +2328,58 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) =~
-               ~s/blame: {params: ["x"], guards: [{operator: "and", left: {source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}, right: {source: "x > 1", test: (context) => Erlang[">\/2"](context.vars.x, Type.integer(1n))}}]}}/
+               ~s/blame: {params: ["x"], guards: [{operator: "and", operands: [{source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}, {source: "x > 1", test: (context) => Erlang[">\/2"](context.vars.x, Type.integer(1n))}]}]}}/
+    end
+
+    test "with blame metadata for a leaf that stands for a chain of the guard's operator" do
+      # (x, y) when :erlang.andalso(struct_check, :erlang.>(y, 1)) do
+      #  :expr_1
+      #
+      # where struct_check is :erlang.andalso(:erlang.is_map(x), :erlang.is_map_key(:__struct__, x)),
+      # which the server renders as one expression, is_struct(x)
+      is_map_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :is_map,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      is_map_key_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :is_map_key,
+        args: [%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}]
+      }
+
+      greater_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :>,
+        args: [%IR.Variable{name: :y}, %IR.IntegerType{value: 1}]
+      }
+
+      andalso_ir = fn left, right ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [left, right]
+        }
+      end
+
+      struct_check_ir = andalso_ir.(is_map_ir, is_map_key_ir)
+      guard_ir = andalso_ir.(struct_check_ir, greater_ir)
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guards: [guard_ir],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x", "y"],
+          guards: [{:and, {:leaf, "is_struct(x)"}, {:leaf, "y > 1"}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x", "y"], guards: [{operator: "and", operands: [{source: "is_struct(x)", test: (context) => (Interpreter.toBoolean(Erlang["is_map\/1"](context.vars.x)) ? Erlang["is_map_key\/2"](Type.atom("__struct__"), context.vars.x) : Type.boolean(false))}, {source: "y > 1", test: (context) => Erlang[">\/2"](context.vars.y, Type.integer(1n))}]}]}}/
     end
 
     test "without blame metadata when client stacktraces are disabled" do
