@@ -259,12 +259,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp load_chunk_registry_items(opts) do
-    dump_path = Path.join(opts[:build_dir], Reflection.chunk_registry_plt_dump_file_name())
-    assert File.exists?(dump_path)
-
-    plt = PLT.start()
-    PLT.load(plt, dump_path)
-    PLT.get_all(plt)
+    opts[:build_dir]
+    |> Path.join(Reflection.chunk_registry_plt_dump_file_name())
+    |> load_plt_items()
   end
 
   defp load_compile_state_dump(opts) do
@@ -277,21 +274,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp load_module_info_items(opts) do
-    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
-    assert File.exists?(dump_path)
-
-    plt = PLT.start()
-    PLT.load(plt, dump_path)
-    PLT.get_all(plt)
+    opts[:build_dir]
+    |> Path.join(Reflection.module_info_plt_dump_file_name())
+    |> load_plt_items()
   end
 
   defp load_page_digest_items(opts) do
-    dump_path = Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
+    opts[:build_dir]
+    |> Path.join(Reflection.page_digest_plt_dump_file_name())
+    |> load_plt_items()
+  end
+
+  # The items of the PLT dumped at the given path. The PLT they are read through is stopped, so
+  # that reading a dump leaves no process behind.
+  defp load_plt_items(dump_path) do
     assert File.exists?(dump_path)
 
     plt = PLT.start()
     PLT.load(plt, dump_path)
-    PLT.get_all(plt)
+    items = PLT.get_all(plt)
+    PLT.stop(plt)
+
+    items
   end
 
   # How many chunk bundles the last compile left.
@@ -549,14 +553,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_page_digest_plt(opts) do
-    page_digest_plt_dump_path =
-      Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
-
-    assert File.exists?(page_digest_plt_dump_path)
-
-    page_digest_plt = PLT.start()
-    PLT.load(page_digest_plt, page_digest_plt_dump_path)
-    page_digest_items = PLT.get_all(page_digest_plt)
+    page_digest_items = load_page_digest_items(opts)
 
     assert map_size(page_digest_items) == @num_pages
 
@@ -3196,17 +3193,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(opts)
 
-      page_digest_plt = PLT.start()
-
-      PLT.load(
-        page_digest_plt,
-        Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
-      )
+      page_digest =
+        opts
+        |> load_page_digest_items()
+        |> Map.fetch!(Module1)
 
       bundle_path =
         Path.join(
           opts[:static_dir],
-          "page-#{Reflection.module_name(Module1)}-#{PLT.get!(page_digest_plt, Module1)}.js"
+          "page-#{Reflection.module_name(Module1)}-#{page_digest}.js"
         )
 
       bundle = File.read!(bundle_path)
