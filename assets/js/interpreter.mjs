@@ -1764,6 +1764,18 @@ export default class Interpreter {
       );
     }
 
+    // The operands of a chain arrive side by side and are folded back into
+    // the left-nested tuples the rendering expects: a or b or c is
+    // {:or, {:or, a, b}, c}.
+    if (guard.operands !== undefined) {
+      return guard.operands
+        .map((operand) => Interpreter.#blameGuard(operand, context))
+        .reduce((left, right) =>
+          Type.tuple([Type.atom(guard.operator), left, right]),
+        );
+    }
+
+    // TODO: remove once the compiler writes the operands of every operator side by side
     return Type.tuple([
       Type.atom(guard.operator),
       Interpreter.#blameGuard(guard.left, context),

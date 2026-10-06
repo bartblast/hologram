@@ -10565,6 +10565,116 @@ describe("Interpreter", () => {
         );
       };
 
+      // The leaf of a guard that compares x with the given integer
+      const equals = (value) => ({
+        source: `x === ${value}`,
+        test: (context) => Erlang["=:=/2"](context.vars.x, Type.integer(value)),
+      });
+
+      // The blamed guards of def my_fun(x) with the given guards, called with the given x
+      const foldedGuards = (guards, x) => {
+        Interpreter.defineFunctionClauseHeads(
+          "MyFoldedModule",
+          "my_fun",
+          1,
+          "public",
+          [
+            {
+              params: (_context) => [Type.variablePattern("x")],
+              guards: [],
+              blame: {params: ["x"], guards: guards},
+            },
+          ],
+        );
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError("MyFoldedModule", "my_fun", 1, [
+            x,
+          ]);
+        } catch (e) {
+          caught = e;
+        }
+
+        const clauses = caught.value.data["atom(clauses)"][1];
+
+        return clauses.data[0].data[1];
+      };
+
+      it("folds a chain nested in an operand", () => {
+        // def my_fun(x) when is_integer(x) and (x === 1 or x === 2 or x === 3)
+        const guards = [
+          {
+            operator: "and",
+            operands: [
+              {
+                source: "is_integer(x)",
+                test: (context) => Erlang["is_integer/1"](context.vars.x),
+              },
+              {operator: "or", operands: [equals(1), equals(2), equals(3)]},
+            ],
+          },
+        ];
+
+        assert.deepStrictEqual(
+          foldedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("and"),
+              blamedNode(true, "is_integer(x)"),
+              Type.tuple([
+                Type.atom("or"),
+                Type.tuple([
+                  Type.atom("or"),
+                  blamedNode(false, "x === 1"),
+                  blamedNode(true, "x === 2"),
+                ]),
+                blamedNode(false, "x === 3"),
+              ]),
+            ]),
+          ]),
+        );
+      });
+
+      it("folds three operands into left-nested tuples", () => {
+        // def my_fun(x) when x === 1 or x === 2 or x === 3
+        const guards = [
+          {operator: "or", operands: [equals(1), equals(2), equals(3)]},
+        ];
+
+        assert.deepStrictEqual(
+          foldedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("or"),
+              Type.tuple([
+                Type.atom("or"),
+                blamedNode(false, "x === 1"),
+                blamedNode(true, "x === 2"),
+              ]),
+              blamedNode(false, "x === 3"),
+            ]),
+          ]),
+        );
+      });
+
+      it("folds two operands into one tuple", () => {
+        // def my_fun(x) when x === 1 or x === 2
+        const guards = [{operator: "or", operands: [equals(1), equals(2)]}];
+
+        assert.deepStrictEqual(
+          foldedGuards(guards, Type.integer(2)),
+          Type.list([
+            Type.tuple([
+              Type.atom("or"),
+              blamedNode(false, "x === 1"),
+              blamedNode(true, "x === 2"),
+            ]),
+          ]),
+        );
+      });
+
       it("marks the parts of the clause head that didn't match", () => {
         defineClauseHeads();
 
