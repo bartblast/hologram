@@ -556,6 +556,21 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(
         %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: function,
+          args: [_left, _right],
+          line: line
+        } = ir,
+        context
+      )
+      when function in [:andalso, :orelse] do
+    ir
+    |> encode_short_circuit(context)
+    |> maybe_encode_frame_line(line, context)
+  end
+
+  def encode_ir(
+        %IR.RemoteFunctionCall{
           module: module,
           function: function,
           args: args,
@@ -767,22 +782,29 @@ defmodule Hologram.Compiler.Encoder do
   # The operands of a chain of calls to the given short-circuit operator, in the order they are
   # evaluated. The operator is associative, the boolean check on each tested operand included, so
   # the way the calls are nested in each other makes no difference to the result.
-  defp collect_chain_operands(function, ir, acc \\ [])
+  #
+  # Each operand comes with the line of the call that tests it, which is the line the BEAM reports
+  # when the operand is not a boolean. A call tests the last operand of its left side. The last
+  # operand of its right side is the call's own result, so it is tested by whatever tests the
+  # call: last_line, which is nil when nothing does.
+  defp collect_chain_operands(function, ir, last_line \\ nil, acc \\ [])
 
   defp collect_chain_operands(
          function,
          %IR.RemoteFunctionCall{
            module: %IR.AtomType{value: :erlang},
            function: function,
-           args: [left, right]
+           args: [left, right],
+           line: line
          },
+         last_line,
          acc
        ) do
-    right_acc = collect_chain_operands(function, right, acc)
-    collect_chain_operands(function, left, right_acc)
+    right_acc = collect_chain_operands(function, right, last_line, acc)
+    collect_chain_operands(function, left, line, right_acc)
   end
 
-  defp collect_chain_operands(_function, ir, acc), do: [ir | acc]
+  defp collect_chain_operands(_function, ir, last_line, acc), do: [{ir, last_line} | acc]
 
   defp encode_as_array(data, context, encoder \\ &encode_ir/2) do
     data
@@ -903,20 +925,34 @@ defmodule Hologram.Compiler.Encoder do
 
   # The JavaScript boolean a short-circuit operator tests the given operand by. An operand that
   # is a chain of the other operator is written with that operator, every one of its operands
-  # tested - the last one too, since the chain's result is what gets tested.
+  # tested - the last one too, since the chain's result is what gets tested. The line is that of
+  # the call doing the testing, and the check carries it wherever a call would record its own.
   defp encode_boolean_test(
          %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, function: function} = ir,
+         line,
          context
        )
        when function in [:andalso, :orelse] do
     function
-    |> collect_chain_operands(ir)
-    |> Enum.map_join(short_circuit_operator(function), &encode_boolean_test(&1, context))
+    |> collect_chain_operands(ir, line)
+    |> encode_boolean_tests(function, context)
     |> StringUtils.wrap("(", ")")
   end
 
-  defp encode_boolean_test(ir, context) do
-    "Interpreter.toBoolean(#{encode_ir(ir, context)})"
+  defp encode_boolean_test(ir, line, context) do
+    term_js = encode_ir(ir, context)
+
+    if frame_line?(line, context) do
+      "Interpreter.toBoolean(#{term_js}, #{line})"
+    else
+      "Interpreter.toBoolean(#{term_js})"
+    end
+  end
+
+  defp encode_boolean_tests(operands, function, context) do
+    Enum.map_join(operands, short_circuit_operator(function), fn {operand, line} ->
+      encode_boolean_test(operand, line, context)
+    end)
   end
 
   # A string literal carries text and nothing else: the client reads it back through UTF-8, so a
@@ -1099,10 +1135,6 @@ defmodule Hologram.Compiler.Encoder do
     "{#{fields}}"
   end
 
-  defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
-    encode_short_circuit(:andalso, [left, right], context)
-  end
-
   # Encoded as Interpreter.callNamedFunction() instead of Erlang["apply/3"]()
   # because we can't pass the runtime context to the ported function.
   defp encode_named_function_call(
@@ -1112,10 +1144,6 @@ defmodule Hologram.Compiler.Encoder do
          context
        ) do
     encode_dynamic_named_function_call(module, function, args, context)
-  end
-
-  defp encode_named_function_call(%IR.AtomType{value: :erlang}, :orelse, [left, right], context) do
-    encode_short_circuit(:orelse, [left, right], context)
   end
 
   defp encode_named_function_call(%IR.AtomType{} = module, function, args, context) do
@@ -1165,21 +1193,13 @@ defmodule Hologram.Compiler.Encoder do
   # The operands of a chain sit side by side, so the nesting of the output does not grow with the
   # length of the chain, and each is a plain expression, which can hold an await. Every operand but
   # the last is tested as a boolean. The last one is the chain's value as it is.
-  defp encode_short_circuit(function, args, context) do
-    call = %IR.RemoteFunctionCall{
-      module: %IR.AtomType{value: :erlang},
-      function: function,
-      args: args
-    }
-
-    {tested, [last]} =
+  defp encode_short_circuit(%IR.RemoteFunctionCall{function: function} = ir, context) do
+    {tested, [{last, _line}]} =
       function
-      |> collect_chain_operands(call)
+      |> collect_chain_operands(ir)
       |> Enum.split(-1)
 
-    tests_js =
-      Enum.map_join(tested, short_circuit_operator(function), &encode_boolean_test(&1, context))
-
+    tests_js = encode_boolean_tests(tested, function, context)
     last_js = encode_ir(last, context)
 
     case function do
@@ -1254,6 +1274,14 @@ defmodule Hologram.Compiler.Encoder do
       IR.has_call_to?(clauses, context.module, context.async_mfas)
   end
 
+  # Whether the given line is written into the code: there is one, the code is not a guard, and
+  # the client keeps stacktraces.
+  defp frame_line?(nil, _context), do: false
+
+  defp frame_line?(_line, %Context{guard?: true}), do: false
+
+  defp frame_line?(_line, _context), do: Hologram.client_stacktraces?()
+
   defp has_match_operator?(ir)
 
   defp has_match_operator?(%IR.MatchOperator{}), do: true
@@ -1284,12 +1312,8 @@ defmodule Hologram.Compiler.Encoder do
   # reached, so each call records its own line before it is made - the way the
   # BEAM does it. A call the AST gave no line to records nothing, and the frame
   # keeps the line it already had.
-  defp maybe_encode_frame_line(js, nil, _context), do: js
-
-  defp maybe_encode_frame_line(js, _line, %Context{guard?: true}), do: js
-
-  defp maybe_encode_frame_line(js, line, _context) do
-    if Hologram.client_stacktraces?() do
+  defp maybe_encode_frame_line(js, line, context) do
+    if frame_line?(line, context) do
       "(Interpreter.setFrameLine(#{line}), #{js})"
     else
       js

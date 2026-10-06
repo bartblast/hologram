@@ -2933,6 +2933,27 @@ defmodule Hologram.Compiler.EncoderTest do
                "(Interpreter.toBoolean(Type.integer(1n)) && Interpreter.toBoolean(Type.integer(2n)) ? Type.integer(3n) : Type.boolean(false))"
     end
 
+    test ":erlang.andalso/2 checks carry the line of the call that makes them" do
+      # :erlang.andalso(:erlang.andalso(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(11), (Interpreter.toBoolean(Type.integer(1n), 10) && Interpreter.toBoolean(Type.integer(2n), 11) ? Type.integer(3n) : Type.boolean(false)))"
+    end
+
     test ":erlang.andalso/2 with an :erlang.orelse/2 chain as a tested operand" do
       # :erlang.andalso(:erlang.orelse(1, 2), 3)
       ir = %IR.RemoteFunctionCall{
@@ -3040,6 +3061,93 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 checks carry no line in a guard" do
+      # :erlang.orelse(:erlang.orelse(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir, %Context{guard?: true}) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 checks carry no line when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # :erlang.orelse(:erlang.orelse(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 checks carry the line of the call that makes them" do
+      # :erlang.orelse(:erlang.orelse(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(11), (Interpreter.toBoolean(Type.integer(1n), 10) || Interpreter.toBoolean(Type.integer(2n), 11) ? Type.boolean(true) : Type.integer(3n)))"
+    end
+
+    test ":erlang.orelse/2 checks in a tested :erlang.andalso/2 chain carry the line of the call that makes them" do
+      # :erlang.orelse(:erlang.andalso(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(11), ((Interpreter.toBoolean(Type.integer(1n), 10) && Interpreter.toBoolean(Type.integer(2n), 11)) ? Type.boolean(true) : Type.integer(3n)))"
     end
 
     test ":erlang.orelse/2 with an :erlang.andalso/2 chain as a tested operand" do
