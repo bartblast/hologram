@@ -103,15 +103,20 @@ function renderClauses(clauses, kind, functionName) {
   return `${header}${clausesText}${hiddenText}`;
 }
 
+// A guard is a leaf or an operator with its operands side by side. The operands
+// all sit at the operator's own precedence, so joining them reads the same as
+// rendering them one nested in the other, whatever their number.
 function renderGuard(guard, parentPrecedence) {
   if (!Type.isTuple(guard)) {
     return renderNode(guard);
   }
 
-  const [operator, left, right] = guard.data;
+  const [operator, operands] = guard.data;
   const precedence = PRECEDENCES[operator.value];
 
-  const text = `${renderGuard(left, precedence)} ${operator.value} ${renderGuard(right, precedence)}`;
+  const text = operands.data
+    .map((operand) => renderGuard(operand, precedence))
+    .join(` ${operator.value} `);
 
   return parentPrecedence > precedence ? `(${text})` : text;
 }

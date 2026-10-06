@@ -940,6 +940,38 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "remote function call using :erlang.andalso/2", %{empty_call_graph: call_graph} do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.AtomType{value: Module6},
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Module5},
+            function: :my_fun_2,
+            args: [%IR.AtomType{value: Module7}]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               Module7,
+               {Module1, :my_fun_1, 4},
+               {Module5, :my_fun_2, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Module6},
+               {{Module1, :my_fun_1, 4}, Module7},
+               {{Module1, :my_fun_1, 4}, {Module5, :my_fun_2, 1}}
+             ]
+    end
+
     test "remote function call using :erlang.error/3, error_info with module key", %{
       empty_call_graph: call_graph
     } do
@@ -1162,6 +1194,38 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_edges(call_graph) == [
                {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.orelse/2", %{empty_call_graph: call_graph} do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.AtomType{value: Module6},
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Module5},
+            function: :my_fun_2,
+            args: [%IR.AtomType{value: Module7}]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               Module7,
+               {Module1, :my_fun_1, 4},
+               {Module5, :my_fun_2, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Module6},
+               {{Module1, :my_fun_1, 4}, Module7},
+               {{Module1, :my_fun_1, 4}, {Module5, :my_fun_2, 1}}
              ]
     end
 

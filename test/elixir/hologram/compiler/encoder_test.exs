@@ -42,6 +42,26 @@ defmodule Hologram.Compiler.EncoderTest do
 
   defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
 
+  # :erlang.orelse/2 calls nested to the left over the given operands, the way `or` and `in` nest
+  defp orelse_chain_ir([first_ir | rest_irs]) do
+    Enum.reduce(rest_irs, first_ir, fn operand_ir, acc ->
+      %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [acc, operand_ir]
+      }
+    end)
+  end
+
+  # :erlang.=:=(left, right)
+  defp strict_equality_ir(left_ir, right_ir) do
+    %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: :erlang},
+      function: :"=:=",
+      args: [left_ir, right_ir]
+    }
+  end
+
   describe "anonymous function call" do
     setup do
       # my_fun.(1, 2)
@@ -1856,6 +1876,214 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
     end
+
+    test "declares one set for two guards that look up in the same literals" do
+      # def fun_3(x) when x === :a or x === :b, do: :expr_1
+      # def fun_3(x) when x === :a or x === :b, do: :expr_2
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+        },
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_2}]}
+        }
+      ]
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.atom("a"), Type.atom("b")]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_3", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_1");
+        }}, {params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_2");
+        }}]);
+        }\
+        """)
+
+      context = %Context{module: Aaa.Bbb}
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, context) == expected
+    end
+
+    test "declares the literal sets of a guard in a clause body" do
+      # def fun_3(y) do
+      #   case y do
+      #     x when x === 1 or x === 2 -> :expr_1
+      #   end
+      # end
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      case_ir = %IR.Case{
+        condition: %IR.Variable{name: :y},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [guard_ir],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+          }
+        ]
+      }
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :y}],
+          guards: [],
+          body: %IR.Block{expressions: [case_ir]}
+        }
+      ]
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.integer(1n), Type.integer(2n)]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_3", 1, "public", [{params: (context) => [Type.variablePattern("y")], guards: [], body: (context) => {
+        return Interpreter.case(context.vars.y, [{match: Type.variablePattern("x"), guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_1");
+        }}], context);
+        }}]);
+        }\
+        """)
+
+      context = %Context{module: Aaa.Bbb}
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, context) == expected
+    end
+
+    test "declares the literal sets of its guards in front of the definition, in the order they are used" do
+      # def fun_3(x) when x === :a or x === "b", do: :expr_1
+      # def fun_3(x) when x === 1 or x === 2.5, do: :expr_2
+      first_guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.StringType{value: "b"})
+        ])
+
+      second_guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.FloatType{value: 2.5})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [first_guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+        },
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [second_guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_2}]}
+        }
+      ]
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.atom("a"), Type.bitstring("b")]);
+        const s1 = Interpreter.literalSet(() => [Type.integer(1n), Type.float(2.5)]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_3", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_1");
+        }}, {params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s1.has(context.vars.x))], body: (context) => {
+        return Type.atom("expr_2");
+        }}]);
+        }\
+        """)
+
+      context = %Context{module: Aaa.Bbb}
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, context) == expected
+    end
+
+    test "leaves nothing in the process dictionary" do
+      # def fun_3(x) when x === :a or x === :b, do: :expr_1
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+        }
+      ]
+
+      keys_before = Process.get_keys()
+
+      encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, %Context{module: Aaa.Bbb})
+
+      assert Process.get_keys() == keys_before
+    end
+
+    test "numbers the sets of each function from zero" do
+      # def fun_3(x) when x === :a or x === :b, do: :expr_1
+      # def fun_4(x) when x === :c or x === :d, do: :expr_1
+      clauses = fn first, second ->
+        guard_ir =
+          orelse_chain_ir([
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: first}),
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: second})
+          ])
+
+        [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [guard_ir],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+          }
+        ]
+      end
+
+      context = %Context{module: Aaa.Bbb}
+
+      encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses.(:a, :b), context)
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_4, 1, :public, clauses.(:c, :d), context) =~
+               ~s'const s0 = Interpreter.literalSet(() => [Type.atom("c"), Type.atom("d")]);'
+    end
+
+    test "leaves nothing in the process dictionary when encoding raises" do
+      # def fun_3(x) when x === :a or x === :b, do: <IR the encoder has no clause for>
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clauses = [
+        %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [guard_ir],
+          body: %IR.Block{expressions: [:not_ir]}
+        }
+      ]
+
+      keys_before = Process.get_keys()
+
+      assert_raise FunctionClauseError, fn ->
+        encode_elixir_function("Aaa.Bbb", :fun_3, 1, :public, clauses, %Context{module: Aaa.Bbb})
+      end
+
+      assert Process.get_keys() == keys_before
+    end
   end
 
   describe "encode_module_metadata_registration/1" do
@@ -1885,6 +2113,39 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "encode_elixir_function_clause_heads/6" do
+    test "declares the literal sets of its guards in front of the registration" do
+      # (x) when :erlang.orelse(:erlang.=:=(x, :a), :erlang.=:=(x, :b)) do
+      #  :expr_1
+      guard_ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :b})
+        ])
+
+      clause = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [guard_ir],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]},
+        line: 3,
+        blame: %{params: ["x"], guards: [{:or, {:leaf, "x === :a"}, {:leaf, "x === :b"}}]}
+      }
+
+      result =
+        encode_elixir_function_clause_heads("Aaa.Bbb", :my_fun, 1, :public, [clause], %Context{
+          module: Aaa.Bbb
+        })
+
+      expected =
+        normalize_newlines("""
+        {
+        const s0 = Interpreter.literalSet(() => [Type.atom("a"), Type.atom("b")]);
+        Interpreter.defineFunctionClauseHeads("Aaa.Bbb", "my_fun", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Type.boolean(s0.has(context.vars.x))], blame: {params: ["x"], guards: [{operator: "or", operands: [{source: "x === :a", test: (context) => Erlang["=:=/2"](context.vars.x, Type.atom("a"))}, {source: "x === :b", test: (context) => Erlang["=:=/2"](context.vars.x, Type.atom("b"))}]}]}}]);
+        }\
+        """)
+
+      assert result == expected
+    end
+
     test "encodes the clause heads without their bodies" do
       # (x) when :erlang.is_integer(x) do
       #  :expr_1
@@ -2160,6 +2421,90 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
+    test "with blame metadata for a chain nested on the right" do
+      # (x) when :erlang.orelse(:erlang.=:=(x, 1), :erlang.orelse(:erlang.=:=(x, 2), :erlang.=:=(x, 3))) do
+      #  :expr_1
+      equals_ir = fn value ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :"=:=",
+          args: [%IR.Variable{name: :x}, %IR.IntegerType{value: value}]
+        }
+      end
+
+      orelse_ir = fn left, right ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :orelse,
+          args: [left, right]
+        }
+      end
+
+      first_ir = equals_ir.(1)
+      second_ir = equals_ir.(2)
+      third_ir = equals_ir.(3)
+
+      right_ir = orelse_ir.(second_ir, third_ir)
+      guard_ir = orelse_ir.(first_ir, right_ir)
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [guard_ir],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x"],
+          guards: [{:or, {:leaf, "x === 1"}, {:or, {:leaf, "x === 2"}, {:leaf, "x === 3"}}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x"], guards: [{operator: "or", operands: [{source: "x === 1", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(1n))}, {operator: "or", operands: [{source: "x === 2", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(2n))}, {source: "x === 3", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(3n))}]}]}]}}/
+    end
+
+    test "with blame metadata for a chain of three operands" do
+      # (x) when :erlang.orelse(:erlang.orelse(:erlang.=:=(x, 1), :erlang.=:=(x, 2)), :erlang.=:=(x, 3)) do
+      #  :expr_1
+      equals_ir = fn value ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :"=:=",
+          args: [%IR.Variable{name: :x}, %IR.IntegerType{value: value}]
+        }
+      end
+
+      orelse_ir = fn left, right ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :orelse,
+          args: [left, right]
+        }
+      end
+
+      first_ir = equals_ir.(1)
+      second_ir = equals_ir.(2)
+      third_ir = equals_ir.(3)
+
+      left_ir = orelse_ir.(first_ir, second_ir)
+      guard_ir = orelse_ir.(left_ir, third_ir)
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [guard_ir],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x"],
+          guards: [{:or, {:or, {:leaf, "x === 1"}, {:leaf, "x === 2"}}, {:leaf, "x === 3"}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x"], guards: [{operator: "or", operands: [{source: "x === 1", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(1n))}, {source: "x === 2", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(2n))}, {source: "x === 3", test: (context) => Erlang["=:=\/2"](context.vars.x, Type.integer(3n))}]}]}}/
+    end
+
     test "with blame metadata for a clause without guards" do
       # (x) do
       #  :expr_1
@@ -2244,7 +2589,58 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) =~
-               ~s/blame: {params: ["x"], guards: [{operator: "and", left: {source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}, right: {source: "x > 1", test: (context) => Erlang[">\/2"](context.vars.x, Type.integer(1n))}}]}}/
+               ~s/blame: {params: ["x"], guards: [{operator: "and", operands: [{source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}, {source: "x > 1", test: (context) => Erlang[">\/2"](context.vars.x, Type.integer(1n))}]}]}}/
+    end
+
+    test "with blame metadata for a leaf that stands for a chain of the guard's operator" do
+      # (x, y) when :erlang.andalso(struct_check, :erlang.>(y, 1)) do
+      #  :expr_1
+      #
+      # where struct_check is :erlang.andalso(:erlang.is_map(x), :erlang.is_map_key(:__struct__, x)),
+      # which the server renders as one expression, is_struct(x)
+      is_map_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :is_map,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      is_map_key_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :is_map_key,
+        args: [%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}]
+      }
+
+      greater_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :>,
+        args: [%IR.Variable{name: :y}, %IR.IntegerType{value: 1}]
+      }
+
+      andalso_ir = fn left, right ->
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [left, right]
+        }
+      end
+
+      struct_check_ir = andalso_ir.(is_map_ir, is_map_key_ir)
+      guard_ir = andalso_ir.(struct_check_ir, greater_ir)
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+        guards: [guard_ir],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x", "y"],
+          guards: [{:and, {:leaf, "is_struct(x)"}, {:leaf, "y > 1"}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x", "y"], guards: [{operator: "and", operands: [{source: "is_struct(x)", test: (context) => (Interpreter.toBoolean(Erlang["is_map\/1"](context.vars.x)) ? Erlang["is_map_key\/2"](Type.atom("__struct__"), context.vars.x) : Type.boolean(false))}, {source: "y > 1", test: (context) => Erlang[">\/2"](context.vars.y, Type.integer(1n))}]}]}}/
     end
 
     test "without blame metadata when client stacktraces are disabled" do
@@ -2294,6 +2690,281 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == ~s/Type.list([Type.integer(1n), Type.atom("abc")])/
+    end
+  end
+
+  describe "literal run" do
+    test "a call as the subject makes a run in a guard" do
+      # elem(t, 0) === 1 or elem(t, 0) === 2
+      subject_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :element,
+        args: [%IR.IntegerType{value: 1}, %IR.Variable{name: :t}]
+      }
+
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 1}),
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(Erlang["element/2"](Type.integer(1n), context.vars.t)))'
+    end
+
+    test "a call as the subject makes no run outside a guard" do
+      # elem(t, 0) === 1 or elem(t, 0) === 2
+      subject_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :element,
+        args: [%IR.IntegerType{value: 1}, %IR.Variable{name: :t}]
+      }
+
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 1}),
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](Erlang["element/2"](Type.integer(1n), context.vars.t), Type.integer(1n))) ? Type.boolean(true) : Erlang["=:=/2"](Erlang["element/2"](Type.integer(1n), context.vars.t), Type.integer(2n)))'
+    end
+
+    test "a chain that is one run" do
+      # x === 1 or x === 2 or x === 3
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 3})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(context.vars.x))'
+    end
+
+    test "a comparison with a term that is not a literal ends a run" do
+      # x === 1 or x === 2 or x === y or x === 3
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.Variable{name: :y}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 3})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) || Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, context.vars.y)) ? Type.boolean(true) : Erlang["=:=/2"](context.vars.x, Type.integer(3n)))'
+    end
+
+    test "a list or a tuple holding a term that is not a literal is not a literal" do
+      # x === [y] or x === {1, y}
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.ListType{data: [%IR.Variable{name: :y}]}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.TupleType{
+            data: [%IR.IntegerType{value: 1}, %IR.Variable{name: :y}]
+          })
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.list([context.vars.y]))) ? Type.boolean(true) : Erlang["=:=/2"](context.vars.x, Type.tuple([Type.integer(1n), context.vars.y])))'
+    end
+
+    test "a literal on the left of a comparison makes no run" do
+      # 1 === x or 2 === x
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.IntegerType{value: 1}, %IR.Variable{name: :x}),
+          strict_equality_ir(%IR.IntegerType{value: 2}, %IR.Variable{name: :x})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](Type.integer(1n), context.vars.x)) ? Type.boolean(true) : Erlang["=:=/2"](Type.integer(2n), context.vars.x))'
+    end
+
+    test "a run after another operand" do
+      # is_atom(x) or x === 1 or x === 2
+      ir =
+        orelse_chain_ir([
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_atom,
+            args: [%IR.Variable{name: :x}]
+          },
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["is_atom/1"](context.vars.x)) ? Type.boolean(true) : Type.boolean(s0.has(context.vars.x)))'
+    end
+
+    test "a run as a tested operand of an :erlang.andalso/2 chain" do
+      # (x === 1 or x === 2) and is_integer(x)
+      ir =
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [
+            orelse_chain_ir([
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+            ]),
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_integer,
+              args: [%IR.Variable{name: :x}]
+            }
+          ]
+        }
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'((s0.has(context.vars.x)) ? Erlang["is_integer/1"](context.vars.x) : Type.boolean(false))'
+    end
+
+    test "a run as the last operand of an :erlang.andalso/2 chain" do
+      # is_integer(x) and (x === 1 or x === 2)
+      ir =
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_integer,
+              args: [%IR.Variable{name: :x}]
+            },
+            orelse_chain_ir([
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+            ])
+          ]
+        }
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["is_integer/1"](context.vars.x)) ? Type.boolean(s0.has(context.vars.x)) : Type.boolean(false))'
+    end
+
+    test "a run before another operand" do
+      # x === 1 or x === 2 or is_atom(x)
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_atom,
+            args: [%IR.Variable{name: :x}]
+          }
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) ? Type.boolean(true) : Erlang["is_atom/1"](context.vars.x))'
+    end
+
+    test "a single comparison is not a run" do
+      # x === 1 or is_atom(x)
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_atom,
+            args: [%IR.Variable{name: :x}]
+          }
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.integer(1n))) ? Type.boolean(true) : Erlang["is_atom/1"](context.vars.x))'
+    end
+
+    test "a variable as the subject makes a run outside a guard" do
+      # x === 1 or x === 2
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(context.vars.x))'
+    end
+
+    test "an :erlang.andalso/2 chain of comparisons is not a run" do
+      # x === 1 and x === 2
+      ir =
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+          ]
+        }
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.integer(1n))) ? Erlang["=:=/2"](context.vars.x, Type.integer(2n)) : Type.boolean(false))'
+    end
+
+    test "literals of every kind make a run" do
+      # x === :a or x === 1.5 or x === 1 or x === [1, :a] or x === "abc" or x === {1, :a}
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.FloatType{value: 1.5}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.ListType{
+            data: [%IR.IntegerType{value: 1}, %IR.AtomType{value: :a}]
+          }),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.StringType{value: "abc"}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.TupleType{
+            data: [%IR.IntegerType{value: 1}, %IR.AtomType{value: :a}]
+          })
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(context.vars.x))'
+    end
+
+    test "no run where the context has no place to declare a set" do
+      # x === 1 or x === 2
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.integer(1n))) ? Type.boolean(true) : Erlang["=:=/2"](context.vars.x, Type.integer(2n)))'
+    end
+
+    test "runs of different literals get sets numbered in the order they are used" do
+      # x === 1 or x === 2 or y === 3 or y === 4
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 3}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 4})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) ? Type.boolean(true) : Type.boolean(s1.has(context.vars.y)))'
+    end
+
+    test "runs of the same literals share a set" do
+      # x === 1 or x === 2 or y === 1 or y === 2
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) ? Type.boolean(true) : Type.boolean(s0.has(context.vars.y)))'
     end
   end
 
@@ -2911,7 +3582,66 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["andalso/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
+               "(Interpreter.toBoolean(Type.integer(1n)) ? Type.integer(2n) : Type.boolean(false))"
+    end
+
+    test ":erlang.andalso/2 chain" do
+      # :erlang.andalso(:erlang.andalso(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) && Interpreter.toBoolean(Type.integer(2n)) ? Type.integer(3n) : Type.boolean(false))"
+    end
+
+    test ":erlang.andalso/2 checks carry the line of the call that makes them" do
+      # :erlang.andalso(:erlang.andalso(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(11), (Interpreter.toBoolean(Type.integer(1n), 10) && Interpreter.toBoolean(Type.integer(2n), 11) ? Type.integer(3n) : Type.boolean(false)))"
+    end
+
+    test ":erlang.andalso/2 with an :erlang.orelse/2 chain as a tested operand" do
+      # :erlang.andalso(:erlang.orelse(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "((Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n))) ? Type.integer(3n) : Type.boolean(false))"
     end
 
     test ":erlang.apply/3 call with non-variable args" do
@@ -2963,7 +3693,170 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
+               "(Interpreter.toBoolean(Type.integer(1n)) ? Type.boolean(true) : Type.integer(2n))"
+    end
+
+    test ":erlang.orelse/2 chain nested to the left" do
+      # :erlang.orelse(:erlang.orelse(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 chain nested to the right" do
+      # :erlang.orelse(1, :erlang.orelse(2, 3))
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]
+          }
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 checks carry no line in a guard" do
+      # :erlang.orelse(:erlang.orelse(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir, %Context{guard?: true}) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 checks carry no line when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # :erlang.orelse(:erlang.orelse(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 checks carry the line of the call that makes them" do
+      # :erlang.orelse(:erlang.orelse(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(11), (Interpreter.toBoolean(Type.integer(1n), 10) || Interpreter.toBoolean(Type.integer(2n), 11) ? Type.boolean(true) : Type.integer(3n)))"
+    end
+
+    test ":erlang.orelse/2 checks in a tested :erlang.andalso/2 chain carry the line of the call that makes them" do
+      # :erlang.orelse(:erlang.andalso(1, 2), 3), the inner call on line 10 and the outer one on line 11
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+            line: 10
+          },
+          %IR.IntegerType{value: 3}
+        ],
+        line: 11
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(11), ((Interpreter.toBoolean(Type.integer(1n), 10) && Interpreter.toBoolean(Type.integer(2n), 11)) ? Type.boolean(true) : Type.integer(3n)))"
+    end
+
+    test ":erlang.orelse/2 with an :erlang.andalso/2 chain as a tested operand" do
+      # :erlang.orelse(:erlang.andalso(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "((Interpreter.toBoolean(Type.integer(1n)) && Interpreter.toBoolean(Type.integer(2n))) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 with an :erlang.andalso/2 chain as the last operand" do
+      # :erlang.orelse(1, :erlang.andalso(2, 3))
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]
+          }
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) ? Type.boolean(true) : (Interpreter.toBoolean(Type.integer(2n)) ? Type.integer(3n) : Type.boolean(false)))"
     end
 
     test "async - wraps call with await when target MFA is in async_mfas" do
@@ -3027,6 +3920,27 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) ==
                ~s'(await Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), Type.atom("my_fun"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
+
+    test "async - :erlang.orelse/2 operands are awaited in place" do
+      # :erlang.orelse(Aaa.Bbb.my_fun(), Aaa.Bbb.my_fun())
+      my_fun_call = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: []
+      }
+
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [my_fun_call, my_fun_call]
+      }
+
+      async_mfas = MapSet.new([{Aaa.Bbb, :my_fun, 0}])
+      context = %Context{async?: true, async_mfas: async_mfas}
+
+      assert encode_ir(ir, context) ==
+               ~s'(Interpreter.toBoolean((await Elixir_Aaa_Bbb["my_fun/0"]())) ? Type.boolean(true) : (await Elixir_Aaa_Bbb["my_fun/0"]()))'
     end
   end
 
