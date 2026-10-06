@@ -764,6 +764,26 @@ defmodule Hologram.Compiler.Encoder do
     IO.puts("\n........................................\n")
   end
 
+  # The operands of a chain of calls to the given short-circuit operator, in the order they are
+  # evaluated. The operator is associative, the boolean check on each tested operand included, so
+  # the way the calls are nested in each other makes no difference to the result.
+  defp collect_chain_operands(function, ir, acc \\ [])
+
+  defp collect_chain_operands(
+         function,
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: function,
+           args: [left, right]
+         },
+         acc
+       ) do
+    right_acc = collect_chain_operands(function, right, acc)
+    collect_chain_operands(function, left, right_acc)
+  end
+
+  defp collect_chain_operands(_function, ir, acc), do: [ir | acc]
+
   defp encode_as_array(data, context, encoder \\ &encode_ir/2) do
     data
     |> Enum.map_join(", ", &encoder.(&1, context))
@@ -879,6 +899,24 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_block_expr(expr_js, false, false) do
     "\n#{expr_js};"
+  end
+
+  # The JavaScript boolean a short-circuit operator tests the given operand by. An operand that
+  # is a chain of the other operator is written with that operator, every one of its operands
+  # tested - the last one too, since the chain's result is what gets tested.
+  defp encode_boolean_test(
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, function: function} = ir,
+         context
+       )
+       when function in [:andalso, :orelse] do
+    function
+    |> collect_chain_operands(ir)
+    |> Enum.map_join(short_circuit_operator(function), &encode_boolean_test(&1, context))
+    |> StringUtils.wrap("(", ")")
+  end
+
+  defp encode_boolean_test(ir, context) do
+    "Interpreter.toBoolean(#{encode_ir(ir, context)})"
   end
 
   # A string literal carries text and nothing else: the client reads it back through UTF-8, so a
@@ -1062,10 +1100,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
-    left_js = encode_closure(left, context)
-    right_js = encode_closure(right, context)
-
-    "Erlang[\"andalso/2\"](#{left_js}, #{right_js}, context)"
+    encode_short_circuit(:andalso, [left, right], context)
   end
 
   # Encoded as Interpreter.callNamedFunction() instead of Erlang["apply/3"]()
@@ -1080,10 +1115,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :orelse, [left, right], context) do
-    left_js = encode_closure(left, context)
-    right_js = encode_closure(right, context)
-
-    "Erlang[\"orelse/2\"](#{left_js}, #{right_js}, context)"
+    encode_short_circuit(:orelse, [left, right], context)
   end
 
   defp encode_named_function_call(%IR.AtomType{} = module, function, args, context) do
@@ -1127,6 +1159,33 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_primitive_type(type, value, false) do
     "Type.#{type}(#{value})"
+  end
+
+  # :erlang.andalso/2 and :erlang.orelse/2 are operators, and are written with JavaScript's own.
+  # The operands of a chain sit side by side, so the nesting of the output does not grow with the
+  # length of the chain, and each is a plain expression, which can hold an await. Every operand but
+  # the last is tested as a boolean. The last one is the chain's value as it is.
+  defp encode_short_circuit(function, args, context) do
+    call = %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: :erlang},
+      function: function,
+      args: args
+    }
+
+    {tested, [last]} =
+      function
+      |> collect_chain_operands(call)
+      |> Enum.split(-1)
+
+    tests_js =
+      Enum.map_join(tested, short_circuit_operator(function), &encode_boolean_test(&1, context))
+
+    last_js = encode_ir(last, context)
+
+    case function do
+      :andalso -> "(#{tests_js} ? #{last_js} : Type.boolean(false))"
+      :orelse -> "(#{tests_js} ? Type.boolean(true) : #{last_js})"
+    end
   end
 
   defp encode_var(name, version) do
@@ -1286,4 +1345,7 @@ defmodule Hologram.Compiler.Encoder do
   defp parse_id_words(<<word::32, rest::binary>>, count, acc) do
     parse_id_words(rest, count - 1, [word | acc])
   end
+
+  defp short_circuit_operator(:andalso), do: " && "
+  defp short_circuit_operator(:orelse), do: " || "
 end

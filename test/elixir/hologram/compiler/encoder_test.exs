@@ -2911,7 +2911,45 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["andalso/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
+               "(Interpreter.toBoolean(Type.integer(1n)) ? Type.integer(2n) : Type.boolean(false))"
+    end
+
+    test ":erlang.andalso/2 chain" do
+      # :erlang.andalso(:erlang.andalso(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) && Interpreter.toBoolean(Type.integer(2n)) ? Type.integer(3n) : Type.boolean(false))"
+    end
+
+    test ":erlang.andalso/2 with an :erlang.orelse/2 chain as a tested operand" do
+      # :erlang.andalso(:erlang.orelse(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :andalso,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "((Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n))) ? Type.integer(3n) : Type.boolean(false))"
     end
 
     test ":erlang.apply/3 call with non-variable args" do
@@ -2963,7 +3001,83 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
+               "(Interpreter.toBoolean(Type.integer(1n)) ? Type.boolean(true) : Type.integer(2n))"
+    end
+
+    test ":erlang.orelse/2 chain nested to the left" do
+      # :erlang.orelse(:erlang.orelse(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 chain nested to the right" do
+      # :erlang.orelse(1, :erlang.orelse(2, 3))
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :orelse,
+            args: [%IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]
+          }
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) || Interpreter.toBoolean(Type.integer(2n)) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 with an :erlang.andalso/2 chain as a tested operand" do
+      # :erlang.orelse(:erlang.andalso(1, 2), 3)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+          },
+          %IR.IntegerType{value: 3}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "((Interpreter.toBoolean(Type.integer(1n)) && Interpreter.toBoolean(Type.integer(2n))) ? Type.boolean(true) : Type.integer(3n))"
+    end
+
+    test ":erlang.orelse/2 with an :erlang.andalso/2 chain as the last operand" do
+      # :erlang.orelse(1, :erlang.andalso(2, 3))
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [%IR.IntegerType{value: 2}, %IR.IntegerType{value: 3}]
+          }
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.toBoolean(Type.integer(1n)) ? Type.boolean(true) : (Interpreter.toBoolean(Type.integer(2n)) ? Type.integer(3n) : Type.boolean(false)))"
     end
 
     test "async - wraps call with await when target MFA is in async_mfas" do
@@ -3027,6 +3141,27 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) ==
                ~s'(await Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), Type.atom("my_fun"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
+
+    test "async - :erlang.orelse/2 operands are awaited in place" do
+      # :erlang.orelse(Aaa.Bbb.my_fun(), Aaa.Bbb.my_fun())
+      my_fun_call = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: []
+      }
+
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [my_fun_call, my_fun_call]
+      }
+
+      async_mfas = MapSet.new([{Aaa.Bbb, :my_fun, 0}])
+      context = %Context{async?: true, async_mfas: async_mfas}
+
+      assert encode_ir(ir, context) ==
+               ~s'(Interpreter.toBoolean((await Elixir_Aaa_Bbb["my_fun/0"]())) ? Type.boolean(true) : (await Elixir_Aaa_Bbb["my_fun/0"]()))'
     end
   end
 
