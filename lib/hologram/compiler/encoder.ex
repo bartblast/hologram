@@ -42,6 +42,11 @@ defmodule Hologram.Compiler.Encoder do
   # read it.
   @escapable_chars_pattern_key {__MODULE__, :escapable_chars_pattern}
 
+  # The literal sets of the code being encoded, each list of literals with the number its set
+  # got, kept in the process dictionary: a set is declared once, in front of the code that uses
+  # it, and the place that needs one is deep inside that code.
+  @literal_sets_key {__MODULE__, :literal_sets}
+
   @doc """
   Encodes Elixir or Erlang alias as JavaScript class name.
 
@@ -942,6 +947,10 @@ defmodule Hologram.Compiler.Encoder do
   # is a chain of the other operator is written with that operator, every one of its operands
   # tested - the last one too, since the chain's result is what gets tested. The line is that of
   # the call doing the testing, and the check carries it wherever a call would record its own.
+  defp encode_boolean_test({:literal_run, subject, literals}, _line, context) do
+    encode_literal_set_lookup(subject, literals, context)
+  end
+
   defp encode_boolean_test(
          %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, function: function} = ir,
          line,
@@ -950,6 +959,7 @@ defmodule Hologram.Compiler.Encoder do
        when function in [:andalso, :orelse] do
     function
     |> collect_chain_operands(ir, line)
+    |> group_literal_runs(function, context)
     |> encode_boolean_tests(function, context)
     |> StringUtils.wrap("(", ")")
   end
@@ -978,6 +988,13 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_bytes(binary) do
     ~s/Type.bitstring("#{Base.encode16(binary, case: :lower)}", "hex")/
   end
+
+  # The last operand of a chain, which is the chain's value as it is.
+  defp encode_chain_value({:literal_run, subject, literals}, context) do
+    "Type.boolean(#{encode_literal_set_lookup(subject, literals, context)})"
+  end
+
+  defp encode_chain_value(ir, context), do: encode_ir(ir, context)
 
   # The clause head is rendered at build time, but which of its parts failed to
   # match is known only at raise time, so each guard leaf travels with its own
@@ -1136,6 +1153,15 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{encoded_node}, #{encoded_segments})"
   end
 
+  # Whether the subject is one of the literals, as a JavaScript boolean. The answer is the one
+  # the comparisons of the run would give, with the subject read once.
+  defp encode_literal_set_lookup(subject, literals, context) do
+    set_name = register_literal_set(literals)
+    subject_js = encode_ir(subject, context)
+
+    "#{set_name}.has(#{subject_js})"
+  end
+
   # Module-level frame metadata: the module's source file (relative to its
   # source root) and the app that owns it, so client frames render the same
   # "(app vsn) file:line" prefix as server frames - the version comes from
@@ -1217,18 +1243,23 @@ defmodule Hologram.Compiler.Encoder do
   # The operands of a chain sit side by side, so the nesting of the output does not grow with the
   # length of the chain, and each is a plain expression, which can hold an await. Every operand but
   # the last is tested as a boolean. The last one is the chain's value as it is.
+  #
+  # A literal run counts as one operand, so a chain that is nothing but a run has no operand to
+  # test and is the run's value.
   defp encode_short_circuit(%IR.RemoteFunctionCall{function: function} = ir, context) do
     {tested, [{last, _line}]} =
       function
       |> collect_chain_operands(ir)
+      |> group_literal_runs(function, context)
       |> Enum.split(-1)
 
     tests_js = encode_boolean_tests(tested, function, context)
-    last_js = encode_ir(last, context)
+    last_js = encode_chain_value(last, context)
 
-    case function do
-      :andalso -> "(#{tests_js} ? #{last_js} : Type.boolean(false))"
-      :orelse -> "(#{tests_js} ? Type.boolean(true) : #{last_js})"
+    case {function, tested} do
+      {_function, []} -> last_js
+      {:andalso, _tested} -> "(#{tests_js} ? #{last_js} : Type.boolean(false))"
+      {:orelse, _tested} -> "(#{tests_js} ? Type.boolean(true) : #{last_js})"
     end
   end
 
@@ -1306,6 +1337,19 @@ defmodule Hologram.Compiler.Encoder do
 
   defp frame_line?(_line, _context), do: Hologram.client_stacktraces?()
 
+  # Replaces each literal run among the operands of a chain with one operand that stands for the
+  # whole run: {:literal_run, subject, literals}. A literal run is two or more operands in a row
+  # of an :erlang.orelse/2 chain that strictly compare the same subject with a literal, which is
+  # what `subject in [literals]` expands to in a guard. A run becomes a lookup in a set, and a set
+  # is only named where it gets declared, so no run is looked for anywhere else.
+  defp group_literal_runs(operands, :orelse, %Context{literal_sets?: true} = context) do
+    operands
+    |> Enum.chunk_by(fn {ir, _line} -> literal_run_subject(ir, context) end)
+    |> Enum.flat_map(&merge_literal_run(&1, context))
+  end
+
+  defp group_literal_runs(operands, _function, _context), do: operands
+
   defp has_match_operator?(ir)
 
   defp has_match_operator?(%IR.MatchOperator{}), do: true
@@ -1332,6 +1376,39 @@ defmodule Hologram.Compiler.Encoder do
 
   defp has_match_operator?(_ast), do: false
 
+  # Whether the given IR is a term written out in the code, with nothing in it to evaluate.
+  defp literal?(%IR.AtomType{}), do: true
+
+  defp literal?(%IR.FloatType{}), do: true
+
+  defp literal?(%IR.IntegerType{}), do: true
+
+  defp literal?(%IR.ListType{data: data}), do: Enum.all?(data, &literal?/1)
+
+  defp literal?(%IR.StringType{}), do: true
+
+  defp literal?(%IR.TupleType{data: data}), do: Enum.all?(data, &literal?/1)
+
+  defp literal?(_ir), do: false
+
+  # The subject of a strict comparison with a literal that can be part of a literal run, nil for
+  # any other IR. A run reads its subject once where the comparisons read it once each, which
+  # changes nothing for a variable, and nothing in a guard, where no expression has side effects.
+  defp literal_run_subject(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: :erlang},
+           function: :"=:=",
+           args: [subject, literal]
+         },
+         context
+       ) do
+    if literal?(literal) and (context.guard? or match?(%IR.Variable{}, subject)) do
+      subject
+    end
+  end
+
+  defp literal_run_subject(_ir, _context), do: nil
+
   # A stacktrace frame reports the line the function currently running has
   # reached, so each call records its own line before it is made - the way the
   # BEAM does it. A call the AST gave no line to records nothing, and the frame
@@ -1343,6 +1420,25 @@ defmodule Hologram.Compiler.Encoder do
       js
     end
   end
+
+  # Turns operands that share a literal run subject into the run's one operand. A single
+  # comparison stays a comparison, and so do operands that are no comparison of that kind.
+  defp merge_literal_run([{first_ir, _first_line}, _second | _rest] = operands, context) do
+    case literal_run_subject(first_ir, context) do
+      nil ->
+        operands
+
+      subject ->
+        literals =
+          Enum.map(operands, fn {%IR.RemoteFunctionCall{args: [_subject, literal]}, _line} ->
+            literal
+          end)
+
+        [{{:literal_run, subject, literals}, nil}]
+    end
+  end
+
+  defp merge_literal_run(operands, _context), do: operands
 
   # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
   # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
@@ -1392,6 +1488,26 @@ defmodule Hologram.Compiler.Encoder do
 
   defp parse_id_words(<<word::32, rest::binary>>, count, acc) do
     parse_id_words(rest, count - 1, [word | acc])
+  end
+
+  # The name of the set of the given literals: the one it already has when the same literals were
+  # looked up in before, a new one otherwise. Sets are numbered in the order they are first used.
+  defp register_literal_set(literals) do
+    literal_sets = Process.get(@literal_sets_key, %{})
+
+    index =
+      case literal_sets do
+        %{^literals => index} ->
+          index
+
+        %{} ->
+          index = map_size(literal_sets)
+          Process.put(@literal_sets_key, Map.put(literal_sets, literals, index))
+
+          index
+      end
+
+    "s#{index}"
   end
 
   defp short_circuit_operator(:andalso), do: " && "

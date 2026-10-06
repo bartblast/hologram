@@ -42,6 +42,26 @@ defmodule Hologram.Compiler.EncoderTest do
 
   defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
 
+  # :erlang.orelse/2 calls nested to the left over the given operands, the way `or` and `in` nest
+  defp orelse_chain_ir([first_ir | rest_irs]) do
+    Enum.reduce(rest_irs, first_ir, fn operand_ir, acc ->
+      %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :orelse,
+        args: [acc, operand_ir]
+      }
+    end)
+  end
+
+  # :erlang.=:=(left, right)
+  defp strict_equality_ir(left_ir, right_ir) do
+    %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: :erlang},
+      function: :"=:=",
+      args: [left_ir, right_ir]
+    }
+  end
+
   describe "anonymous function call" do
     setup do
       # my_fun.(1, 2)
@@ -2429,6 +2449,281 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == ~s/Type.list([Type.integer(1n), Type.atom("abc")])/
+    end
+  end
+
+  describe "literal run" do
+    test "a call as the subject makes a run in a guard" do
+      # elem(t, 0) === 1 or elem(t, 0) === 2
+      subject_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :element,
+        args: [%IR.IntegerType{value: 1}, %IR.Variable{name: :t}]
+      }
+
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 1}),
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(Erlang["element/2"](Type.integer(1n), context.vars.t)))'
+    end
+
+    test "a call as the subject makes no run outside a guard" do
+      # elem(t, 0) === 1 or elem(t, 0) === 2
+      subject_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :element,
+        args: [%IR.IntegerType{value: 1}, %IR.Variable{name: :t}]
+      }
+
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 1}),
+          strict_equality_ir(subject_ir, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](Erlang["element/2"](Type.integer(1n), context.vars.t), Type.integer(1n))) ? Type.boolean(true) : Erlang["=:=/2"](Erlang["element/2"](Type.integer(1n), context.vars.t), Type.integer(2n)))'
+    end
+
+    test "a chain that is one run" do
+      # x === 1 or x === 2 or x === 3
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 3})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(context.vars.x))'
+    end
+
+    test "a comparison with a term that is not a literal ends a run" do
+      # x === 1 or x === 2 or x === y or x === 3
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.Variable{name: :y}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 3})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) || Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, context.vars.y)) ? Type.boolean(true) : Erlang["=:=/2"](context.vars.x, Type.integer(3n)))'
+    end
+
+    test "a list or a tuple holding a term that is not a literal is not a literal" do
+      # x === [y] or x === {1, y}
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.ListType{data: [%IR.Variable{name: :y}]}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.TupleType{
+            data: [%IR.IntegerType{value: 1}, %IR.Variable{name: :y}]
+          })
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.list([context.vars.y]))) ? Type.boolean(true) : Erlang["=:=/2"](context.vars.x, Type.tuple([Type.integer(1n), context.vars.y])))'
+    end
+
+    test "a literal on the left of a comparison makes no run" do
+      # 1 === x or 2 === x
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.IntegerType{value: 1}, %IR.Variable{name: :x}),
+          strict_equality_ir(%IR.IntegerType{value: 2}, %IR.Variable{name: :x})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](Type.integer(1n), context.vars.x)) ? Type.boolean(true) : Erlang["=:=/2"](Type.integer(2n), context.vars.x))'
+    end
+
+    test "a run after another operand" do
+      # is_atom(x) or x === 1 or x === 2
+      ir =
+        orelse_chain_ir([
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_atom,
+            args: [%IR.Variable{name: :x}]
+          },
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["is_atom/1"](context.vars.x)) ? Type.boolean(true) : Type.boolean(s0.has(context.vars.x)))'
+    end
+
+    test "a run as a tested operand of an :erlang.andalso/2 chain" do
+      # (x === 1 or x === 2) and is_integer(x)
+      ir =
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [
+            orelse_chain_ir([
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+            ]),
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_integer,
+              args: [%IR.Variable{name: :x}]
+            }
+          ]
+        }
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'((s0.has(context.vars.x)) ? Erlang["is_integer/1"](context.vars.x) : Type.boolean(false))'
+    end
+
+    test "a run as the last operand of an :erlang.andalso/2 chain" do
+      # is_integer(x) and (x === 1 or x === 2)
+      ir =
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_integer,
+              args: [%IR.Variable{name: :x}]
+            },
+            orelse_chain_ir([
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+              strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+            ])
+          ]
+        }
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["is_integer/1"](context.vars.x)) ? Type.boolean(s0.has(context.vars.x)) : Type.boolean(false))'
+    end
+
+    test "a run before another operand" do
+      # x === 1 or x === 2 or is_atom(x)
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_atom,
+            args: [%IR.Variable{name: :x}]
+          }
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) ? Type.boolean(true) : Erlang["is_atom/1"](context.vars.x))'
+    end
+
+    test "a single comparison is not a run" do
+      # x === 1 or is_atom(x)
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_atom,
+            args: [%IR.Variable{name: :x}]
+          }
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.integer(1n))) ? Type.boolean(true) : Erlang["is_atom/1"](context.vars.x))'
+    end
+
+    test "a variable as the subject makes a run outside a guard" do
+      # x === 1 or x === 2
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(context.vars.x))'
+    end
+
+    test "an :erlang.andalso/2 chain of comparisons is not a run" do
+      # x === 1 and x === 2
+      ir =
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :andalso,
+          args: [
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+            strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+          ]
+        }
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.integer(1n))) ? Erlang["=:=/2"](context.vars.x, Type.integer(2n)) : Type.boolean(false))'
+    end
+
+    test "literals of every kind make a run" do
+      # x === :a or x === 1.5 or x === 1 or x === [1, :a] or x === "abc" or x === {1, :a}
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.AtomType{value: :a}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.FloatType{value: 1.5}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.ListType{
+            data: [%IR.IntegerType{value: 1}, %IR.AtomType{value: :a}]
+          }),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.StringType{value: "abc"}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.TupleType{
+            data: [%IR.IntegerType{value: 1}, %IR.AtomType{value: :a}]
+          })
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'Type.boolean(s0.has(context.vars.x))'
+    end
+
+    test "no run where the context has no place to declare a set" do
+      # x === 1 or x === 2
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true}) ==
+               ~s'(Interpreter.toBoolean(Erlang["=:=/2"](context.vars.x, Type.integer(1n))) ? Type.boolean(true) : Erlang["=:=/2"](context.vars.x, Type.integer(2n)))'
+    end
+
+    test "runs of different literals get sets numbered in the order they are used" do
+      # x === 1 or x === 2 or y === 3 or y === 4
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 3}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 4})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) ? Type.boolean(true) : Type.boolean(s1.has(context.vars.y)))'
+    end
+
+    test "runs of the same literals share a set" do
+      # x === 1 or x === 2 or y === 1 or y === 2
+      ir =
+        orelse_chain_ir([
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :x}, %IR.IntegerType{value: 2}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 1}),
+          strict_equality_ir(%IR.Variable{name: :y}, %IR.IntegerType{value: 2})
+        ])
+
+      assert encode_ir(ir, %Context{guard?: true, literal_sets?: true}) ==
+               ~s'(s0.has(context.vars.x) ? Type.boolean(true) : Type.boolean(s0.has(context.vars.y)))'
     end
   end
 

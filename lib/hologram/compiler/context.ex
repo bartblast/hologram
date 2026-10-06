@@ -5,12 +5,15 @@ defmodule Hologram.Compiler.Context do
   # functions defined inside it are named after, the way the BEAM names them.
   # guard? marks the guard being encoded - a guard that fails is a guard that
   # didn't hold, never a raise, so its calls record no line.
+  # literal_sets? says the code being encoded has a place where the sets of
+  # literals it looks values up in get declared.
   @type t :: %__MODULE__{
           arity: non_neg_integer | nil,
           async?: bool,
           async_mfas: MapSet.t(mfa),
           function: atom | nil,
           guard?: bool,
+          literal_sets?: bool,
           match_operator?: bool,
           module: module,
           pattern?: bool
@@ -21,6 +24,7 @@ defmodule Hologram.Compiler.Context do
             async_mfas: MapSet.new(),
             function: nil,
             guard?: false,
+            literal_sets?: false,
             match_operator?: false,
             module: nil,
             pattern?: false
