@@ -2380,6 +2380,122 @@ describe("Hologram", () => {
       });
     });
 
+    // The browser went back or forward to an entry whose snapshot cannot be restored, so the
+    // entry's page comes from the server instead. The entry exists already: the page is shown in
+    // its place, and whatever is handed to the browser replaces it rather than adding one.
+    describe("a page loaded into the history entry the browser went to", () => {
+      const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+
+      let pushStateStub, replaceLocationStub, replaceStateStub;
+
+      beforeEach(() => {
+        window.requestAnimationFrame = (callback) => callback();
+        seedCurrentPage();
+
+        pushStateStub = sinon.stub(history, "pushState");
+        replaceStateStub = sinon.stub(history, "replaceState");
+        replaceLocationStub = sinon.stub(Hologram, "replaceBrowserLocation");
+      });
+
+      afterEach(() => {
+        replaceLocationStub.restore();
+        replaceStateStub.restore();
+        pushStateStub.restore();
+
+        globalThis.Hologram.config.liveReload = false;
+        LiveReload.pageBundleDigests = new Map();
+
+        delete window.requestAnimationFrame;
+        Hologram.virtualDocument = null;
+        removeBundleScripts();
+      });
+
+      it("follows a redirect into the same entry", async () => {
+        let showRedirectTarget;
+
+        fetchPageStub.callsFake((_toParam, onSuccess, _onNotPage) => {
+          showRedirectTarget = onSuccess;
+          return null;
+        });
+
+        await Hologram.loadNewPage(
+          "/entry",
+          redirectTo("/target"),
+          0,
+          "history-entry-1",
+        );
+
+        const loadNewPageStub = sinon.stub(Hologram, "loadNewPage");
+        const nextPayload = payloadFor("entry-1");
+
+        try {
+          showRedirectTarget(nextPayload);
+
+          sinon.assert.calledOnceWithExactly(
+            loadNewPageStub,
+            "/target",
+            nextPayload,
+            1,
+            "history-entry-1",
+          );
+        } finally {
+          loadNewPageStub.restore();
+        }
+      });
+
+      it("is handed to the browser in place of the entry when the tab holds its code in an older version", async () => {
+        globalThis.Hologram.config.liveReload = true;
+        LiveReload.recordPageBundle(module7, "old");
+
+        await Hologram.loadNewPage(
+          "/entry",
+          payloadFor("new"),
+          0,
+          "history-entry-2",
+        );
+
+        sinon.assert.calledOnceWithExactly(replaceLocationStub, "/entry");
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.notCalled(replaceStateStub);
+      });
+
+      it("is handed to the browser in place of the entry when it redirects to a target that names no page", async () => {
+        await Hologram.loadNewPage(
+          "/entry",
+          {to: "https://example.com/x", type: "redirect"},
+          0,
+          "history-entry-3",
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          replaceLocationStub,
+          "https://example.com/x",
+        );
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      it("is shown in the entry, and no entry is added", async () => {
+        await Hologram.loadNewPage(
+          "/entry",
+          payloadFor("entry-4"),
+          0,
+          "history-entry-4",
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          replaceStateStub,
+          "history-entry-4",
+          null,
+          "/entry",
+        );
+
+        sinon.assert.notCalled(pushStateStub);
+        assert.isNotNull(bundleScript("entry-4"));
+      });
+    });
+
     // A value of a struct type whose protocol implementations no bundle carries needs the chunks
     // that hold them, and so does the page's own code for the types it names. The server says
     // which, by digest.
@@ -2517,7 +2633,6 @@ describe("Hologram", () => {
         );
 
         const consoleErrorStub = sinon.stub(console, "error");
-        const reloadStub = sinon.stub(Hologram, "reloadPage");
 
         const fetchStub = sinon
           .stub(Client, "fetchPageDigest")
@@ -2547,12 +2662,63 @@ describe("Hologram", () => {
 
           assert.isNull(MountGate.pendingMount);
           assert.strictEqual(App.instanceId, instanceId);
-          sinon.assert.notCalled(reloadStub);
+
+          // The entry's page is not asked for either: the navigation is somewhere else by now.
+          sinon.assert.notCalled(fetchPageStub);
         } finally {
           fetchStub.restore();
-          reloadStub.restore();
           consoleErrorStub.restore();
           LiveReload.pageBundleDigests.delete(pageSnapshot.pageModule.value);
+          sessionStorage.clear();
+          ComponentRegistry.clear();
+          App.instanceId = instanceId;
+        }
+      });
+
+      // While a restore waits for its chunks the tab still holds the page being left, so a snapshot
+      // saved then is that page's, and the entry the browser went to keeps its own.
+      it("leave the snapshot of an entry whose restore still waits for them as it was", async () => {
+        const instanceId = App.instanceId;
+
+        const pageSnapshot = {
+          chunkDigests: ["AAAAAAAA"],
+          componentRegistryEntries: Type.map(),
+          instanceId: "waiting-restore-instance",
+          pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.WaitingRestore"),
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        const snapshotKey = "hologram_page_snapshot_history-waiting";
+        const storedSnapshot = Serializer.serialize(pageSnapshot, "client");
+
+        sessionStorage.setItem(snapshotKey, storedSnapshot);
+
+        const consoleErrorStub = sinon.stub(console, "error");
+        const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-waiting"});
+
+          // A navigation saves the page it leaves.
+          await Hologram.loadNewPage("/target", payloadFor("chunks-9"));
+
+          assert.strictEqual(
+            sessionStorage.getItem(snapshotKey),
+            storedSnapshot,
+          );
+        } finally {
+          // The restore is settled, so that it does not stay in flight for the tests that follow.
+          globalThis.Hologram.pendingScripts = [
+            {define: () => null, digest: "AAAAAAAA"},
+          ];
+
+          ScriptRegistry.defineLoaded({});
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          fetchStub.restore();
+          consoleErrorStub.restore();
           sessionStorage.clear();
           ComponentRegistry.clear();
           App.instanceId = instanceId;
@@ -2946,12 +3112,12 @@ describe("Hologram", () => {
         );
       };
 
-      let consoleErrorStub, fetchStub, instanceId, reloadStub;
+      let consoleErrorStub, fetchPageStub, fetchStub, instanceId;
 
       beforeEach(() => {
         instanceId = App.instanceId;
         consoleErrorStub = sinon.stub(console, "error");
-        reloadStub = sinon.stub(Hologram, "reloadPage");
+        fetchPageStub = sinon.stub(Client, "fetchPage");
 
         // The tab does not hold the page's code, so the server is asked which bundle serves it,
         // and the mount then waits for that bundle.
@@ -2968,8 +3134,9 @@ describe("Hologram", () => {
 
       afterEach(() => {
         fetchStub.restore();
-        reloadStub.restore();
+        fetchPageStub.restore();
         consoleErrorStub.restore();
+        globalThis.Hologram.config.liveReload = false;
 
         document.head
           .querySelectorAll("script[src^='/hologram/']")
@@ -2987,7 +3154,9 @@ describe("Hologram", () => {
         Hologram.registryEpoch = 0;
       });
 
-      it("is passed over, and the page loaded afresh, when one of its chunks fails to load", async () => {
+      // The entry's page is asked for the way a navigation asks for one, and goes into the entry
+      // that exists already. Nothing of the tab is given up for it.
+      it("is passed over, and the entry's page asked for, when one of its chunks fails to load", async () => {
         seedSnapshot("history-chunks-1");
 
         await Hologram.handlePopstateEvent({state: "history-chunks-1"});
@@ -3001,7 +3170,69 @@ describe("Hologram", () => {
 
         assert.strictEqual(App.instanceId, instanceId);
         assert.isNull(MountGate.pendingMount);
-        sinon.assert.calledOnce(reloadStub);
+
+        sinon.assert.calledOnce(fetchPageStub);
+
+        const [toParam, showPage] = fetchPageStub.firstCall.args;
+
+        assert.deepStrictEqual(toParam, Type.tuple([pageModule, Type.map()]));
+
+        const loadNewPageStub = sinon.stub(Hologram, "loadNewPage");
+        const payload = {type: "page"};
+
+        try {
+          showPage(payload);
+
+          const {hash, pathname, search} = window.location;
+
+          sinon.assert.calledOnceWithExactly(
+            loadNewPageStub,
+            `${pathname}${search}${hash}`,
+            payload,
+            0,
+            "history-chunks-1",
+          );
+        } finally {
+          loadNewPageStub.restore();
+        }
+      });
+
+      // Taken with code other than the page's current one, which is only asked about where live
+      // reload runs.
+      it("is passed over, and the entry's page asked for, when it is outdated", async () => {
+        globalThis.Hologram.config.liveReload = true;
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-chunks-4",
+          Serializer.serialize(
+            {
+              chunkDigests: ["SNAPSHOT"],
+              componentRegistryEntries: Type.map(),
+              instanceId: "restored-instance",
+              pageDigest: "outdated-1",
+              pageModule: pageModule,
+              pageParams: Type.map(),
+              runtimeDigest: null,
+              scrollPosition: [0, 0],
+              subscriptionReceipts: [],
+            },
+            "client",
+          ),
+        );
+
+        await Hologram.handlePopstateEvent({state: "history-chunks-4"});
+        await flushPromises();
+
+        assert.deepStrictEqual(snapshotChunkScripts(), []);
+        assert.strictEqual(App.instanceId, instanceId);
+        assert.isNull(MountGate.pendingMount);
+
+        sinon.assert.calledOnce(fetchPageStub);
+
+        assert.deepStrictEqual(
+          fetchPageStub.firstCall.args[0],
+          Type.tuple([pageModule, Type.map()]),
+        );
       });
 
       it("is restored at once when the tab has its chunks", async () => {
@@ -3014,7 +3245,7 @@ describe("Hologram", () => {
         assert.deepStrictEqual(snapshotChunkScripts(), []);
         assert.strictEqual(App.instanceId, "restored-instance");
         assert.isNotNull(MountGate.pendingMount);
-        sinon.assert.notCalled(reloadStub);
+        sinon.assert.notCalled(fetchPageStub);
       });
 
       it("is restored once its chunks have loaded", async () => {
@@ -3037,7 +3268,7 @@ describe("Hologram", () => {
         ]);
 
         assert.isNotNull(MountGate.pendingMount);
-        sinon.assert.notCalled(reloadStub);
+        sinon.assert.notCalled(fetchPageStub);
       });
     });
   });

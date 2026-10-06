@@ -131,7 +131,8 @@ export default class Hologram {
   static #deadEpochs = new Set();
 
   // The snapshot of the history entry this document was loaded for, found while the runtime was
-  // starting and restored by run() once its chunks are in. Null when there is none to restore.
+  // starting and restored by run() once its chunks are in. Null when there is none to restore, and
+  // once that is settled.
   static #documentSnapshot = null;
 
   static #historyId = null;
@@ -495,9 +496,17 @@ export default class Hologram {
   // asking for the page it names, so only the page actually arrived at is mounted and only its path
   // enters history - the same trail a browser leaves, where the pages passed through on the way are
   // not places the user can go back to.
-  static async loadNewPage(pagePath, payload, hopCount = 0) {
+  //
+  // The page goes into a new history entry, unless the id of an entry is given: that entry exists
+  // already (the browser went back or forward to it) and the page is shown in its place.
+  static async loadNewPage(
+    pagePath,
+    payload,
+    hopCount = 0,
+    historyEntryId = null,
+  ) {
     if (payload.type === "redirect") {
-      return Hologram.#followRedirect(payload, hopCount);
+      return Hologram.#followRedirect(payload, hopCount, historyEntryId);
     }
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
@@ -508,18 +517,29 @@ export default class Hologram {
     // Running the held copy would show the page as it was before the edit, so the browser loads
     // the page afresh instead.
     if (LiveReload.holdsOldPageBundle(pageModule, payload.pageDigest)) {
-      Hologram.navigateBrowserTo(pagePath);
+      $.#handToBrowser(pagePath, historyEntryId);
       return;
     }
 
-    await $.#savePageSnapshot();
-    $.#historyId = Utils.randomUUID();
+    if (historyEntryId === null) {
+      await $.#savePageSnapshot();
+      $.#historyId = Utils.randomUUID();
+    } else {
+      // The page being left was saved when the browser left its entry. From here on the tab
+      // answers for this one.
+      $.#historyId = historyEntryId;
+    }
 
     window.requestAnimationFrame(() => {
       Hologram.#showNewPage(payload);
       window.scrollTo(0, 0);
 
-      history.pushState($.#historyId, null, pagePath);
+      if (historyEntryId === null) {
+        history.pushState($.#historyId, null, pagePath);
+      } else {
+        // A redirect can have led to another path than the one the entry held.
+        history.replaceState($.#historyId, null, pagePath);
+      }
     });
   }
 
@@ -577,14 +597,6 @@ export default class Hologram {
     for (const action of selfEchoes.data) {
       Hologram.enqueueActionAfterDelay(action, $.registryEpoch);
     }
-  }
-
-  // Made public to make tests easier
-  //
-  // Loads the page afresh from the server, in place: the same history entry, the state the server
-  // renders, no snapshot restored.
-  static reloadPage() {
-    window.location.reload();
   }
 
   // Made public to make tests easier
@@ -658,6 +670,15 @@ export default class Hologram {
     Hologram.#runActions();
   }
 
+  // Made public to make tests easier
+  //
+  // Hands the navigation to the browser like navigateBrowserTo() does, for a page that was being
+  // loaded into the history entry the tab is on: the document is loaded afresh in that entry, and
+  // none is added.
+  static replaceBrowserLocation(url) {
+    window.location.replace(url);
+  }
+
   // Fetches the chunks with the given digests, unless the document has them (see ScriptRegistry).
   // A chunk holds the protocol implementations of struct types that no bundle carries, and is
   // named when a value of such a type is on its way to the browser.
@@ -687,12 +708,13 @@ export default class Hologram {
       // once they are in. When one cannot be had the snapshot is passed over, and the page mounts
       // from the state the server has just rendered, which the document carries.
       const pageSnapshot = $.#documentSnapshot;
+
+      const isRestorable =
+        pageSnapshot !== null && (await $.#loadSnapshotChunks(pageSnapshot));
+
       $.#documentSnapshot = null;
 
-      if (
-        pageSnapshot !== null &&
-        (await $.#loadSnapshotChunks(pageSnapshot))
-      ) {
+      if (isRestorable) {
         $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
         $.#restorePageSnapshot(pageSnapshot);
 
@@ -1226,21 +1248,18 @@ export default class Hologram {
 
     const pageSnapshot = await $.#getPageSnapshot(event.state);
 
-    // Checked while the history id is still the page being left's: the reload saves a snapshot
-    // on its way out, and it must be the one on screen, filed under its own entry, rather than
-    // this page's entry being overwritten with it.
-    if (pageSnapshot && (await $.#isSnapshotOutdated(pageSnapshot))) {
-      LiveReload.reload();
-      return;
-    }
-
-    $.#historyId = event.state;
+    // Asked before anything of the page being left is given up: where live reload runs, this is a
+    // round trip to the server.
+    const isSnapshotOutdated = pageSnapshot
+      ? await $.#isSnapshotOutdated(pageSnapshot)
+      : false;
 
     // What the registry answers for is about to change either way: a restore swaps it for the
-    // snapshot's, and with no snapshot the mount reads the document's mount data instead and
-    // repopulates the registry from it, putting every component back to the state it was rendered
-    // with. So the epoch advances here - otherwise an action armed before this point would settle
-    // against state that has been replaced underneath it.
+    // snapshot's, a snapshot that cannot be restored gives way to the page the server renders, and
+    // with no snapshot the mount reads the document's mount data instead and repopulates the
+    // registry from it, putting every component back to the state it was rendered with. So the
+    // epoch advances here - otherwise an action armed before this point would settle against
+    // state that has been replaced underneath it.
     $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
     // The epoch of the navigation this popstate opened. What follows waits, for the snapshot's
@@ -1249,6 +1268,20 @@ export default class Hologram {
     // navigation now in flight.
     const epoch = $.registryEpoch;
     const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+
+    // The history id stays the page being left's until the registry holds the page of the entry
+    // the browser went to: a snapshot saved meanwhile is of the page still on screen, and belongs
+    // under that page's entry.
+    const historyEntryId = event.state;
+
+    // A snapshot taken with code other than the page's current one is not restored.
+    if (isSnapshotOutdated) {
+      return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
+    }
+
+    if (!pageSnapshot) {
+      $.#historyId = historyEntryId;
+    }
 
     // The page on its way: the snapshot's, or with none the one the tab already answers for.
     const pageModule = pageSnapshot
@@ -1268,7 +1301,7 @@ export default class Hologram {
     }
 
     // Closes the transition. A snapshot is restored only once its chunks are in, so that one that
-    // cannot be restored leaves the tab as it was.
+    // cannot be restored leaves the tab as it was, and the entry's page is asked for instead.
     const mount = async (isPageModuleRegistered, pageBundleDigests) => {
       if (pageSnapshot) {
         const loaded = await snapshotChunksLoaded;
@@ -1280,16 +1313,10 @@ export default class Hologram {
         }
 
         if (!loaded) {
-          // The mount that would have closed this transition is never going to run.
-          $.#deadEpochs.add(epoch);
-          MountGate.cancel();
-
-          // TODO: load the page from the server in place instead
-          $.reloadPage();
-
-          return;
+          return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
         }
 
+        $.#historyId = historyEntryId;
         $.#restorePageSnapshot(pageSnapshot);
       }
 
@@ -1327,6 +1354,16 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // Hands a page to the browser: as a new history entry, or in place of the entry the tab is on
+  // when the page was being loaded into that one.
+  static #handToBrowser(url, historyEntryId) {
+    if (historyEntryId === null) {
+      Hologram.navigateBrowserTo(url);
+    } else {
+      Hologram.replaceBrowserLocation(url);
+    }
   }
 
   // A page bundle or a chunk could not be fetched. When the mount waits for it, the mount is never
@@ -1555,6 +1592,50 @@ export default class Hologram {
   // A navigation reaches it the same way a document load does, by patching in the page the
   // server described, that script included.
   // A navigation carries the mount data as payload fields, which #showNewPage decodes and holds.
+  // Shows the page of the history entry the browser went to as the server renders it now, when the
+  // entry's snapshot cannot be restored. The page is asked for the way a navigation asks for one,
+  // and goes into the entry that exists already. Nothing of the tab is given up for it: the
+  // runtime, the realtime stream and the instance id stay.
+  static async #loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch) {
+    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+
+    // A mount still waiting belongs to a navigation this one supersedes.
+    MountGate.cancel();
+    MountGate.require([]);
+
+    // What the browser shows for the entry already, query string and fragment included.
+    const {hash, pathname, search} = window.location;
+    const pagePath = `${pathname}${search}${hash}`;
+
+    const toParam = Type.tuple([
+      pageSnapshot.pageModule,
+      pageSnapshot.pageParams,
+    ]);
+
+    try {
+      await Client.fetchPage(
+        toParam,
+        (payload) =>
+          // The page on its way is a later navigation's by now.
+          isSuperseded()
+            ? null
+            : Hologram.loadNewPage(pagePath, payload, 0, historyEntryId),
+        () => {
+          if (!isSuperseded()) {
+            Hologram.replaceBrowserLocation(pagePath);
+          }
+        },
+      );
+    } catch (error) {
+      // The mount that would have closed this transition is never going to run.
+      if (!isSuperseded()) {
+        $.#deadEpochs.add(epoch);
+      }
+
+      throw error;
+    }
+  }
+
   // A loaded document has no payload, so it carries the same six values as an inline script that
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
@@ -1717,9 +1798,9 @@ export default class Hologram {
   // A target outside the app carries no page to ask for, so the browser takes it. The hop limit is
   // there because a redirect can point at a page that redirects again: a cycle would otherwise
   // fetch forever, silently.
-  static #followRedirect(payload, hopCount) {
+  static #followRedirect(payload, hopCount, historyEntryId) {
     if (!payload.pageModule) {
-      Hologram.navigateBrowserTo(payload.to);
+      $.#handToBrowser(payload.to, historyEntryId);
       return null;
     }
 
@@ -1737,8 +1818,13 @@ export default class Hologram {
     return Client.fetchPage(
       toParam,
       (nextPayload) =>
-        Hologram.loadNewPage(payload.to, nextPayload, hopCount + 1),
-      () => Hologram.navigateBrowserTo(payload.to),
+        Hologram.loadNewPage(
+          payload.to,
+          nextPayload,
+          hopCount + 1,
+          historyEntryId,
+        ),
+      () => $.#handToBrowser(payload.to, historyEntryId),
     );
   }
 
@@ -2129,6 +2215,12 @@ export default class Hologram {
   }
 
   static async #savePageSnapshot(forceSync = false) {
+    // The entry's snapshot is still waiting to be restored, and nothing has taken its place: the
+    // page is not mounted yet, so there is no state to save over it.
+    if ($.#documentSnapshot !== null) {
+      return;
+    }
+
     const pageSnapshot = {
       // Every chunk the tab has loaded, not only the ones this page's state needs: which of them
       // the state needs is not known here, and a chunk too many costs a restore one cached fetch.
