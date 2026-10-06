@@ -270,19 +270,6 @@ const Erlang = {
   // End abs/1
   // Deps: []
 
-  // Start andalso/2
-  "andalso/2": (leftFun, rightFun, context) => {
-    const left = leftFun(context);
-
-    if (!Type.isBoolean(left)) {
-      Interpreter.raiseFramelessError(["badarg", left]);
-    }
-
-    return Type.isTrue(left) ? rightFun(context) : left;
-  },
-  // End andalso/2
-  // Deps: []
-
   // Start append_element/2
   "append_element/2": (tuple, term) => {
     if (!Type.isTuple(tuple)) {
@@ -3031,19 +3018,6 @@ const Erlang = {
     return Type.boolean(term.value == "true" ? false : true);
   },
   // End not/1
-  // Deps: []
-
-  // Start orelse/2
-  "orelse/2": (leftFun, rightFun, context) => {
-    const left = leftFun(context);
-
-    if (!Type.isBoolean(left)) {
-      Interpreter.raiseFramelessError(["badarg", left]);
-    }
-
-    return Type.isTrue(left) ? left : rightFun(context);
-  },
-  // End orelse/2
   // Deps: []
 
   // Start pid_to_list/1

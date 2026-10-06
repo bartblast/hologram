@@ -14,7 +14,6 @@ defmodule Hologram.FrameworkTest do
       {Kernel, :is_integer, 1}
     ],
     {Kernel, :and, 2} => [
-      {:erlang, :andalso, 2},
       {:erlang, :error, 1}
     ]
   }
@@ -50,10 +49,9 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "includes edges from macro dependencies", %{result: result} do
-      # Verify Kernel.and/2 -> :erlang.andalso/2 edge exists
-      # (from macro_deps: {Kernel, :and, 2} => [{:erlang, :andalso, 2}, {:erlang, :error, 1}])
+      # Verify Kernel.and/2 -> :erlang.error/1 edge exists
+      # (from macro_deps: {Kernel, :and, 2} => [{:erlang, :error, 1}])
       kernel_and_targets = Map.get(result.outgoing_edges, {Kernel, :and, 2}, %{})
-      assert Map.has_key?(kernel_and_targets, {:erlang, :andalso, 2})
       assert Map.has_key?(kernel_and_targets, {:erlang, :error, 1})
 
       # Verify Integer.is_even/1 has edges to its dependencies
@@ -76,7 +74,6 @@ defmodule Hologram.FrameworkTest do
 
       # Verify Kernel.and/2 does NOT have edges to Erlang functions when macro_deps is empty
       kernel_and_targets = Map.get(result.outgoing_edges, {Kernel, :and, 2}, %{})
-      refute Map.has_key?(kernel_and_targets, {:erlang, :andalso, 2})
       refute Map.has_key?(kernel_and_targets, {:erlang, :error, 1})
     end
 
@@ -113,12 +110,9 @@ defmodule Hologram.FrameworkTest do
 
     test "macro dependencies create transitive edges in graph", %{result: result} do
       # Integer.is_even/1 depends on Kernel.and/2 (via macro_deps)
-      # Kernel.and/2 depends on :erlang.andalso/2 (via macro_deps)
-      # So Integer.is_even/1 should transitively reach :erlang.andalso/2
+      # Kernel.and/2 depends on :erlang.error/1 (via macro_deps)
+      # So Integer.is_even/1 should transitively reach :erlang.error/1
       reachable_from_is_even = CallGraph.reachable_mfas(result, [{Integer, :is_even, 1}])
-
-      assert {:erlang, :andalso, 2} in reachable_from_is_even,
-             "Expected Integer.is_even/1 to transitively reach :erlang.andalso/2 through Kernel.and/2"
 
       assert {:erlang, :error, 1} in reachable_from_is_even,
              "Expected Integer.is_even/1 to transitively reach :erlang.error/1 through Kernel.and/2"
@@ -1380,14 +1374,12 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "injects macro dependencies into call graph", %{stdlib_deps: result} do
-      # Test that Kernel.and/2 includes the directly specified Erlang dependencies
+      # Test that Kernel.and/2 includes the directly specified Erlang dependency
       kernel_and_deps = result[Kernel][{:and, 2}]
-      assert {:erlang, :andalso, 2} in kernel_and_deps
       assert {:erlang, :error, 1} in kernel_and_deps
 
       # Test that Integer.is_even/1 includes transitive dependencies through Kernel.and/2
       integer_is_even_deps = result[Integer][{:is_even, 1}]
-      assert {:erlang, :andalso, 2} in integer_is_even_deps
       assert {:erlang, :error, 1} in integer_is_even_deps
     end
 
@@ -1395,11 +1387,9 @@ defmodule Hologram.FrameworkTest do
       result = elixir_stdlib_erlang_deps(%{})
 
       kernel_and_deps = result[Kernel][{:and, 2}]
-      refute {:erlang, :andalso, 2} in kernel_and_deps
       refute {:erlang, :error, 1} in kernel_and_deps
 
       integer_is_even_deps = result[Integer][{:is_even, 1}]
-      refute {:erlang, :andalso, 2} in integer_is_even_deps
       refute {:erlang, :error, 1} in integer_is_even_deps
     end
 
