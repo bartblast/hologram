@@ -2405,6 +2405,24 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    # A struct's default map can hold a struct of another type, and the client builds both from the
+    # module: the other type's code comes with the type.
+    test "includes what another struct type's module vertex leads to", %{
+      client_protocols: client_protocols
+    } do
+      call_graph = reach_full(reach_modules())
+      add_edge(call_graph, {ReachTest.TypeA, :__struct__, 0}, ReachTest.TypeB)
+      # The type's own implementation dispatches the protocol, so the other type's enters.
+      add_edge(call_graph, {ReachTest.Proto.TypeA, :fun, 1}, {ReachTest.Proto, :fun, 1})
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      assert {ReachTest.TypeB, :__struct__, 0} in result[ReachTest.TypeA]
+      assert {ReachTest.TypeB, :__struct__, 1} in result[ReachTest.TypeA]
+      assert {ReachTest.Proto.TypeB, :fun, 1} in result[ReachTest.TypeA]
+    end
+
     # A client protocol's implementations arrive with the values of their types, so a call of one
     # brings none along for a type the calling code does not name.
     test "leaves out the implementation of a client protocol for a struct type the type's code does not name",
@@ -2494,6 +2512,22 @@ defmodule Hologram.Compiler.CallGraphTest do
                {ReachTest.Proto.TypeA, :__impl__, 1},
                {ReachTest.Proto.TypeA, :fun, 1}
              ]
+    end
+
+    # A struct's default map names the struct's own module, and a module's vertex leads to what a
+    # named module can be asked dynamically. The type's entries are that already.
+    test "leaves out what the type's own module vertex leads to", %{
+      client_protocols: client_protocols
+    } do
+      call_graph = reach_full(reach_modules())
+      add_edge(call_graph, {ReachTest.TypeA, :__struct__, 0}, ReachTest.TypeA)
+      add_edge(call_graph, ReachTest.TypeA, {ReachTest.Unreached, :fun, 0})
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      refute {ReachTest.Unreached, :fun, 0} in result[ReachTest.TypeA]
+      assert {ReachTest.TypeA, :__struct__, 0} in result[ReachTest.TypeA]
     end
 
     test "lists the struct functions of a type with no implementation of a client protocol", %{
@@ -4368,6 +4402,49 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert {struct_1_impl, :__impl__, 1} in result
       assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "reaches an opaque module's vertex and nothing through it", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          opaque_modules: MapSet.new([Struct1])
+        )
+
+      # The vertex is reached, so the type is, and its implementation is entered.
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+
+      refute {Struct1, :__struct__, 0} in result
+      refute {Struct1, :__struct__, 1} in result
+    end
+
+    test "walks through every module's vertex by default", %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result =
+        reachable_mfas(graph, [{Module5, :my_fun, 0}], MapSet.new(), module_info_plt_fixture())
+
+      assert {Struct1, :__struct__, 0} in result
+      assert {Struct1, :__struct__, 1} in result
     end
 
     test "enters every implementation of a protocol that is not among the opaque ones", %{
