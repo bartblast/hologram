@@ -4056,11 +4056,11 @@ A few things are read from the environment rather than from config, because they
 
 ### Bundling
 
-The compiler builds one runtime bundle, which every page loads, one bundle per page, and chunks, which hold the protocol implementations of struct types and load only when a struct needs them. A page bundle holds the Elixir code the page's client side can reach from its template, its actions and its layout's, compiled to JavaScript. Code that runs only on the server, like `init/3` and commands, is not bundled, but the values it hands to the client can bring code with them, as the sections below describe.
+The compiler builds one runtime bundle, which every page loads, one bundle per page, and chunks, which hold the code of struct types and load only when a struct needs them. A page bundle holds the Elixir code the page's client side can reach from its template, its actions and its layout's, compiled to JavaScript. Code that runs only on the server, like `init/3` and commands, is not bundled, but the values it hands to the client can bring code with them, as the sections below describe.
 
-#### Struct Protocol Implementations
+#### Struct Types
 
-Client code that works with a struct needs the struct's protocol implementations, like `String.Chars` to interpolate it in a template. Neither the runtime bundle nor a page bundle holds them. The compiler writes them to chunks, which are separate files, and the browser loads a type's chunks when a struct of that type reaches it: in the state `init/3` sets, in an action a command returns, or in an action the server broadcasts.
+Client code that works with a struct needs the struct's code: its protocol implementations, like `String.Chars` to interpolate it in a template, and its `__struct__` functions, which build it. Neither the runtime bundle nor a page bundle holds them. The compiler writes them to chunks, which are separate files, and the browser loads a type's chunks when a struct of that type reaches it: in the state `init/3` sets, in an action a command returns, or in an action the server broadcasts.
 
 ```elixir
 def init(_params, component, _server) do
@@ -4078,13 +4078,15 @@ Before the server sends a value to the browser, it checks which struct types the
 
 Where a struct comes from makes no difference. One read from the database or received from another process loads its chunks the same way as one built in `init/3`.
 
+A module atom counts too. When `init/3` puts `type: User` into the state, or a command sends it in an action's params, the browser loads `User`'s chunks, so `struct(type, name: "Ada")` in an action works. A module the client builds itself from a string, with `String.to_existing_atom/1` or `Module.concat/2`, loads nothing.
+
 A struct that client code builds never passes through the server. A page therefore preloads the chunks of the struct types its own client code names, in its template or in its actions. Every page also preloads the chunks of the few struct types the runtime bundle's own code builds, like `Range` and `MapSet`.
 
 A page mounts once the chunks its state needs have loaded, and an action the server sends runs once its chunks have loaded. The development server speaks HTTP/1.1, so the browser fetches six chunks at a time there. A deployment served over HTTP/2 fetches them in parallel on one connection.
 
 #### Reflection Functions
 
-A struct's `__struct__/0,1` and an Ecto schema's `__changeset__/0` and `__schema__/1,2` are reflection functions. A call that names the module, like `User.__changeset__()`, reaches them like any other function. A call on a module the code does not name reaches them only at runtime:
+An Ecto schema's `__changeset__/0` and `__schema__/1,2` are reflection functions. A call that names the module, like `User.__changeset__()`, reaches them like any other function. A call on a module the code does not name reaches them only at runtime:
 
 ```elixir
 schema = component.state.schema
@@ -4094,8 +4096,6 @@ schema.__changeset__()
 So a type's reflection functions ship with a page when two things hold. The type can reach the page: the page's client code names it, or `init/3`, a command or code that broadcasts an action creates it. And the page's client code, or the runtime every page loads, calls the function on a module it does not name, like `schema.__changeset__()` above or `apply(schema, :__schema__, [:fields])`. A call on a function's parameter counts only when some caller can pass that parameter something other than a module written in the code.
 
 A call through `apply/3` with a function name known only at runtime is not detected, as for any other function, so a reflection function reached only that way is not bundled and the call raises an `UndefinedFunctionError` on the client, whose message says why. Name the function in the call, or reference it anywhere in client-reachable code.
-
-One limit remains for now: a call on a value the compiler cannot tell is not a module keeps the function in the bundle. Elixir's own `Kernel.struct/2` and `Exception.message/1` make such calls, so `__struct__/0` of the types a page can see ships with every page.
 
 #### Dynamic Components
 
