@@ -1021,6 +1021,17 @@ defmodule Hologram.CompilerTest do
       assert CallGraph.has_vertex?(call_graph, {struct_impl, :my_fun, 1})
     end
 
+    test "builds the IR and the vertices of a struct type no code names, with no implementation",
+         %{call_graph: call_graph, ir_plt: ir_plt, result: result} do
+      struct = Hologram.Test.Fixtures.Compiler.CallGraph.Module25
+
+      assert struct in result.built_modules
+      assert PLT.member?(ir_plt, struct)
+      assert struct in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {struct, :__struct__, 0})
+      assert CallGraph.has_vertex?(call_graph, {struct, :__struct__, 1})
+    end
+
     test "builds the IR of exactly the modules it returns, besides the ones built before", %{
       ir_plt: ir_plt,
       result: result
@@ -1042,7 +1053,7 @@ defmodule Hologram.CompilerTest do
       assert result.client_protocols == MapSet.new([protocol])
     end
 
-    test "returns the entry vertices of the implementation by its type", %{result: result} do
+    test "returns the entry vertices of a struct type by the type", %{result: result} do
       struct = Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
 
       struct_impl =
@@ -1050,7 +1061,9 @@ defmodule Hologram.CompilerTest do
 
       assert result.entries_by_type[struct] == [
                {struct_impl, :__impl__, 1},
-               {struct_impl, :my_fun, 1}
+               {struct_impl, :my_fun, 1},
+               {struct, :__struct__, 0},
+               {struct, :__struct__, 1}
              ]
     end
   end

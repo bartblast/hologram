@@ -67,6 +67,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # page alone names (Module7's action).
   @page_named_type Hologram.Test.Fixtures.Reflection.Module5
 
+  # A struct of the test build with no protocol implementation, which no page and no runtime
+  # function names.
+  @unnamed_struct_type Hologram.Test.Fixtures.Reflection.Module9
+
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
@@ -169,6 +173,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> File.read!()
     |> String.contains?(
       ~s/defineElixirFunction("#{Reflection.module_name(@chunk_only_impl)}","to_string",1,/
+    )
+  end
+
+  # Whether the bundle at the given path holds the given struct type's struct function of the given
+  # arity.
+  defp defines_struct_function?(bundle_path, type, arity) do
+    bundle_path
+    |> File.read!()
+    |> String.contains?(
+      ~s/defineElixirFunction("#{Reflection.module_name(type)}","__struct__",#{arity},/
     )
   end
 
@@ -2364,6 +2378,32 @@ defmodule Mix.Tasks.Compile.HologramTest do
              |> defines_chunk_only_impl?()
 
       test_chunk_registry_plt(opts)
+    end
+
+    # The runtime's own code names the struct, so the runtime bundle holds its struct functions and
+    # no chunk is left to load for it.
+    test "the chunk registry names no chunk for a struct type the runtime's code names", %{
+      opts: opts
+    } do
+      run(opts)
+
+      runtime_bundle_path = cache_state().runtime.bundle_info.static_bundle_path
+      items = load_chunk_registry_items(opts)
+
+      assert defines_struct_function?(runtime_bundle_path, Hologram.Component, 0)
+      refute Map.has_key?(items, {:type, Hologram.Component})
+    end
+
+    test "the chunk registry names the chunk of a struct type's struct functions, for a type with no implementation that no page names",
+         %{opts: opts} do
+      run(opts)
+
+      assert [digest] = load_chunk_registry_items(opts)[{:type, @unnamed_struct_type}]
+
+      chunk_bundle_path = Path.join(opts[:static_dir], "chunk-#{digest}.js")
+
+      assert defines_struct_function?(chunk_bundle_path, @unnamed_struct_type, 0)
+      assert defines_struct_function?(chunk_bundle_path, @unnamed_struct_type, 1)
     end
 
     test "the chunk registry names the kept chunks until the first batch replaces them", %{

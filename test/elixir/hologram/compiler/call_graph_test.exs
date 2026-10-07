@@ -312,8 +312,8 @@ defmodule Hologram.Compiler.CallGraphTest do
            implemented_protocol: ReachTest.Proto
          }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.Unreached, :fun, 0}]}]},
       ReachTest.Server => {%{}, [{:load, 0, [ReachTest.Named, ReachTest.Plain]}]},
-      ReachTest.TypeA => {%{struct?: true}, [{:__struct__, 0, []}]},
-      ReachTest.TypeB => {%{struct?: true}, [{:__struct__, 0, []}]},
+      ReachTest.TypeA => {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]},
+      ReachTest.TypeB => {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]},
       ReachTest.Unreached => {%{}, [{:fun, 0, []}]}
     }
   end
@@ -358,7 +358,7 @@ defmodule Hologram.Compiler.CallGraphTest do
            implementation_for: ReachTest.TypeC,
            implemented_protocol: ReachTest.Proto2
          }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.ImplHelper, :fun, 0}]}]},
-      ReachTest.TypeC => {%{struct?: true}, [{:__struct__, 0, []}]}
+      ReachTest.TypeC => {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]}
     })
   end
 
@@ -1611,7 +1611,7 @@ defmodule Hologram.Compiler.CallGraphTest do
           &reach_build(call_graph, modules, &1)
         )
 
-      assert result.built_modules == [ReachTest.Proto.TypeB, ReachTest.Unreached]
+      assert result.built_modules == [ReachTest.Proto.TypeB, ReachTest.TypeB, ReachTest.Unreached]
 
       assert ReachTest.Proto.TypeB in modules(call_graph)
       assert ReachTest.Unreached in modules(call_graph)
@@ -1623,10 +1623,28 @@ defmodule Hologram.Compiler.CallGraphTest do
              )
     end
 
+    test "builds a struct type no code names" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      refute ReachTest.TypeB in modules(call_graph)
+
+      build_chunk_reach(
+        call_graph,
+        [ReachTest.Page],
+        [ReachTest.Layout, ReachTest.Named],
+        &reach_build(call_graph, modules, &1)
+      )
+
+      assert ReachTest.TypeB in modules(call_graph)
+      assert has_vertex?(call_graph, {ReachTest.TypeB, :__struct__, 0})
+      assert has_vertex?(call_graph, {ReachTest.TypeB, :__struct__, 1})
+    end
+
     # No code names TypeC, and the protocol Proto2 is called by an implementation alone, so no page
     # can dispatch it: its implementations are built as part of what the calling implementation
-    # reaches, and give the type no entry of its own.
-    test "builds every implementation of a protocol only an implementation calls, with no entry for its types" do
+    # reaches, and give the type no entry of their own. The type's struct functions are its entries.
+    test "builds every implementation of a protocol only an implementation calls, with no entry of its own" do
       modules = reach_modules_with_chunk_only_protocol()
 
       {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
@@ -1641,13 +1659,18 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result.built_modules == [
                ReachTest.Proto.TypeB,
+               ReachTest.TypeB,
+               ReachTest.TypeC,
                ReachTest.Proto2,
                ReachTest.Proto2.TypeC
              ]
 
       assert has_vertex?(call_graph, {ReachTest.Proto2.TypeC, :fun, 1})
 
-      assert Map.keys(result.entries_by_type) == [ReachTest.TypeA, ReachTest.TypeB]
+      assert result.entries_by_type[ReachTest.TypeC] == [
+               {ReachTest.TypeC, :__struct__, 0},
+               {ReachTest.TypeC, :__struct__, 1}
+             ]
     end
 
     # Kernel.inspect/1 runs as hand-written JavaScript on the client, so the protocol its Elixir
@@ -1671,7 +1694,9 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result.entries_by_type[ReachTest.TypeA] == [
                {ReachTest.Proto.TypeA, :__impl__, 1},
-               {ReachTest.Proto.TypeA, :fun, 1}
+               {ReachTest.Proto.TypeA, :fun, 1},
+               {ReachTest.TypeA, :__struct__, 0},
+               {ReachTest.TypeA, :__struct__, 1}
              ]
     end
 
@@ -1693,7 +1718,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                {ReachTest.Proto.TypeA, :__impl__, 1},
                {ReachTest.Proto.TypeA, :fun, 1},
                {ReachTest.Proto3.TypeA, :__impl__, 1},
-               {ReachTest.Proto3.TypeA, :fun, 1}
+               {ReachTest.Proto3.TypeA, :fun, 1},
+               {ReachTest.TypeA, :__struct__, 0},
+               {ReachTest.TypeA, :__struct__, 1}
              ]
     end
 
@@ -1727,7 +1754,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result.client_protocols == MapSet.new([ReachTest.Proto])
     end
 
-    test "returns the entry vertices of every struct type's implementations by type" do
+    test "returns the entry vertices of every struct type by type" do
       modules = reach_modules()
       {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
 
@@ -1742,11 +1769,15 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result.entries_by_type == %{
                ReachTest.TypeA => [
                  {ReachTest.Proto.TypeA, :__impl__, 1},
-                 {ReachTest.Proto.TypeA, :fun, 1}
+                 {ReachTest.Proto.TypeA, :fun, 1},
+                 {ReachTest.TypeA, :__struct__, 0},
+                 {ReachTest.TypeA, :__struct__, 1}
                ],
                ReachTest.TypeB => [
                  {ReachTest.Proto.TypeB, :__impl__, 1},
-                 {ReachTest.Proto.TypeB, :fun, 1}
+                 {ReachTest.Proto.TypeB, :fun, 1},
+                 {ReachTest.TypeB, :__struct__, 0},
+                 {ReachTest.TypeB, :__struct__, 1}
                ]
              }
     end
@@ -2200,7 +2231,16 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "leaves out an implementation of a protocol not given" do
       result = list_chunk_entries([Protocol1], module_info_plt_fixture())
 
-      refute Map.has_key?(result, Module12)
+      assert result[Module12] == [{Module12, :__struct__, 0}, {Module12, :__struct__, 1}]
+    end
+
+    test "leaves out the struct types of the Hex build tool" do
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+      PLT.put(module_info_plt, Hex.NoSuchStruct, %{struct?: true})
+
+      result = list_chunk_entries([], module_info_plt)
+
+      refute Map.has_key?(result, Hex.NoSuchStruct)
     end
 
     test "leaves out the implementations of the Hex build tool" do
@@ -2222,9 +2262,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       result = list_chunk_entries([Protocol1], module_info_plt_fixture())
 
-      assert result == %{
-               Struct1 => [{struct_1_impl, :__impl__, 1}, {struct_1_impl, :my_fun, 1}]
-             }
+      assert result[Struct1] == [
+               {struct_1_impl, :__impl__, 1},
+               {struct_1_impl, :my_fun, 1},
+               {Struct1, :__struct__, 0},
+               {Struct1, :__struct__, 1}
+             ]
     end
 
     test "lists the implementations of every given protocol under their type" do
@@ -2245,17 +2288,42 @@ defmodule Hologram.Compiler.CallGraphTest do
                {string_chars_impl, :__impl__, 1},
                {string_chars_impl, :to_string, 1},
                {struct_1_impl, :__impl__, 1},
-               {struct_1_impl, :my_fun, 1}
+               {struct_1_impl, :my_fun, 1},
+               {Struct1, :__struct__, 0},
+               {Struct1, :__struct__, 1}
              ]
 
       assert result[Module12] == [
+               {Module12, :__struct__, 0},
+               {Module12, :__struct__, 1},
                {StringCharsModule12, :__impl__, 1},
                {StringCharsModule12, :to_string, 1}
              ]
     end
 
-    test "returns an empty map for no protocols" do
-      assert list_chunk_entries([], module_info_plt_fixture()) == %{}
+    test "lists the struct functions of a struct type with no implementation" do
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      assert result[Module25] == [{Module25, :__struct__, 0}, {Module25, :__struct__, 1}]
+    end
+
+    test "lists the struct functions of every struct type for no protocols" do
+      result = list_chunk_entries([], module_info_plt_fixture())
+
+      assert result[Struct1] == [{Struct1, :__struct__, 0}, {Struct1, :__struct__, 1}]
+
+      vertices =
+        result
+        |> Map.values()
+        |> Enum.concat()
+
+      assert Enum.all?(vertices, &match?({_module, :__struct__, _arity}, &1))
+    end
+
+    test "lists no entry for a module that is no struct" do
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      refute Map.has_key?(result, Module43)
     end
   end
 
@@ -2288,10 +2356,17 @@ defmodule Hologram.Compiler.CallGraphTest do
                {ReachTest.Proto.TypeB, :fun, 1},
                {ReachTest.Proto2, :fun, 1},
                {ReachTest.Proto2.TypeC, :__impl__, 1},
-               {ReachTest.Proto2.TypeC, :fun, 1}
+               {ReachTest.Proto2.TypeC, :fun, 1},
+               {ReachTest.TypeB, :__struct__, 0},
+               {ReachTest.TypeB, :__struct__, 1}
              ]
 
-      assert Map.keys(result) == [ReachTest.TypeA, ReachTest.TypeB]
+      # The implementation is for a protocol the client cannot call, so TypeC's own chunks hold its
+      # struct functions alone.
+      assert result[ReachTest.TypeC] == [
+               {ReachTest.TypeC, :__struct__, 0},
+               {ReachTest.TypeC, :__struct__, 1}
+             ]
     end
 
     test "includes the implementation for a struct type the type's code names", %{
@@ -2324,7 +2399,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                {ReachTest.Proto.TypeA, :fun, 1},
                {ReachTest.Proto.TypeB, :__impl__, 1},
                {ReachTest.Proto.TypeB, :fun, 1},
-               {ReachTest.TypeA, :__struct__, 0}
+               {ReachTest.TypeA, :__struct__, 0},
+               {ReachTest.TypeB, :__struct__, 0},
+               {ReachTest.TypeB, :__struct__, 1}
              ]
     end
 
@@ -2351,7 +2428,9 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result[ReachTest.TypeB] == [
                {ReachTest.Proto, :fun, 1},
                {ReachTest.Proto.TypeB, :__impl__, 1},
-               {ReachTest.Proto.TypeB, :fun, 1}
+               {ReachTest.Proto.TypeB, :fun, 1},
+               {ReachTest.TypeB, :__struct__, 0},
+               {ReachTest.TypeB, :__struct__, 1}
              ]
     end
 
@@ -2363,7 +2442,9 @@ defmodule Hologram.Compiler.CallGraphTest do
       runtime_mfas = [
         {ReachTest.ImplHelper, :fun, 0},
         {ReachTest.Proto.TypeA, :__impl__, 1},
-        {ReachTest.Proto.TypeA, :fun, 1}
+        {ReachTest.Proto.TypeA, :fun, 1},
+        {ReachTest.TypeA, :__struct__, 0},
+        {ReachTest.TypeA, :__struct__, 1}
       ]
 
       result =
@@ -2385,16 +2466,58 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == %{
                ReachTest.TypeA => [
                  {ReachTest.Proto.TypeA, :__impl__, 1},
-                 {ReachTest.Proto.TypeA, :fun, 1}
+                 {ReachTest.Proto.TypeA, :fun, 1},
+                 {ReachTest.TypeA, :__struct__, 0},
+                 {ReachTest.TypeA, :__struct__, 1}
                ],
                ReachTest.TypeB => [
                  {ReachTest.Proto.TypeB, :__impl__, 1},
-                 {ReachTest.Proto.TypeB, :fun, 1}
+                 {ReachTest.Proto.TypeB, :fun, 1},
+                 {ReachTest.TypeB, :__struct__, 0},
+                 {ReachTest.TypeB, :__struct__, 1}
                ]
              }
     end
 
-    test "lists what each type's implementations reach, sorted", %{
+    test "leaves out the struct functions the runtime holds", %{
+      call_graph: call_graph,
+      client_protocols: client_protocols,
+      entries_by_type: entries_by_type
+    } do
+      runtime_mfas = [{ReachTest.TypeA, :__struct__, 0}, {ReachTest.TypeA, :__struct__, 1}]
+
+      result =
+        list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, runtime_mfas)
+
+      assert result[ReachTest.TypeA] == [
+               {ReachTest.ImplHelper, :fun, 0},
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1}
+             ]
+    end
+
+    test "lists the struct functions of a type with no implementation of a client protocol", %{
+      client_protocols: client_protocols
+    } do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.TypeC,
+          {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]}
+        )
+
+      call_graph = reach_full(modules)
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      assert result[ReachTest.TypeC] == [
+               {ReachTest.TypeC, :__struct__, 0},
+               {ReachTest.TypeC, :__struct__, 1}
+             ]
+    end
+
+    test "lists what each type's entries reach, sorted", %{
       call_graph: call_graph,
       client_protocols: client_protocols,
       entries_by_type: entries_by_type
@@ -2405,11 +2528,15 @@ defmodule Hologram.Compiler.CallGraphTest do
                ReachTest.TypeA => [
                  {ReachTest.ImplHelper, :fun, 0},
                  {ReachTest.Proto.TypeA, :__impl__, 1},
-                 {ReachTest.Proto.TypeA, :fun, 1}
+                 {ReachTest.Proto.TypeA, :fun, 1},
+                 {ReachTest.TypeA, :__struct__, 0},
+                 {ReachTest.TypeA, :__struct__, 1}
                ],
                ReachTest.TypeB => [
                  {ReachTest.Proto.TypeB, :__impl__, 1},
                  {ReachTest.Proto.TypeB, :fun, 1},
+                 {ReachTest.TypeB, :__struct__, 0},
+                 {ReachTest.TypeB, :__struct__, 1},
                  {ReachTest.Unreached, :fun, 0}
                ]
              }

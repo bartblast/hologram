@@ -786,13 +786,13 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Grows the graph until it holds the code of every chunk: what the implementations of the client
-  protocols (see list_client_protocols/4) for struct types reach. Returns those implementations'
-  entry vertices by type (see list_chunk_entries/2), the client protocols and the modules it asked
-  to build, in the order asked.
+  Grows the graph until it holds the code of every chunk: what the struct functions of the struct
+  types and their implementations of the client protocols (see list_client_protocols/4) reach.
+  Returns those entry vertices by type (see list_chunk_entries/2), the client protocols and the
+  modules it asked to build, in the order asked.
 
-  The graph build_reach/3 leaves holds what the pages and the runtime reach, so the implementation
-  for a type no page names, and what only such an implementation calls, are not in it. The walk
+  The graph build_reach/3 leaves holds what the pages and the runtime reach, so a struct type no
+  page names, its implementations, and what only they call, are not in it. The walk
   starts from every entry vertex with every such type reachable, follows edges with the rules of
   reachable_mfas/5, and runs in rounds like build_reach/3: `build_modules` is called with the
   modules a round needs built, and the next round walks the graph again. When a round asks for no
@@ -972,15 +972,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns, for each struct type that has an implementation of one of the given protocols, the entry
-  vertices of those implementations: `__impl__/1` and the protocol's functions of each, sorted. The
-  types are read from the module info PLT, so a type no code names is among them. An implementation
-  for a built-in type is left out, and so are the implementations of Hex, the build tool, which a
-  dev build has loaded.
+  Returns the entry vertices of each struct type's chunks, sorted: the type's own `__struct__/0`
+  and `__struct__/1`, and `__impl__/1` and the protocol's functions of each of its implementations
+  of the given protocols. The types are read from the module info PLT, so a type no code names is
+  among them, and so is a type with no implementation, for its struct functions. An implementation
+  for a built-in type is left out, and so are the struct types and the implementations of Hex, the
+  build tool, which a dev build has loaded.
   """
   @spec list_chunk_entries(Enumerable.t(module), PLT.t()) :: %{module => [vertex]}
   def list_chunk_entries(protocols, module_info_plt) do
-    entries =
+    impl_entries =
       for protocol <- protocols,
           functions = [{:__impl__, 1} | protocol_functions(protocol, module_info_plt)],
           # The implementations the protocol's dispatch edges are built from (see build/3).
@@ -991,8 +992,17 @@ defmodule Hologram.Compiler.CallGraph do
         {type, {impl, function, arity}}
       end
 
+    # A struct is built by its type's __struct__/0,1, on the client too, where the type can be
+    # known only at runtime: a module read from the state, or the module of a struct the server
+    # sent. So they are loaded with the type, like its implementations.
+    struct_entries =
+      for type <- PLT.keys(module_info_plt, %{struct?: true}), arity <- [0, 1] do
+        {type, {type, :__struct__, arity}}
+      end
+
     # Sorted before the grouping, which keeps each type's vertices in that order.
-    entries
+    impl_entries
+    |> Enum.concat(struct_entries)
     |> Enum.sort()
     |> Enum.group_by(fn {type, _vertex} -> type end, fn {_type, vertex} -> vertex end)
     |> Map.new(fn {type, vertices} -> {type, reject_hex_mfas(vertices)} end)
@@ -1000,9 +1010,10 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the MFAs of each struct type's chunks: what the given entry vertices of the type's
-  implementations (see list_chunk_entries/2) reach, sorted, without the given runtime MFAs, which
-  every page has loaded. A type none of whose MFAs is left is not among the keys.
+  Returns the MFAs of each struct type's chunks: what the given entry vertices of the type (see
+  list_chunk_entries/2), its struct functions and its implementations', reach, sorted, without the
+  given runtime MFAs, which every page has loaded. A type none of whose MFAs is left is not among
+  the keys: one the runtime's own code names, when no implementation of it is left either.
 
   The walk follows edges with the rules of reachable_mfas/5 from the type alone, so the
   implementations for the struct types the reached code names are entered too: code that turns a
@@ -1782,7 +1793,7 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  # Walks a round from the given entries of the client protocols' implementations, builds the
+  # Walks a round from the given entries of the struct types (see list_chunk_entries/2), builds the
   # modules it asks for, and goes on until a round asks for none. Returns the modules built.
   defp build_chunk_reach_rounds(
          call_graph,
