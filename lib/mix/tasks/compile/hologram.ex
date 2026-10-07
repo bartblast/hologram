@@ -275,9 +275,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       # compile that failed while bundling) it is derived again.
       chunk_analysis_kept? = graph_unchanged? and cache.chunks != nil
 
-      # Grows it further by what the chunks hold and no page reaches: the implementations for the
-      # struct types no page's code names, and what only those call. Before the async MFAs and the
-      # app versions are taken, which read the whole graph.
+      # Grows it further by what the chunks hold and no page reaches: the struct functions of the
+      # struct types no page's code names, their implementations, and what only those call. Before
+      # the async MFAs and the app versions are taken, which read the whole graph.
       chunk_reach =
         build_chunk_reach(
           call_graph,

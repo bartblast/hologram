@@ -210,8 +210,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds JavaScript code for a chunk: a script holding the given MFAs, which are the protocol
-  implementation code a set of struct types shares (see `group_mfas_by_signature/1`).
+  Builds JavaScript code for a chunk: a script holding the given MFAs, which are the code a set of
+  struct types shares, of their struct functions and their protocol implementations (see
+  `group_mfas_by_signature/1`).
 
   The script does not define its functions when it runs: it leaves them, with its own digest, for
   the runtime to define, and announces itself with a `hologram:scriptLoaded` event (see

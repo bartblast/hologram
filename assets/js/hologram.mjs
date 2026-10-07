@@ -680,8 +680,9 @@ export default class Hologram {
   }
 
   // Fetches the chunks with the given digests, unless the document has them (see ScriptRegistry).
-  // A chunk holds the protocol implementations of struct types that no bundle carries, and is
-  // named when a value of such a type is on its way to the browser.
+  // A chunk holds code of struct types that no bundle carries, their struct functions and their
+  // protocol implementations, and is named when a value of such a type, or the type's module, is
+  // on its way to the browser.
   static requestChunks(digests) {
     digests.forEach((digest) => $.#chunkDigests.add(digest));
 
@@ -749,9 +750,9 @@ export default class Hologram {
   }
 
   // Schedules an action the server pushed: a command reply's next action or self echo, or an action
-  // or a broadcast that came over SSE. Such an action can carry a value of a struct type whose
-  // protocol implementations the tab has not loaded, and must not run before the chunks that hold
-  // them are in. The server names those chunks, by digest.
+  // or a broadcast that came over SSE. Such an action can carry a value of a struct type, or the
+  // type's module, whose struct functions and protocol implementations the tab has not loaded, and
+  // must not run before the chunks that hold them are in. The server names those chunks, by digest.
   //
   // The wait happens here, before the action queue, since an action still waiting for its chunks
   // has not arrived as far as the page is concerned: nothing the user does queues up behind it.
@@ -1564,8 +1565,9 @@ export default class Hologram {
   }
 
   // Fetches the chunks the given snapshot was taken with, unless the tab has them, and answers
-  // whether they are all in. The state a snapshot holds can carry values of struct types whose
-  // protocol implementations only those chunks have, so it cannot be restored without them.
+  // whether they are all in. The state a snapshot holds can carry values of struct types, and
+  // their modules, whose struct functions and protocol implementations only those chunks have, so
+  // it cannot be restored without them.
   //
   // Unlike every other digest the tab asks for, these were not named by the server just now: a
   // snapshot can be older than the build that serves the app, which no longer has the files. So
