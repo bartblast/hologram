@@ -207,7 +207,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       ir_plt: ir_plt,
       module_info_plt: CallGraph.module_info_plt(call_graph),
-      runtime_mfas: CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
+      runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
     ]
   end
 
@@ -450,7 +450,7 @@ defmodule Hologram.CompilerTest do
           js_dir: @js_dir
         )
 
-      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pendingScripts.push({/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
@@ -483,13 +483,43 @@ defmodule Hologram.CompilerTest do
           js_dir: @js_dir
         )
 
-      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pendingScripts.push({/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
       assert String.contains?(result, js_fragment_1)
       assert String.contains?(result, js_fragment_2)
       refute String.contains?(result, js_fragment_3)
+    end
+
+    test "leaves its function defs for the runtime to define, under its own digest", %{
+      ir_plt: ir_plt
+    } do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      js_fragment_1 = "globalThis.Hologram.pendingScripts ??= [];"
+      js_fragment_2 = "globalThis.Hologram.pendingScripts.push({"
+
+      js_fragment_3 =
+        ~S"digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\.js$/)[1],"
+
+      js_fragment_4 = "define: (deps) => {"
+      js_fragment_5 = ~s/document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));/
+
+      js_fragment_6 =
+        ~s/console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));/
+
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      assert String.contains?(result, js_fragment_3)
+      assert String.contains?(result, js_fragment_4)
+      assert String.contains?(result, js_fragment_5)
+      assert String.ends_with?(result, js_fragment_6)
+
+      refute String.contains?(result, "pageReachableFunctionDefs")
+      refute String.contains?(result, "pageScriptLoaded")
     end
 
     test "no JS imports", %{
@@ -874,6 +904,242 @@ defmodule Hologram.CompilerTest do
              PLT.get!(ir_plt, Hologram.Compiler)
   end
 
+  describe "build_chunk_js/5" do
+    test "has both Erlang and Elixir function defs", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}, {:lists, :reverse, 1}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      assert String.contains?(
+               result,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
+             )
+
+      assert String.contains?(result, ~s/Interpreter.defineErlangFunction("lists", "reverse", 1/)
+    end
+
+    test "has no timing code", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      refute String.contains?(result, "PerformanceTimer")
+      refute String.contains?(result, "console.debug")
+    end
+
+    test "leaves its function defs for the runtime to define, under its own digest", %{
+      ir_plt: ir_plt
+    } do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      js_fragment_1 = "globalThis.Hologram.pendingScripts ??= [];"
+      js_fragment_2 = "globalThis.Hologram.pendingScripts.push({"
+
+      js_fragment_3 =
+        ~S"digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\.js$/)[1],"
+
+      js_fragment_4 = "define: (deps) => {"
+      js_fragment_5 = ~s/document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));/
+
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      assert String.contains?(result, js_fragment_3)
+      assert String.contains?(result, js_fragment_4)
+      assert String.ends_with?(result, js_fragment_5)
+    end
+
+    test "single JS import", %{ir_plt: ir_plt} do
+      mfas = [{Module18, :my_fun, 0}]
+
+      result = build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_path}";')
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}});'
+             )
+    end
+
+    test "skips the JS imports of the modules the runtime script registers", %{ir_plt: ir_plt} do
+      mfas = [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+
+      result =
+        build_chunk_js(mfas, ir_plt, PLT.start(), MapSet.new(),
+          js_dir: @js_dir,
+          runtime_js_binding_modules: MapSet.new([Module18])
+        )
+
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { export_2 as $1 } from "#{js_fixture_2_path}";')
+
+      refute String.contains?(result, js_fixture_1_path)
+
+      assert String.contains?(
+               result,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+             )
+    end
+  end
+
+  describe "build_chunk_reach!/4" do
+    setup %{module_info_plt: module_info_plt} do
+      page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+
+      call_graph = CallGraph.start(module_info_plt: module_info_plt)
+      ir_plt = build_missing_ir!(PLT.start(), [page, protocol])
+      CallGraph.build_for_module(call_graph, ir_plt, page)
+      CallGraph.build_for_module(call_graph, ir_plt, protocol)
+
+      # The page's client code calls the protocol, and no code names the struct it is implemented for.
+      CallGraph.add_edge(call_graph, {page, :action, 3}, {protocol, :my_fun, 1})
+
+      [
+        call_graph: call_graph,
+        ir_plt: ir_plt,
+        result: build_chunk_reach!(call_graph, ir_plt, [page], [])
+      ]
+    end
+
+    test "builds the IR and the vertices of an implementation for a struct type no code names",
+         %{call_graph: call_graph, ir_plt: ir_plt, result: result} do
+      struct_impl =
+        Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1.Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+      assert struct_impl in result.built_modules
+      assert PLT.member?(ir_plt, struct_impl)
+      assert struct_impl in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {struct_impl, :my_fun, 1})
+    end
+
+    test "builds the IR of exactly the modules it returns, besides the ones built before", %{
+      ir_plt: ir_plt,
+      result: result
+    } do
+      page = Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+
+      ir_modules =
+        ir_plt
+        |> PLT.keys()
+        |> Enum.sort()
+
+      assert ir_modules == Enum.sort([page, protocol | result.built_modules])
+    end
+
+    test "returns the client protocols", %{result: result} do
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+
+      assert result.client_protocols == MapSet.new([protocol])
+    end
+
+    test "returns the entry vertices of the implementation by its type", %{result: result} do
+      struct = Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+      struct_impl =
+        Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1.Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+
+      assert result.entries_by_type[struct] == [
+               {struct_impl, :__impl__, 1},
+               {struct_impl, :my_fun, 1}
+             ]
+    end
+  end
+
+  describe "build_chunk_registry_plt/4" do
+    setup do
+      # Date's own code, the code Date and DateTime share, and Time's own code.
+      bundle_infos_by_signature = %{
+        MapSet.new([Date]) => %{bundle_name: "chunk", digest: "AAAAAAAA", entry_name: "59b80f19"},
+        MapSet.new([Date, DateTime]) => %{
+          bundle_name: "chunk",
+          digest: "BBBBBBBB",
+          entry_name: "0a1b2c3d"
+        },
+        MapSet.new([Time]) => %{bundle_name: "chunk", digest: "CCCCCCCC", entry_name: "a6274391"}
+      }
+
+      build_dir = Path.join("/", "my_build_dir")
+
+      [
+        build_dir: build_dir,
+        bundle_infos_by_signature: bundle_infos_by_signature,
+        opts: [build_dir: build_dir]
+      ]
+    end
+
+    test "gives a page that preloads no chunk an empty list", %{
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      {plt, _dump_path} =
+        build_chunk_registry_plt(bundle_infos_by_signature, %{MyPage1 => []}, [], opts)
+
+      assert PLT.get(plt, {:page, MyPage1}) == {:ok, []}
+    end
+
+    test "lists for a page the chunks its types and the runtime's types need", %{
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      chunk_types_by_page = %{MyPage1 => [DateTime], MyPage2 => [Date, Version]}
+
+      {plt, _dump_path} =
+        build_chunk_registry_plt(bundle_infos_by_signature, chunk_types_by_page, [Time], opts)
+
+      assert PLT.get(plt, {:page, MyPage1}) ==
+               {:ok,
+                [
+                  "BBBBBBBB",
+                  "CCCCCCCC"
+                ]}
+
+      assert PLT.get(plt, {:page, MyPage2}) ==
+               {:ok,
+                [
+                  "AAAAAAAA",
+                  "BBBBBBBB",
+                  "CCCCCCCC"
+                ]}
+    end
+
+    test "lists for a type every chunk whose signature holds it", %{
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      {plt, _dump_path} = build_chunk_registry_plt(bundle_infos_by_signature, %{}, [], opts)
+
+      assert PLT.get_all(plt) == %{
+               {:type, Date} => [
+                 "AAAAAAAA",
+                 "BBBBBBBB"
+               ],
+               {:type, DateTime} => ["BBBBBBBB"],
+               {:type, Time} => ["CCCCCCCC"]
+             }
+    end
+
+    test "returns the path of the dump in the build dir", %{
+      build_dir: build_dir,
+      bundle_infos_by_signature: bundle_infos_by_signature,
+      opts: opts
+    } do
+      expected_dump_path = Path.join(build_dir, "chunk_registry.plt")
+
+      assert {%PLT{}, ^expected_dump_path} =
+               build_chunk_registry_plt(bundle_infos_by_signature, %{}, [], opts)
+    end
+  end
+
   describe "build_ir_plt/1" do
     test "module has BEAM path" do
       assert %PLT{} = ir_plt = build_ir_plt()
@@ -1245,7 +1511,17 @@ defmodule Hologram.CompilerTest do
                ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
              )
 
-      refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+      # The implementation for a struct type is not in the runtime, and the dispatcher names it:
+      # it is loaded in a chunk.
+      refute String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12"/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/Type.atom("Elixir.String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12")/
+             )
 
       assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
 
@@ -1368,6 +1644,20 @@ defmodule Hologram.CompilerTest do
         :binary.match(js, ~s/defineElixirFunction("Enum", "into_protocol", 2/)
 
       assert into_pos < into_protocol_pos
+    end
+
+    test "starts the runtime without waiting for a page script", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        runtime_mfas
+        |> build_runtime_js(ir_plt, encode_plt, MapSet.new(), [], js_dir: @js_dir)
+        |> normalize_newlines()
+
+      assert String.contains?(result, "\n\nHologram.run();\n\n")
+      refute String.contains?(result, "pageScriptLoaded")
     end
 
     test "renders the clause heads of manually ported functions", %{
@@ -1742,6 +2032,79 @@ defmodule Hologram.CompilerTest do
                "//# sourceMappingURL=my_bundle_name-#{digest}.js.map"
     end
 
+    test "string entry name" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_string_entry_name"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      File.write(entry_file_path, "export const myVar = 123;\n")
+
+      assert %{
+               bundle_name: "chunk",
+               digest: digest,
+               entry_name: "59b80f19",
+               static_bundle_path: static_bundle_path
+             } = bundle("59b80f19", entry_file_path, "chunk", opts)
+
+      assert digest =~ ~r/^[A-Z2-7]{8}$/
+      # The entry name names the build, not the file.
+      assert static_bundle_path == Path.join(opts[:static_dir], "chunk-#{digest}.js")
+      assert File.read!(static_bundle_path) =~ "//# sourceMappingURL=chunk-#{digest}.js.map"
+    end
+
+    test "string entry names keep the bundles of one bundle name apart" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_string_entry_names"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path_1 = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      File.write(entry_file_path_1, "export const myVar = 123;\n")
+
+      entry_file_path_2 = Path.join(tmp_dir, "chunk-a6274391.entry.js")
+      File.write(entry_file_path_2, "export const myVar = 456;\n")
+
+      assert [
+               %{digest: digest_1, entry_name: "59b80f19", static_bundle_path: path_1},
+               %{digest: digest_2, entry_name: "a6274391", static_bundle_path: path_2}
+             ] =
+               bundle(
+                 [
+                   {"59b80f19", entry_file_path_1, "chunk"},
+                   {"a6274391", entry_file_path_2, "chunk"}
+                 ],
+                 opts
+               )
+
+      assert digest_1 != digest_2
+      assert path_1 == Path.join(opts[:static_dir], "chunk-#{digest_1}.js")
+      assert path_2 == Path.join(opts[:static_dir], "chunk-#{digest_2}.js")
+      assert File.read!(path_1) =~ "123"
+      assert File.read!(path_2) =~ "456"
+    end
+
     test "the same entry file bundles to the same digest" do
       node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
 
@@ -1857,6 +2220,37 @@ defmodule Hologram.CompilerTest do
       assert File.ls!(opts[:static_dir]) == []
     end
 
+    test "does not apply :max_bundle_size to a chunk" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_chunk_max_size"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      File.write!(entry_file_path, "export const myVar = 123;\n")
+
+      Application.put_env(:hologram, :max_bundle_size, 10)
+
+      on_exit(fn ->
+        Application.delete_env(:hologram, :max_bundle_size)
+      end)
+
+      assert %{static_bundle_path: static_bundle_path} =
+               bundle("59b80f19", entry_file_path, "chunk", opts)
+
+      assert File.exists?(static_bundle_path)
+    end
+
     test "records no input for an entry file that imports nothing" do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_4_no_inputs"])
       clean_dir(test_tmp_dir)
@@ -1961,6 +2355,18 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "chunk_signature_digest/1" do
+    test "is the first 8 hex digits of the MD5 of the sorted type names" do
+      assert chunk_signature_digest(MapSet.new([Date])) == "59b80f19"
+      assert chunk_signature_digest(MapSet.new([Date, Time])) == "59fbfa6b"
+    end
+
+    test "is the same whatever order the types were put in" do
+      assert chunk_signature_digest(MapSet.new([Time, Date])) ==
+               chunk_signature_digest(MapSet.new([Date, Time]))
+    end
+  end
+
   describe "client_config/0" do
     setup do
       hologram_env = System.get_env("HOLOGRAM_ENV")
@@ -2006,6 +2412,144 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, PLT.start(), MapSet.new(), [], js_dir: @js_dir)
 
       assert String.contains?(js, "globalThis.Hologram.config = #{client_config()};")
+    end
+  end
+
+  describe "create_chunk_entry_files/5" do
+    setup %{module_info_plt: module_info_plt} do
+      # Neither signature holds the other, so neither chunk is folded.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      [
+        mfas_by_signature: mfas_by_signature,
+        opts: [js_dir: @js_dir, module_info_plt: module_info_plt]
+      ]
+    end
+
+    test "creates an entry file for each signature, named by its digest", %{
+      ir_plt: ir_plt,
+      mfas_by_signature: mfas_by_signature,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5"])
+      clean_dir(tmp_dir)
+
+      result =
+        create_chunk_entry_files(
+          mfas_by_signature,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          Keyword.put(opts, :tmp_dir, tmp_dir)
+        )
+
+      entry_file_path_1 = Path.join(tmp_dir, "chunk-59b80f19.entry.js")
+      entry_file_path_2 = Path.join(tmp_dir, "chunk-a6274391.entry.js")
+
+      assert result == [
+               {MapSet.new([Date]), "59b80f19", entry_file_path_1},
+               {MapSet.new([Time]), "a6274391", entry_file_path_2}
+             ]
+
+      entry_file_1 = File.read!(entry_file_path_1)
+      entry_file_2 = File.read!(entry_file_path_2)
+
+      js_fragment_1 =
+        ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+
+      js_fragment_2 =
+        ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
+
+      assert String.contains?(entry_file_1, js_fragment_1)
+      refute String.contains?(entry_file_1, js_fragment_2)
+
+      assert String.contains?(entry_file_2, js_fragment_2)
+      refute String.contains?(entry_file_2, js_fragment_1)
+    end
+
+    test "creates no entry file for a chunk folded into another", %{ir_plt: ir_plt, opts: opts} do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_fold"])
+      clean_dir(tmp_dir)
+
+      # Module22.my_fun/0 returns an atom, so the chunk holding it alone is a few hundred bytes of
+      # definitions, under what a file of its own costs.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
+      }
+
+      result =
+        create_chunk_entry_files(
+          mfas_by_signature,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          Keyword.put(opts, :tmp_dir, tmp_dir)
+        )
+
+      entry_file_path = Path.join(tmp_dir, "chunk-59fbfa6b.entry.js")
+
+      assert result == [{MapSet.new([Date, Time]), "59fbfa6b", entry_file_path}]
+
+      entry_file = File.read!(entry_file_path)
+
+      assert String.contains?(
+               entry_file,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+             )
+
+      assert String.contains?(
+               entry_file,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
+             )
+    end
+
+    test "encodes the chunks' functions into the encode PLT", %{
+      ir_plt: ir_plt,
+      mfas_by_signature: mfas_by_signature,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_encode"])
+      clean_dir(tmp_dir)
+
+      encode_plt = PLT.start()
+
+      create_chunk_entry_files(
+        mfas_by_signature,
+        ir_plt,
+        encode_plt,
+        MapSet.new(),
+        Keyword.put(opts, :tmp_dir, tmp_dir)
+      )
+
+      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
+      assert PLT.member?(encode_plt, {Module22, :my_fun, 0})
+    end
+
+    test "skips the JS imports of the modules the runtime script registers", %{
+      ir_plt: ir_plt,
+      mfas_by_signature: mfas_by_signature,
+      opts: opts
+    } do
+      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_imports"])
+      clean_dir(tmp_dir)
+
+      chunk_opts =
+        opts
+        |> Keyword.put(:runtime_js_binding_modules, MapSet.new([Module18]))
+        |> Keyword.put(:tmp_dir, tmp_dir)
+
+      [{_signature, _signature_digest, entry_file_path} | _rest] =
+        create_chunk_entry_files(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), chunk_opts)
+
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+
+      refute entry_file_path
+             |> File.read!()
+             |> String.contains?(js_fixture_1_path)
     end
   end
 
@@ -2531,6 +3075,117 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "fold_small_chunks/2" do
+    test "folds a chain of small chunks into the first chunk that is not small" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      size_by_signature = %{
+        MapSet.new([Date]) => 100,
+        MapSet.new([Date, DateTime]) => 200,
+        MapSet.new([Date, DateTime, Time]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime, Time]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {Calendar.ISO, :zero_pad, 2},
+                 {String.Chars.Date, :to_string, 1}
+               ]
+             }
+    end
+
+    test "folds a small chunk into its superset, keeping the MFAs sorted" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}]
+      }
+
+      size_by_signature = %{MapSet.new([Date]) => 300, MapSet.new([Date, DateTime]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ]
+             }
+    end
+
+    test "folds a small chunk into the superset with the fewest types" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      size_by_signature = %{
+        MapSet.new([Date]) => 300,
+        MapSet.new([Date, DateTime]) => 4_000,
+        MapSet.new([Date, DateTime, Time]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ],
+               MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+             }
+    end
+
+    test "keeps a chunk that grew to the bound by what was folded into it" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      # 500 + 500 bytes is over the bound of 850.
+      size_by_signature = %{
+        MapSet.new([Date]) => 500,
+        MapSet.new([Date, DateTime]) => 500,
+        MapSet.new([Date, DateTime, Time]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == %{
+               MapSet.new([Date, DateTime]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ],
+               MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+             }
+    end
+
+    test "keeps a chunk whose size is the bound" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}]
+      }
+
+      size_by_signature = %{MapSet.new([Date]) => 850, MapSet.new([Date, DateTime]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == mfas_by_signature
+    end
+
+    test "keeps a small chunk no other chunk's signature holds" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}]
+      }
+
+      size_by_signature = %{MapSet.new([Date]) => 300, MapSet.new([Time]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature) == mfas_by_signature
+    end
+
+    test "returns an empty map for no chunks" do
+      assert fold_small_chunks(%{}, %{}) == %{}
+    end
+  end
+
   describe "get_erlang_function_js/4" do
     test ":erlang module function that is implemented" do
       result = get_erlang_function_js(:erlang, :+, 2, @erlang_js_dir)
@@ -2665,6 +3320,53 @@ defmodule Hologram.CompilerTest do
              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
            }
+  end
+
+  describe "group_mfas_by_signature/1" do
+    test "gives a single type one group holding its MFAs, sorted" do
+      mfas_by_type = %{
+        Date => [{String.Chars.Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}]
+      }
+
+      assert group_mfas_by_signature(mfas_by_type) == %{
+               MapSet.new([Date]) => [
+                 {Calendar.ISO, :date_to_string, 3},
+                 {String.Chars.Date, :to_string, 1}
+               ]
+             }
+    end
+
+    test "puts an MFA several types hold in a group of those types alone" do
+      mfas_by_type = %{
+        Date => [
+          {Calendar.ISO, :date_to_string, 3},
+          {Calendar.ISO, :zero_pad, 2},
+          {String.Chars.Date, :to_string, 1}
+        ],
+        DateTime => [
+          {Calendar.ISO, :date_to_string, 3},
+          {Calendar.ISO, :time_to_string, 4},
+          {Calendar.ISO, :zero_pad, 2}
+        ],
+        Time => [
+          {Calendar.ISO, :time_to_string, 4},
+          {Calendar.ISO, :zero_pad, 2},
+          {String.Chars.Time, :to_string, 1}
+        ]
+      }
+
+      assert group_mfas_by_signature(mfas_by_type) == %{
+               MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+               MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+               MapSet.new([Date, DateTime, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+               MapSet.new([DateTime, Time]) => [{Calendar.ISO, :time_to_string, 4}],
+               MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}]
+             }
+    end
+
+    test "returns an empty map for no types" do
+      assert group_mfas_by_signature(%{}) == %{}
+    end
   end
 
   describe "install_js_deps/1" do
@@ -4431,7 +5133,7 @@ defmodule Hologram.CompilerTest do
     assert checks_with_plt == 0
   end
 
-  test "prune_module_def/4 prunes protocol dispatcher clauses to included implementations", %{
+  test "prune_module_def/4 keeps the protocol dispatcher clauses for struct types", %{
     module_info_plt: module_info_plt
   } do
     module_mfas = [
@@ -4441,7 +5143,34 @@ defmodule Hologram.CompilerTest do
       {String.Chars, :to_string, 1}
     ]
 
-    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom, String.Chars.URI])
+    # No implementation for a struct type is among the modules.
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom])
+
+    js =
+      String.Chars
+      |> IR.for_module()
+      |> prune_module_def(module_mfas, reachable_modules, module_info_plt)
+      |> Encoder.encode_ir(%Context{module: String.Chars, async_mfas: MapSet.new()})
+
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.URI")/)
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.Version")/)
+
+    assert String.contains?(
+             js,
+             ~s/Type.atom("Elixir.String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12")/
+           )
+  end
+
+  test "prune_module_def/4 prunes the protocol dispatcher clauses for built-in types to the included implementations",
+       %{module_info_plt: module_info_plt} do
+    module_mfas = [
+      {String.Chars, :impl_for, 1},
+      {String.Chars, :impl_for!, 1},
+      {String.Chars, :struct_impl_for, 1},
+      {String.Chars, :to_string, 1}
+    ]
+
+    reachable_modules = MapSet.new([String.Chars, String.Chars.Atom])
 
     js =
       String.Chars
@@ -4455,10 +5184,9 @@ defmodule Hologram.CompilerTest do
            )
 
     assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.Atom")/)
-    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.URI")/)
 
-    refute String.contains?(js, "Elixir.String.Chars.Version")
-    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+    refute String.contains?(js, "Elixir.String.Chars.Integer")
+    refute String.contains?(js, "Elixir.String.Chars.List")
   end
 
   describe "validate_prop_usages/2" do

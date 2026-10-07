@@ -427,6 +427,10 @@ defmodule Hologram.ReflectionTest do
     assert call_graph_dump_file_name() == "call_graph.bin"
   end
 
+  test "chunk_registry_plt_dump_file_name/0" do
+    assert chunk_registry_plt_dump_file_name() == "chunk_registry.plt"
+  end
+
   test "compile_inputs_dump_file_name/0" do
     assert compile_inputs_dump_file_name() == "compile_inputs.bin"
   end

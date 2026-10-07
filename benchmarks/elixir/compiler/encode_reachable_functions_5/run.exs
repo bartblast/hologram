@@ -19,7 +19,7 @@ Benchee.run(
     CallGraph.remove_manually_ported_mfas(call_graph)
 
     page_modules = Reflection.list_pages()
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, page_modules)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
     graph = CallGraph.get_graph(call_graph_for_pages)

@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.CallGraph.server_protocol_dispatch_types/3
+Hologram.Compiler.CallGraph.list_runtime_mfas/1
 
 ## System
 
@@ -62,43 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">1 templatable</td>
-    <td style="white-space: nowrap; text-align: right">3.51 K</td>
-    <td style="white-space: nowrap; text-align: right">284.68 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;18.39%</td>
-    <td style="white-space: nowrap; text-align: right">279.79 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">319.46 &micro;s</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">all templatables</td>
-    <td style="white-space: nowrap; text-align: right">3.01 K</td>
-    <td style="white-space: nowrap; text-align: right">332.74 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;18.98%</td>
-    <td style="white-space: nowrap; text-align: right">325.88 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">392.50 &micro;s</td>
-  </tr>
-
-</table>
-
-
-Run Time Comparison
-
-<table style="width: 1%">
-  <tr>
-    <th>Name</th>
-    <th style="text-align: right">IPS</th>
-    <th style="text-align: right">Slower</th>
-  <tr>
-    <td style="white-space: nowrap">1 templatable</td>
-    <td style="white-space: nowrap;text-align: right">3.51 K</td>
-    <td>&nbsp;</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">all templatables</td>
-    <td style="white-space: nowrap; text-align: right">3.01 K</td>
-    <td style="white-space: nowrap; text-align: right">1.17x</td>
+    <td style="white-space: nowrap">list_runtime_mfas/1</td>
+    <td style="white-space: nowrap; text-align: right">42.80</td>
+    <td style="white-space: nowrap; text-align: right">23.37 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;18.60%</td>
+    <td style="white-space: nowrap; text-align: right">25.17 ms</td>
+    <td style="white-space: nowrap; text-align: right">29.31 ms</td>
   </tr>
 
 </table>

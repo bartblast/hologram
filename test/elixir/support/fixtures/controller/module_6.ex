@@ -28,6 +28,10 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     %{server | next_action: action}
   end
 
+  def command(:my_command_with_action_holding_struct, _params, server) do
+    put_action(server, :my_action, date: ~D[2026-10-05])
+  end
+
   def command(:my_command_with_cookies, _params, server) do
     put_cookie(server, "my_cookie_name", "my_cookie_value")
   end
@@ -111,6 +115,12 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
 
   def command(:my_command_self_echo_broadcast_only, _params, server) do
     put_broadcast(server, :room_a, :test_action, text: "hi")
+  end
+
+  def command(:my_command_self_echo_holding_struct, _params, server) do
+    server
+    |> put_subscription({:instance, server.instance_id})
+    |> put_broadcast({:instance, server.instance_id}, :test_action, time: ~T[12:34:56])
   end
 
   def command(:my_command_self_echo_put_broadcast_subscribed, _params, server) do

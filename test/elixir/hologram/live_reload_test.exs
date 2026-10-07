@@ -11,11 +11,13 @@ defmodule Hologram.LiveReloadTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Commons.ETS
   alias Hologram.LiveReload
   alias Hologram.Realtime.SubscriptionRegistry
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
 
@@ -360,6 +362,7 @@ defmodule Hologram.LiveReloadTest do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
       setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_chunk_registry(ChunkRegistryStub)
       setup_page_digest_registry(PageDigestRegistryStub)
       setup_page_module_resolver(PageModuleResolverStub)
 
@@ -434,6 +437,30 @@ defmodule Hologram.LiveReloadTest do
       assert :sys.get_state(pid).pending == MapSet.new([Page3])
     end
 
+    test "reloads every tab when the chunk bundles were rebuilt", %{pid: pid} do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+        bundles_built.([:chunks, Page1])
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, :all}
+    end
+
+    test "reloads every tab when the chunk bundles were rebuilt alone", %{pid: pid} do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+        bundles_built.([:chunks])
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, :all}
+    end
+
     test "reloads every tab when the runtime bundle was rebuilt", %{pid: pid} do
       expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
         bundles_built = Keyword.fetch!(opts, :bundles_built)
@@ -444,6 +471,37 @@ defmodule Hologram.LiveReloadTest do
       send(pid, {:debounced_reload, @file_path})
 
       assert_receive {:reload, :all}
+    end
+
+    test "reloads the chunk registry with every batch", %{pid: pid} do
+      test_pid = self()
+      ets_table_name = ChunkRegistryStub.ets_table_name()
+
+      # An entry the dump does not hold is gone once the registry is reloaded from it.
+      stale_entry? = fn ->
+        ets_table_name
+        |> ETS.get_all()
+        |> Map.has_key?(:stale_key)
+      end
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        ETS.put(ets_table_name, :stale_key, :stale_value)
+        bundles_built.([Page1])
+        send(test_pid, {:stale_after_first_batch?, stale_entry?.()})
+
+        ETS.put(ets_table_name, :stale_key, :stale_value)
+        bundles_built.([Page2])
+        send(test_pid, {:stale_after_second_batch?, stale_entry?.()})
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:stale_after_first_batch?, false}
+      assert_receive {:stale_after_second_batch?, false}
     end
 
     test "a save during a pass stops it at its next batch and runs a pass of its own", %{

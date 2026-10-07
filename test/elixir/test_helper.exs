@@ -1,3 +1,4 @@
+alias Hologram.Assets.ChunkRegistry
 alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 alias Hologram.Assets.PageDigestRegistry
 alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
@@ -27,6 +28,9 @@ Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMoc
 
 Mox.defmock(AssetPathRegistryMock, for: AssetPathRegistry)
 Application.put_env(:hologram, :asset_path_registry_impl, AssetPathRegistryMock)
+
+Mox.defmock(ChunkRegistryMock, for: ChunkRegistry)
+Application.put_env(:hologram, :chunk_registry_impl, ChunkRegistryMock)
 
 Mox.defmock(LiveReloadMock, for: LiveReload)
 Application.put_env(:hologram, :live_reload_impl, LiveReloadMock)

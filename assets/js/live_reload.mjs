@@ -53,11 +53,11 @@ export default class LiveReload {
   }
 
   // Whether a page snapshot can be restored into the code given by the page digest and the
-  // runtime bundle path: the snapshot holds component state shaped by the code it was taken
+  // runtime digest: the snapshot holds component state shaped by the code it was taken
   // with, and component code lives in the page bundle and, for components the runtime
   // carries, in the runtime bundle. A snapshot with no stamp, taken before stamping existed
   // or before any bundle was recorded, is taken on trust, as every snapshot used to be.
-  static snapshotFits(snapshot, pageDigest, runtimeBundlePath) {
+  static snapshotFits(snapshot, pageDigest, runtimeDigest) {
     if (!globalThis.Hologram.config.liveReload) {
       return true;
     }
@@ -68,7 +68,7 @@ export default class LiveReload {
 
     return (
       snapshot.pageDigest === pageDigest &&
-      snapshot.runtimeBundlePath === runtimeBundlePath
+      snapshot.runtimeDigest === runtimeDigest
     );
   }
 

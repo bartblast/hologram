@@ -12,7 +12,7 @@ Benchee.run(
     pages = Reflection.list_pages()
 
     call_graph = Compiler.build_call_graph()
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, pages)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
     graph = CallGraph.get_graph(call_graph_for_pages)

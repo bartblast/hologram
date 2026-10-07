@@ -112,11 +112,11 @@ list_page_mfas/4        570.04        1.75 ms     ±7.29%        1.74 ms        
 ```
 
 
-### ✅ compiler » call_graph » list_runtime_mfas_2
+### ✅ compiler » call_graph » list_runtime_mfas_1
 
 ```
 Name                          ips        average  deviation         median         99th %
-list_runtime_mfas/2         42.80       23.37 ms    ±18.60%       25.17 ms       29.31 ms
+list_runtime_mfas/1         42.80       23.37 ms    ±18.60%       25.17 ms       29.31 ms
 ```
 
 
@@ -195,19 +195,6 @@ Comparison:
 ```
 Name                                                ips        average  deviation         median         99th %
 server_callback_analysis_by_templatable/3        6.73 K      148.57 μs    ±13.37%         146 μs      170.33 μs
-```
-
-
-### ✅ compiler » call_graph » server_protocol_dispatch_types_3
-
-```
-Name                       ips        average  deviation         median         99th %
-1 templatable           3.51 K      284.68 μs    ±18.39%      279.79 μs      319.46 μs
-all templatables        3.01 K      332.74 μs    ±18.98%      325.88 μs      392.50 μs
-
-Comparison: 
-1 templatable           3.51 K
-all templatables        3.01 K - 1.17x slower +48.06 μs
 ```
 
 

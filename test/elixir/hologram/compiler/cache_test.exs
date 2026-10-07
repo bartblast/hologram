@@ -14,6 +14,14 @@ defmodule Hologram.Compiler.CacheTest do
     on_exit(&stop_cache/0)
   end
 
+  defp chunks_state_reading(js_inputs) do
+    %{
+      bundle_infos: %{MapSet.new([Date]) => %{digest: "c", js_inputs: js_inputs}},
+      mfas_by_signature: %{MapSet.new([Date]) => []},
+      modules: MapSet.new()
+    }
+  end
+
   defp page_state_reading(js_inputs) do
     %{bundle_info: %{digest: "a", js_inputs: js_inputs}, modules: MapSet.new()}
   end
@@ -22,6 +30,18 @@ defmodule Hologram.Compiler.CacheTest do
   defp put_full_state do
     put_app_versions(hologram: "1.0.0")
     put_bundle_inputs(%{client_stacktraces?: true})
+
+    put_chunks(%{
+      bundle_infos: %{
+        MapSet.new([Date]) => %{
+          digest: "c",
+          js_inputs: %{"/app/assets/js/chunk.mjs" => {:digest, 3}}
+        }
+      },
+      mfas_by_signature: %{MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}]},
+      modules: MapSet.new([String.Chars.Date])
+    })
+
     put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
     put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
 
@@ -54,6 +74,7 @@ defmodule Hologram.Compiler.CacheTest do
     [
       fn -> put_app_versions(hologram: "1.0.0") end,
       fn -> put_bundle_inputs(%{client_stacktraces?: true}) end,
+      fn -> put_chunks(chunks_state_reading(%{})) end,
       fn -> put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true}) end,
       fn -> put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}) end,
       fn -> put_pending_pages([Module1]) end,
@@ -298,9 +319,25 @@ defmodule Hologram.Compiler.CacheTest do
                 %{
                   app_versions: [hologram: "1.0.0"],
                   bundle_inputs: %{client_stacktraces?: true},
+                  chunks: %{
+                    bundle_infos: %{
+                      MapSet.new([Date]) => %{
+                        digest: "c",
+                        js_inputs: %{"/app/assets/js/chunk.mjs" => {:digest, 3}}
+                      }
+                    },
+                    mfas_by_signature: %{
+                      MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}]
+                    },
+                    modules: MapSet.new([String.Chars.Date])
+                  },
                   encoding_inputs: %{async_mfas: MapSet.new(), client_stacktraces?: true},
                   js_input_paths:
-                    MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"]),
+                    MapSet.new([
+                      "/app/assets/js/chunk.mjs",
+                      "/app/assets/js/page.mjs",
+                      "/app/assets/js/runtime.mjs"
+                    ]),
                   module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
                   pages: %{
                     Module1 => %{
@@ -412,7 +449,8 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(pages_plt) == []
     end
 
-    test "forgets the pending pages, the runtime, the template modules and the encoding inputs" do
+    test "forgets the pending pages, the runtime, the chunks, the template modules and the encoding inputs" do
+      put_chunks(chunks_state_reading(%{}))
       put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
       put_pending_pages([Module1])
       put_template_modules(%{Module1 => MapSet.new()})
@@ -426,7 +464,7 @@ defmodule Hologram.Compiler.CacheTest do
 
       forget_bundles()
 
-      assert %{encoding_inputs: nil, runtime: nil, template_modules: nil} = get()
+      assert %{chunks: nil, encoding_inputs: nil, runtime: nil, template_modules: nil} = get()
 
       assert get().pending_pages == MapSet.new()
     end
@@ -486,6 +524,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{
                bundle_inputs: nil,
                call_graph: %CallGraph{} = call_graph,
+               chunks: nil,
                compile_state_changed?: false,
                dumped_at: nil,
                editable_modules: nil,
@@ -553,6 +592,19 @@ defmodule Hologram.Compiler.CacheTest do
     test "gets the paths of the files a kept page's bundle read" do
       put_page(Module1, page_state_reading(%{"/app/a.mjs" => {:digest, 1}}), [])
       put_page(Module2, page_state_reading(%{"/app/b.mjs" => {:digest, 2}}), [])
+
+      assert get().js_input_paths == MapSet.new(["/app/a.mjs", "/app/b.mjs"])
+    end
+
+    test "gets the paths of the files the kept chunks' bundles read" do
+      put_chunks(%{
+        bundle_infos: %{
+          MapSet.new([Date]) => %{digest: "c", js_inputs: %{"/app/a.mjs" => {:digest, 1}}},
+          MapSet.new([Time]) => %{digest: "d", js_inputs: %{"/app/b.mjs" => {:digest, 2}}}
+        },
+        mfas_by_signature: %{MapSet.new([Date]) => [], MapSet.new([Time]) => []},
+        modules: MapSet.new()
+      })
 
       assert get().js_input_paths == MapSet.new(["/app/a.mjs", "/app/b.mjs"])
     end
@@ -632,6 +684,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert %{
                app_versions: [hologram: "1.0.0"],
                bundle_inputs: %{client_stacktraces?: true},
+               chunks: chunks,
                encoding_inputs: %{async_mfas: async_mfas, client_stacktraces?: true},
                js_input_paths: js_input_paths,
                module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
@@ -651,10 +704,26 @@ defmodule Hologram.Compiler.CacheTest do
              } = get()
 
       assert async_mfas == MapSet.new()
+
+      assert chunks == %{
+               bundle_infos: %{
+                 MapSet.new([Date]) => %{
+                   digest: "c",
+                   js_inputs: %{"/app/assets/js/chunk.mjs" => {:digest, 3}}
+                 }
+               },
+               mfas_by_signature: %{MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}]},
+               modules: MapSet.new([String.Chars.Date])
+             }
+
       assert dynamic_calls_open == MapSet.new([{:__struct__, 0}])
 
       assert js_input_paths ==
-               MapSet.new(["/app/assets/js/page.mjs", "/app/assets/js/runtime.mjs"])
+               MapSet.new([
+                 "/app/assets/js/chunk.mjs",
+                 "/app/assets/js/page.mjs",
+                 "/app/assets/js/runtime.mjs"
+               ])
 
       assert js_binding_modules == MapSet.new()
       assert pending_pages == MapSet.new([Module2])
@@ -700,6 +769,26 @@ defmodule Hologram.Compiler.CacheTest do
       assert dump_compile_state(path, false) == :unchanged
     end
 
+    test "a dump written before the chunk state existed loads with no chunk state", %{
+      path: path
+    } do
+      put_full_state()
+      dump_compile_state(path, false)
+
+      {1, compile_state} = read_compile_state_dump(path)
+
+      File.write!(
+        path,
+        SerializationUtils.serialize({1, Map.delete(compile_state, :chunks)})
+      )
+
+      stop_cache()
+
+      assert load_compile_state(path) == :ok
+      assert %{chunks: nil, pending_pages: pending_pages} = get()
+      assert pending_pages == MapSet.new([Module2])
+    end
+
     test "a dump of another version is not loaded", %{path: path} do
       File.write!(
         path,
@@ -725,6 +814,26 @@ defmodule Hologram.Compiler.CacheTest do
 
     assert put_bundle_inputs(bundle_inputs) == :ok
     assert %{bundle_inputs: ^bundle_inputs} = get()
+  end
+
+  describe "put_chunks/1" do
+    test "keeps the chunk state" do
+      chunks_state = %{
+        bundle_infos: %{MapSet.new([Date]) => %{digest: "c", js_inputs: %{}}},
+        mfas_by_signature: %{MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}]},
+        modules: MapSet.new([String.Chars.Date])
+      }
+
+      assert put_chunks(chunks_state) == :ok
+      assert %{chunks: ^chunks_state} = get()
+    end
+
+    test "nil forgets the kept chunk state" do
+      put_chunks(chunks_state_reading(%{}))
+
+      assert put_chunks(nil) == :ok
+      assert %{chunks: nil} = get()
+    end
   end
 
   test "put_encoding_inputs/1" do

@@ -42,6 +42,8 @@ defmodule Hologram.Reflection do
 
   @call_graph_dump_file_name "call_graph.bin"
 
+  @chunk_registry_plt_dump_file_name "chunk_registry.plt"
+
   @compile_inputs_dump_file_name "compile_inputs.bin"
 
   @compile_state_dump_file_name "compile_state.bin"
@@ -264,6 +266,14 @@ defmodule Hologram.Reflection do
   @spec call_graph_dump_file_name() :: String.t()
   def call_graph_dump_file_name do
     @call_graph_dump_file_name
+  end
+
+  @doc """
+  Returns the chunk registry PLT dump file name.
+  """
+  @spec chunk_registry_plt_dump_file_name() :: String.t()
+  def chunk_registry_plt_dump_file_name do
+    @chunk_registry_plt_dump_file_name
   end
 
   @doc """

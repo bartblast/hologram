@@ -3,6 +3,7 @@ defmodule Hologram.Test.Stubs do
   import Hologram.Test.Helpers, only: [random_atom: 0, random_module: 0, random_string: 0]
   import Mox, only: [stub_with: 2]
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
@@ -55,6 +56,24 @@ defmodule Hologram.Test.Stubs do
     end
 
     mapping
+  end
+
+  def setup_chunk_registry(stub, start_link \\ true) do
+    stub_with(ChunkRegistryMock, stub)
+
+    setup_chunk_registry_dump(stub)
+
+    ets_table_name = stub.ets_table_name()
+
+    if ETS.table_exists?(ets_table_name) do
+      ETS.delete(ets_table_name)
+    end
+
+    if start_link do
+      ChunkRegistry.start_link([])
+    end
+
+    :ok
   end
 
   def setup_page_digest_registry(stub, start_link \\ true) do
@@ -135,6 +154,31 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
+  defmacro use_module_stub(:chunk_registry) do
+    random_module = random_module()
+
+    quote do
+      defmodule alias!(unquote(random_module).ChunkRegistryStub) do
+        @behaviour ChunkRegistry
+
+        def dump_path do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "chunk_registry",
+            "dump_path_0",
+            "#{unquote(random_string())}.plt"
+          ])
+        end
+
+        def ets_table_name, do: unquote(random_atom())
+      end
+
+      alias alias!(unquote(random_module).ChunkRegistryStub)
+    end
+  end
+
   defmacro use_module_stub(:page_digest_registry) do
     random_module = random_module()
 
@@ -211,6 +255,8 @@ defmodule Hologram.Test.Stubs do
     file_4d_path = dir_4 <> "/page-Elixir.MyPage2-CCCCCCCC.js.map"
     file_4e_path = dir_4 <> "/runtime-AAAAAAAA.js"
     file_4f_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
+    file_4g_path = dir_4 <> "/chunk-DDDDDDDD.js"
+    file_4h_path = dir_4 <> "/chunk-DDDDDDDD.js.map"
 
     File.mkdir_p!(dir_2)
     File.mkdir_p!(dir_3)
@@ -234,7 +280,9 @@ defmodule Hologram.Test.Stubs do
       file_4c_path,
       file_4d_path,
       file_4e_path,
-      file_4f_path
+      file_4f_path,
+      file_4g_path,
+      file_4h_path
     ]
 
     Enum.each(file_paths, &File.write!(&1, ""))
@@ -258,6 +306,22 @@ defmodule Hologram.Test.Stubs do
         "hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
       }
     ]
+  end
+
+  # Two pages, the second preloading no chunk, and two struct types that share a chunk.
+  defp setup_chunk_registry_dump(stub) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    PLT.start()
+    |> PLT.put({:page, :module_a}, ["AAAAAAAA", "CCCCCCCC"])
+    |> PLT.put({:page, :module_b}, [])
+    |> PLT.put({:type, Date}, ["BBBBBBBB", "CCCCCCCC"])
+    |> PLT.put({:type, Time}, ["AAAAAAAA", "CCCCCCCC"])
+    |> PLT.dump(dump_path)
+
+    :ok
   end
 
   defp setup_page_digest_registry_dump(stub) do

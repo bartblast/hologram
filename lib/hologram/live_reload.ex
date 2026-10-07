@@ -5,6 +5,7 @@ defmodule Hologram.LiveReload do
 
   require Logger
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
@@ -87,12 +88,14 @@ defmodule Hologram.LiveReload do
   end
 
   def handle_call({:bundles_built, built}, _from, state) do
-    pages = List.delete(built, :runtime)
+    pages = built -- [:chunks, :runtime]
 
     # The first batch of a pass is where the registries learn what the compile wrote: the pages and
-    # routes of the module info dump, the static files, among them a new runtime bundle, and the page
-    # digests. Later batches change the page digests only.
+    # routes of the module info dump, the static files, among them a new runtime bundle and new
+    # chunk bundles, the chunks each struct type needs and each page preloads, and the page
+    # digests. Later batches change the page digests and the chunks their pages preload only.
     if state.pass.registries_reloaded? do
+      ChunkRegistry.reload()
       PageDigestRegistry.reload()
     else
       reload_runtime()
@@ -100,8 +103,10 @@ defmodule Hologram.LiveReload do
 
     # A rebuilt runtime bundle no longer matches the page bundles any tab holds, so every tab
     # reloads, the ones on pages this pass has not built yet included: they ask for their page,
-    # which is then built next.
-    if :runtime in built do
+    # which is then built next. Rebuilt chunks reload every tab too: a tab that loaded a chunk
+    # holds its old code, and no page bundle carries the implementation that changed, so only a
+    # reload brings the new code in.
+    if :runtime in built or :chunks in built do
       broadcast_reload(:all)
     else
       broadcast_reload(pages)
@@ -493,6 +498,7 @@ defmodule Hologram.LiveReload do
     PageModuleResolver.reload()
     PathRegistry.reload()
     ManifestCache.reload()
+    ChunkRegistry.reload()
     PageDigestRegistry.reload()
   end
 

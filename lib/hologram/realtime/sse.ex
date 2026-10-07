@@ -1,6 +1,7 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime
@@ -31,12 +32,16 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for an `action` broadcast: the standard
-  `event:`/`id:`/`data:` framing with the given id and the encoded `%Action{}`
-  struct as the data payload.
+  `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
+  object holding the encoded `%Action{}` struct under `action` and the digests of the
+  chunks its struct types need under `chunks` (see `Hologram.Assets.ChunkRegistry`),
+  which the client loads before it runs the action.
   """
   @spec encode_action_envelope(integer, Action.t()) :: String.t()
   def encode_action_envelope(id, %Action{} = action) do
-    {:ok, data} = Encoder.encode_term(action)
+    {:ok, encoded_action} = Encoder.encode_term(action)
+    data = Jason.encode!(%{action: encoded_action, chunks: ChunkRegistry.lookup_term(action)})
+
     "event: action\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -54,15 +59,20 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for a `broadcast` event: the standard
-  `event:`/`id:`/`data:` framing with the given id and the encoded
-  `{action_name, params, [cid1, cid2, ...]}` tuple as the data payload.
+  `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
+  object holding the encoded `{action_name, params, [cid1, cid2, ...]}` tuple under
+  `data` and the digests of the chunks the struct types in the params need under
+  `chunks` (see `Hologram.Assets.ChunkRegistry`), which the client loads before it
+  runs the actions.
 
   The cids list lets the client iterate per-cid dispatch from a single
   bundled chunk rather than receiving one `event: action` per matching cid.
   """
   @spec encode_broadcast_envelope(integer, atom, map, [String.t()]) :: String.t()
   def encode_broadcast_envelope(id, action_name, params, cids) do
-    {:ok, data} = Encoder.encode_term({action_name, params, cids})
+    {:ok, encoded_tuple} = Encoder.encode_term({action_name, params, cids})
+    data = Jason.encode!(%{chunks: ChunkRegistry.lookup_term(params), data: encoded_tuple})
+
     "event: broadcast\nid: #{id}\ndata: #{data}\n\n"
   end
 

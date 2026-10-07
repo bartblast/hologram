@@ -63,23 +63,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   @tmp_dir Reflection.tmp_dir()
 
-  defp app_protocol_dispatch_types_with_analysis(graph) do
-    module_info_plt = module_info_plt_fixture()
-
-    app_protocol_dispatch_types(
-      graph,
-      Reflection.list_pages(),
-      broadcast_caller_analysis(graph, module_info_plt),
-      module_info_plt
-    )
-  end
-
-  # The Erlang functions each ported module calls, taken from the "Deps" comment
-  # every port carries under its End marker. The comment is what a port author
-  # writes down, so it is the statement the edge table has to answer to.
-  # Runs the function in a process of its own, traced with this one as the tracer (a process cannot
-  # be its own tracer), checks that CallGraph.get_graph/1 was not called there, and returns its
-  # result. A walk that copied the graph out would copy it in that process, not in the agent.
   defp call_without_copying_graph(fun) do
     test_pid = self()
 
@@ -131,6 +114,12 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> Enum.chunk_every(2, 1, :discard)
       |> Enum.flat_map(&parse_declared_erlang_deps(&1, module))
     end)
+  end
+
+  defp list_page_chunk_types_with_analysis(call_graph, page_module) do
+    call_graph
+    |> CallGraph.get_graph()
+    |> list_page_chunk_types(page_module, PLT.start(), CallGraph.module_info_plt(call_graph))
   end
 
   defp list_page_mfas_with_analysis(call_graph, page_module) do
@@ -329,13 +318,57 @@ defmodule Hologram.Compiler.CallGraphTest do
     }
   end
 
+  # reach_modules/0 with a protocol implemented for TypeA that Kernel.inspect/1 calls, and with the
+  # page's template calling the given functions besides its own.
+  defp reach_modules_with_inspected_protocol(template_callees) do
+    Map.merge(reach_modules(), %{
+      Kernel => {%{}, [{:inspect, 1, [{ReachTest.Proto3, :fun, 1}]}]},
+      ReachTest.Page =>
+        {%{page?: true, layout_module: ReachTest.Layout},
+         [
+           {:init, 3, [{ReachTest.Server, :load, 0}]},
+           {:template, 0,
+            [{ReachTest.Proto, :fun, 1}, {ReachTest.TypeA, :__struct__, 0} | template_callees]}
+         ]},
+      ReachTest.Proto3 => {%{protocol?: true, protocol_functions: [fun: 1]}, [{:fun, 1, []}]},
+      ReachTest.Proto3.TypeA =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeA,
+           implemented_protocol: ReachTest.Proto3
+         }, [{:__impl__, 1, []}, {:fun, 1, []}]}
+    })
+  end
+
+  # reach_modules/0 with a second protocol that no page, component or runtime code calls: TypeB's
+  # implementation of the first protocol calls it, and it is implemented for TypeC, a struct no
+  # code names.
+  defp reach_modules_with_chunk_only_protocol do
+    Map.merge(reach_modules(), %{
+      ReachTest.Proto.TypeB =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeB,
+           implemented_protocol: ReachTest.Proto
+         }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.Proto2, :fun, 1}]}]},
+      ReachTest.Proto2 => {%{protocol?: true, protocol_functions: [fun: 1]}, [{:fun, 1, []}]},
+      ReachTest.Proto2.TypeC =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeC,
+           implemented_protocol: ReachTest.Proto2
+         }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.ImplHelper, :fun, 0}]}]},
+      ReachTest.TypeC => {%{struct?: true}, [{:__struct__, 0, []}]}
+    })
+  end
+
   defp reach_state(%{pid: pid}), do: Agent.get(pid, & &1.reach)
 
   setup_all do
     module_info_plt = module_info_plt_fixture()
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt, module_info_plt)
-    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph, Reflection.list_pages())
+    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph)
 
     [
       full_call_graph: full_call_graph,
@@ -389,85 +422,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
-  describe "app_protocol_dispatch_types/4" do
-    test "includes types reachable from page client code" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types created in server-executed code of pages" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types created in server-executed code of components used by pages" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :template, 0}, {Module4, :template, 0})
-        |> Digraph.add_edge({Module4, :init, 3}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types reachable from broadcast callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
-        |> Digraph.add_edge({Module13, :my_fun, 0}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "includes types created in server-executed code of broadcast-referenced components" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
-        |> Digraph.add_edge({Module13, :my_fun, 0}, Module4)
-        |> Digraph.add_edge({Module4, :command, 3}, Struct1)
-
-      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
-    end
-
-    test "returns only built-in types for a graph without app type references" do
-      graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
-
-      assert app_protocol_dispatch_types_with_analysis(graph) ==
-               protocol_dispatch_types([], module_info_plt_fixture())
-    end
-  end
-
   describe "broadcast_caller_analysis/2" do
-    test "includes struct types reachable from broadcast_action callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action, 3})
-        |> Digraph.add_edge({Module6, :my_fun, 0}, {Module7, :my_fun, 0})
-        |> Digraph.add_edge({Module7, :my_fun, 0}, Module12)
-
-      result = broadcast_caller_analysis(graph, module_info_plt_fixture())
-
-      assert Struct1 in result.dispatch_types
-      assert Module12 in result.dispatch_types
-    end
-
-    test "includes struct types reachable from broadcast_action_except callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 4})
-        |> Digraph.add_edge({Module6, :my_fun, 0}, Module12)
-
-      result = broadcast_caller_analysis(graph, module_info_plt_fixture())
-
-      assert Struct1 in result.dispatch_types
-      assert Module12 in result.dispatch_types
-    end
-
     test "collects component modules referenced in broadcast caller code" do
       graph =
         Digraph.new()
@@ -529,15 +484,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result.referenced_components == []
     end
 
-    test "returns only built-in types and no components when there are no broadcast callers" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Module15)
+    test "returns no components when there are no broadcast callers" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Module15)
 
       result = broadcast_caller_analysis(graph, module_info_plt_fixture())
 
-      assert result.dispatch_types == protocol_dispatch_types([], module_info_plt_fixture())
       assert result.referenced_components == []
     end
 
@@ -546,12 +497,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         Digraph.new()
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Module15)
 
       result = broadcast_caller_analysis(graph, module_info_plt_fixture())
 
-      refute Struct1 in result.dispatch_types
       refute Module15 in result.referenced_components
     end
 
@@ -562,10 +511,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         Digraph.new()
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module5, :my_fun, 0}, {protocol, :my_fun, 1})
-        |> Digraph.add_edge({protocol, :my_fun, 1}, Struct1)
+        |> Digraph.add_edge({protocol, :my_fun, 1}, Module15)
 
       without_entry = broadcast_caller_analysis(graph, module_info_plt_fixture())
-      assert Struct1 in without_entry.dispatch_types
+      assert Module15 in without_entry.referenced_components
 
       module_info_plt = PLT.clone(module_info_plt_fixture())
 
@@ -575,7 +524,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       })
 
       with_entry = broadcast_caller_analysis(graph, module_info_plt)
-      refute Struct1 in with_entry.dispatch_types
+      refute Module15 in with_entry.referenced_components
     end
   end
 
@@ -1622,6 +1571,187 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  test "built_in_protocol_types/0" do
+    result = built_in_protocol_types()
+
+    assert Any in result
+    assert Integer in result
+    assert Map in result
+
+    refute MapSet in result
+  end
+
+  describe "build_chunk_reach/4" do
+    test "asks for nothing when the graph holds every module" do
+      modules = reach_modules()
+      call_graph = reach_full(modules)
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.built_modules == []
+    end
+
+    test "builds the implementation for a type no code names and what only it calls" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      refute ReachTest.Proto.TypeB in modules(call_graph)
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.built_modules == [ReachTest.Proto.TypeB, ReachTest.Unreached]
+
+      assert ReachTest.Proto.TypeB in modules(call_graph)
+      assert ReachTest.Unreached in modules(call_graph)
+
+      assert has_edge?(
+               call_graph,
+               {ReachTest.Proto.TypeB, :fun, 1},
+               {ReachTest.Unreached, :fun, 0}
+             )
+    end
+
+    # No code names TypeC, and the protocol Proto2 is called by an implementation alone, so no page
+    # can dispatch it: its implementations are built as part of what the calling implementation
+    # reaches, and give the type no entry of its own.
+    test "builds every implementation of a protocol only an implementation calls, with no entry for its types" do
+      modules = reach_modules_with_chunk_only_protocol()
+
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.built_modules == [
+               ReachTest.Proto.TypeB,
+               ReachTest.Proto2,
+               ReachTest.Proto2.TypeC
+             ]
+
+      assert has_vertex?(call_graph, {ReachTest.Proto2.TypeC, :fun, 1})
+
+      assert Map.keys(result.entries_by_type) == [ReachTest.TypeA, ReachTest.TypeB]
+    end
+
+    # Kernel.inspect/1 runs as hand-written JavaScript on the client, so the protocol its Elixir
+    # body calls is not one the client can dispatch.
+    test "leaves out a protocol only the Elixir body of a manually ported function calls" do
+      modules = reach_modules_with_inspected_protocol([{Kernel, :inspect, 1}])
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert {Kernel, :inspect, 1} in manually_ported_elixir_mfas()
+      assert has_edge?(call_graph, {Kernel, :inspect, 1}, {ReachTest.Proto3, :fun, 1})
+
+      assert result.client_protocols == MapSet.new([ReachTest.Proto])
+
+      assert result.entries_by_type[ReachTest.TypeA] == [
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1}
+             ]
+    end
+
+    test "counts a protocol the page calls itself among the client protocols" do
+      modules = reach_modules_with_inspected_protocol([{ReachTest.Proto3, :fun, 1}])
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.client_protocols == MapSet.new([ReachTest.Proto, ReachTest.Proto3])
+
+      assert result.entries_by_type[ReachTest.TypeA] == [
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1},
+               {ReachTest.Proto3.TypeA, :__impl__, 1},
+               {ReachTest.Proto3.TypeA, :fun, 1}
+             ]
+    end
+
+    test "leaves the reach of build_reach/3 as it is" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+      reach = reach_state(call_graph)
+
+      build_chunk_reach(
+        call_graph,
+        [ReachTest.Page],
+        [ReachTest.Layout, ReachTest.Named],
+        &reach_build(call_graph, modules, &1)
+      )
+
+      assert reach_state(call_graph) == reach
+    end
+
+    test "returns the client protocols" do
+      modules = reach_modules_with_chunk_only_protocol()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.client_protocols == MapSet.new([ReachTest.Proto])
+    end
+
+    test "returns the entry vertices of every struct type's implementations by type" do
+      modules = reach_modules()
+      {call_graph, _built_modules} = reach_cold(modules, [ReachTest.Page, ReachTest.Caller])
+
+      result =
+        build_chunk_reach(
+          call_graph,
+          [ReachTest.Page],
+          [ReachTest.Layout, ReachTest.Named],
+          &reach_build(call_graph, modules, &1)
+        )
+
+      assert result.entries_by_type == %{
+               ReachTest.TypeA => [
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1}
+               ]
+             }
+    end
+  end
+
   describe "build_reach/3" do
     test "the walk's graph lists every fixture page and the runtime as the full graph does", %{
       full_call_graph: full_call_graph,
@@ -1641,7 +1771,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         Enum.each(modules, &build_for_module(call_graph, ir_plt, &1))
       end)
 
-      assert list_runtime_mfas(call_graph, pages) == full_runtime_mfas
+      assert list_runtime_mfas(call_graph) == full_runtime_mfas
 
       graph = get_graph(call_graph)
       full_graph = get_graph(full_call_graph)
@@ -1671,8 +1801,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                  module_info_plt
                )
 
-      assert list_runtime_mfas(call_graph, [ReachTest.Page]) ==
-               list_runtime_mfas(full_call_graph, [ReachTest.Page])
+      assert list_runtime_mfas(call_graph) == list_runtime_mfas(full_call_graph)
     end
 
     test "builds what the pages, their server callbacks and the broadcast callers reach" do
@@ -2061,6 +2190,365 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_chunk_entries/2" do
+    test "leaves out an implementation for a built-in type" do
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      refute Map.has_key?(result, Integer)
+    end
+
+    test "leaves out an implementation of a protocol not given" do
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      refute Map.has_key?(result, Module12)
+    end
+
+    test "leaves out the implementations of the Hex build tool" do
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, String.Chars.Hex.NoSuchStruct, %{
+        protocol_implementation?: true,
+        implementation_for: Hex.NoSuchStruct,
+        implemented_protocol: String.Chars
+      })
+
+      result = list_chunk_entries([String.Chars], module_info_plt)
+
+      refute Map.has_key?(result, Hex.NoSuchStruct)
+    end
+
+    test "lists the implementation of a struct type" do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      result = list_chunk_entries([Protocol1], module_info_plt_fixture())
+
+      assert result == %{
+               Struct1 => [{struct_1_impl, :__impl__, 1}, {struct_1_impl, :my_fun, 1}]
+             }
+    end
+
+    test "lists the implementations of every given protocol under their type" do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+      string_chars_impl = Hologram.Test.Fixtures.Compiler.CallGraph.NoSuchImpl
+
+      module_info_plt = PLT.clone(module_info_plt_fixture())
+
+      PLT.put(module_info_plt, string_chars_impl, %{
+        protocol_implementation?: true,
+        implementation_for: Struct1,
+        implemented_protocol: String.Chars
+      })
+
+      result = list_chunk_entries([Protocol1, String.Chars], module_info_plt)
+
+      assert result[Struct1] == [
+               {string_chars_impl, :__impl__, 1},
+               {string_chars_impl, :to_string, 1},
+               {struct_1_impl, :__impl__, 1},
+               {struct_1_impl, :my_fun, 1}
+             ]
+
+      assert result[Module12] == [
+               {StringCharsModule12, :__impl__, 1},
+               {StringCharsModule12, :to_string, 1}
+             ]
+    end
+
+    test "returns an empty map for no protocols" do
+      assert list_chunk_entries([], module_info_plt_fixture()) == %{}
+    end
+  end
+
+  describe "list_chunk_mfas_by_type/4" do
+    setup do
+      modules = reach_modules()
+      call_graph = reach_full(modules)
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      [
+        call_graph: call_graph,
+        client_protocols: MapSet.new([ReachTest.Proto]),
+        entries_by_type: entries_by_type
+      ]
+    end
+
+    # A value of any type can reach a call of a protocol that only chunk code calls, and nothing
+    # but that code can dispatch it, so the calling type's chunks carry all of its implementations.
+    test "includes every implementation of a protocol only the type's code calls", %{
+      client_protocols: client_protocols
+    } do
+      call_graph = reach_full(reach_modules_with_chunk_only_protocol())
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      assert result[ReachTest.TypeB] == [
+               {ReachTest.ImplHelper, :fun, 0},
+               {ReachTest.Proto.TypeB, :__impl__, 1},
+               {ReachTest.Proto.TypeB, :fun, 1},
+               {ReachTest.Proto2, :fun, 1},
+               {ReachTest.Proto2.TypeC, :__impl__, 1},
+               {ReachTest.Proto2.TypeC, :fun, 1}
+             ]
+
+      assert Map.keys(result) == [ReachTest.TypeA, ReachTest.TypeB]
+    end
+
+    test "includes the implementation for a struct type the type's code names", %{
+      client_protocols: client_protocols
+    } do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Proto.TypeB,
+          {%{
+             protocol_implementation?: true,
+             implementation_for: ReachTest.TypeB,
+             implemented_protocol: ReachTest.Proto
+           },
+           [
+             {:__impl__, 1, []},
+             {:fun, 1, [{ReachTest.Proto, :fun, 1}, {ReachTest.TypeA, :__struct__, 0}]}
+           ]}
+        )
+
+      call_graph = reach_full(modules)
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      assert result[ReachTest.TypeB] == [
+               {ReachTest.ImplHelper, :fun, 0},
+               {ReachTest.Proto, :fun, 1},
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1},
+               {ReachTest.Proto.TypeB, :__impl__, 1},
+               {ReachTest.Proto.TypeB, :fun, 1},
+               {ReachTest.TypeA, :__struct__, 0}
+             ]
+    end
+
+    # A client protocol's implementations arrive with the values of their types, so a call of one
+    # brings none along for a type the calling code does not name.
+    test "leaves out the implementation of a client protocol for a struct type the type's code does not name",
+         %{client_protocols: client_protocols} do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Proto.TypeB,
+          {%{
+             protocol_implementation?: true,
+             implementation_for: ReachTest.TypeB,
+             implemented_protocol: ReachTest.Proto
+           }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.Proto, :fun, 1}]}]}
+        )
+
+      call_graph = reach_full(modules)
+      entries_by_type = list_chunk_entries([ReachTest.Proto], call_graph.module_info_plt)
+
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      assert result[ReachTest.TypeB] == [
+               {ReachTest.Proto, :fun, 1},
+               {ReachTest.Proto.TypeB, :__impl__, 1},
+               {ReachTest.Proto.TypeB, :fun, 1}
+             ]
+    end
+
+    test "leaves out a type whose every MFA the runtime holds", %{
+      call_graph: call_graph,
+      client_protocols: client_protocols,
+      entries_by_type: entries_by_type
+    } do
+      runtime_mfas = [
+        {ReachTest.ImplHelper, :fun, 0},
+        {ReachTest.Proto.TypeA, :__impl__, 1},
+        {ReachTest.Proto.TypeA, :fun, 1}
+      ]
+
+      result =
+        list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, runtime_mfas)
+
+      assert Map.keys(result) == [ReachTest.TypeB]
+    end
+
+    test "leaves out the MFAs the runtime holds", %{
+      call_graph: call_graph,
+      client_protocols: client_protocols,
+      entries_by_type: entries_by_type
+    } do
+      runtime_mfas = [{ReachTest.ImplHelper, :fun, 0}, {ReachTest.Unreached, :fun, 0}]
+
+      result =
+        list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, runtime_mfas)
+
+      assert result == %{
+               ReachTest.TypeA => [
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1}
+               ]
+             }
+    end
+
+    test "lists what each type's implementations reach, sorted", %{
+      call_graph: call_graph,
+      client_protocols: client_protocols,
+      entries_by_type: entries_by_type
+    } do
+      result = list_chunk_mfas_by_type(call_graph, entries_by_type, client_protocols, [])
+
+      assert result == %{
+               ReachTest.TypeA => [
+                 {ReachTest.ImplHelper, :fun, 0},
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1},
+                 {ReachTest.Unreached, :fun, 0}
+               ]
+             }
+    end
+  end
+
+  describe "list_client_protocols/4" do
+    test "excludes a protocol called only by a function of another protocol" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module14, :action, 3}, {String.Chars, :to_string, 1})
+        |> Digraph.add_edge({String.Chars, :to_string, 1}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [Module14], [], module_info_plt_fixture())
+
+      assert String.Chars in result
+      refute Protocol1 in result
+    end
+
+    test "excludes a protocol only a page's server callbacks call" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module14, :command, 3}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Module14, :init, 3}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [Module14], [], module_info_plt_fixture())
+
+      refute Protocol1 in result
+    end
+
+    test "includes a protocol a component's client code calls" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge(Module15, {Module15, :action, 3})
+        |> Digraph.add_edge({Module15, :action, 3}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [], [Module15], module_info_plt_fixture())
+
+      assert Protocol1 in result
+    end
+
+    test "includes a protocol a page's client code calls" do
+      graph = Digraph.add_edge(Digraph.new(), {Module14, :action, 3}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [Module14], [], module_info_plt_fixture())
+
+      assert Protocol1 in result
+    end
+
+    test "includes a protocol the client code of a broadcast-referenced component calls" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module13, :my_fun, 0}, Module38)
+        |> Digraph.add_edge(Module38, {Module38, :template, 0})
+        |> Digraph.add_edge({Module38, :template, 0}, {Protocol1, :my_fun, 1})
+
+      result = list_client_protocols(graph, [], [], module_info_plt_fixture())
+
+      assert Protocol1 in result
+    end
+
+    test "includes a protocol the runtime's entry MFAs reach", %{full_call_graph: call_graph} do
+      result =
+        call_graph
+        |> get_graph()
+        |> list_client_protocols([], [], module_info_plt_fixture())
+
+      assert Enumerable in result
+      assert String.Chars in result
+    end
+
+    test "returns no protocol for a graph that calls none" do
+      graph = Digraph.add_edge(Digraph.new(), {Module14, :action, 3}, {Module5, :my_fun, 0})
+
+      assert list_client_protocols(graph, [Module14], [], module_info_plt_fixture()) ==
+               MapSet.new()
+    end
+  end
+
+  describe "list_page_chunk_types/4" do
+    test "excludes built-in types", %{full_call_graph: full_call_graph} do
+      result = list_page_chunk_types_with_analysis(full_call_graph, Module17)
+
+      refute Integer in result
+      refute List in result
+    end
+
+    test "excludes a type only the page's server callbacks name", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :command, 3}, Struct1)
+        |> add_edge({Module17, :init, 3}, Module12)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      refute Module12 in result
+      refute Struct1 in result
+    end
+
+    test "includes a type the client code of a server-referenced component names", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module15)
+        |> add_edge({Module15, :template, 0}, Module12)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      assert Module12 in result
+    end
+
+    test "includes a type the page's client code names", %{full_call_graph: full_call_graph} do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :action, 3}, {Struct1, :__struct__, 1})
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      assert Module12 in result
+      assert Struct1 in result
+    end
+
+    test "results are sorted", %{full_call_graph: full_call_graph} do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> add_edge({Module17, :template, 0}, Struct1)
+        |> list_page_chunk_types_with_analysis(Module17)
+
+      assert result == Enum.sort(result)
+    end
+  end
+
   describe "list_page_entry_mfas/2" do
     test "with the module info PLT of the app" do
       assert list_page_entry_mfas(Module19, module_info_plt_fixture()) ==
@@ -2269,7 +2757,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose concrete type is reachable", %{
+    test "excludes protocol implementations whose concrete type is reachable", %{
       full_call_graph: full_call_graph
     } do
       result =
@@ -2279,8 +2767,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "reads an implementation target from the PLT without calling the implementation", %{
@@ -2292,7 +2780,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       PLT.put(module_info_plt, impl, %{
         protocol_implementation?: true,
-        implementation_for: Module12
+        implementation_for: Integer
       })
 
       call_graph = %{CallGraph.clone(full_call_graph) | module_info_plt: module_info_plt}
@@ -2302,14 +2790,13 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
         |> add_edge({String.Chars, :to_string, 1}, {impl, :__impl__, 1})
         |> add_edge({String.Chars, :to_string, 1}, {impl, :to_string, 1})
-        |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
         |> list_page_mfas_with_analysis(Module17)
 
       assert {impl, :__impl__, 1} in result
       assert {impl, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is created only in server init", %{
+    test "excludes protocol implementations whose type is created only in server init", %{
       full_call_graph: full_call_graph
     } do
       result =
@@ -2319,11 +2806,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :init, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is created only in commands", %{
+    test "excludes protocol implementations whose type is created only in commands", %{
       full_call_graph: full_call_graph
     } do
       result =
@@ -2333,17 +2820,18 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :command, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations unlocked transitively by server-created types", %{
+    test "excludes protocol implementations unlocked transitively by server-created types", %{
       full_call_graph: full_call_graph
     } do
       struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
-      # Struct1 is created only in server init, its Protocol1 implementation code
-      # creates Module12, and Module12's String.Chars implementation must follow
+      # Struct1 is created only in server init and its Protocol1 implementation code
+      # creates Module12. Neither implementation is listed: an implementation for a
+      # struct type is in no page bundle.
       result =
         full_call_graph
         |> CallGraph.clone()
@@ -2353,11 +2841,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {struct_1_impl, :__impl__, 1} in result
-      assert {struct_1_impl, :my_fun, 1} in result
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "excludes MFAs reachable only from server-executed code", %{
@@ -2432,7 +2920,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module4, :template, 0} in result
     end
 
-    test "includes protocol implementations whose type is created in a server-referenced component's server code",
+    test "excludes protocol implementations whose type is created in a server-referenced component's server code",
          %{full_call_graph: full_call_graph} do
       result =
         full_call_graph
@@ -2442,15 +2930,16 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module15, :init, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "treats components reached from a server-referenced component's client code as templatables",
          %{full_call_graph: full_call_graph} do
       # Module17's server init references Module15, whose template statically renders
-      # Module4, whose own server init creates Module12 - so Module12's String.Chars
-      # implementation must follow
+      # Module4, whose own server init creates Module12 - so Module12 counts as a type
+      # of the page and its reflection functions follow. Its String.Chars implementation
+      # does not: an implementation for a struct type is in no page bundle.
       result =
         full_call_graph
         |> CallGraph.clone()
@@ -2460,8 +2949,11 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module4, :init, 3}, Module12)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      assert {Module12, :__struct__, 0} in result
+      assert {Module12, :__struct__, 1} in result
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
@@ -2687,9 +3179,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
 
-  describe "list_runtime_mfas/2" do
+  describe "list_runtime_mfas/1" do
     setup %{full_call_graph: call_graph} do
-      [runtime_mfas: list_runtime_mfas(call_graph, Reflection.list_pages())]
+      [runtime_mfas: list_runtime_mfas(call_graph)]
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
@@ -2713,7 +3205,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
       |> add_edge({Enum, :into, 2}, {:non_existing_module_fixture, :dummy_function_4, 4})
 
-      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Calendar.ISO, :dummy_function_1, 1} in result
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
@@ -2728,7 +3220,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex, :start, 2})
       |> add_edge({Enum, :into, 2}, {Hex, :version, 0})
 
-      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Enum, :into, 2} in result
 
@@ -2743,7 +3235,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex.API, :request, 4})
       |> add_edge({Enum, :into, 2}, {Hex.Registry.Server, :versions, 2})
 
-      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Enum, :into, 2} in result
 
@@ -2784,20 +3276,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Protocol.UndefinedError, :exception, 1} in result
     end
 
-    test "includes protocol implementations whose type is used only by a page", %{
+    test "excludes protocol implementations whose type is used only by a page", %{
       full_call_graph: call_graph
     } do
       result =
         call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is created only in a page's server init",
+    test "excludes protocol implementations whose type is created only in a page's server init",
          %{
            full_call_graph: call_graph
          } do
@@ -2805,13 +3297,13 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :init, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "includes protocol implementations whose type is reachable from broadcast callers", %{
+    test "excludes protocol implementations whose type is reachable from broadcast callers", %{
       full_call_graph: call_graph
     } do
       result =
@@ -2819,10 +3311,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
 
       refute {Module13, :my_fun, 0} in result
     end
@@ -2835,7 +3327,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module38)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module38, :__props__, 0} in result
       assert {Module38, :action, 3} in result
@@ -2853,7 +3345,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module38, :command, 3}, {Component, :put_broadcast, 4})
         |> add_edge({Module38, :command, 3}, Module39)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module39, :__props__, 0} in result
       assert {Module39, :action, 3} in result
@@ -2871,13 +3363,13 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module14)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       refute {Module14, :action, 3} in result
       refute {Module14, :template, 0} in result
     end
 
-    test "includes protocol implementations whose type is created in a broadcast-referenced component's server code",
+    test "excludes protocol implementations whose type is created in a broadcast-referenced component's server code",
          %{full_call_graph: call_graph} do
       result =
         call_graph
@@ -2885,10 +3377,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module38)
         |> add_edge({Module38, :command, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
 
       refute {Module38, :command, 3} in result
     end
@@ -2901,7 +3393,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module38)
         |> add_edge({Module38, :command, 3}, Module39)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module39, :__props__, 0} in result
       assert {Module39, :action, 3} in result
@@ -2914,7 +3406,8 @@ defmodule Hologram.Compiler.CallGraphTest do
       # Module13 broadcasts and references Module38, whose template statically renders
       # Module39, whose own server command creates Module12. The broadcast caller
       # traversal crosses static client code, so Module39 is collected by the analysis
-      # itself and Module12's String.Chars implementation must follow.
+      # itself. Module12's String.Chars implementation does not follow: an implementation
+      # for a struct type is in no runtime.
       result =
         call_graph
         |> CallGraph.clone()
@@ -2922,18 +3415,20 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module13, :my_fun, 0}, Module38)
         |> add_edge({Module38, :template, 0}, Module39)
         |> add_edge({Module39, :command, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      assert {Module39, :template, 0} in result
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "treats components reached from a broadcast-chained component's client code as templatables",
          %{full_call_graph: call_graph} do
       # Module13 broadcasts and references Module38, whose server command references
       # Module39 (fixpoint hop), whose template statically renders Module40, whose own
-      # server command creates Module12 - so Module12's String.Chars implementation
-      # must follow
+      # server command creates Module12. Module12's String.Chars implementation does not
+      # follow: an implementation for a struct type is in no runtime.
       result =
         call_graph
         |> CallGraph.clone()
@@ -2942,12 +3437,12 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module38, :command, 3}, Module39)
         |> add_edge({Module39, :template, 0}, Module40)
         |> add_edge({Module40, :command, 3}, Module12)
-        |> list_runtime_mfas(Reflection.list_pages())
+        |> list_runtime_mfas()
 
       assert {Module40, :template, 0} in result
 
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     # Guards the type-bounded implementation inclusion in both directions: missing
@@ -2986,7 +3481,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "stops the analyses PLT it starts", %{full_call_graph: call_graph} do
       {:links, links_before} = Process.info(call_graph.pid, :links)
 
-      list_runtime_mfas(call_graph, Reflection.list_pages())
+      list_runtime_mfas(call_graph)
 
       {:links, links_after} = Process.info(call_graph.pid, :links)
 
@@ -2999,7 +3494,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     } do
       walked_mfas =
         call_without_copying_graph(fn ->
-          list_runtime_mfas(call_graph, Reflection.list_pages())
+          list_runtime_mfas(call_graph)
         end)
 
       assert walked_mfas == runtime_mfas
@@ -3620,7 +4115,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert modules(call_graph) == MapSet.new([Module9])
   end
 
-  describe "reachable_mfas/4" do
+  describe "reachable_mfas/5" do
     test "drops MFAs of Elixir-named modules the module info PLT does not know and keeps Erlang ones" do
       graph =
         Digraph.new()
@@ -3713,6 +4208,129 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert {struct_1_impl, :__impl__, 1} in result
       assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "enters every implementation of a protocol that is not among the opaque ones", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          opaque_protocols: MapSet.new([String.Chars])
+        )
+
+      # No code reached names Struct1.
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {Protocol1, :my_fun, 1} in result
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is not reachable for a protocol among the opaque ones",
+         %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          opaque_protocols: MapSet.new([Protocol1])
+        )
+
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {Protocol1, :my_fun, 1} in result
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is reachable with enter_struct_impls?: false",
+         %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          enter_struct_impls?: false
+        )
+
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {Protocol1, :my_fun, 1} in result
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is in the extra types with enter_struct_impls?: false",
+         %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      extra_types = MapSet.new([Struct1])
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          extra_types,
+          module_info_plt_fixture(),
+          enter_struct_impls?: false
+        )
+
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations for built-in types with enter_struct_impls?: false", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result =
+        reachable_mfas(
+          graph,
+          [{Module5, :my_fun, 0}],
+          MapSet.new(),
+          module_info_plt_fixture(),
+          enter_struct_impls?: false
+        )
+
+      assert {Protocol1.Integer, :__impl__, 1} in result
+      assert {Protocol1.Integer, :my_fun, 1} in result
     end
 
     test "reaches fixpoint when implementation code makes further types reachable", %{
@@ -3831,7 +4449,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   describe "remove_runtime_mfas!/2" do
     test "removes the runtime MFAs and keeps the rest", %{ir_plt: ir_plt} do
       call_graph = Compiler.build_call_graph(ir_plt)
-      runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
+      runtime_mfas = list_runtime_mfas(call_graph)
 
       CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 
@@ -3921,6 +4539,90 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   # How the runtime's dynamic calls are resolved is tested with Hologram.Compiler.DynamicCallGate.
+  describe "runtime_analysis/1" do
+    setup %{full_call_graph: call_graph} do
+      [runtime_analysis: runtime_analysis(call_graph)]
+    end
+
+    test "mfas are the runtime's MFAs", %{
+      full_call_graph: call_graph,
+      runtime_analysis: result
+    } do
+      assert result.mfas == list_runtime_mfas(call_graph)
+    end
+
+    test "mfas hold implementations for built-in types", %{runtime_analysis: result} do
+      assert {Enumerable.List, :__impl__, 1} in result.mfas
+      assert {Enumerable.List, :reduce, 3} in result.mfas
+    end
+
+    test "mfas hold no implementation for a struct type only a page's code names", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> runtime_analysis()
+
+      refute Module12 in result.types
+
+      refute {StringCharsModule12, :__impl__, 1} in result.mfas
+      refute {StringCharsModule12, :to_string, 1} in result.mfas
+    end
+
+    # Which structs the runtime's functions name depends on the Elixir version (Enum.into/2 names
+    # MapSet from 1.20 on), so a runtime entry is made to name a fixture struct.
+    test "mfas hold the implementations for the struct types the runtime's code names", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Enum, :to_list, 1}, Module12)
+        |> runtime_analysis()
+
+      assert {StringCharsModule12, :__impl__, 1} in result.mfas
+      assert {StringCharsModule12, :to_string, 1} in result.mfas
+    end
+
+    # A broadcast-referenced component's client code is runtime code, so a struct it names is one
+    # the runtime's code names.
+    test "types hold a struct type a broadcast-referenced component's client code names", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> add_edge({Module38, :template, 0}, Module12)
+        |> runtime_analysis()
+
+      assert Module12 in result.types
+
+      assert {StringCharsModule12, :__impl__, 1} in result.mfas
+      assert {StringCharsModule12, :to_string, 1} in result.mfas
+    end
+
+    test "types hold no built-in type", %{runtime_analysis: result} do
+      refute Integer in result.types
+      refute List in result.types
+    end
+
+    test "types hold the struct types the runtime's code names", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Enum, :to_list, 1}, Module12)
+        |> runtime_analysis()
+
+      assert Module12 in result.types
+    end
+  end
+
   describe "runtime_dynamic_calls/3" do
     test "opens the reflection functions the runtime's functions call on unnamed modules", %{
       empty_call_graph: call_graph
@@ -4050,85 +4752,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result[Module2].server_referenced_components == []
     end
-  end
-
-  describe "server_protocol_dispatch_types/3" do
-    test "includes struct types reachable from init/3" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
-        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
-
-      assert Struct1 in server_protocol_dispatch_types(
-               graph,
-               [Module2],
-               module_info_plt_fixture()
-             )
-    end
-
-    test "includes struct types reachable from command/3" do
-      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Struct1, :__struct__, 1})
-
-      assert Struct1 in server_protocol_dispatch_types(
-               graph,
-               [Module2],
-               module_info_plt_fixture()
-             )
-    end
-
-    test "harvests types from all given templatables" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
-        |> Digraph.add_edge({Module4, :command, 3}, Module12)
-
-      result =
-        server_protocol_dispatch_types(graph, [Module2, Module4], module_info_plt_fixture())
-
-      assert Struct1 in result
-      assert Module12 in result
-    end
-
-    test "returns only built-in types when init/3 and command/3 vertices don't exist" do
-      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
-
-      assert server_protocol_dispatch_types(graph, [Module2], module_info_plt_fixture()) ==
-               protocol_dispatch_types([], module_info_plt_fixture())
-    end
-
-    test "doesn't traverse through protocol function vertices" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
-        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
-
-      refute Struct1 in server_protocol_dispatch_types(
-               graph,
-               [Module2],
-               module_info_plt_fixture()
-             )
-    end
-  end
-
-  test "sorted_edges/1", %{empty_call_graph: call_graph} do
-    call_graph
-    |> add_edge(:vertex_4, :vertex_5)
-    |> add_vertex(:vertex_1)
-    |> add_edge(:vertex_2, :vertex_3)
-
-    assert sorted_edges(call_graph) == [
-             {:vertex_2, :vertex_3},
-             {:vertex_4, :vertex_5}
-           ]
-  end
-
-  test "sorted_vertices/1", %{empty_call_graph: call_graph} do
-    call_graph
-    |> add_edge(:vertex_4, :vertex_5)
-    |> add_vertex(:vertex_1)
-    |> add_edge(:vertex_2, :vertex_3)
-
-    assert sorted_vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
   end
 
   describe "start/1" do

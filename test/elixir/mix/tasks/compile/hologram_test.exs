@@ -18,6 +18,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
 
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
   @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
@@ -57,6 +58,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @linked_page Hologram.Test.Fixtures.Page.Module2
   @linking_page Hologram.Test.Fixtures.Page.Module5
 
+  # An implementation of String.Chars for a struct of the test build that no page and no runtime
+  # function names, so that only the chunks reach it, and the struct.
+  @chunk_only_impl String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12
+  @chunk_only_type Hologram.Test.Fixtures.Compiler.CallGraph.Module12
+
+  # A struct of the test build with a String.Chars implementation, which the client code of one
+  # page alone names (Module7's action).
+  @page_named_type Hologram.Test.Fixtures.Reflection.Module5
+
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
@@ -91,12 +101,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # How many times the call graph and the module info PLT are dumped while the given function runs.
-  # PLT.dump/2 also writes the page digest PLT, once before the batches and once after each, through
-  # a private function whose local calls are counted and taken off.
+  # PLT.dump/2 also writes the page digest PLT and the chunk registry PLT, once before the batches
+  # and once after each, through private functions whose local calls are counted and taken off.
   defp count_dumps(fun) do
     counted = [
       {CallGraph, :dump, 2, [:call_count]},
       {PLT, :dump, 2, [:call_count]},
+      {Mix.Tasks.Compile.Hologram, :dump_chunk_registry_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_page_digest_plt, 2, [:local, :call_count]}
     ]
 
@@ -107,13 +118,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     try do
       fun.()
 
-      [call_graph_dumps, plt_dumps, page_digest_dumps] =
+      [call_graph_dumps, plt_dumps, chunk_registry_dumps, page_digest_dumps] =
         Enum.map(counted, fn {module, function, arity, _flags} ->
           {:call_count, count} = :erlang.trace_info({module, function, arity}, :call_count)
           count
         end)
 
-      [call_graph_dumps, plt_dumps - page_digest_dumps]
+      [call_graph_dumps, plt_dumps - chunk_registry_dumps - page_digest_dumps]
     after
       Enum.each(counted, fn {module, function, arity, flags} ->
         :erlang.trace_pattern({module, function, arity}, false, flags)
@@ -150,6 +161,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     after
       :erlang.trace_pattern(mfa, false, [:local, :call_count])
     end
+  end
+
+  # Whether the bundle at the given path holds the implementation only the chunks reach.
+  defp defines_chunk_only_impl?(bundle_path) do
+    bundle_path
+    |> File.read!()
+    |> String.contains?(
+      ~s/defineElixirFunction("#{Reflection.module_name(@chunk_only_impl)}","to_string",1,/
+    )
   end
 
   # Fakes an edit of the module in the kept state: the compiler reports it, so its beam is read, and
@@ -238,6 +258,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Agent.update(tracker, fn state -> %{state | current: state.current - 1} end)
   end
 
+  defp load_chunk_registry_items(opts) do
+    opts[:build_dir]
+    |> Path.join(Reflection.chunk_registry_plt_dump_file_name())
+    |> load_plt_items()
+  end
+
   defp load_compile_state_dump(opts) do
     dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
     assert File.exists?(dump_path)
@@ -248,21 +274,61 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp load_module_info_items(opts) do
-    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
-    assert File.exists?(dump_path)
-
-    plt = PLT.start()
-    PLT.load(plt, dump_path)
-    PLT.get_all(plt)
+    opts[:build_dir]
+    |> Path.join(Reflection.module_info_plt_dump_file_name())
+    |> load_plt_items()
   end
 
   defp load_page_digest_items(opts) do
-    dump_path = Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
+    opts[:build_dir]
+    |> Path.join(Reflection.page_digest_plt_dump_file_name())
+    |> load_plt_items()
+  end
+
+  # The items of the PLT dumped at the given path. The PLT they are read through is stopped, so
+  # that reading a dump leaves no process behind.
+  defp load_plt_items(dump_path) do
     assert File.exists?(dump_path)
 
     plt = PLT.start()
     PLT.load(plt, dump_path)
-    PLT.get_all(plt)
+    items = PLT.get_all(plt)
+    PLT.stop(plt)
+
+    items
+  end
+
+  # How many chunk bundles the last compile left.
+  defp num_chunk_bundles do
+    map_size(cache_state().chunks.bundle_infos)
+  end
+
+  # Puts one of the kept chunk bundles under another digest, files and kept state alike, as it is
+  # before an edit that changes the chunk's content, and returns a struct type of the chunk's
+  # signature with the bundle's old info.
+  defp put_kept_chunk_bundle_under_old_digest(opts) do
+    chunks = cache_state().chunks
+    [{signature, bundle_info} | _rest] = Map.to_list(chunks.bundle_infos)
+
+    old_digest = "OLDCHUNK"
+    old_bundle_path = Path.join(opts[:static_dir], "chunk-#{old_digest}.js")
+    old_source_map_path = old_bundle_path <> ".map"
+    File.rename!(bundle_info.static_bundle_path, old_bundle_path)
+    File.rename!(bundle_info.static_source_map_path, old_source_map_path)
+
+    old_bundle_info = %{
+      bundle_info
+      | digest: old_digest,
+        static_bundle_path: old_bundle_path,
+        static_source_map_path: old_source_map_path
+    }
+
+    Cache.put_chunks(%{
+      chunks
+      | bundle_infos: %{chunks.bundle_infos | signature => old_bundle_info}
+    })
+
+    {Enum.min(signature), old_bundle_info}
   end
 
   # Replaces the kept module infos with the given ones and marks them as the before picture.
@@ -337,6 +403,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_build_artifacts(opts) do
     test_call_graph(opts)
+    test_chunk_bundles(opts)
+    test_chunk_registry_plt(opts)
     test_dirs(opts)
     test_js_deps(opts)
     test_module_info_plt(opts)
@@ -379,6 +447,60 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # Dynamic dispatch edges are added during compilation
     assert CallGraph.has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
+  end
+
+  # The chunk bundles in the static dir are the ones the kept chunk state names, each with its
+  # source map.
+  defp test_chunk_bundles(opts) do
+    bundle_infos = Map.values(cache_state().chunks.bundle_infos)
+
+    chunk_bundle_paths =
+      opts[:static_dir]
+      |> Path.join("chunk-????????.js")
+      |> Path.wildcard()
+      |> Enum.sort()
+
+    chunk_source_map_paths =
+      opts[:static_dir]
+      |> Path.join("chunk-????????.js.map")
+      |> Path.wildcard()
+      |> Enum.sort()
+
+    assert chunk_bundle_paths != []
+
+    assert chunk_bundle_paths ==
+             bundle_infos
+             |> Enum.map(& &1.static_bundle_path)
+             |> Enum.sort()
+
+    assert chunk_source_map_paths ==
+             bundle_infos
+             |> Enum.map(& &1.static_source_map_path)
+             |> Enum.sort()
+  end
+
+  # The chunk registry dump names every page, and no chunk the static dir does not have.
+  defp test_chunk_registry_plt(opts) do
+    items = load_chunk_registry_items(opts)
+
+    page_modules = for {{:page, page_module}, _digests} <- items, do: page_module
+
+    type_digests =
+      for {{:type, _type}, digests} <- items, digest <- digests, uniq: true, do: digest
+
+    page_digests =
+      for {{:page, _page_module}, digests} <- items, digest <- digests, uniq: true, do: digest
+
+    served_digests =
+      opts[:static_dir]
+      |> Path.join("chunk-????????.js")
+      |> Path.wildcard()
+      |> Enum.map(&Path.basename(&1, ".js"))
+      |> Enum.map(&String.replace_prefix(&1, "chunk-", ""))
+
+    assert Enum.sort(page_modules) == Enum.sort(Reflection.list_pages())
+    assert Enum.sort(type_digests) == Enum.sort(served_digests)
+    assert page_digests -- served_digests == []
   end
 
   defp test_dirs(opts) do
@@ -431,14 +553,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_page_digest_plt(opts) do
-    page_digest_plt_dump_path =
-      Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
-
-    assert File.exists?(page_digest_plt_dump_path)
-
-    page_digest_plt = PLT.start()
-    PLT.load(page_digest_plt, page_digest_plt_dump_path)
-    page_digest_items = PLT.get_all(page_digest_plt)
+    page_digest_items = load_page_digest_items(opts)
 
     assert map_size(page_digest_items) == @num_pages
 
@@ -872,12 +987,33 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert MapSet.size(graph_modules) < map_size(module_infos)
     end
 
+    test "a run into an empty build dir holds the chunks' code in the graph and its IR", %{
+      opts: opts
+    } do
+      Cache.reset()
+      run(Keyword.put(opts, :build_dir, setup_empty_build_dir()))
+
+      %{call_graph: call_graph, ir_plt: ir_plt} = cache_state()
+
+      assert @chunk_only_impl in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {@chunk_only_impl, :to_string, 1})
+      assert PLT.member?(ir_plt, @chunk_only_impl)
+    end
+
     test "a run with no changes does not walk the graph", %{opts: opts} do
       run(opts)
 
       Code.ensure_loaded!(CallGraph)
 
       assert count_calls({CallGraph, :build_reach, 3}, fn -> run(opts) end) == 0
+    end
+
+    test "a run with no changes does not walk the graph for the chunks", %{opts: opts} do
+      run(opts)
+
+      Code.ensure_loaded!(CallGraph)
+
+      assert count_calls({CallGraph, :build_chunk_reach, 4}, fn -> run(opts) end) == 0
     end
 
     test "an edit of a module the graph does not hold builds no IR", %{opts: opts} do
@@ -1488,15 +1624,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_page_bundles(opts)
     end
 
-    test "rebuilds every page and the runtime when the client stack traces setting changed", %{
-      opts: opts
-    } do
+    test "rebuilds every page, the runtime and the chunks when the client stack traces setting changed",
+         %{
+           opts: opts
+         } do
       on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
       run(opts)
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+               @num_pages + 1 + num_chunk_bundles()
+
       assert cache_state().bundle_inputs.client_stacktraces? == Hologram.client_stacktraces?()
       test_page_bundles(opts)
       test_runtime_bundle(opts)
@@ -1639,7 +1778,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       mfas = [
         {CallGraph, :clone, 2},
         {CallGraph, :list_page_mfas, 5},
-        {CallGraph, :list_runtime_mfas, 2}
+        {CallGraph, :runtime_analysis, 1}
       ]
 
       Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
@@ -1719,7 +1858,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_page_bundles(opts)
     end
 
-    test "a new VM whose bundle inputs differ rebuilds every page and the runtime", %{
+    test "a new VM whose bundle inputs differ rebuilds every page, the runtime and the chunks", %{
       opts: opts
     } do
       on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
@@ -1728,7 +1867,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+               @num_pages + 1 + num_chunk_bundles()
+
       test_page_bundles(opts)
     end
 
@@ -1739,7 +1880,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+               @num_pages + 1 + num_chunk_bundles()
+
       assert {1, _compile_state} = load_compile_state_dump(opts)
     end
 
@@ -1753,7 +1896,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == @num_pages + 1
+      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+               @num_pages + 1 + num_chunk_bundles()
+
       test_page_bundles(opts)
     end
 
@@ -2093,6 +2238,238 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_runtime_bundle(opts)
     end
 
+    test "builds the implementation for a struct type no page names into a chunk bundle", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{chunks: chunks, pages_plt: pages_plt, runtime: runtime} = cache_state()
+
+      chunk_bundle_paths =
+        chunks.bundle_infos
+        |> Map.values()
+        |> Enum.map(& &1.static_bundle_path)
+
+      page_bundle_paths =
+        pages_plt
+        |> PLT.get_all()
+        |> Map.values()
+        |> Enum.map(& &1.bundle_info.static_bundle_path)
+
+      assert [_chunk_bundle_path] = Enum.filter(chunk_bundle_paths, &defines_chunk_only_impl?/1)
+      refute defines_chunk_only_impl?(runtime.bundle_info.static_bundle_path)
+      refute Enum.any?(page_bundle_paths, &defines_chunk_only_impl?/1)
+    end
+
+    test "a run with no changes keeps the chunk bundles", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      {record_built, recorded_built} = record_calls()
+
+      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn ->
+               run(Keyword.put(opts, :bundles_built, record_built))
+             end) == 0
+
+      assert recorded_built.() == []
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
+    test "a new VM keeps the chunk bundles", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      Cache.reset()
+      fake_recompile()
+
+      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 0
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
+    test "a run with no chunk state kept derives the chunks again", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      Cache.put_chunks(nil)
+
+      Code.ensure_loaded!(CallGraph)
+
+      assert count_calls({CallGraph, :build_chunk_reach, 4}, fn -> run(opts) end) == 1
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
+    test "rebundles the chunks alone when a module only they carry was edited", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      fake_edit(@chunk_only_impl)
+      {record_built, recorded_built} = record_calls()
+
+      # The edit is faked in the kept infos, so the beam and with it the rebuilt bundles are
+      # byte-identical and keep their digests; what the test asserts is that they were built.
+      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn ->
+               run(Keyword.put(opts, :bundles_built, record_built))
+             end) == 1
+
+      assert recorded_built.() == [[:chunks]]
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
+    test "rebundles the chunks when one's bundle is gone", %{opts: opts} do
+      run(opts)
+
+      [bundle_info | _rest] = Map.values(cache_state().chunks.bundle_infos)
+      File.rm!(bundle_info.static_bundle_path)
+
+      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      test_chunk_bundles(opts)
+    end
+
+    test "rebundles the chunks when one's source map is gone", %{opts: opts} do
+      run(opts)
+
+      [bundle_info | _rest] = Map.values(cache_state().chunks.bundle_infos)
+      File.rm!(bundle_info.static_source_map_path)
+
+      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      test_chunk_bundles(opts)
+    end
+
+    test "removes the chunk bundles a rebuild replaced", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      {_type, old_bundle_info} = put_kept_chunk_bundle_under_old_digest(opts)
+
+      fake_edit(@chunk_only_impl)
+      run(opts)
+
+      refute File.exists?(old_bundle_info.static_bundle_path)
+      refute File.exists?(old_bundle_info.static_source_map_path)
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
+    test "the chunk registry names the chunks of a struct type no page names", %{opts: opts} do
+      run(opts)
+
+      assert [digest] = load_chunk_registry_items(opts)[{:type, @chunk_only_type}]
+
+      assert opts[:static_dir]
+             |> Path.join("chunk-#{digest}.js")
+             |> defines_chunk_only_impl?()
+
+      test_chunk_registry_plt(opts)
+    end
+
+    test "the chunk registry names the kept chunks until the first batch replaces them", %{
+      opts: opts
+    } do
+      run(opts)
+
+      {type, old_bundle_info} = put_kept_chunk_bundle_under_old_digest(opts)
+
+      fake_edit(@chunk_only_impl)
+      Cache.put_pending_pages([Module1])
+
+      {record_digests, recorded_digests} = record_calls()
+
+      # The chunk registry dump is read as the first batch is asked for, and as it is reported.
+      next_batch = fn remaining_pages, _links ->
+        record_digests.(load_chunk_registry_items(opts)[{:type, type}])
+        MapSet.to_list(remaining_pages)
+      end
+
+      bundles_built = fn _built ->
+        record_digests.(load_chunk_registry_items(opts)[{:type, type}])
+      end
+
+      run(Keyword.merge(opts, bundles_built: bundles_built, next_batch: next_batch))
+
+      assert [digests_before, digests_after] = recorded_digests.()
+      assert old_bundle_info.digest in digests_before
+      refute old_bundle_info.digest in digests_after
+      test_chunk_registry_plt(opts)
+    end
+
+    test "a page preloads the chunks of the struct types its client code names", %{opts: opts} do
+      run(opts)
+
+      {:ok, page_state} = PLT.get(cache_state().pages_plt, Module7)
+      items = load_chunk_registry_items(opts)
+
+      assert page_state.chunk_types == [@page_named_type]
+      assert [digest] = items[{:type, @page_named_type}]
+      assert digest in items[{:page, Module7}]
+      refute digest in items[{:page, Module1}]
+    end
+
+    test "a new VM keeps the chunks each page preloads", %{opts: opts} do
+      run(opts)
+
+      items = load_chunk_registry_items(opts)
+      Cache.reset()
+      fake_recompile()
+      run(opts)
+
+      assert load_chunk_registry_items(opts) == items
+    end
+
+    test "the chunks are built with the first batch, after the runtime", %{opts: opts} do
+      {record_built, recorded_built} = record_calls()
+
+      next_batch = fn remaining_pages, _links -> [Enum.min(remaining_pages)] end
+
+      run(Keyword.merge(opts, bundles_built: record_built, next_batch: next_batch))
+
+      assert [[:runtime, :chunks, _first_page] | rest] = recorded_built.()
+      refute Enum.any?(rest, &(:chunks in &1))
+      test_chunk_bundles(opts)
+    end
+
+    test "the chunks are built alone when the first answer is to stop", %{opts: opts} do
+      run(opts)
+
+      fake_edit(@chunk_only_impl)
+      Cache.put_pending_pages([Module1])
+
+      {record_built, recorded_built} = record_calls()
+
+      run(
+        Keyword.merge(opts,
+          bundles_built: record_built,
+          next_batch: fn _remaining_pages, _links -> :stop end
+        )
+      )
+
+      assert recorded_built.() == [[:chunks]]
+      assert MapSet.member?(cache_state().pending_pages, Module1)
+      test_chunk_bundles(opts)
+    end
+
+    test "a run that fails while bundling leaves the next one rebuilding the chunks", %{
+      opts: opts
+    } do
+      run(opts)
+
+      chunks = cache_state().chunks
+      fake_edit(@chunk_only_impl)
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      assert cache_state().chunks == nil
+      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
     test "a run into a fresh static dir rebuilds every bundle", %{opts: opts} do
       run(opts)
 
@@ -2106,11 +2483,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
       try do
         run(fresh_static_dir_opts)
 
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, @num_pages + 1}
+        assert :erlang.trace_info(mfa, :call_count) ==
+                 {:call_count, @num_pages + 1 + num_chunk_bundles()}
       after
         :erlang.trace_pattern(mfa, false, [:call_count])
       end
 
+      test_chunk_bundles(fresh_static_dir_opts)
       test_page_bundles(fresh_static_dir_opts)
       test_runtime_bundle(fresh_static_dir_opts)
     end
@@ -2223,29 +2602,31 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert encoding_inputs.async_mfas == CallGraph.list_async_mfas(call_graph)
     end
 
-    test "a run with no changes lists no runtime MFAs", %{opts: opts} do
+    test "a run with no changes does not analyse the runtime", %{opts: opts} do
       run(opts)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+      assert count_calls({CallGraph, :runtime_analysis, 1}, fn -> run(opts) end) == 0
     end
 
-    test "an edit of a module the graph does not hold lists no runtime MFAs", %{opts: opts} do
+    test "an edit of a module the graph does not hold does not analyse the runtime", %{
+      opts: opts
+    } do
       run(opts)
 
       fake_edit(@unreached_module)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 0
+      assert count_calls({CallGraph, :runtime_analysis, 1}, fn -> run(opts) end) == 0
     end
 
-    test "an edit of a page lists the runtime MFAs again", %{opts: opts} do
+    test "an edit of a page analyses the runtime again", %{opts: opts} do
       run(opts)
 
       fake_edit(Module1)
 
-      assert count_calls({CallGraph, :list_runtime_mfas, 2}, fn -> run(opts) end) == 1
+      assert count_calls({CallGraph, :runtime_analysis, 1}, fn -> run(opts) end) == 1
     end
 
-    test "the kept runtime MFAs are the ones a walk finds", %{opts: opts} do
+    test "the kept runtime MFAs and types are the ones a walk finds", %{opts: opts} do
       run(opts)
       run(opts)
 
@@ -2260,9 +2641,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         |> CallGraph.clone()
         |> CallGraph.remove_manually_ported_mfas()
 
-      pages = Compiler.list_pages(module_info_plt)
-
-      assert runtime.mfas == CallGraph.list_runtime_mfas(call_graph, pages)
+      assert CallGraph.runtime_analysis(call_graph) == %{mfas: runtime.mfas, types: runtime.types}
 
       CallGraph.stop(call_graph)
       PLT.stop(module_info_plt)
@@ -2443,7 +2822,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert map_size(page_states) > 0
 
       Enum.each(page_states, fn {page_module, page_state} ->
-        assert Enum.sort(Map.keys(page_state)) == [:bundle_info, :modules]
+        assert Enum.sort(Map.keys(page_state)) == [:bundle_info, :chunk_types, :modules]
         assert {:ok, [_mfa | _rest]} = PLT.get(page_mfas_plt, page_module)
       end)
     end
@@ -2451,7 +2830,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with no changes copies no module info", %{opts: opts} do
       run(opts)
 
-      assert count_calls({PLT, :get_all, 1}, fn -> run(opts) end) == 1
+      # The chunk registry PLT and the page digest PLT are copied, each for its dump.
+      assert count_calls({PLT, :get_all, 1}, fn -> run(opts) end) == 2
     end
 
     test "a run with no changes reads no key of the encode PLT", %{opts: opts} do
@@ -2813,17 +3193,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(opts)
 
-      page_digest_plt = PLT.start()
-
-      PLT.load(
-        page_digest_plt,
-        Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
-      )
+      page_digest =
+        opts
+        |> load_page_digest_items()
+        |> Map.fetch!(Module1)
 
       bundle_path =
         Path.join(
           opts[:static_dir],
-          "page-#{Reflection.module_name(Module1)}-#{PLT.get!(page_digest_plt, Module1)}.js"
+          "page-#{Reflection.module_name(Module1)}-#{page_digest}.js"
         )
 
       bundle = File.read!(bundle_path)

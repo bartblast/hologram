@@ -69,6 +69,11 @@ defmodule Hologram.Assets.PathRegistryTest do
       assert lookup("invalid_file.css") == :error
     end
 
+    test "chunk bundle named by esbuild" do
+      assert lookup("hologram/chunk.js") == :error
+      assert lookup("hologram/chunk-DDDDDDDD.js") == :error
+    end
+
     test "page bundle named by esbuild" do
       assert lookup("hologram/page-Elixir.MyPage1.js") == :error
       assert lookup("hologram/page-Elixir.MyPage1-BBBBBBBB.js") == :error

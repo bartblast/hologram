@@ -77,6 +77,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
+  alias Hologram.Test.Fixtures.Template.Renderer.Module93
 
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
@@ -97,6 +98,7 @@ defmodule Hologram.Template.RendererTest do
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
 
   setup :set_mox_global
@@ -1724,6 +1726,8 @@ defmodule Hologram.Template.RendererTest do
 
       setup_asset_manifest_cache(AssetManifestCacheStub)
 
+      setup_chunk_registry(ChunkRegistryStub)
+
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
@@ -1901,6 +1905,8 @@ defmodule Hologram.Template.RendererTest do
 
       setup_asset_manifest_cache(AssetManifestCacheStub)
 
+      setup_chunk_registry(ChunkRegistryStub)
+
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
@@ -1954,6 +1960,22 @@ defmodule Hologram.Template.RendererTest do
       assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module24, @params, @server, @opts)
+    end
+
+    test "name the chunks the struct types in the page state need" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module93, :dummy_module_93_digest)
+
+      assert render_page(Module93, @params, @server, @opts).chunk_digests == [
+               "AAAAAAAA",
+               "BBBBBBBB",
+               "CCCCCCCC"
+             ]
+    end
+
+    test "name no chunk when the page state holds no struct of a type that needs one" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      assert render_page(Module21, @params, @server, @opts).chunk_digests == []
     end
 
     test "merge the page params into the page component struct" do
@@ -3062,6 +3084,27 @@ defmodule Hologram.Template.RendererTest do
 
       assert encoded ==
                ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
+    end
+  end
+
+  describe "interpolate_chunks/2" do
+    test "substitutes the placeholders with the digests and a script tag per chunk" do
+      html =
+        "before chunkDigests: $CHUNK_DIGESTS_JS_PLACEHOLDER; $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
+
+      chunk_digests = ["AAAAAAAA", "BBBBBBBB"]
+
+      assert Renderer.interpolate_chunks(html, chunk_digests) ==
+               ~s'before chunkDigests: ["AAAAAAAA","BBBBBBBB"]; ' <>
+                 ~s'<script async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
+                 ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script> after'
+    end
+
+    test "substitutes the placeholders with an empty array and no script tag when no chunks are provided" do
+      html =
+        "before chunkDigests: $CHUNK_DIGESTS_JS_PLACEHOLDER; $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
+
+      assert Renderer.interpolate_chunks(html, []) == "before chunkDigests: [];  after"
     end
   end
 

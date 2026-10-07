@@ -19,6 +19,15 @@ defmodule Hologram.Compiler do
   @type js_input_fingerprint ::
           {:digest, integer} | {:stat, non_neg_integer, non_neg_integer} | :fresh | :missing
 
+  # A chunk whose rendered definitions are smaller than this many bytes is folded into another
+  # chunk (see fold_small_chunks/2), because shipping it as a file of its own costs more than it
+  # holds. The measured part: a bundled chunk with no function is 403 bytes, and the response
+  # headers of a static script are about 185 bytes, so a file costs about 590 bytes on the wire
+  # before its first function. Rendered definitions minify to about 0.69 of their size (measured on
+  # the chunks under 2 KB of Hologram's own test build), which makes 590 bytes on the wire about 850
+  # rendered ones. The policy part: a request is counted as costing those bytes and nothing else.
+  @chunk_fold_bound 850
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs,
   skipping the modules whose bindings another bundle already registers. The module info PLT says which
@@ -194,6 +203,113 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds JavaScript code for a chunk: a script holding the given MFAs, which are the protocol
+  implementation code a set of struct types shares (see `group_mfas_by_signature/1`).
+
+  The script does not define its functions when it runs: it leaves them, with its own digest, for
+  the runtime to define, and announces itself with a `hologram:scriptLoaded` event (see
+  `assets/js/script_registry.mjs`). A chunk can run before the runtime does, and neither needs to
+  know the other's name: the digest is read from the file name of the script element running it
+  (see `Hologram.Router.Helpers.chunk_bundle_path/1`), since a file cannot hold the hash of its
+  own content.
+
+  It carries no timing code, unlike the page and runtime scripts: a document can load many chunks,
+  and the bundler would put a copy of the timer in each.
+
+  Takes the options `build_page_js/5` takes.
+  """
+  @spec build_chunk_js([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) :: String.t()
+  def build_chunk_js(mfas, ir_plt, encode_plt, async_mfas, opts) do
+    %{defs: defs, import_statements: import_statements} =
+      render_script_parts(mfas, ir_plt, encode_plt, async_mfas, opts)
+
+    """
+    "use strict";#{import_statements}
+
+    #{render_script_announcement(defs)}\
+    """
+  end
+
+  @doc """
+  Grows the call graph until it holds the code of every chunk (see `CallGraph.build_chunk_reach/4`),
+  building the IR of each module the walk asks for into the IR PLT first, and returns what that
+  walk returns: the chunks' entry vertices by type, the client protocols and the modules built.
+  The walk asks only for modules the graph's module info PLT holds, so each has a beam to build
+  IR from.
+  """
+  @spec build_chunk_reach!(CallGraph.t(), PLT.t(), [module], [module]) :: %{
+          built_modules: [module],
+          client_protocols: MapSet.t(module),
+          entries_by_type: %{module => [CallGraph.vertex()]}
+        }
+  def build_chunk_reach!(call_graph, ir_plt, pages, components) do
+    CallGraph.build_chunk_reach(
+      call_graph,
+      pages,
+      components,
+      &build_graph_modules!(call_graph, ir_plt, &1)
+    )
+  end
+
+  @doc """
+  Builds the chunk registry PLT, which says which chunks to load, and returns it with the path of
+  its dump in the `:build_dir` opt:
+
+    * `{:type, type}` - the digests of the chunks a struct type needs, sorted: every chunk whose
+      signature holds the type. A type no chunk's signature holds has no entry.
+
+    * `{:page, page}` - the digests of the chunks a page preloads, sorted: the ones its own types
+      need and the ones the given runtime types need. A page that preloads none has an empty list.
+
+  A chunk's digest names its file (see `Hologram.Router.Helpers.chunk_bundle_path/1`).
+
+  Takes the chunks' bundle infos by signature (see `bundle/4`), each page's types (see
+  `CallGraph.list_page_chunk_types/4`) and the struct types the runtime's code names (see
+  `CallGraph.runtime_analysis/1`).
+  """
+  @spec build_chunk_registry_plt(
+          %{MapSet.t(module) => map},
+          %{module => [module]},
+          Enumerable.t(module),
+          T.opts()
+        ) :: {PLT.t(), T.file_path()}
+  def build_chunk_registry_plt(
+        bundle_infos_by_signature,
+        chunk_types_by_page,
+        runtime_types,
+        opts
+      ) do
+    digests_by_type =
+      bundle_infos_by_signature
+      |> Enum.flat_map(fn {signature, bundle_info} ->
+        Enum.map(signature, &{&1, bundle_info.digest})
+      end)
+      |> Enum.sort()
+      |> Enum.group_by(fn {type, _digest} -> type end, fn {_type, digest} -> digest end)
+
+    type_items = Enum.map(digests_by_type, fn {type, digests} -> {{:type, type}, digests} end)
+
+    page_items =
+      Enum.map(chunk_types_by_page, fn {page, types} ->
+        digests =
+          types
+          |> Enum.concat(runtime_types)
+          |> Enum.flat_map(&Map.get(digests_by_type, &1, []))
+          |> Enum.uniq()
+          |> Enum.sort()
+
+        {{:page, page}, digests}
+      end)
+
+    chunk_registry_plt = PLT.start(items: type_items ++ page_items, supervisor: opts[:supervisor])
+
+    chunk_registry_plt_dump_path =
+      Path.join([opts[:build_dir], Reflection.chunk_registry_plt_dump_file_name()])
+
+    {chunk_registry_plt, chunk_registry_plt_dump_path}
+  end
+
+  @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
   Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
   module info PLT's keys.
@@ -315,6 +431,10 @@ defmodule Hologram.Compiler do
   many pages can encode their functions first with `encode_reachable_functions/5` and render every
   page from the encode PLT.
 
+  The script announces itself the way a chunk does (see `build_chunk_js/5`): it leaves its
+  function definitions, with its own digest, for the runtime to define. Its digest is in its file
+  name too (see `Hologram.Router.Helpers.page_bundle_path/2`).
+
   ## Options
 
     * `:js_dir` - the directory of Hologram's JavaScript sources, which the page script imports
@@ -332,37 +452,9 @@ defmodule Hologram.Compiler do
   @spec build_page_js([mfa], PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) :: String.t()
   def build_page_js(mfas, ir_plt, encode_plt, async_mfas, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
-    runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
 
-    %{imports: imports, bindings: bindings} =
-      aggregate_js_imports(mfas, ir_plt, opts[:module_info_plt], runtime_js_binding_modules)
-
-    import_statements =
-      imports
-      |> render_js_import_statements()
-      |> render_block()
-
-    js_bindings_registration_call =
-      bindings
-      |> render_js_bindings_registration_call()
-      |> render_block()
-
-    erlang_js_dir = Path.join(js_dir, "erlang")
-
-    erlang_function_defs =
-      mfas
-      |> render_erlang_function_defs(ir_plt, erlang_js_dir)
-      |> render_block()
-
-    elixir_function_defs =
-      mfas
-      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
-      |> render_block()
-
-    module_metadata_registration =
-      mfas
-      |> render_module_metadata_registration(ir_plt, opts[:module_metadata])
-      |> render_block()
+    %{defs: defs, import_statements: import_statements} =
+      render_script_parts(mfas, ir_plt, encode_plt, async_mfas, opts)
 
     """
     "use strict";
@@ -371,21 +463,7 @@ defmodule Hologram.Compiler do
 
     const startTime = performance.now();
 
-    globalThis.Hologram.pageReachableFunctionDefs = (deps) => {
-      const {
-        Bitstring,
-        ERTS,
-        HologramBoxedError,
-        HologramInterpreterError,
-        Interpreter,
-        MemoryStorage,
-        Type,
-        Utils,
-      } = deps;#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
-    }
-
-    globalThis.Hologram.pageScriptLoaded = true;
-    document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
+    #{render_script_announcement(defs)}
 
     console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));\
     """
@@ -399,14 +477,15 @@ defmodule Hologram.Compiler do
   """
   @spec build_reach!(CallGraph.t(), PLT.t(), map) :: [module]
   def build_reach!(call_graph, ir_plt, graph_diff) do
-    CallGraph.build_reach(call_graph, graph_diff, fn modules ->
-      build_missing_ir!(ir_plt, modules)
-      TaskUtils.map_concurrently(modules, &CallGraph.build_for_module(call_graph, ir_plt, &1))
-    end)
+    CallGraph.build_reach(call_graph, graph_diff, &build_graph_modules!(call_graph, ir_plt, &1))
   end
 
   @doc """
   Builds Hologram runtime JavaScript source code.
+
+  The script starts the runtime once it has run. It waits for no page script: the runtime mounts
+  the page when the scripts the page needs have announced themselves (see
+  `assets/js/script_registry.mjs`).
 
   ## Options
 
@@ -484,11 +563,7 @@ defmodule Hologram.Compiler do
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
-    document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
-
-    if (globalThis.Hologram.pageScriptLoaded) {
-      document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
-    }
+    Hologram.run();
 
     console.debug("Hologram: runtime script executed in", PerformanceTimer.diff(startTime));\
     """
@@ -501,7 +576,8 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
   """
-  @spec bundle(list({module | nil, T.file_path(), String.t()}), T.opts()) :: list(map)
+  @spec bundle(list({module | String.t() | nil, T.file_path(), String.t()}), T.opts()) ::
+          list(map)
   def bundle(entry_files_info, opts) do
     TaskUtils.map_concurrently(entry_files_info, fn {entry_name, entry_file_path, bundle_name} ->
       bundle(entry_name, entry_file_path, bundle_name, opts)
@@ -510,17 +586,24 @@ defmodule Hologram.Compiler do
 
   @doc """
   Bundles the given entry file with esbuild, which names the output `<bundle_name>-<hash>.js` and
-  its source map `<bundle_name>-<hash>.js.map` by the content hash, with the entry name, a module
-  written without its `Elixir.` prefix, between the bundle name and the hash when one is given: a
-  bundle name shared by many entries (the page bundles) needs it to tell them apart, one with a
-  single entry (the runtime) does not. The returned digest is the hash.
+  its source map `<bundle_name>-<hash>.js.map` by the content hash. An entry name that is a module
+  goes between the bundle name and the hash, written without its `Elixir.` prefix: the page
+  bundles share a bundle name, and the name says which page a file is for. An entry name that is a
+  string names the build only, its output dir under the `:tmp_dir` opt, which keeps the entries of
+  a shared bundle name apart while they are bundled at once: the chunks' files are named by the
+  bundle name and the hash alone, since no two chunks have the same content. The returned digest is
+  the hash.
+
+  A bundle bigger than the `:max_bundle_size` config value fails the build, unless its bundle name
+  is `"chunk"`: a chunk is downloaded only once a struct of one of its types is on the client, and
+  an app has chunks for types it never sends there.
 
   The returned `js_inputs` are the files esbuild read for the bundle besides the entry file,
   Hologram's own sources under the `:js_dir` opt and the packages under the `:node_modules_path`
   opt, with their fingerprints (see `fingerprint_js_inputs/2`), taken against the time esbuild
   started: a bundle inlines them, and a kept bundle whose files moved must be built again.
   """
-  @spec bundle(module | nil, T.file_path(), String.t(), T.opts()) :: map
+  @spec bundle(module | String.t() | nil, T.file_path(), String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
   def bundle(entry_name, entry_file_path, bundle_name, opts) do
     # esbuild names the bundle and its source map by their content hash and writes the source map
@@ -528,7 +611,8 @@ defmodule Hologram.Compiler do
     # dir: the name is only known once esbuild has run, so the dir is listed for it, and it is
     # recreated so that a bundle left there by a run that failed the size check is not listed too.
     output_name = bundle_output_name(bundle_name, entry_name)
-    output_dir = Path.join(opts[:tmp_dir], "#{output_name}.output")
+    output_dir_name = bundle_output_dir_name(bundle_name, entry_name)
+    output_dir = Path.join(opts[:tmp_dir], "#{output_dir_name}.output")
     FileUtils.recreate_dir(output_dir)
     metafile_path = Path.join(output_dir, "meta.json")
 
@@ -584,7 +668,7 @@ defmodule Hologram.Compiler do
 
     output_bundle_path = Path.join(output_dir, bundle_file_name)
 
-    maybe_ensure_bundle_within_size_limit!(output_name, output_bundle_path)
+    maybe_ensure_bundle_within_size_limit!(bundle_name, output_name, output_bundle_path)
 
     digest =
       bundle_file_name
@@ -613,6 +697,25 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the digest of a chunk's signature (see `group_mfas_by_signature/1`): the first 8 hex
+  digits of the MD5 of its type names, sorted. It names the chunk while it is built, its entry
+  file and its output dir, and not the file that is served (see `bundle/4`). The same signature
+  gives the same digest in every compile.
+  """
+  @spec chunk_signature_digest(MapSet.t(module)) :: String.t()
+  def chunk_signature_digest(signature) do
+    type_names =
+      signature
+      |> Enum.sort()
+      |> Enum.map_join(",", &Atom.to_string/1)
+
+    :md5
+    |> :crypto.hash(type_names)
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 8)
+  end
+
+  @doc """
   Returns the client config the runtime bundle sets as `globalThis.Hologram.config`: whether the
   error overlay is on, whether live reload is (it runs in dev only, and in test, so that the feature
   tests can drive it, as the SSE stream's live reload subscription does), and whether client stack
@@ -626,6 +729,61 @@ defmodule Hologram.Compiler do
 
     "{errorOverlay: #{Hologram.client_error_overlay?()}, liveReload: #{live_reload?}, " <>
       "stacktraces: #{Hologram.client_stacktraces?()}}"
+  end
+
+  @doc """
+  Creates the chunk bundle entry files, one per signature of the given MFAs by signature (see
+  `group_mfas_by_signature/1`) once the small chunks are folded (see `fold_small_chunks/2`), and
+  returns each signature left with its digest (see `chunk_signature_digest/1`) and its entry
+  file's path, sorted by digest. The functions of all the chunks are encoded into the encode PLT
+  first, with one IR read per module (`encode_reachable_functions/5`), and then each chunk is
+  rendered from that cache. Takes the
+  options `create_page_entry_files/6` takes, with the modules whose JS bindings the runtime script
+  registers as the `runtime_js_binding_modules:` opt.
+  """
+  @spec create_chunk_entry_files(
+          %{MapSet.t(module) => [mfa]},
+          PLT.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          T.opts()
+        ) :: list({MapSet.t(module), String.t(), T.file_path()})
+  def create_chunk_entry_files(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
+    module_info_plt = opts[:module_info_plt]
+
+    script_opts = [
+      js_dir: opts[:js_dir],
+      module_info_plt: module_info_plt,
+      module_metadata: opts[:module_metadata],
+      runtime_js_binding_modules: opts[:runtime_js_binding_modules] || MapSet.new()
+    ]
+
+    mfas_by_signature
+    |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
+    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
+
+    # A chunk's size is the size of its definitions as rendered, which holds the Erlang functions
+    # and the protocol dispatchers too: the encode PLT holds neither.
+    size_by_signature =
+      mfas_by_signature
+      |> TaskUtils.map_concurrently(fn {signature, mfas} ->
+        %{defs: defs} = render_script_parts(mfas, ir_plt, encode_plt, async_mfas, script_opts)
+        {signature, byte_size(defs)}
+      end)
+      |> Map.new()
+
+    mfas_by_signature
+    |> fold_small_chunks(size_by_signature)
+    |> Enum.map(fn {signature, mfas} -> {signature, chunk_signature_digest(signature), mfas} end)
+    |> Enum.sort_by(fn {_signature, signature_digest, _mfas} -> signature_digest end)
+    |> TaskUtils.map_concurrently(fn {signature, signature_digest, mfas} ->
+      entry_file_path =
+        mfas
+        |> build_chunk_js(ir_plt, encode_plt, async_mfas, script_opts)
+        |> create_entry_file("chunk-" <> signature_digest, opts[:tmp_dir])
+
+      {signature, signature_digest, entry_file_path}
+    end)
   end
 
   @doc """
@@ -815,6 +973,49 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Folds each chunk that is smaller than what a separate file costs into another chunk, given the
+  MFAs by signature (see `group_mfas_by_signature/1`) and each signature's size, the bytes of its
+  definitions as rendered. A small chunk is merged into the chunk whose signature is its smallest
+  strict superset, so that every type that needs its MFAs still loads them: those types save a
+  request, and the other types of the superset load a few bytes they have no use for. A small
+  chunk with no superset stays.
+
+  The smallest chunks are folded first, and a chunk that grew to the bound by what was folded into
+  it stays.
+
+  ## Examples
+
+      iex> fold_small_chunks(
+      ...>   %{
+      ...>     MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+      ...>     MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}]
+      ...>   },
+      ...>   %{MapSet.new([Date]) => 300, MapSet.new([Date, DateTime]) => 4_000}
+      ...> )
+      %{
+        MapSet.new([Date, DateTime]) => [
+          {Calendar.ISO, :date_to_string, 3},
+          {String.Chars.Date, :to_string, 1}
+        ]
+      }
+  """
+  @spec fold_small_chunks(
+          %{MapSet.t(module) => [mfa]},
+          %{MapSet.t(module) => non_neg_integer}
+        ) :: %{MapSet.t(module) => [mfa]}
+  def fold_small_chunks(mfas_by_signature, size_by_signature) do
+    {folded_mfas_by_signature, _sizes} =
+      size_by_signature
+      |> Enum.filter(fn {_signature, size} -> size < @chunk_fold_bound end)
+      |> Enum.sort_by(fn {signature, size} -> {size, Enum.sort(signature)} end)
+      |> Enum.reduce({mfas_by_signature, size_by_signature}, fn {signature, _size}, acc ->
+        fold_small_chunk(signature, acc)
+      end)
+
+    folded_mfas_by_signature
+  end
+
+  @doc """
   Extracts JavaScript source code for the given ported Erlang function.
 
   Returns the JavaScript function code if it exists in the corresponding .mjs file,
@@ -853,6 +1054,34 @@ defmodule Hologram.Compiler do
   @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
   def group_mfas_by_module(mfas) do
     Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
+  end
+
+  @doc """
+  Groups the MFAs of the given types' chunks (see `CallGraph.list_chunk_mfas_by_type/4`) by their
+  signature: the set of types whose MFAs hold them. Each group is the MFAs of one chunk, sorted, so
+  that an MFA several types need is in one chunk those types share, and in no other.
+
+  ## Examples
+
+      iex> group_mfas_by_signature(%{
+      ...>   Date => [{Calendar.ISO, :date_to_string, 3}, {String.Chars.Date, :to_string, 1}],
+      ...>   Time => [{Calendar.ISO, :time_to_string, 4}, {String.Chars.Time, :to_string, 1}],
+      ...>   DateTime => [{Calendar.ISO, :date_to_string, 3}, {Calendar.ISO, :time_to_string, 4}]
+      ...> })
+      %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, DateTime]) => [{Calendar.ISO, :date_to_string, 3}],
+        MapSet.new([DateTime, Time]) => [{Calendar.ISO, :time_to_string, 4}],
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}]
+      }
+  """
+  @spec group_mfas_by_signature(%{module => [mfa]}) :: %{MapSet.t(module) => [mfa]}
+  def group_mfas_by_signature(mfas_by_type) do
+    mfas_by_type
+    |> Enum.flat_map(fn {type, mfas} -> Enum.map(mfas, &{&1, type}) end)
+    |> Enum.group_by(fn {mfa, _type} -> mfa end, fn {_mfa, type} -> type end)
+    |> Enum.group_by(fn {_mfa, types} -> MapSet.new(types) end, fn {mfa, _types} -> mfa end)
+    |> Map.new(fn {signature, mfas} -> {signature, Enum.sort(mfas)} end)
   end
 
   @doc """
@@ -1457,7 +1686,26 @@ defmodule Hologram.Compiler do
   # An entry name, a module, tells apart the entries bundled under one bundle name (the pages), so
   # it goes into the file name, without its Elixir prefix like the entry file name; a bundle name
   # with a single entry (the runtime) has none.
-  defp bundle_output_name(bundle_name, nil), do: bundle_name
+  # Builds the IR of the given modules into the IR PLT, then the modules into the call graph.
+  defp build_graph_modules!(call_graph, ir_plt, modules) do
+    build_missing_ir!(ir_plt, modules)
+    TaskUtils.map_concurrently(modules, &CallGraph.build_for_module(call_graph, ir_plt, &1))
+  end
+
+  # The name of a bundle's output dir in the tmp dir, one per entry.
+  defp bundle_output_dir_name(bundle_name, entry_name) when is_binary(entry_name) do
+    "#{bundle_name}-#{entry_name}"
+  end
+
+  defp bundle_output_dir_name(bundle_name, entry_name) do
+    bundle_output_name(bundle_name, entry_name)
+  end
+
+  # The name esbuild puts in front of the hash in a bundle's file name.
+  defp bundle_output_name(bundle_name, entry_name)
+       when is_nil(entry_name) or is_binary(entry_name) do
+    bundle_name
+  end
 
   defp bundle_output_name(bundle_name, entry_name) do
     "#{bundle_name}-#{Reflection.module_name(entry_name)}"
@@ -1666,6 +1914,34 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Merges the chunk of the given signature into its target (see fold_target/2), when it is still
+  # under the bound with what was folded into it and has one.
+  defp fold_small_chunk(signature, {mfas_by_signature, size_by_signature} = acc) do
+    size = Map.fetch!(size_by_signature, signature)
+    target = fold_target(signature, Map.keys(mfas_by_signature))
+
+    if size < @chunk_fold_bound and target do
+      {mfas, remaining_mfas_by_signature} = Map.pop!(mfas_by_signature, signature)
+
+      {
+        Map.update!(remaining_mfas_by_signature, target, &Enum.sort(&1 ++ mfas)),
+        size_by_signature
+        |> Map.delete(signature)
+        |> Map.update!(target, &(&1 + size))
+      }
+    else
+      acc
+    end
+  end
+
+  # The signature a small chunk is folded into: its strict superset with the fewest types, the
+  # first by its sorted types among several. Nil when no signature is a strict superset.
+  defp fold_target(signature, signatures) do
+    signatures
+    |> Enum.filter(&(&1 != signature and MapSet.subset?(signature, &1)))
+    |> Enum.min_by(&{MapSet.size(&1), Enum.sort(&1)}, fn -> nil end)
+  end
+
   defp function_encoded?(encode_plt, module, {function, arity}) do
     PLT.member?(encode_plt, {module, function, arity})
   end
@@ -1716,20 +1992,19 @@ defmodule Hologram.Compiler do
     |> MapSet.new()
   end
 
-  # The catch-all clause returns nil and every included implementation ships in the bundle, so
-  # only a clause naming another module needs the module info PLT to say whether it is an
-  # implementation of this protocol (dropped) or something else (kept).
+  # Only a clause naming the protocol's implementation for a built-in type can be dropped, when
+  # that implementation is not in the bundle. An implementation is named after its protocol and its
+  # type, so the ones for the built-in types are known without asking any module.
   defp keep_protocol_dispatcher_function_def?(
          %IR.FunctionDefinition{name: function, arity: 1, clause: clause},
-         protocol,
-         included_impls,
-         module_info_plt
+         built_in_impl_names,
+         included_impls
        )
        when function in [:impl_for, :struct_impl_for] do
     case clause do
       %IR.FunctionClause{body: %IR.Block{expressions: [%IR.AtomType{value: value}]}} ->
-        is_nil(value) or MapSet.member?(included_impls, value) or
-          Reflection.protocol_implementation(value, module_info_plt) != protocol
+        not MapSet.member?(built_in_impl_names, Atom.to_string(value)) or
+          MapSet.member?(included_impls, value)
 
       _clause ->
         true
@@ -1738,9 +2013,8 @@ defmodule Hologram.Compiler do
 
   defp keep_protocol_dispatcher_function_def?(
          _function_def,
-         _protocol,
-         _included_impls,
-         _module_info_plt
+         _built_in_impl_names,
+         _included_impls
        ),
        do: true
 
@@ -1856,7 +2130,9 @@ defmodule Hologram.Compiler do
     |> Enum.sort()
   end
 
-  defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
+  defp maybe_ensure_bundle_within_size_limit!("chunk", _entry_name, _bundle_path), do: :ok
+
+  defp maybe_ensure_bundle_within_size_limit!(_bundle_name, entry_name, bundle_path) do
     max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
 
     if max_bundle_size do
@@ -1877,9 +2153,13 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # Consolidated protocol dispatchers list every loaded implementation. Keep only
-  # clauses for implementations that ship in the same bundle, so dispatch on other
-  # types falls through to the catch-all clause and raises Protocol.UndefinedError.
+  # Consolidated protocol dispatchers list every loaded implementation. A clause for a struct
+  # type always stays: the implementation for a struct type is in no runtime or page bundle, it is
+  # loaded in a chunk once a struct of the type is on the client, and by then the dispatcher has to
+  # name it, or dispatch would fall through to Any or raise Protocol.UndefinedError with the
+  # implementation loaded. A clause for a built-in type stays only when its implementation ships
+  # in the same bundle, so dispatch on a built-in type the bundle has no implementation for falls
+  # through to the catch-all clause.
   defp maybe_prune_protocol_dispatcher_function_defs(
          function_defs,
          module,
@@ -1887,12 +2167,20 @@ defmodule Hologram.Compiler do
          module_info_plt
        ) do
     if Reflection.protocol?(module, module_info_plt) do
+      # As names, not as modules: a protocol has no implementation for most built-in types, and
+      # no atom is made for one that does not exist.
+      built_in_impl_names =
+        MapSet.new(
+          CallGraph.built_in_protocol_types(),
+          &"#{module}.#{Reflection.module_name(&1)}"
+        )
+
       included_impls =
         included_protocol_implementations(reachable_modules, module, module_info_plt)
 
       Enum.filter(
         function_defs,
-        &keep_protocol_dispatcher_function_def?(&1, module, included_impls, module_info_plt)
+        &keep_protocol_dispatcher_function_def?(&1, built_in_impl_names, included_impls)
       )
     else
       function_defs
@@ -2240,6 +2528,78 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Encoder.encode_module_metadata_registration(module_metadata)
+  end
+
+  # The part of a page or chunk script that leaves the script's definitions for the runtime to
+  # define, with the script's digest, and announces the script (see assets/js/script_registry.mjs).
+  # The digest is read from the file name of the script element running the script: both kinds of
+  # file end in a dash, the digest and `.js`.
+  defp render_script_announcement(defs) do
+    """
+    globalThis.Hologram.pendingScripts ??= [];
+
+    globalThis.Hologram.pendingScripts.push({
+      digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\\.js$/)[1],
+      define: (deps) => {
+        const {
+          Bitstring,
+          ERTS,
+          HologramBoxedError,
+          HologramInterpreterError,
+          Interpreter,
+          MemoryStorage,
+          Type,
+          Utils,
+        } = deps;#{defs}
+      },
+    });
+
+    document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));\
+    """
+  end
+
+  # What a script holding the given MFAs is made of besides its wrapper: the import statements of
+  # the JavaScript its modules bind (none for the modules whose bindings the runtime script
+  # registers, the `runtime_js_binding_modules:` opt), and the definitions, each a block of its
+  # own: the modules' stack trace metadata, the JS bindings, the Erlang and the Elixir functions.
+  defp render_script_parts(mfas, ir_plt, encode_plt, async_mfas, opts) do
+    js_dir = Keyword.fetch!(opts, :js_dir)
+    runtime_js_binding_modules = Keyword.get(opts, :runtime_js_binding_modules, MapSet.new())
+
+    %{imports: imports, bindings: bindings} =
+      aggregate_js_imports(mfas, ir_plt, opts[:module_info_plt], runtime_js_binding_modules)
+
+    import_statements =
+      imports
+      |> render_js_import_statements()
+      |> render_block()
+
+    js_bindings_registration_call =
+      bindings
+      |> render_js_bindings_registration_call()
+      |> render_block()
+
+    erlang_function_defs =
+      mfas
+      |> render_erlang_function_defs(ir_plt, Path.join(js_dir, "erlang"))
+      |> render_block()
+
+    elixir_function_defs =
+      mfas
+      |> render_elixir_function_defs(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
+      |> render_block()
+
+    module_metadata_registration =
+      mfas
+      |> render_module_metadata_registration(ir_plt, opts[:module_metadata])
+      |> render_block()
+
+    %{
+      defs:
+        module_metadata_registration <>
+          js_bindings_registration_call <> erlang_function_defs <> elixir_function_defs,
+      import_statements: import_statements
+    }
   end
 
   defp render_erlang_function_defs(mfas, ir_plt, erlang_js_dir) do
