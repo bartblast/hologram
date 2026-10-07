@@ -1217,7 +1217,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> reject_hex_mfas()
     |> add_reflection_mfas(final_state.types, open_reflection_functions, module_info_plt)
     # A struct type's struct functions live in its chunks alone, whichever edge reached them here: a
-    # struct the page's client code builds, a module it names, or a type its server code names.
+    # struct the page's client code builds, or a struct module it names.
     |> Enum.reject(&struct_function?(&1, module_info_plt))
     |> Enum.uniq()
     |> Enum.sort()
@@ -1769,17 +1769,16 @@ defmodule Hologram.Compiler.CallGraph do
   # The reflection functions (see Hologram.Compiler.DynamicCallSites) of the types that can appear
   # at protocol dispatch on the page, the ones its client code names and the ones its templatables'
   # server callbacks name: a type's __changeset__/0 and __schema__/1,2 when it is an Ecto schema,
-  # and only the functions the gate opens (see Hologram.Compiler.DynamicCallGate). A named call of a
-  # reflection function reaches it through an ordinary edge and needs none of this. A struct's
-  # __struct__/0,1 are added here too while the gate tracks them, and list_page_mfas/5 takes them
-  # out again: they live in the type's chunks.
+  # which is the kind of type that defines them, and only the functions the gate opens (see
+  # Hologram.Compiler.DynamicCallGate). A named call of a reflection function reaches it through an
+  # ordinary edge and needs none of this.
   # TODO: the server callbacks' types are every module they name, which is more than the types
   # whose values reach the client. A narrower set would list fewer functions.
   defp add_reflection_mfas(page_mfas, types, open_functions, module_info_plt) do
     added_mfas =
       for type <- types,
-          {name, arity} <- open_functions,
-          reflection_function?(type, name, module_info_plt) do
+          flag?(module_info_plt, type, :ecto_schema?),
+          {name, arity} <- open_functions do
         {type, name, arity}
       end
 
@@ -2433,16 +2432,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp protocol_metadata_mfa?(_vertex, _module_infos), do: false
-
-  # Whether the type defines the reflection function: a struct defines __struct__/0,1, an Ecto schema
-  # __changeset__/0 and __schema__/1,2. The built-in protocol dispatch types define none.
-  defp reflection_function?(type, :__struct__, module_info_plt) do
-    flag?(module_info_plt, type, :struct?)
-  end
-
-  defp reflection_function?(type, _name, module_info_plt) do
-    flag?(module_info_plt, type, :ecto_schema?)
-  end
 
   # Records the module as one whose definition is built into the graph (see modules/1).
   defp put_module(%{pid: pid} = call_graph, module) do
