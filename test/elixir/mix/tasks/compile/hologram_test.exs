@@ -152,6 +152,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
+  # How many bundles are built while the given function runs, the pages', the runtime's and the
+  # chunks' alike: each one built is moved into the static dir by a private function, whose local
+  # calls are counted. The calls of the bundling functions do not tell: the chunks are bundled in
+  # groups (see Hologram.Compiler.bundle_chunks/2).
+  defp count_built_bundles(fun) do
+    mfa = {Compiler, :move_bundle_to_static_dir, 3}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
   # How many templates are validated while the given function runs: each goes through a private
   # function once, whose local calls are counted.
   defp count_validated_templates(fun) do
@@ -886,16 +903,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       kept_info = %{module_infos[Enum] | digest: "kept", mtime: 0}
       put_kept_module_infos(%{module_infos | Enum => kept_info}, dumped_at, editable_modules)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       assert cache_state().module_infos[Enum] == kept_info
     end
@@ -936,16 +944,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       kept_info = %{module_infos[Module2] | digest: "kept", mtime: 0}
       put_kept_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       assert cache_state().module_infos[Module2] == kept_info
     end
@@ -1066,16 +1065,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with no changes rebuilds no page", %{opts: opts} do
       run(opts)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       test_page_bundles(opts)
     end
@@ -1085,16 +1075,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Cache.put_pending_pages([Module1])
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       assert cache_state().pending_pages == MapSet.new()
       test_page_bundles(opts)
@@ -1211,16 +1192,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Cache.put_pending_pages([@unreached_module])
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       assert cache_state().pending_pages == MapSet.new()
     end
@@ -1296,17 +1268,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       test_page_bundles(opts)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, MapSet.size(not_built_pages)}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == MapSet.size(not_built_pages)
 
       assert cache_state().pending_pages == MapSet.new()
     end
@@ -1602,16 +1564,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules
       )
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, pages_reaching_module_2}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
 
       assert pages_reaching_module_2 < @num_pages
       partial_digests = load_page_digest_items(opts)
@@ -1634,7 +1587,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with unchanged bundle inputs builds no bundle", %{opts: opts} do
       run(opts)
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      assert count_built_bundles(fn -> run(opts) end) == 0
       test_page_bundles(opts)
     end
 
@@ -1647,7 +1600,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       assert cache_state().bundle_inputs.client_stacktraces? == Hologram.client_stacktraces?()
@@ -1725,7 +1678,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      assert count_built_bundles(fn -> run(opts) end) == 0
       assert load_page_digest_items(opts) == page_digests
       test_page_bundles(opts)
       test_runtime_bundle(opts)
@@ -1854,7 +1807,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
       assert pages_reaching_module_2 < @num_pages
       test_page_bundles(opts)
     end
@@ -1868,7 +1821,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
       Cache.reset()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
       test_page_bundles(opts)
     end
 
@@ -1881,7 +1834,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       test_page_bundles(opts)
@@ -1894,7 +1847,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       assert {1, _compile_state} = load_compile_state_dump(opts)
@@ -1910,7 +1863,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       test_page_bundles(opts)
@@ -2121,16 +2074,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       {:ok, page_state} = PLT.get(cache_state().pages_plt, Module1)
       File.rm!(page_state.bundle_info.static_bundle_path)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       assert File.exists?(page_state.bundle_info.static_bundle_path)
       test_page_bundles(opts)
@@ -2217,16 +2161,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       runtime = cache_state().runtime
       File.rm!(runtime.bundle_info.static_bundle_path)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       assert File.exists?(cache_state().runtime.bundle_info.static_bundle_path)
       test_runtime_bundle(opts)
@@ -2238,16 +2173,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       runtime = cache_state().runtime
       File.rm!(runtime.bundle_info.static_source_map_path)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       test_runtime_bundle(opts)
     end
@@ -2517,17 +2443,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       clean_dir(fresh_static_dir)
       fresh_static_dir_opts = Keyword.put(opts, :static_dir, fresh_static_dir)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(fresh_static_dir_opts)
-
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, @num_pages + 1 + num_chunk_bundles()}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(fresh_static_dir_opts) end) ==
+               @num_pages + 1 + num_chunk_bundles()
 
       test_chunk_bundles(fresh_static_dir_opts)
       test_page_bundles(fresh_static_dir_opts)
@@ -3050,17 +2967,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().module_infos == load_module_info_items(opts)
       assert cache_state().pending_pages == pages_reaching_module_2
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, MapSet.size(pages_reaching_module_2)}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == MapSet.size(pages_reaching_module_2)
 
       assert MapSet.size(pages_reaching_module_2) > 0
       assert cache_state().pending_pages == MapSet.new()
