@@ -1179,13 +1179,17 @@ defmodule Hologram.Compiler.CallGraph do
   The protocol implementations for the built-in types are listed, those for struct types are not,
   whichever code names the type: they ship in chunks of their own (see list_page_chunk_types/4).
 
-  The reflection functions (`__struct__/0,1` of a struct, `__changeset__/0` and `__schema__/1,2` of
-  an Ecto schema) of the types that can appear at protocol dispatch on the page (the ones its
-  client code names and the ones its templatables' server callbacks name) are listed, but only the
-  ones the page can call on a module its code does not name: the `:gate` opt (see
-  `Hologram.Compiler.DynamicCallGate`) says which, from the dynamic calls the page's client code
-  reaches and the ones the runtime holds. With no gate, every reflection function of every such
-  type is listed.
+  A struct type's `__struct__/0,1` are not listed either, whichever code reaches them: they ship in
+  the type's chunks too (see list_chunk_entries/2), which the page preloads for the types its
+  client code names and the server names when a struct or the module of the type is on its way to
+  the client.
+
+  The reflection functions of an Ecto schema (`__changeset__/0` and `__schema__/1,2`) are listed
+  for the types that can appear at protocol dispatch on the page (the ones its client code names
+  and the ones its templatables' server callbacks name), but only the ones the page can call on a
+  module its code does not name: the `:gate` opt (see `Hologram.Compiler.DynamicCallGate`) says
+  which, from the dynamic calls the page's client code reaches and the ones the runtime holds. With
+  no gate, every such function of every such type is listed.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
@@ -1212,6 +1216,9 @@ defmodule Hologram.Compiler.CallGraph do
     |> finalize_reachable_mfas(final_state, module_info_plt)
     |> reject_hex_mfas()
     |> add_reflection_mfas(final_state.types, open_reflection_functions, module_info_plt)
+    # A struct type's struct functions live in its chunks alone, whichever edge reached them here: a
+    # struct the page's client code builds, a module it names, or a type its server code names.
+    |> Enum.reject(&struct_function?(&1, module_info_plt))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1761,10 +1768,11 @@ defmodule Hologram.Compiler.CallGraph do
 
   # The reflection functions (see Hologram.Compiler.DynamicCallSites) of the types that can appear
   # at protocol dispatch on the page, the ones its client code names and the ones its templatables'
-  # server callbacks name: a type's __struct__/0,1 when it is a struct, its __changeset__/0 and
-  # __schema__/1,2 when it is an Ecto schema, and only the functions the gate opens (see
-  # Hologram.Compiler.DynamicCallGate). A named call of a reflection function reaches it through an
-  # ordinary edge and needs none of this.
+  # server callbacks name: a type's __changeset__/0 and __schema__/1,2 when it is an Ecto schema,
+  # and only the functions the gate opens (see Hologram.Compiler.DynamicCallGate). A named call of a
+  # reflection function reaches it through an ordinary edge and needs none of this. A struct's
+  # __struct__/0,1 are added here too while the gate tracks them, and list_page_mfas/5 takes them
+  # out again: they live in the type's chunks.
   # TODO: the server callbacks' types are every module they name, which is more than the types
   # whose values reach the client. A narrower set would list fewer functions.
   defp add_reflection_mfas(page_mfas, types, open_functions, module_info_plt) do
@@ -2664,6 +2672,13 @@ defmodule Hologram.Compiler.CallGraph do
 
     expand_reachable_state(graph, state, entry_vertices, module_info_plt)
   end
+
+  # Whether the vertex is one of a struct type's struct functions, __struct__/0 and __struct__/1.
+  defp struct_function?({module, :__struct__, arity}, module_info_plt) when arity in [0, 1] do
+    flag?(module_info_plt, module, :struct?)
+  end
+
+  defp struct_function?(_vertex, _module_info_plt), do: false
 
   # A component's module vertex, which carries the edges to its client functions, and its server
   # callbacks.

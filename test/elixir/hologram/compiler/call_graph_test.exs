@@ -3064,9 +3064,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "treats components reached from a server-referenced component's client code as templatables",
          %{full_call_graph: full_call_graph} do
       # Module17's server init references Module15, whose template statically renders
-      # Module4, whose own server init creates Module12 - so Module12 counts as a type
-      # of the page and its reflection functions follow. Its String.Chars implementation
-      # does not: an implementation for a struct type is in no page bundle.
+      # Module4, whose own server init creates Module12 and names Module24 - so both count as
+      # types of the page, and the reflection functions of Module24, an Ecto schema, follow.
+      # Module12's struct functions and its String.Chars implementation do not: what a struct
+      # type needs is in no page bundle.
       result =
         full_call_graph
         |> CallGraph.clone()
@@ -3074,10 +3075,15 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :init, 3}, Module15)
         |> add_edge({Module15, :template, 0}, Module4)
         |> add_edge({Module4, :init, 3}, Module12)
+        |> add_edge({Module4, :init, 3}, Module24)
         |> list_page_mfas_with_analysis(Module17)
 
-      assert {Module12, :__struct__, 0} in result
-      assert {Module12, :__struct__, 1} in result
+      assert {Module24, :__changeset__, 0} in result
+      assert {Module24, :__schema__, 1} in result
+      assert {Module24, :__schema__, 2} in result
+
+      refute {Module12, :__struct__, 0} in result
+      refute {Module12, :__struct__, 1} in result
 
       refute {StringCharsModule12, :__impl__, 1} in result
       refute {StringCharsModule12, :to_string, 1} in result
@@ -3090,39 +3096,66 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module24, :__schema__, 1} in result
       assert {Module24, :__schema__, 2} in result
 
-      assert {Module25, :__struct__, 0} in result
-      assert {Module25, :__struct__, 1} in result
-
       assert {Module27, :__changeset__, 0} in result
       assert {Module27, :__schema__, 1} in result
       assert {Module27, :__schema__, 2} in result
-
-      assert {Module28, :__struct__, 0} in result
-      assert {Module28, :__struct__, 1} in result
 
       assert {Module30, :__changeset__, 0} in result
       assert {Module30, :__schema__, 1} in result
       assert {Module30, :__schema__, 2} in result
 
-      assert {Module31, :__struct__, 0} in result
-      assert {Module31, :__struct__, 1} in result
-
       assert {Module32, :__changeset__, 0} in result
       assert {Module32, :__schema__, 1} in result
       assert {Module32, :__schema__, 2} in result
 
-      assert {Module33, :__struct__, 0} in result
-      assert {Module33, :__struct__, 1} in result
-
       assert {Module35, :__changeset__, 0} in result
       assert {Module35, :__schema__, 1} in result
       assert {Module35, :__schema__, 2} in result
+    end
 
-      assert {Module36, :__struct__, 0} in result
-      assert {Module36, :__struct__, 1} in result
+    # The structs are created in the server inits of the page, of its layout and of the components
+    # they use. Their struct functions ship in the types' chunks.
+    test "lists no struct functions of the struct types created in server inits of components used by the page",
+         %{page_module_22_mfas: result} do
+      for struct_type <- [Module25, Module28, Module31, Module33, Module36, Module37] do
+        refute {struct_type, :__struct__, 0} in result
+        refute {struct_type, :__struct__, 1} in result
+      end
+    end
 
-      assert {Module37, :__struct__, 0} in result
-      assert {Module37, :__struct__, 1} in result
+    # A struct literal in client code is a call of the type's __struct__/1. The page preloads the
+    # type's chunks, which hold it.
+    test "lists no struct functions of a struct type the page's client code builds", %{
+      full_call_graph: full_call_graph
+    } do
+      call_graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module14, :action, 3}, {Module25, :__struct__, 1})
+
+      result = list_page_mfas_with_analysis(call_graph, Module14)
+
+      refute {Module25, :__struct__, 0} in result
+      refute {Module25, :__struct__, 1} in result
+
+      assert Module25 in list_page_chunk_types_with_analysis(call_graph, Module14)
+    end
+
+    # A struct module's vertex has an edge to each of its struct functions.
+    test "lists no struct functions of a struct type the page's client code names", %{
+      full_call_graph: full_call_graph
+    } do
+      call_graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module14, :action, 3}, Module25)
+
+      result = list_page_mfas_with_analysis(call_graph, Module14)
+
+      refute {Module25, :__struct__, 0} in result
+      refute {Module25, :__struct__, 1} in result
+
+      assert Module25 in list_page_chunk_types_with_analysis(call_graph, Module14)
     end
 
     test "removes duplicate reflection MFAs reachable from server inits of components used by the page",
@@ -3130,9 +3163,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert Enum.count(result, &(&1 == {Module32, :__changeset__, 0})) == 1
       assert Enum.count(result, &(&1 == {Module32, :__schema__, 1})) == 1
       assert Enum.count(result, &(&1 == {Module32, :__schema__, 2})) == 1
-
-      assert Enum.count(result, &(&1 == {Module37, :__struct__, 0})) == 1
-      assert Enum.count(result, &(&1 == {Module37, :__struct__, 1})) == 1
     end
 
     test "results are deduped", %{page_module_22_mfas: result} do
@@ -3194,13 +3224,15 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "lists the reflection functions of the types the page reaches, when no gate is given", %{
       page_module_22_mfas: result
     } do
-      # Module25 is a struct put into state by the page's init/3, Module21 an Ecto schema no
-      # templatable of the page reaches.
-      assert {Module25, :__struct__, 0} in result
-      assert {Module25, :__struct__, 1} in result
+      # Module24 is an Ecto schema put into state by the page's init/3, Module21 one no templatable
+      # of the page reaches.
+      assert {Module24, :__changeset__, 0} in result
+      assert {Module24, :__schema__, 1} in result
+      assert {Module24, :__schema__, 2} in result
 
       refute {Module21, :__changeset__, 0} in result
-      refute {Module21, :__struct__, 0} in result
+      refute {Module21, :__schema__, 1} in result
+      refute {Module21, :__schema__, 2} in result
     end
 
     test "lists the reflection functions of the types created in command/3", %{
@@ -3217,8 +3249,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module21, :__changeset__, 0} in result
       assert {Module21, :__schema__, 1} in result
       assert {Module21, :__schema__, 2} in result
-      assert {Module21, :__struct__, 0} in result
-      assert {Module21, :__struct__, 1} in result
+
+      # An Ecto schema is a struct type too, and its struct functions ship in its chunks.
+      refute {Module21, :__struct__, 0} in result
+      refute {Module21, :__struct__, 1} in result
     end
 
     test "lists no reflection functions for the built-in types", %{page_module_22_mfas: result} do
@@ -3281,14 +3315,13 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> remove_runtime_mfas!(runtime_mfas)
         |> list_page_mfas_with_gate(Module43, %{
           ir_plt: PLT.start(),
-          runtime: %{exposed: %{}, open: MapSet.new([{:__struct__, 0}]), page_callers: %{}}
+          runtime: %{exposed: %{}, open: MapSet.new([{:__schema__, 1}]), page_callers: %{}}
         })
 
-      assert {Module24, :__struct__, 0} in result
-      assert {Module25, :__struct__, 0} in result
+      assert {Module24, :__schema__, 1} in result
 
       refute {Module24, :__changeset__, 0} in result
-      refute {Module25, :__struct__, 1} in result
+      refute {Module24, :__schema__, 2} in result
     end
   end
 
