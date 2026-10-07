@@ -494,9 +494,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       chunk_entry_file_opts =
         Keyword.put(entry_file_opts, :runtime_js_binding_modules, runtime_js_binding_modules)
 
-      # The chunks as bundled, by signature: the kept state's when the analysis is kept, else folded
-      # from the listing (see Hologram.Compiler.fold_chunks/5), which reads the IR of every chunk.
-      chunks =
+      # The chunks as bundled, by signature, with their sizes: the kept state's when the analysis is
+      # kept, else folded from the listing (see Hologram.Compiler.fold_chunks/5).
+      %{chunks: chunks, sizes: chunk_sizes} =
         fold_chunks(
           chunk_analysis_kept?,
           cache.chunks,
@@ -504,7 +504,15 @@ defmodule Mix.Tasks.Compile.Hologram do
           ir_plt,
           encode_plt,
           async_mfas,
-          chunk_entry_file_opts
+          Keyword.put(
+            chunk_entry_file_opts,
+            :sizes,
+            reusable_chunk_sizes(
+              cache.chunks,
+              reaching_modules,
+              cache.encoding_inputs == encoding_inputs
+            )
+          )
         )
 
       kept_chunk_bundles_info =
@@ -533,7 +541,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_module_metadata(module_metadata)
       Cache.put_template_modules(template_modules)
 
-      keep_chunk_state(kept_chunk_bundles_info, chunks)
+      keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes)
       keep_runtime_state(cache.runtime, runtime_entry_files_info, runtime_dynamic_calls)
 
       # The after picture, for the first compile in the next VM: the bundles on disk, what they were
@@ -599,6 +607,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         async_mfas: async_mfas,
         call_graph: call_graph_for_pages,
         chunk_entry_files_info: chunk_entry_files_info,
+        chunk_sizes: chunk_sizes,
         chunks: chunks,
         client_config: client_config,
         encode_plt: encode_plt,
@@ -1000,15 +1009,16 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # No state for a page that no longer exists, whose bundle the artifact cleanup deletes.
-  # The chunks as bundled, by signature (see Hologram.Compiler.fold_chunks/5). A compile that kept
-  # the chunk analysis has them in the kept state, which holds the chunks as folded: the fold reads
-  # the rendered size of every chunk, so it is not done again.
+  # The chunks as bundled, by signature, with their sizes (see Hologram.Compiler.fold_chunks/5). A
+  # compile that kept the chunk analysis has both in the kept state. One that lists the chunks
+  # again folds them with the kept sizes it can reuse (see reusable_chunk_sizes/3), so that a
+  # chunk whose functions and modules are untouched is not rendered again, nor its IR built or its
+  # functions encoded in a new VM.
   defp fold_chunks(true, kept_chunks, _listed, _ir_plt, _encode_plt, _async_mfas, _opts) do
-    kept_chunks.mfas_by_signature
+    %{chunks: kept_chunks.mfas_by_signature, sizes: kept_chunks.sizes}
   end
 
   defp fold_chunks(false, _kept_chunks, listed, ir_plt, encode_plt, async_mfas, opts) do
-    build_chunk_ir!(listed, ir_plt, opts[:module_info_plt])
     Compiler.fold_chunks(listed, ir_plt, encode_plt, async_mfas, opts)
   end
 
@@ -1090,7 +1100,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp keep_built_chunk_bundles(built_chunk_bundles_info, context) do
     put_chunk_state(
       Map.merge(context.kept_chunk_bundles_info, built_chunk_bundles_info),
-      context.chunks
+      context.chunks,
+      context.chunk_sizes
     )
   end
 
@@ -1147,8 +1158,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The kept chunk state is replaced before the batches by one that names the kept bundles alone: a
   # compile that fails while bundling leaves the next one keeping those and rebuilding the rest.
   # The batch that builds the rest records them next to the kept ones.
-  defp keep_chunk_state(kept_chunk_bundles_info, chunks) do
-    put_chunk_state(kept_chunk_bundles_info, chunks)
+  defp keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes) do
+    put_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes)
   end
 
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
@@ -1273,14 +1284,20 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{bundles | chunks: Map.merge(context.kept_chunk_bundles_info, built_chunk_bundles_info)}
   end
 
-  # Records the given chunk bundles with the chunks they were built from.
-  defp put_chunk_state(bundle_infos, chunks) do
+  # Records the given chunk bundles with the chunks they were built from and the sizes those were
+  # folded by.
+  defp put_chunk_state(bundle_infos, chunks, chunk_sizes) do
     modules =
       chunks
       |> chunk_mfas()
       |> page_state_modules()
 
-    Cache.put_chunks(%{bundle_infos: bundle_infos, mfas_by_signature: chunks, modules: modules})
+    Cache.put_chunks(%{
+      bundle_infos: bundle_infos,
+      mfas_by_signature: chunks,
+      modules: modules,
+      sizes: chunk_sizes
+    })
   end
 
   # Whether the module info dump on disk is the one the given mtime belongs to: the one this VM
@@ -1307,6 +1324,19 @@ defmodule Mix.Tasks.Compile.Hologram do
     else
       PLT.reset(encode_plt)
     end
+  end
+
+  # The kept chunk sizes a compile can fold with again: a size holds while the chunk's functions are
+  # the ones it was sized with, which the key says, and their JavaScript is what it was, which the
+  # encoding inputs say for every module and an edit denies for the edited ones and the ones that
+  # reach them. None without a state.
+  defp reusable_chunk_sizes(nil, _reaching_modules, _encoding_inputs_kept?), do: %{}
+  defp reusable_chunk_sizes(_kept_chunks, _reaching_modules, false), do: %{}
+
+  defp reusable_chunk_sizes(kept_chunks, reaching_modules, true) do
+    Map.filter(kept_chunks.sizes, fn {mfas, _size} ->
+      MapSet.disjoint?(page_state_modules(mfas), reaching_modules)
+    end)
   end
 
   # The runtime's MFAs and the struct types its code names are a walk of the graph, so a compile

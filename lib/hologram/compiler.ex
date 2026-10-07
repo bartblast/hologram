@@ -794,9 +794,10 @@ defmodule Hologram.Compiler do
   @doc """
   Creates the chunk bundle entry files, one per signature of the given folded chunks (see
   `fold_chunks/5`), and returns each signature with its digest (see `chunk_signature_digest/1`) and
-  its entry file's path, sorted by digest. Each chunk is rendered from the encode PLT, which
-  `fold_chunks/5` filled. Takes the options `create_page_entry_files/6` takes, with the modules
-  whose JS bindings the runtime script registers as the `runtime_js_binding_modules:` opt.
+  its entry file's path, sorted by digest. The functions of all the chunks are encoded into the
+  encode PLT first, with one IR read per module (`encode_reachable_functions/5`), and then each
+  chunk is rendered from that cache. Takes the options `create_page_entry_files/6` takes, with the
+  modules whose JS bindings the runtime script registers as the `runtime_js_binding_modules:` opt.
   """
   @spec create_chunk_entry_files(
           %{MapSet.t(module) => [mfa]},
@@ -807,6 +808,10 @@ defmodule Hologram.Compiler do
         ) :: list({MapSet.t(module), String.t(), T.file_path()})
   def create_chunk_entry_files(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
     script_opts = chunk_script_opts(opts)
+
+    mfas_by_signature
+    |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
+    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, opts[:module_info_plt])
 
     mfas_by_signature
     |> Enum.map(fn {signature, mfas} -> {signature, chunk_signature_digest(signature), mfas} end)
@@ -1008,34 +1013,52 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the chunks to bundle, by signature: the given MFAs by signature (see
-  `group_mfas_by_signature/1`) with the small chunks folded into others (see
-  `fold_small_chunks/2`). The functions of all the chunks are encoded into the encode PLT first,
-  with one IR read per module (`encode_reachable_functions/5`), and each chunk is sized by its
-  definitions as rendered from that cache, which is what `create_chunk_entry_files/5` renders
-  again. Takes the options `create_chunk_entry_files/5` takes.
+  Returns the chunks to bundle, by signature, with the size of each chunk given:
+
+    * `:chunks` - the given MFAs by signature (see `group_mfas_by_signature/1`) with the small
+      chunks folded into others (see `fold_small_chunks/2`).
+
+    * `:sizes` - the size of each given chunk, keyed by its MFAs: the size of its definitions as
+      rendered, which holds the Erlang functions and the protocol dispatchers too, so the encode
+      PLT alone cannot tell it.
+
+  A size given under the `:sizes` opt, keyed the same way, is taken as it is: the kept size of a
+  chunk whose functions are the ones it was sized with, and whose modules were not edited since.
+  The other chunks are sized: the IR their functions need is built into the IR PLT, the functions
+  are encoded into the encode PLT (`encode_reachable_functions/5`) and each chunk is rendered
+  once. Takes the options `create_chunk_entry_files/5` takes, plus `:sizes`.
   """
   @spec fold_chunks(%{MapSet.t(module) => [mfa]}, PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
-          %{MapSet.t(module) => [mfa]}
+          %{chunks: %{MapSet.t(module) => [mfa]}, sizes: %{[mfa] => non_neg_integer}}
   def fold_chunks(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
     module_info_plt = opts[:module_info_plt]
     script_opts = chunk_script_opts(opts)
+    known_sizes = opts[:sizes] || %{}
 
-    mfas_by_signature
-    |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
-    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
+    chunks_to_size =
+      Enum.reject(mfas_by_signature, fn {_signature, mfas} -> is_map_key(known_sizes, mfas) end)
 
-    # A chunk's size is the size of its definitions as rendered, which holds the Erlang functions
-    # and the protocol dispatchers too: the encode PLT holds neither.
-    size_by_signature =
-      mfas_by_signature
-      |> TaskUtils.map_concurrently(fn {signature, mfas} ->
+    mfas_to_size = Enum.flat_map(chunks_to_size, fn {_signature, mfas} -> mfas end)
+
+    mfas_to_size
+    |> list_ir_modules(module_info_plt)
+    |> then(&build_missing_ir!(ir_plt, &1))
+
+    encode_reachable_functions(mfas_to_size, ir_plt, encode_plt, async_mfas, module_info_plt)
+
+    sizes =
+      chunks_to_size
+      |> TaskUtils.map_concurrently(fn {_signature, mfas} ->
         %{defs: defs} = render_script_parts(mfas, ir_plt, encode_plt, async_mfas, script_opts)
-        {signature, byte_size(defs)}
+        {mfas, byte_size(defs)}
       end)
       |> Map.new()
+      |> Map.merge(Map.take(known_sizes, Map.values(mfas_by_signature)))
 
-    fold_small_chunks(mfas_by_signature, size_by_signature)
+    size_by_signature =
+      Map.new(mfas_by_signature, fn {signature, mfas} -> {signature, sizes[mfas]} end)
+
+    %{chunks: fold_small_chunks(mfas_by_signature, size_by_signature), sizes: sizes}
   end
 
   @doc """

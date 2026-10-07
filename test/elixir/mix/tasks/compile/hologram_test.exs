@@ -2282,6 +2282,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_chunk_bundles(opts)
     end
 
+    # A new VM has no IR and no encodings. Every chunk's size is kept, so the chunks are folded
+    # again with none of them rendered, and a kept chunk is not rendered either.
+    test "a page edit in a new VM renders no chunk", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      Cache.reset()
+      fake_recompile()
+      fake_edit_in_dump(Module1, opts)
+
+      run(opts)
+
+      refute PLT.member?(cache_state().encode_plt, {@chunk_only_impl, :to_string, 1})
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
     test "rebundles the chunks when one's bundle is gone", %{opts: opts} do
       run(opts)
 

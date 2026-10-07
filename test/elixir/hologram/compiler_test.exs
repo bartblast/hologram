@@ -2806,10 +2806,12 @@ defmodule Hologram.CompilerTest do
 
       encode_plt = PLT.start()
       chunk_opts = Keyword.put(opts, :tmp_dir, tmp_dir)
-      folded = fold_chunks(mfas_by_signature, ir_plt, encode_plt, MapSet.new(), chunk_opts)
+
+      %{chunks: chunks} =
+        fold_chunks(mfas_by_signature, ir_plt, encode_plt, MapSet.new(), chunk_opts)
 
       [{_signature, _signature_digest, entry_file_path} | _rest] =
-        create_chunk_entry_files(folded, ir_plt, encode_plt, MapSet.new(), chunk_opts)
+        create_chunk_entry_files(chunks, ir_plt, encode_plt, MapSet.new(), chunk_opts)
 
       assert entry_file_path
              |> File.read!()
@@ -3393,7 +3395,7 @@ defmodule Hologram.CompilerTest do
 
       result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
 
-      assert result == %{
+      assert result.chunks == %{
                MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
              }
     end
@@ -3406,7 +3408,71 @@ defmodule Hologram.CompilerTest do
 
       result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
 
-      assert result == mfas_by_signature
+      assert result.chunks == mfas_by_signature
+    end
+
+    test "returns the size of each chunk, keyed by its functions", %{ir_plt: ir_plt, opts: opts} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
+
+      assert %{[{Module18, :my_fun, 0}] => size_1, [{Module22, :my_fun, 0}] => size_2} =
+               result.sizes
+
+      assert map_size(result.sizes) == 2
+      assert size_1 > size_2
+      assert size_2 > 0
+    end
+
+    test "takes a given size for a chunk with the same functions, and renders no such chunk", %{
+      ir_plt: ir_plt,
+      opts: opts
+    } do
+      # Sized alone, the chunk holding Module22.my_fun/0 is under the bound and is folded. The given
+      # size keeps it apart, and its function is encoded by nothing.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
+      }
+
+      sizes = %{[{Module22, :my_fun, 0}] => 10_000}
+      encode_plt = PLT.start()
+
+      result =
+        fold_chunks(
+          mfas_by_signature,
+          ir_plt,
+          encode_plt,
+          MapSet.new(),
+          Keyword.put(opts, :sizes, sizes)
+        )
+
+      assert result.chunks == mfas_by_signature
+      assert result.sizes[[{Module22, :my_fun, 0}]] == 10_000
+      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
+      refute PLT.member?(encode_plt, {Module22, :my_fun, 0})
+    end
+
+    test "leaves out a given size of a chunk that is not among the given ones", %{
+      ir_plt: ir_plt,
+      opts: opts
+    } do
+      mfas_by_signature = %{MapSet.new([Date]) => [{Module18, :my_fun, 0}]}
+      sizes = %{[{Module22, :my_fun, 0}] => 10_000}
+
+      result =
+        fold_chunks(
+          mfas_by_signature,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          Keyword.put(opts, :sizes, sizes)
+        )
+
+      assert Map.keys(result.sizes) == [[{Module18, :my_fun, 0}]]
     end
   end
 
