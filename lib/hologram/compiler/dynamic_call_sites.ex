@@ -2,25 +2,25 @@ defmodule Hologram.Compiler.DynamicCallSites do
   @moduledoc false
 
   # Finds the dynamic calls the compiler tracks: calls of a reflection function on a module the code
-  # does not name, such as `mod.__changeset__()` or `data.__struct__`. The reflection functions are
-  # Ecto's schema reflection, __changeset__/0 and __schema__/1,2, and a struct's __struct__/0,1 (see
-  # reflection_functions/0); this has nothing to do with Hologram.Reflection. A call on a named
-  # module needs no tracking: it gives the call graph an edge to the function it calls. Not every
-  # dynamic call is tracked: a call whose function name is known only at runtime (`apply(mod, fun,
-  # args)` with a variable `fun`, `:erlang.make_fun/3`) is not, since the call graph adds no edge for
-  # such calls and no function reached only that way is bundled, reflection functions included.
+  # does not name, such as `mod.__changeset__()`. The reflection functions are Ecto's schema
+  # reflection, __changeset__/0 and __schema__/1,2 (see reflection_functions/0); this has nothing to
+  # do with Hologram.Reflection. A call on a named module needs no tracking: it gives the call graph
+  # an edge to the function it calls. Neither does a call of a struct's __struct__/0,1: those load
+  # with the struct type's chunks, wherever the module comes from (see
+  # Hologram.Compiler.CallGraph.list_chunk_entries/2). Not every dynamic call is tracked: a call
+  # whose function name is known only at runtime (`apply(mod, fun, args)` with a variable `fun`,
+  # `:erlang.make_fun/3`) is not, since the call graph adds no edge for such calls and no function
+  # reached only that way is bundled, reflection functions included.
 
   alias Hologram.Compiler.IR
 
   @reflection_functions [
     {:__changeset__, 0},
     {:__schema__, 1},
-    {:__schema__, 2},
-    {:__struct__, 0},
-    {:__struct__, 1}
+    {:__schema__, 2}
   ]
 
-  @names [:__changeset__, :__schema__, :__struct__]
+  @names [:__changeset__, :__schema__]
 
   # What an argument of a call is: an atom written in the code, the calling clause's parameter at
   # the given index, or anything else.
@@ -61,7 +61,7 @@ defmodule Hologram.Compiler.DynamicCallSites do
   parameter at that index, and `:open` otherwise. A call in an anonymous function keeps the kind,
   since a closure sees the value its enclosing function was given. The dot without parentheses
   counts as a call when the name is one of a zero-arity reflection function: the client runs
-  `data.__struct__` as a call when `data` is a module.
+  `data.__changeset__` as a call when `data` is a module.
   """
   @spec list(IR.FunctionClause.t()) :: [site]
   def list(%IR.FunctionClause{params: params, guards: guards, body: body}) do

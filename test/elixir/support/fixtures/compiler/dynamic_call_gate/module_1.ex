@@ -2,8 +2,8 @@
 defmodule Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1 do
   alias Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module2
 
-  # Calls __struct__/0 on its parameter.
-  def build(module), do: module.__struct__()
+  # Calls __changeset__/0 on its parameter.
+  def build(module), do: module.__changeset__()
 
   def capturing, do: Enum.map([Module2], &build/1)
 

@@ -77,9 +77,7 @@ defmodule Hologram.Compiler.DynamicCallSitesTest do
     assert reflection_functions() == [
              {:__changeset__, 0},
              {:__schema__, 1},
-             {:__schema__, 2},
-             {:__struct__, 0},
-             {:__struct__, 1}
+             {:__schema__, 2}
            ]
   end
 
@@ -138,7 +136,7 @@ defmodule Hologram.Compiler.DynamicCallSitesTest do
     end
 
     test "dot on a param" do
-      assert list(clause(:dot_on_param)) == [{:__struct__, 0, {:param, 0}}]
+      assert list(clause(:changeset_dot_on_param)) == [{:__changeset__, 0, {:param, 0}}]
     end
 
     test "dot with the name of a reflection function that has no zero arity" do
@@ -157,8 +155,14 @@ defmodule Hologram.Compiler.DynamicCallSitesTest do
       assert list(clause(:schema_call_with_2_args)) == [{:__schema__, 2, {:param, 0}}]
     end
 
+    # A struct's struct functions load with the struct type's chunks, so a call of one is not
+    # tracked.
+    test "__struct__ dot" do
+      assert list(clause(:dot_on_param)) == []
+    end
+
     test "__struct__/1 call" do
-      assert list(clause(:struct_call_with_fields)) == [{:__struct__, 1, {:param, 0}}]
+      assert list(clause(:struct_call_with_fields)) == []
     end
   end
 end
