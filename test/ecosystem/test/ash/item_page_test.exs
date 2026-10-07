@@ -2,6 +2,7 @@ defmodule HologramEcosystemTests.Ash.ItemPageTest do
   use HologramEcosystemTests.TestCase, async: false
 
   alias Hologram.Assets.ChunkRegistry
+  alias HologramEcosystemTests.Ash.Item
   alias HologramEcosystemTests.Ash.ItemPage
   alias HologramEcosystemTests.Bundles
 
@@ -14,6 +15,17 @@ defmodule HologramEcosystemTests.Ash.ItemPageTest do
     session
     |> visit(ItemPage)
     |> assert_text(css("#title"), "title")
+  end
+
+  test "the money type's chunks define its struct functions" do
+    money_digests = ChunkRegistry.lookup_type(Money)
+
+    for arity <- [0, 1] do
+      defining_digests =
+        Enum.filter(money_digests, &Bundles.chunk_defines?(&1, {Money, :__struct__, arity}))
+
+      assert [_defining_digest] = defining_digests
+    end
   end
 
   test "the money type's implementation and the localization library are in chunks the money type needs, and in no other bundle" do
@@ -32,6 +44,17 @@ defmodule HologramEcosystemTests.Ash.ItemPageTest do
       refute Bundles.defines?(page_bundle, function)
       refute Bundles.defines?(runtime_bundle, function)
     end
+  end
+
+  # The record's type and the money type are named by the page's init/3 alone, and the bundle holds
+  # no struct function of any type: every struct type's are in its chunks.
+  test "the page bundle defines no struct function" do
+    page_bundle = Bundles.page(ItemPage)
+
+    refute Bundles.defines?(page_bundle, {Item, :__struct__, 0})
+    refute Bundles.defines?(page_bundle, {Money, :__struct__, 0})
+    refute String.contains?(page_bundle, ~s/,"__struct__",0,/)
+    refute String.contains?(page_bundle, ~s/,"__struct__",1,/)
   end
 
   # Only the title reaches the state, and the page's client code names no money struct. The page
