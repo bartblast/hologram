@@ -792,14 +792,11 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates the chunk bundle entry files, one per signature of the given MFAs by signature (see
-  `group_mfas_by_signature/1`) once the small chunks are folded (see `fold_small_chunks/2`), and
-  returns each signature left with its digest (see `chunk_signature_digest/1`) and its entry
-  file's path, sorted by digest. The functions of all the chunks are encoded into the encode PLT
-  first, with one IR read per module (`encode_reachable_functions/5`), and then each chunk is
-  rendered from that cache. Takes the
-  options `create_page_entry_files/6` takes, with the modules whose JS bindings the runtime script
-  registers as the `runtime_js_binding_modules:` opt.
+  Creates the chunk bundle entry files, one per signature of the given folded chunks (see
+  `fold_chunks/5`), and returns each signature with its digest (see `chunk_signature_digest/1`) and
+  its entry file's path, sorted by digest. Each chunk is rendered from the encode PLT, which
+  `fold_chunks/5` filled. Takes the options `create_page_entry_files/6` takes, with the modules
+  whose JS bindings the runtime script registers as the `runtime_js_binding_modules:` opt.
   """
   @spec create_chunk_entry_files(
           %{MapSet.t(module) => [mfa]},
@@ -809,31 +806,9 @@ defmodule Hologram.Compiler do
           T.opts()
         ) :: list({MapSet.t(module), String.t(), T.file_path()})
   def create_chunk_entry_files(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
-    module_info_plt = opts[:module_info_plt]
-
-    script_opts = [
-      js_dir: opts[:js_dir],
-      module_info_plt: module_info_plt,
-      module_metadata: opts[:module_metadata],
-      runtime_js_binding_modules: opts[:runtime_js_binding_modules] || MapSet.new()
-    ]
+    script_opts = chunk_script_opts(opts)
 
     mfas_by_signature
-    |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
-    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
-
-    # A chunk's size is the size of its definitions as rendered, which holds the Erlang functions
-    # and the protocol dispatchers too: the encode PLT holds neither.
-    size_by_signature =
-      mfas_by_signature
-      |> TaskUtils.map_concurrently(fn {signature, mfas} ->
-        %{defs: defs} = render_script_parts(mfas, ir_plt, encode_plt, async_mfas, script_opts)
-        {signature, byte_size(defs)}
-      end)
-      |> Map.new()
-
-    mfas_by_signature
-    |> fold_small_chunks(size_by_signature)
     |> Enum.map(fn {signature, mfas} -> {signature, chunk_signature_digest(signature), mfas} end)
     |> Enum.sort_by(fn {_signature, signature_digest, _mfas} -> signature_digest end)
     |> TaskUtils.map_concurrently(fn {signature, signature_digest, mfas} ->
@@ -1030,6 +1005,37 @@ defmodule Hologram.Compiler do
         }
   def fingerprint_js_inputs(paths, started_at) do
     Map.new(paths, &{&1, fingerprint_js_input(&1, started_at)})
+  end
+
+  @doc """
+  Returns the chunks to bundle, by signature: the given MFAs by signature (see
+  `group_mfas_by_signature/1`) with the small chunks folded into others (see
+  `fold_small_chunks/2`). The functions of all the chunks are encoded into the encode PLT first,
+  with one IR read per module (`encode_reachable_functions/5`), and each chunk is sized by its
+  definitions as rendered from that cache, which is what `create_chunk_entry_files/5` renders
+  again. Takes the options `create_chunk_entry_files/5` takes.
+  """
+  @spec fold_chunks(%{MapSet.t(module) => [mfa]}, PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
+          %{MapSet.t(module) => [mfa]}
+  def fold_chunks(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
+    module_info_plt = opts[:module_info_plt]
+    script_opts = chunk_script_opts(opts)
+
+    mfas_by_signature
+    |> Enum.flat_map(fn {_signature, mfas} -> mfas end)
+    |> encode_reachable_functions(ir_plt, encode_plt, async_mfas, module_info_plt)
+
+    # A chunk's size is the size of its definitions as rendered, which holds the Erlang functions
+    # and the protocol dispatchers too: the encode PLT holds neither.
+    size_by_signature =
+      mfas_by_signature
+      |> TaskUtils.map_concurrently(fn {signature, mfas} ->
+        %{defs: defs} = render_script_parts(mfas, ir_plt, encode_plt, async_mfas, script_opts)
+        {signature, byte_size(defs)}
+      end)
+      |> Map.new()
+
+    fold_small_chunks(mfas_by_signature, size_by_signature)
   end
 
   @doc """
@@ -1782,6 +1788,16 @@ defmodule Hologram.Compiler do
   # named by the bundle name and its content hash alone (see bundle/4).
   defp chunk_entry_args(entries) do
     Enum.map(entries, fn {_entry_name, entry_file_path} -> "chunk=#{entry_file_path}" end)
+  end
+
+  # The options a chunk's script is rendered with, from the options the chunk functions take.
+  defp chunk_script_opts(opts) do
+    [
+      js_dir: opts[:js_dir],
+      module_info_plt: opts[:module_info_plt],
+      module_metadata: opts[:module_metadata],
+      runtime_js_binding_modules: opts[:runtime_js_binding_modules] || MapSet.new()
+    ]
   end
 
   # The length of the command line esbuild is started with for the given chunk entries (see

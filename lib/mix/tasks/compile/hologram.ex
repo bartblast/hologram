@@ -909,7 +909,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Compiler.list_ir_modules(opts[:module_info_plt])
     |> then(&Compiler.build_missing_ir!(ir_plt, &1))
 
-    Compiler.create_chunk_entry_files(mfas_by_signature, ir_plt, encode_plt, async_mfas, opts)
+    mfas_by_signature
+    |> Compiler.fold_chunks(ir_plt, encode_plt, async_mfas, opts)
+    |> Compiler.create_chunk_entry_files(ir_plt, encode_plt, async_mfas, opts)
   end
 
   # The call graph and the module infos are the before picture of the next VM's first compile (see

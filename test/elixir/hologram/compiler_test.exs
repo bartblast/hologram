@@ -2796,44 +2796,7 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(entry_file_2, js_fragment_1)
     end
 
-    test "creates no entry file for a chunk folded into another", %{ir_plt: ir_plt, opts: opts} do
-      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_fold"])
-      clean_dir(tmp_dir)
-
-      # Module22.my_fun/0 returns an atom, so the chunk holding it alone is a few hundred bytes of
-      # definitions, under what a file of its own costs.
-      mfas_by_signature = %{
-        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
-        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
-      }
-
-      result =
-        create_chunk_entry_files(
-          mfas_by_signature,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          Keyword.put(opts, :tmp_dir, tmp_dir)
-        )
-
-      entry_file_path = Path.join(tmp_dir, "chunk-59fbfa6b.entry.js")
-
-      assert result == [{MapSet.new([Date, Time]), "59fbfa6b", entry_file_path}]
-
-      entry_file = File.read!(entry_file_path)
-
-      assert String.contains?(
-               entry_file,
-               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
-             )
-
-      assert String.contains?(
-               entry_file,
-               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
-             )
-    end
-
-    test "encodes the chunks' functions into the encode PLT", %{
+    test "renders a chunk from the encode PLT the folding filled", %{
       ir_plt: ir_plt,
       mfas_by_signature: mfas_by_signature,
       opts: opts
@@ -2842,17 +2805,17 @@ defmodule Hologram.CompilerTest do
       clean_dir(tmp_dir)
 
       encode_plt = PLT.start()
+      chunk_opts = Keyword.put(opts, :tmp_dir, tmp_dir)
+      folded = fold_chunks(mfas_by_signature, ir_plt, encode_plt, MapSet.new(), chunk_opts)
 
-      create_chunk_entry_files(
-        mfas_by_signature,
-        ir_plt,
-        encode_plt,
-        MapSet.new(),
-        Keyword.put(opts, :tmp_dir, tmp_dir)
-      )
+      [{_signature, _signature_digest, entry_file_path} | _rest] =
+        create_chunk_entry_files(folded, ir_plt, encode_plt, MapSet.new(), chunk_opts)
 
-      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
-      assert PLT.member?(encode_plt, {Module22, :my_fun, 0})
+      assert entry_file_path
+             |> File.read!()
+             |> String.contains?(
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+             )
     end
 
     test "skips the JS imports of the modules the runtime script registers", %{
@@ -3398,6 +3361,52 @@ defmodule Hologram.CompilerTest do
 
     test "no paths", _context do
       assert fingerprint_js_inputs([], nil) == %{}
+    end
+  end
+
+  describe "fold_chunks/5" do
+    setup %{module_info_plt: module_info_plt} do
+      [opts: [js_dir: @js_dir, module_info_plt: module_info_plt]]
+    end
+
+    test "encodes the chunks' functions into the encode PLT", %{ir_plt: ir_plt, opts: opts} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      encode_plt = PLT.start()
+
+      fold_chunks(mfas_by_signature, ir_plt, encode_plt, MapSet.new(), opts)
+
+      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
+      assert PLT.member?(encode_plt, {Module22, :my_fun, 0})
+    end
+
+    test "folds a chunk under the bound into its superset", %{ir_plt: ir_plt, opts: opts} do
+      # Module22.my_fun/0 returns an atom, so the chunk holding it alone is a few hundred bytes of
+      # definitions, under what a file of its own costs.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
+      }
+
+      result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
+
+      assert result == %{
+               MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+             }
+    end
+
+    test "leaves chunks neither of which holds the other apart", %{ir_plt: ir_plt, opts: opts} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
+
+      assert result == mfas_by_signature
     end
   end
 
