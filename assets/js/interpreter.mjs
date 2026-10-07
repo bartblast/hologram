@@ -70,15 +70,17 @@ export default class Interpreter {
   // Clause heads of manually ported functions, keyed by "Module.function/arity".
   static #functionClauseHeads = {};
 
-  // The functions a missing one gets a hint for in raiseUndefinedFunctionError(). Keep in sync with
-  // Hologram.Compiler.DynamicCallSites.reflection_functions/0.
+  // The reflection functions, which a missing one gets a hint for in raiseUndefinedFunctionError().
+  // Keep in sync with Hologram.Compiler.DynamicCallSites.reflection_functions/0.
   static #REFLECTION_FUNCTIONS = new Set([
     "__changeset__/0",
     "__schema__/1",
     "__schema__/2",
-    "__struct__/0",
-    "__struct__/1",
   ]);
+
+  // The functions every struct type has, which a missing one gets a hint of its own for in
+  // raiseUndefinedFunctionError().
+  static #STRUCT_FUNCTIONS = new Set(["__struct__/0", "__struct__/1"]);
 
   // Deps: [:lists.keyfind/3]
   static accessKeywordListElement(keywordList, key, defaultValue = null) {
@@ -1260,7 +1262,9 @@ export default class Interpreter {
   // reaches it like any other function, but a call on a module the code does
   // not name ships it only for the types the page can see, and only when the
   // compiler detects the call (see Hologram.Compiler.DynamicCallGate), so the
-  // message says what makes such a call detectable. The hint follows the text
+  // message says what makes such a call detectable. A missing struct function
+  // gets a hint of its own: it is in no bundle, and loads with its type's
+  // chunks, so the message says what loads those. The hint follows the text
   // the struct's message/1 callback derives, kept as the eager message.
   static raiseUndefinedFunctionError(
     module,
@@ -1280,13 +1284,15 @@ export default class Interpreter {
       [Type.atom("reason"), Type.atom(reason)],
     ];
 
-    if (Interpreter.#REFLECTION_FUNCTIONS.has(`${functionName}/${arity}`)) {
+    const hint = Interpreter.#undefinedFunctionHint(functionName, arity);
+
+    if (hint !== null) {
       const struct = Type.struct("UndefinedFunctionError", [
         [Type.atom("__exception__"), Type.boolean(true)],
         ...fields,
       ]);
 
-      const message = `${Interpreter.resolveErrorMessage(struct)}. A reflection function (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.`;
+      const message = `${Interpreter.resolveErrorMessage(struct)}. ${hint}`;
 
       fields[2] = [Type.atom("message"), Type.bitstring(message)];
     }
@@ -2742,6 +2748,22 @@ export default class Interpreter {
     ]);
 
     Erlang["error/1"](struct);
+  }
+
+  // What the message of an UndefinedFunctionError adds for the given function,
+  // or null for a function that gets no hint.
+  static #undefinedFunctionHint(functionName, arity) {
+    const key = `${functionName}/${arity}`;
+
+    if (Interpreter.#REFLECTION_FUNCTIONS.has(key)) {
+      return "A reflection function (__changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.";
+    }
+
+    if (Interpreter.#STRUCT_FUNCTIONS.has(key)) {
+      return "The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.";
+    }
+
+    return null;
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWalkComprehension().
