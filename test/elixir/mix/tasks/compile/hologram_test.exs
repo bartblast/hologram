@@ -334,12 +334,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     map_size(cache_state().chunks.bundle_infos)
   end
 
-  # Puts one of the kept chunk bundles under another digest, files and kept state alike, as it is
-  # before an edit that changes the chunk's content, and returns a struct type of the chunk's
-  # signature with the bundle's old info.
+  # Puts the kept chunk bundle that carries the chunk-only implementation under another digest,
+  # files and kept state alike, as it is before an edit of the implementation changes the chunk's
+  # content, and returns a struct type of the chunk's signature with the bundle's old info.
   defp put_kept_chunk_bundle_under_old_digest(opts) do
     chunks = cache_state().chunks
-    [{signature, bundle_info} | _rest] = Map.to_list(chunks.bundle_infos)
+    [signature] = signatures_carrying(chunks, @chunk_only_impl)
+    bundle_info = chunks.bundle_infos[signature]
 
     old_digest = "OLDCHUNK"
     old_bundle_path = Path.join(opts[:static_dir], "chunk-#{old_digest}.js")
@@ -360,6 +361,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
     })
 
     {Enum.min(signature), old_bundle_info}
+  end
+
+  # The signatures of the kept chunks that hold a function of the given module.
+  defp signatures_carrying(chunks, module) do
+    for {signature, mfas} <- chunks.mfas_by_signature,
+        Enum.any?(mfas, &match?({^module, _function, _arity}, &1)) do
+      signature
+    end
   end
 
   # Replaces the kept module infos with the given ones and marks them as the before picture.
@@ -2259,13 +2268,66 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_chunk_bundles(opts)
     end
 
+    test "rebundles only the chunks that carry an edited module", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      carrying = signatures_carrying(chunks, @chunk_only_impl)
+      assert length(carrying) < map_size(chunks.bundle_infos)
+
+      fake_edit(@chunk_only_impl)
+
+      assert count_built_bundles(fn -> run(opts) end) == length(carrying)
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
     test "rebundles the chunks when one's bundle is gone", %{opts: opts} do
       run(opts)
 
       [bundle_info | _rest] = Map.values(cache_state().chunks.bundle_infos)
       File.rm!(bundle_info.static_bundle_path)
 
-      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      assert count_built_bundles(fn -> run(opts) end) == 1
+      test_chunk_bundles(opts)
+    end
+
+    test "drops the chunk of a signature the app no longer has", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+
+      # A chunk of a type the app does not have, as a build that had the type would have left it.
+      signature = MapSet.new([NoSuchStruct])
+      bundle_path = Path.join(opts[:static_dir], "chunk-NOSUCH11.js")
+      File.write!(bundle_path, "")
+      File.write!(bundle_path <> ".map", "")
+
+      bundle_info = %{
+        bundle_name: "chunk",
+        digest: "NOSUCH11",
+        entry_name: "nosuch11",
+        js_inputs: %{},
+        static_bundle_path: bundle_path,
+        static_source_map_path: bundle_path <> ".map"
+      }
+
+      Cache.put_chunks(%{
+        chunks
+        | bundle_infos: Map.put(chunks.bundle_infos, signature, bundle_info),
+          mfas_by_signature:
+            Map.put(chunks.mfas_by_signature, signature, [{NoSuchStruct, :__struct__, 0}])
+      })
+
+      fake_edit(@chunk_only_impl)
+      run(opts)
+
+      items = load_chunk_registry_items(opts)
+
+      refute File.exists?(bundle_path)
+      refute File.exists?(bundle_path <> ".map")
+      refute Map.has_key?(items, {:type, NoSuchStruct})
+      assert cache_state().chunks == chunks
       test_chunk_bundles(opts)
     end
 
@@ -2417,12 +2479,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_chunk_bundles(opts)
     end
 
-    test "a run that fails while bundling leaves the next one rebuilding the chunks", %{
-      opts: opts
-    } do
+    test "a run that fails while bundling keeps the chunks it did not rebuild", %{opts: opts} do
       run(opts)
 
       chunks = cache_state().chunks
+      [signature] = signatures_carrying(chunks, @chunk_only_impl)
       fake_edit(@chunk_only_impl)
 
       missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
@@ -2430,8 +2491,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
 
-      assert cache_state().chunks == nil
-      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      assert cache_state().chunks.bundle_infos == Map.delete(chunks.bundle_infos, signature)
+      assert cache_state().chunks.mfas_by_signature == chunks.mfas_by_signature
+
+      assert count_built_bundles(fn -> run(opts) end) == 1
       assert cache_state().chunks == chunks
       test_chunk_bundles(opts)
     end

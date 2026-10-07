@@ -41,8 +41,9 @@ defmodule Hologram.Compiler.Cache do
   # (see keep_bundle_inputs/2 there).
   @dump_version 1
 
-  # What the chunk bundles were built from: each chunk's bundle info and MFAs by its signature (see
-  # Hologram.Compiler.group_mfas_by_signature/1), and the modules of all the chunks' MFAs.
+  # What the chunk bundles were built from: the bundle info of each chunk on disk and the MFAs of
+  # each chunk as bundled, folded (see Hologram.Compiler.fold_chunks/5), by signature, and the
+  # modules of all the chunks' MFAs. A chunk with MFAs and no bundle info is one still to build.
   @type chunks_state :: %{
           bundle_infos: %{MapSet.t(module) => map},
           mfas_by_signature: %{MapSet.t(module) => [mfa]},

@@ -491,22 +491,37 @@ defmodule Mix.Tasks.Compile.Hologram do
           [{nil, runtime_entry_file_path, "runtime"}]
         end
 
-      chunk_bundles_kept? =
-        keep_chunk_bundles?(cache.chunks, reaching_modules,
-          js_bindings_changed?:
-            runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
-          js_fingerprints: js_fingerprints,
-          mfas_by_signature: chunk_mfas_by_signature,
-          static_dir: opts[:static_dir]
-        )
-
       chunk_entry_file_opts =
         Keyword.put(entry_file_opts, :runtime_js_binding_modules, runtime_js_binding_modules)
 
+      # The chunks as bundled, by signature: the kept state's when the analysis is kept, else folded
+      # from the listing (see Hologram.Compiler.fold_chunks/5), which reads the IR of every chunk.
+      chunks =
+        fold_chunks(
+          chunk_analysis_kept?,
+          cache.chunks,
+          chunk_mfas_by_signature,
+          ir_plt,
+          encode_plt,
+          async_mfas,
+          chunk_entry_file_opts
+        )
+
+      kept_chunk_bundles_info =
+        keep_chunk_bundles(cache.chunks, chunks, reaching_modules,
+          js_bindings_changed?:
+            runtime_js_bindings_changed?(cache.runtime, runtime_js_binding_modules),
+          js_fingerprints: js_fingerprints,
+          static_dir: opts[:static_dir]
+        )
+
+      chunks_to_build = Map.drop(chunks, Map.keys(kept_chunk_bundles_info))
+
+      # The entry files are rendered before the batches like the runtime's, from IR built here: a
+      # kept chunk reads none, and a chunk rebuilt on a kept analysis may read IR a new VM lacks.
       chunk_entry_files_info =
         create_chunk_entry_files(
-          chunk_bundles_kept?,
-          chunk_mfas_by_signature,
+          chunks_to_build,
           ir_plt,
           encode_plt,
           async_mfas,
@@ -518,7 +533,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_module_metadata(module_metadata)
       Cache.put_template_modules(template_modules)
 
-      keep_chunk_state(chunk_bundles_kept?, chunk_mfas_by_signature)
+      keep_chunk_state(kept_chunk_bundles_info, chunks)
       keep_runtime_state(cache.runtime, runtime_entry_files_info, runtime_dynamic_calls)
 
       # The after picture, for the first compile in the next VM: the bundles on disk, what they were
@@ -556,12 +571,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       # belongs in the page digest PLT and among the artifacts the cleanup below keeps. So does the
       # bundle a page still to rebuild had: it is served until its new one replaces it, which is
       # never when the compile stops before the page's batch. The chunk bundles the kept state
-      # names are served too until the first batch replaces them. With them, the struct types the
-      # client code of each page names, as its last built state recorded them, which decide the
-      # chunks the page preloads.
+      # names are served too until the first batch replaces the ones to rebuild. With them, the
+      # struct types the client code of each page names, as its last built state recorded them,
+      # which decide the chunks the page preloads.
       bundles =
         %{
-          chunks: initial_chunk_bundles_info(cache.chunks, chunk_mfas_by_signature),
+          chunks:
+            initial_chunk_bundles_info(cache.chunks, kept_chunk_bundles_info, chunks_to_build),
           page_chunk_types:
             Map.new(kept_pages ++ old_page_states, fn {page_module, page_state} ->
               {page_module, page_state.chunk_types}
@@ -583,12 +599,13 @@ defmodule Mix.Tasks.Compile.Hologram do
         async_mfas: async_mfas,
         call_graph: call_graph_for_pages,
         chunk_entry_files_info: chunk_entry_files_info,
-        chunk_mfas_by_signature: chunk_mfas_by_signature,
+        chunks: chunks,
         client_config: client_config,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         gate: gate,
         ir_plt: ir_plt,
+        kept_chunk_bundles_info: kept_chunk_bundles_info,
         links: links,
         listed_mfas_by_page: Map.new(unrecorded_mfas_by_page),
         module_info_plt: new_module_info_plt,
@@ -858,7 +875,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     new_bundles =
       bundles
       |> put_built_bundles_info(built_bundles_info, context)
-      |> put_built_chunk_bundles_info(built_chunk_bundles_info)
+      |> put_built_chunk_bundles_info(built_chunk_bundles_info, context)
       |> Map.update!(:page_chunk_types, &Map.merge(&1, batch.chunk_types_by_page))
 
     dump_chunk_registry_plt(new_bundles, context)
@@ -869,6 +886,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     context.opts[:bundles_built].(built_entries)
 
     new_bundles
+  end
+
+  # Builds the IR the given chunks' functions are rendered from.
+  defp build_chunk_ir!(chunks, ir_plt, module_info_plt) do
+    chunks
+    |> chunk_mfas()
+    |> Compiler.list_ir_modules(module_info_plt)
+    |> then(&Compiler.build_missing_ir!(ir_plt, &1))
   end
 
   defp chunk_built_modules(nil), do: []
@@ -889,29 +914,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # The chunk bundles are kept or rebuilt together: a function's chunk is decided by the signatures
-  # of them all, and the small ones are folded by their sizes. The entry files are rendered before
-  # the batches like the runtime's, so the IR they read is built here, and only here: kept chunks
-  # read none.
-  defp create_chunk_entry_files(
-         true,
-         _mfas_by_signature,
-         _ir_plt,
-         _encode_plt,
-         _async_mfas,
-         _opts
-       ),
+  # The entry files of the given chunks (see Hologram.Compiler.create_chunk_entry_files/5), the IR
+  # their functions read built first. None for no chunk.
+  defp create_chunk_entry_files(chunks, _ir_plt, _encode_plt, _async_mfas, _opts)
+       when chunks == %{},
        do: []
 
-  defp create_chunk_entry_files(false, mfas_by_signature, ir_plt, encode_plt, async_mfas, opts) do
-    mfas_by_signature
-    |> chunk_mfas()
-    |> Compiler.list_ir_modules(opts[:module_info_plt])
-    |> then(&Compiler.build_missing_ir!(ir_plt, &1))
-
-    mfas_by_signature
-    |> Compiler.fold_chunks(ir_plt, encode_plt, async_mfas, opts)
-    |> Compiler.create_chunk_entry_files(ir_plt, encode_plt, async_mfas, opts)
+  defp create_chunk_entry_files(chunks, ir_plt, encode_plt, async_mfas, opts) do
+    build_chunk_ir!(chunks, ir_plt, opts[:module_info_plt])
+    Compiler.create_chunk_entry_files(chunks, ir_plt, encode_plt, async_mfas, opts)
   end
 
   # The call graph and the module infos are the before picture of the next VM's first compile (see
@@ -989,6 +1000,18 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # No state for a page that no longer exists, whose bundle the artifact cleanup deletes.
+  # The chunks as bundled, by signature (see Hologram.Compiler.fold_chunks/5). A compile that kept
+  # the chunk analysis has them in the kept state, which holds the chunks as folded: the fold reads
+  # the rendered size of every chunk, so it is not done again.
+  defp fold_chunks(true, kept_chunks, _listed, _ir_plt, _encode_plt, _async_mfas, _opts) do
+    kept_chunks.mfas_by_signature
+  end
+
+  defp fold_chunks(false, _kept_chunks, listed, ir_plt, encode_plt, async_mfas, opts) do
+    build_chunk_ir!(listed, ir_plt, opts[:module_info_plt])
+    Compiler.fold_chunks(listed, ir_plt, encode_plt, async_mfas, opts)
+  end
+
   defp forget_removed_pages(pages_plt, page_modules) do
     pages_plt
     |> PLT.keys()
@@ -996,15 +1019,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.each(&Cache.delete_page/1)
   end
 
-  # The bundle of each chunk the kept state names. None without a state, and none when no chunk is
-  # left to build: no batch replaces them then.
-  defp initial_chunk_bundles_info(nil, _chunk_mfas_by_signature), do: %{}
+  # The bundle of each chunk the kept state names, served until the first batch replaces the ones
+  # to rebuild. With no chunk to build no batch replaces any, so only the kept ones: a signature
+  # the app no longer has goes with the cleanup. None without a state.
+  defp initial_chunk_bundles_info(nil, _kept_chunk_bundles_info, _chunks_to_build), do: %{}
 
-  defp initial_chunk_bundles_info(_kept_chunks, chunk_mfas_by_signature)
-       when chunk_mfas_by_signature == %{},
-       do: %{}
+  defp initial_chunk_bundles_info(_kept_chunks, kept_chunk_bundles_info, chunks_to_build)
+       when chunks_to_build == %{},
+       do: kept_chunk_bundles_info
 
-  defp initial_chunk_bundles_info(kept_chunks, _chunk_mfas_by_signature) do
+  defp initial_chunk_bundles_info(kept_chunks, _kept_chunk_bundles_info, _chunks_to_build) do
     kept_chunks.bundle_infos
   end
 
@@ -1058,22 +1082,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # Records the chunk bundles a batch built, all of them at once, with what they were built from.
+  # Records the chunk bundles a batch built, next to the kept ones, with what they were built from.
   defp keep_built_chunk_bundles(built_chunk_bundles_info, _context)
        when built_chunk_bundles_info == %{},
        do: :ok
 
   defp keep_built_chunk_bundles(built_chunk_bundles_info, context) do
-    modules =
-      context.chunk_mfas_by_signature
-      |> chunk_mfas()
-      |> page_state_modules()
-
-    Cache.put_chunks(%{
-      bundle_infos: built_chunk_bundles_info,
-      mfas_by_signature: context.chunk_mfas_by_signature,
-      modules: modules
-    })
+    put_chunk_state(
+      Map.merge(context.kept_chunk_bundles_info, built_chunk_bundles_info),
+      context.chunks
+    )
   end
 
   # The kept bundles stay while the inputs are the ones they were built with. No inputs kept means no
@@ -1100,33 +1118,38 @@ defmodule Mix.Tasks.Compile.Hologram do
     }
   end
 
-  # The chunk bundles are rebuilt when their MFAs differ from the kept ones and when a module of
-  # those MFAs was edited, like the runtime bundle. They are rebuilt too when a file one of them read
-  # changed (see Hologram.Compiler.js_inputs_changed?/2), when one cannot be served from the static
-  # dir any more (see Hologram.Compiler.usable_bundle?/2), and when the JS imports the runtime
-  # registers changed: a chunk leaves those out, as a page does.
-  defp keep_chunk_bundles?(nil, _reaching_modules, _inputs), do: false
+  # The chunks kept with their bundles, each on its own: one whose kept bundle was built from the
+  # same functions, none of whose modules was edited, whose files it read are unchanged (see
+  # Hologram.Compiler.js_inputs_changed?/2) and whose bundle can be served from the static dir (see
+  # Hologram.Compiler.usable_bundle?/2), unless the JS imports the runtime registers changed: a
+  # chunk leaves those out, as a page does. Every struct type has a chunk, so an edit of a struct
+  # module rebuilds the chunks that carry it and no other. None without a state.
+  defp keep_chunk_bundles(nil, _chunks, _reaching_modules, _inputs), do: %{}
 
-  defp keep_chunk_bundles?(kept_chunks, reaching_modules, inputs) do
-    kept_chunks.mfas_by_signature == inputs[:mfas_by_signature] and
-      not inputs[:js_bindings_changed?] and
-      MapSet.disjoint?(kept_chunks.modules, reaching_modules) and
-      Enum.all?(kept_chunks.bundle_infos, fn {_signature, bundle_info} ->
-        not Compiler.js_inputs_changed?(bundle_info.js_inputs, inputs[:js_fingerprints]) and
-          Compiler.usable_bundle?(bundle_info, inputs[:static_dir])
-      end)
+  defp keep_chunk_bundles(kept_chunks, chunks, reaching_modules, inputs) do
+    if inputs[:js_bindings_changed?] do
+      %{}
+    else
+      for {signature, mfas} <- chunks,
+          bundle_info = kept_chunks.bundle_infos[signature],
+          bundle_info != nil,
+          kept_chunks.mfas_by_signature[signature] == mfas,
+          modules = page_state_modules(mfas),
+          MapSet.disjoint?(modules, reaching_modules),
+          not Compiler.js_inputs_changed?(bundle_info.js_inputs, inputs[:js_fingerprints]),
+          Compiler.usable_bundle?(bundle_info, inputs[:static_dir]),
+          into: %{} do
+        {signature, bundle_info}
+      end
+    end
   end
 
-  # The kept chunk state describes the bundles this compile replaces, so it is forgotten when they
-  # are rebuilt, for the reason the runtime's is (see keep_runtime_state/3). With no chunk left to
-  # build no batch records a new one, so the state of an app without chunks is kept here.
-  defp keep_chunk_state(true, _chunk_mfas_by_signature), do: :ok
-
-  defp keep_chunk_state(false, chunk_mfas_by_signature) when chunk_mfas_by_signature == %{} do
-    Cache.put_chunks(%{bundle_infos: %{}, mfas_by_signature: %{}, modules: MapSet.new()})
+  # The kept chunk state is replaced before the batches by one that names the kept bundles alone: a
+  # compile that fails while bundling leaves the next one keeping those and rebuilding the rest.
+  # The batch that builds the rest records them next to the kept ones.
+  defp keep_chunk_state(kept_chunk_bundles_info, chunks) do
+    put_chunk_state(kept_chunk_bundles_info, chunks)
   end
-
-  defp keep_chunk_state(false, _chunk_mfas_by_signature), do: Cache.put_chunks(nil)
 
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
@@ -1239,14 +1262,25 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # The chunks are rebuilt together, so the ones built replace the whole set: a signature the app no
-  # longer has goes with it. An old chunk's bundle stays until the cleanup at the end.
-  defp put_built_chunk_bundles_info(bundles, built_chunk_bundles_info)
+  # The chunks built join the kept ones, and the rest of the old set goes: a signature the app no
+  # longer has, and the bundles the built ones replace. An old chunk's bundle stays on disk until
+  # the cleanup at the end.
+  defp put_built_chunk_bundles_info(bundles, built_chunk_bundles_info, _context)
        when built_chunk_bundles_info == %{},
        do: bundles
 
-  defp put_built_chunk_bundles_info(bundles, built_chunk_bundles_info) do
-    %{bundles | chunks: built_chunk_bundles_info}
+  defp put_built_chunk_bundles_info(bundles, built_chunk_bundles_info, context) do
+    %{bundles | chunks: Map.merge(context.kept_chunk_bundles_info, built_chunk_bundles_info)}
+  end
+
+  # Records the given chunk bundles with the chunks they were built from.
+  defp put_chunk_state(bundle_infos, chunks) do
+    modules =
+      chunks
+      |> chunk_mfas()
+      |> page_state_modules()
+
+    Cache.put_chunks(%{bundle_infos: bundle_infos, mfas_by_signature: chunks, modules: modules})
   end
 
   # Whether the module info dump on disk is the one the given mtime belongs to: the one this VM
@@ -1397,7 +1431,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The MFAs of each chunk by its signature (see Hologram.Compiler.group_mfas_by_signature/1): each
   # chunked type's MFAs without the runtime's, regrouped. A compile that did not grow the graph for
-  # the chunks (see build_chunk_reach/5) finds the ones the chunk bundles on disk were built from.
+  # the chunks (see build_chunk_reach/5) finds the ones the chunk bundles on disk were built from,
+  # as folded.
   defp list_chunk_mfas_by_signature(kept_chunks, nil, _call_graph_for_runtime, _runtime_mfas) do
     kept_chunks.mfas_by_signature
   end
