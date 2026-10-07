@@ -786,13 +786,13 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Grows the graph until it holds the code of every chunk: what the implementations of the client
-  protocols (see list_client_protocols/4) for struct types reach. Returns those implementations'
-  entry vertices by type (see list_chunk_entries/2), the client protocols and the modules it asked
-  to build, in the order asked.
+  Grows the graph until it holds the code of every chunk: what the struct functions of the struct
+  types and their implementations of the client protocols (see list_client_protocols/4) reach.
+  Returns those entry vertices by type (see list_chunk_entries/2), the client protocols and the
+  modules it asked to build, in the order asked.
 
-  The graph build_reach/3 leaves holds what the pages and the runtime reach, so the implementation
-  for a type no page names, and what only such an implementation calls, are not in it. The walk
+  The graph build_reach/3 leaves holds what the pages and the runtime reach, so a struct type no
+  page names, its implementations, and what only they call, are not in it. The walk
   starts from every entry vertex with every such type reachable, follows edges with the rules of
   reachable_mfas/5, and runs in rounds like build_reach/3: `build_modules` is called with the
   modules a round needs built, and the next round walks the graph again. When a round asks for no
@@ -972,15 +972,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns, for each struct type that has an implementation of one of the given protocols, the entry
-  vertices of those implementations: `__impl__/1` and the protocol's functions of each, sorted. The
-  types are read from the module info PLT, so a type no code names is among them. An implementation
-  for a built-in type is left out, and so are the implementations of Hex, the build tool, which a
-  dev build has loaded.
+  Returns the entry vertices of each struct type's chunks, sorted: the type's own `__struct__/0`
+  and `__struct__/1`, and `__impl__/1` and the protocol's functions of each of its implementations
+  of the given protocols. The types are read from the module info PLT, so a type no code names is
+  among them, and so is a type with no implementation, for its struct functions. An implementation
+  for a built-in type is left out, and so are the struct types and the implementations of Hex, the
+  build tool, which a dev build has loaded.
   """
   @spec list_chunk_entries(Enumerable.t(module), PLT.t()) :: %{module => [vertex]}
   def list_chunk_entries(protocols, module_info_plt) do
-    entries =
+    impl_entries =
       for protocol <- protocols,
           functions = [{:__impl__, 1} | protocol_functions(protocol, module_info_plt)],
           # The implementations the protocol's dispatch edges are built from (see build/3).
@@ -991,8 +992,17 @@ defmodule Hologram.Compiler.CallGraph do
         {type, {impl, function, arity}}
       end
 
+    # A struct is built by its type's __struct__/0,1, on the client too, where the type can be
+    # known only at runtime: a module read from the state, or the module of a struct the server
+    # sent. So they are loaded with the type, like its implementations.
+    struct_entries =
+      for type <- PLT.keys(module_info_plt, %{struct?: true}), arity <- [0, 1] do
+        {type, {type, :__struct__, arity}}
+      end
+
     # Sorted before the grouping, which keeps each type's vertices in that order.
-    entries
+    impl_entries
+    |> Enum.concat(struct_entries)
     |> Enum.sort()
     |> Enum.group_by(fn {type, _vertex} -> type end, fn {_type, vertex} -> vertex end)
     |> Map.new(fn {type, vertices} -> {type, reject_hex_mfas(vertices)} end)
@@ -1000,9 +1010,10 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the MFAs of each struct type's chunks: what the given entry vertices of the type's
-  implementations (see list_chunk_entries/2) reach, sorted, without the given runtime MFAs, which
-  every page has loaded. A type none of whose MFAs is left is not among the keys.
+  Returns the MFAs of each struct type's chunks: what the given entry vertices of the type (see
+  list_chunk_entries/2), its struct functions and its implementations', reach, sorted, without the
+  given runtime MFAs, which every page has loaded. A type none of whose MFAs is left is not among
+  the keys: one the runtime's own code names, when no implementation of it is left either.
 
   The walk follows edges with the rules of reachable_mfas/5 from the type alone, so the
   implementations for the struct types the reached code names are entered too: code that turns a
@@ -1014,6 +1025,10 @@ defmodule Hologram.Compiler.CallGraph do
   option of reachable_mfas/5): a value of any type can reach the call, the server announces
   chunks for the client protocols alone, and only the code that calls the protocol can dispatch
   it, so that code's chunks carry all of its implementations.
+
+  The walk does not go through the type's own module vertex (the `:opaque_modules` option of
+  reachable_mfas/5): its struct functions name the type, and its entries are what the vertex would
+  bring.
   """
   @spec list_chunk_mfas_by_type(t, %{module => [vertex]}, MapSet.t(module), [mfa]) :: %{
           module => [mfa]
@@ -1168,13 +1183,17 @@ defmodule Hologram.Compiler.CallGraph do
   The protocol implementations for the built-in types are listed, those for struct types are not,
   whichever code names the type: they ship in chunks of their own (see list_page_chunk_types/4).
 
-  The reflection functions (`__struct__/0,1` of a struct, `__changeset__/0` and `__schema__/1,2` of
-  an Ecto schema) of the types that can appear at protocol dispatch on the page (the ones its
-  client code names and the ones its templatables' server callbacks name) are listed, but only the
-  ones the page can call on a module its code does not name: the `:gate` opt (see
-  `Hologram.Compiler.DynamicCallGate`) says which, from the dynamic calls the page's client code
-  reaches and the ones the runtime holds. With no gate, every reflection function of every such
-  type is listed.
+  A struct type's `__struct__/0,1` are not listed either, whichever code reaches them: they ship in
+  the type's chunks too (see list_chunk_entries/2), which the page preloads for the types its
+  client code names and the server names when a struct or the module of the type is on its way to
+  the client.
+
+  The reflection functions of an Ecto schema (`__changeset__/0` and `__schema__/1,2`) are listed
+  for the types that can appear at protocol dispatch on the page (the ones its client code names
+  and the ones its templatables' server callbacks name), but only the ones the page can call on a
+  module its code does not name: the `:gate` opt (see `Hologram.Compiler.DynamicCallGate`) says
+  which, from the dynamic calls the page's client code reaches and the ones the runtime holds. With
+  no gate, every such function of every such type is listed.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_4/README.md
   """
@@ -1201,6 +1220,9 @@ defmodule Hologram.Compiler.CallGraph do
     |> finalize_reachable_mfas(final_state, module_info_plt)
     |> reject_hex_mfas()
     |> add_reflection_mfas(final_state.types, open_reflection_functions, module_info_plt)
+    # A struct type's struct functions live in its chunks alone, whichever edge reached them here: a
+    # struct the page's client code builds, or a struct module it names.
+    |> Enum.reject(&struct_function?(&1, module_info_plt))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1402,6 +1424,14 @@ defmodule Hologram.Compiler.CallGraph do
       `false` only the implementations for the built-in types are, whatever struct types the code
       reaches: the listing of a bundle that carries no struct implementation, since those ship in
       chunks of their own (default: `true`).
+
+    * `:opaque_modules` - the module vertices the traversal reaches but does not walk through. A
+      module's vertex carries the edges for what a named module can be asked dynamically (its
+      struct functions, an exception's `message/1`, an Ecto schema's reflection functions), and a
+      struct function's default map names the struct's own module: the listing of a struct type's
+      chunks, whose entries are the type's own struct functions already, stops at the type's own
+      vertex, or an Ecto schema's chunks would hold the reflection functions of every schema its
+      associations lead to. A `MapSet` of modules (default: none).
 
     * `:opaque_protocols` - the protocols whose functions the traversal stops at, entering an
       implementation only once its type is reachable, as described above. The functions of any
@@ -1750,8 +1780,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   # The reflection functions (see Hologram.Compiler.DynamicCallSites) of the types that can appear
   # at protocol dispatch on the page, the ones its client code names and the ones its templatables'
-  # server callbacks name: a type's __struct__/0,1 when it is a struct, its __changeset__/0 and
-  # __schema__/1,2 when it is an Ecto schema, and only the functions the gate opens (see
+  # server callbacks name: a type's __changeset__/0 and __schema__/1,2 when it is an Ecto schema,
+  # which is the kind of type that defines them, and only the functions the gate opens (see
   # Hologram.Compiler.DynamicCallGate). A named call of a reflection function reaches it through an
   # ordinary edge and needs none of this.
   # TODO: the server callbacks' types are every module they name, which is more than the types
@@ -1759,8 +1789,8 @@ defmodule Hologram.Compiler.CallGraph do
   defp add_reflection_mfas(page_mfas, types, open_functions, module_info_plt) do
     added_mfas =
       for type <- types,
-          {name, arity} <- open_functions,
-          reflection_function?(type, name, module_info_plt) do
+          flag?(module_info_plt, type, :ecto_schema?),
+          {name, arity} <- open_functions do
         {type, name, arity}
       end
 
@@ -1782,7 +1812,7 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  # Walks a round from the given entries of the client protocols' implementations, builds the
+  # Walks a round from the given entries of the struct types (see list_chunk_entries/2), builds the
   # modules it asks for, and goes on until a round asks for none. Returns the modules built.
   defp build_chunk_reach_rounds(
          call_graph,
@@ -1911,10 +1941,15 @@ defmodule Hologram.Compiler.CallGraph do
   # option of reachable_mfas/5). One that names none (the reach of build_reach/3, which a dump can
   # hold) stops at every protocol's.
   defp expand_reachable_state(graph, state, entry_vertices, module_info_plt) do
+    opaque_modules = Map.get(state, :opaque_modules, MapSet.new())
     opaque_protocols = Map.get(state, :opaque_protocols, :all)
 
-    opaque_vertex? =
+    opaque_protocol_function? =
       &opaque_protocol_function_mfa?(&1, opaque_protocols, module_info_plt)
+
+    opaque_vertex? = fn vertex ->
+      MapSet.member?(opaque_modules, vertex) or opaque_protocol_function?.(vertex)
+    end
 
     new_vertices =
       Digraph.reachable(graph, entry_vertices,
@@ -1928,7 +1963,7 @@ defmodule Hologram.Compiler.CallGraph do
     # An implementation of a protocol the walk does not stop at was reached through the protocol's
     # function already, so only the functions it stops at give candidates.
     pending_impl_candidates =
-      extract_impl_candidates(graph, Enum.filter(new_vertices, opaque_vertex?)) ++
+      extract_impl_candidates(graph, Enum.filter(new_vertices, opaque_protocol_function?)) ++
         state.pending_impl_candidates
 
     new_state = %{
@@ -2156,6 +2191,7 @@ defmodule Hologram.Compiler.CallGraph do
   defp list_chunk_mfas(graph, type, entries, walk) do
     graph
     |> reachable_mfas(entries, MapSet.new([type]), walk.module_info_plt,
+      opaque_modules: MapSet.new([type]),
       opaque_protocols: walk.client_protocols
     )
     |> reject_hex_mfas()
@@ -2415,16 +2451,6 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp protocol_metadata_mfa?(_vertex, _module_infos), do: false
 
-  # Whether the type defines the reflection function: a struct defines __struct__/0,1, an Ecto schema
-  # __changeset__/0 and __schema__/1,2. The built-in protocol dispatch types define none.
-  defp reflection_function?(type, :__struct__, module_info_plt) do
-    flag?(module_info_plt, type, :struct?)
-  end
-
-  defp reflection_function?(type, _name, module_info_plt) do
-    flag?(module_info_plt, type, :ecto_schema?)
-  end
-
   # Records the module as one whose definition is built into the graph (see modules/1).
   defp put_module(%{pid: pid} = call_graph, module) do
     Agent.cast(pid, fn state -> %{state | modules: MapSet.put(state.modules, module)} end)
@@ -2645,6 +2671,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     state = %{
       enter_struct_impls?: Keyword.get(opts, :enter_struct_impls?, true),
+      opaque_modules: Keyword.get(opts, :opaque_modules, MapSet.new()),
       opaque_protocols: Keyword.get(opts, :opaque_protocols, :all),
       reached_vertices: MapSet.new(),
       types: initial_types,
@@ -2653,6 +2680,13 @@ defmodule Hologram.Compiler.CallGraph do
 
     expand_reachable_state(graph, state, entry_vertices, module_info_plt)
   end
+
+  # Whether the vertex is one of a struct type's struct functions, __struct__/0 and __struct__/1.
+  defp struct_function?({module, :__struct__, arity}, module_info_plt) when arity in [0, 1] do
+    flag?(module_info_plt, module, :struct?)
+  end
+
+  defp struct_function?(_vertex, _module_info_plt), do: false
 
   # A component's module vertex, which carries the edges to its client functions, and its server
   # callbacks.

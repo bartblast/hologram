@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
   alias Hologram.Test.Fixtures.Compiler.DynamicCallGate.Module1
 
   @build {Module1, :build, 1}
-  @site {:dynamic_call, @build, :__struct__, 0, {:param, 0}}
+  @site {:dynamic_call, @build, :__changeset__, 0, {:param, 0}}
 
   # The graph of Module1, its reach from the given entry function, and what the gate opens for it.
   defp open_from(function, arity, graph \\ module_1_graph()) do
@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       for {caller, _build} <- Digraph.incoming_edges(full_graph, @build), do: caller
 
     runtime = %{
-      exposed: %{{@build, 0} => MapSet.new([{:__struct__, 0}])},
+      exposed: %{{@build, 0} => MapSet.new([{:__changeset__, 0}])},
       open: MapSet.new(),
       page_callers: %{@build => page_callers}
     }
@@ -58,9 +58,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
                MapSet.new([
                  {:__changeset__, 0},
                  {:__schema__, 1},
-                 {:__schema__, 2},
-                 {:__struct__, 0},
-                 {:__struct__, 1}
+                 {:__schema__, 2}
                ])
     end
 
@@ -89,8 +87,8 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
     test "the runtime's open functions are added" do
       reached_vertices = [{:dynamic_call, {:module_1, :fun_a, 1}, :__schema__, 1, :open}]
 
-      assert open_functions(Digraph.new(), reached_vertices, [], gate([{:__struct__, 0}])) ==
-               MapSet.new([{:__schema__, 1}, {:__struct__, 0}])
+      assert open_functions(Digraph.new(), reached_vertices, [], gate([{:__changeset__, 0}])) ==
+               MapSet.new([{:__schema__, 1}, {:__changeset__, 0}])
     end
 
     test "a caller passing a module written in the code keeps a site on a parameter closed" do
@@ -98,12 +96,12 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
     end
 
     test "a caller passing a value from state opens a site on a parameter" do
-      assert open_from(:with_state_value, 1) == MapSet.new([{:__struct__, 0}])
+      assert open_from(:with_state_value, 1) == MapSet.new([{:__changeset__, 0}])
     end
 
     test "a caller passing its own parameter is followed to its callers" do
       assert open_from(:forwarding_with_literal, 0) == MapSet.new()
-      assert open_from(:forwarding_with_state_value, 1) == MapSet.new([{:__struct__, 0}])
+      assert open_from(:forwarding_with_state_value, 1) == MapSet.new([{:__changeset__, 0}])
     end
 
     test "a recursive chain is followed to an end" do
@@ -111,16 +109,16 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
     end
 
     test "a capture of the function opens a site on its parameter" do
-      assert open_from(:capturing, 0) == MapSet.new([{:__struct__, 0}])
+      assert open_from(:capturing, 0) == MapSet.new([{:__changeset__, 0}])
     end
 
     test "an entry opens a site on its parameter" do
-      assert open_from(:build, 1) == MapSet.new([{:__struct__, 0}])
+      assert open_from(:build, 1) == MapSet.new([{:__changeset__, 0}])
     end
 
     test "a function no reached function calls opens a site on its parameter" do
       assert open_functions(module_1_graph(), [@build, @site], [], gate()) ==
-               MapSet.new([{:__struct__, 0}])
+               MapSet.new([{:__changeset__, 0}])
     end
 
     test "a module vertex among the callers opens a site on a parameter" do
@@ -128,13 +126,13 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       reached_vertices = [Module1, @build, @site]
 
       assert open_functions(graph, reached_vertices, [Module1], gate()) ==
-               MapSet.new([{:__struct__, 0}])
+               MapSet.new([{:__changeset__, 0}])
     end
 
     test "a caller whose code shows no call of the function opens a site on a parameter" do
       graph = Digraph.add_edge(module_1_graph(), {Module1, :no_call, 0}, @build)
 
-      assert open_from(:no_call, 0, graph) == MapSet.new([{:__struct__, 0}])
+      assert open_from(:no_call, 0, graph) == MapSet.new([{:__changeset__, 0}])
     end
 
     test "puts the IR of a module it reads into the gate's IR PLT" do
@@ -148,7 +146,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
     end
 
     test "a reached page caller passing a value from state opens an exposed runtime call" do
-      assert open_on_pages_from(:with_state_value, 1) == MapSet.new([{:__struct__, 0}])
+      assert open_on_pages_from(:with_state_value, 1) == MapSet.new([{:__changeset__, 0}])
     end
 
     test "a reached page caller passing a written module keeps an exposed runtime call closed" do
@@ -159,7 +157,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       assert open_on_pages_from(:forwarding_with_literal, 0) == MapSet.new()
 
       assert open_on_pages_from(:forwarding_with_state_value, 1) ==
-               MapSet.new([{:__struct__, 0}])
+               MapSet.new([{:__changeset__, 0}])
     end
 
     test "a page caller outside the reach leaves an exposed runtime call closed" do
@@ -177,7 +175,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
         )
 
       assert result == %{
-               exposed: %{{@build, 0} => MapSet.new([{:__struct__, 0}])},
+               exposed: %{{@build, 0} => MapSet.new([{:__changeset__, 0}])},
                open: MapSet.new(),
                page_callers: %{
                  @build => [
@@ -198,7 +196,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
           PLT.start()
         )
 
-      assert result.open == MapSet.new([{:__struct__, 0}])
+      assert result.open == MapSet.new([{:__changeset__, 0}])
       assert result.exposed == %{}
     end
 
@@ -209,7 +207,7 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
 
       result = runtime_dynamic_calls(graph, [@build, {Module1, :with_literal, 0}], PLT.start())
 
-      assert result.open == MapSet.new([{:__struct__, 0}])
+      assert result.open == MapSet.new([{:__changeset__, 0}])
       assert result.exposed == %{}
     end
 
@@ -225,8 +223,8 @@ defmodule Hologram.Compiler.DynamicCallGateTest do
       assert result.open == MapSet.new()
 
       assert result.exposed == %{
-               {@build, 0} => MapSet.new([{:__struct__, 0}]),
-               {{Module1, :forwarding, 1}, 0} => MapSet.new([{:__struct__, 0}])
+               {@build, 0} => MapSet.new([{:__changeset__, 0}]),
+               {{Module1, :forwarding, 1}, 0} => MapSet.new([{:__changeset__, 0}])
              }
     end
   end

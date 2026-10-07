@@ -10917,7 +10917,20 @@ describe("Interpreter", () => {
             0,
           ),
         "UndefinedFunctionError",
-        "function Aaa.Bbb.__changeset__/0 is undefined or private. A reflection function (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.",
+        "function Aaa.Bbb.__changeset__/0 is undefined or private. A reflection function (__changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.",
+      );
+    });
+
+    it("adds a hint of its own when the function is a struct function", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("Aaa.Bbb"),
+            "__struct__",
+            0,
+          ),
+        "UndefinedFunctionError",
+        "function Aaa.Bbb.__struct__/0 is undefined or private. The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.",
       );
     });
 
@@ -10931,7 +10944,7 @@ describe("Interpreter", () => {
             false,
           ),
         "UndefinedFunctionError",
-        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). A reflection function (__struct__/0, __struct__/1, __changeset__/0, __schema__/1, __schema__/2) that client code calls on a module it does not name, such as mod.__changeset__(), is bundled only for the types the page can see; a call through apply/3 with a function name known only at runtime is not detected.",
+        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.",
       );
     });
 

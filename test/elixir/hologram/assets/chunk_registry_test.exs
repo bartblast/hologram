@@ -62,12 +62,25 @@ defmodule Hologram.Assets.ChunkRegistryTest do
       :ok
     end
 
+    test "term holding a module that is no struct type" do
+      assert lookup_term(%{calendar: Calendar.ISO}) == []
+    end
+
     test "term holding a struct of a type that has no chunk" do
       assert lookup_term(1..3) == []
     end
 
-    test "term holding no struct" do
+    test "term holding no struct and no module" do
       assert lookup_term(%{a: [1, {:b, "c"}]}) == []
+    end
+
+    # Client code can build a struct of the type from the module alone.
+    test "term holding the module of a type that has chunks" do
+      assert lookup_term(%{type: Date}) == ["BBBBBBBB", "CCCCCCCC"]
+    end
+
+    test "term holding the modules of two types that share a chunk" do
+      assert lookup_term([Date, Time]) == ["AAAAAAAA", "BBBBBBBB", "CCCCCCCC"]
     end
 
     test "term holding structs of a type that has chunks" do
@@ -101,6 +114,70 @@ defmodule Hologram.Assets.ChunkRegistryTest do
     end
   end
 
+  # The structs are ranges, which hold no module but their own. A date holds its calendar's too.
+  describe "named_modules/1" do
+    test "atom that is no module's name" do
+      assert named_modules(:ok) == MapSet.new()
+    end
+
+    test "improper list" do
+      assert named_modules([1..2 | Date]) == MapSet.new([Date, Range])
+    end
+
+    test "list" do
+      assert named_modules([1..2, 1, Date]) == MapSet.new([Date, Range])
+    end
+
+    test "map key" do
+      assert named_modules(%{Date => 1, (1..2) => 2}) == MapSet.new([Date, Range])
+    end
+
+    test "map value" do
+      assert named_modules(%{a: Date, b: 1..2}) == MapSet.new([Date, Range])
+    end
+
+    test "module" do
+      assert named_modules(Date) == MapSet.new([Date])
+    end
+
+    test "module that is no struct type" do
+      assert named_modules(Calendar.ISO) == MapSet.new([Calendar.ISO])
+    end
+
+    test "no struct and no module" do
+      assert named_modules(%{a: [1, {:b, "c"}], d: 2.0, e: nil, f: true}) == MapSet.new()
+    end
+
+    test "struct" do
+      assert named_modules(1..2) == MapSet.new([Range])
+    end
+
+    test "struct field" do
+      assert named_modules(Date.range(~D[2026-10-05], ~D[2026-10-06])) ==
+               MapSet.new([Calendar.ISO, Date, Date.Range])
+    end
+
+    test "struct in a list in a map in a struct" do
+      term = MapSet.new([%{a: [1..2]}])
+
+      assert named_modules(term) == MapSet.new([MapSet, Range])
+    end
+
+    test "the same module more than once" do
+      assert named_modules({1..2, [3..4], Range}) == MapSet.new([Range])
+    end
+
+    test "tuple" do
+      assert named_modules({1..2, 1, Date}) == MapSet.new([Date, Range])
+    end
+
+    test "value an anonymous function captures" do
+      range = 1..2
+
+      assert named_modules(fn -> {range, Date} end) == MapSet.new()
+    end
+  end
+
   test "reload/0" do
     ChunkRegistry.start_link([])
 
@@ -116,56 +193,5 @@ defmodule Hologram.Assets.ChunkRegistryTest do
     assert {:ok, pid} = ChunkRegistry.start_link([])
     assert is_pid(pid)
     assert ets_table_exists?(ChunkRegistryStub.ets_table_name())
-  end
-
-  describe "struct_types/1" do
-    test "improper list" do
-      assert struct_types([~D[2026-10-05] | ~T[12:34:56]]) == MapSet.new([Date, Time])
-    end
-
-    test "list" do
-      assert struct_types([~D[2026-10-05], 1, ~T[12:34:56]]) == MapSet.new([Date, Time])
-    end
-
-    test "map key" do
-      assert struct_types(%{~D[2026-10-05] => 1}) == MapSet.new([Date])
-    end
-
-    test "map value" do
-      assert struct_types(%{a: ~D[2026-10-05]}) == MapSet.new([Date])
-    end
-
-    test "no struct" do
-      assert struct_types(%{a: [1, {:b, "c"}], d: 2.0, e: nil}) == MapSet.new()
-    end
-
-    test "struct" do
-      assert struct_types(~D[2026-10-05]) == MapSet.new([Date])
-    end
-
-    test "struct field" do
-      assert struct_types(Date.range(~D[2026-10-05], ~D[2026-10-06])) ==
-               MapSet.new([Date, Date.Range])
-    end
-
-    test "struct in a list in a map in a struct" do
-      term = MapSet.new([%{a: [~T[12:34:56]]}])
-
-      assert struct_types(term) == MapSet.new([MapSet, Time])
-    end
-
-    test "the same type more than once" do
-      assert struct_types({~D[2026-10-05], [~D[2026-10-06]]}) == MapSet.new([Date])
-    end
-
-    test "tuple" do
-      assert struct_types({~D[2026-10-05], 1, ~T[12:34:56]}) == MapSet.new([Date, Time])
-    end
-
-    test "value an anonymous function captures" do
-      date = ~D[2026-10-05]
-
-      assert struct_types(fn -> date end) == MapSet.new()
-    end
   end
 end

@@ -3,6 +3,7 @@ defmodule Hologram.CompilerTest do
   import Hologram.Compiler
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
@@ -78,6 +79,44 @@ defmodule Hologram.CompilerTest do
     js_inputs
   end
 
+  # The options to bundle with in a tmp dir of the given name, which is left empty but for its
+  # static dir. The tmp dir is relative to the working dir, so that an entry file in it takes the
+  # same share of the command line esbuild is started with on every machine.
+  defp bundling_opts(test_subdir) do
+    node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+    tmp_dir = Path.join(["tmp", "tests", "compiler", test_subdir])
+
+    opts = [
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      node_modules_path: node_modules_path,
+      static_dir: Path.join(tmp_dir, "static"),
+      tmp_dir: tmp_dir
+    ]
+
+    clean_dir(tmp_dir)
+    File.mkdir!(opts[:static_dir])
+
+    opts
+  end
+
+  # Runs the function and returns its result with the number of times esbuild was run.
+  defp count_esbuild_runs(fun) do
+    mfa = {SystemUtils, :cmd_cross_platform, 3}
+
+    # A call count is kept only for a module that is loaded when the counting starts.
+    Code.ensure_loaded!(SystemUtils)
+    :erlang.trace_pattern(mfa, true, [:call_count])
+
+    try do
+      result = fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+
+      {result, count}
+    after
+      :erlang.trace_pattern(mfa, false, [:call_count])
+    end
+  end
+
   # Runs the function with call counts on the one-argument protocol, protocol implementation and
   # JS import checks, which consult a module's code path, and returns its result with the number
   # of such checks.
@@ -105,6 +144,23 @@ defmodule Hologram.CompilerTest do
     after
       Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
     end
+  end
+
+  # Writes the given number of chunk entry files, each with a content of its own, into the tmp dir
+  # of the given options, and returns them as bundle_chunks/2 takes them: the entry names are
+  # "00000001", "00000002" and so on.
+  defp create_chunk_entries(count, opts) do
+    Enum.map(1..count, fn index ->
+      entry_name =
+        index
+        |> Integer.to_string()
+        |> String.pad_leading(8, "0")
+
+      entry_file_path = Path.join(opts[:tmp_dir], "chunk-#{entry_name}.entry.js")
+      File.write!(entry_file_path, "export const myVar = #{index};\n")
+
+      {entry_name, entry_file_path}
+    end)
   end
 
   # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
@@ -1021,6 +1077,17 @@ defmodule Hologram.CompilerTest do
       assert CallGraph.has_vertex?(call_graph, {struct_impl, :my_fun, 1})
     end
 
+    test "builds the IR and the vertices of a struct type no code names, with no implementation",
+         %{call_graph: call_graph, ir_plt: ir_plt, result: result} do
+      struct = Hologram.Test.Fixtures.Compiler.CallGraph.Module25
+
+      assert struct in result.built_modules
+      assert PLT.member?(ir_plt, struct)
+      assert struct in CallGraph.modules(call_graph)
+      assert CallGraph.has_vertex?(call_graph, {struct, :__struct__, 0})
+      assert CallGraph.has_vertex?(call_graph, {struct, :__struct__, 1})
+    end
+
     test "builds the IR of exactly the modules it returns, besides the ones built before", %{
       ir_plt: ir_plt,
       result: result
@@ -1042,7 +1109,7 @@ defmodule Hologram.CompilerTest do
       assert result.client_protocols == MapSet.new([protocol])
     end
 
-    test "returns the entry vertices of the implementation by its type", %{result: result} do
+    test "returns the entry vertices of a struct type by the type", %{result: result} do
       struct = Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
 
       struct_impl =
@@ -1050,7 +1117,9 @@ defmodule Hologram.CompilerTest do
 
       assert result.entries_by_type[struct] == [
                {struct_impl, :__impl__, 1},
-               {struct_impl, :my_fun, 1}
+               {struct_impl, :my_fun, 1},
+               {struct, :__struct__, 0},
+               {struct, :__struct__, 1}
              ]
     end
   end
@@ -1853,97 +1922,170 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "bundle/2" do
-    node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
-    tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
+  describe "bundle/2" do
+    test "bundles each entry file" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+      tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
-    opts = [
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
-      node_modules_path: node_modules_path,
-      static_dir: Path.join(tmp_dir, "static"),
-      tmp_dir: tmp_dir
-    ]
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
 
-    clean_dir(tmp_dir)
-    File.mkdir!(opts[:static_dir])
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
 
-    entry_file_path_1 = Path.join(tmp_dir, "MyPage.entry.js")
-    File.write(entry_file_path_1, "export const myVar = 111;\n")
+      entry_file_path_1 = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write(entry_file_path_1, "export const myVar = 111;\n")
 
-    entry_file_path_2 = Path.join(tmp_dir, "runtime.entry.js")
-    File.write(entry_file_path_2, "export const myVar = 222;\n")
+      entry_file_path_2 = Path.join(tmp_dir, "runtime.entry.js")
+      File.write(entry_file_path_2, "export const myVar = 222;\n")
 
-    entry_files_info = [
-      {MyPage, entry_file_path_1, "page"},
-      {nil, entry_file_path_2, "runtime"}
-    ]
+      entry_files_info = [
+        {MyPage, entry_file_path_1, "page"},
+        {nil, entry_file_path_2, "runtime"}
+      ]
 
-    assert [
-             %{
-               bundle_name: "page",
-               digest: digest_1,
-               entry_name: MyPage,
-               static_bundle_path: static_bundle_path_1,
-               static_source_map_path: static_source_map_path_1
-             },
-             %{
-               bundle_name: "runtime",
-               digest: digest_2,
-               entry_name: nil,
-               static_bundle_path: static_bundle_path_2,
-               static_source_map_path: static_source_map_path_2
-             }
-           ] = bundle(entry_files_info, opts)
+      assert [
+               %{
+                 bundle_name: "page",
+                 digest: digest_1,
+                 entry_name: MyPage,
+                 static_bundle_path: static_bundle_path_1,
+                 static_source_map_path: static_source_map_path_1
+               },
+               %{
+                 bundle_name: "runtime",
+                 digest: digest_2,
+                 entry_name: nil,
+                 static_bundle_path: static_bundle_path_2,
+                 static_source_map_path: static_source_map_path_2
+               }
+             ] = bundle(entry_files_info, opts)
 
-    assert digest_1 =~ ~r/^[A-Z2-7]{8}$/
-    assert digest_2 =~ ~r/^[A-Z2-7]{8}$/
+      assert digest_1 =~ ~r/^[A-Z2-7]{8}$/
+      assert digest_2 =~ ~r/^[A-Z2-7]{8}$/
 
-    assert static_bundle_path_1 == Path.join(opts[:static_dir], "page-MyPage-#{digest_1}.js")
-    assert static_source_map_path_1 == "#{static_bundle_path_1}.map"
-    assert static_bundle_path_2 == Path.join(opts[:static_dir], "runtime-#{digest_2}.js")
-    assert static_source_map_path_2 == "#{static_bundle_path_2}.map"
+      assert static_bundle_path_1 == Path.join(opts[:static_dir], "page-MyPage-#{digest_1}.js")
+      assert static_source_map_path_1 == "#{static_bundle_path_1}.map"
+      assert static_bundle_path_2 == Path.join(opts[:static_dir], "runtime-#{digest_2}.js")
+      assert static_source_map_path_2 == "#{static_bundle_path_2}.map"
 
-    expected_bundle_js_1 =
-      normalize_newlines("""
-      (()=>{var o=111;})();
-      //# sourceMappingURL=page-MyPage-#{digest_1}.js.map
-      """)
+      expected_bundle_js_1 =
+        normalize_newlines("""
+        (()=>{var o=111;})();
+        //# sourceMappingURL=page-MyPage-#{digest_1}.js.map
+        """)
 
-    assert File.read!(static_bundle_path_1) == expected_bundle_js_1
+      assert File.read!(static_bundle_path_1) == expected_bundle_js_1
 
-    expected_bundle_js_2 =
-      normalize_newlines("""
-      (()=>{var o=222;})();
-      //# sourceMappingURL=runtime-#{digest_2}.js.map
-      """)
+      expected_bundle_js_2 =
+        normalize_newlines("""
+        (()=>{var o=222;})();
+        //# sourceMappingURL=runtime-#{digest_2}.js.map
+        """)
 
-    assert File.read!(static_bundle_path_2) == expected_bundle_js_2
+      assert File.read!(static_bundle_path_2) == expected_bundle_js_2
 
-    expected_source_map_js_1 =
-      normalize_newlines("""
-      {
-        "version": 3,
-        "sources": ["../MyPage.entry.js"],
-        "sourcesContent": ["export const myVar = 111;\\n"],
-        "mappings": "MAAO,IAAMA,EAAQ",
-        "names": ["myVar"]
-      }
-      """)
+      expected_source_map_js_1 =
+        normalize_newlines("""
+        {
+          "version": 3,
+          "sources": ["../MyPage.entry.js"],
+          "sourcesContent": ["export const myVar = 111;\\n"],
+          "mappings": "MAAO,IAAMA,EAAQ",
+          "names": ["myVar"]
+        }
+        """)
 
-    assert File.read!(static_source_map_path_1) == expected_source_map_js_1
+      assert File.read!(static_source_map_path_1) == expected_source_map_js_1
 
-    expected_source_map_js_2 =
-      normalize_newlines("""
-      {
-        "version": 3,
-        "sources": ["../runtime.entry.js"],
-        "sourcesContent": ["export const myVar = 222;\\n"],
-        "mappings": "MAAO,IAAMA,EAAQ",
-        "names": ["myVar"]
-      }
-      """)
+      expected_source_map_js_2 =
+        normalize_newlines("""
+        {
+          "version": 3,
+          "sources": ["../runtime.entry.js"],
+          "sourcesContent": ["export const myVar = 222;\\n"],
+          "mappings": "MAAO,IAAMA,EAAQ",
+          "names": ["myVar"]
+        }
+        """)
 
-    assert File.read!(static_source_map_path_2) == expected_source_map_js_2
+      assert File.read!(static_source_map_path_2) == expected_source_map_js_2
+    end
+
+    test "bundles the chunks among the other entries, and returns the bundles in the given order" do
+      opts = bundling_opts("bundle_2_chunks_among_others")
+      [{chunk_name_1, chunk_path_1}, {chunk_name_2, chunk_path_2}] = create_chunk_entries(2, opts)
+
+      page_path = Path.join(opts[:tmp_dir], "MyPage.entry.js")
+      File.write!(page_path, "export const myVar = 111;\n")
+
+      runtime_path = Path.join(opts[:tmp_dir], "runtime.entry.js")
+      File.write!(runtime_path, "export const myVar = 222;\n")
+
+      entry_files_info = [
+        {chunk_name_1, chunk_path_1, "chunk"},
+        {MyPage, page_path, "page"},
+        {chunk_name_2, chunk_path_2, "chunk"},
+        {nil, runtime_path, "runtime"}
+      ]
+
+      {bundles_info, esbuild_runs} = count_esbuild_runs(fn -> bundle(entry_files_info, opts) end)
+
+      assert Enum.map(bundles_info, &{&1.bundle_name, &1.entry_name}) == [
+               {"chunk", "00000001"},
+               {"page", MyPage},
+               {"chunk", "00000002"},
+               {"runtime", nil}
+             ]
+
+      # One for the page, one for the runtime and one for both chunks.
+      assert esbuild_runs == 3
+    end
+
+    # With these paths each entry file takes 76 of the command line's 8191 characters, and what the
+    # command line holds besides the entry files 311 and the path esbuild is installed at. So 100
+    # entry files fit for a path of up to 280 characters, and 150 never do.
+    test "bundles the chunks that fit the bound of the command line in one esbuild process" do
+      opts = bundling_opts("bundle_2_one_chunk_group")
+
+      entry_files_info =
+        100
+        |> create_chunk_entries(opts)
+        |> Enum.map(fn {entry_name, entry_file_path} ->
+          {entry_name, entry_file_path, "chunk"}
+        end)
+
+      {bundles_info, esbuild_runs} = count_esbuild_runs(fn -> bundle(entry_files_info, opts) end)
+
+      assert esbuild_runs == 1
+      assert Enum.map(bundles_info, & &1.entry_name) == Enum.map(entry_files_info, &elem(&1, 0))
+    end
+
+    test "bundles the chunks over the bound of the command line in another esbuild process" do
+      opts = bundling_opts("bundle_2_two_chunk_groups")
+
+      entry_files_info =
+        150
+        |> create_chunk_entries(opts)
+        |> Enum.map(fn {entry_name, entry_file_path} ->
+          {entry_name, entry_file_path, "chunk"}
+        end)
+
+      {bundles_info, esbuild_runs} = count_esbuild_runs(fn -> bundle(entry_files_info, opts) end)
+
+      assert esbuild_runs == 2
+      assert Enum.map(bundles_info, & &1.entry_name) == Enum.map(entry_files_info, &elem(&1, 0))
+
+      assert bundles_info
+             |> List.last()
+             |> Map.fetch!(:static_bundle_path)
+             |> File.read!()
+             |> String.contains?("150")
+    end
   end
 
   describe "bundle/4" do
@@ -2355,6 +2497,190 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "bundle_chunks/2" do
+    test "bundles each entry file into a bundle of its own" do
+      opts = bundling_opts("bundle_chunks_2_own_bundles")
+      entries = create_chunk_entries(2, opts)
+
+      assert [
+               %{
+                 bundle_name: "chunk",
+                 digest: digest_1,
+                 entry_name: "00000001",
+                 js_inputs: %{},
+                 static_bundle_path: static_bundle_path_1,
+                 static_source_map_path: static_source_map_path_1
+               },
+               %{
+                 bundle_name: "chunk",
+                 digest: digest_2,
+                 entry_name: "00000002",
+                 js_inputs: %{},
+                 static_bundle_path: static_bundle_path_2,
+                 static_source_map_path: static_source_map_path_2
+               }
+             ] = bundle_chunks(entries, opts)
+
+      assert digest_1 =~ ~r/^[A-Z2-7]{8}$/
+      assert digest_2 =~ ~r/^[A-Z2-7]{8}$/
+      assert digest_1 != digest_2
+
+      assert static_bundle_path_1 == Path.join(opts[:static_dir], "chunk-#{digest_1}.js")
+      assert static_source_map_path_1 == "#{static_bundle_path_1}.map"
+
+      assert static_bundle_path_2 == Path.join(opts[:static_dir], "chunk-#{digest_2}.js")
+      assert static_source_map_path_2 == "#{static_bundle_path_2}.map"
+
+      expected_bundle_js_1 =
+        normalize_newlines("""
+        (()=>{var o=1;})();
+        //# sourceMappingURL=chunk-#{digest_1}.js.map
+        """)
+
+      assert File.read!(static_bundle_path_1) == expected_bundle_js_1
+
+      expected_bundle_js_2 =
+        normalize_newlines("""
+        (()=>{var o=2;})();
+        //# sourceMappingURL=chunk-#{digest_2}.js.map
+        """)
+
+      assert File.read!(static_bundle_path_2) == expected_bundle_js_2
+
+      expected_source_map_js_2 =
+        normalize_newlines("""
+        {
+          "version": 3,
+          "sources": ["../chunk-00000002.entry.js"],
+          "sourcesContent": ["export const myVar = 2;\\n"],
+          "mappings": "MAAO,IAAMA,EAAQ",
+          "names": ["myVar"]
+        }
+        """)
+
+      assert File.read!(static_source_map_path_2) == expected_source_map_js_2
+    end
+
+    test "gives an entry file the digest it gets when bundled alone" do
+      opts = bundling_opts("bundle_chunks_2_same_digest")
+      [{entry_name, entry_file_path} | _rest] = entries = create_chunk_entries(3, opts)
+
+      [%{digest: digest} | _bundles_info] = bundle_chunks(entries, opts)
+
+      assert %{digest: ^digest} = bundle(entry_name, entry_file_path, "chunk", opts)
+    end
+
+    test "leaves the output dir empty" do
+      opts = bundling_opts("bundle_chunks_2_output_dir")
+      entries = create_chunk_entries(2, opts)
+
+      bundle_chunks(entries, opts)
+
+      # Named by the first entry.
+      assert opts[:tmp_dir]
+             |> Path.join("chunk-00000001.output")
+             |> File.ls!() == []
+    end
+
+    test "no entry files" do
+      opts = bundling_opts("bundle_chunks_2_no_entries")
+
+      {bundles_info, esbuild_runs} = count_esbuild_runs(fn -> bundle_chunks([], opts) end)
+
+      assert bundles_info == []
+      assert esbuild_runs == 0
+    end
+
+    test "records for each bundle the files its own entry file imports" do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "bundle_chunks_2_inputs"])
+      clean_dir(test_tmp_dir)
+
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
+      opts = [
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        js_dir: Path.join(test_tmp_dir, "hologram_js"),
+        node_modules_path: node_modules_path,
+        static_dir: Path.join(test_tmp_dir, "static"),
+        tmp_dir: Path.join(test_tmp_dir, "tmp")
+      ]
+
+      File.mkdir_p!(opts[:static_dir])
+      File.mkdir_p!(opts[:tmp_dir])
+
+      path_1 = write_js_input(test_tmp_dir, "app/helpers_1.mjs", "export const a = 1;\n")
+      path_2 = write_js_input(test_tmp_dir, "app/helpers_2.mjs", "export const b = 2;\n")
+
+      entry_file_path_1 = Path.join(opts[:tmp_dir], "chunk-00000001.entry.js")
+      File.write!(entry_file_path_1, ~s'import { a } from "#{path_1}";\nconsole.log(a);\n')
+
+      entry_file_path_2 = Path.join(opts[:tmp_dir], "chunk-00000002.entry.js")
+      File.write!(entry_file_path_2, ~s'import { b } from "#{path_2}";\nconsole.log(b);\n')
+
+      entry_file_path_3 = Path.join(opts[:tmp_dir], "chunk-00000003.entry.js")
+      File.write!(entry_file_path_3, "console.log(3);\n")
+
+      entries = [
+        {"00000001", entry_file_path_1},
+        {"00000002", entry_file_path_2},
+        {"00000003", entry_file_path_3}
+      ]
+
+      assert [%{js_inputs: js_inputs_1}, %{js_inputs: js_inputs_2}, %{js_inputs: js_inputs_3}] =
+               bundle_chunks(entries, opts)
+
+      assert js_inputs_1 == %{path_1 => {:digest, :erlang.phash2("export const a = 1;\n")}}
+      assert js_inputs_2 == %{path_2 => {:digest, :erlang.phash2("export const b = 2;\n")}}
+      assert js_inputs_3 == %{}
+    end
+
+    test "runs esbuild once" do
+      opts = bundling_opts("bundle_chunks_2_one_run")
+      entries = create_chunk_entries(3, opts)
+
+      {_bundles_info, esbuild_runs} = count_esbuild_runs(fn -> bundle_chunks(entries, opts) end)
+
+      assert esbuild_runs == 1
+    end
+
+    # esbuild names an entry file by its real path, which is not the path it was given.
+    @tag :skip_on_windows
+    test "tells apart the entry files of a tmp dir reached through a symbolic link" do
+      opts = bundling_opts("bundle_chunks_2_symlink")
+
+      real_tmp_dir = Path.join(opts[:tmp_dir], "real")
+      linked_tmp_dir = Path.join(opts[:tmp_dir], "linked")
+      File.mkdir!(real_tmp_dir)
+
+      real_tmp_dir
+      |> Path.expand()
+      |> File.ln_s!(linked_tmp_dir)
+
+      linked_opts = Keyword.put(opts, :tmp_dir, linked_tmp_dir)
+      entries = create_chunk_entries(2, linked_opts)
+
+      assert [%{static_bundle_path: path_1}, %{static_bundle_path: path_2}] =
+               bundle_chunks(entries, linked_opts)
+
+      assert File.read!(path_1) =~ "var o=1;"
+      assert File.read!(path_2) =~ "var o=2;"
+    end
+
+    test "invalid entry file" do
+      opts = bundling_opts("bundle_chunks_2_invalid_entry_file")
+      [{_entry_name, entry_file_path} | _rest] = entries = create_chunk_entries(2, opts)
+      File.write!(entry_file_path, "export const myVar 123;\n")
+
+      assert_error RuntimeError,
+                   "esbuild bundler failed for the chunk entry files (probably there were JavaScript syntax errors)",
+                   fn ->
+                     bundle_chunks(entries, opts)
+                   end
+
+      assert File.ls!(opts[:static_dir]) == []
+    end
+  end
+
   describe "chunk_signature_digest/1" do
     test "is the first 8 hex digits of the MD5 of the sorted type names" do
       assert chunk_signature_digest(MapSet.new([Date])) == "59b80f19"
@@ -2470,44 +2796,7 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(entry_file_2, js_fragment_1)
     end
 
-    test "creates no entry file for a chunk folded into another", %{ir_plt: ir_plt, opts: opts} do
-      tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "create_chunk_entry_files_5_fold"])
-      clean_dir(tmp_dir)
-
-      # Module22.my_fun/0 returns an atom, so the chunk holding it alone is a few hundred bytes of
-      # definitions, under what a file of its own costs.
-      mfas_by_signature = %{
-        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
-        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
-      }
-
-      result =
-        create_chunk_entry_files(
-          mfas_by_signature,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          Keyword.put(opts, :tmp_dir, tmp_dir)
-        )
-
-      entry_file_path = Path.join(tmp_dir, "chunk-59fbfa6b.entry.js")
-
-      assert result == [{MapSet.new([Date, Time]), "59fbfa6b", entry_file_path}]
-
-      entry_file = File.read!(entry_file_path)
-
-      assert String.contains?(
-               entry_file,
-               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
-             )
-
-      assert String.contains?(
-               entry_file,
-               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module22"/
-             )
-    end
-
-    test "encodes the chunks' functions into the encode PLT", %{
+    test "renders a chunk from the encode PLT the folding filled", %{
       ir_plt: ir_plt,
       mfas_by_signature: mfas_by_signature,
       opts: opts
@@ -2516,17 +2805,19 @@ defmodule Hologram.CompilerTest do
       clean_dir(tmp_dir)
 
       encode_plt = PLT.start()
+      chunk_opts = Keyword.put(opts, :tmp_dir, tmp_dir)
 
-      create_chunk_entry_files(
-        mfas_by_signature,
-        ir_plt,
-        encode_plt,
-        MapSet.new(),
-        Keyword.put(opts, :tmp_dir, tmp_dir)
-      )
+      %{chunks: chunks} =
+        fold_chunks(mfas_by_signature, ir_plt, encode_plt, MapSet.new(), chunk_opts)
 
-      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
-      assert PLT.member?(encode_plt, {Module22, :my_fun, 0})
+      [{_signature, _signature_digest, entry_file_path} | _rest] =
+        create_chunk_entry_files(chunks, ir_plt, encode_plt, MapSet.new(), chunk_opts)
+
+      assert entry_file_path
+             |> File.read!()
+             |> String.contains?(
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
+             )
     end
 
     test "skips the JS imports of the modules the runtime script registers", %{
@@ -3072,6 +3363,116 @@ defmodule Hologram.CompilerTest do
 
     test "no paths", _context do
       assert fingerprint_js_inputs([], nil) == %{}
+    end
+  end
+
+  describe "fold_chunks/5" do
+    setup %{module_info_plt: module_info_plt} do
+      [opts: [js_dir: @js_dir, module_info_plt: module_info_plt]]
+    end
+
+    test "encodes the chunks' functions into the encode PLT", %{ir_plt: ir_plt, opts: opts} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      encode_plt = PLT.start()
+
+      fold_chunks(mfas_by_signature, ir_plt, encode_plt, MapSet.new(), opts)
+
+      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
+      assert PLT.member?(encode_plt, {Module22, :my_fun, 0})
+    end
+
+    test "folds a chunk under the bound into its superset", %{ir_plt: ir_plt, opts: opts} do
+      # Module22.my_fun/0 returns an atom, so the chunk holding it alone is a few hundred bytes of
+      # definitions, under what a file of its own costs.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
+      }
+
+      result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
+
+      assert result.chunks == %{
+               MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+             }
+    end
+
+    test "leaves chunks neither of which holds the other apart", %{ir_plt: ir_plt, opts: opts} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
+
+      assert result.chunks == mfas_by_signature
+    end
+
+    test "returns the size of each chunk, keyed by its functions", %{ir_plt: ir_plt, opts: opts} do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module18, :my_fun, 0}],
+        MapSet.new([Time]) => [{Module22, :my_fun, 0}]
+      }
+
+      result = fold_chunks(mfas_by_signature, ir_plt, PLT.start(), MapSet.new(), opts)
+
+      assert %{[{Module18, :my_fun, 0}] => size_1, [{Module22, :my_fun, 0}] => size_2} =
+               result.sizes
+
+      assert map_size(result.sizes) == 2
+      assert size_1 > size_2
+      assert size_2 > 0
+    end
+
+    test "takes a given size for a chunk with the same functions, and renders no such chunk", %{
+      ir_plt: ir_plt,
+      opts: opts
+    } do
+      # Sized alone, the chunk holding Module22.my_fun/0 is under the bound and is folded. The given
+      # size keeps it apart, and its function is encoded by nothing.
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{Module22, :my_fun, 0}],
+        MapSet.new([Date, Time]) => [{Module18, :my_fun, 0}]
+      }
+
+      sizes = %{[{Module22, :my_fun, 0}] => 10_000}
+      encode_plt = PLT.start()
+
+      result =
+        fold_chunks(
+          mfas_by_signature,
+          ir_plt,
+          encode_plt,
+          MapSet.new(),
+          Keyword.put(opts, :sizes, sizes)
+        )
+
+      assert result.chunks == mfas_by_signature
+      assert result.sizes[[{Module22, :my_fun, 0}]] == 10_000
+      assert PLT.member?(encode_plt, {Module18, :my_fun, 0})
+      refute PLT.member?(encode_plt, {Module22, :my_fun, 0})
+    end
+
+    test "leaves out a given size of a chunk that is not among the given ones", %{
+      ir_plt: ir_plt,
+      opts: opts
+    } do
+      mfas_by_signature = %{MapSet.new([Date]) => [{Module18, :my_fun, 0}]}
+      sizes = %{[{Module22, :my_fun, 0}] => 10_000}
+
+      result =
+        fold_chunks(
+          mfas_by_signature,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          Keyword.put(opts, :sizes, sizes)
+        )
+
+      assert Map.keys(result.sizes) == [[{Module18, :my_fun, 0}]]
     end
   end
 

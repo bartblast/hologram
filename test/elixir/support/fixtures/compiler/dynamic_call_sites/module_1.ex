@@ -27,6 +27,8 @@ defmodule Hologram.Test.Fixtures.Compiler.DynamicCallSites.Module1 do
 
   def calls_repeated(module), do: {module.__changeset__(), module.__changeset__()}
 
+  def changeset_dot_on_param(module), do: module.__changeset__
+
   def dot_on_param(module), do: module.__struct__
 
   def dot_with_schema_name(module), do: module.__schema__

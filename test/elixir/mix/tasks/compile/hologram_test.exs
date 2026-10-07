@@ -67,6 +67,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # page alone names (Module7's action).
   @page_named_type Hologram.Test.Fixtures.Reflection.Module5
 
+  # A struct of the test build with no protocol implementation, which no page and no runtime
+  # function names.
+  @unnamed_struct_type Hologram.Test.Fixtures.Reflection.Module9
+
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
@@ -148,6 +152,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
+  # How many bundles are built while the given function runs, the pages', the runtime's and the
+  # chunks' alike: each one built is moved into the static dir by a private function, whose local
+  # calls are counted. The calls of the bundling functions do not tell: the chunks are bundled in
+  # groups (see Hologram.Compiler.bundle_chunks/2).
+  defp count_built_bundles(fun) do
+    mfa = {Compiler, :move_bundle_to_static_dir, 3}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
   # How many templates are validated while the given function runs: each goes through a private
   # function once, whose local calls are counted.
   defp count_validated_templates(fun) do
@@ -169,6 +190,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> File.read!()
     |> String.contains?(
       ~s/defineElixirFunction("#{Reflection.module_name(@chunk_only_impl)}","to_string",1,/
+    )
+  end
+
+  # Whether the bundle at the given path holds the given struct type's struct function of the given
+  # arity.
+  defp defines_struct_function?(bundle_path, type, arity) do
+    bundle_path
+    |> File.read!()
+    |> String.contains?(
+      ~s/defineElixirFunction("#{Reflection.module_name(type)}","__struct__",#{arity},/
     )
   end
 
@@ -303,12 +334,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     map_size(cache_state().chunks.bundle_infos)
   end
 
-  # Puts one of the kept chunk bundles under another digest, files and kept state alike, as it is
-  # before an edit that changes the chunk's content, and returns a struct type of the chunk's
-  # signature with the bundle's old info.
+  # Puts the kept chunk bundle that carries the chunk-only implementation under another digest,
+  # files and kept state alike, as it is before an edit of the implementation changes the chunk's
+  # content, and returns a struct type of the chunk's signature with the bundle's old info.
   defp put_kept_chunk_bundle_under_old_digest(opts) do
     chunks = cache_state().chunks
-    [{signature, bundle_info} | _rest] = Map.to_list(chunks.bundle_infos)
+    [signature] = signatures_carrying(chunks, @chunk_only_impl)
+    bundle_info = chunks.bundle_infos[signature]
 
     old_digest = "OLDCHUNK"
     old_bundle_path = Path.join(opts[:static_dir], "chunk-#{old_digest}.js")
@@ -329,6 +361,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
     })
 
     {Enum.min(signature), old_bundle_info}
+  end
+
+  # The signatures of the kept chunks that hold a function of the given module.
+  defp signatures_carrying(chunks, module) do
+    for {signature, mfas} <- chunks.mfas_by_signature,
+        Enum.any?(mfas, &match?({^module, _function, _arity}, &1)) do
+      signature
+    end
   end
 
   # Replaces the kept module infos with the given ones and marks them as the before picture.
@@ -872,16 +912,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       kept_info = %{module_infos[Enum] | digest: "kept", mtime: 0}
       put_kept_module_infos(%{module_infos | Enum => kept_info}, dumped_at, editable_modules)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       assert cache_state().module_infos[Enum] == kept_info
     end
@@ -922,16 +953,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       kept_info = %{module_infos[Module2] | digest: "kept", mtime: 0}
       put_kept_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       assert cache_state().module_infos[Module2] == kept_info
     end
@@ -1052,16 +1074,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with no changes rebuilds no page", %{opts: opts} do
       run(opts)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       test_page_bundles(opts)
     end
@@ -1071,16 +1084,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Cache.put_pending_pages([Module1])
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       assert cache_state().pending_pages == MapSet.new()
       test_page_bundles(opts)
@@ -1197,16 +1201,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Cache.put_pending_pages([@unreached_module])
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 0}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 0
 
       assert cache_state().pending_pages == MapSet.new()
     end
@@ -1282,17 +1277,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       test_page_bundles(opts)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, MapSet.size(not_built_pages)}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == MapSet.size(not_built_pages)
 
       assert cache_state().pending_pages == MapSet.new()
     end
@@ -1588,16 +1573,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         editable_modules
       )
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, pages_reaching_module_2}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
 
       assert pages_reaching_module_2 < @num_pages
       partial_digests = load_page_digest_items(opts)
@@ -1620,7 +1596,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a run with unchanged bundle inputs builds no bundle", %{opts: opts} do
       run(opts)
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      assert count_built_bundles(fn -> run(opts) end) == 0
       test_page_bundles(opts)
     end
 
@@ -1633,7 +1609,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       assert cache_state().bundle_inputs.client_stacktraces? == Hologram.client_stacktraces?()
@@ -1711,7 +1687,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == 0
+      assert count_built_bundles(fn -> run(opts) end) == 0
       assert load_page_digest_items(opts) == page_digests
       test_page_bundles(opts)
       test_runtime_bundle(opts)
@@ -1840,7 +1816,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
       assert pages_reaching_module_2 < @num_pages
       test_page_bundles(opts)
     end
@@ -1854,7 +1830,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(Keyword.put(opts, :next_batch, fn _remaining_pages, _links -> :stop end))
       Cache.reset()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) == pages_reaching_module_2
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
       test_page_bundles(opts)
     end
 
@@ -1867,7 +1843,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       test_page_bundles(opts)
@@ -1880,7 +1856,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       assert {1, _compile_state} = load_compile_state_dump(opts)
@@ -1896,7 +1872,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_calls({Compiler, :bundle, 4}, fn -> run(opts) end) ==
+      assert count_built_bundles(fn -> run(opts) end) ==
                @num_pages + 1 + num_chunk_bundles()
 
       test_page_bundles(opts)
@@ -2107,16 +2083,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       {:ok, page_state} = PLT.get(cache_state().pages_plt, Module1)
       File.rm!(page_state.bundle_info.static_bundle_path)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       assert File.exists?(page_state.bundle_info.static_bundle_path)
       test_page_bundles(opts)
@@ -2203,16 +2170,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       runtime = cache_state().runtime
       File.rm!(runtime.bundle_info.static_bundle_path)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       assert File.exists?(cache_state().runtime.bundle_info.static_bundle_path)
       test_runtime_bundle(opts)
@@ -2224,16 +2182,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       runtime = cache_state().runtime
       File.rm!(runtime.bundle_info.static_source_map_path)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, 1}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == 1
 
       test_runtime_bundle(opts)
     end
@@ -2319,13 +2268,83 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_chunk_bundles(opts)
     end
 
+    test "rebundles only the chunks that carry an edited module", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      carrying = signatures_carrying(chunks, @chunk_only_impl)
+      assert length(carrying) < map_size(chunks.bundle_infos)
+
+      fake_edit(@chunk_only_impl)
+
+      assert count_built_bundles(fn -> run(opts) end) == length(carrying)
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
+    # A new VM has no IR and no encodings. Every chunk's size is kept, so the chunks are folded
+    # again with none of them rendered, and a kept chunk is not rendered either.
+    test "a page edit in a new VM renders no chunk", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+      Cache.reset()
+      fake_recompile()
+      fake_edit_in_dump(Module1, opts)
+
+      run(opts)
+
+      refute PLT.member?(cache_state().encode_plt, {@chunk_only_impl, :to_string, 1})
+      assert cache_state().chunks == chunks
+      test_chunk_bundles(opts)
+    end
+
     test "rebundles the chunks when one's bundle is gone", %{opts: opts} do
       run(opts)
 
       [bundle_info | _rest] = Map.values(cache_state().chunks.bundle_infos)
       File.rm!(bundle_info.static_bundle_path)
 
-      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      assert count_built_bundles(fn -> run(opts) end) == 1
+      test_chunk_bundles(opts)
+    end
+
+    test "drops the chunk of a signature the app no longer has", %{opts: opts} do
+      run(opts)
+
+      chunks = cache_state().chunks
+
+      # A chunk of a type the app does not have, as a build that had the type would have left it.
+      signature = MapSet.new([NoSuchStruct])
+      bundle_path = Path.join(opts[:static_dir], "chunk-NOSUCH11.js")
+      File.write!(bundle_path, "")
+      File.write!(bundle_path <> ".map", "")
+
+      bundle_info = %{
+        bundle_name: "chunk",
+        digest: "NOSUCH11",
+        entry_name: "nosuch11",
+        js_inputs: %{},
+        static_bundle_path: bundle_path,
+        static_source_map_path: bundle_path <> ".map"
+      }
+
+      Cache.put_chunks(%{
+        chunks
+        | bundle_infos: Map.put(chunks.bundle_infos, signature, bundle_info),
+          mfas_by_signature:
+            Map.put(chunks.mfas_by_signature, signature, [{NoSuchStruct, :__struct__, 0}])
+      })
+
+      fake_edit(@chunk_only_impl)
+      run(opts)
+
+      items = load_chunk_registry_items(opts)
+
+      refute File.exists?(bundle_path)
+      refute File.exists?(bundle_path <> ".map")
+      refute Map.has_key?(items, {:type, NoSuchStruct})
+      assert cache_state().chunks == chunks
       test_chunk_bundles(opts)
     end
 
@@ -2364,6 +2383,32 @@ defmodule Mix.Tasks.Compile.HologramTest do
              |> defines_chunk_only_impl?()
 
       test_chunk_registry_plt(opts)
+    end
+
+    # The runtime's own code names the struct, so the runtime bundle holds its struct functions and
+    # no chunk is left to load for it.
+    test "the chunk registry names no chunk for a struct type the runtime's code names", %{
+      opts: opts
+    } do
+      run(opts)
+
+      runtime_bundle_path = cache_state().runtime.bundle_info.static_bundle_path
+      items = load_chunk_registry_items(opts)
+
+      assert defines_struct_function?(runtime_bundle_path, Hologram.Component, 0)
+      refute Map.has_key?(items, {:type, Hologram.Component})
+    end
+
+    test "the chunk registry names the chunk of a struct type's struct functions, for a type with no implementation that no page names",
+         %{opts: opts} do
+      run(opts)
+
+      assert [digest] = load_chunk_registry_items(opts)[{:type, @unnamed_struct_type}]
+
+      chunk_bundle_path = Path.join(opts[:static_dir], "chunk-#{digest}.js")
+
+      assert defines_struct_function?(chunk_bundle_path, @unnamed_struct_type, 0)
+      assert defines_struct_function?(chunk_bundle_path, @unnamed_struct_type, 1)
     end
 
     test "the chunk registry names the kept chunks until the first batch replaces them", %{
@@ -2451,12 +2496,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_chunk_bundles(opts)
     end
 
-    test "a run that fails while bundling leaves the next one rebuilding the chunks", %{
-      opts: opts
-    } do
+    test "a run that fails while bundling keeps the chunks it did not rebuild", %{opts: opts} do
       run(opts)
 
       chunks = cache_state().chunks
+      [signature] = signatures_carrying(chunks, @chunk_only_impl)
       fake_edit(@chunk_only_impl)
 
       missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
@@ -2464,8 +2508,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
 
-      assert cache_state().chunks == nil
-      assert count_calls({Compiler, :create_chunk_entry_files, 5}, fn -> run(opts) end) == 1
+      assert cache_state().chunks.bundle_infos == Map.delete(chunks.bundle_infos, signature)
+      assert cache_state().chunks.mfas_by_signature == chunks.mfas_by_signature
+
+      assert count_built_bundles(fn -> run(opts) end) == 1
       assert cache_state().chunks == chunks
       test_chunk_bundles(opts)
     end
@@ -2477,17 +2523,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       clean_dir(fresh_static_dir)
       fresh_static_dir_opts = Keyword.put(opts, :static_dir, fresh_static_dir)
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(fresh_static_dir_opts)
-
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, @num_pages + 1 + num_chunk_bundles()}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(fresh_static_dir_opts) end) ==
+               @num_pages + 1 + num_chunk_bundles()
 
       test_chunk_bundles(fresh_static_dir_opts)
       test_page_bundles(fresh_static_dir_opts)
@@ -3010,17 +3047,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().module_infos == load_module_info_items(opts)
       assert cache_state().pending_pages == pages_reaching_module_2
 
-      mfa = {Compiler, :bundle, 4}
-      :erlang.trace_pattern(mfa, true, [:call_count])
-
-      try do
-        run(opts)
-
-        assert :erlang.trace_info(mfa, :call_count) ==
-                 {:call_count, MapSet.size(pages_reaching_module_2)}
-      after
-        :erlang.trace_pattern(mfa, false, [:call_count])
-      end
+      assert count_built_bundles(fn -> run(opts) end) == MapSet.size(pages_reaching_module_2)
 
       assert MapSet.size(pages_reaching_module_2) > 0
       assert cache_state().pending_pages == MapSet.new()
@@ -3309,7 +3336,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # The page callers of the exposed runtime functions move with the pages, so a compile whose
     # graph changed takes them again, and a later compile that keeps the runtime's MFAs reads them
-    # from the kept state, even when the runtime bundle itself was kept.
+    # from the kept state, even when the runtime bundle itself was kept. The kept state is given
+    # an open function here that the graph does not give, to tell a state taken again from one kept.
     test "updates the kept runtime state's dynamic calls when the runtime bundle is kept",
          %{opts: opts} do
       run(opts)
@@ -3317,9 +3345,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
       %{runtime: %{bundle_info: bundle_info, dynamic_calls: dynamic_calls} = runtime} =
         cache_state()
 
-      assert dynamic_calls.page_callers != %{}
+      stale_dynamic_calls = %{dynamic_calls | open: MapSet.new([{:__changeset__, 0}])}
+      assert stale_dynamic_calls != dynamic_calls
 
-      Cache.put_runtime(%{runtime | dynamic_calls: %{dynamic_calls | page_callers: %{}}})
+      Cache.put_runtime(%{runtime | dynamic_calls: stale_dynamic_calls})
       fake_edit(@reflection_open_page)
 
       run(opts)
@@ -3328,16 +3357,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
                cache_state()
     end
 
-    # Kernel.struct!/2 calls __struct__/1 on its parameter, and the runtime's own callers of it name
-    # the module they pass (struct!(__MODULE__, args) in exception constructors).
-    test "exposes the runtime's struct!/2 to the pages instead of opening __struct__/1",
-         %{opts: opts} do
+    # Kernel.struct!/2, a runtime function, calls __struct__/1 on its parameter. A struct's struct
+    # functions load with the struct type's chunks, so the call opens and exposes nothing.
+    test "tracks no __struct__ call of a runtime function", %{opts: opts} do
       run(opts)
 
       %{exposed: exposed, open: open} = cache_state().runtime.dynamic_calls
 
+      refute {:__struct__, 0} in open
       refute {:__struct__, 1} in open
-      assert exposed[{{Kernel, :struct!, 2}, 0}] == MapSet.new([{:__struct__, 1}])
+      refute Map.has_key?(exposed, {{Kernel, :struct!, 2}, 0})
     end
   end
 

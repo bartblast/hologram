@@ -61,13 +61,14 @@ defmodule Hologram.Assets.ChunkRegistry do
   end
 
   @doc """
-  Returns the digests of the chunks the struct types found in the given term need (see
-  `struct_types/1`), each once, sorted.
+  Returns the digests of the chunks the struct types the given term names need (see
+  `named_modules/1`), each once, sorted: the types of the structs it holds, and the types it holds
+  the module of, with which client code can build a struct of the type.
   """
   @spec lookup_term(term) :: [String.t()]
   def lookup_term(term) do
     term
-    |> struct_types()
+    |> named_modules()
     |> Enum.flat_map(&lookup_type/1)
     |> Enum.uniq()
     |> Enum.sort()
@@ -88,6 +89,19 @@ defmodule Hologram.Assets.ChunkRegistry do
   end
 
   @doc """
+  Returns the modules the given term names, at any depth: every atom in it that has the form of a
+  module's name (see `Hologram.Reflection.alias?/1`), among the keys and values of maps and of
+  structs' fields, and the elements of lists (improper ones included) and tuples. The module of a
+  struct the term holds is one of them, and so is a module the term holds as a value. What an
+  anonymous function captures is not looked at. An atom among them that is no struct type has no
+  chunk to look up (see `lookup_type/1`).
+  """
+  @spec named_modules(term) :: MapSet.t(module)
+  def named_modules(term) do
+    collect_named_modules(term, MapSet.new())
+  end
+
+  @doc """
   Reloads the chunk registry data.
   """
   @spec reload :: PLT.t()
@@ -98,43 +112,34 @@ defmodule Hologram.Assets.ChunkRegistry do
     |> populate()
   end
 
-  @doc """
-  Returns the modules of the structs the given term holds, at any depth: the term itself, the keys
-  and values of maps and of structs' fields, and the elements of lists (improper ones included) and
-  tuples. What an anonymous function captures is not looked at.
-  """
-  @spec struct_types(term) :: MapSet.t(module)
-  def struct_types(term) do
-    collect_struct_types(term, MapSet.new())
+  defp collect_named_modules(term, acc) when is_atom(term) do
+    if Reflection.alias?(term), do: MapSet.put(acc, term), else: acc
   end
 
-  # A struct's own keys and its module under :__struct__ are atoms, which hold no struct, so a
-  # struct's fields are walked as any map's entries.
-  defp collect_struct_types(term, acc) when is_map(term) do
-    map_acc = if is_struct(term), do: MapSet.put(acc, term.__struct__), else: acc
-
+  # A struct is walked as the map it is, so its module is met as the value under :__struct__.
+  defp collect_named_modules(term, acc) when is_map(term) do
     :maps.fold(
       fn key, value, entry_acc ->
-        key_acc = collect_struct_types(key, entry_acc)
-        collect_struct_types(value, key_acc)
+        key_acc = collect_named_modules(key, entry_acc)
+        collect_named_modules(value, key_acc)
       end,
-      map_acc,
+      acc,
       term
     )
   end
 
-  defp collect_struct_types([head | tail], acc) do
-    head_acc = collect_struct_types(head, acc)
-    collect_struct_types(tail, head_acc)
+  defp collect_named_modules([head | tail], acc) do
+    head_acc = collect_named_modules(head, acc)
+    collect_named_modules(tail, head_acc)
   end
 
-  defp collect_struct_types(term, acc) when is_tuple(term) do
+  defp collect_named_modules(term, acc) when is_tuple(term) do
     term
     |> Tuple.to_list()
-    |> collect_struct_types(acc)
+    |> collect_named_modules(acc)
   end
 
-  defp collect_struct_types(_term, acc), do: acc
+  defp collect_named_modules(_term, acc), do: acc
 
   defp impl do
     Application.get_env(:hologram, :chunk_registry_impl, __MODULE__)
