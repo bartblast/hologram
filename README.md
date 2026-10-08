@@ -42,6 +42,18 @@ Website: https://hologram.page
 
 [Erlang Ecosystem Foundation](https://erlef.org)
 
+### Performance Sponsor
+
+<a href="https://www.evostore.no/" target="_blank">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/evo_store_logo_horizontal_white.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/evo_store_logo_horizontal_black.svg">
+    <img src=".sponsors/evo_store_logo_horizontal_black.svg" alt="Evo Store" height="52">
+  </picture>
+</a>
+
+[Evo Store](https://www.evostore.no/)
+
 ### Innovation Partner Tier
 
 * Sheharyar Naseer, [@sheharyarn](https://github.com/sheharyarn)
