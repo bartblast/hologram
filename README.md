@@ -49,7 +49,6 @@ Website: https://hologram.page
 ### Framework Visionary Tier
 
 * [@absowoot](https://github.com/absowoot)
-* Oban, [@oban-bg](https://github.com/oban-bg)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
 * Moss Piglet, [@moss-piglet](https://github.com/moss-piglet)
 
@@ -61,7 +60,6 @@ Website: https://hologram.page
 * James Harton, [@jimsynz](https://github.com/jimsynz)
 * Ian Asaff, [@montague](https://github.com/montague)
 * Max, [@Makesesama](https://github.com/Makesesama)
-* Dawid Danieluk, [@nxy7](https://github.com/nxy7)
 
 Thank you to **all other** sponsors for supporting the project!
 
