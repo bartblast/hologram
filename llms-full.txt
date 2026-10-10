@@ -137,6 +137,14 @@ defp elixirc_paths(_env), do: ["app", "lib"]
 
 This allows you to organize your code like `app/pages/`, `app/components/`, etc., which many developers find cleaner than keeping everything in `lib/`.
 
+#### 9. Optional: Configure Tailwind for the App Directory
+
+If you use the `app` directory from step 8 and your app uses Tailwind, add the directory to its sources in `assets/css/app.css`. Without it, the classes used only in your pages and components are left out of the generated stylesheet:
+
+```css
+@source "../../app";
+```
+
 #### Running the App
 
 Start your app with the `mix holo` task. It runs your Phoenix server with the Hologram compiler and client-side runtime enabled:
