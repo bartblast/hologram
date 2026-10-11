@@ -1880,6 +1880,8 @@ defmodule Hologram.Compiler do
   queries. Shipping every policied type's rules is what lets the client answer every check the
   way the server would. What is left out is exactly the types declaring no policy, which is what
   lets the client read an ABSENT entry as the server's own default deny.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
   @spec build_sync_constants([{module, page_reach}], PLT.t(), boolean) :: sync_constants
   def build_sync_constants(reach_by_page, module_info_plt, permission_checking? \\ false) do
