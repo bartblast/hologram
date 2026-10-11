@@ -1641,6 +1641,8 @@ defmodule Hologram.Compiler do
   its slot bindings (see `validate_slot_bindings!/2`), whether it checks permissions (see
   `pages_checking_permissions/1`) and the entity types its client holds or mentions (see
   `build_sync_constants/3`).
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
   """
   @spec list_reach_by_page([module], CallGraph.t()) :: [{module, page_reach}]
   def list_reach_by_page([], _call_graph), do: []
