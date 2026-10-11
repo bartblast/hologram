@@ -2269,6 +2269,8 @@ defmodule Hologram.Compiler do
 
   Raises Hologram.CompileError when a capture argument names no declared slot, or
   when an argument position is named by no clause of the capture's target.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_slot_bindings!_2/README.md
   """
   @spec validate_slot_bindings!([{module, page_reach}], PLT.t()) :: :ok
   def validate_slot_bindings!(reach_by_page, module_info_plt) do
