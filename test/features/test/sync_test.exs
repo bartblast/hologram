@@ -140,7 +140,10 @@ defmodule HologramFeatureTests.SyncTest do
   end
 
   # The wire half of the revisions path: a patch carries an entry for each column it names, which
-  # is what the client writes over its own map rather than being sent a whole one.
+  # is what the client writes over its own map rather than being sent a whole one. The create and
+  # the patch can be read from the log in one batch, and a patch built from that batch names every
+  # column - so what is asserted is the promise, an entry for each column named, not the batch's
+  # width.
   feature "carries the revisions of a patched column", %{session: _session} do
     document =
       %{public: true, title: "before_revision_patch"}
@@ -160,9 +163,17 @@ defmodule HologramFeatureTests.SyncTest do
 
     reloaded = DB.read(Document, document.id)
 
-    assert [%{"$revisions" => revisions, "id" => patched_id}] = patched
+    assert [%{"$revisions" => revisions, "id" => patched_id} = patch] = patched
     assert patched_id == document.id
-    assert revisions == %{"title" => reloaded.__meta__.revisions.title}
+
+    patched_columns =
+      patch
+      |> Map.drop(["$revisions", "id"])
+      |> Map.keys()
+      |> Enum.sort()
+
+    assert Map.keys(revisions) == patched_columns
+    assert revisions["title"] == reloaded.__meta__.revisions.title
   end
 
   # The defect this spec pins: membership must cover the window's whole REACH, so a row no window
