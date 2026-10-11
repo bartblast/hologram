@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
+  alias Hologram.Entity.Model
   alias Hologram.Mutation.Record
   alias Hologram.Policy.Edges
   alias Hologram.Realtime
@@ -12,7 +13,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SSE.Adapters
   alias Hologram.Realtime.SubscriptionRegistry
-  alias Hologram.Reflection
   alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Session
   alias Hologram.Sync.Catchup
@@ -902,11 +902,11 @@ defmodule Hologram.Realtime.SSE do
         # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
         # is sent every row it may see, so there is nothing to reach back for.
         #
-        # Derived per resume rather than kept, for the reason `Fanout.route/2` derives per batch:
-        # it follows the compiled model, which a live reload can change under a running node. A
-        # connect already fills every window, which is where this cost belongs - never a per-frame
-        # path.
-        edges = if gap, do: Edges.derive(Reflection.list_entities())
+        # Derived per resume rather than kept, from the cached model: deriving costs nothing once
+        # the policies are built, and the list it is derived from is dropped by a compile, so a live
+        # reload is picked up by the next client that resumes. A connect already fills every
+        # window, which is where this cost belongs - never a per-frame path.
+        edges = if gap, do: Edges.derive(Model.entity_types())
 
         replica_id = verified_replica_id(greeting, conn, user_id)
 
