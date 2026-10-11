@@ -18,6 +18,7 @@ export function defineModel() {
     model: {
       [PROJECT]: {
         attributes: {id: "uuid", name: "string"},
+        enumValues: {},
         relationships: {tasks: {toMany: true, type: TASK}},
         serverOnly: [],
       },
@@ -33,6 +34,7 @@ export function defineModel() {
           updated_at: "datetime",
           weight: "float",
         },
+        enumValues: {status: ["open", "closed"]},
         relationships: {project: {toMany: false, type: PROJECT}},
         serverOnly: ["internal_notes"],
       },
