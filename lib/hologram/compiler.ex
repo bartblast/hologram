@@ -1970,6 +1970,8 @@ defmodule Hologram.Compiler do
   Rendered from what the entity types declare when it is called, which is why the compile task
   keeps it with the runtime bundle it built: a declaration or a policy that changed moves the
   JavaScript while the sync constants stay the same.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_js_1/README.md
   """
   @spec build_sync_constants_js(sync_constants) :: String.t()
   def build_sync_constants_js(sync_constants) do
