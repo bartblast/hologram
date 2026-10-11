@@ -41,8 +41,17 @@ Benchee.run(
         module_metadata: Compiler.build_module_metadata(module_info_plt)
       )
 
+    page_modules = Reflection.list_pages()
+
     # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
     async_mfas = CallGraph.list_async_mfas(call_graph)
+
+    # Asked before remove_manually_ported_mfas/1 as well: the permission checks are manually
+    # ported, so the graph the bundles are derived from no longer holds the vertices to ask about.
+    permission_checking_pages =
+      page_modules
+      |> Compiler.list_reach_by_page(call_graph)
+      |> Compiler.pages_checking_permissions()
 
     CallGraph.remove_manually_ported_mfas(call_graph)
 
@@ -51,6 +60,14 @@ Benchee.run(
     # Derived before the graph is split into runtime and page parts, so that the
     # applications reached from pages are named as well.
     app_versions = Compiler.build_app_versions(call_graph)
+
+    # Derived before the graph is split too: the data layer reads every page's reach with the
+    # runtime's MFAs in it.
+    sync_constants_js =
+      page_modules
+      |> Compiler.list_reach_by_page(call_graph)
+      |> Compiler.build_sync_constants(module_info_plt, permission_checking_pages != [])
+      |> Compiler.build_sync_constants_js()
 
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
@@ -61,6 +78,7 @@ Benchee.run(
         encode_plt,
         async_mfas,
         app_versions,
+        sync_constants_js,
         entry_file_opts
       )
 
@@ -69,7 +87,7 @@ Benchee.run(
       |> Compiler.list_js_import_modules(ir_plt, module_info_plt)
       |> MapSet.new()
 
-    mfas_by_page = Compiler.list_mfas_by_page(Reflection.list_pages(), call_graph_for_pages)
+    mfas_by_page = Compiler.list_mfas_by_page(page_modules, call_graph_for_pages)
 
     page_entry_files_info =
       mfas_by_page
