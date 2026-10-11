@@ -19,6 +19,7 @@ defmodule Hologram.Entity.Model do
 
   @hash_bytes 16
 
+  @entity_types_key {__MODULE__, :entity_types}
   @exists_key {__MODULE__, :exists?}
   @hash_key {__MODULE__, :hash}
 
@@ -28,6 +29,30 @@ defmodule Hologram.Entity.Model do
   """
   @spec empty() :: %{atom => any}
   def empty, do: %{entities: %{}, roles: %{}, user_entity: nil}
+
+  @doc """
+  Returns the entity type modules of the project's compiled data model, sorted by name - the list
+  `Hologram.Reflection.list_entities/0` sweeps the project's modules for.
+
+  Cached for the lifetime of the runtime, like `hash/0`: the sweep behind it walks every module the
+  project holds, and this is read for every batch of writes a node routes to its windows and for
+  every client that resumes with a place in the log. The compiler and the application boot reset
+  the cache, so a recompiled data model is picked up.
+  """
+  @spec entity_types() :: list(module)
+  def entity_types do
+    case :persistent_term.get(@entity_types_key, nil) do
+      nil ->
+        entity_types = Reflection.list_entities()
+
+        :persistent_term.put(@entity_types_key, entity_types)
+
+        entity_types
+
+      entity_types ->
+        entity_types
+    end
+  end
 
   @doc """
   Returns the model term derived from the given entity type modules and global role
@@ -152,6 +177,7 @@ defmodule Hologram.Entity.Model do
   @doc false
   @spec reset_caches() :: :ok
   def reset_caches do
+    :persistent_term.erase(@entity_types_key)
     :persistent_term.erase(@exists_key)
     :persistent_term.erase(@hash_key)
 
