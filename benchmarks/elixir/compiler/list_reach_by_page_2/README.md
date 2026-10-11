@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_reach_by_page/2</td>
-    <td style="white-space: nowrap; text-align: right">25.47</td>
-    <td style="white-space: nowrap; text-align: right">39.27 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;6.00%</td>
-    <td style="white-space: nowrap; text-align: right">39.59 ms</td>
-    <td style="white-space: nowrap; text-align: right">49.65 ms</td>
+    <td style="white-space: nowrap; text-align: right">25.76</td>
+    <td style="white-space: nowrap; text-align: right">38.81 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;6.52%</td>
+    <td style="white-space: nowrap; text-align: right">39.21 ms</td>
+    <td style="white-space: nowrap; text-align: right">50.95 ms</td>
   </tr>
 
 </table>

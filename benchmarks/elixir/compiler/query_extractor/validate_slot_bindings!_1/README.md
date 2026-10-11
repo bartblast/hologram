@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">no parameterized captures</td>
-    <td style="white-space: nowrap; text-align: right">2.80 M</td>
+    <td style="white-space: nowrap; text-align: right">2.75 M</td>
     <td style="white-space: nowrap; text-align: right">0.36 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1967.04%</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2036.94%</td>
     <td style="white-space: nowrap; text-align: right">0.29 &micro;s</td>
     <td style="white-space: nowrap; text-align: right">0.54 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">parameterized capture</td>
-    <td style="white-space: nowrap; text-align: right">0.00735 M</td>
-    <td style="white-space: nowrap; text-align: right">136.10 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;18.08%</td>
-    <td style="white-space: nowrap; text-align: right">129.79 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">175.58 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">0.00711 M</td>
+    <td style="white-space: nowrap; text-align: right">140.69 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;18.97%</td>
+    <td style="white-space: nowrap; text-align: right">140.13 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">181.81 &micro;s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no parameterized captures</td>
-    <td style="white-space: nowrap;text-align: right">2.80 M</td>
+    <td style="white-space: nowrap;text-align: right">2.75 M</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">parameterized capture</td>
-    <td style="white-space: nowrap; text-align: right">0.00735 M</td>
-    <td style="white-space: nowrap; text-align: right">381.09x</td>
+    <td style="white-space: nowrap; text-align: right">0.00711 M</td>
+    <td style="white-space: nowrap; text-align: right">386.4x</td>
   </tr>
 
 </table>

@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">one edited page</td>
-    <td style="white-space: nowrap; text-align: right">159.77</td>
-    <td style="white-space: nowrap; text-align: right">6.26 ms</td>
+    <td style="white-space: nowrap; text-align: right">161.27</td>
+    <td style="white-space: nowrap; text-align: right">6.20 ms</td>
     <td style="white-space: nowrap; text-align: right">&plusmn;1.66%</td>
-    <td style="white-space: nowrap; text-align: right">6.21 ms</td>
-    <td style="white-space: nowrap; text-align: right">6.57 ms</td>
+    <td style="white-space: nowrap; text-align: right">6.15 ms</td>
+    <td style="white-space: nowrap; text-align: right">6.45 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">every caller</td>
-    <td style="white-space: nowrap; text-align: right">154.77</td>
-    <td style="white-space: nowrap; text-align: right">6.46 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.30%</td>
+    <td style="white-space: nowrap; text-align: right">154.19</td>
+    <td style="white-space: nowrap; text-align: right">6.49 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;6.27%</td>
     <td style="white-space: nowrap; text-align: right">6.40 ms</td>
-    <td style="white-space: nowrap; text-align: right">6.90 ms</td>
+    <td style="white-space: nowrap; text-align: right">7.11 ms</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">one edited page</td>
-    <td style="white-space: nowrap;text-align: right">159.77</td>
+    <td style="white-space: nowrap;text-align: right">161.27</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">every caller</td>
-    <td style="white-space: nowrap; text-align: right">154.77</td>
-    <td style="white-space: nowrap; text-align: right">1.03x</td>
+    <td style="white-space: nowrap; text-align: right">154.19</td>
+    <td style="white-space: nowrap; text-align: right">1.05x</td>
   </tr>
 
 </table>

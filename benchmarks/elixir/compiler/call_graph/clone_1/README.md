@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">clone/1</td>
-    <td style="white-space: nowrap; text-align: right">31.60</td>
-    <td style="white-space: nowrap; text-align: right">31.64 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;14.95%</td>
-    <td style="white-space: nowrap; text-align: right">28.49 ms</td>
-    <td style="white-space: nowrap; text-align: right">39.50 ms</td>
+    <td style="white-space: nowrap; text-align: right">30.66</td>
+    <td style="white-space: nowrap; text-align: right">32.61 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;13.90%</td>
+    <td style="white-space: nowrap; text-align: right">29.58 ms</td>
+    <td style="white-space: nowrap; text-align: right">40.45 ms</td>
   </tr>
 
 </table>

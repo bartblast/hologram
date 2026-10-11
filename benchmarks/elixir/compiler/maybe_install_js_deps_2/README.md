@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap; text-align: right">6.65 K</td>
+    <td style="white-space: nowrap; text-align: right">6.66 K</td>
     <td style="white-space: nowrap; text-align: right">0.00015 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;73.58%</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;63.81%</td>
     <td style="white-space: nowrap; text-align: right">0.00014 s</td>
     <td style="white-space: nowrap; text-align: right">0.00022 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
-    <td style="white-space: nowrap; text-align: right">0.00009 K</td>
-    <td style="white-space: nowrap; text-align: right">10.96 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.00%</td>
-    <td style="white-space: nowrap; text-align: right">10.96 s</td>
-    <td style="white-space: nowrap; text-align: right">10.96 s</td>
+    <td style="white-space: nowrap; text-align: right">0.00014 K</td>
+    <td style="white-space: nowrap; text-align: right">7.21 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.19%</td>
+    <td style="white-space: nowrap; text-align: right">7.21 s</td>
+    <td style="white-space: nowrap; text-align: right">7.38 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap;text-align: right">6.65 K</td>
+    <td style="white-space: nowrap;text-align: right">6.66 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
-    <td style="white-space: nowrap; text-align: right">0.00009 K</td>
-    <td style="white-space: nowrap; text-align: right">72943.97x</td>
+    <td style="white-space: nowrap; text-align: right">0.00014 K</td>
+    <td style="white-space: nowrap; text-align: right">48050.93x</td>
   </tr>
 
 </table>

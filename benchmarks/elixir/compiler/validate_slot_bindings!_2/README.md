@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">validate_slot_bindings!/2</td>
-    <td style="white-space: nowrap; text-align: right">593.23</td>
-    <td style="white-space: nowrap; text-align: right">1.69 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.38%</td>
-    <td style="white-space: nowrap; text-align: right">1.65 ms</td>
-    <td style="white-space: nowrap; text-align: right">2.04 ms</td>
+    <td style="white-space: nowrap; text-align: right">597.64</td>
+    <td style="white-space: nowrap; text-align: right">1.67 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.12%</td>
+    <td style="white-space: nowrap; text-align: right">1.67 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.95 ms</td>
   </tr>
 
 </table>

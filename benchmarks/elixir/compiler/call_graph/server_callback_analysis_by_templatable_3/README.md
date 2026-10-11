@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">server_callback_analysis_by_templatable/3</td>
-    <td style="white-space: nowrap; text-align: right">9.48 K</td>
-    <td style="white-space: nowrap; text-align: right">105.53 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;25.81%</td>
-    <td style="white-space: nowrap; text-align: right">100.38 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">154.40 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">8.67 K</td>
+    <td style="white-space: nowrap; text-align: right">115.31 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;132.71%</td>
+    <td style="white-space: nowrap; text-align: right">105.04 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">240.41 &micro;s</td>
   </tr>
 
 </table>
