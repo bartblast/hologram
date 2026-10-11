@@ -18,6 +18,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
+  @entity_types_key {Hologram.Entity.Model, :entity_types}
   @exists_key {Hologram.Entity.Model, :exists?}
   @hash_key {Hologram.Entity.Model, :hash}
 
@@ -34,6 +35,29 @@ defmodule Hologram.Entity.ModelTest do
   describe "empty/0" do
     test "returns a model with no entity types, no global roles, and no designated user entity type" do
       assert empty() == %{entities: %{}, roles: %{}, user_entity: nil}
+    end
+  end
+
+  describe "entity_types/0" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "lists the entity types of the project's compiled data model" do
+      assert entity_types() == Reflection.list_entities()
+    end
+
+    # The sweep behind this walks every module the project holds and runs for every batch of
+    # writes a node routes, so the cache is the point rather than a nicety. Asserted through the
+    # store rather than by timing.
+    test "remembers the list rather than sweeping the modules again" do
+      assert :persistent_term.get(@entity_types_key, nil) == nil
+
+      entity_types()
+
+      assert :persistent_term.get(@entity_types_key, nil) == Reflection.list_entities()
     end
   end
 
@@ -1417,12 +1441,19 @@ defmodule Hologram.Entity.ModelTest do
       assert :persistent_term.get(@hash_key, nil) == nil
     end
 
-    # Both, or a recompiled model would be picked up by one answer and not the other.
+    # All three, or a recompiled model would be picked up by one answer and not the others.
     test "drops the remembered answer about whether a model exists" do
       exists?()
 
       assert reset_caches() == :ok
       assert :persistent_term.get(@exists_key, nil) == nil
+    end
+
+    test "drops the remembered entity types" do
+      entity_types()
+
+      assert reset_caches() == :ok
+      assert :persistent_term.get(@entity_types_key, nil) == nil
     end
   end
 
