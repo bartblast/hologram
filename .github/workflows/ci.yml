@@ -657,6 +657,14 @@ jobs:
       - name: Check feature tests app project compiles without warnings
         run: mix compile --all-warnings --warnings-as-errors
 
+      # Step: Start the runner image's preinstalled Postgres server, aligned with the
+      # zero-config test defaults (localhost:5432, postgres/postgres) - the feature app
+      # declares entities, which activates the Hologram database.
+      - name: Start Postgres
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
       # Step: Execute the feature tests that touch the SSE stream, over HTTP/2. The rest of
       # the suite doesn't touch the transport and runs over HTTP/1.1 in feature_tests. The
       # codebase checks run there too, so this job repeats none of them.
@@ -976,7 +984,7 @@ jobs:
       # Step: Check that all cowboy tests app test scripts have valid file names.
       - name: Check cowboy tests app test file names
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix holo.test.check_file_names test
+        run: mix holo.check.test_file_names test
 
       # Step: Execute cowboy tests app Elixir tests.
       - name: Run cowboy tests app Elixir tests
@@ -1131,7 +1139,7 @@ jobs:
       # Step: Check that all ecosystem tests app test scripts have valid file names.
       - name: Check ecosystem tests app test file names
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix holo.test.check_file_names test
+        run: mix holo.check.test_file_names test
 
       # Step: Execute ecosystem tests app Elixir tests.
       - name: Run ecosystem tests app Elixir tests

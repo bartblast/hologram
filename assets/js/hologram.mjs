@@ -1457,6 +1457,17 @@ export default class Hologram {
     EventListenerRegistry.detachAll();
   }
 
+  // What the document the server sent mounts with: the values its boot script defines, and the
+  // digest of the page's bundle, which the boot script sets beside them. Read by whichever comes
+  // first, the tab group's naming or the mount, since both need it and the second takes what the
+  // first read.
+  static #documentMountData() {
+    return {
+      ...globalThis.Hologram.pageMountData(Hologram.#deps),
+      pageDigest: globalThis.Hologram.initialPageDigest,
+    };
+  }
+
   // Takes the page's own bundle out of the document the server described, leaving every other
   // script it carries to be patched in and run.
   //
@@ -1867,7 +1878,7 @@ export default class Hologram {
     if (database !== null && Durability.mode === "indexeddb") {
       // Read HERE rather than at the mount, because the group cannot be named without it. The
       // mount finds it already read - it has always taken what is held over what the page defines.
-      $.#mountData ??= globalThis.Hologram.pageMountData(Hologram.#deps);
+      $.#mountData ??= $.#documentMountData();
 
       await Tabs.join(
         `${database}.${$.#mountData.actorUserId ?? "anonymous"}`,
@@ -2084,11 +2095,7 @@ export default class Hologram {
   // A loaded document has no payload, so it carries the same six values as an inline script that
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
-    // A loaded document's bundle digest comes with the other values its boot script sets.
-    const mountData = $.#mountData ?? {
-      ...globalThis.Hologram.pageMountData(Hologram.#deps),
-      pageDigest: globalThis.Hologram.initialPageDigest,
-    };
+    const mountData = $.#mountData ?? $.#documentMountData();
 
     $.#mountData = null;
 

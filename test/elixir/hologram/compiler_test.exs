@@ -5768,7 +5768,9 @@ defmodule Hologram.CompilerTest do
       pages = Reflection.list_pages()
 
       listed_pages =
-        Enum.map(list_reach_by_page(pages, call_graph), fn {page, _reach} -> page end)
+        pages
+        |> list_reach_by_page(call_graph)
+        |> Enum.map(fn {page, _reach} -> page end)
 
       assert listed_pages == pages
     end
