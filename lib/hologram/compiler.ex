@@ -2206,6 +2206,8 @@ defmodule Hologram.Compiler do
 
   The opts go to `operation_asks/3`: with `:modules`, only the asks of those modules' callers are
   judged.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_operations!_4/README.md
   """
   @spec validate_operations!(list(module), CallGraph.t(), PLT.t(), T.opts()) :: :ok
   def validate_operations!(entity_types, call_graph, ir_plt, opts \\ []) do
