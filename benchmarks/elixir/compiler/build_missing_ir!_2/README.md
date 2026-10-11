@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.create_runtime_entry_file/6
+Hologram.Compiler.build_missing_ir!/2
 
 ## System
 
@@ -62,12 +62,43 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">create_runtime_entry_file/6</td>
-    <td style="white-space: nowrap; text-align: right">9.25</td>
-    <td style="white-space: nowrap; text-align: right">108.12 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.79%</td>
-    <td style="white-space: nowrap; text-align: right">107.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">137.40 ms</td>
+    <td style="white-space: nowrap">nothing missing</td>
+    <td style="white-space: nowrap; text-align: right">7.74 K</td>
+    <td style="white-space: nowrap; text-align: right">0.129 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;21.21%</td>
+    <td style="white-space: nowrap; text-align: right">0.126 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.172 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">all missing</td>
+    <td style="white-space: nowrap; text-align: right">0.00160 K</td>
+    <td style="white-space: nowrap; text-align: right">626.00 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.19%</td>
+    <td style="white-space: nowrap; text-align: right">627.45 ms</td>
+    <td style="white-space: nowrap; text-align: right">637.40 ms</td>
+  </tr>
+
+</table>
+
+
+Run Time Comparison
+
+<table style="width: 1%">
+  <tr>
+    <th>Name</th>
+    <th style="text-align: right">IPS</th>
+    <th style="text-align: right">Slower</th>
+  <tr>
+    <td style="white-space: nowrap">nothing missing</td>
+    <td style="white-space: nowrap;text-align: right">7.74 K</td>
+    <td>&nbsp;</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">all missing</td>
+    <td style="white-space: nowrap; text-align: right">0.00160 K</td>
+    <td style="white-space: nowrap; text-align: right">4842.92x</td>
   </tr>
 
 </table>

@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_elixir_modules/0</td>
-    <td style="white-space: nowrap; text-align: right">11.27</td>
-    <td style="white-space: nowrap; text-align: right">88.73 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.83%</td>
-    <td style="white-space: nowrap; text-align: right">87.34 ms</td>
-    <td style="white-space: nowrap; text-align: right">122.25 ms</td>
+    <td style="white-space: nowrap; text-align: right">10.88</td>
+    <td style="white-space: nowrap; text-align: right">91.88 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.21%</td>
+    <td style="white-space: nowrap; text-align: right">91.06 ms</td>
+    <td style="white-space: nowrap; text-align: right">109.51 ms</td>
   </tr>
 
 </table>

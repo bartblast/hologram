@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_queries/2</td>
-    <td style="white-space: nowrap; text-align: right">30.99</td>
-    <td style="white-space: nowrap; text-align: right">32.27 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.41%</td>
-    <td style="white-space: nowrap; text-align: right">31.73 ms</td>
-    <td style="white-space: nowrap; text-align: right">41.82 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.29</td>
+    <td style="white-space: nowrap; text-align: right">436.90 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.34%</td>
+    <td style="white-space: nowrap; text-align: right">433.04 ms</td>
+    <td style="white-space: nowrap; text-align: right">499.56 ms</td>
   </tr>
 
 </table>
