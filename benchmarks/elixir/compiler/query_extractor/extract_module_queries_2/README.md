@@ -63,38 +63,38 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">no parameterized captures</td>
-    <td style="white-space: nowrap; text-align: right">9183.85 K</td>
-    <td style="white-space: nowrap; text-align: right">0.109 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7780.67%</td>
-    <td style="white-space: nowrap; text-align: right">0.0830 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">0.166 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2911.06 K</td>
+    <td style="white-space: nowrap; text-align: right">0.34 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1738.31%</td>
+    <td style="white-space: nowrap; text-align: right">0.29 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">0.50 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">capture naming its entity</td>
-    <td style="white-space: nowrap; text-align: right">2.02 K</td>
-    <td style="white-space: nowrap; text-align: right">493.92 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;18.07%</td>
-    <td style="white-space: nowrap; text-align: right">495.58 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">708.63 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">6.98 K</td>
+    <td style="white-space: nowrap; text-align: right">143.23 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;48.39%</td>
+    <td style="white-space: nowrap; text-align: right">142 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">183.91 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">capture whose entity is an argument, 1 candidate</td>
-    <td style="white-space: nowrap; text-align: right">1.60 K</td>
-    <td style="white-space: nowrap; text-align: right">626.01 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;25.46%</td>
-    <td style="white-space: nowrap; text-align: right">625.83 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">892.77 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">6.92 K</td>
+    <td style="white-space: nowrap; text-align: right">144.54 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;7.83%</td>
+    <td style="white-space: nowrap; text-align: right">143.88 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">181.89 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">capture whose entity is an argument, 21 candidates</td>
-    <td style="white-space: nowrap; text-align: right">1.41 K</td>
-    <td style="white-space: nowrap; text-align: right">707.57 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;15.69%</td>
-    <td style="white-space: nowrap; text-align: right">707.79 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">986.50 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">4.72 K</td>
+    <td style="white-space: nowrap; text-align: right">211.83 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.52%</td>
+    <td style="white-space: nowrap; text-align: right">209.04 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">245.29 &micro;s</td>
   </tr>
 
 </table>
@@ -109,26 +109,26 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no parameterized captures</td>
-    <td style="white-space: nowrap;text-align: right">9183.85 K</td>
+    <td style="white-space: nowrap;text-align: right">2911.06 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">capture naming its entity</td>
-    <td style="white-space: nowrap; text-align: right">2.02 K</td>
-    <td style="white-space: nowrap; text-align: right">4536.11x</td>
+    <td style="white-space: nowrap; text-align: right">6.98 K</td>
+    <td style="white-space: nowrap; text-align: right">416.96x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">capture whose entity is an argument, 1 candidate</td>
-    <td style="white-space: nowrap; text-align: right">1.60 K</td>
-    <td style="white-space: nowrap; text-align: right">5749.17x</td>
+    <td style="white-space: nowrap; text-align: right">6.92 K</td>
+    <td style="white-space: nowrap; text-align: right">420.78x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">capture whose entity is an argument, 21 candidates</td>
-    <td style="white-space: nowrap; text-align: right">1.41 K</td>
-    <td style="white-space: nowrap; text-align: right">6498.23x</td>
+    <td style="white-space: nowrap; text-align: right">4.72 K</td>
+    <td style="white-space: nowrap; text-align: right">616.65x</td>
   </tr>
 
 </table>

@@ -63,110 +63,110 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">100% modules removed</td>
-    <td style="white-space: nowrap; text-align: right">1858.32</td>
-    <td style="white-space: nowrap; text-align: right">0.54 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;18.03%</td>
-    <td style="white-space: nowrap; text-align: right">0.62 ms</td>
+    <td style="white-space: nowrap; text-align: right">1532.24</td>
     <td style="white-space: nowrap; text-align: right">0.65 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;16.55%</td>
+    <td style="white-space: nowrap; text-align: right">0.64 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.90 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">100% modules added</td>
-    <td style="white-space: nowrap; text-align: right">1616.13</td>
-    <td style="white-space: nowrap; text-align: right">0.62 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;19.50%</td>
-    <td style="white-space: nowrap; text-align: right">0.71 ms</td>
-    <td style="white-space: nowrap; text-align: right">0.86 ms</td>
+    <td style="white-space: nowrap; text-align: right">1363.57</td>
+    <td style="white-space: nowrap; text-align: right">0.73 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;11.80%</td>
+    <td style="white-space: nowrap; text-align: right">0.72 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.99 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">33% added, 33% removed, 34% edited</td>
-    <td style="white-space: nowrap; text-align: right">1273.18</td>
-    <td style="white-space: nowrap; text-align: right">0.79 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.12%</td>
-    <td style="white-space: nowrap; text-align: right">0.78 ms</td>
-    <td style="white-space: nowrap; text-align: right">0.85 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">3 added, 3 removed, 3 edited</td>
-    <td style="white-space: nowrap; text-align: right">826.25</td>
-    <td style="white-space: nowrap; text-align: right">1.21 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.05%</td>
-    <td style="white-space: nowrap; text-align: right">1.20 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.32 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">no module changes</td>
-    <td style="white-space: nowrap; text-align: right">822.59</td>
-    <td style="white-space: nowrap; text-align: right">1.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.25%</td>
-    <td style="white-space: nowrap; text-align: right">1.21 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.46 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">1 added, 1 removed, 1 edited</td>
-    <td style="white-space: nowrap; text-align: right">820.39</td>
-    <td style="white-space: nowrap; text-align: right">1.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.48%</td>
-    <td style="white-space: nowrap; text-align: right">1.21 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.33 ms</td>
+    <td style="white-space: nowrap; text-align: right">939.69</td>
+    <td style="white-space: nowrap; text-align: right">1.06 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;24.44%</td>
+    <td style="white-space: nowrap; text-align: right">1.13 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.49 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">1 module added</td>
-    <td style="white-space: nowrap; text-align: right">816.52</td>
-    <td style="white-space: nowrap; text-align: right">1.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.06%</td>
-    <td style="white-space: nowrap; text-align: right">1.22 ms</td>
+    <td style="white-space: nowrap; text-align: right">693.29</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.84%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.55 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">3 added, 3 removed, 3 edited</td>
+    <td style="white-space: nowrap; text-align: right">692.18</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.06%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.55 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">no module changes</td>
+    <td style="white-space: nowrap; text-align: right">691.66</td>
     <td style="white-space: nowrap; text-align: right">1.45 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">1 module edited</td>
-    <td style="white-space: nowrap; text-align: right">812.37</td>
-    <td style="white-space: nowrap; text-align: right">1.23 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.74%</td>
-    <td style="white-space: nowrap; text-align: right">1.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.41 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">1% added, 1% removed, 1% edited</td>
-    <td style="white-space: nowrap; text-align: right">774.03</td>
-    <td style="white-space: nowrap; text-align: right">1.29 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.43%</td>
-    <td style="white-space: nowrap; text-align: right">1.31 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.51 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">1 module removed</td>
-    <td style="white-space: nowrap; text-align: right">768.55</td>
-    <td style="white-space: nowrap; text-align: right">1.30 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.94%</td>
-    <td style="white-space: nowrap; text-align: right">1.31 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.51 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">10 added, 10 removed, 10 edited</td>
-    <td style="white-space: nowrap; text-align: right">764.02</td>
-    <td style="white-space: nowrap; text-align: right">1.31 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.49%</td>
-    <td style="white-space: nowrap; text-align: right">1.33 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.48 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.92%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.54 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">100% modules edited</td>
-    <td style="white-space: nowrap; text-align: right">717.28</td>
-    <td style="white-space: nowrap; text-align: right">1.39 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.42%</td>
-    <td style="white-space: nowrap; text-align: right">1.41 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.57 ms</td>
+    <td style="white-space: nowrap; text-align: right">687.67</td>
+    <td style="white-space: nowrap; text-align: right">1.45 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.03%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.62 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">10 added, 10 removed, 10 edited</td>
+    <td style="white-space: nowrap; text-align: right">673.41</td>
+    <td style="white-space: nowrap; text-align: right">1.48 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;12.98%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.01 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1% added, 1% removed, 1% edited</td>
+    <td style="white-space: nowrap; text-align: right">673.02</td>
+    <td style="white-space: nowrap; text-align: right">1.49 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;12.88%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.01 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1 added, 1 removed, 1 edited</td>
+    <td style="white-space: nowrap; text-align: right">671.22</td>
+    <td style="white-space: nowrap; text-align: right">1.49 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.89%</td>
+    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.99 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1 module removed</td>
+    <td style="white-space: nowrap; text-align: right">668.68</td>
+    <td style="white-space: nowrap; text-align: right">1.50 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;13.29%</td>
+    <td style="white-space: nowrap; text-align: right">1.45 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.02 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1 module edited</td>
+    <td style="white-space: nowrap; text-align: right">665.11</td>
+    <td style="white-space: nowrap; text-align: right">1.50 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;12.53%</td>
+    <td style="white-space: nowrap; text-align: right">1.45 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.03 ms</td>
   </tr>
 
 </table>
@@ -181,74 +181,74 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">100% modules removed</td>
-    <td style="white-space: nowrap;text-align: right">1858.32</td>
+    <td style="white-space: nowrap;text-align: right">1532.24</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">100% modules added</td>
-    <td style="white-space: nowrap; text-align: right">1616.13</td>
-    <td style="white-space: nowrap; text-align: right">1.15x</td>
+    <td style="white-space: nowrap; text-align: right">1363.57</td>
+    <td style="white-space: nowrap; text-align: right">1.12x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">33% added, 33% removed, 34% edited</td>
-    <td style="white-space: nowrap; text-align: right">1273.18</td>
-    <td style="white-space: nowrap; text-align: right">1.46x</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">3 added, 3 removed, 3 edited</td>
-    <td style="white-space: nowrap; text-align: right">826.25</td>
-    <td style="white-space: nowrap; text-align: right">2.25x</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">no module changes</td>
-    <td style="white-space: nowrap; text-align: right">822.59</td>
-    <td style="white-space: nowrap; text-align: right">2.26x</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">1 added, 1 removed, 1 edited</td>
-    <td style="white-space: nowrap; text-align: right">820.39</td>
-    <td style="white-space: nowrap; text-align: right">2.27x</td>
+    <td style="white-space: nowrap; text-align: right">939.69</td>
+    <td style="white-space: nowrap; text-align: right">1.63x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">1 module added</td>
-    <td style="white-space: nowrap; text-align: right">816.52</td>
-    <td style="white-space: nowrap; text-align: right">2.28x</td>
+    <td style="white-space: nowrap; text-align: right">693.29</td>
+    <td style="white-space: nowrap; text-align: right">2.21x</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">1 module edited</td>
-    <td style="white-space: nowrap; text-align: right">812.37</td>
-    <td style="white-space: nowrap; text-align: right">2.29x</td>
+    <td style="white-space: nowrap">3 added, 3 removed, 3 edited</td>
+    <td style="white-space: nowrap; text-align: right">692.18</td>
+    <td style="white-space: nowrap; text-align: right">2.21x</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">1% added, 1% removed, 1% edited</td>
-    <td style="white-space: nowrap; text-align: right">774.03</td>
-    <td style="white-space: nowrap; text-align: right">2.4x</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">1 module removed</td>
-    <td style="white-space: nowrap; text-align: right">768.55</td>
-    <td style="white-space: nowrap; text-align: right">2.42x</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">10 added, 10 removed, 10 edited</td>
-    <td style="white-space: nowrap; text-align: right">764.02</td>
-    <td style="white-space: nowrap; text-align: right">2.43x</td>
+    <td style="white-space: nowrap">no module changes</td>
+    <td style="white-space: nowrap; text-align: right">691.66</td>
+    <td style="white-space: nowrap; text-align: right">2.22x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">100% modules edited</td>
-    <td style="white-space: nowrap; text-align: right">717.28</td>
-    <td style="white-space: nowrap; text-align: right">2.59x</td>
+    <td style="white-space: nowrap; text-align: right">687.67</td>
+    <td style="white-space: nowrap; text-align: right">2.23x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">10 added, 10 removed, 10 edited</td>
+    <td style="white-space: nowrap; text-align: right">673.41</td>
+    <td style="white-space: nowrap; text-align: right">2.28x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1% added, 1% removed, 1% edited</td>
+    <td style="white-space: nowrap; text-align: right">673.02</td>
+    <td style="white-space: nowrap; text-align: right">2.28x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1 added, 1 removed, 1 edited</td>
+    <td style="white-space: nowrap; text-align: right">671.22</td>
+    <td style="white-space: nowrap; text-align: right">2.28x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1 module removed</td>
+    <td style="white-space: nowrap; text-align: right">668.68</td>
+    <td style="white-space: nowrap; text-align: right">2.29x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">1 module edited</td>
+    <td style="white-space: nowrap; text-align: right">665.11</td>
+    <td style="white-space: nowrap; text-align: right">2.3x</td>
   </tr>
 
 </table>

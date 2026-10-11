@@ -63,65 +63,65 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">10 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">12393.06</td>
-    <td style="white-space: nowrap; text-align: right">0.0807 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;10.55%</td>
-    <td style="white-space: nowrap; text-align: right">0.0748 ms</td>
-    <td style="white-space: nowrap; text-align: right">0.108 ms</td>
+    <td style="white-space: nowrap; text-align: right">12432.00</td>
+    <td style="white-space: nowrap; text-align: right">0.0804 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;11.95%</td>
+    <td style="white-space: nowrap; text-align: right">0.0743 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.107 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">200 KB binary that is not text</td>
-    <td style="white-space: nowrap; text-align: right">2754.18</td>
+    <td style="white-space: nowrap; text-align: right">2778.44</td>
     <td style="white-space: nowrap; text-align: right">0.36 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.40%</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.16%</td>
     <td style="white-space: nowrap; text-align: right">0.36 ms</td>
-    <td style="white-space: nowrap; text-align: right">0.38 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.39 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">80 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">1530.09</td>
+    <td style="white-space: nowrap; text-align: right">1527.37</td>
     <td style="white-space: nowrap; text-align: right">0.65 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.93%</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.76%</td>
     <td style="white-space: nowrap; text-align: right">0.65 ms</td>
     <td style="white-space: nowrap; text-align: right">0.71 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">256 KB of non-ASCII text</td>
-    <td style="white-space: nowrap; text-align: right">680.12</td>
+    <td style="white-space: nowrap; text-align: right">680.57</td>
     <td style="white-space: nowrap; text-align: right">1.47 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.98%</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;0.87%</td>
     <td style="white-space: nowrap; text-align: right">1.47 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.54 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.52 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">160 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">623.51</td>
+    <td style="white-space: nowrap; text-align: right">621.81</td>
+    <td style="white-space: nowrap; text-align: right">1.61 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.32%</td>
     <td style="white-space: nowrap; text-align: right">1.60 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.37%</td>
-    <td style="white-space: nowrap; text-align: right">1.60 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.67 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.74 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">320 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">319.21</td>
-    <td style="white-space: nowrap; text-align: right">3.13 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.63%</td>
-    <td style="white-space: nowrap; text-align: right">3.11 ms</td>
-    <td style="white-space: nowrap; text-align: right">3.47 ms</td>
+    <td style="white-space: nowrap; text-align: right">323.91</td>
+    <td style="white-space: nowrap; text-align: right">3.09 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.05%</td>
+    <td style="white-space: nowrap; text-align: right">3.09 ms</td>
+    <td style="white-space: nowrap; text-align: right">3.19 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">640 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">146.78</td>
-    <td style="white-space: nowrap; text-align: right">6.81 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.72%</td>
-    <td style="white-space: nowrap; text-align: right">6.84 ms</td>
-    <td style="white-space: nowrap; text-align: right">7.18 ms</td>
+    <td style="white-space: nowrap; text-align: right">147.96</td>
+    <td style="white-space: nowrap; text-align: right">6.76 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.26%</td>
+    <td style="white-space: nowrap; text-align: right">6.79 ms</td>
+    <td style="white-space: nowrap; text-align: right">7.06 ms</td>
   </tr>
 
 </table>
@@ -136,44 +136,44 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">10 KB of text</td>
-    <td style="white-space: nowrap;text-align: right">12393.06</td>
+    <td style="white-space: nowrap;text-align: right">12432.00</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">200 KB binary that is not text</td>
-    <td style="white-space: nowrap; text-align: right">2754.18</td>
-    <td style="white-space: nowrap; text-align: right">4.5x</td>
+    <td style="white-space: nowrap; text-align: right">2778.44</td>
+    <td style="white-space: nowrap; text-align: right">4.47x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">80 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">1530.09</td>
-    <td style="white-space: nowrap; text-align: right">8.1x</td>
+    <td style="white-space: nowrap; text-align: right">1527.37</td>
+    <td style="white-space: nowrap; text-align: right">8.14x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">256 KB of non-ASCII text</td>
-    <td style="white-space: nowrap; text-align: right">680.12</td>
-    <td style="white-space: nowrap; text-align: right">18.22x</td>
+    <td style="white-space: nowrap; text-align: right">680.57</td>
+    <td style="white-space: nowrap; text-align: right">18.27x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">160 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">623.51</td>
-    <td style="white-space: nowrap; text-align: right">19.88x</td>
+    <td style="white-space: nowrap; text-align: right">621.81</td>
+    <td style="white-space: nowrap; text-align: right">19.99x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">320 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">319.21</td>
-    <td style="white-space: nowrap; text-align: right">38.82x</td>
+    <td style="white-space: nowrap; text-align: right">323.91</td>
+    <td style="white-space: nowrap; text-align: right">38.38x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">640 KB of text</td>
-    <td style="white-space: nowrap; text-align: right">146.78</td>
-    <td style="white-space: nowrap; text-align: right">84.43x</td>
+    <td style="white-space: nowrap; text-align: right">147.96</td>
+    <td style="white-space: nowrap; text-align: right">84.02x</td>
   </tr>
 
 </table>
