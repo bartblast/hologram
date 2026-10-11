@@ -257,6 +257,8 @@ defmodule Hologram.Compiler do
   evaluates permissions against is grant rows, so a page that checks them on the client needs
   them held like any other rows it reads. The list is derived apart, from the pages' reach on the
   call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/1`.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
   @spec build_page_windows([{module, page_reach}], PLT.t(), list(module)) ::
           %{module => list(String.t())}
