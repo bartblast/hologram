@@ -139,11 +139,14 @@ defmodule HologramFeatureTests.SyncTest do
     assert data =~ ~s["patch_entity":]
   end
 
-  # The wire half of the revisions path: a patch carries an entry for each column it names, which
-  # is what the client writes over its own map rather than being sent a whole one. The create and
-  # the patch can be read from the log in one batch, and a patch built from that batch names every
-  # column - so what is asserted is the promise, an entry for each column named, not the batch's
-  # width.
+  # The wire half of the revisions path: a patch carries the row's entry for each column it names
+  # that has one, which is what the client writes over its own map rather than being sent a whole
+  # one. A column the framework stamps itself - the id and the timestamps - has no revision, so a
+  # patch naming one carries no entry for it.
+  #
+  # The create and the patch can be read from the log in one batch, and a patch built from that
+  # batch names every column - so the frame is waited for by the value it carries and the entries
+  # are checked against the columns it names, whichever those turn out to be.
   feature "carries the revisions of a patched column", %{session: _session} do
     document =
       %{public: true, title: "before_revision_patch"}
@@ -154,7 +157,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     update(Document, document.id, %{title: "after_revision_patch"})
 
-    {data, _client} = await_deltas_carrying(client, ~s["$revisions":{"title":])
+    {data, _client} = await_deltas_carrying(client, ~s["title":"after_revision_patch"])
 
     patched =
       data
@@ -163,16 +166,17 @@ defmodule HologramFeatureTests.SyncTest do
 
     reloaded = DB.read(Document, document.id)
 
+    row_revisions =
+      Map.new(reloaded.__meta__.revisions, fn {name, revision} ->
+        {Atom.to_string(name), revision}
+      end)
+
     assert [%{"$revisions" => revisions, "id" => patched_id} = patch] = patched
     assert patched_id == document.id
 
-    patched_columns =
-      patch
-      |> Map.drop(["$revisions", "id"])
-      |> Map.keys()
-      |> Enum.sort()
+    patched_columns = Map.keys(patch)
 
-    assert Map.keys(revisions) == patched_columns
+    assert revisions == Map.take(row_revisions, patched_columns)
     assert revisions["title"] == reloaded.__meta__.revisions.title
   end
 
