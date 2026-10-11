@@ -1,6 +1,7 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
@@ -9,6 +10,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE.Adapters
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
   alias Hologram.Runtime.ReplicaIdentity
@@ -18,8 +20,11 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Sync.Handshake, as: SyncHandshake
   alias Hologram.Sync.Session, as: SyncSession
 
-  # Read only when the host app enables the attach-delay seam - see maybe_delay_attach/1.
+  # Read only when the host app enables the test seams - see maybe_delay_attach/1.
   @attach_delay_cookie "hologram_sse_attach_delay_ms"
+
+  # Read only when the host app enables the test seams - see heartbeat_interval_ms/1.
+  @heartbeat_interval_cookie "hologram_sse_heartbeat_interval_ms"
 
   @heartbeat_interval_ms 15_000
   @max_heap_size_words 1_000_000
@@ -28,7 +33,7 @@ defmodule Hologram.Realtime.SSE do
   @doc """
   Returns the name of the cookie carrying the test-only attach delay.
 
-  Honored only when the host app sets `:__sse_attach_delay_enabled__`, so it has
+  Honored only when the host app sets `:__sse_test_seams_enabled__`, so it has
   no effect in production. See `maybe_delay_attach/1`.
   """
   @spec attach_delay_cookie() :: String.t()
@@ -36,12 +41,16 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for an `action` broadcast: the standard
-  `event:`/`id:`/`data:` framing with the given id and the encoded `%Action{}`
-  struct as the data payload.
+  `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
+  object holding the encoded `%Action{}` struct under `action` and the digests of the
+  chunks its struct types need under `chunks` (see `Hologram.Assets.ChunkRegistry`),
+  which the client loads before it runs the action.
   """
   @spec encode_action_envelope(integer, Action.t()) :: String.t()
   def encode_action_envelope(id, %Action{} = action) do
-    {:ok, data} = Encoder.encode_client_term(action)
+    {:ok, encoded_action} = Encoder.encode_client_term(action)
+    data = Jason.encode!(%{action: encoded_action, chunks: ChunkRegistry.lookup_term(action)})
+
     "event: action\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -59,16 +68,31 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for a `broadcast` event: the standard
-  `event:`/`id:`/`data:` framing with the given id and the encoded
-  `{action_name, params, [cid1, cid2, ...]}` tuple as the data payload.
+  `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
+  object holding the encoded `{action_name, params, [cid1, cid2, ...]}` tuple under
+  `data` and the digests of the chunks the struct types in the params need under
+  `chunks` (see `Hologram.Assets.ChunkRegistry`), which the client loads before it
+  runs the actions.
 
   The cids list lets the client iterate per-cid dispatch from a single
   bundled chunk rather than receiving one `event: action` per matching cid.
   """
   @spec encode_broadcast_envelope(integer, atom, map, [String.t()]) :: String.t()
   def encode_broadcast_envelope(id, action_name, params, cids) do
-    {:ok, data} = Encoder.encode_client_term({action_name, params, cids})
+    {:ok, encoded_tuple} = Encoder.encode_client_term({action_name, params, cids})
+    data = Jason.encode!(%{chunks: ChunkRegistry.lookup_term(params), data: encoded_tuple})
+
     "event: broadcast\nid: #{id}\ndata: #{data}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk for a `compilation_error` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and the JSON-encoded lines of the
+  diagnostic (see `Hologram.LiveReload.Diagnostic.to_lines/1`) as the data payload.
+  """
+  @spec encode_compilation_error_envelope(integer, [[map]]) :: String.t()
+  def encode_compilation_error_envelope(id, lines) do
+    "event: compilation_error\nid: #{id}\ndata: #{Jason.encode!(lines)}\n\n"
   end
 
   @doc """
@@ -83,6 +107,15 @@ defmodule Hologram.Realtime.SSE do
   end
 
   @doc """
+  Builds the SSE event-stream chunk for a `heartbeat` event: an `event:` line and
+  an empty `data:` line. The data line is what makes browsers dispatch the event -
+  the SSE parser discards an event with no data, and never surfaces a comment to
+  JavaScript at all.
+  """
+  @spec encode_heartbeat_envelope() :: String.t()
+  def encode_heartbeat_envelope, do: "event: heartbeat\ndata:\n\n"
+
+  @doc """
   Builds the SSE event-stream chunk for a `refresh_sub_receipts` event: the
   standard `event:`/`id:`/`data:` framing with the given id and the encoded
   list of `{channel, cid, token}` triples as the data payload.
@@ -92,6 +125,17 @@ defmodule Hologram.Realtime.SSE do
   def encode_refresh_sub_receipts_envelope(id, receipts) do
     {:ok, data} = Encoder.encode_client_term(receipts)
     "event: refresh_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk for a `reload` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and, as the data payload, the JSON
+  list of the page modules whose bundles a live reload rebuilt (`"Elixir.MyApp.HomePage"`),
+  or `"all"` when every tab must reload.
+  """
+  @spec encode_reload_envelope(integer, [module] | :all) :: String.t()
+  def encode_reload_envelope(id, pages) do
+    "event: reload\nid: #{id}\ndata: #{Jason.encode!(pages)}\n\n"
   end
 
   # Public so tests can read what a client said without standing up a stream to say it on.
@@ -118,6 +162,44 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  @doc """
+  Returns the name of the cookie carrying the test-only heartbeat interval.
+
+  Honored only when the host app sets `:__sse_test_seams_enabled__`, so it has
+  no effect in production. See `heartbeat_interval_ms/1`.
+  """
+  @spec heartbeat_interval_cookie() :: String.t()
+  def heartbeat_interval_cookie, do: @heartbeat_interval_cookie
+
+  @doc """
+  Returns the heartbeat interval for the given connection, in milliseconds.
+
+  The handshake response tells the client this number and the stream keeps it, so
+  the client's liveness check and the server's writes agree. Test-only: when the
+  host app sets `:__sse_test_seams_enabled__`, a positive integer in the
+  `hologram_sse_heartbeat_interval_ms` cookie overrides the default, per browser.
+  """
+  @spec heartbeat_interval_ms(Plug.Conn.t()) :: pos_integer
+  def heartbeat_interval_ms(initial_conn) do
+    if Application.get_env(:hologram, :__sse_test_seams_enabled__, false) do
+      conn = Plug.Conn.fetch_cookies(initial_conn)
+
+      with value when is_binary(value) <- conn.cookies[@heartbeat_interval_cookie],
+           {interval_ms, ""} when interval_ms > 0 <- Integer.parse(value) do
+        interval_ms
+      else
+        _no_override -> @heartbeat_interval_ms
+      end
+    else
+      @heartbeat_interval_ms
+    end
+  end
+
+  # No `connection` header: HTTP/2 forbids connection-specific header fields and treats a
+  # response carrying one as malformed, which WebKit enforces by dropping the stream. The
+  # header buys nothing where it is legal either, since HTTP/1.1 keeps connections alive by
+  # default and the adapter writes the header itself when a version needs it spelled out.
+  #
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
   @doc false
@@ -125,7 +207,6 @@ defmodule Hologram.Realtime.SSE do
   def prepare(conn) do
     conn
     |> Plug.Conn.put_resp_header("cache-control", "no-cache")
-    |> Plug.Conn.put_resp_header("connection", "keep-alive")
     |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
     |> Plug.Conn.send_chunked(200)
   end
@@ -144,6 +225,8 @@ defmodule Hologram.Realtime.SSE do
 
     receipts_refresh_interval_ms =
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
+
+    adapter = Keyword.get(opts, :adapter, Adapters.Passive)
 
     receive do
       {:add_sub_receipts, receipts} ->
@@ -246,6 +329,17 @@ defmodule Hologram.Realtime.SSE do
       {:close, _reason} ->
         {:halt, conn}
 
+      # A live reload whose Elixir compile failed. Forwarded as it came: the tab shows it
+      # until a compile succeeds and reloads the page.
+      {:compilation_error, lines} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_compilation_error_envelope(id, lines)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       {:drop_channel, channel} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -264,7 +358,7 @@ defmodule Hologram.Realtime.SSE do
         drop_keys_and_emit(conn, instance_id, keys)
 
       :heartbeat ->
-        case Plug.Conn.chunk(conn, ":\n\n") do
+        case Plug.Conn.chunk(conn, encode_heartbeat_envelope()) do
           {:ok, conn} ->
             schedule_heartbeat(heartbeat_interval_ms)
             {:cont, conn}
@@ -304,6 +398,17 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
+      # A live reload rebuilt these pages' bundles. Every tab gets the list, and the
+      # client decides whether the page it shows is among them.
+      {:reload, pages} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_reload_envelope(id, pages)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       # A page render declares the complete subscription set, so the bindings are
       # replaced rather than folded. Nothing is answered - the renderer computed the
       # client's diff without the registry.
@@ -325,8 +430,13 @@ defmodule Hologram.Realtime.SSE do
         Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
         {:cont, conn}
 
-      _msg ->
-        {:cont, conn}
+      # Whatever the pump doesn't recognise goes to the server's adapter, which is the only
+      # part that knows how a departed client shows up here.
+      message ->
+        case adapter.handle_message(message) do
+          :closed -> {:halt, conn}
+          :ignore -> {:cont, conn}
+        end
     end
   end
 
@@ -349,8 +459,9 @@ defmodule Hologram.Realtime.SSE do
 
   ## Options
 
-    * `:heartbeat_interval_ms` - milliseconds between proxy-keep-alive comment
-      writes. Defaults to `15_000`.
+    * `:heartbeat_interval_ms` - milliseconds between heartbeat events. A proxy
+      keep-alive on the server side, and the client's proof that the stream is
+      alive. Defaults to `15_000`.
   """
   @spec stream(Plug.Conn.t(), keyword) :: Plug.Conn.t()
   def stream(conn, opts \\ []) do
@@ -367,7 +478,7 @@ defmodule Hologram.Realtime.SSE do
         configure_backpressure_safety_net()
 
         heartbeat_interval_ms =
-          Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
+          Keyword.get(opts, :heartbeat_interval_ms, heartbeat_interval_ms(conn))
 
         receipts_refresh_interval_ms =
           Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
@@ -375,7 +486,10 @@ defmodule Hologram.Realtime.SSE do
         schedule_heartbeat(heartbeat_interval_ms)
         schedule_receipts_refresh(receipts_refresh_interval_ms)
 
+        adapter = adapter_for(conn)
+
         message_pump_opts = [
+          adapter: adapter,
           heartbeat_interval_ms: heartbeat_interval_ms,
           receipts_refresh_interval_ms: receipts_refresh_interval_ms
         ]
@@ -389,10 +503,12 @@ defmodule Hologram.Realtime.SSE do
         # own bindings.
         {conn, sync_session} =
           conn
+          |> maybe_subscribe_to_live_reload()
           |> subscribe_to_announce_topics()
           |> maybe_delay_attach()
           |> attach_validated_subscriptions(validated_bindings)
           |> prepare()
+          |> watch_client(adapter)
           |> start_syncing(user_id)
 
         message_pump(conn, session_id, user_id, [
@@ -544,6 +660,12 @@ defmodule Hologram.Realtime.SSE do
     conn
   end
 
+  # The server-specific half of the stream, picked from the conn so nothing needs
+  # configuring. Bandit is matched by name only - Hologram doesn't depend on it.
+  defp adapter_for(%Plug.Conn{adapter: {Bandit.Adapter, _state}}), do: Adapters.Bandit
+
+  defp adapter_for(_conn), do: Adapters.Passive
+
   defp claimed_identity(conn) do
     {
       conn.query_params["instance_id"],
@@ -630,7 +752,7 @@ defmodule Hologram.Realtime.SSE do
   # cannot disturb each other, and gated on the host app opting in so a client can
   # never slow its own attach in production.
   defp maybe_delay_attach(initial_conn) do
-    if Application.get_env(:hologram, :__sse_attach_delay_enabled__, false) do
+    if Application.get_env(:hologram, :__sse_test_seams_enabled__, false) do
       conn = Plug.Conn.fetch_cookies(initial_conn)
 
       with value when is_binary(value) <- conn.cookies[@attach_delay_cookie],
@@ -669,6 +791,16 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
     end
+  end
+
+  # Live reload runs in dev only, so nothing publishes on the topic elsewhere except a test,
+  # which is why test streams listen too: the feature tests reload tabs this way.
+  defp maybe_subscribe_to_live_reload(conn) do
+    if Hologram.env() in [:dev, :test] do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+    end
+
+    conn
   end
 
   defp message_pump(conn, session_id, user_id, opts) do
@@ -821,5 +953,10 @@ defmodule Hologram.Realtime.SSE do
     :ok = GenServer.stop(session, :normal)
 
     start_syncing(conn, new_user_id, false)
+  end
+
+  defp watch_client(conn, adapter) do
+    :ok = adapter.watch(conn)
+    conn
   end
 end

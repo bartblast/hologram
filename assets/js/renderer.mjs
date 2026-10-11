@@ -10,7 +10,6 @@ import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
-import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import LocalDatabase from "./local_database.mjs";
@@ -1602,7 +1601,12 @@ export default class Renderer {
         );
       }
 
-      InitActionQueue.enqueue(actionWithTarget);
+      // The render on the stack holds the queue, so the action runs once this render is done, with
+      // the page it rendered into - or once its delay has elapsed, when it has one.
+      Hologram.enqueueActionAfterDelay(
+        actionWithTarget,
+        Hologram.registryEpoch,
+      );
     }
   }
 

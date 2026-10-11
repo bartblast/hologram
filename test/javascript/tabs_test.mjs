@@ -23,7 +23,7 @@ import Type from "../../assets/js/type.mjs";
 // first: a browser that cannot coordinate its tabs is told so through Logger, which writes there.
 registerWebApis();
 
-// Hologram.currentPageModule() answers a boxed module, and reading its name goes through the
+// Hologram.pageModule() answers a boxed module, and reading its name goes through the
 // interpreter - so the runtime globals have to be there before a page-scoped message is judged.
 defineRuntimeGlobals();
 
@@ -372,7 +372,7 @@ describe("Tabs", () => {
     // with a page-scoped claim depends on whether it is the page this tab is on.
     const mountPage = (name) =>
       sinon
-        .stub(Hologram, "currentPageModule")
+        .stub(Hologram, "pageModule")
         .returns(name === null ? null : Type.alias(name));
 
     beforeEach(() => {

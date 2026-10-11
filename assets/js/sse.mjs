@@ -1,13 +1,14 @@
 "use strict";
 
 import App from "./app.mjs";
-import ComponentRegistry from "./component_registry.mjs";
 import Batches from "./batches.mjs";
+import ComponentRegistry from "./component_registry.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
+import LiveReload from "./live_reload.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
@@ -18,6 +19,14 @@ import Type from "./type.mjs";
 export default class Sse {
   static BASE_RECONNECT_DELAY = 250;
   static HANDSHAKE_PATH = "/hologram/sse/handshake";
+
+  // A stream with no heartbeat for this many intervals is dead. The real bound is one
+  // interval plus the heartbeat's delivery delay (network latency, and whatever the
+  // server's pump is writing ahead of it), and the delay is a property of the
+  // deployment, not of Hologram. Two is policy: the first heartbeat may be late, the
+  // second missing one is the verdict.
+  static HEARTBEAT_TIMEOUT_INTERVALS = 2;
+
   static MAX_RECONNECT_DELAY = 5_000;
   static RECONNECT_BACKOFF_FACTOR = 2;
   static RECONNECT_JITTER = 0.25;
@@ -38,6 +47,8 @@ export default class Sse {
   static STABLE_CONNECTION_MS = 5_000;
 
   static eventSource = null;
+  static heartbeatIntervalMs = null;
+  static heartbeatTimer = null;
   static reconnectAttempts = 0;
 
   // The pending retry after a stream died, held so a deliberate restart can call it off - the same
@@ -124,6 +135,19 @@ export default class Sse {
     return baseDelay + (Math.random() * 2 - 1) * jitterRange;
   }
 
+  // Browsers never surface a dead stream that was not closed (a killed HTTP/2 stream
+  // on Bandit, a proxy dropping the upstream, a NAT forgetting the connection), so the
+  // client keeps its own clock: every heartbeat pushes the deadline, and a missed one
+  // ends the stream the way a browser-reported error does.
+  static armHeartbeatWatchdog() {
+    clearTimeout($.heartbeatTimer);
+
+    $.heartbeatTimer = setTimeout(
+      () => $.handleStreamLoss("heartbeat timeout"),
+      $.heartbeatIntervalMs * $.HEARTBEAT_TIMEOUT_INTERVALS,
+    );
+  }
+
   static buildHandshakePayload() {
     const receipts = Array.from(
       App.subscriptionReceiptRegistry.entries.values(),
@@ -152,8 +176,11 @@ export default class Sse {
         return;
       }
 
-      const {handshakeId, refreshedReceipts: encodedRefreshed} =
-        await response.json();
+      const {
+        handshakeId,
+        heartbeatIntervalMs,
+        refreshedReceipts: encodedRefreshed,
+      } = await response.json();
 
       const refreshed =
         Interpreter.evaluateJavaScriptExpression(encodedRefreshed);
@@ -164,8 +191,9 @@ export default class Sse {
       }
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
+      $.heartbeatIntervalMs = heartbeatIntervalMs;
 
-      const greeting = $.buildSyncGreeting(Hologram.currentPageModule());
+      const greeting = $.buildSyncGreeting(Hologram.pageModule());
 
       // A greeting that asks for sync and names no place asks for EVERYTHING, so what this client
       // holds goes back to awaiting the server's word exactly as it does on a resync - there is no
@@ -199,8 +227,12 @@ export default class Sse {
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
+      // An action or a broadcast arrives as JSON holding the encoded term and the digests of the
+      // chunks the struct types in it need, which are loaded before the action runs (see
+      // Hologram.schedulePushedAction).
       $.eventSource.addEventListener("action", (event) => {
-        const action = Interpreter.evaluateJavaScriptExpression(event.data);
+        const {action: encodedAction, chunks} = JSON.parse(event.data);
+        const action = Interpreter.evaluateJavaScriptExpression(encodedAction);
         const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
         // Hologram realtime is fire-and-forget: silently drop actions
@@ -211,7 +243,7 @@ export default class Sse {
           return;
         }
 
-        Hologram.scheduleAction(action);
+        Hologram.schedulePushedAction(action, chunks);
       });
 
       $.eventSource.addEventListener("add_sub_receipts", (event) => {
@@ -220,7 +252,8 @@ export default class Sse {
       });
 
       $.eventSource.addEventListener("broadcast", (event) => {
-        const decoded = Interpreter.evaluateJavaScriptExpression(event.data);
+        const {chunks, data} = JSON.parse(event.data);
+        const decoded = Interpreter.evaluateJavaScriptExpression(data);
         const [actionName, params, cidsList] = decoded.data;
 
         for (const cid of cidsList.data) {
@@ -232,13 +265,23 @@ export default class Sse {
             target: cid,
           });
 
-          Hologram.scheduleAction(action);
+          Hologram.schedulePushedAction(action, chunks);
         }
+      });
+
+      // Live reload events carry plain JSON rather than encoded terms: the server builds
+      // them outside any page, from a compiler diagnostic and a list of page names.
+      $.eventSource.addEventListener("compilation_error", (event) => {
+        LiveReload.showErrorOverlay(JSON.parse(event.data));
       });
 
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {
         const keys = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.purge(keys);
+      });
+
+      $.eventSource.addEventListener("heartbeat", () => {
+        $.armHeartbeatWatchdog();
       });
 
       $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
@@ -305,8 +348,13 @@ export default class Sse {
         $.tell("synced", frame);
       });
 
+      $.eventSource.addEventListener("reload", (event) => {
+        LiveReload.handleReload(JSON.parse(event.data), Hologram.pageModule());
+      });
+
       $.eventSource.onopen = () => {
         GlobalRegistry.set("sseConnected?", true);
+        $.armHeartbeatWatchdog();
 
         // The one signal that actually means the network is worth trying again. A batch whose
         // send got no answer is still pending, and this is what wakes the queue that stopped
@@ -328,18 +376,25 @@ export default class Sse {
       // No retry cap: the receipt-expiry path inside `connect()` handles the
       // "give up and reload" case organically once stored receipts age out.
       $.eventSource.onerror = (event) => {
-        clearTimeout($.stabilityTimer);
-
-        Logger.debug(`SSE error: ${event.type}`);
-        GlobalRegistry.set("sseConnected?", false);
-        $.eventSource.close();
-
-        $.scheduleReconnect();
+        $.handleStreamLoss(event.type);
       };
     } catch (error) {
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
     }
+  }
+
+  // A stream is over whether the browser reported it or the heartbeat watchdog did:
+  // stop trusting it, close it, and re-run the handshake protocol after a backoff.
+  static handleStreamLoss(reason) {
+    clearTimeout($.heartbeatTimer);
+    clearTimeout($.stabilityTimer);
+
+    Logger.debug(`SSE stream lost: ${reason}`);
+    GlobalRegistry.set("sseConnected?", false);
+    $.eventSource.close();
+
+    $.scheduleReconnect();
   }
 
   // Drops the stream and opens a new one, for a client whose greeting has changed since it

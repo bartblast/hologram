@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_app_versions/1</td>
-    <td style="white-space: nowrap; text-align: right">27.19</td>
-    <td style="white-space: nowrap; text-align: right">36.78 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.19%</td>
-    <td style="white-space: nowrap; text-align: right">36.39 ms</td>
-    <td style="white-space: nowrap; text-align: right">51.06 ms</td>
+    <td style="white-space: nowrap; text-align: right">17.86</td>
+    <td style="white-space: nowrap; text-align: right">55.98 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.32%</td>
+    <td style="white-space: nowrap; text-align: right">55.63 ms</td>
+    <td style="white-space: nowrap; text-align: right">63.77 ms</td>
   </tr>
 
 </table>

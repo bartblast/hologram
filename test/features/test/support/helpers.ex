@@ -3,13 +3,16 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -285,6 +288,44 @@ defmodule HologramFeatureTests.Helpers do
     end)
   end
 
+  @doc """
+  Returns whether the given JavaScript bundle defines the given function.
+
+  A bundle can name a module without holding its code (a protocol's dispatcher
+  names every implementation), so the name alone says nothing.
+  """
+  @spec bundle_defines?(String.t(), mfa) :: boolean
+  def bundle_defines?(bundle, {module, function, arity}) do
+    String.contains?(
+      bundle,
+      ~s/defineElixirFunction("#{inspect(module)}","#{function}",#{arity},/
+    )
+  end
+
+  @doc """
+  Returns whether the chunk bundle with the given digest defines the given
+  function (see `bundle_defines?/2`).
+  """
+  @spec chunk_bundle_defines?(String.t(), mfa) :: boolean
+  def chunk_bundle_defines?(digest, mfa) do
+    digest
+    |> read_chunk_bundle()
+    |> bundle_defines?(mfa)
+  end
+
+  @doc """
+  Returns the digests of every chunk bundle the compiler wrote, sorted.
+  """
+  @spec chunk_digests() :: [String.t()]
+  def chunk_digests do
+    static_dir()
+    |> Path.join("hologram/chunk-????????.js")
+    |> Path.wildcard()
+    |> Enum.map(&Path.basename(&1, ".js"))
+    |> Enum.map(&String.replace_prefix(&1, "chunk-", ""))
+    |> Enum.sort()
+  end
+
   def cookies(session) do
     session
     |> Browser.cookies()
@@ -329,6 +370,28 @@ defmodule HologramFeatureTests.Helpers do
       nil -> nil
       entry -> entry.user_id
     end
+  end
+
+  @doc """
+  Returns the digests of the chunks the document of the given page names: the
+  ones the server tells a browser to load before the page mounts. The document
+  is the one the server answers a request for the page with, before any script
+  has run.
+  """
+  @spec document_chunk_digests(module) :: [String.t()]
+  def document_chunk_digests(page_module) do
+    path = RouterHelpers.page_path(page_module)
+
+    document =
+      :get
+      |> Plug.Test.conn(path)
+      |> Endpoint.call(Endpoint.init([]))
+      |> Map.fetch!(:resp_body)
+
+    [_match, digests_json] =
+      Regex.run(~r/globalThis\.Hologram\.initialChunkDigests = (\[[^\]]*\]);/, document)
+
+    Jason.decode!(digests_json)
   end
 
   @doc """
@@ -391,6 +454,41 @@ defmodule HologramFeatureTests.Helpers do
       {:error, false} ->
         false
     end
+  end
+
+  @doc """
+  Returns the content of the chunk bundle with the given digest.
+  """
+  @spec read_chunk_bundle(String.t()) :: String.t()
+  def read_chunk_bundle(digest) do
+    static_dir()
+    |> Path.join(RouterHelpers.chunk_bundle_path(digest))
+    |> File.read!()
+  end
+
+  @doc """
+  Returns the content of the given page's bundle.
+  """
+  @spec read_page_bundle(module) :: String.t()
+  def read_page_bundle(page_module) do
+    digest = PageDigestRegistry.lookup(page_module)
+
+    static_dir()
+    |> Path.join(RouterHelpers.page_bundle_path(page_module, digest))
+    |> File.read!()
+  end
+
+  @doc """
+  Returns the content of the runtime bundle.
+  """
+  @spec read_runtime_bundle() :: String.t()
+  def read_runtime_bundle do
+    [runtime_bundle_path] =
+      static_dir()
+      |> Path.join("hologram/runtime-????????.js")
+      |> Path.wildcard()
+
+    File.read!(runtime_bundle_path)
   end
 
   @doc """
@@ -499,6 +597,26 @@ defmodule HologramFeatureTests.Helpers do
   def send_keys(session, keys) do
     # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
     Browser.send_keys(session, List.wrap(keys) ++ [:null])
+  end
+
+  @doc """
+  Shortens the SSE heartbeat for this browser's next stream to `interval_ms`, then
+  returns the `session` so the helper can be piped.
+
+  A stream that dies without closing is only noticed by the client's heartbeat
+  watchdog, two intervals after the last heartbeat. At the production interval that
+  is longer than the wait budget, so a test that kills the stream and waits for the
+  reconnect asks for a shorter one.
+
+  Scoped by cookie, so concurrently running test files are unaffected. Navigates
+  to a blank page first, since a cookie cannot be set before the browser holds a
+  document.
+  """
+  @spec simulate_fast_sse_heartbeat(Wallaby.Session.t(), pos_integer) :: Wallaby.Session.t()
+  def simulate_fast_sse_heartbeat(session, interval_ms) do
+    session
+    |> visit("/external")
+    |> Browser.set_cookie(SSE.heartbeat_interval_cookie(), to_string(interval_ms))
   end
 
   @doc """
@@ -623,6 +741,54 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until the registry holds a connection for `instance_id`, then returns
+  `instance_id`. Raises if none appears within `@max_wait_time`.
+
+  Scoped to one instance, unlike `wait_for_subscription/5`, which counts every
+  connection holding a channel and so can be satisfied by another tab.
+  """
+  def wait_for_connection(instance_id, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      connection?(instance_id) ->
+        instance_id
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for a connection for instance #{inspect(instance_id)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_connection(instance_id, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until the registry no longer holds a connection for `instance_id`, then
+  returns `instance_id`. Raises if the connection is still there after `max_wait_ms`.
+
+  Takes its own limit rather than `@max_wait_time`, because a test using it asserts
+  how soon the connection goes, not only that it does.
+  """
+  def wait_for_no_connection(instance_id, max_wait_ms, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      !connection?(instance_id) ->
+        instance_id
+
+      current_time() - start_time > max_wait_ms ->
+        raise Wallaby.ExpectationNotMetError,
+              "Connection for instance #{inspect(instance_id)} still registered after #{max_wait_ms} ms"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_no_connection(instance_id, max_wait_ms, start_time)
+    end
+  end
+
+  @doc """
   Blocks until no `SubscriptionRegistry` entry holds a subscription on `channel`,
   then returns the `session` so the helper can be piped. Pass a `cid` to narrow
   the wait to a single `{channel, cid}` binding - needed to gate a single-cid
@@ -653,6 +819,36 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until the `session`'s own connection holds a binding on `channel` - or,
+  when `cid` is given, a `{channel, cid}` binding specifically - and can receive
+  broadcasts on it, then returns the `session`. Raises if it does not within
+  `@max_wait_time`.
+
+  Resolves this browser's connection specifically. `wait_for_subscription/5`
+  counts every connection in the registry, so in a single-session test a tab
+  left by an earlier test on the same channel can satisfy it before this
+  session's binding exists: a departed tab's SSE process is only reaped once a
+  write to its dead socket fails, which may not happen until the next heartbeat.
+  """
+  def wait_for_own_subscription(session, channel, cid \\ nil, start_time \\ nil) do
+    start_time = start_time || current_time()
+    entry = registry_entry(session)
+
+    cond do
+      entry != nil and receiving?(entry, channel, cid) ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for this session's subscription on #{inspect(channel)} (cid: #{inspect(cid)})"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_own_subscription(session, channel, cid, start_time)
+    end
+  end
+
+  @doc """
   Blocks until at least `count` (default 1) `SubscriptionRegistry` connections
   hold a binding on `channel` - or, when `cid` is given, a `{channel, cid}`
   binding specifically - then returns the `session` so the helper can be piped.
@@ -666,6 +862,12 @@ defmodule HologramFeatureTests.Helpers do
   participating connection in a multi-session test. Pass a `cid` when several
   bindings share one connection (e.g. multiple components on one page), where a
   connection count can't tell whether a specific cid is bound.
+
+  A connection counts once its SSE process can receive broadcasts on `channel`,
+  not merely once the registry records the binding. Every connection in the
+  registry counts, a departed tab from an earlier test included, so a
+  single-session test on a channel other tests use gates with
+  `wait_for_own_subscription/4` instead.
   """
   def wait_for_subscription(session, channel, count \\ 1, cid \\ nil, start_time \\ nil) do
     start_time = start_time || current_time()
@@ -724,6 +926,16 @@ defmodule HologramFeatureTests.Helpers do
       {n, count} when n < count -> {:ok, [Enum.at(elements, n)]}
       {_n, _count} -> {:error, {:not_found, elements}}
     end
+  end
+
+  defp bound?(entry, channel, cid) do
+    Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
+      ch == channel and (is_nil(cid) or c == cid)
+    end)
+  end
+
+  defp connection?(instance_id) do
+    :ets.member(SubscriptionRegistry.ets_table_name(), instance_id)
   end
 
   defp current_time do
@@ -787,11 +999,16 @@ defmodule HologramFeatureTests.Helpers do
   defp has_subscription?(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
-    |> Enum.any?(fn {_instance_id, entry} ->
-      Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
-        ch == channel and (is_nil(cid) or c == cid)
-      end)
-    end)
+    |> Enum.any?(fn {_instance_id, entry} -> bound?(entry, channel, cid) end)
+  end
+
+  # Whether the connection holds the binding and its SSE process has subscribed to
+  # the channel's PubSub topic. The registry records a binding before the SSE
+  # process subscribes, which it does only when it handles the `{:sub, channel}`
+  # message the registry sends it, and a broadcast in between reaches no one.
+  defp receiving?(entry, channel, cid) do
+    bound?(entry, channel, cid) and
+      Realtime.channel_topic(channel) in Registry.keys(Hologram.PubSub, entry.sse_pid)
   end
 
   # How many of the connections holding the binding are actually ON the channel's topic.
@@ -829,14 +1046,14 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  defp static_dir do
+    Application.app_dir(:hologram_feature_tests, "priv/static")
+  end
+
   defp subscription_count(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
-    |> Enum.count(fn {_instance_id, entry} ->
-      Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
-        ch == channel and (is_nil(cid) or c == cid)
-      end)
-    end)
+    |> Enum.count(fn {_instance_id, entry} -> receiving?(entry, channel, cid) end)
   end
 
   defp text_matches?(%Element{driver: driver} = element, text) do

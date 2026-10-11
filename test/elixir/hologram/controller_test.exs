@@ -10,11 +10,14 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Encoder
+  alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
+  alias Hologram.Reflection
   alias Hologram.Router.SearchTree
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
@@ -46,13 +49,18 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module30
   alias Hologram.Test.Fixtures.Controller.Module31
   alias Hologram.Test.Fixtures.Controller.Module32
+  alias Hologram.Test.Fixtures.Controller.Module33
   alias Hologram.Test.Fixtures.Controller.Module34
   alias Hologram.Test.Fixtures.Controller.Module35
+  alias Hologram.Test.Fixtures.Controller.Module37
+  alias Hologram.Test.Fixtures.Controller.Module38
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
+
+  @page_modules Reflection.list_pages()
 
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
@@ -69,6 +77,7 @@ defmodule Hologram.ControllerTest do
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
 
@@ -174,7 +183,7 @@ defmodule Hologram.ControllerTest do
     ]
   end
 
-  defp post_handshake(instance_id, session_data, receipts \\ []) do
+  defp post_handshake(instance_id, session_data, receipts \\ [], cookies \\ []) do
     parsed_json =
       instance_id
       |> handshake_request_body(receipts)
@@ -184,8 +193,30 @@ defmodule Hologram.ControllerTest do
     :post
     |> Plug.Test.conn("/hologram/sse/handshake", "")
     |> Plug.Test.init_test_session(session_data)
+    |> put_req_cookies(cookies)
     |> Map.put(:body_params, %{"_json" => parsed_json})
     |> handle_sse_handshake_request()
+  end
+
+  # Puts the env var back as it was before the test, set or not.
+  defp put_hologram_env(env) do
+    previous = System.get_env("HOLOGRAM_ENV")
+
+    on_exit(fn ->
+      if previous do
+        System.put_env("HOLOGRAM_ENV", previous)
+      else
+        System.delete_env("HOLOGRAM_ENV")
+      end
+    end)
+
+    System.put_env("HOLOGRAM_ENV", env)
+  end
+
+  defp put_req_cookies(conn, cookies) do
+    Enum.reduce(cookies, conn, fn {name, value}, acc ->
+      Plug.Test.put_req_cookie(acc, name, value)
+    end)
   end
 
   defp render_page_with_instance(page_module, instance_id, client_claimed_sub_keys \\ []) do
@@ -200,6 +231,11 @@ defmodule Hologram.ControllerTest do
       replica_id: @replica_id,
       replica_token: @replica_token
     )
+  end
+
+  defp start_live_reload do
+    wait_for_process_cleanup(LiveReload)
+    start_supervised!({LiveReload, watch?: false})
   end
 
   defp serialize_params(params) when params == %{} do
@@ -268,6 +304,11 @@ defmodule Hologram.ControllerTest do
     AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
     setup_asset_manifest_cache(AssetManifestCacheStub)
+
+    setup_chunk_registry(ChunkRegistryStub)
+
+    # Every page of the test build preloads no chunk, unless a test gives it some.
+    Enum.each(@page_modules, &ETS.put(ChunkRegistryStub.ets_table_name(), {:page, &1}, []))
 
     setup_page_digest_registry(PageDigestRegistryStub)
   end
@@ -471,6 +512,7 @@ defmodule Hologram.ControllerTest do
   describe "build_page_data_payload/1" do
     setup do
       fields = %{
+        chunk_digests: ["AAAAAAAA", "BBBBBBBB"],
         mount_data: %{
           actor_user_id: "123",
           asset_manifest: "{\"/hologram/runtime.js\": \"/hologram/runtime-1234.js\"};",
@@ -488,6 +530,13 @@ defmodule Hologram.ControllerTest do
       }
 
       [fields: fields]
+    end
+
+    test "carries the chunks the page needs before it mounts", %{fields: fields} do
+      assert build_page_data_payload(fields).chunks == [
+               "AAAAAAAA",
+               "BBBBBBBB"
+             ]
     end
 
     test "carries the digest naming the page's bundle", %{fields: fields} do
@@ -516,6 +565,7 @@ defmodule Hologram.ControllerTest do
              |> Map.keys()
              |> Enum.sort() == [
                :actorUserId,
+               :chunks,
                :componentRegistry,
                :pageDigest,
                :pageModule,
@@ -550,6 +600,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert decoded["type"] == "page"
+      assert decoded["chunks"] == payload.chunks
       assert decoded["pageDigest"] == "abcdef1234567890"
       assert decoded["tree"] == payload.tree
       assert decoded["componentRegistry"] == payload.componentRegistry
@@ -824,6 +875,7 @@ defmodule Hologram.ControllerTest do
 
       assert response == %{
                "action" => ~s'Type.atom("nil")',
+               "chunks" => [],
                "selfEchoes" => "Type.list([])",
                "status" => 1,
                "subReceiptAdds" => "Type.list([])",
@@ -864,7 +916,7 @@ defmodule Hologram.ControllerTest do
 
       parsed_json =
         %{
-          module: Module34,
+          module: Module37,
           name: :my_command_reporting_middleware_actor,
           params: %{},
           target: "my_target_1"
@@ -1532,6 +1584,43 @@ defmodule Hologram.ControllerTest do
       refute_receive {:broadcast_action, _channel, _action_name, _params, _excluded_identities}
     end
 
+    test "names the chunks the struct types in the next action need" do
+      payload = %{
+        module: Module6,
+        name: :my_command_with_action_holding_struct,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      conn = execute_command_request(payload)
+
+      assert Jason.decode!(conn.resp_body)["chunks"] == [
+               "BBBBBBBB",
+               "CCCCCCCC"
+             ]
+    end
+
+    test "names the chunks the struct types in the self-echoes need" do
+      # The command subscribes, so the instance has a connection to apply the subscription to.
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
+
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_self_echo_holding_struct,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      conn = execute_command_request(payload)
+
+      assert Jason.decode!(conn.resp_body)["chunks"] == [
+               "AAAAAAAA",
+               "CCCCCCCC"
+             ]
+    end
+
     test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
       payload = %{
         module: Module6,
@@ -1855,6 +1944,69 @@ defmodule Hologram.ControllerTest do
     #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
     # end
 
+    test "names the chunks the struct types in the page state need" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module33, :dummy_module_33_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module33")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module33)
+
+      assert conn.resp_body =~
+               ~s'globalThis.Hologram.initialChunkDigests = ["BBBBBBBB","CCCCCCCC"];'
+
+      assert conn.resp_body =~
+               ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script>' <>
+                 ~s'<script async src="/hologram/chunk-CCCCCCCC.js"></script>'
+    end
+
+    test "names the chunks the struct types in the self-echoes need" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module35, :dummy_module_35_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module35")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module35)
+
+      assert conn.resp_body =~
+               ~s'globalThis.Hologram.initialChunkDigests = ["AAAAAAAA","CCCCCCCC"];'
+    end
+
+    test "names the chunks the page preloads" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      assert conn.resp_body =~
+               ~s'globalThis.Hologram.initialChunkDigests = ["DDDDDDDD"];'
+
+      assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
+    end
+
+    test "names no chunk for a page that needs none" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      assert conn.resp_body =~ "globalThis.Hologram.initialChunkDigests = [];"
+      refute conn.resp_body =~ "/hologram/chunk-"
+      refute conn.resp_body =~ "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
+    end
+
     test "extracts and casts page params and passes them to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
@@ -2108,6 +2260,53 @@ defmodule Hologram.ControllerTest do
       :ok
     end
 
+    test "in dev, tells live reload which page the tab rendered" do
+      put_hologram_env("dev")
+      start_live_reload()
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      render_page_with_instance(Module14, "test-instance-id")
+
+      assert LiveReload.open_pages() == %{"test-instance-id" => Module14}
+    end
+
+    test "outside dev, tells live reload nothing" do
+      put_hologram_env("test")
+      start_live_reload()
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      render_page_with_instance(Module14, "test-instance-id")
+
+      assert LiveReload.open_pages() == %{}
+    end
+
+    test "in dev, renders a page whose bundle a live reload is building once it is built" do
+      put_hologram_env("dev")
+      pid = start_live_reload()
+
+      # A pass is building the page: pending, with a pass running, so the request waits rather
+      # than starting one.
+      pass_ref = make_ref()
+
+      :sys.replace_state(pid, fn state ->
+        %{
+          state
+          | pass: %{ref: pass_ref, registries_reloaded?: true},
+            pending: MapSet.new([Module14])
+        }
+      end)
+
+      request = Task.async(fn -> render_page_with_instance(Module14, "test-instance-id") end)
+
+      wait_until(fn -> Map.has_key?(:sys.get_state(pid).waiters, Module14) end)
+      assert Task.yield(request, 50) == nil
+
+      # The pass ends, which answers the requests still waiting.
+      send(pid, {pass_ref, :ok})
+
+      assert %Plug.Conn{status: 200} = Task.await(request)
+    end
+
     test "skips the render and sends the terminal response when page middleware terminates" do
       conn = render_page_with_instance(Module25, "test-instance-id")
 
@@ -2123,7 +2322,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "runs page middleware as the session user" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module35, :dummy_module_35_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module38, :dummy_module_38_digest)
 
       conn =
         :get
@@ -2132,7 +2331,7 @@ defmodule Hologram.ControllerTest do
           hologram_user_id: "019ff5c2-0000-7000-8000-000000000002"
         })
         |> Plug.Conn.fetch_cookies()
-        |> handle_page_request(Module35, %{}, [],
+        |> handle_page_request(Module38, %{}, [],
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
@@ -2444,6 +2643,25 @@ defmodule Hologram.ControllerTest do
       assert {:ok, _info} = UUID.info(handshake_id)
     end
 
+    test "returns the heartbeat interval the stream will use" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert {:ok, %{"heartbeatIntervalMs" => interval_ms}} = Jason.decode(conn.resp_body)
+      assert is_integer(interval_ms)
+      assert interval_ms > 0
+    end
+
+    test "returns the seam's heartbeat interval when the cookie is set" do
+      Application.put_env(:hologram, :__sse_test_seams_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_test_seams_enabled__) end)
+
+      session_data = %{hologram_session_id: "test-session-id"}
+      cookies = [{SSE.heartbeat_interval_cookie(), "1000"}]
+      conn = post_handshake("test-instance-id", session_data, [], cookies)
+
+      assert {:ok, %{"heartbeatIntervalMs" => 1000}} = Jason.decode(conn.resp_body)
+    end
+
     test "returns 401 when the session has no Hologram session_id" do
       conn = post_handshake("test-instance-id", %{})
 
@@ -2646,6 +2864,25 @@ defmodule Hologram.ControllerTest do
       # That the tree arrives as data rather than as source is what matters here; the tests that
       # follow cover what a non-empty one carries.
       assert response["tree"] == []
+    end
+
+    test "carries the chunks the page needs before it mounts" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module33, :dummy_module_33_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module33}, [
+        "DDDDDDDD"
+      ])
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module33"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module33)
+
+      assert Jason.decode!(conn.resp_body)["chunks"] == [
+               "BBBBBBBB",
+               "CCCCCCCC",
+               "DDDDDDDD"
+             ]
     end
 
     test "casts page params and carries them in the payload" do

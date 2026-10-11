@@ -35,4 +35,19 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizesTest do
 
     assert output =~ Regex.compile!(expected_pattern)
   end
+
+  # The page's init/3 puts an Ecto schema into state, and no client code calls a reflection
+  # function on a module it does not name, so the page's bundle holds none of the schema's.
+  test "run/1 lists no reflection function the page's bundle leaves out" do
+    arg = "Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module2"
+
+    output =
+      capture_io(fn ->
+        assert Task.run([arg]) == :ok
+      end)
+
+    assert output =~ "PageExFunSizes.Module2"
+    refute output =~ "__changeset__"
+    refute output =~ "__schema__"
+  end
 end

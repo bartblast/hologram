@@ -332,7 +332,7 @@ export default class Tabs {
       return false;
     }
 
-    const pageModule = Hologram.currentPageModule();
+    const pageModule = Hologram.pageModule();
 
     return (
       pageModule === null ||

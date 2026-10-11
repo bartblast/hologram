@@ -20,8 +20,81 @@ describe("EventListenerRegistry", () => {
 
   afterEach(() => {
     // Tear down any listeners installed by the test, then restore the spies.
-    EventListenerRegistry.reconcile([]);
+    EventListenerRegistry.detachAll();
     sinon.restore();
+  });
+
+  describe("detachAll()", () => {
+    it("detaches every live listener on every target", () => {
+      EventListenerRegistry.reconcile([
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: sinon.spy(),
+        },
+        {
+          target: document,
+          ...EventListeners.domEvent(document, "click", true),
+          handler: sinon.spy(),
+        },
+      ]);
+
+      EventListenerRegistry.detachAll();
+
+      sinon.assert.calledOnceWithExactly(
+        windowRemoveSpy,
+        "keydown",
+        sinon.match.func,
+        false,
+      );
+
+      sinon.assert.calledOnceWithExactly(
+        documentRemoveSpy,
+        "click",
+        sinon.match.func,
+        true,
+      );
+    });
+
+    it("is a no-op when nothing is live", () => {
+      EventListenerRegistry.detachAll();
+
+      sinon.assert.notCalled(windowRemoveSpy);
+      sinon.assert.notCalled(documentRemoveSpy);
+    });
+
+    it("leaves the registry empty, so a later reconcile attaches afresh", () => {
+      const binding = {
+        target: window,
+        ...EventListeners.domEvent(window, "keydown"),
+        handler: sinon.spy(),
+      };
+
+      EventListenerRegistry.reconcile([binding]);
+      EventListenerRegistry.detachAll();
+      EventListenerRegistry.reconcile([binding]);
+
+      sinon.assert.calledTwice(windowAddSpy);
+    });
+
+    // An observer binding has no removeEventListener to spy on: its teardown is whatever its
+    // attach returned, so that is what must run.
+    it("runs each entry's own detach", () => {
+      const detachSpy = sinon.spy();
+
+      EventListenerRegistry.reconcile([
+        {
+          target: {},
+          key: "observer",
+          attach: () => detachSpy,
+          handler: sinon.spy(),
+        },
+      ]);
+
+      EventListenerRegistry.detachAll();
+
+      sinon.assert.calledOnce(detachSpy);
+    });
   });
 
   describe("reconcile()", () => {

@@ -6,6 +6,7 @@ defmodule Hologram.UI.Runtime do
   prop :initial_page?, :boolean, from_context: {Hologram, :initial_page?}
   prop :instance_id, :string, from_context: {Hologram, :instance_id}
   prop :page_digest, :string, from_context: {Hologram, :page_digest}
+  prop :page_module, :module, from_context: {Hologram, :page_module}
   prop :page_mounted?, :boolean, from_context: {Hologram, :page_mounted?}
   prop :replica_id, :string, from_context: {Hologram, :replica_id}
   prop :replica_token, :string, from_context: {Hologram, :replica_token}
@@ -19,6 +20,8 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram._pendingJsInteropActions = [];
         globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
         globalThis.Hologram.csrfToken = "{@csrf_token}";
+        globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;
+        globalThis.Hologram.initialPageDigest = "{@page_digest}";
         globalThis.Hologram.instanceId = "{@instance_id}";
         globalThis.Hologram.replicaId = "{@replica_id}";
         globalThis.Hologram.replicaToken = "{@replica_token}";
@@ -34,7 +37,7 @@ defmodule Hologram.UI.Runtime do
         {%raw}
           globalThis.Hologram.pageMountData = (deps) => {
             const Type = deps.Type;
-            
+
             return {
               actorUserId: $ACTOR_USER_ID_JS_PLACEHOLDER,
               componentRegistry: $COMPONENT_REGISTRY_JS_PLACEHOLDER,
@@ -53,10 +56,11 @@ defmodule Hologram.UI.Runtime do
 
     {%if @initial_page? && !@page_mounted?}
       <script async src={asset_path("hologram/runtime.js")}></script>
+      $CHUNK_SCRIPT_TAGS_PLACEHOLDER
     {/if}
 
     {%if !@page_mounted?}
-      <script async src={RouterHelpers.page_bundle_path(@page_digest)}></script>
+      <script async src={RouterHelpers.page_bundle_path(@page_module, @page_digest)}></script>
     {/if}
     """
   end

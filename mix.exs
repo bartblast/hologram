@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.11.1"
+  @version "0.12.0"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
@@ -14,6 +14,7 @@ defmodule Hologram.MixProject do
       f: [
         "format",
         "format.js",
+        "cmd cd test/ecosystem && mix format",
         "cmd cd test/features && mix format && mix format.js",
         "cmd cd test/umbrella && mix format"
       ],
@@ -24,6 +25,7 @@ defmodule Hologram.MixProject do
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
+        "cmd --cd test/ecosystem mix deps.get",
         "cmd --cd test/features mix deps.get",
         "cmd --cd test/features/assets npm install",
         "cmd --cd test/umbrella mix deps.get",

@@ -3,8 +3,14 @@ defmodule Hologram.Router.PageModuleResolver do
 
   use GenServer
 
+  alias Hologram.Commons.PLT
   alias Hologram.Reflection
   alias Hologram.Router.SearchTree
+
+  @doc """
+  Returns the path of the dump file the page module resolver reads the pages and their routes from.
+  """
+  @callback dump_path() :: String.t()
 
   @doc """
   Returns the key of the persistent term used by the page module resolver registered process.
@@ -23,6 +29,15 @@ defmodule Hologram.Router.PageModuleResolver do
   def init(nil) do
     populate_persistent_term()
     {:ok, nil}
+  end
+
+  @doc """
+  Returns the implementation of the page module resolver's dump path: the module info PLT dump the
+  compiler writes at the end of every compile, which records every page and its route.
+  """
+  @spec dump_path() :: String.t()
+  def dump_path do
+    Path.join([Reflection.build_dir(), Reflection.module_info_plt_dump_file_name()])
   end
 
   @doc """
@@ -51,10 +66,34 @@ defmodule Hologram.Router.PageModuleResolver do
     |> SearchTree.match_route(request_path)
   end
 
+  # The pages and their routes come from the compiler's dump, so no module is asked whether it is a
+  # page, which would read the BEAM of every module that is not loaded, at boot and on every reload.
+  # Each routed page is loaded, as the route calls this replaces did: requests turn names from the
+  # browser into existing atoms only, and a page's names exist once its module is loaded. A page
+  # whose module cannot be loaded (its BEAM gone since the dump) is not routed. A route the dump
+  # does not hold (one built at runtime, with interpolation say) is asked from the loaded page.
   defp build_search_tree do
-    Enum.reduce(Reflection.list_pages(), %SearchTree.Node{}, fn page_module, acc ->
-      SearchTree.add_route(acc, page_module.__route__(), page_module)
-    end)
+    plt = PLT.start()
+
+    try do
+      plt
+      |> PLT.load(impl().dump_path())
+      |> PLT.get_all()
+      |> Enum.reduce(%SearchTree.Node{}, fn
+        {page_module, %{page?: true} = info}, acc ->
+          if Code.ensure_loaded?(page_module) do
+            route = info[:route] || page_module.__route__()
+            SearchTree.add_route(acc, route, page_module)
+          else
+            acc
+          end
+
+        _other, acc ->
+          acc
+      end)
+    after
+      PLT.stop(plt)
+    end
   end
 
   defp impl do

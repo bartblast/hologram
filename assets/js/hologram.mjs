@@ -1,5 +1,6 @@
 "use strict";
 
+import ActionQueue from "./action_queue.mjs";
 import App from "./app.mjs";
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Batches from "./batches.mjs";
@@ -10,6 +11,7 @@ import Config from "./config.mjs";
 import Debouncer from "./debouncer.mjs";
 import Deltas from "./deltas.mjs";
 import Deserializer from "./deserializer.mjs";
+import Dispatch from "./dispatch.mjs";
 import Durability from "./durability.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
@@ -18,15 +20,16 @@ import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
-import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
+import LiveReload from "./live_reload.mjs";
 import LocalDatabase from "./local_database.mjs";
 import MemoryStorage from "./memory_storage.mjs";
-import Dispatch from "./dispatch.mjs";
+import MountGate from "./mount_gate.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Replica from "./replica.mjs";
+import ScriptRegistry from "./script_registry.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
 import Tabs from "./tabs.mjs";
@@ -87,6 +90,12 @@ export default class Hologram {
   static domEpoch = 0;
 
   // Made public to make tests easier
+  // True from the start of a mount to the end of its first render. The registry arrives with every
+  // struct's props empty and that render is what writes them, so no action may run before it. Set
+  // and cleared by #mountPage.
+  static isMounting = false;
+
+  // Made public to make tests easier
   // Whether a render is on the stack - its patch walking the live DOM, or its event bindings
   // being reconciled onto it. Set by render() alone: a patch made outside a render is not
   // covered, and has to keep a dispatch out by its own means.
@@ -116,17 +125,35 @@ export default class Hologram {
   // In-memory cache for page snapshots (fastest access)
   static #pageSnapshots = new Map();
 
+  // Component ids whose action is running asynchronously, each with the epoch of the page it
+  // belongs to, from the action's start to the commit of its result. The queue waits for it on
+  // that component only: the next action for the component reads its state, and the state it must
+  // read is the one the running action is about to write. Other components' actions are not held -
+  // an action never writes another component's struct, so there is nothing for them to wait for.
+  // Emptied when the page is left: what was awaiting belongs to the page being left, and the
+  // destination may hold the same cids.
+  static #awaitingTargets = new Map();
+
+  // The digests of the chunks this document was told of: the ones the document the server sent
+  // carries and the ones requested since. A snapshot saves the loaded ones.
+  static #chunkDigests = new Set();
+
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
-  // Actions that arrived while a render was on the stack, waiting for it to finish.
-  static #deferredActions = [];
-
-  // Actions belonging to a page that cannot answer for them yet, waiting for its mount.
-  static #heldActions = [];
+  // The snapshot of the history entry this document was loaded for, found while the runtime was
+  // starting and restored by run() once its chunks are in. Null when there is none to restore, and
+  // once that is settled.
+  static #documentSnapshot = null;
 
   static #historyId = null;
   static #isInitiated = false;
+
+  // True while #runActions walks the queue. A running action can enqueue another one synchronously
+  // (an event its own code fires on the DOM, a debounce flush), and that one is picked up by the
+  // walk already on the stack rather than by a nested one, which would run it in the middle of its
+  // parent.
+  static #isRunningActions = false;
 
   // A navigation's mount data, held between #showNewPage and the mount. The two are not always
   // adjacent: when the destination's code has not loaded yet the mount runs from the bundle's
@@ -137,6 +164,10 @@ export default class Hologram {
   static #pageParams = null;
   static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
+
+  // For each snapshot restore in flight, the chunks it waits for (see #loadSnapshotChunks).
+  static #restoresInFlight = new Set();
+
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
 
@@ -157,12 +188,45 @@ export default class Hologram {
     Hologram.scheduleAction(action, $.domEpoch);
   }
 
+  // Puts an action on the queue and runs the queue: a DOM event's dispatch, a timer scheduleAction
+  // set, a command's reply, a server push. A mount and a render put their own actions on the queue
+  // directly, through enqueueActionAfterDelay, since they run it themselves once they are done. An
+  // action carries the epoch of the page it was reasoning about when it was created, and
+  // #runActions compares that against where the client has got to by the time the action reaches
+  // the head of the queue.
+  static enqueueAction(action, epoch = $.registryEpoch) {
+    ActionQueue.enqueue(action, epoch);
+    Hologram.#runActions();
+  }
+
+  // Puts an action the mount or a render brings on the queue: at once, or once its delay has
+  // elapsed, like any delayed action. The queue is not run here - the mount and the render run it
+  // themselves once they are done, and a delayed one enters through scheduleAction's timer, which
+  // runs it.
+  // Deps: [:maps.get/3]
+  static enqueueActionAfterDelay(action, epoch = $.registryEpoch) {
+    const delay = Erlang_Maps["get/3"](
+      Type.atom("delay"),
+      action,
+      Type.integer(0),
+    );
+
+    if (delay.value === 0n) {
+      ActionQueue.enqueue(action, epoch);
+    } else {
+      Hologram.scheduleAction(action, epoch);
+    }
+  }
+
   // This function is intentionally NOT async. Actions that use Task.await/1 return
   // a Promise, but we handle it with .then() instead of async/await. Making this
   // function async would wrap ALL errors (including from sync actions) in rejected
   // Promises, breaking ChromeDriver/Wallaby error detection which relies on the
   // synchronous "error" event. Async action errors are caught separately via the
   // "unhandledrejection" event listener in #init().
+  //
+  // Returns the promise of an asynchronous action, settled once its result has been processed, so
+  // that a caller can wait for the commit. A synchronous action returns nothing.
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2]
   static executeAction(action, epoch = $.registryEpoch) {
@@ -176,7 +240,7 @@ export default class Hologram {
     // getComponentModule() answers with plain null for a cid the registry does not hold, and null
     // reaching callNamedFunction faults on reading a module name off it - a raw TypeError naming
     // neither the cid nor the action, which handleUncaughtError drops because it isn't boxed.
-    // An action reaches here only through #settleAction, which admits it when its epoch is the
+    // An action reaches here only through #runActions, which runs it when its epoch is the
     // current one and the two epochs agree - so it was created while the registry answered for
     // the page it answers for now. A target that does not resolve is therefore a cid that page
     // never held, not a dispatch that outlived its own page - raised boxed, the way the error
@@ -219,7 +283,7 @@ export default class Hologram {
     }
 
     if (resultComponentStruct instanceof Promise) {
-      resultComponentStruct.then(
+      return resultComponentStruct.then(
         (resolved) =>
           Hologram.#processActionResult(
             resolved,
@@ -234,15 +298,15 @@ export default class Hologram {
           throw error;
         },
       );
-    } else {
-      Hologram.#processActionResult(
-        resultComponentStruct,
-        name,
-        target,
-        startTime,
-        epoch,
-      );
     }
+
+    Hologram.#processActionResult(
+      resultComponentStruct,
+      name,
+      target,
+      startTime,
+      epoch,
+    );
   }
 
   // Made public to make tests easier
@@ -265,7 +329,7 @@ export default class Hologram {
 
     if (mapValue.isPage === false) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.leaveApp(pagePath);
+      Hologram.navigateBrowserTo(pagePath);
     } else if (mapValue.payload === null) {
       mapValue.isNavigateConfirmed = true;
     } else {
@@ -323,7 +387,7 @@ export default class Hologram {
 
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.leaveApp(mapValue.pagePath);
+      Hologram.navigateBrowserTo(mapValue.pagePath);
     } else {
       mapValue.isPage = false;
     }
@@ -423,10 +487,11 @@ export default class Hologram {
               Type.integer(0),
             );
 
-            // Settling directly keeps an undelayed dispatch synchronous on a stable page, which
-            // is what lets a raising action reach the "error" event the feature tests read.
+            // Enqueuing directly keeps an undelayed dispatch synchronous on a stable page - an
+            // idle queue runs it at once - which is what lets a raising action reach the "error"
+            // event the feature tests read.
             if (delay.value === 0n) {
-              return Hologram.#settleAction(dispatch, epoch);
+              return Hologram.enqueueAction(dispatch, epoch);
             } else {
               return Hologram.scheduleAction(dispatch, epoch);
             }
@@ -465,38 +530,69 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
-  // Gives the path back to the browser, which is how Hologram answers anything it cannot mount: a
-  // target outside the app, or a response a page's middleware wrote itself. The browser then gets
-  // the same answer a typed-in URL would have got, address bar and history included.
-  static leaveApp(url) {
-    window.location.assign(url);
-  }
-
-  // Made public to make tests easier
-  //
   // Takes the page the server described, or where it says to go instead. A redirect is followed by
   // asking for the page it names, so only the page actually arrived at is mounted and only its path
   // enters history - the same trail a browser leaves, where the pages passed through on the way are
   // not places the user can go back to.
-  static async loadNewPage(pagePath, payload, hopCount = 0) {
+  //
+  // The page goes into a new history entry, unless the id of an entry is given: that entry exists
+  // already (the browser went back or forward to it) and the page is shown in its place.
+  static async loadNewPage(
+    pagePath,
+    payload,
+    hopCount = 0,
+    historyEntryId = null,
+  ) {
     if (payload.type === "redirect") {
-      return Hologram.#followRedirect(payload, hopCount);
+      return Hologram.#followRedirect(payload, hopCount, historyEntryId);
     }
 
-    await $.#savePageSnapshot();
-    $.#historyId = Utils.uuidv7();
+    const pageModule = Interpreter.evaluateJavaScriptExpression(
+      payload.pageModule,
+    );
+
+    // The tab holds this page's code from an earlier visit, and a live reload has rebuilt it since.
+    // Running the held copy would show the page as it was before the edit, so the browser loads
+    // the page afresh instead.
+    if (LiveReload.holdsOldPageBundle(pageModule, payload.pageDigest)) {
+      $.#handToBrowser(pagePath, historyEntryId);
+      return;
+    }
+
+    if (historyEntryId === null) {
+      await $.#savePageSnapshot();
+      $.#historyId = Utils.uuidv7();
+    } else {
+      // The page being left was saved when the browser left its entry. From here on the tab
+      // answers for this one.
+      $.#historyId = historyEntryId;
+    }
 
     window.requestAnimationFrame(() => {
       Hologram.#showNewPage(payload);
       window.scrollTo(0, 0);
 
-      history.pushState($.#historyId, null, pagePath);
+      if (historyEntryId === null) {
+        history.pushState($.#historyId, null, pagePath);
+      } else {
+        // A redirect can have led to another path than the one the entry held.
+        history.replaceState($.#historyId, null, pagePath);
+      }
     });
   }
 
-  // The page this client is on, for whoever needs to name it to the server. Null before the page
-  // has mounted.
-  static currentPageModule() {
+  // Made public to make tests easier
+  //
+  // Hands the navigation to the browser instead of doing it in the app, which is how Hologram answers
+  // anything it does not mount itself: a target outside the app, or a response a page's middleware
+  // wrote itself. The browser then gets the same answer a typed-in URL would have got, address bar
+  // and history included: the document is loaded afresh and a history entry is added.
+  static navigateBrowserTo(url) {
+    window.location.assign(url);
+  }
+
+  // The module of the page this tab shows, as the last mount or restore set it.
+  static pageModule() {
     return Hologram.#pageModule;
   }
 
@@ -529,7 +625,7 @@ export default class Hologram {
           );
         }
 
-        InitActionQueue.enqueue(actionWithTarget);
+        Hologram.enqueueActionAfterDelay(actionWithTarget, $.registryEpoch);
       }
     }
   }
@@ -537,7 +633,7 @@ export default class Hologram {
   // Made public to make tests easier
   static queueSelfEchoes(selfEchoes) {
     for (const action of selfEchoes.data) {
-      InitActionQueue.enqueue(action);
+      Hologram.enqueueActionAfterDelay(action, $.registryEpoch);
     }
   }
 
@@ -579,8 +675,10 @@ export default class Hologram {
       // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
       // their targets. The deferred bindings are resolved here because their target is a live DOM
       // element, which exists only after patch. Each resolve also drops a binding whose once modifier
-      // has fired, so reconcile tears it down. Every page-entry path reaches render() through
-      // #mountPage, so this also tears down a previous page's listeners on navigation.
+      // has fired, so reconcile tears it down. A navigation has already detached the previous
+      // page's listeners at its boundary, so a mount's reconcile attaches against an empty
+      // registry: every mount attaches fresh, and no listener's private state crosses from one
+      // page to the next.
       EventListenerRegistry.reconcile([
         ...Renderer.resolveListenerBindings(),
         ...Renderer.resolveReachBindings(),
@@ -599,7 +697,7 @@ export default class Hologram {
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
 
-    // Drained after the reconcile above rather than straight after the patch: a deferred action
+    // Run after the reconcile above rather than straight after the patch: a waiting action
     // renders, and a render collects the page's <window>/<document> bindings into
     // Renderer.listenerBindings. Running one earlier would leave this render reconciling the
     // other render's bindings.
@@ -607,7 +705,32 @@ export default class Hologram {
     // Reached only when the render finished. A render that raised left the DOM and the virtual
     // document describing different pages, and running the queue against that repairs nothing -
     // it waits for the next render that finishes.
-    $.#drainDeferredActions();
+    Hologram.#runActions();
+  }
+
+  // Made public to make tests easier
+  //
+  // Hands the navigation to the browser like navigateBrowserTo() does, for a page that was being
+  // loaded into the history entry the tab is on: the document is loaded afresh in that entry, and
+  // none is added.
+  static replaceBrowserLocation(url) {
+    window.location.replace(url);
+  }
+
+  // Fetches the chunks with the given digests, unless the document has them (see ScriptRegistry).
+  // A chunk holds code of struct types that no bundle carries, their struct functions and their
+  // protocol implementations, and is named when a value of such a type, or the type's module, is
+  // on its way to the browser.
+  static requestChunks(digests) {
+    digests.forEach((digest) => $.#chunkDigests.add(digest));
+
+    ScriptRegistry.request(
+      digests.map((digest) => ({
+        digest: digest,
+        path: $.#chunkBundlePath(digest),
+      })),
+      (digest) => $.#handleScriptFailure(digest),
+    );
   }
 
   static run() {
@@ -616,37 +739,42 @@ export default class Hologram {
         await Hologram.#init();
       }
 
-      try {
-        Hologram.#mountPage();
-      } catch (error) {
-        if (error instanceof HologramBoxedError) {
-          error.name = error.type;
-          error.message = error.text;
-        }
+      // The document's own page bundle and chunks are what its mount waits for. Their script
+      // elements are in the document the server sent, so they are not requested here.
+      MountGate.require($.#initialScriptDigests());
 
-        throw error;
+      // A snapshot can need more chunks than the server rendered the page with. It is restored
+      // once they are in. When one cannot be had the snapshot is passed over, and the page mounts
+      // from the state the server has just rendered, which the document carries.
+      const pageSnapshot = $.#documentSnapshot;
+
+      const isRestorable =
+        pageSnapshot !== null && (await $.#loadSnapshotChunks(pageSnapshot));
+
+      $.#documentSnapshot = null;
+
+      if (isRestorable) {
+        $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+        $.#restorePageSnapshot(pageSnapshot);
+
+        // The mount after a restore reads no mount data, which is where a page's bundle digest is
+        // recorded, so this document's is recorded here: the snapshot it saves on leaving is
+        // stamped with it.
+        LiveReload.recordPageBundle(
+          pageSnapshot.pageModule,
+          globalThis.Hologram.initialPageDigest,
+        );
       }
 
-      // After the mount, so that the rows the page itself carried are already in - they are the
-      // freshest thing this client has, and a stored row fills only what the page said nothing
-      // about. Before the connect, so the stream is greeted with the place this browser had
-      // already been brought up to rather than with nothing.
-      Hologram.#restoreDurable();
-
-      // SSE must open AFTER `#mountPage()` because the handshake payload
-      // includes the receipts merged from `pageMountData.subReceiptAdds` -
-      // connecting earlier would send an empty receipts list.
-      if (Sse.eventSource === null) {
-        Sse.connect();
-      }
+      Hologram.#mountWhenReady(false);
     });
   }
 
   // Execute action asynchronously to allow animations and prevent blocking the event loop
   // Deps: [:maps.get/3]
   // The default stamp covers every caller that reasoned about the registry rather than about the
-  // markup - server-pushed actions, command responses, and the queues the mount drains. A caller
-  // whose action came from the DOM passes the displayed page's epoch instead.
+  // markup - server-pushed actions and command responses. A caller whose action came from the DOM
+  // passes the displayed page's epoch instead.
   static scheduleAction(action, epoch = $.registryEpoch) {
     const delay = Erlang_Maps["get/3"](
       Type.atom("delay"),
@@ -655,8 +783,45 @@ export default class Hologram {
     );
 
     setTimeout(() => {
-      Hologram.#settleAction(action, epoch);
+      Hologram.enqueueAction(action, epoch);
     }, Number(delay.value));
+  }
+
+  // Schedules an action the server pushed: a command reply's next action or self echo, or an action
+  // or a broadcast that came over SSE. Such an action can carry a value of a struct type, or the
+  // type's module, whose struct functions and protocol implementations the tab has not loaded, and
+  // must not run before the chunks that hold them are in. The server names those chunks, by digest.
+  //
+  // The wait happens here, before the action queue, since an action still waiting for its chunks
+  // has not arrived as far as the page is concerned: nothing the user does queues up behind it.
+  // An action triggered on the client never waits, because the state only ever holds values whose
+  // chunks the tab has.
+  //
+  // Realtime promises no order, so two pushed actions can run in the other order than the one
+  // they were sent in, when the first of them waits for a chunk.
+  // Deps: [:maps.get/2]
+  static schedulePushedAction(action, chunkDigests) {
+    // Captured on arrival: a navigation while the chunks are fetched must leave the action stamped
+    // with the page it was sent to, so that the queue drops it as stale.
+    const epoch = $.registryEpoch;
+
+    $.requestChunks(chunkDigests);
+
+    if (ScriptRegistry.isLoaded(chunkDigests)) {
+      $.scheduleAction(action, epoch);
+      return;
+    }
+
+    ScriptRegistry.whenLoaded(chunkDigests).then(
+      () => $.scheduleAction(action, epoch),
+      (digest) => {
+        console.warn(
+          "Hologram: dropped a pushed action whose chunk failed to load:",
+          Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), action)),
+          digest,
+        );
+      },
+    );
   }
 
   static #buildPagePath(toParam) {
@@ -667,6 +832,18 @@ export default class Hologram {
 
   static #buildPrefetchedPagesMapKey(eventTargetNode, pagePath) {
     return `${eventTargetNode.__hologramId__}:${pagePath}`;
+  }
+
+  // Mirrors Hologram.Router.Helpers.chunk_bundle_path/1
+  static #chunkBundlePath(chunkDigest) {
+    return `/hologram/chunk-${chunkDigest}.js`;
+  }
+
+  // Defines the functions of the scripts that announced themselves (see ScriptRegistry), and lets
+  // the waiting mount through when they were the last ones it waited for.
+  static #defineLoadedScripts() {
+    ScriptRegistry.defineLoaded(Hologram.#deps);
+    MountGate.settle();
   }
 
   static #defineManuallyPortedFunctions() {
@@ -1266,59 +1443,33 @@ export default class Hologram {
     );
   }
 
-  // A document load leaves a shim that buffers whatever the page's script dispatches before the
-  // runtime exists, since there is nothing yet to dispatch it to. The mount is the first moment
-  // any of it can be answered, so that is where it drains. A dispatch made once the runtime is up
-  // needs no buffer - it carries the epoch of the page that made it and waits on that instead.
-  static #dispatchPendingJsInteropActions() {
-    const actions = Hologram.#pendingJsInteropActions;
-    Hologram.#pendingJsInteropActions = [];
-
-    actions.forEach(([actionName, target, params]) => {
-      Hologram.dispatchAction(actionName, target, params);
-    });
-  }
-
-  // Runs what a render held back, in the order it arrived. Settled rather than executed: a
-  // deferred action never got an answer from the settle rule, so it meets the same rules as any
-  // other, against the page the client is on by the time it runs.
-  //
-  // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
-  // element at once, so a queue of several is the ordinary case, and they have nothing to do with
-  // one another. Every one is delivered and the first error is raised once the queue is empty -
-  // the same bargain the debouncer makes with the callbacks it flushes.
-  static #drainDeferredActions() {
-    let firstError;
-
-    while ($.#deferredActions.length > 0) {
-      const {action, epoch} = $.#deferredActions.shift();
-
-      try {
-        $.#settleAction(action, epoch);
-      } catch (error) {
-        firstError ??= error;
-      }
-    }
-
-    if (firstError !== undefined) {
-      throw firstError;
-    }
+  // Everything the page being left armed is dropped at the boundary: a debounce or throttle
+  // timer, and every registry listener - a <window>/<document> binding, a click_outside, a reach
+  // or resize observer. A timer outlives the page that armed it, and a listener attached to a
+  // target the patch does not own would observe the patch itself: a detached element's observer
+  // reports it at 0x0, a shortened document fires the scroll the browser clamps, and every such
+  // dispatch would carry the destination's epoch. Nothing of the destination exists yet at
+  // either boundary, so nothing of it is taken, and the mount's render attaches its listeners
+  // afresh. Cancel, not flush: a dispatch must never execute on a page the user has left.
+  static #disarmLeftPage() {
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
+    EventListenerRegistry.detachAll();
   }
 
   // Takes the page's own bundle out of the document the server described, leaving every other
   // script it carries to be patched in and run.
   //
   // The bundle is fetched here rather than through the patch so that a failure to load is
-  // noticed - #loadPageBundle gives it a failure path, which a script the patch creates would
+  // noticed - ScriptRegistry gives it a failure path, which a script the patch creates would
   // not have. It also settles what a script element cannot express on its own: a script is keyed
   // by the source it loads, so navigating back to a page whose bundle is already in the document
   // would adopt that element and never run it, while navigating to a page whose bundle is in
   // memory but absent from the document would run it a second time.
   //
   // The document is the one just built from the tree, so it is edited in place.
-  static #dropPageBundleScript(virtualDocument, pageDigest) {
-    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
-    const key = `__hologramScript__:${$.#pageBundlePath(pageDigest)}`;
+  static #dropPageBundleScript(virtualDocument, pageModule, pageDigest) {
+    const key = `__hologramScript__:${$.#pageBundlePath(pageModule, pageDigest)}`;
 
     const headVnode = virtualDocument.children.find(
       (childVnode) => childVnode?.sel === "head",
@@ -1329,6 +1480,26 @@ export default class Hologram {
         (childVnode) => childVnode?.key !== key,
       );
     }
+  }
+
+  // A document load leaves a shim that buffers whatever the page's script dispatches before the
+  // runtime exists, since there is nothing yet to dispatch it to. The mount is the first moment
+  // any of it can be answered, so that is where it enters the queue, stamped with the mount's
+  // page. A dispatch made once the runtime is up needs no buffer - it carries the epoch of the
+  // page that made it and waits on that instead.
+  static #enqueuePendingJsInteropActions() {
+    const actions = Hologram.#pendingJsInteropActions;
+    Hologram.#pendingJsInteropActions = [];
+
+    actions.forEach(([actionName, target, params]) => {
+      const action = Type.actionStruct({
+        name: Type.atom(actionName),
+        params: JsInterop.boxActionParam(params),
+        target: Type.bitstring(target),
+      });
+
+      ActionQueue.enqueue(action, $.registryEpoch);
+    });
   }
 
   static #ensureDomNodeHasHologramId(eventNode) {
@@ -1445,50 +1616,156 @@ export default class Hologram {
     );
   }
 
-  static async #handlePopstateEvent(event) {
-    // The same boundary as #showNewPage, on the history's side of it: nothing of the destination
-    // exists yet, so every debounced or throttled dispatch still pending belongs to the page being
-    // left. It cannot wait for the restore below, which a popstate carrying no snapshot skips.
-    Debouncer.cancelAll();
-    Throttler.cancelAll();
+  // Made public to make tests easier
+  static async handlePopstateEvent(event) {
+    // The same boundary as #showNewPage, on the history's side of it. It cannot wait for the
+    // restore below, which a popstate carrying no snapshot skips.
+    $.#disarmLeftPage();
+
+    // What was awaiting belongs to the page being left, and the destination may hold the same
+    // cids. Emptied here for the same reason the timers are cancelled here.
+    $.#awaitingTargets.clear();
 
     await $.#savePageSnapshot();
-    $.#historyId = event.state;
 
     const pageSnapshot = await $.#getPageSnapshot(event.state);
 
+    // Asked before anything of the page being left is given up: where live reload runs, this is a
+    // round trip to the server.
+    const isSnapshotOutdated = pageSnapshot
+      ? await $.#isSnapshotOutdated(pageSnapshot)
+      : false;
+
+    // What the registry answers for is about to change either way: a restore swaps it for the
+    // snapshot's, a snapshot that cannot be restored gives way to the page the server renders, and
+    // with no snapshot the mount reads the document's mount data instead and repopulates the
+    // registry from it, putting every component back to the state it was rendered with. So the
+    // epoch advances here - otherwise an action armed before this point would settle against
+    // state that has been replaced underneath it.
+    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+
+    // The epoch of the navigation this popstate opened. What follows waits, for the snapshot's
+    // chunks and for the server, and a later navigation may supersede this one before either
+    // answers - neither the answer nor the failure of a superseded wait says anything about the
+    // navigation now in flight.
+    const epoch = $.registryEpoch;
+    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+
+    // The history id stays the page being left's until the registry holds the page of the entry
+    // the browser went to: a snapshot saved meanwhile is of the page still on screen, and belongs
+    // under that page's entry.
+    const historyEntryId = event.state;
+
+    // A snapshot taken with code other than the page's current one is not restored.
+    if (isSnapshotOutdated) {
+      return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
+    }
+
+    if (!pageSnapshot) {
+      $.#historyId = historyEntryId;
+    }
+
+    // The page on its way: the snapshot's, or with none the one the tab already answers for.
+    const pageModule = pageSnapshot
+      ? pageSnapshot.pageModule
+      : Hologram.#pageModule;
+
+    let snapshotChunksLoaded = null;
+
     if (pageSnapshot) {
-      $.#restorePageSnapshot(pageSnapshot);
-    } else {
-      // With no snapshot to restore, the mount below reads the document's mount data instead and
-      // repopulates the registry from it, putting every component back to the state it was
-      // rendered with. That is as much a change of what the registry answers for as a restore is,
-      // so it advances the same way - otherwise an action armed before this point would settle
-      // against state that has been reset underneath it.
-      $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+      // A mount still waiting belongs to a navigation this one supersedes, and nothing is put in
+      // its place until the snapshot's chunks are in.
+      MountGate.cancel();
+      MountGate.require([]);
+
+      // Asked for now, so that they load while the server is asked for the page's bundle.
+      snapshotChunksLoaded = $.#loadSnapshotChunks(pageSnapshot);
     }
 
-    if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
-      return $.#mountPage(true);
+    // Closes the transition. A snapshot is restored only once its chunks are in, so that one that
+    // cannot be restored leaves the tab as it was, and the entry's page is asked for instead.
+    const mount = async (isPageModuleRegistered, pageBundleDigests) => {
+      if (pageSnapshot) {
+        const loaded = await snapshotChunksLoaded;
+
+        // A later navigation took over meanwhile, or the page's bundle failed to load, which ended
+        // this navigation already.
+        if (isSuperseded() || ScriptRegistry.hasFailed(pageBundleDigests)) {
+          return;
+        }
+
+        if (!loaded) {
+          return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
+        }
+
+        $.#historyId = historyEntryId;
+        $.#restorePageSnapshot(pageSnapshot);
+      }
+
+      $.#mountWhenReady(isPageModuleRegistered);
+    };
+
+    if ($.#isPageModuleRegistered(pageModule)) {
+      MountGate.require([]);
+
+      return mount(true, []);
     }
 
-    // The epoch of the navigation this restore opened. The fetch below is a round trip, and a
-    // later navigation may supersede this one before it answers - the failure of a superseded
-    // fetch says nothing about the navigation now in flight.
-    const epoch = Math.max($.domEpoch, $.registryEpoch);
+    await Client.fetchPageDigest(
+      pageModule,
+      (pageDigest) => {
+        // The scripts required and the mount waiting are the later navigation's by now.
+        if (isSuperseded()) {
+          return null;
+        }
 
-    await Client.fetchPageBundlePath(
-      Hologram.#pageModule,
-      (resp) => $.#loadPageBundle(resp, epoch),
+        LiveReload.recordPageBundle(pageModule, pageDigest);
+
+        MountGate.require([pageDigest]);
+        $.#requestPageBundle(pageModule, pageDigest);
+
+        return mount(false, [pageDigest]);
+      },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
         $.#deadEpochs.add(epoch);
 
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
-            Interpreter.inspect(Hologram.#pageModule),
+            Interpreter.inspect(pageModule),
         );
       },
+    );
+  }
+
+  // Hands a page to the browser: as a new history entry, or in place of the entry the tab is on
+  // when the page was being loaded into that one.
+  static #handToBrowser(url, historyEntryId) {
+    if (historyEntryId === null) {
+      Hologram.navigateBrowserTo(url);
+    } else {
+      Hologram.replaceBrowserLocation(url);
+    }
+  }
+
+  // A page bundle or a chunk could not be fetched. When the mount waits for it, the mount is never
+  // going to run, so the epoch is recorded dead: what belongs to it is dropped rather than held
+  // (see #runActions). A script no longer required belongs to a navigation a later one superseded,
+  // and its failure says nothing about the one now in flight.
+  //
+  // Answers whether the failure is one the tab is prepared for, which is what keeps it from being
+  // raised (see ScriptRegistry.request()): a chunk that only a snapshot restore waits for, which
+  // goes on without the snapshot when it cannot have it.
+  static #handleScriptFailure(digest) {
+    if (MountGate.requires(digest)) {
+      MountGate.cancel();
+      $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+
+      return false;
+    }
+
+    return Array.from($.#restoresInFlight).some((digests) =>
+      digests.includes(digest),
     );
   }
 
@@ -1512,7 +1789,7 @@ export default class Hologram {
       Hologram.#saveEts();
     });
 
-    window.addEventListener("popstate", Hologram.#handlePopstateEvent);
+    window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
     window.addEventListener("pageshow", (event) => {
       // Reconnect when page is restored from bfcache OR when navigating back from external page
@@ -1541,9 +1818,19 @@ export default class Hologram {
       $.#historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      // Only restore state for back/forward navigation, not page reloads
-      if (!$.#isPageReload() && pageSnapshot) {
-        $.#restorePageSnapshot(pageSnapshot);
+      // Only restore state for back/forward navigation, not page reloads, and only into the code
+      // the snapshot was taken with: this document runs the page's current code, and one that does
+      // not fit mounts from the state the server has just rendered instead.
+      if (
+        !$.#isPageReload() &&
+        pageSnapshot &&
+        LiveReload.snapshotFits(
+          pageSnapshot,
+          globalThis.Hologram.initialPageDigest,
+          $.#runtimeDigest(),
+        )
+      ) {
+        $.#documentSnapshot = pageSnapshot;
       }
     } else {
       $.#historyId = Utils.uuidv7();
@@ -1630,7 +1917,34 @@ export default class Hologram {
 
     delete globalThis.Hologram._pendingJsInteropActions;
 
+    // A page bundle or a chunk announces itself when it has run (see ScriptRegistry), which can be
+    // before or after this point: the ones that ran already are defined here, the rest as they
+    // announce themselves.
+    document.addEventListener("hologram:scriptLoaded", () =>
+      Hologram.#defineLoadedScripts(),
+    );
+
+    ScriptRegistry.markRequested($.#initialScriptDigests());
+
+    (globalThis.Hologram.initialChunkDigests ?? []).forEach((digest) =>
+      $.#chunkDigests.add(digest),
+    );
+
+    Hologram.#defineLoadedScripts();
+
     Hologram.#isInitiated = true;
+  }
+
+  // The digests of the scripts the document the server sent carries script elements for, besides
+  // the runtime: its page bundle and the chunks its page needs. A document that names none (a test
+  // one) has none.
+  static #initialScriptDigests() {
+    const pageDigest = globalThis.Hologram.initialPageDigest;
+    const chunkDigests = globalThis.Hologram.initialChunkDigests ?? [];
+
+    return pageDigest === undefined
+      ? chunkDigests
+      : [pageDigest, ...chunkDigests];
   }
 
   static #isPageModuleRegistered(pageModule) {
@@ -1665,20 +1979,123 @@ export default class Hologram {
     );
   }
 
+  // Whether a snapshot Back or Forward is about to restore was taken with code other than the
+  // page's current one, or the tab holds the page's code in an older version: either way, the
+  // page is loaded afresh instead. Asks the server which bundle serves the page now, which is worth
+  // a round trip only where live reload runs; if no answer comes, the snapshot is restored as it
+  // always was.
+  static async #isSnapshotOutdated(pageSnapshot) {
+    if (!globalThis.Hologram.config.liveReload) {
+      return false;
+    }
+
+    let currentPageDigest;
+
+    try {
+      currentPageDigest = await Client.fetchPageDigest(pageSnapshot.pageModule);
+    } catch {
+      return false;
+    }
+
+    return (
+      !LiveReload.snapshotFits(
+        pageSnapshot,
+        currentPageDigest,
+        $.#runtimeDigest(),
+      ) ||
+      LiveReload.holdsOldPageBundle(pageSnapshot.pageModule, currentPageDigest)
+    );
+  }
+
+  // Fetches the chunks the given snapshot was taken with, unless the tab has them, and answers
+  // whether they are all in. The state a snapshot holds can carry values of struct types, and
+  // their modules, whose struct functions and protocol implementations only those chunks have, so
+  // it cannot be restored without them.
+  //
+  // Unlike every other digest the tab asks for, these were not named by the server just now: a
+  // snapshot can be older than the build that serves the app, which no longer has the files. So
+  // one that fails to load is no error here, and the caller goes on without the snapshot.
+  static async #loadSnapshotChunks(pageSnapshot) {
+    // A snapshot taken before snapshots saved their chunks holds none.
+    const digests = pageSnapshot.chunkDigests ?? [];
+
+    $.#restoresInFlight.add(digests);
+    $.requestChunks(digests);
+
+    try {
+      await ScriptRegistry.whenLoaded(digests);
+
+      return true;
+    } catch {
+      return false;
+    } finally {
+      $.#restoresInFlight.delete(digests);
+    }
+  }
+
   // What the page was mounted with, left behind by the script the server wrote into the page.
   // A navigation reaches it the same way a document load does, by patching in the page the
   // server described, that script included.
   // A navigation carries the mount data as payload fields, which #showNewPage decodes and holds.
+  // Shows the page of the history entry the browser went to as the server renders it now, when the
+  // entry's snapshot cannot be restored. The page is asked for the way a navigation asks for one,
+  // and goes into the entry that exists already. Nothing of the tab is given up for it: the
+  // runtime, the realtime stream and the instance id stay.
+  static async #loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch) {
+    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+
+    // A mount still waiting belongs to a navigation this one supersedes.
+    MountGate.cancel();
+    MountGate.require([]);
+
+    // What the browser shows for the entry already, query string and fragment included.
+    const {hash, pathname, search} = window.location;
+    const pagePath = `${pathname}${search}${hash}`;
+
+    const toParam = Type.tuple([
+      pageSnapshot.pageModule,
+      pageSnapshot.pageParams,
+    ]);
+
+    try {
+      await Client.fetchPage(
+        toParam,
+        (payload) =>
+          // The page on its way is a later navigation's by now.
+          isSuperseded()
+            ? null
+            : Hologram.loadNewPage(pagePath, payload, 0, historyEntryId),
+        () => {
+          if (!isSuperseded()) {
+            Hologram.replaceBrowserLocation(pagePath);
+          }
+        },
+      );
+    } catch (error) {
+      // The mount that would have closed this transition is never going to run.
+      if (!isSuperseded()) {
+        $.#deadEpochs.add(epoch);
+      }
+
+      throw error;
+    }
+  }
+
   // A loaded document has no payload, so it carries the same six values as an inline script that
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
-    const mountData =
-      $.#mountData ?? globalThis.Hologram.pageMountData(Hologram.#deps);
+    // A loaded document's bundle digest comes with the other values its boot script sets.
+    const mountData = $.#mountData ?? {
+      ...globalThis.Hologram.pageMountData(Hologram.#deps),
+      pageDigest: globalThis.Hologram.initialPageDigest,
+    };
 
     $.#mountData = null;
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
+
+    LiveReload.recordPageBundle(mountData.pageModule, mountData.pageDigest);
 
     ComponentRegistry.populate(mountData.componentRegistry);
 
@@ -1702,38 +2119,6 @@ export default class Hologram {
     return mountData;
   }
 
-  // Fetches a page's own code. Running it is what announces the page is ready to mount, by
-  // dispatching hologram:pageScriptLoaded, which the runtime listens for.
-  //
-  // Without the failure path a bundle that never loads ends the navigation in silence: nothing
-  // dispatches the event, so the mount never runs, the URL is never pushed, and the page already
-  // on screen stays with no sign that anything went wrong.
-  //
-  // Throwing from the handler does not reach whoever started the navigation, since the handler
-  // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
-  // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
-  // overlay, that being reserved for errors a page raised.
-  // The epoch defaults to an at-call capture, which is right for the forward path, where the
-  // call follows the transition's epoch advance synchronously. The popstate path reaches here a
-  // round trip after its advance and passes the epoch it captured before that trip - a later
-  // navigation may have started in between, and the failure of a superseded fetch says nothing
-  // about the navigation now in flight.
-  static #loadPageBundle(src, epoch = Math.max($.domEpoch, $.registryEpoch)) {
-    const script = document.createElement("script");
-
-    script.src = src;
-    script.fetchpriority = "high";
-
-    script.onerror = () => {
-      // The mount that would have released this epoch's held dispatches is never going to run.
-      $.#deadEpochs.add(epoch);
-
-      throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
-    };
-
-    document.head.appendChild(script);
-  }
-
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
       AssetPathRegistry.populate(globalThis.Hologram.assetManifest);
@@ -1742,12 +2127,15 @@ export default class Hologram {
 
   static #mountPage(isPageModuleRegistered = false) {
     // Nothing pending from the page the user left is dropped here. It is dropped at the instant
-    // the user leaves instead - in #showNewPage and #handlePopstateEvent - which is the last
+    // the user leaves instead - in #showNewPage and handlePopstateEvent - which is the last
     // point at which every pending timer provably belongs to the page being left.
     //
     // Whichever pointer ran ahead during the transition, the mount is where they converge: from
     // here the page on screen and the page the registry answers for are the same page.
     $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
+
+    // Nothing runs until the first render below has written the props - see the flag.
+    $.isMounting = true;
 
     let mountData = null;
 
@@ -1758,13 +2146,17 @@ export default class Hologram {
     }
 
     if (!isPageModuleRegistered) {
-      globalThis.Hologram.pageReachableFunctionDefs(Hologram.#deps);
       $.#registerPageModule($.#pageModule);
     }
 
     Hologram.#maybeInitAssetPathRegistry();
 
     Hologram.prefetchedPages.clear();
+
+    // What arrived during the transition waits behind the mount's own actions, so that a page
+    // starts the same way however it was reached: on a document load the page's script dispatches
+    // into the shim's buffer, which is enqueued below, after the server inits' actions.
+    const waitingEntries = ActionQueue.drain();
 
     Hologram.queueActionsFromServerInits();
 
@@ -1777,12 +2169,22 @@ export default class Hologram {
       );
     }
 
+    Hologram.#enqueuePendingJsInteropActions();
+
+    ActionQueue.append(waitingEntries);
+
     window.requestAnimationFrame(() => {
       // The registry arrives with every struct's props empty - this render is what writes them, so
       // that the payload doesn't carry each prop value a second time - which is one more reason
-      // nothing above may run a handler before this call, and why every drain below it stays below
-      // it.
-      $.render();
+      // nothing above may run a handler before this call, and why the queue is held until it is
+      // done.
+      try {
+        $.render();
+      } finally {
+        // A template expression is app code and can raise, so the flag is cleared on the way out
+        // either way. Leaving it set would hold every action from here on.
+        $.isMounting = false;
+      }
 
       if ($.#scrollPosition) {
         window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
@@ -1791,9 +2193,7 @@ export default class Hologram {
 
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
 
-      Hologram.#scheduleQueuedInitActions();
-      Hologram.#dispatchPendingJsInteropActions();
-      Hologram.#releaseHeldActions();
+      Hologram.#runActions();
     });
   }
 
@@ -1804,8 +2204,38 @@ export default class Hologram {
     return Client.fetchPage(
       toParam,
       (payload) => Hologram.loadNewPage(pagePath, payload),
-      () => Hologram.leaveApp(pagePath),
+      () => Hologram.navigateBrowserTo(pagePath),
     );
+  }
+
+  // Mounts the page once the scripts it requires are loaded (see MountGate): at once when they
+  // are, and otherwise when the last of them announces itself.
+  static #mountWhenReady(isPageModuleRegistered) {
+    MountGate.mountWhenReady(() => {
+      try {
+        Hologram.#mountPage(isPageModuleRegistered);
+      } catch (error) {
+        if (error instanceof HologramBoxedError) {
+          error.name = error.type;
+          error.message = error.text;
+        }
+
+        throw error;
+      }
+
+      // After the mount, so that the rows the page itself carried are already in - they are the
+      // freshest thing this client has, and a stored row fills only what the page said nothing
+      // about. Before the connect, so the stream is greeted with the place this browser had
+      // already been brought up to rather than with nothing.
+      Hologram.#restoreDurable();
+
+      // SSE must open AFTER `#mountPage()` because the handshake payload
+      // includes the receipts merged from `pageMountData.subReceiptAdds` -
+      // connecting earlier would send an empty receipts list.
+      if (Sse.eventSource === null) {
+        Sse.connect();
+      }
+    });
   }
 
   static #onReady(callback) {
@@ -1822,15 +2252,15 @@ export default class Hologram {
     }
   }
 
-  // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+  // Mirrors Hologram.Router.Helpers.page_bundle_path/2
+  static #pageBundlePath(pageModule, pageDigest) {
+    return `/hologram/page-${Interpreter.moduleExName(pageModule)}-${pageDigest}.js`;
+  }
+
   // A value the server sent as JSON, or undefined when it sent none - a build with no data model
   // carries no rows, and neither does a payload from a server that predates them.
   static #parseMountJson(json) {
     return json === undefined ? undefined : JSON.parse(json);
-  }
-
-  static #pageBundlePath(pageDigest) {
-    return `/hologram/page-${pageDigest}.js`;
   }
 
   static #pageSnapshotKey(historyId) {
@@ -1842,9 +2272,9 @@ export default class Hologram {
   // A target outside the app carries no page to ask for, so the browser takes it. The hop limit is
   // there because a redirect can point at a page that redirects again: a cycle would otherwise
   // fetch forever, silently.
-  static #followRedirect(payload, hopCount) {
+  static #followRedirect(payload, hopCount, historyEntryId) {
     if (!payload.pageModule) {
-      Hologram.leaveApp(payload.to);
+      $.#handToBrowser(payload.to, historyEntryId);
       return null;
     }
 
@@ -1862,8 +2292,13 @@ export default class Hologram {
     return Client.fetchPage(
       toParam,
       (nextPayload) =>
-        Hologram.loadNewPage(payload.to, nextPayload, hopCount + 1),
-      () => Hologram.leaveApp(payload.to),
+        Hologram.loadNewPage(
+          payload.to,
+          nextPayload,
+          hopCount + 1,
+          historyEntryId,
+        ),
+      () => $.#handToBrowser(payload.to, historyEntryId),
     );
   }
 
@@ -1890,14 +2325,14 @@ export default class Hologram {
     // hand.
     $.#pendingJsInteropActions = [];
 
-    // A debounce or a throttle holds its dispatch in a timer rather than in a queue, and a timer
-    // outlives the page that armed it. This line is the last instant that is still only the page
-    // being left - nothing of the destination is on screen, none of its listeners are attached,
-    // none of its scripts have run - so every timer pending here provably belongs to the page
-    // being left, and cancelling all of them takes nothing from the destination. Cancel, not
-    // flush: a dispatch must never execute on a page the user has left.
-    Debouncer.cancelAll();
-    Throttler.cancelAll();
+    // This line is the last instant that is still only the page being left - nothing of the
+    // destination is on screen, none of its listeners are attached, none of its scripts have run
+    // - so everything armed here provably belongs to the page being left.
+    $.#disarmLeftPage();
+
+    // What was awaiting belongs to the page being left, and the destination may hold the same
+    // cids. Emptied here for the same reason the timers are cancelled here.
+    $.#awaitingTargets.clear();
 
     // The patch below puts the destination's markup on screen and runs its scripts, so the epoch
     // of what is displayed advances here, ahead of the registry - the mount brings the registry
@@ -1914,10 +2349,19 @@ export default class Hologram {
     // The fetch is started before the patch, which is local work, so the network has a head start
     // on it. Nothing the bundle does can run before the patch is done, since it cannot execute
     // until this frame's work ends.
-    if (!isPageModuleRegistered) {
-      globalThis.Hologram.pageScriptLoaded = false;
-      $.#loadPageBundle($.#pageBundlePath(payload.pageDigest));
+    //
+    // The mount waits for the page's bundle, unless the tab holds the page's code already, and for
+    // the chunks the page needs: the ones it preloads and the ones its state holds values for.
+    const chunkDigests = payload.chunks ?? [];
+
+    if (isPageModuleRegistered) {
+      MountGate.require(chunkDigests);
+    } else {
+      MountGate.require([payload.pageDigest, ...chunkDigests]);
+      $.#requestPageBundle(pageModule, payload.pageDigest);
     }
+
+    $.requestChunks(chunkDigests);
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
     // the browser then runs. The page module is already decoded above, so it is reused.
@@ -1929,6 +2373,7 @@ export default class Hologram {
       componentRegistry: Interpreter.evaluateJavaScriptExpression(
         payload.componentRegistry,
       ),
+      pageDigest: payload.pageDigest,
       pageModule: pageModule,
       pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
       selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
@@ -1946,16 +2391,16 @@ export default class Hologram {
     const tree = Renderer.decodeTree(payload.tree);
     const newVirtualDocument = Renderer.renderTree(tree);
 
-    $.#dropPageBundleScript(newVirtualDocument, payload.pageDigest);
+    $.#dropPageBundleScript(newVirtualDocument, pageModule, payload.pageDigest);
 
     Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,
       newVirtualDocument,
     );
 
-    if (isPageModuleRegistered) {
-      $.#mountPage(true);
-    }
+    // A page whose code the tab holds mounts now. The mount of any other waits for its bundle to
+    // announce itself.
+    $.#mountWhenReady(isPageModuleRegistered);
   }
 
   // Deps: [:maps.get/2, :maps.put/3]
@@ -2026,8 +2471,6 @@ export default class Hologram {
     // After the render rather than before it: what the user sees does not wait on the network.
     Batches.flush();
 
-    Hologram.#scheduleQueuedInitActions();
-
     if (!Type.isNil(nextAction)) {
       if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
         nextAction = Erlang_Maps["put/3"](
@@ -2053,27 +2496,13 @@ export default class Hologram {
     $.#registeredPageModules.add(pageModule.value);
   }
 
-  static #releaseHeldActions() {
-    const held = $.#heldActions;
-    $.#heldActions = [];
-
-    for (const {action, epoch} of held) {
-      // An entry from a transition that never reached this mount belongs to a page that will
-      // never answer for it.
-      if (epoch !== $.registryEpoch) {
-        continue;
-      }
-
-      // A held action already served its own delay before it was held - the timer is what
-      // delivered it to the settle rule in the first place - so releasing it goes through a bare
-      // macrotask rather than scheduleAction, which would serve that delay a second time. The
-      // macrotask is not incidental: it puts the release behind the init-action and JS-interop
-      // drains, which ride timers of their own, and keeps a raising action surfacing the way
-      // every other timer-driven action does.
-      setTimeout(() => {
-        Hologram.#settleAction(action, epoch);
-      }, 0);
-    }
+  // Fetches a page's own code, which announces itself when it has run (see ScriptRegistry). A
+  // bundle that cannot be fetched ends the navigation: see #handleScriptFailure.
+  static #requestPageBundle(pageModule, pageDigest) {
+    ScriptRegistry.request(
+      [{digest: pageDigest, path: $.#pageBundlePath(pageModule, pageDigest)}],
+      (digest) => $.#handleScriptFailure(digest),
+    );
   }
 
   // Takes up what a previous page load left - the place to resume the stream from, the number to
@@ -2146,12 +2575,11 @@ export default class Hologram {
       subscriptionReceipts,
     } = pageSnapshot;
 
-    ComponentRegistry.populate(componentRegistryEntries);
-
     // A restore swaps the registry while the previous page is still on screen - the mirror of a
     // forward navigation, where the markup runs ahead instead. The epoch of what the registry
-    // answers for advances here; the mount brings the displayed side level.
-    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+    // answers for was advanced when the restore was decided on; the mount brings the displayed
+    // side level.
+    ComponentRegistry.populate(componentRegistryEntries);
 
     App.instanceId = instanceId;
     App.subscriptionReceiptRegistry.populate(subscriptionReceipts);
@@ -2161,6 +2589,120 @@ export default class Hologram {
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
+  }
+
+  // Walks the queue and runs every entry that can run, in order, until the walk is over or the
+  // page has to wait. The page waits while the client is mid-transition (the entries belong to the
+  // page being moved to, which cannot answer until it mounts), while the page is mounting (its
+  // first render has not written the props yet), and while a render is on the stack (the DOM it
+  // walks is mid-update, and an action's own render would walk the same tree behind it). A
+  // component waits while an action of its own is awaiting, and so do its later entries: a later
+  // entry never overtakes an earlier one for the same component. Whoever ends a wait runs the
+  // queue again: the settled action, the mount, the finished render.
+  //
+  // An action stamped with a page that has been left, or whose navigation failed before it could
+  // mount, is dropped when the walk reaches it - nothing can answer for it any more. The warning is
+  // the trace a button that appears to do nothing leaves behind.
+  //
+  // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
+  // element at once, so a run of several is the ordinary case, and they have nothing to do with one
+  // another. Every one is delivered and the first error is raised once the walk is over - the same
+  // bargain the debouncer makes with the callbacks it flushes.
+  // Deps: [:maps.get/2]
+  static #runActions() {
+    if ($.#isRunningActions) {
+      return;
+    }
+
+    $.#isRunningActions = true;
+
+    let firstError;
+
+    try {
+      // The components this walk may not run an action for: one whose action is awaiting, and one
+      // whose earlier entry was passed over, so that a later entry for it does not overtake it.
+      const blockedTargets = new Set($.#awaitingTargets.keys());
+      let index = 0;
+
+      while (index < ActionQueue.entries.length) {
+        const {action, epoch} = ActionQueue.entries[index];
+        const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
+
+        // Dropped whatever the page is doing: a stale entry has nothing to wait for.
+        if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+          ActionQueue.removeAt(index);
+
+          console.warn(
+            "Hologram: dropped an action dispatched on a page that has been left:",
+            Interpreter.inspect(
+              Erlang_Maps["get/2"](Type.atom("name"), action),
+            ),
+          );
+
+          continue;
+        }
+
+        if ($.domEpoch !== $.registryEpoch || $.isMounting || $.isRendering) {
+          break;
+        }
+
+        // A cid is text by construction, and reading a bitstring's text fills in nothing on it -
+        // encoding it as a map key would cache its bytes on the action's own struct.
+        const targetKey = Bitstring.toText(
+          Erlang_Maps["get/2"](Type.atom("target"), action),
+        );
+
+        if (blockedTargets.has(targetKey)) {
+          index++;
+          continue;
+        }
+
+        ActionQueue.removeAt(index);
+
+        let result;
+
+        try {
+          result = Hologram.executeAction(action, epoch);
+        } catch (error) {
+          firstError ??= error;
+          continue;
+        }
+
+        if (result instanceof Promise) {
+          $.#awaitingTargets.set(targetKey, epoch);
+          blockedTargets.add(targetKey);
+
+          // Resumed from a macrotask rather than from the promise's own continuation, so that an
+          // action raising in the resumed run surfaces as an uncaught error, the way every
+          // timer-driven action does, and not as the rejection of a promise nobody holds. The
+          // promise's own rejection still reaches the "unhandledrejection" listener: finally()
+          // passes it through.
+          result.finally(() => {
+            // The page may have been left since, which empties the map, and the destination may
+            // be awaiting an action of its own under the same cid - that entry is not this one's.
+            if ($.#awaitingTargets.get(targetKey) === epoch) {
+              $.#awaitingTargets.delete(targetKey);
+            }
+
+            setTimeout(() => Hologram.#runActions(), 0);
+          });
+        }
+      }
+    } finally {
+      $.#isRunningActions = false;
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
+    }
+  }
+
+  // The digest of the runtime bundle this document runs, read from the path the asset manifest the
+  // boot script left holds for it.
+  static #runtimeDigest() {
+    const path = globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
+
+    return path?.match(/-([^-]+)\.js$/)?.[1] ?? null;
   }
 
   static async #saveEts() {
@@ -2191,11 +2733,24 @@ export default class Hologram {
   }
 
   static async #savePageSnapshot(forceSync = false) {
+    // The entry's snapshot is still waiting to be restored, and nothing has taken its place: the
+    // page is not mounted yet, so there is no state to save over it.
+    if ($.#documentSnapshot !== null) {
+      return;
+    }
+
     const pageSnapshot = {
+      // Every chunk the tab has loaded, not only the ones this page's state needs: which of them
+      // the state needs is not known here, and a chunk too many costs a restore one cached fetch.
+      chunkDigests: Array.from($.#chunkDigests).filter((digest) =>
+        ScriptRegistry.isLoaded([digest]),
+      ),
       componentRegistryEntries: ComponentRegistry.entries,
       instanceId: App.instanceId,
+      pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
+      runtimeDigest: $.#runtimeDigest(),
       scrollPosition: [window.scrollX, window.scrollY],
       subscriptionReceipts: Array.from(
         App.subscriptionReceiptRegistry.entries.entries(),
@@ -2246,49 +2801,6 @@ export default class Hologram {
         );
       }
     }
-  }
-
-  static #scheduleQueuedInitActions() {
-    const actions = InitActionQueue.dequeueAll();
-
-    actions.forEach((action) => {
-      Hologram.scheduleAction(action);
-    });
-  }
-
-  // The one place an action meets the registry, and the only thing that decides whether it runs.
-  // An action carries the epoch of the page it was reasoning about when it was created, and this
-  // compares that against where the client has got to since.
-  static #settleAction(action, epoch) {
-    const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
-
-    // The page the action belonged to has been left, or its navigation failed before it could
-    // mount - either way nothing can answer for it any more. The warning is the trace a button
-    // that appears to do nothing leaves behind.
-    if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
-      console.warn(
-        "Hologram: dropped an action dispatched on a page that has been left:",
-        Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), action)),
-      );
-
-      return;
-    }
-
-    // The two sides disagree, so the client is mid-transition: the page this action belongs to is
-    // the one being moved to, and it cannot answer until it mounts.
-    if ($.domEpoch !== $.registryEpoch) {
-      $.#heldActions.push({action: action, epoch: epoch});
-      return;
-    }
-
-    // A render is on the stack, so the DOM it is walking is mid-update and this action's own
-    // render would walk the same tree behind it. It waits, and runs when that render is done.
-    if ($.isRendering) {
-      $.#deferredActions.push({action: action, epoch: epoch});
-      return;
-    }
-
-    return Hologram.executeAction(action, epoch);
   }
 }
 

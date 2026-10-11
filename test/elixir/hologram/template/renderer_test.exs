@@ -78,6 +78,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
+  alias Hologram.Test.Fixtures.Template.Renderer.Module93
   alias Hologram.Test.Fixtures.Template.Renderer.Module96
 
   @csrf_token "test-csrf-token"
@@ -107,6 +108,7 @@ defmodule Hologram.Template.RendererTest do
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
 
   setup :set_mox_global
@@ -1734,6 +1736,8 @@ defmodule Hologram.Template.RendererTest do
 
       setup_asset_manifest_cache(AssetManifestCacheStub)
 
+      setup_chunk_registry(ChunkRegistryStub)
+
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
@@ -1758,6 +1762,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_39_digest,
+                        {Hologram, :page_module} => Module39,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -1790,6 +1795,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_46_digest,
+                        {Hologram, :page_module} => Module46,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -1822,6 +1828,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_40_digest,
+                        {Hologram, :page_module} => Module40,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -1854,6 +1861,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_43_digest,
+                        {Hologram, :page_module} => Module43,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -1885,6 +1893,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_45_digest,
+                        {Hologram, :page_module} => Module45,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -1920,6 +1929,8 @@ defmodule Hologram.Template.RendererTest do
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
       setup_asset_manifest_cache(AssetManifestCacheStub)
+
+      setup_chunk_registry(ChunkRegistryStub)
 
       setup_page_digest_registry(PageDigestRegistryStub)
     end
@@ -1976,6 +1987,22 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module24, @params, @server, @opts)
     end
 
+    test "name the chunks the struct types in the page state need" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module93, :dummy_module_93_digest)
+
+      assert render_page(Module93, @params, @server, @opts).chunk_digests == [
+               "AAAAAAAA",
+               "BBBBBBBB",
+               "CCCCCCCC"
+             ]
+    end
+
+    test "name no chunk when the page state holds no struct of a type that needs one" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      assert render_page(Module21, @params, @server, @opts).chunk_digests == []
+    end
+
     test "merge the page params into the page component struct" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
 
@@ -2005,6 +2032,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_28_digest,
+                        {Hologram, :page_module} => Module28,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -2037,6 +2065,7 @@ defmodule Hologram.Template.RendererTest do
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_29_digest,
+                        {Hologram, :page_module} => Module29,
                         {Hologram, :page_mounted?} => true,
                         {Hologram, :replica_id} => @replica_id,
                         {Hologram, :replica_token} => @replica_token,
@@ -2151,7 +2180,7 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module48, @params, @server, @opts)
 
       expected =
-        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_id")]), Type.bitstring("#{@replica_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_token")]), Type.bitstring("#{@replica_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("user")]), Type.atom("nil")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
+        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_module")]), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_id")]), Type.bitstring("#{@replica_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("replica_token")]), Type.bitstring("#{@replica_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("user")]), Type.atom("nil")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("props"), Type.map([])], [Type.atom("state"), Type.map([])]])]])]])/
 
       assert String.contains?(html, expected)
     end
@@ -3155,6 +3184,18 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "chunk_replacements/1" do
+    test "maps the digests to the placeholder as a JavaScript array" do
+      assert Renderer.chunk_replacements(["AAAAAAAA", "BBBBBBBB"]) == %{
+               "$CHUNK_DIGESTS_JS_PLACEHOLDER" => ~s(["AAAAAAAA","BBBBBBBB"])
+             }
+    end
+
+    test "maps no digest to an empty array" do
+      assert Renderer.chunk_replacements([]) == %{"$CHUNK_DIGESTS_JS_PLACEHOLDER" => "[]"}
+    end
+  end
+
   describe "encode_tree/1" do
     test "text node" do
       tree = {:text, "abc < xyz"}
@@ -3274,6 +3315,75 @@ defmodule Hologram.Template.RendererTest do
 
       assert encoded ==
                ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
+    end
+  end
+
+  describe "interpolate_chunk_script_tags_in_tree/2" do
+    test "replaces the text node holding the placeholder with a script element per chunk" do
+      tree =
+        {:element, "head", [],
+         [
+           {:element, "script", [{"async", []}, {"src", [text: "/hologram/runtime.js"]}], []},
+           {:text, "\n  $CHUNK_SCRIPT_TAGS_PLACEHOLDER\n"}
+         ]}
+
+      result = Renderer.interpolate_chunk_script_tags_in_tree(tree, ["AAAAAAAA", "BBBBBBBB"])
+
+      assert result ==
+               {:element, "head", [],
+                [
+                  {:element, "script", [{"async", []}, {"src", [text: "/hologram/runtime.js"]}],
+                   []},
+                  {:element, "script",
+                   [{"async", []}, {"src", [text: "/hologram/chunk-AAAAAAAA.js"]}], []},
+                  {:element, "script",
+                   [{"async", []}, {"src", [text: "/hologram/chunk-BBBBBBBB.js"]}], []}
+                ]}
+    end
+
+    test "prints as a script tag per chunk" do
+      tree = {:element, "head", [], [{:text, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"}]}
+
+      html =
+        tree
+        |> Renderer.interpolate_chunk_script_tags_in_tree(["AAAAAAAA"])
+        |> Renderer.print_dom()
+
+      assert html ==
+               ~s(<head><script async src="/hologram/chunk-AAAAAAAA.js"></script></head>)
+    end
+
+    test "drops the text node when there is no chunk" do
+      tree = {:element, "head", [], [{:text, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"}]}
+
+      assert Renderer.interpolate_chunk_script_tags_in_tree(tree, []) ==
+               {:element, "head", [], []}
+    end
+
+    test "reaches the placeholder in a node list" do
+      tree = [{:element, "head", [], [{:text, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"}]}]
+
+      assert Renderer.interpolate_chunk_script_tags_in_tree(tree, ["AAAAAAAA"]) == [
+               {:element, "head", [],
+                [
+                  {:element, "script",
+                   [{"async", []}, {"src", [text: "/hologram/chunk-AAAAAAAA.js"]}], []}
+                ]}
+             ]
+    end
+
+    # The runtime component renders the token as the whole of a text node. One that says anything
+    # else is something a page rendered, which can be what someone typed.
+    test "leaves a text node that holds more than the placeholder untouched" do
+      tree = {:element, "p", [], [{:text, "typed $CHUNK_SCRIPT_TAGS_PLACEHOLDER by hand"}]}
+
+      assert Renderer.interpolate_chunk_script_tags_in_tree(tree, ["AAAAAAAA"]) == tree
+    end
+
+    test "leaves a tree without the placeholder untouched" do
+      tree = {:element, "div", [], [{:text, "Hologram"}]}
+
+      assert Renderer.interpolate_chunk_script_tags_in_tree(tree, ["AAAAAAAA"]) == tree
     end
   end
 

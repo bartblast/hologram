@@ -10,6 +10,8 @@ import {
   waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import ActionQueue from "../../assets/js/action_queue.mjs";
+import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
@@ -24,10 +26,13 @@ import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
-import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import LiveReload from "../../assets/js/live_reload.mjs";
+import MountGate from "../../assets/js/mount_gate.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
+import ScriptRegistry from "../../assets/js/script_registry.mjs";
+import Serializer from "../../assets/js/serializer.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
@@ -85,6 +90,295 @@ describe("Hologram", () => {
         Erlang_Maps["get/2"](Type.atom("params"), action),
         Type.map([[Type.atom("a"), Type.integer(1)]]),
       );
+    });
+  });
+
+  describe("enqueueAction()", () => {
+    let clock, executeActionStub, pendingSettles, warnStub;
+
+    const actionNamed = (name, target = cid1) =>
+      Type.actionStruct({
+        name: Type.atom(name),
+        params: Type.map(),
+        target: target,
+      });
+
+    const action1 = actionNamed("action_1");
+    const action2 = actionNamed("action_2");
+    const action3 = actionNamed("action_3");
+    const otherComponentAction = actionNamed("other_component_action", cid2);
+
+    // A promise a test settles when it chooses to - or the teardown does, so that a component left
+    // awaiting in one test is not still awaiting in the next.
+    const pendingPromise = () => {
+      let settle;
+
+      const promise = new Promise((resolve) => {
+        settle = resolve;
+      });
+
+      pendingSettles.push(settle);
+
+      return promise;
+    };
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+      ActionQueue.entries = [];
+      pendingSettles = [];
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake(() => undefined);
+
+      warnStub = sinon.stub(console, "warn");
+    });
+
+    afterEach(async () => {
+      pendingSettles.forEach((settle) => settle());
+      await clock.tickAsync(0);
+
+      ActionQueue.entries = [];
+      Hologram.domEpoch = 0;
+      Hologram.registryEpoch = 0;
+      Hologram.isMounting = false;
+      Hologram.isRendering = false;
+      clock.restore();
+      sinon.restore();
+    });
+
+    // The ordinary case: nothing is in flight, so the action runs on the enqueuer's own stack -
+    // which is what keeps a DOM dispatch synchronous.
+    it("runs the action at once when nothing is ahead of it", () => {
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1, 0);
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
+
+    // An action's own code can enqueue the next one before it returns, e.g. by firing an event on
+    // the DOM. The walk already on the stack takes it once its parent is done, rather than a nested
+    // walk running it in the middle of the parent.
+    it("runs an action enqueued by a running action after it", () => {
+      const calls = [];
+
+      executeActionStub.callsFake((action) => {
+        if (action === action1) {
+          Hologram.enqueueAction(action2, 0);
+          calls.push("action_1 done");
+        } else {
+          calls.push("action_2");
+        }
+      });
+
+      Hologram.enqueueAction(action1, 0);
+
+      assert.deepStrictEqual(calls, ["action_1 done", "action_2"]);
+    });
+
+    // The reason the queue exists: the component's next action reads its state, so it must not
+    // start before the running one has written it.
+    it("waits for a component's asynchronous action before running its next one", async () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(action2, 0);
+
+      sinon.assert.calledOnce(executeActionStub);
+
+      pendingSettles[0]();
+      await clock.tickAsync(0);
+
+      sinon.assert.calledTwice(executeActionStub);
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [action2, 0]);
+    });
+
+    // An action never writes another component's struct, so another component has nothing to wait
+    // for - and a promise that never settles must not hold the rest of the page.
+    it("runs another component's action while one is awaiting", () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(otherComponentAction, 0);
+
+      sinon.assert.calledTwice(executeActionStub);
+
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [
+        otherComponentAction,
+        0,
+      ]);
+    });
+
+    it("keeps a component's later actions behind its awaiting one", () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(action2, 0);
+      Hologram.enqueueAction(otherComponentAction, 0);
+
+      sinon.assert.calledTwice(executeActionStub);
+
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [
+        otherComponentAction,
+        0,
+      ]);
+
+      assert.deepStrictEqual(ActionQueue.entries, [
+        {action: action2, epoch: 0},
+      ]);
+    });
+
+    // A later entry never overtakes an earlier one for the same component, whatever held the
+    // earlier one back.
+    it("keeps a component's later actions behind one that was passed over", async () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+
+      Hologram.isRendering = true;
+      Hologram.enqueueAction(action2, 0);
+      Hologram.enqueueAction(action3, 0);
+      Hologram.isRendering = false;
+
+      pendingSettles[0]();
+      await clock.tickAsync(0);
+
+      assert.deepStrictEqual(
+        executeActionStub.getCalls().map((call) => call.args[0]),
+        [action1, action2, action3],
+      );
+    });
+
+    // The settle of an action awaited on a page that has been left finds the epochs moved on. It
+    // still releases its own component, since the wait it ends is its own.
+    it("releases the component when its action settles after a navigation", async () => {
+      executeActionStub.onFirstCall().returns(pendingPromise());
+
+      Hologram.enqueueAction(action1, 0);
+
+      Hologram.domEpoch = 1;
+      Hologram.registryEpoch = 1;
+
+      pendingSettles[0]();
+      await clock.tickAsync(0);
+
+      Hologram.enqueueAction(action2, 1);
+
+      sinon.assert.calledTwice(executeActionStub);
+      assert.deepStrictEqual(executeActionStub.secondCall.args, [action2, 1]);
+    });
+
+    // The two sides disagree, so the client is mid-transition: the page the action belongs to is
+    // the one being moved to, and it cannot answer until it mounts.
+    it("holds the queue while the client is mid-transition", () => {
+      Hologram.domEpoch = 1;
+
+      Hologram.enqueueAction(action1, 1);
+
+      sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(warnStub);
+      assert.equal(ActionQueue.entries.length, 1);
+    });
+
+    it("holds the queue while the page is mounting", () => {
+      Hologram.isMounting = true;
+
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.notCalled(executeActionStub);
+      assert.equal(ActionQueue.entries.length, 1);
+    });
+
+    it("holds the queue while a render is on the stack", () => {
+      Hologram.isRendering = true;
+
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.notCalled(executeActionStub);
+      assert.equal(ActionQueue.entries.length, 1);
+    });
+
+    // The shape a history restoration leaves behind: the registry has moved on while the page the
+    // action came from is still on screen, so the page it was aimed at is already gone.
+    it("drops an action whose page has been left, with a warning", () => {
+      Hologram.registryEpoch = 1;
+
+      Hologram.enqueueAction(action1, 0);
+
+      sinon.assert.notCalled(executeActionStub);
+      sinon.assert.calledOnce(warnStub);
+      assert.deepStrictEqual(ActionQueue.entries, []);
+    });
+
+    // A single focusout flushes every pending slot on the element at once, so a run of several is
+    // the ordinary case and they have nothing to do with one another - the same bargain the
+    // debouncer makes with the callbacks it flushes.
+    it("delivers every action when one raises, and raises the first error", () => {
+      const executed = [];
+
+      executeActionStub.callsFake((action) => {
+        executed.push(action);
+
+        if (action === action1) {
+          throw new Error("action failed");
+        }
+      });
+
+      Hologram.isRendering = true;
+      Hologram.enqueueAction(action1, 0);
+      Hologram.enqueueAction(action2, 0);
+      Hologram.isRendering = false;
+
+      assert.throws(
+        () => Hologram.enqueueAction(action3, 0),
+        Error,
+        "action failed",
+      );
+
+      assert.deepStrictEqual(executed, [action1, action2, action3]);
+    });
+  });
+
+  describe("enqueueActionAfterDelay()", () => {
+    let scheduleActionStub;
+
+    const action = Type.actionStruct({
+      name: Type.atom("my_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const delayedAction = Type.actionStruct({
+      name: Type.atom("my_delayed_action"),
+      params: Type.map(),
+      target: cid1,
+      delay: Type.integer(500),
+    });
+
+    beforeEach(() => {
+      ActionQueue.entries = [];
+      scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+    });
+
+    afterEach(() => {
+      ActionQueue.entries = [];
+      sinon.restore();
+    });
+
+    it("puts an action without a delay on the queue at once", () => {
+      Hologram.enqueueActionAfterDelay(action, 3);
+
+      assert.deepStrictEqual(ActionQueue.entries, [{action: action, epoch: 3}]);
+      sinon.assert.notCalled(scheduleActionStub);
+    });
+
+    // The same timer every other delayed action serves: the queue runs an entry as soon as it can,
+    // so a delayed action must not be an entry until its delay has elapsed.
+    it("puts an action with a delay through the timer", () => {
+      Hologram.enqueueActionAfterDelay(delayedAction, 3);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, delayedAction, 3);
+      assert.deepStrictEqual(ActionQueue.entries, []);
     });
   });
 
@@ -359,6 +653,45 @@ describe("Hologram", () => {
       });
     });
 
+    it("returns nothing for a synchronous action", () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      assert.isUndefined(Hologram.executeAction(actionFor(cid1)));
+    });
+
+    // What the promise settles on is the commit, not the action's own return: a caller waiting on
+    // it reads the state the action wrote.
+    it("returns a promise that settles once an asynchronous action's result is processed", async () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Promise.resolve(
+          Type.componentStruct({nextAction: Type.nil(), state: Type.map()}),
+        ),
+      );
+
+      const result = Hologram.executeAction(actionFor(cid1));
+
+      assert.instanceOf(result, Promise);
+      sinon.assert.notCalled(renderStub);
+
+      await result;
+
+      sinon.assert.calledOnce(renderStub);
+    });
+
     // A next action is a continuation of the one that produced it, so it belongs to the same page
     // - which is not necessarily the page current by the time it is scheduled, since the parent
     // may have been asynchronous.
@@ -543,7 +876,7 @@ describe("Hologram", () => {
     // Dropping the entry instead would leave the link dead: the click looks the target up here,
     // and an entry that is not there does nothing at all.
     it("hands the target to the browser when the prefetch found no page", () => {
-      const leaveAppStub = sinon.stub(Hologram, "leaveApp");
+      const navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
 
       eventTargetNode = {__hologramId__: "dummy_hologram_id"};
       const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
@@ -568,10 +901,10 @@ describe("Hologram", () => {
 
       assert.equal(Hologram.prefetchedPages.size, 0);
 
-      sinon.assert.calledOnceWithExactly(leaveAppStub, pagePath);
+      sinon.assert.calledOnceWithExactly(navigateBrowserToStub, pagePath);
       sinon.assert.notCalled(loadNewPageStub);
 
-      leaveAppStub.restore();
+      navigateBrowserToStub.restore();
     });
 
     it("is a no-op if there is no prefeteched pages map entry for the given map key", () => {
@@ -820,6 +1153,9 @@ describe("Hologram", () => {
       Hologram.executeLoadPrefetchedPageAction.restore();
       Hologram.executePrefetchPageAction.restore();
       Hologram.scheduleAction.restore();
+
+      // A dispatch made mid-transition waits in the queue, and would be ahead of the next test's.
+      ActionQueue.entries = [];
     });
 
     it("event is ignored", () => {
@@ -1566,8 +1902,11 @@ describe("Hologram", () => {
       children,
     ];
 
+    const bundlePath = (pageDigest) =>
+      `/hologram/page-Hologram.Test.Fixtures.Module7-${pageDigest}.js`;
+
     const wireBundleScript = (pageDigest) =>
-      wireElement("script", ["src", `/hologram/page-${pageDigest}.js`]);
+      wireElement("script", ["src", bundlePath(pageDigest)]);
 
     // What the server sends: the whole document, the page's own bundle script included.
     const treeFor = (pageDigest, bodyText) => [
@@ -1597,8 +1936,11 @@ describe("Hologram", () => {
     });
 
     const bundleScript = (pageDigest) =>
+      document.head.querySelector(`script[src="${bundlePath(pageDigest)}"]`);
+
+    const chunkScript = (chunkDigest) =>
       document.head.querySelector(
-        `script[src="/hologram/page-${pageDigest}.js"]`,
+        `script[src="/hologram/chunk-${chunkDigest}.js"]`,
       );
 
     // The page a navigation patches against, which on a document load is the render mirrored
@@ -1612,16 +1954,22 @@ describe("Hologram", () => {
       );
     };
 
-    const removeBundleScripts = () =>
+    // Takes the fetched bundles out of the document and forgets them, with what waited for them.
+    const removeBundleScripts = () => {
       document.head
-        .querySelectorAll("script[src^='/hologram/page-']")
+        .querySelectorAll("script[src^='/hologram/']")
         .forEach((script) => script.remove());
+
+      ScriptRegistry.statuses.clear();
+      MountGate.require([]);
+      MountGate.cancel();
+    };
 
     beforeEach(() => {
       assignedUrls = [];
 
       assignStub = sinon
-        .stub(Hologram, "leaveApp")
+        .stub(Hologram, "navigateBrowserTo")
         .callsFake((url) => assignedUrls.push(url));
 
       fetchPageStub = sinon.stub(Client, "fetchPage");
@@ -1632,9 +1980,12 @@ describe("Hologram", () => {
       assignStub.restore();
 
       // A navigation opens a transition window and only a mount closes it, which these tests
-      // never reach - so it is closed here rather than left open for whatever runs next.
+      // never reach - so it is closed here rather than left open for whatever runs next. The
+      // same goes for the queue a held action waits in and the gate a reached mount sets.
       Hologram.domEpoch = 0;
       Hologram.registryEpoch = 0;
+      Hologram.isMounting = false;
+      ActionQueue.entries = [];
     });
 
     // A page the client cannot ask for is one only the browser can reach.
@@ -1681,6 +2032,114 @@ describe("Hologram", () => {
       assert.isAtMost(fetchPageStub.callCount, 10);
     });
 
+    describe("the snapshot of the page being left", () => {
+      let originalAssetManifest, serializeStub;
+
+      beforeEach(() => {
+        originalAssetManifest = globalThis.Hologram.assetManifest;
+
+        globalThis.Hologram.assetManifest = {
+          "hologram/runtime.js": "/hologram/runtime-abc.js",
+        };
+
+        window.requestAnimationFrame = () => {};
+        serializeStub = sinon
+          .stub(Serializer, "serialize")
+          .returns("serialized");
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.assetManifest = originalAssetManifest;
+        delete window.requestAnimationFrame;
+        serializeStub.restore();
+        removeBundleScripts();
+      });
+
+      it("is stamped with the code it was taken with", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        // No page is mounted in these tests, so the tab holds no bundle for one.
+        assert.isNull(snapshot.pageDigest);
+        assert.equal(snapshot.runtimeDigest, "abc");
+      });
+
+      it("is stamped with no runtime digest when the asset manifest names no runtime bundle", async () => {
+        globalThis.Hologram.assetManifest = {};
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.isNull(snapshot.runtimeDigest);
+      });
+
+      // The state a snapshot holds can carry values of struct types whose protocol implementations
+      // only chunks have, so the snapshot names the chunks to load before it is restored.
+      it("names the chunks the tab has loaded", async () => {
+        Hologram.requestChunks(["SNAPSHOT1", "SNAPSHOT2", "SNAPSHOT3"]);
+
+        ScriptRegistry.statuses.set("SNAPSHOT1", "loaded");
+        ScriptRegistry.statuses.set("SNAPSHOT2", "failed");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.deepStrictEqual(snapshot.chunkDigests, ["SNAPSHOT1"]);
+      });
+    });
+
+    describe("a page whose code the tab holds from an earlier visit", () => {
+      const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+
+      let requestAnimationFrameSpy;
+
+      beforeEach(() => {
+        globalThis.Hologram.config.liveReload = true;
+
+        // The frame's work is the in-app navigation. Not running it keeps these tests about
+        // whether it was scheduled at all.
+        requestAnimationFrameSpy = sinon.spy();
+        window.requestAnimationFrame = requestAnimationFrameSpy;
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config.liveReload = false;
+        LiveReload.pageBundleDigests = new Map();
+        delete window.requestAnimationFrame;
+      });
+
+      it("is handed to the browser when the server has rebuilt it since", async () => {
+        LiveReload.recordPageBundle(module7, "old");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        sinon.assert.notCalled(requestAnimationFrameSpy);
+      });
+
+      it("is shown in the app when its code is current", async () => {
+        LiveReload.recordPageBundle(module7, "same");
+
+        await Hologram.loadNewPage("/target", payloadFor("same"));
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.calledOnce(requestAnimationFrameSpy);
+      });
+
+      it("is shown in the app where live reload does not run", async () => {
+        globalThis.Hologram.config.liveReload = false;
+        LiveReload.recordPageBundle(module7, "old");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.calledOnce(requestAnimationFrameSpy);
+      });
+    });
+
     // The page the server described is patched in as soon as it arrives, so it is on screen a
     // round trip after it was asked for rather than a round trip plus a bundle plus a render.
     describe("showing the page the server described", () => {
@@ -1695,7 +2154,6 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
-        delete globalThis.Hologram.pageScriptLoaded;
         Hologram.virtualDocument = null;
 
         patchStub?.restore();
@@ -1709,7 +2167,6 @@ describe("Hologram", () => {
       // it. No mount data script exists in this tree at all.
       it("makes the page's mount data readable before the patch", async () => {
         delete globalThis.Hologram.pageMountData;
-        globalThis.Hologram.pageScriptLoaded = true;
 
         await Hologram.loadNewPage("/target", payloadFor("mount-data"));
 
@@ -1723,8 +2180,6 @@ describe("Hologram", () => {
       // announce itself. What is provable here is that the payload's fields are decoded during
       // the swap: a field that cannot be evaluated fails it.
       it("decodes the payload's mount data during the swap", async () => {
-        globalThis.Hologram.pageScriptLoaded = true;
-
         const payload = {
           ...payloadFor("bad-registry"),
           componentRegistry: "Type.map([[[",
@@ -1744,12 +2199,10 @@ describe("Hologram", () => {
       // The property the whole feature rests on: what the server described is on screen while the
       // page's own code is still in flight.
       it("puts the page on screen before its bundle has run", async () => {
-        globalThis.Hologram.pageScriptLoaded = true;
-
         await Hologram.loadNewPage("/target", payloadFor("aaa", "new content"));
 
         assert.include(document.body.textContent, "new content");
-        assert.isFalse(globalThis.Hologram.pageScriptLoaded);
+        assert.equal(ScriptRegistry.statuses.get("aaa"), "requested");
       });
 
       // The swap advances the epoch of what is displayed while the registry's epoch stays put -
@@ -2043,10 +2496,76 @@ describe("Hologram", () => {
         }
       });
 
+      // A registry listener - a <window>/<document> binding, a click_outside, a reach or resize
+      // observer - is attached to a target the patch does not own, so it is the one kind of
+      // listener that outlives the markup it was rendered for. One left alive would observe the
+      // patch itself and dispatch with the destination's epoch.
+      it("detaches the listeners of the page being left", async () => {
+        const handler = sinon.spy();
+
+        try {
+          EventListenerRegistry.reconcile([
+            {
+              target: window,
+              ...EventListeners.domEvent(window, "keydown"),
+              handler,
+            },
+          ]);
+
+          await Hologram.loadNewPage("/target", payloadFor("listeners-left"));
+
+          window.dispatchEvent(new KeyboardEvent("keydown"));
+
+          sinon.assert.notCalled(handler);
+        } finally {
+          EventListenerRegistry.detachAll();
+        }
+      });
+
+      // The order is the design: a synchronous event the patch itself causes (Chrome fires blur
+      // on a focused element being removed) must already find no listener.
+      it("detaches them before the patch", async () => {
+        const handler = sinon.spy();
+
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument").callsFake(() => {
+          window.dispatchEvent(new KeyboardEvent("keydown"));
+          return Hologram.virtualDocument;
+        });
+
+        try {
+          EventListenerRegistry.reconcile([
+            {
+              target: window,
+              ...EventListeners.domEvent(window, "keydown"),
+              handler,
+            },
+          ]);
+
+          await Hologram.loadNewPage("/target", payloadFor("listeners-patch"));
+
+          sinon.assert.calledOnce(patchStub);
+          sinon.assert.notCalled(handler);
+        } finally {
+          EventListenerRegistry.detachAll();
+        }
+      });
+
       it("fetches the bundle of a page this client has not run before", async () => {
         await Hologram.loadNewPage("/target", payloadFor("bbb"));
 
         assert.isNotNull(bundleScript("bbb"));
+        assert.equal(ScriptRegistry.statuses.get("bbb"), "requested");
+      });
+
+      // The mount is what registers the page's code and converges the two epochs, and it cannot
+      // run before the code it mounts is defined.
+      it("holds the mount until the page's bundle has announced itself", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("held"));
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), ["held"]);
+        assert.isNotNull(MountGate.pendingMount);
+        assert.equal(Hologram.domEpoch, 1);
+        assert.equal(Hologram.registryEpoch, 0);
       });
 
       // A script is keyed by the source it loads, so a bundle already in the document would be
@@ -2067,8 +2586,379 @@ describe("Hologram", () => {
       });
     });
 
-    // A bundle that never loads would otherwise end the navigation in silence: nothing dispatches
-    // hologram:pageScriptLoaded, so the mount never runs and the page on screen stays put.
+    // The browser went back or forward to an entry whose snapshot cannot be restored, so the
+    // entry's page comes from the server instead. The entry exists already: the page is shown in
+    // its place, and whatever is handed to the browser replaces it rather than adding one.
+    describe("a page loaded into the history entry the browser went to", () => {
+      const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+
+      let pushStateStub, replaceLocationStub, replaceStateStub;
+
+      beforeEach(() => {
+        window.requestAnimationFrame = (callback) => callback();
+        seedCurrentPage();
+
+        pushStateStub = sinon.stub(history, "pushState");
+        replaceStateStub = sinon.stub(history, "replaceState");
+        replaceLocationStub = sinon.stub(Hologram, "replaceBrowserLocation");
+      });
+
+      afterEach(() => {
+        replaceLocationStub.restore();
+        replaceStateStub.restore();
+        pushStateStub.restore();
+
+        globalThis.Hologram.config.liveReload = false;
+        LiveReload.pageBundleDigests = new Map();
+
+        delete window.requestAnimationFrame;
+        Hologram.virtualDocument = null;
+        removeBundleScripts();
+      });
+
+      it("follows a redirect into the same entry", async () => {
+        let showRedirectTarget;
+
+        fetchPageStub.callsFake((_toParam, onSuccess, _onNotPage) => {
+          showRedirectTarget = onSuccess;
+          return null;
+        });
+
+        await Hologram.loadNewPage(
+          "/entry",
+          redirectTo("/target"),
+          0,
+          "history-entry-1",
+        );
+
+        const loadNewPageStub = sinon.stub(Hologram, "loadNewPage");
+        const nextPayload = payloadFor("entry-1");
+
+        try {
+          showRedirectTarget(nextPayload);
+
+          sinon.assert.calledOnceWithExactly(
+            loadNewPageStub,
+            "/target",
+            nextPayload,
+            1,
+            "history-entry-1",
+          );
+        } finally {
+          loadNewPageStub.restore();
+        }
+      });
+
+      it("is handed to the browser in place of the entry when the tab holds its code in an older version", async () => {
+        globalThis.Hologram.config.liveReload = true;
+        LiveReload.recordPageBundle(module7, "old");
+
+        await Hologram.loadNewPage(
+          "/entry",
+          payloadFor("new"),
+          0,
+          "history-entry-2",
+        );
+
+        sinon.assert.calledOnceWithExactly(replaceLocationStub, "/entry");
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.notCalled(replaceStateStub);
+      });
+
+      it("is handed to the browser in place of the entry when it redirects to a target that names no page", async () => {
+        await Hologram.loadNewPage(
+          "/entry",
+          {to: "https://example.com/x", type: "redirect"},
+          0,
+          "history-entry-3",
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          replaceLocationStub,
+          "https://example.com/x",
+        );
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      it("is shown in the entry, and no entry is added", async () => {
+        await Hologram.loadNewPage(
+          "/entry",
+          payloadFor("entry-4"),
+          0,
+          "history-entry-4",
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          replaceStateStub,
+          "history-entry-4",
+          null,
+          "/entry",
+        );
+
+        sinon.assert.notCalled(pushStateStub);
+        assert.isNotNull(bundleScript("entry-4"));
+      });
+    });
+
+    // A value of a struct type whose protocol implementations no bundle carries needs the chunks
+    // that hold them, and so does the page's own code for the types it names. The server says
+    // which, by digest.
+    describe("chunks the page needs", () => {
+      const payloadWithChunks = (pageDigest, chunkDigests) => ({
+        ...payloadFor(pageDigest),
+        chunks: chunkDigests,
+      });
+
+      beforeEach(() => {
+        window.requestAnimationFrame = (callback) => callback();
+        seedCurrentPage();
+      });
+
+      afterEach(() => {
+        delete window.requestAnimationFrame;
+        Hologram.virtualDocument = null;
+        removeBundleScripts();
+      });
+
+      it("are fetched", async () => {
+        await Hologram.loadNewPage(
+          "/target",
+          payloadWithChunks("chunks-1", ["AAAAAAAA", "BBBBBBBB"]),
+        );
+
+        assert.isNotNull(chunkScript("AAAAAAAA"));
+        assert.isNotNull(chunkScript("BBBBBBBB"));
+        assert.equal(ScriptRegistry.statuses.get("AAAAAAAA"), "requested");
+        assert.equal(ScriptRegistry.statuses.get("BBBBBBBB"), "requested");
+      });
+
+      it("are not fetched again when the tab has them", async () => {
+        ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+        await Hologram.loadNewPage(
+          "/target",
+          payloadWithChunks("chunks-2", ["AAAAAAAA", "BBBBBBBB"]),
+        );
+
+        assert.isNull(chunkScript("AAAAAAAA"));
+        assert.isNotNull(chunkScript("BBBBBBBB"));
+      });
+
+      it("hold the mount with the page's bundle until all have announced themselves", async () => {
+        ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+        await Hologram.loadNewPage(
+          "/target",
+          payloadWithChunks("chunks-3", ["AAAAAAAA", "BBBBBBBB"]),
+        );
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "chunks-3",
+          "AAAAAAAA",
+          "BBBBBBBB",
+        ]);
+
+        assert.isNotNull(MountGate.pendingMount);
+      });
+
+      it("are none for a payload that names none", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("chunks-4"));
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "chunks-4",
+        ]);
+      });
+
+      // The mount is never going to run without the chunk, like without the page's bundle.
+      it("end the navigation when one fails to load", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        const warnStub = sinon.stub(console, "warn");
+
+        try {
+          await Hologram.loadNewPage(
+            "/target",
+            payloadWithChunks("chunks-5", ["AAAAAAAA"]),
+          );
+
+          assert.throws(
+            () => chunkScript("AAAAAAAA").onerror(),
+            HologramRuntimeError,
+            "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+          );
+
+          assert.isNull(MountGate.pendingMount);
+
+          Hologram.scheduleAction(
+            Type.actionStruct({
+              name: Type.atom("after_chunk_failure"),
+              params: Type.map(),
+              target: cid1,
+            }),
+            Hologram.domEpoch,
+          );
+
+          clock.tick(5000);
+
+          sinon.assert.notCalled(executeActionStub);
+          sinon.assert.calledOnce(warnStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+          warnStub.restore();
+        }
+      });
+
+      // A navigation from the server takes over from a restore still waiting for its chunks. The
+      // chunk is the navigation's now, so its failure ends the navigation like any other chunk's,
+      // and the restore, superseded, does nothing about it.
+      it("end the navigation when one a superseded restore waited for too fails to load", async () => {
+        const instanceId = App.instanceId;
+
+        const pageSnapshot = {
+          chunkDigests: ["AAAAAAAA"],
+          componentRegistryEntries: Type.map(),
+          instanceId: "superseded-restore-instance",
+          pageModule: Type.atom(
+            "Elixir.Hologram.Test.Fixtures.SupersededRestore",
+          ),
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-superseded",
+          Serializer.serialize(pageSnapshot, "client"),
+        );
+
+        const consoleErrorStub = sinon.stub(console, "error");
+
+        const fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("superseded-1");
+            }
+
+            return Promise.resolve("superseded-1");
+          });
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-superseded"});
+
+          await Hologram.loadNewPage(
+            "/target",
+            payloadWithChunks("chunks-8", ["AAAAAAAA"]),
+          );
+
+          assert.throws(
+            () => chunkScript("AAAAAAAA").onerror(),
+            HologramRuntimeError,
+            "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          assert.isNull(MountGate.pendingMount);
+          assert.strictEqual(App.instanceId, instanceId);
+
+          // The entry's page is not asked for either: the navigation is somewhere else by now.
+          sinon.assert.notCalled(fetchPageStub);
+        } finally {
+          fetchStub.restore();
+          consoleErrorStub.restore();
+          LiveReload.pageBundleDigests.delete(pageSnapshot.pageModule.value);
+          sessionStorage.clear();
+          ComponentRegistry.clear();
+          App.instanceId = instanceId;
+        }
+      });
+
+      // While a restore waits for its chunks the tab still holds the page being left, so a snapshot
+      // saved then is that page's, and the entry the browser went to keeps its own.
+      it("leave the snapshot of an entry whose restore still waits for them as it was", async () => {
+        const instanceId = App.instanceId;
+
+        const pageSnapshot = {
+          chunkDigests: ["AAAAAAAA"],
+          componentRegistryEntries: Type.map(),
+          instanceId: "waiting-restore-instance",
+          pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.WaitingRestore"),
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        const snapshotKey = "hologram_page_snapshot_history-waiting";
+        const storedSnapshot = Serializer.serialize(pageSnapshot, "client");
+
+        sessionStorage.setItem(snapshotKey, storedSnapshot);
+
+        const consoleErrorStub = sinon.stub(console, "error");
+        const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-waiting"});
+
+          // A navigation saves the page it leaves.
+          await Hologram.loadNewPage("/target", payloadFor("chunks-9"));
+
+          assert.strictEqual(
+            sessionStorage.getItem(snapshotKey),
+            storedSnapshot,
+          );
+        } finally {
+          // The restore is settled, so that it does not stay in flight for the tests that follow.
+          globalThis.Hologram.pendingScripts = [
+            {define: () => null, digest: "AAAAAAAA"},
+          ];
+
+          ScriptRegistry.defineLoaded({});
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          fetchStub.restore();
+          consoleErrorStub.restore();
+          sessionStorage.clear();
+          ComponentRegistry.clear();
+          App.instanceId = instanceId;
+        }
+      });
+
+      // The chunk of a page left behind by a later navigation is no longer what the mount waits
+      // for, so its failure says nothing about the navigation now in flight.
+      it("leave a later navigation's mount waiting when one of an earlier navigation fails", async () => {
+        await Hologram.loadNewPage(
+          "/target-1",
+          payloadWithChunks("chunks-6", ["AAAAAAAA"]),
+        );
+
+        const supersededScript = chunkScript("AAAAAAAA");
+
+        await Hologram.loadNewPage(
+          "/target-2",
+          payloadWithChunks("chunks-7", ["BBBBBBBB"]),
+        );
+
+        assert.throws(() => supersededScript.onerror(), HologramRuntimeError);
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "chunks-7",
+          "BBBBBBBB",
+        ]);
+
+        assert.isNotNull(MountGate.pendingMount);
+      });
+    });
+
+    // A bundle that never loads would otherwise end the navigation in silence: it never announces
+    // itself, so the mount never runs and the page on screen stays put.
     describe("page bundle that fails to load", () => {
       beforeEach(() => {
         window.requestAnimationFrame = (callback) => callback();
@@ -2077,7 +2967,6 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
-        delete globalThis.Hologram.pageScriptLoaded;
         Hologram.virtualDocument = null;
         removeBundleScripts();
       });
@@ -2092,8 +2981,50 @@ describe("Hologram", () => {
         assert.throws(
           () => script.onerror(),
           HologramRuntimeError,
-          "Failed to load page bundle: /hologram/page-eee.js",
+          `Failed to load script: ${bundlePath("eee")}`,
         );
+      });
+
+      it("forgets the mount that waited for the bundle", async () => {
+        await Hologram.loadNewPage("/target-fff", payloadFor("fff"));
+
+        assert.isNotNull(MountGate.pendingMount);
+
+        assert.throws(
+          () => bundleScript("fff").onerror(),
+          HologramRuntimeError,
+        );
+
+        assert.isNull(MountGate.pendingMount);
+      });
+
+      // The bundle of a page left behind by a later navigation is no longer what the mount waits
+      // for, so its failure says nothing about the navigation now in flight.
+      it("leaves a later navigation's mount waiting", async () => {
+        await Hologram.loadNewPage("/target-iii", payloadFor("iii"));
+        const supersededScript = bundleScript("iii");
+
+        await Hologram.loadNewPage("/target-jjj", payloadFor("jjj"));
+
+        assert.throws(() => supersededScript.onerror(), HologramRuntimeError);
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), ["jjj"]);
+        assert.isNotNull(MountGate.pendingMount);
+      });
+
+      // A new need for the bundle is a new attempt at it.
+      it("fetches the bundle again on the next navigation to the page", async () => {
+        await Hologram.loadNewPage("/target-kkk", payloadFor("kkk"));
+
+        const failedScript = bundleScript("kkk");
+        assert.throws(() => failedScript.onerror(), HologramRuntimeError);
+        failedScript.remove();
+
+        await Hologram.loadNewPage("/target-kkk", payloadFor("kkk"));
+
+        assert.isNotNull(bundleScript("kkk"));
+        assert.equal(ScriptRegistry.statuses.get("kkk"), "requested");
+        assert.isNotNull(MountGate.pendingMount);
       });
 
       // The mount that would have answered for this page is never going to run, so nothing it
@@ -2114,7 +3045,7 @@ describe("Hologram", () => {
           assert.throws(
             () => bundleScript("hhh").onerror(),
             HologramRuntimeError,
-            "Failed to load page bundle: /hologram/page-hhh.js",
+            `Failed to load script: ${bundlePath("hhh")}`,
           );
 
           Hologram.scheduleAction(
@@ -2140,13 +3071,13 @@ describe("Hologram", () => {
   });
 
   describe("handlePrefetchPageNotPage()", () => {
-    let leaveAppStub;
+    let navigateBrowserToStub;
 
     beforeEach(() => {
-      leaveAppStub = sinon.stub(Hologram, "leaveApp");
+      navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
     });
 
-    afterEach(() => leaveAppStub.restore());
+    afterEach(() => navigateBrowserToStub.restore());
 
     it("leaves the app when navigate has already been confirmed", () => {
       Hologram.prefetchedPages = new Map([
@@ -2165,7 +3096,10 @@ describe("Hologram", () => {
       Hologram.handlePrefetchPageNotPage("dummy_map_key");
 
       assert.equal(Hologram.prefetchedPages.size, 0);
-      sinon.assert.calledOnceWithExactly(leaveAppStub, "/my-page-path");
+      sinon.assert.calledOnceWithExactly(
+        navigateBrowserToStub,
+        "/my-page-path",
+      );
     });
 
     // Before the click, the answer is only remembered: leaving the app on hover would take the
@@ -2190,7 +3124,7 @@ describe("Hologram", () => {
 
       assert.equal(Hologram.prefetchedPages.size, 1);
       assert.isFalse(Hologram.prefetchedPages.get(mapKey).isPage);
-      sinon.assert.notCalled(leaveAppStub);
+      sinon.assert.notCalled(navigateBrowserToStub);
     });
 
     it("no prefetchedPages map entry", () => {
@@ -2199,7 +3133,7 @@ describe("Hologram", () => {
       Hologram.handlePrefetchPageNotPage("dummy_map_key");
 
       assert.equal(Hologram.prefetchedPages.size, 0);
-      sinon.assert.notCalled(leaveAppStub);
+      sinon.assert.notCalled(navigateBrowserToStub);
     });
   });
 
@@ -2283,6 +3217,265 @@ describe("Hologram", () => {
       });
 
       sinon.assert.notCalled(loadNewPageStub);
+    });
+  });
+
+  describe("handlePopstateEvent()", () => {
+    // The history's side of the navigation boundary. The handler needs a page to restore, and
+    // the only way in from outside is the storage it reads: a snapshot is seeded under the key
+    // the handler derives from the history id, and in jsdom the OPFS read throws into the
+    // session storage fallback.
+    it("detaches the listeners of the page being left", async () => {
+      const handler = sinon.spy();
+      const instanceId = App.instanceId;
+
+      const pageSnapshot = {
+        componentRegistryEntries: Type.map(),
+        instanceId: "popstate-instance",
+        pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+        pageParams: Type.map(),
+        scrollPosition: [0, 0],
+        subscriptionReceipts: [],
+      };
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-1",
+        Serializer.serialize(pageSnapshot, "client"),
+      );
+
+      const consoleErrorStub = sinon.stub(console, "error");
+      const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+      try {
+        EventListenerRegistry.reconcile([
+          {
+            target: window,
+            ...EventListeners.domEvent(window, "keydown"),
+            handler,
+          },
+        ]);
+
+        await Hologram.handlePopstateEvent({state: "history-1"});
+
+        window.dispatchEvent(new KeyboardEvent("keydown"));
+
+        sinon.assert.notCalled(handler);
+      } finally {
+        EventListenerRegistry.detachAll();
+        fetchStub.restore();
+        consoleErrorStub.restore();
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
+    });
+
+    // The state a snapshot holds can carry values of struct types whose protocol implementations
+    // only the chunks it was taken with have, so it is restored once they are in. A snapshot can be
+    // older than the build that serves the app now, and its chunks are named by digest, so the
+    // files it names can be gone: the snapshot is then passed over, with the tab left as it was.
+    describe("snapshot that names chunks", () => {
+      const pageModule = Type.atom(
+        "Elixir.Hologram.Test.Fixtures.RestoredFromSnapshot",
+      );
+
+      const announce = (digest) => {
+        globalThis.Hologram.pendingScripts = [
+          {define: () => null, digest: digest},
+        ];
+
+        ScriptRegistry.defineLoaded({});
+      };
+
+      const flushPromises = () =>
+        new Promise((resolve) => setTimeout(resolve, 0));
+
+      const snapshotChunkScripts = () =>
+        Array.from(
+          document.head.querySelectorAll(
+            'script[src="/hologram/chunk-SNAPSHOT.js"]',
+          ),
+        );
+
+      // Filed under a history id of its own each time: the handler first saves the page being
+      // left under the id it holds, which is the one the last restore went to.
+      const seedSnapshot = (historyId) => {
+        const pageSnapshot = {
+          chunkDigests: ["SNAPSHOT"],
+          componentRegistryEntries: Type.map(),
+          instanceId: "restored-instance",
+          pageModule: pageModule,
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        sessionStorage.setItem(
+          `hologram_page_snapshot_${historyId}`,
+          Serializer.serialize(pageSnapshot, "client"),
+        );
+      };
+
+      let consoleErrorStub, fetchPageStub, fetchStub, instanceId;
+
+      beforeEach(() => {
+        instanceId = App.instanceId;
+        consoleErrorStub = sinon.stub(console, "error");
+        fetchPageStub = sinon.stub(Client, "fetchPage");
+
+        // The tab does not hold the page's code, so the server is asked which bundle serves it,
+        // and the mount then waits for that bundle.
+        fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("restored-1");
+            }
+
+            return Promise.resolve("restored-1");
+          });
+      });
+
+      afterEach(() => {
+        fetchStub.restore();
+        fetchPageStub.restore();
+        consoleErrorStub.restore();
+        globalThis.Hologram.config.liveReload = false;
+
+        document.head
+          .querySelectorAll("script[src^='/hologram/']")
+          .forEach((script) => script.remove());
+
+        ScriptRegistry.statuses.clear();
+        MountGate.require([]);
+        MountGate.cancel();
+        LiveReload.pageBundleDigests.delete(pageModule.value);
+
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      // The entry's page is asked for the way a navigation asks for one, and goes into the entry
+      // that exists already. Nothing of the tab is given up for it.
+      it("is passed over, and the entry's page asked for, when one of its chunks fails to load", async () => {
+        seedSnapshot("history-chunks-1");
+
+        await Hologram.handlePopstateEvent({state: "history-chunks-1"});
+
+        const [script] = snapshotChunkScripts();
+
+        // The restore is prepared for it, so it is no error.
+        assert.doesNotThrow(() => script.onerror());
+
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        assert.isNull(MountGate.pendingMount);
+
+        sinon.assert.calledOnce(fetchPageStub);
+
+        const [toParam, showPage] = fetchPageStub.firstCall.args;
+
+        assert.deepStrictEqual(toParam, Type.tuple([pageModule, Type.map()]));
+
+        const loadNewPageStub = sinon.stub(Hologram, "loadNewPage");
+        const payload = {type: "page"};
+
+        try {
+          showPage(payload);
+
+          const {hash, pathname, search} = window.location;
+
+          sinon.assert.calledOnceWithExactly(
+            loadNewPageStub,
+            `${pathname}${search}${hash}`,
+            payload,
+            0,
+            "history-chunks-1",
+          );
+        } finally {
+          loadNewPageStub.restore();
+        }
+      });
+
+      // Taken with code other than the page's current one, which is only asked about where live
+      // reload runs.
+      it("is passed over, and the entry's page asked for, when it is outdated", async () => {
+        globalThis.Hologram.config.liveReload = true;
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-chunks-4",
+          Serializer.serialize(
+            {
+              chunkDigests: ["SNAPSHOT"],
+              componentRegistryEntries: Type.map(),
+              instanceId: "restored-instance",
+              pageDigest: "outdated-1",
+              pageModule: pageModule,
+              pageParams: Type.map(),
+              runtimeDigest: null,
+              scrollPosition: [0, 0],
+              subscriptionReceipts: [],
+            },
+            "client",
+          ),
+        );
+
+        await Hologram.handlePopstateEvent({state: "history-chunks-4"});
+        await flushPromises();
+
+        assert.deepStrictEqual(snapshotChunkScripts(), []);
+        assert.strictEqual(App.instanceId, instanceId);
+        assert.isNull(MountGate.pendingMount);
+
+        sinon.assert.calledOnce(fetchPageStub);
+
+        assert.deepStrictEqual(
+          fetchPageStub.firstCall.args[0],
+          Type.tuple([pageModule, Type.map()]),
+        );
+      });
+
+      it("is restored at once when the tab has its chunks", async () => {
+        ScriptRegistry.statuses.set("SNAPSHOT", "loaded");
+        seedSnapshot("history-chunks-2");
+
+        await Hologram.handlePopstateEvent({state: "history-chunks-2"});
+        await flushPromises();
+
+        assert.deepStrictEqual(snapshotChunkScripts(), []);
+        assert.strictEqual(App.instanceId, "restored-instance");
+        assert.isNotNull(MountGate.pendingMount);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      it("is restored once its chunks have loaded", async () => {
+        seedSnapshot("history-chunks-3");
+
+        await Hologram.handlePopstateEvent({state: "history-chunks-3"});
+        await flushPromises();
+
+        assert.strictEqual(snapshotChunkScripts().length, 1);
+        assert.strictEqual(App.instanceId, instanceId);
+        assert.isNull(MountGate.pendingMount);
+
+        announce("SNAPSHOT");
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, "restored-instance");
+
+        assert.deepStrictEqual(Array.from(MountGate.requiredDigests), [
+          "restored-1",
+        ]);
+
+        assert.isNotNull(MountGate.pendingMount);
+        sinon.assert.notCalled(fetchPageStub);
+      });
     });
   });
 
@@ -2395,11 +3588,18 @@ describe("Hologram", () => {
       target: Type.bitstring("my_target_6"),
     });
 
-    let entry1, entry2, entry3, entry4, entry5, entry6;
+    const delayedAction = Type.actionStruct({
+      name: Type.atom("delayed_action"),
+      params: Type.map(),
+      target: Type.nil(),
+      delay: Type.integer(3000),
+    });
+
+    let entry1, entry2, entry3, entry4, entry5, entry6, delayedEntry;
 
     beforeEach(() => {
       ComponentRegistry.clear();
-      InitActionQueue.dequeueAll();
+      ActionQueue.entries = [];
 
       entry1 = Type.map([
         [Type.atom("module"), Type.alias("Module1")],
@@ -2430,6 +3630,20 @@ describe("Hologram", () => {
         [Type.atom("module"), Type.alias("Module6")],
         [Type.atom("struct"), Type.componentStruct({nextAction: action6})],
       ]);
+
+      delayedEntry = Type.map([
+        [Type.atom("module"), Type.alias("DelayedModule")],
+        [
+          Type.atom("struct"),
+          Type.componentStruct({nextAction: delayedAction}),
+        ],
+      ]);
+    });
+
+    // Nothing runs the queue in these tests, so what they enqueue would be ahead of the next
+    // test's dispatch.
+    afterEach(() => {
+      ActionQueue.entries = [];
     });
 
     it("queues actions from all components that have next_action set", () => {
@@ -2440,7 +3654,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 2);
 
       assert.deepStrictEqual(queuedActions[0], action1);
@@ -2456,7 +3670,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 2);
 
       assert.deepStrictEqual(queuedActions[0], action1);
@@ -2466,7 +3680,7 @@ describe("Hologram", () => {
     it("handles empty component registry", () => {
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 0);
     });
 
@@ -2478,7 +3692,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 0);
     });
 
@@ -2487,10 +3701,12 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
 
       // Should not modify the action
       assert.deepStrictEqual(queuedActions[0], action1);
+
+      assert.equal(ActionQueue.entries[0].epoch, Hologram.registryEpoch);
     });
 
     it("adds component ID as target when action has nil target", () => {
@@ -2498,7 +3714,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
 
       const expectedAction = Erlang_Maps["put/3"](
         Type.atom("target"),
@@ -2518,7 +3734,7 @@ describe("Hologram", () => {
 
       Hologram.queueActionsFromServerInits();
 
-      const queuedActions = InitActionQueue.dequeueAll();
+      const queuedActions = ActionQueue.entries.map((entry) => entry.action);
       assert.equal(queuedActions.length, 3);
 
       assert.deepStrictEqual(queuedActions[0], action2);
@@ -2547,6 +3763,33 @@ describe("Hologram", () => {
         Type.nil(),
       );
     });
+
+    // A delay in init/3 means "this long after the mount", and an entry runs as soon as it can.
+    it("schedules a delayed action instead of queueing it", () => {
+      const scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+
+      try {
+        ComponentRegistry.entries = Type.map([[cid1, delayedEntry]]);
+
+        Hologram.queueActionsFromServerInits();
+
+        const expectedAction = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          cid1,
+          delayedAction,
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          scheduleActionStub,
+          expectedAction,
+          Hologram.registryEpoch,
+        );
+
+        assert.deepStrictEqual(ActionQueue.entries, []);
+      } finally {
+        scheduleActionStub.restore();
+      }
+    });
   });
 
   describe("queueSelfEchoes()", () => {
@@ -2563,19 +3806,55 @@ describe("Hologram", () => {
     });
 
     beforeEach(() => {
-      InitActionQueue.dequeueAll();
+      ActionQueue.entries = [];
+    });
+
+    // Nothing runs the queue in these tests, so what they enqueue would be ahead of the next
+    // test's dispatch.
+    afterEach(() => {
+      ActionQueue.entries = [];
     });
 
     it("does not enqueue anything when the list is empty", () => {
       Hologram.queueSelfEchoes(Type.list([]));
 
-      assert.deepStrictEqual(InitActionQueue.dequeueAll(), []);
+      assert.deepStrictEqual(ActionQueue.entries, []);
     });
 
-    it("enqueues each action in order", () => {
+    it("enqueues each action in order, stamped with the page the registry answers for", () => {
       Hologram.queueSelfEchoes(Type.list([action1, action2]));
 
-      assert.deepStrictEqual(InitActionQueue.dequeueAll(), [action1, action2]);
+      assert.deepStrictEqual(ActionQueue.entries, [
+        {action: action1, epoch: Hologram.registryEpoch},
+        {action: action2, epoch: Hologram.registryEpoch},
+      ]);
+    });
+
+    it("schedules a delayed self echo instead of queueing it", () => {
+      const scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+
+      const delayedAction = Type.actionStruct({
+        name: Type.atom("delayed_self_echo"),
+        params: Type.map(),
+        target: Type.bitstring("page"),
+        delay: Type.integer(3000),
+      });
+
+      try {
+        Hologram.queueSelfEchoes(Type.list([action1, delayedAction]));
+
+        sinon.assert.calledOnceWithExactly(
+          scheduleActionStub,
+          delayedAction,
+          Hologram.registryEpoch,
+        );
+
+        assert.deepStrictEqual(ActionQueue.entries, [
+          {action: action1, epoch: Hologram.registryEpoch},
+        ]);
+      } finally {
+        scheduleActionStub.restore();
+      }
     });
   });
 
@@ -2597,6 +3876,7 @@ describe("Hologram", () => {
     afterEach(() => {
       clock?.restore();
       clock = null;
+      ActionQueue.entries = [];
       Hologram.isRendering = false;
       Hologram.virtualDocument = null;
       Renderer.listenerBindings = [];
@@ -2605,7 +3885,7 @@ describe("Hologram", () => {
 
     // The seam for a dispatch that arrives from inside the patch: a scheduled action whose timer
     // is fired by hand while the patch stub is on the stack, which is where a focusout flush
-    // reaches the settle rule in a real page.
+    // reaches the queue in a real page.
     const stubRender = (patchFake) => {
       clock = sinon.useFakeTimers();
 
@@ -2763,7 +4043,7 @@ describe("Hologram", () => {
       assert.deepStrictEqual(calls, ["finish patch", "execute action"]);
     });
 
-    it("runs held dispatches in the order they arrived", () => {
+    it("runs waiting dispatches in the order they arrived", () => {
       const executeActionStub = sinon.stub(Hologram, "executeAction");
 
       stubRender(() => {
@@ -2790,7 +4070,7 @@ describe("Hologram", () => {
     // A single focusout flushes every pending slot on the element at once, so a queue of several
     // is the ordinary case and they have nothing to do with one another - the same bargain the
     // debouncer makes with the callbacks it flushes.
-    it("delivers every held dispatch when one of them raises, and raises the first error", () => {
+    it("delivers every waiting dispatch when one of them raises, and raises the first error", () => {
       const executed = [];
 
       sinon.stub(Hologram, "executeAction").callsFake((action) => {
@@ -2814,7 +4094,7 @@ describe("Hologram", () => {
 
     // A render that raised left the DOM and the virtual document describing different pages, so
     // running the queue against that repairs nothing. It waits for a render that finishes.
-    it("keeps a held dispatch when the render raises, and runs it on the next render", () => {
+    it("keeps a waiting dispatch when the render raises, and runs it on the next render", () => {
       const executeActionStub = sinon.stub(Hologram, "executeAction");
 
       let patchCount = 0;
@@ -2846,6 +4126,54 @@ describe("Hologram", () => {
       Hologram.render();
 
       sinon.assert.calledOnceWithExactly(executeActionStub, deferredAction1, 0);
+    });
+  });
+
+  describe("requestChunks()", () => {
+    const chunkScripts = () =>
+      Array.from(
+        document.head.querySelectorAll("script[src^='/hologram/chunk-']"),
+      );
+
+    afterEach(() => {
+      chunkScripts().forEach((script) => script.remove());
+      ScriptRegistry.statuses.clear();
+    });
+
+    it("fetches each chunk from the path its digest names", () => {
+      Hologram.requestChunks(["AAAAAAAA", "BBBBBBBB"]);
+
+      assert.deepStrictEqual(
+        chunkScripts().map((script) => script.getAttribute("src")),
+        ["/hologram/chunk-AAAAAAAA.js", "/hologram/chunk-BBBBBBBB.js"],
+      );
+
+      assert.deepStrictEqual(Array.from(ScriptRegistry.statuses), [
+        ["AAAAAAAA", "requested"],
+        ["BBBBBBBB", "requested"],
+      ]);
+    });
+
+    it("passes over a chunk the tab has", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+      Hologram.requestChunks(["AAAAAAAA"]);
+
+      assert.deepStrictEqual(chunkScripts(), []);
+    });
+
+    it("raises when a chunk fails to load", () => {
+      Hologram.requestChunks(["AAAAAAAA"]);
+
+      const [script] = chunkScripts();
+
+      assert.throws(
+        () => script.onerror(),
+        HologramRuntimeError,
+        "Failed to load script: /hologram/chunk-AAAAAAAA.js",
+      );
+
+      assert.equal(ScriptRegistry.statuses.get("AAAAAAAA"), "failed");
     });
   });
 
@@ -3015,6 +4343,116 @@ describe("Hologram", () => {
       // Action should execute after 0ms timeout
       clock.tick(0);
       sinon.assert.calledOnceWithExactly(executeActionStub, actionZeroDelay, 0);
+    });
+  });
+
+  describe("schedulePushedAction()", () => {
+    let originalRegistryEpoch, scheduleActionStub;
+
+    const action = Type.actionStruct({
+      name: Type.atom("pushed_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const chunkScripts = () =>
+      Array.from(
+        document.head.querySelectorAll("script[src^='/hologram/chunk-']"),
+      );
+
+    // Lets the continuations of the promises settled so far run.
+    const flushPromises = () =>
+      new Promise((resolve) => setTimeout(resolve, 0));
+
+    const announce = (digest) => {
+      globalThis.Hologram.pendingScripts = [
+        {define: () => null, digest: digest},
+      ];
+      ScriptRegistry.defineLoaded({});
+    };
+
+    beforeEach(() => {
+      originalRegistryEpoch = Hologram.registryEpoch;
+      Hologram.registryEpoch = 3;
+
+      scheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+    });
+
+    afterEach(() => {
+      Hologram.registryEpoch = originalRegistryEpoch;
+      scheduleActionStub.restore();
+
+      chunkScripts().forEach((script) => script.remove());
+      ScriptRegistry.statuses.clear();
+      ScriptRegistry.waiters = [];
+      delete globalThis.Hologram.pendingScripts;
+    });
+
+    it("fetches the chunks the tab lacks", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+      Hologram.schedulePushedAction(action, ["AAAAAAAA", "BBBBBBBB"]);
+
+      assert.deepStrictEqual(
+        chunkScripts().map((script) => script.getAttribute("src")),
+        ["/hologram/chunk-BBBBBBBB.js"],
+      );
+    });
+
+    it("schedules the action at once when it needs no chunk", () => {
+      Hologram.schedulePushedAction(action, []);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+    });
+
+    it("schedules the action at once when the tab has its chunks", () => {
+      ScriptRegistry.statuses.set("AAAAAAAA", "loaded");
+
+      Hologram.schedulePushedAction(action, ["AAAAAAAA"]);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+      assert.deepStrictEqual(chunkScripts(), []);
+    });
+
+    // A navigation while the chunk is fetched must leave the action stamped with the page it was
+    // sent to, so that the queue drops it as stale.
+    it("schedules the action once its chunks have loaded, stamped with the epoch it arrived in", async () => {
+      Hologram.schedulePushedAction(action, ["AAAAAAAA", "BBBBBBBB"]);
+      Hologram.registryEpoch = 4;
+
+      announce("AAAAAAAA");
+      await flushPromises();
+
+      sinon.assert.notCalled(scheduleActionStub);
+
+      announce("BBBBBBBB");
+      await flushPromises();
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+    });
+
+    it("drops the action, and says so, when one of its chunks fails to load", async () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        Hologram.schedulePushedAction(action, ["AAAAAAAA"]);
+
+        const [script] = chunkScripts();
+
+        assert.throws(() => script.onerror(), HologramRuntimeError);
+        await flushPromises();
+
+        sinon.assert.notCalled(scheduleActionStub);
+
+        sinon.assert.calledOnceWithExactly(
+          warnStub,
+          "Hologram: dropped a pushed action whose chunk failed to load:",
+          ":pushed_action",
+          "AAAAAAAA",
+        );
+      } finally {
+        warnStub.restore();
+      }
     });
   });
 });

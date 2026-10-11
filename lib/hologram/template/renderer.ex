@@ -1,6 +1,7 @@
 defmodule Hologram.Template.Renderer do
   @moduledoc false
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Auth
@@ -17,10 +18,16 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Entity.Validator
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
   alias Hologram.Sync.Carry
   alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
+
+  # The one placeholder the runtime component leaves between elements rather than in a script: the
+  # script elements of the chunks a page needs before it mounts (see
+  # `interpolate_chunk_script_tags_in_tree/2`).
+  @chunk_script_tags_placeholder "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
 
   # Every placeholder the mount script carries, whoever fills it in - the renderer answers for
   # most, the controller for the rest.
@@ -187,6 +194,52 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Maps the chunks a page needs before it mounts, given by their digests, to the placeholder the
+  mount script carries them under: `$CHUNK_DIGESTS_JS_PLACEHOLDER`, as a JavaScript array of
+  strings. The digests are the compiler's own, which need no escaping.
+  """
+  @spec chunk_replacements([String.t()]) :: %{String.t() => String.t()}
+  def chunk_replacements(chunk_digests) do
+    %{"$CHUNK_DIGESTS_JS_PLACEHOLDER" => Jason.encode!(chunk_digests)}
+  end
+
+  @doc """
+  Substitutes the `$CHUNK_SCRIPT_TAGS_PLACEHOLDER` token with a script element per chunk given by
+  its digest, across the given tree: the text node holding the token is replaced by the elements.
+
+  In the tree rather than in the printed document, like `interpolate_js_in_tree/2`: the token sits
+  between elements, where the runtime component renders it as the whole of a text node, and a text
+  node that says anything else is something a page rendered - from what someone typed, maybe - and
+  is left as it was.
+  """
+  @spec interpolate_chunk_script_tags_in_tree(tree, [String.t()]) :: tree
+  def interpolate_chunk_script_tags_in_tree(tree, chunk_digests)
+
+  def interpolate_chunk_script_tags_in_tree(
+        {:element, tag_name, attributes, children},
+        chunk_digests
+      ) do
+    {:element, tag_name, attributes,
+     interpolate_chunk_script_tags_in_tree(children, chunk_digests)}
+  end
+
+  def interpolate_chunk_script_tags_in_tree(nodes, chunk_digests) when is_list(nodes) do
+    Enum.flat_map(nodes, fn
+      {:text, text} = node ->
+        if String.trim(text) == @chunk_script_tags_placeholder do
+          chunk_script_elements(chunk_digests)
+        else
+          [node]
+        end
+
+      node ->
+        [interpolate_chunk_script_tags_in_tree(node, chunk_digests)]
+    end)
+  end
+
+  def interpolate_chunk_script_tags_in_tree(node, _chunk_digests), do: node
+
+  @doc """
   Substitutes the given placeholders with the JavaScript source each maps to, in one pass over
   the given text.
 
@@ -318,15 +371,19 @@ defmodule Hologram.Template.Renderer do
   Renders the given page as its two projections: the HTML a document load is served, and the
   evaluated tree the same render is described by as data.
 
-  Only the HTML has the mount data interpolated into it, since a cold document has no channel for
-  that state but the markup it is sent. The tree keeps the placeholders verbatim and the mount
-  data is returned beside it, for a caller that carries the two as separate fields. Both
-  projections leave the Realtime placeholders for the caller to substitute.
+  The tree keeps the placeholders verbatim and the mount data is returned beside it: a caller
+  serving a document substitutes the mount data into the tree it prints, since a cold document has
+  no channel for that state but the markup it is sent, and a caller carrying the two as separate
+  fields leaves them apart. Both leave the Realtime placeholders for the caller to substitute, and
+  the chunk placeholders too: the chunks the struct types in the component registry need are
+  returned as digests, and the caller knows of more (see `chunk_replacements/1` and
+  `interpolate_chunk_script_tags_in_tree/2`).
 
   ## Examples
 
       iex> render_page(MyPage, %{param: "value"}, %Server{}, initial_page?: true)
       %{
+        chunk_digests: ["ABCDEFGH"],
         component_registry: %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
         mount_data: %{
           actor_user_id: "123",
@@ -342,6 +399,7 @@ defmodule Hologram.Template.Renderer do
       }
   """
   @spec render_page(module, %{atom => any}, Server.t(), T.opts()) :: %{
+          chunk_digests: [String.t()],
           component_registry: %{String.t() => %{module: module, struct: Component.t()}},
           mount_data: %{
             actor_user_id: String.t(),
@@ -378,6 +436,7 @@ defmodule Hologram.Template.Renderer do
       page_component_struct
       |> put_initial_page_flag_context(initial_page?)
       |> put_page_digest_context(page_digest)
+      |> put_page_module_context(page_module)
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
       |> maybe_put_instance_id_context(opts, initial_page?)
@@ -452,6 +511,7 @@ defmodule Hologram.Template.Renderer do
     # which is the caller's to do, since only the caller holds the Realtime values that go in the
     # same pass.
     %{
+      chunk_digests: ChunkRegistry.lookup_term(component_registry_for_client),
       component_registry: component_registry_with_page_struct,
       mount_data: mount_data_js,
       server_struct: final_server_struct,
@@ -936,6 +996,15 @@ defmodule Hologram.Template.Renderer do
     Enum.map(param_names, &from_query_arg!(module, prop_name, &1, props))
   end
 
+  # What the runtime component renders for the runtime script, once per chunk: an async script
+  # element, by the chunk's bundle path.
+  defp chunk_script_elements(chunk_digests) do
+    Enum.map(chunk_digests, fn chunk_digest ->
+      {:element, "script",
+       [{"async", []}, {"src", [text: RouterHelpers.chunk_bundle_path(chunk_digest)]}], []}
+    end)
+  end
+
   defp has_cid_prop?(props) do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
@@ -1167,6 +1236,14 @@ defmodule Hologram.Template.Renderer do
       page_component_struct,
       {Hologram, :page_digest},
       page_digest
+    )
+  end
+
+  defp put_page_module_context(page_component_struct, page_module) do
+    Component.put_context(
+      page_component_struct,
+      {Hologram, :page_module},
+      page_module
     )
   end
 

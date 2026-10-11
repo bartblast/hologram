@@ -21,6 +21,7 @@ defmodule Hologram.UI.RuntimeTest do
         {Hologram, :initial_page?} => false,
         {Hologram, :instance_id} => "test-instance-id-abcde",
         {Hologram, :page_digest} => "102790adb6c3b1956db310be523a7693",
+        {Hologram, :page_module} => MyPage,
         {Hologram, :page_mounted?} => false,
         {Hologram, :replica_id} => "test-replica-id-abcde",
         {Hologram, :replica_token} => "test-replica-token-12345"
@@ -40,11 +41,14 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
+    refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
+    refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "globalThis.Hologram.replicaId")
     refute String.contains?(markup, "globalThis.Hologram.replicaToken")
     refute String.contains?(markup, "hologram/runtime")
+    refute String.contains?(markup, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER")
     refute String.contains?(markup, "hologram/page")
   end
 
@@ -56,11 +60,23 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(markup, "globalThis.Hologram.assetManifest")
     assert String.contains?(markup, "globalThis.Hologram.csrfToken")
     assert String.contains?(markup, "globalThis.Hologram.dispatchAction")
+
+    assert String.contains?(
+             markup,
+             "globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;"
+           )
+
+    assert String.contains?(
+             markup,
+             ~s(globalThis.Hologram.initialPageDigest = "102790adb6c3b1956db310be523a7693")
+           )
+
     assert String.contains?(markup, "globalThis.Hologram.instanceId")
     assert String.contains?(markup, "globalThis.Hologram.pageMountData")
     assert String.contains?(markup, "globalThis.Hologram.replicaId")
     assert String.contains?(markup, "globalThis.Hologram.replicaToken")
     assert String.contains?(markup, "hologram/runtime")
+    assert String.contains?(markup, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER")
     assert String.contains?(markup, "hologram/page")
   end
 
@@ -79,11 +95,14 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
+    refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
+    refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "globalThis.Hologram.replicaId")
     refute String.contains?(markup, "globalThis.Hologram.replicaToken")
     refute String.contains?(markup, "hologram/runtime")
+    refute String.contains?(markup, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER")
     refute String.contains?(markup, "hologram/page")
   end
 
@@ -104,11 +123,14 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
+    refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
+    refute String.contains?(markup, "globalThis.Hologram.initialPageDigest")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "globalThis.Hologram.replicaId")
     refute String.contains?(markup, "globalThis.Hologram.replicaToken")
     refute String.contains?(markup, "hologram/runtime")
+    refute String.contains?(markup, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER")
     assert String.contains?(markup, "hologram/page")
   end
 
@@ -129,12 +151,12 @@ defmodule Hologram.UI.RuntimeTest do
            )
   end
 
-  test "page_digest prop", %{context: context} do
+  test "page bundle script", %{context: context} do
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(
              markup,
-             ~s'<script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js">'
+             ~s'<script async src="/hologram/page-MyPage-102790adb6c3b1956db310be523a7693.js">'
            )
   end
 

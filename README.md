@@ -42,6 +42,18 @@ Website: https://hologram.page
 
 [Erlang Ecosystem Foundation](https://erlef.org)
 
+### Performance Sponsor
+
+<a href="https://www.evostore.no/" target="_blank">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/evo_store_logo_horizontal_white.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/evo_store_logo_horizontal_black.svg">
+    <img src=".sponsors/evo_store_logo_horizontal_black.svg" alt="Evo Store" height="52">
+  </picture>
+</a>
+
+[Evo Store](https://www.evostore.no/)
+
 ### Innovation Partner Tier
 
 * Sheharyar Naseer, [@sheharyarn](https://github.com/sheharyarn)
@@ -49,7 +61,6 @@ Website: https://hologram.page
 ### Framework Visionary Tier
 
 * [@absowoot](https://github.com/absowoot)
-* Oban, [@oban-bg](https://github.com/oban-bg)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
 * Moss Piglet, [@moss-piglet](https://github.com/moss-piglet)
 
@@ -61,7 +72,6 @@ Website: https://hologram.page
 * James Harton, [@jimsynz](https://github.com/jimsynz)
 * Ian Asaff, [@montague](https://github.com/montague)
 * Max, [@Makesesama](https://github.com/Makesesama)
-* Dawid Danieluk, [@nxy7](https://github.com/nxy7)
 
 Thank you to **all other** sponsors for supporting the project!
 

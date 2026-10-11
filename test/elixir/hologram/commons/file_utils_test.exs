@@ -171,6 +171,47 @@ defmodule Hologram.Commons.FileUtilsTest do
     end
   end
 
+  describe "write_atomically!/2" do
+    setup do
+      test_dir =
+        Path.join([
+          Reflection.tmp_dir(),
+          "tests",
+          "commons",
+          "file_utils",
+          "write_atomically!_2"
+        ])
+
+      clean_dir(test_dir)
+
+      [file_path: Path.join(test_dir, "file.bin"), test_dir: test_dir]
+    end
+
+    test "writes content to a file that does not exist", %{file_path: file_path} do
+      assert write_atomically!(file_path, "test content") == :ok
+      assert File.read!(file_path) == "test content"
+    end
+
+    test "replaces the content of a file that exists", %{file_path: file_path} do
+      File.write!(file_path, "old content")
+
+      assert write_atomically!(file_path, "new content") == :ok
+      assert File.read!(file_path) == "new content"
+    end
+
+    test "leaves no temporary file behind", %{file_path: file_path, test_dir: test_dir} do
+      write_atomically!(file_path, "test content")
+
+      assert File.ls!(test_dir) == ["file.bin"]
+    end
+
+    test "writes iodata", %{file_path: file_path} do
+      write_atomically!(file_path, ["test", [" ", "content"]])
+
+      assert File.read!(file_path) == "test content"
+    end
+  end
+
   describe "write_p!/2" do
     setup do
       test_dir =

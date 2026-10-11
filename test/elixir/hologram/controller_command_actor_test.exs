@@ -9,7 +9,7 @@ defmodule Hologram.ControllerCommandActorTest do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.CSRFProtection
-  alias Hologram.Test.Fixtures.Controller.Module33
+  alias Hologram.Test.Fixtures.Controller.Module36
   alias Hologram.Test.Fixtures.Entity.Module14
 
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
@@ -93,7 +93,7 @@ defmodule Hologram.ControllerCommandActorTest do
 
     serialized_map_data = [
       ["ainstance_id", "b0#{binary_to_hex("test-instance-id")}"],
-      ["amodule", "a#{Module33}"],
+      ["amodule", "a#{Module36}"],
       ["aname", "a#{name}"],
       ["aparams", %{"t" => "m", "d" => serialized_params}],
       ["asub_receipts", %{"t" => "l", "d" => []}],

@@ -91,6 +91,32 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Returns the keys of the ETS table, without copying the values out.
+  """
+  @spec keys(tid) :: list
+  def keys(table_name_or_ref) do
+    :ets.select(table_name_or_ref, [{{:"$1", :_}, [], [:"$1"]}])
+  end
+
+  @doc """
+  Returns the keys whose value matches the given match pattern, without copying the other values out.
+  The pattern is a term that may hold `:_` wildcards, as `:ets.match/2` takes it; a map pattern
+  matches every value that holds the given keys with the given values.
+  """
+  @spec keys(tid, term) :: list
+  def keys(table_name_or_ref, value_pattern) do
+    :ets.select(table_name_or_ref, [{{:"$1", value_pattern}, [], [:"$1"]}])
+  end
+
+  @doc """
+  Returns true if the ETS table holds the given key, without copying its value out.
+  """
+  @spec member?(tid, any) :: boolean
+  def member?(table_name_or_ref, key) do
+    :ets.member(table_name_or_ref, key)
+  end
+
+  @doc """
   Puts multiple items into the ETS table.
   """
   @spec put(tid, list({any, any})) :: true

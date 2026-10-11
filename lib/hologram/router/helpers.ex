@@ -18,11 +18,21 @@ defmodule Hologram.Router.Helpers do
   end
 
   @doc """
-  Returns the relative URL of a page's JavaScript bundle using the page's digest.
+  Returns the relative URL of a chunk's JavaScript bundle, named by the digest of its content.
+  Mirrored by `#chunkBundlePath` in `assets/js/hologram.mjs`.
   """
-  @spec page_bundle_path(String.t()) :: String.t()
-  def page_bundle_path(page_digest) do
-    "/hologram/page-#{page_digest}.js"
+  @spec chunk_bundle_path(String.t()) :: String.t()
+  def chunk_bundle_path(chunk_digest) do
+    "/hologram/chunk-#{chunk_digest}.js"
+  end
+
+  @doc """
+  Returns the relative URL of a page's JavaScript bundle, named by the page module and the digest of
+  its content. Mirrored by `#pageBundlePath` in `assets/js/hologram.mjs`.
+  """
+  @spec page_bundle_path(module, String.t()) :: String.t()
+  def page_bundle_path(page_module, page_digest) do
+    "/hologram/page-#{Reflection.module_name(page_module)}-#{page_digest}.js"
   end
 
   @doc """

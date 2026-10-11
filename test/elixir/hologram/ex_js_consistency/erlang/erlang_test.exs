@@ -12,11 +12,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module3
 
-  # :erlang.andalso/2 and :erlang.orelse/2 are short-circuit operators rather than
-  # exported functions, so calling them by MFA trips the Elixir 1.20 undefined-function
-  # check even though they resolve at runtime.
-  @compile {:no_warn_undefined, [{:erlang, :andalso, 2}, {:erlang, :orelse, 2}]}
-
   @moduletag :consistency
 
   @erts_info [error_info: %{module: :erl_erts_errors}]
@@ -1623,41 +1618,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         end
 
       assert top_frame == {:erlang, :abs, [:abc], @erts_info}
-    end
-  end
-
-  describe "andalso/2" do
-    test "returns false if the first argument is false" do
-      assert :erlang.andalso(false, :abc) == false
-    end
-
-    test "returns the second argument if the first argument is true" do
-      assert :erlang.andalso(true, :abc) == :abc
-    end
-
-    test "doesn't evaluate the second argument if the first argument is false" do
-      assert :erlang.andalso(false, apply(wrap_term(:impossible), [])) == false
-    end
-
-    test "raises ArgumentError if the first argument is not a boolean" do
-      arg = prevent_term_typing_violation(nil)
-
-      assert_error ArgumentError,
-                   "argument error: nil",
-                   fn -> :erlang.andalso(arg, true) end
-    end
-
-    test "the error is attributed to the caller" do
-      arg = prevent_term_typing_violation(nil)
-
-      top_frame =
-        try do
-          :erlang.andalso(arg, true)
-        rescue
-          _error -> hd(wrap_term(__STACKTRACE__))
-        end
-
-      assert elem(top_frame, 0) == __MODULE__
     end
   end
 
@@ -6927,41 +6887,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         end
 
       assert top_frame == {:erlang, :not, [1], @erts_info}
-    end
-  end
-
-  describe "orelse/2" do
-    test "returns true if the first argument is true" do
-      assert :erlang.orelse(true, :abc) == true
-    end
-
-    test "returns the second argument if the first argument is false" do
-      assert :erlang.orelse(false, :abc) == :abc
-    end
-
-    test "doesn't evaluate the second argument if the first argument is true" do
-      assert :erlang.orelse(true, apply(wrap_term(:impossible), [])) == true
-    end
-
-    test "raises ArgumentError if the first argument is not a boolean" do
-      arg = prevent_term_typing_violation(nil)
-
-      assert_error ArgumentError,
-                   "argument error: nil",
-                   fn -> :erlang.orelse(arg, true) end
-    end
-
-    test "the error is attributed to the caller" do
-      arg = prevent_term_typing_violation(nil)
-
-      top_frame =
-        try do
-          :erlang.orelse(arg, true)
-        rescue
-          _error -> hd(wrap_term(__STACKTRACE__))
-        end
-
-      assert elem(top_frame, 0) == __MODULE__
     end
   end
 

@@ -2,6 +2,8 @@ defmodule Hologram.ReflectionTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Reflection
 
+  alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Job
   alias Hologram.Test.Fixtures.Policy
@@ -19,6 +21,18 @@ defmodule Hologram.ReflectionTest do
   # they lack the __info__/1 function that the Elixir compiler injects, and must not be
   # treated as Elixir modules.
   defp build_elixir_named_erlang_module do
+    {module, binary} = compile_elixir_named_erlang_module()
+    {:module, ^module} = :code.load_binary(module, ~c"nofile", binary)
+
+    on_exit(fn ->
+      :code.purge(module)
+      :code.delete(module)
+    end)
+
+    module
+  end
+
+  defp compile_elixir_named_erlang_module do
     module = Hologram.Test.Fixtures.Reflection.ErlangModuleWithElixirName
 
     sources = [
@@ -34,14 +48,28 @@ defmodule Hologram.ReflectionTest do
       end)
 
     {:ok, ^module, binary} = :compile.forms(forms, [:debug_info])
-    {:module, ^module} = :code.load_binary(module, ~c"nofile", binary)
 
-    on_exit(fn ->
+    {module, binary}
+  end
+
+  defp compile_to_digest(code) do
+    beam_info(compile_with_debug_info(code)).digest
+  end
+
+  # Code compiled inside the test run carries no debug info unless asked for, and a beam
+  # without a Dbgi chunk has the same digest for any source and no literals to read.
+  defp compile_with_debug_info(code) do
+    debug_info? = Code.get_compiler_option(:debug_info)
+    Code.put_compiler_option(:debug_info, true)
+
+    try do
+      [{module, bytecode}] = Code.compile_string(code)
       :code.purge(module)
       :code.delete(module)
-    end)
-
-    module
+      bytecode
+    after
+      Code.put_compiler_option(:debug_info, debug_info?)
+    end
   end
 
   defp load_app_depending_on_hologram(app) do
@@ -72,10 +100,58 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> :application.unload(app) end)
   end
 
+  # Puts the key back as it was before the test, set or not.
   defp put_env_with_cleanup(app, key, value) do
+    previous = Application.fetch_env(app, key)
     Application.put_env(app, key, value)
 
-    on_exit(fn -> Application.delete_env(app, key) end)
+    on_exit(fn ->
+      case previous do
+        {:ok, previous_value} -> Application.put_env(app, key, previous_value)
+        :error -> Application.delete_env(app, key)
+      end
+    end)
+  end
+
+  # Leaves the beam on a code path added for the test, so that the module exists on disk only.
+  defp write_unloaded_beam(module, tmp_subdir, bytecode) do
+    ebin_dir = Path.join([tmp_dir(), "tests", "reflection", tmp_subdir, "ebin"])
+    ebin_dir_charlist = String.to_charlist(ebin_dir)
+    beam_path = Path.join(ebin_dir, "#{module}.beam")
+    File.mkdir_p!(ebin_dir)
+    File.write!(beam_path, bytecode)
+    true = :code.add_path(ebin_dir_charlist)
+
+    on_exit(fn ->
+      :code.del_path(ebin_dir_charlist)
+      :code.purge(module)
+      :code.delete(module)
+    end)
+  end
+
+  # Compiles the module, unloads it, and leaves its beam on disk only.
+  defp write_unloaded_module(module, tmp_subdir, body) do
+    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
+    :code.purge(module)
+    :code.delete(module)
+    write_unloaded_beam(module, tmp_subdir, bytecode)
+  end
+
+  # Compiles the module, unloads it, and leaves its beam in the given application's ebin directory
+  # only, so that a listing of that application's beams finds it while the VM does not hold it.
+  defp write_unloaded_module_to_ebin(module, app, body) do
+    [{^module, bytecode}] = Code.compile_string("defmodule #{inspect(module)} do #{body} end")
+    :code.purge(module)
+    :code.delete(module)
+
+    beam_path = Path.join([:code.lib_dir(app), "ebin", "#{module}.beam"])
+    File.write!(beam_path, bytecode)
+
+    on_exit(fn ->
+      File.rm!(beam_path)
+      :code.purge(module)
+      :code.delete(module)
+    end)
   end
 
   describe "alias?/1" do
@@ -92,40 +168,198 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "beam_defs/1" do
-    test "beam file path" do
+  describe "beam_info/1" do
+    test "beam file path of a plain module" do
       beam_path = :code.which(Module1)
+      %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
 
-      assert [
-               {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
-                [
-                  {[{:line, 7} | _column_2],
-                   [
-                     {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
-                     {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
-                   ], [],
-                   {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
-                    [
-                      {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
-                      {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
-                    ]}}
-                ]},
-               {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
-                [{[{:line, 3} | _column_10], [], [], :value_1}]}
-             ] = beam_defs(beam_path)
+      assert %{
+               digest: digest,
+               mtime: ^mtime,
+               size: ^size,
+               page?: false,
+               component?: false,
+               protocol?: false,
+               protocol_implementation?: false,
+               struct?: false,
+               exception?: false,
+               ecto_schema?: false,
+               js_imports?: false,
+               broadcast_caller?: false,
+               source_path: source_path,
+               layout_module: nil,
+               route: nil,
+               protocol_functions: nil,
+               implementation_for: nil,
+               implemented_protocol: nil
+             } = beam_info(beam_path)
+
+      assert is_integer(digest)
+      assert String.ends_with?(source_path, "test/elixir/support/fixtures/reflection/module_1.ex")
+    end
+
+    test "module with JS imports" do
+      module = Hologram.Test.Fixtures.Compiler.Module12
+
+      assert %{js_imports?: true} = beam_info(:code.which(module))
+    end
+
+    test "module calling a broadcast function" do
+      module = Hologram.Test.Fixtures.Controller.Module6
+
+      assert %{broadcast_caller?: true} = beam_info(:code.which(module))
+    end
+
+    test "source path is the one the loaded module reports" do
+      assert beam_info(:code.which(Module1)).source_path == source_path(Module1)
+      assert beam_info(:code.which(Enum)).source_path == source_path(Enum)
+    end
+
+    test "page module" do
+      assert %{
+               page?: true,
+               component?: false,
+               layout_module: Module4,
+               route: "/hologram-test-fixtures-commons-reflection-module2"
+             } = beam_info(:code.which(Module2))
+    end
+
+    test "page module without a layout" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithoutLayout do def __is_hologram_page__, do: true end"
+        )
+
+      assert %{page?: true, layout_module: nil, route: nil} = beam_info(bytecode)
+    end
+
+    test "page module whose layout function computes its value" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithComputedLayout do def __is_hologram_page__, do: true; def __layout_module__, do: Application.get_env(:hologram, :layout) end"
+        )
+
+      assert %{page?: true, layout_module: nil} = beam_info(bytecode)
+    end
+
+    test "page module whose route is not a string" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithAtomRoute do def __is_hologram_page__, do: true; def __route__, do: :admin end"
+        )
+
+      assert %{page?: true, route: :admin} = beam_info(bytecode)
+    end
+
+    test "page module whose route is interpolated from a module attribute" do
+      bytecode =
+        compile_with_debug_info(
+          ~S'defmodule PageWithInterpolatedRoute do def __is_hologram_page__, do: true; @prefix "admin"; def __route__, do: "/#{@prefix}/users" end'
+        )
+
+      assert %{page?: true, route: "/admin/users"} = beam_info(bytecode)
+    end
+
+    test "page module whose route comes from a module attribute" do
+      bytecode =
+        compile_with_debug_info(
+          ~S'defmodule PageWithAttributeRoute do def __is_hologram_page__, do: true; @path "/from-attribute"; def __route__, do: @path end'
+        )
+
+      assert %{page?: true, route: "/from-attribute"} = beam_info(bytecode)
+    end
+
+    test "page module whose route function computes its value" do
+      bytecode =
+        compile_with_debug_info(
+          "defmodule PageWithComputedRoute do def __is_hologram_page__, do: true; def __route__, do: Application.get_env(:hologram, :route) end"
+        )
+
+      assert %{page?: true, route: nil} = beam_info(bytecode)
+    end
+
+    test "component module" do
+      assert %{page?: false, component?: true} = beam_info(:code.which(Module3))
+    end
+
+    test "protocol module" do
+      assert %{
+               protocol?: true,
+               protocol_implementation?: false,
+               protocol_functions: [to_string: 1]
+             } =
+               beam_info(:code.which(String.Chars))
+
+      assert protocol?(String.Chars)
+    end
+
+    test "protocol implementation module" do
+      assert %{
+               protocol?: false,
+               protocol_implementation?: true,
+               implementation_for: Function,
+               implemented_protocol: Enumerable
+             } = beam_info(:code.which(Enumerable.Function))
+
+      assert protocol_implementation?(Enumerable.Function)
+    end
+
+    test "struct module" do
+      assert %{struct?: true} = beam_info(:code.which(Module9))
+      assert has_struct?(Module9)
+    end
+
+    test "exception module" do
+      assert %{exception?: true, struct?: true} = beam_info(:code.which(ArgumentError))
+      assert exception?(ArgumentError)
+    end
+
+    test "Ecto schema module" do
+      assert %{ecto_schema?: true, struct?: true} = beam_info(:code.which(Module8))
+      assert ecto_schema?(Module8)
     end
 
     # TODO: Remove when Hologram.Reflection.beam_source/1 goes (see the removal
     # note there), together with the beam_source/1 and umbrella?/0 describes.
-    test "beam binary" do
+    test "beam binary gives the same digest and no mtime or size" do
       {Module1, bytecode, beam_path} = :code.get_object_code(Module1)
 
-      assert beam_defs(bytecode) == beam_defs(beam_path)
+      assert %{digest: digest, mtime: nil, size: nil} = beam_info(bytecode)
+      assert digest == beam_info(beam_path).digest
+    end
+
+    test "Erlang module that uses Elixir-style naming" do
+      {_module, binary} = compile_elixir_named_erlang_module()
+
+      assert beam_info(binary) == nil
+    end
+
+    test "the same source compiled twice gives the same digest" do
+      code = "defmodule Hologram.Test.Fixtures.Reflection.BeamInfoModule1 do def fun, do: 1 end"
+
+      assert compile_to_digest(code) == compile_to_digest(code)
+    end
+
+    test "a changed definition changes the digest" do
+      code_1 = "defmodule Hologram.Test.Fixtures.Reflection.BeamInfoModule2 do def fun, do: 1 end"
+      code_2 = "defmodule Hologram.Test.Fixtures.Reflection.BeamInfoModule2 do def fun, do: 2 end"
+
+      assert compile_to_digest(code_1) != compile_to_digest(code_2)
     end
   end
 
   # TODO: Remove this describe when Hologram.Reflection.beam_source/1 goes (see
   # the removal note there).
+  test "beam_info_keys/0" do
+    keys =
+      Module1
+      |> :code.which()
+      |> beam_info()
+      |> Map.keys()
+
+    assert Enum.sort(beam_info_keys()) == Enum.sort(keys)
+  end
+
   describe "beam_source/1" do
     test "module whose beam file exists" do
       assert beam_source(Hologram.Reflection) == :code.which(Hologram.Reflection)
@@ -195,12 +429,32 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  test "broadcast_mfas/0" do
+    result = broadcast_mfas()
+
+    assert result == Enum.sort(result)
+    assert {Hologram.Component, :put_broadcast, 3} in result
+    assert {Hologram.Realtime, :broadcast_action, 2} in result
+  end
+
   test "build_dir/0" do
     assert build_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv"
   end
 
   test "call_graph_dump_file_name/0" do
     assert call_graph_dump_file_name() == "call_graph.bin"
+  end
+
+  test "chunk_registry_plt_dump_file_name/0" do
+    assert chunk_registry_plt_dump_file_name() == "chunk_registry.plt"
+  end
+
+  test "compile_inputs_dump_file_name/0" do
+    assert compile_inputs_dump_file_name() == "compile_inputs.bin"
+  end
+
+  test "compile_state_dump_file_name/0" do
+    assert compile_state_dump_file_name() == "compile_state.bin"
   end
 
   test "compiler_lock_file_name/0" do
@@ -277,6 +531,52 @@ defmodule Hologram.ReflectionTest do
     test "non-atom" do
       refute elixir_module?(123)
     end
+
+    test "does not load the module" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedElixirModule
+      write_unloaded_module(module, "elixir_module_1", "")
+
+      assert :code.is_loaded(module) == false
+      assert elixir_module?(module)
+      assert :code.is_loaded(module) == false
+    end
+  end
+
+  describe "elixir_module?/2" do
+    setup do
+      [ir_plt: PLT.start()]
+    end
+
+    test "module the IR PLT holds, without consulting the code path", %{ir_plt: ir_plt} do
+      PLT.put(ir_plt, Aaa.Bbb, :ir)
+
+      assert elixir_module?(Aaa.Bbb, ir_plt)
+    end
+
+    test "existing Elixir module the IR PLT does not hold", %{ir_plt: ir_plt} do
+      assert elixir_module?(Calendar.ISO, ir_plt)
+    end
+
+    test "non existing Elixir module the IR PLT does not hold", %{ir_plt: ir_plt} do
+      refute elixir_module?(Aaa.Bbb, ir_plt)
+    end
+
+    test "existing Erlang module", %{ir_plt: ir_plt} do
+      refute elixir_module?(:maps, ir_plt)
+    end
+
+    test "Erlang module that uses Elixir-style naming", %{ir_plt: ir_plt} do
+      refute elixir_module?(build_elixir_named_erlang_module(), ir_plt)
+    end
+
+    test "non-atom", %{ir_plt: ir_plt} do
+      refute elixir_module?(123, ir_plt)
+    end
+
+    test "nil IR PLT decides the elixir_module?/1 way" do
+      assert elixir_module?(Calendar.ISO, nil)
+      refute elixir_module?(Aaa.Bbb, nil)
+    end
   end
 
   describe "entity?" do
@@ -321,6 +621,55 @@ defmodule Hologram.ReflectionTest do
     test "non-atom" do
       refute erlang_module?(123)
     end
+
+    test "does not load the module" do
+      {module, binary} = compile_elixir_named_erlang_module()
+      write_unloaded_beam(module, "erlang_module_1", binary)
+
+      assert :code.is_loaded(module) == false
+      assert erlang_module?(module)
+      assert :code.is_loaded(module) == false
+    end
+  end
+
+  describe "erlang_module?/2" do
+    setup do
+      [ir_plt: PLT.start()]
+    end
+
+    test "module the IR PLT holds is not one, without consulting the code path", %{ir_plt: ir_plt} do
+      module = build_elixir_named_erlang_module()
+      PLT.put(ir_plt, module, :ir)
+
+      refute erlang_module?(module, ir_plt)
+    end
+
+    test "existing Erlang module", %{ir_plt: ir_plt} do
+      assert erlang_module?(:maps, ir_plt)
+    end
+
+    test "Erlang module that uses Elixir-style naming the IR PLT does not hold", %{ir_plt: ir_plt} do
+      assert erlang_module?(build_elixir_named_erlang_module(), ir_plt)
+    end
+
+    test "existing Elixir module", %{ir_plt: ir_plt} do
+      refute erlang_module?(Calendar.ISO, ir_plt)
+    end
+
+    test "atom that starts with a lowercase letter and is not an existing Erlang module", %{
+      ir_plt: ir_plt
+    } do
+      refute erlang_module?(:my_module, ir_plt)
+    end
+
+    test "non-atom", %{ir_plt: ir_plt} do
+      refute erlang_module?(123, ir_plt)
+    end
+
+    test "nil IR PLT decides the erlang_module?/1 way" do
+      assert erlang_module?(:maps, nil)
+      refute erlang_module?(Calendar.ISO, nil)
+    end
   end
 
   describe "has_function?/3" do
@@ -330,6 +679,31 @@ defmodule Hologram.ReflectionTest do
 
     test "returns false if the module doesn't have a function with the given name and arity" do
       refute has_function?(Module4, :test_fun, 3)
+    end
+
+    test "not loaded module that exports the function" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModuleWithFun
+      write_unloaded_module(module, "has_function_3", "def my_fun(_a), do: :ok")
+
+      assert :code.is_loaded(module) == false
+      assert has_function?(module, :my_fun, 1)
+      assert :code.is_loaded(module) == false
+    end
+
+    test "not loaded module that does not export the function" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModuleWithoutFun
+      write_unloaded_module(module, "has_function_3", "def my_fun(_a), do: :ok")
+
+      refute has_function?(module, :other_fun, 1)
+      refute has_function?(module, :my_fun, 2)
+    end
+
+    test "not loaded module whose beam cannot be read" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModuleWithUnreadableBeam
+      write_unloaded_beam(module, "has_function_3_unreadable", "not a beam")
+
+      assert is_list(:code.which(module))
+      refute has_function?(module, :my_fun, 1)
     end
   end
 
@@ -347,22 +721,123 @@ defmodule Hologram.ReflectionTest do
     assert hologram_dep_dir() == File.cwd!() <> "/deps/hologram"
   end
 
-  test "ir_plt_dump_file_name/0" do
-    assert ir_plt_dump_file_name() == "ir.plt"
+  describe "js_imports?/1" do
+    test "module that declares JS imports" do
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12)
+    end
+
+    test "module that does not declare JS imports" do
+      refute js_imports?(Hologram.Reflection)
+    end
+
+    test "non-existing module" do
+      refute js_imports?(Aaa.Bbb)
+    end
+  end
+
+  describe "js_imports?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{js_imports?: true})
+
+      assert js_imports?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Hologram.Test.Fixtures.Compiler.Module12, %{js_imports?: false})
+
+      refute js_imports?(Hologram.Test.Fixtures.Compiler.Module12, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the js_imports?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12, module_info_plt)
+      refute js_imports?(Hologram.Reflection, module_info_plt)
+    end
+
+    test "entry without the flag is decided the js_imports?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Hologram.Test.Fixtures.Compiler.Module12, %{digest: 1})
+
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12, module_info_plt)
+    end
+
+    test "nil PLT decides the js_imports?/1 way" do
+      assert js_imports?(Hologram.Test.Fixtures.Compiler.Module12, nil)
+      refute js_imports?(Hologram.Reflection, nil)
+    end
   end
 
   test "list_all_otp_apps/0" do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
-  test "list_components/0" do
-    result = list_components()
+  describe "list_candidate_modules/0" do
+    test "includes the project's Elixir modules" do
+      result = list_candidate_modules()
 
-    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
-    assert Module3 in result
+      assert Hologram.Reflection in result
+      assert Module1 in result
+      assert Calendar.ISO in result
+    end
 
-    refute Hologram.Compiler.Context in result
-    refute Module2 in result
+    test "excludes ignored modules" do
+      refute Kernel.SpecialForms in list_candidate_modules()
+    end
+  end
+
+  describe "list_candidate_modules/1" do
+    test "includes the given apps' Elixir-named modules and no Erlang-named ones" do
+      result = list_candidate_modules([:elixir, :stdlib])
+
+      assert Kernel in result
+      assert Calendar.ISO in result
+      refute :maps in result
+      refute :elixir_map in result
+      refute Hologram.Reflection in result
+    end
+
+    test "excludes ignored modules" do
+      refute Kernel.SpecialForms in list_candidate_modules([:elixir])
+    end
+  end
+
+  describe "list_components/0" do
+    test "lists the component modules of the loaded applications, sorted by name" do
+      result = list_components()
+
+      assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
+      assert Module3 in result
+
+      refute Hologram.Compiler.Context in result
+      refute Module2 in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a component whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.ComponentInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, """
+      use Hologram.Component
+      @impl Component
+      def template, do: ~HOLO"ComponentInEbinOnly template"
+      """)
+
+      assert module in list_components()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_components/0) == 0
+    end
   end
 
   describe "job?/1" do
@@ -397,20 +872,95 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_elixir_modules/0" do
-    result = list_elixir_modules()
+  describe "list_editable_apps/0" do
+    test "lists the project's application, and only it, without umbrella apps or path dependencies" do
+      assert list_editable_apps() == [:hologram]
+    end
 
-    assert Calendar.ISO in result
-    assert Hologram.Template.Tokenizer in result
-    assert Mix.Tasks.Holo.Check.TestFileNames in result
-    assert Sobelow.CI in result
-    assert Mix.Tasks.Sobelow in result
+    test "adds the applications the Phoenix endpoint reloads" do
+      put_env_with_cleanup(:hologram, Module7, reloadable_apps: [:file_system])
 
-    refute :elixir_map in result
-    refute :dialyzer in result
+      assert list_editable_apps() == [:hologram, :file_system]
+    end
 
-    refute Enumerable.Atom in result
-    refute Kernel.SpecialForms in result
+    test "leaves out a reloadable application that is not loaded" do
+      put_env_with_cleanup(:hologram, Module7, reloadable_apps: [:not_loaded_app])
+
+      assert list_editable_apps() == [:hologram]
+    end
+  end
+
+  describe "list_editable_beams/0" do
+    test "lists the beams of the editable applications with their paths" do
+      assert {Hologram.Reflection, :code.which(Hologram.Reflection)} in list_editable_beams()
+    end
+
+    test "lists a consolidated protocol from its consolidated beam" do
+      beam_path = :code.which(Enumerable)
+
+      # The test build consolidates protocols.
+      assert :string.find(beam_path, ~c"/consolidated/") != :nomatch
+
+      assert {Enumerable, beam_path} in list_editable_beams()
+    end
+
+    test "leaves out the modules of the other applications" do
+      refute List.keymember?(list_editable_beams(), Enum, 0)
+    end
+
+    test "leaves out the beams of modules that are not Elixir-named" do
+      # The listing reads only the file names, so the files need no content.
+      dir = Path.join([tmp_dir(), "tests", "reflection", "list_editable_beams_0", "consolidated"])
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+
+      elixir_beam_path =
+        Path.join(dir, "Elixir.Hologram.Test.Fixtures.Reflection.EditableModule.beam")
+
+      File.write!(elixir_beam_path, "")
+
+      dir
+      |> Path.join("erlang_named_module.beam")
+      |> File.write!("")
+
+      Code.prepend_path(dir)
+      on_exit(fn -> Code.delete_path(dir) end)
+
+      beam_paths = Map.new(list_editable_beams())
+
+      assert beam_paths[Hologram.Test.Fixtures.Reflection.EditableModule] ==
+               String.to_charlist(elixir_beam_path)
+
+      refute Map.has_key?(beam_paths, :erlang_named_module)
+    end
+
+    test "lists every module once" do
+      modules = Enum.map(list_editable_beams(), fn {module, _beam_path} -> module end)
+
+      assert Enum.uniq(modules) == modules
+    end
+  end
+
+  describe "list_elixir_modules/0" do
+    test "lists the Elixir modules of the loaded applications" do
+      result = list_elixir_modules()
+
+      assert Calendar.ISO in result
+      assert Hologram.Template.Tokenizer in result
+      assert Mix.Tasks.Holo.Check.TestFileNames in result
+      assert Sobelow.CI in result
+      assert Mix.Tasks.Sobelow in result
+
+      refute :elixir_map in result
+      refute :dialyzer in result
+
+      refute Enumerable.Atom in result
+      refute Kernel.SpecialForms in result
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_elixir_modules/0) == 0
+    end
   end
 
   describe "list_elixir_modules/1" do
@@ -430,67 +980,24 @@ defmodule Hologram.ReflectionTest do
       refute Kernel.SpecialForms in result
     end
 
-    # This test can't be async, because it manipulates global state
-    # (compiles modules and modifies the file system)
-    test "includes newly compiled module found in ebin but not in Application.spec" do
-      module_name = random_module()
+    test "includes a module found in ebin but not in Application.spec, without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.ModuleInEbinOnly
+      write_unloaded_module_to_ebin(module, :hologram, "def test_function, do: :test_value")
 
-      module_source = """
-      defmodule #{module_name} do
-        def test_function do
-          :test_value
-        end
-      end
-      """
+      refute module in Application.spec(:hologram, :modules)
 
-      hologram_ebin_path =
-        :hologram
-        |> :code.lib_dir()
-        |> Path.join("ebin")
+      assert module in list_elixir_modules([:hologram])
+      assert :code.is_loaded(module) == false
+    end
 
-      beam_file_path = Path.join(hologram_ebin_path, "#{module_name}.beam")
+    test "excludes an Erlang module with an Elixir-style name found in ebin" do
+      {module, bytecode} = compile_elixir_named_erlang_module()
+      beam_path = Path.join([:code.lib_dir(:hologram), "ebin", "#{module}.beam"])
+      File.write!(beam_path, bytecode)
 
-      try do
-        [{^module_name, beam_binary}] = Code.compile_string(module_source)
+      on_exit(fn -> File.rm!(beam_path) end)
 
-        # This simulates a newly compiled module that exists in ebin
-        # but hasn't been added to Application.spec yet
-        File.write!(beam_file_path, beam_binary)
-
-        assert Code.ensure_loaded(module_name) == {:module, module_name}
-        assert module_name.test_function() == :test_value
-
-        current_spec_modules =
-          :hologram
-          |> Application.spec()
-          |> Keyword.get(:modules, [])
-
-        # Verify our module is NOT in Application.spec
-        refute module_name in current_spec_modules
-
-        ebin_modules = list_ebin_modules(:hologram)
-
-        # Verify our module IS found by list_ebin_modules/1
-        assert module_name in ebin_modules
-
-        # Now test the actual list_elixir_modules/1 functionality...
-
-        # Ensure we're actually in test environment
-        assert Hologram.env() == :test
-
-        result = list_elixir_modules([:hologram])
-
-        assert module_name in result
-      after
-        # Clean up...
-
-        if File.exists?(beam_file_path) do
-          File.rm!(beam_file_path)
-        end
-
-        :code.purge(module_name)
-        :code.delete(module_name)
-      end
+      refute module in list_elixir_modules([:hologram])
     end
   end
 
@@ -515,7 +1022,7 @@ defmodule Hologram.ReflectionTest do
       app = :hologram_reflection_designated_user_fixture_app
       load_app_with_modules(app, [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant])
 
-      assert list_entities([app]) == [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant]
+      assert list_entities([app]) == [Hologram.Auth.RoleGrant, Entity.Module1, Entity.Module14]
     end
 
     test "excludes the role grant store when no entity type is designated as the user entity" do
@@ -535,24 +1042,110 @@ defmodule Hologram.ReflectionTest do
     assert :hologram in result
   end
 
-  test "list_pages/0" do
-    result = list_pages()
+  describe "list_module_applications/0" do
+    test "maps modules of the project, of Elixir and of Erlang/OTP to their applications" do
+      result = list_module_applications()
 
-    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
-    assert Hologram.Test.Fixtures.Reflection.Module2 in result
-    assert Hologram.Test.Fixtures.Reflection.Module6 in result
-    assert Hologram.Test.Fixtures.Page.Module1 in result
+      assert result[Hologram.Reflection] == :hologram
+      assert result[Enum] == :elixir
+      assert result[:lists] == :stdlib
+    end
 
-    refute Hologram.Test.Fixtures.Compiler.Module6 in result
-    refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
-    refute Hologram.Compiler.Context in result
+    test "has no entry for a module no loaded application lists" do
+      refute Map.has_key?(list_module_applications(), Aaa.Bbb)
+    end
+
+    test "agrees with Application.get_application/1" do
+      result = list_module_applications()
+
+      result
+      |> Map.keys()
+      |> Enum.take_every(50)
+      |> Enum.each(fn module ->
+        assert Application.get_application(module) == result[module]
+      end)
+    end
   end
 
-  test "list_protocol_implementations" do
-    result = list_protocol_implementations(String.Chars)
+  describe "list_pages/0" do
+    test "lists the page modules of the loaded applications, sorted by name" do
+      result = list_pages()
 
-    assert String.Chars.Atom in result
-    assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
+      assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
+      assert Hologram.Test.Fixtures.Reflection.Module2 in result
+      assert Hologram.Test.Fixtures.Reflection.Module6 in result
+      assert Hologram.Test.Fixtures.Page.Module1 in result
+
+      refute Hologram.Test.Fixtures.Compiler.Module6 in result
+      refute Hologram.Test.Fixtures.Compiler.CallGraph.Module4 in result
+      refute Hologram.Compiler.Context in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a page whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.PageInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, """
+      use Hologram.Page
+      route "/hologram-test-fixtures-reflection-page-in-ebin-only"
+      layout Hologram.Test.Fixtures.LayoutFixture
+      @impl Page
+      def template, do: ~HOLO"PageInEbinOnly template"
+      """)
+
+      assert module in list_pages()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_pages/0) == 0
+    end
+  end
+
+  describe "list_protocol_implementations/2" do
+    setup do
+      module_info_plt =
+        PLT.start(
+          items: [
+            {String.Chars.Atom,
+             %{protocol_implementation?: true, implemented_protocol: String.Chars}},
+            {String.Chars.Integer,
+             %{protocol_implementation?: true, implemented_protocol: String.Chars}},
+            {Enumerable.List,
+             %{protocol_implementation?: true, implemented_protocol: Enumerable}},
+            {Calendar.ISO, %{protocol_implementation?: false, implemented_protocol: nil}},
+            {String.Chars, %{protocol?: true}}
+          ]
+        )
+
+      [module_info_plt: module_info_plt]
+    end
+
+    test "modules the PLT records as implementations of the protocol", %{
+      module_info_plt: module_info_plt
+    } do
+      sorted_impls =
+        String.Chars
+        |> list_protocol_implementations(module_info_plt)
+        |> Enum.sort()
+
+      assert sorted_impls == [String.Chars.Atom, String.Chars.Integer]
+    end
+
+    test "protocol the PLT records no implementation of", %{module_info_plt: module_info_plt} do
+      assert list_protocol_implementations(Inspect, module_info_plt) == []
+    end
+
+    test "the fixture app's PLT lists its implementation" do
+      module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
+
+      result = list_protocol_implementations(String.Chars, module_info_plt)
+
+      assert String.Chars.Atom in result
+      assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
+      refute Enumerable.List in result
+    end
   end
 
   test "list_roles/0" do
@@ -604,13 +1197,22 @@ defmodule Hologram.ReflectionTest do
       refute module?(:my_module)
     end
 
+    test "does not load the module" do
+      module = Hologram.Test.Fixtures.Reflection.NotLoadedModule
+      write_unloaded_module(module, "module_1", "")
+
+      assert :code.is_loaded(module) == false
+      assert module?(module)
+      assert :code.is_loaded(module) == false
+    end
+
     test "non-atom" do
       refute module?(123)
     end
   end
 
-  test "module_digest_plt_dump_file_name/0" do
-    assert module_digest_plt_dump_file_name() == "module_digest.plt"
+  test "module_info_plt_dump_file_name/0" do
+    assert module_info_plt_dump_file_name() == "module_info.plt"
   end
 
   test "module_name/1" do
@@ -790,6 +1392,39 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "protocol?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{protocol?: true})
+
+      assert protocol?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, String.Chars, %{protocol?: false})
+
+      refute protocol?(String.Chars, module_info_plt)
+    end
+
+    test "term the PLT does not hold is decided the protocol?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert protocol?(String.Chars, module_info_plt)
+      refute protocol?(Calendar.ISO, module_info_plt)
+      refute protocol?(123, module_info_plt)
+    end
+
+    test "nil PLT decides the protocol?/1 way" do
+      assert protocol?(String.Chars, nil)
+      refute protocol?(Calendar.ISO, nil)
+    end
+  end
+
   describe "protocol_implementation/1" do
     test "module that implements a protocol" do
       assert protocol_implementation(Enumerable.Function) == Enumerable
@@ -797,6 +1432,38 @@ defmodule Hologram.ReflectionTest do
 
     test "module that does not implement a protocol" do
       assert protocol_implementation(Calendar.ISO) == nil
+    end
+  end
+
+  describe "protocol_implementation/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{implemented_protocol: String.Chars})
+
+      assert protocol_implementation(Aaa.Bbb, module_info_plt) == String.Chars
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Enumerable.Function, %{implemented_protocol: nil})
+
+      assert protocol_implementation(Enumerable.Function, module_info_plt) == nil
+    end
+
+    test "module the PLT does not hold is decided the protocol_implementation/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert protocol_implementation(Enumerable.Function, module_info_plt) == Enumerable
+      assert protocol_implementation(Calendar.ISO, module_info_plt) == nil
+    end
+
+    test "nil PLT decides the protocol_implementation/1 way" do
+      assert protocol_implementation(Enumerable.Function, nil) == Enumerable
+      assert protocol_implementation(Calendar.ISO, nil) == nil
     end
   end
 
@@ -812,6 +1479,21 @@ defmodule Hologram.ReflectionTest do
 
   test "queries_plt_dump_file_name/0" do
     assert queries_plt_dump_file_name() == "queries.plt"
+  end
+
+  test "put_env_with_cleanup/3 puts back the value the key had" do
+    key = :put_env_with_cleanup_test_key
+    Application.put_env(:hologram, key, :before)
+
+    # Registered first, so it runs after the helper's cleanup: on_exit callbacks run in reverse order.
+    on_exit(fn ->
+      assert Application.fetch_env(:hologram, key) == {:ok, :before}
+      Application.delete_env(:hologram, key)
+    end)
+
+    put_env_with_cleanup(:hologram, key, :during)
+
+    assert Application.fetch_env!(:hologram, key) == :during
   end
 
   describe "relative_source_path/1" do
@@ -839,6 +1521,31 @@ defmodule Hologram.ReflectionTest do
       end)
 
       assert relative_source_path(module) == "foreign_source.ex"
+    end
+  end
+
+  describe "relative_source_path/2" do
+    test "dep module" do
+      assert relative_source_path("/proj/deps/my_dep/lib/my_dep/a.ex", "/proj") ==
+               "lib/my_dep/a.ex"
+    end
+
+    test "project module" do
+      assert relative_source_path("/proj/lib/my_app/a.ex", "/proj") == "lib/my_app/a.ex"
+    end
+
+    test "Elixir standard library module" do
+      path = "/home/runner/work/elixir/elixir/lib/elixir/lib/enum.ex"
+
+      assert relative_source_path(path, "/proj") == "lib/enum.ex"
+    end
+
+    test "unrecognized source root" do
+      assert relative_source_path("/foreign/build/machine/lib/a.ex", "/proj") == "a.ex"
+    end
+
+    test "a sibling directory whose name starts with the root's name is not the root" do
+      assert relative_source_path("/proj_other/lib/a.ex", "/proj") == "a.ex"
     end
   end
 

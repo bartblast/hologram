@@ -480,7 +480,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   @doc """
-  Aggregates function clauses from a module definition.
+  Aggregates function clauses from a module definition, sorted by function name and arity.
 
   ## Returns
 
@@ -516,6 +516,10 @@ defmodule Hologram.Compiler.IR do
         acc
     end)
     |> Enum.map(fn {key, {visibility, clauses}} -> {key, {visibility, Enum.reverse(clauses)}} end)
+    # The order a bundle lists its functions in is chosen here rather than inherited from the
+    # accumulator's layout, which is sorted only while a module holds 32 or fewer functions.
+    # The same reachable set then always renders the same bytes.
+    |> Enum.sort_by(fn {key, _fun} -> key end)
   end
 
   @doc """

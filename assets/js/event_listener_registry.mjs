@@ -12,9 +12,16 @@
 // binding's own concern: each carries an attach(dispatcher) that installs the real listener and
 // returns a detach() teardown (see event_listeners.mjs). The key tells listeners on one target
 // apart - a capture-phase listener from a bubble-phase one, a DOM event from an observer - so
-// each reconciles independently.
+// each reconciles independently. detachAll() drops every live listener at once, which is what a
+// navigation needs: the page being left must observe nothing of the page replacing it.
 export default class EventListenerRegistry {
   static #entriesByTarget = new Map();
+
+  // Detaches every live listener on every target and empties the registry. A later reconcile
+  // attaches afresh.
+  static detachAll() {
+    $.reconcile([]);
+  }
 
   // Reconciles the live listeners against `bindings`, an array of {target, key, attach, handler}
   // descriptors collected during the current render. Attaches, refreshes, or detaches exactly one

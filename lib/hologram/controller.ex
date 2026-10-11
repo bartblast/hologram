@@ -3,15 +3,18 @@ defmodule Hologram.Controller do
 
   require Logger
 
+  alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Auth.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.LiveReload
   alias Hologram.Mutation
   alias Hologram.Page
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Router.PageModuleResolver
@@ -114,7 +117,9 @@ defmodule Hologram.Controller do
   readable before the render is patched in, rather than as a side effect of a script the patch
   inserts and the browser then runs.
 
-  The digest names the bundle to fetch when this client does not have the page's code yet.
+  The digest names the bundle to fetch when this client does not have the page's code yet, and the
+  chunk digests name the chunks the page needs before it mounts (see
+  `Hologram.Assets.ChunkRegistry`), which the client loads unless it has them.
 
   Every value but the tree is encoded the way a command's response encodes terms, as JavaScript the
   client evaluates, since that is the form its runtime already reads. The tree is not: it holds
@@ -147,6 +152,7 @@ defmodule Hologram.Controller do
   # The wire format for the tree, and the 112 alternatives it was measured against.
   # See: docs/navigation_payload_wire_format.md
   def build_page_data_payload(%{
+        chunk_digests: chunk_digests,
         mount_data: mount_data,
         page_digest: page_digest,
         self_echoes: self_echoes,
@@ -156,6 +162,7 @@ defmodule Hologram.Controller do
       }) do
     %{
       actorUserId: mount_data.actor_user_id,
+      chunks: chunk_digests,
       componentRegistry: mount_data.component_registry,
       pageDigest: page_digest,
       pageModule: mount_data.page_module,
@@ -414,6 +421,9 @@ defmodule Hologram.Controller do
       |> maybe_persist_user_id(server_struct, flushed_server_struct)
       |> Controller.json(%{
         action: encoded_next_action,
+        # The chunks the struct types in the action and in the self echoes need, which the client
+        # loads before it runs them.
+        chunks: ChunkRegistry.lookup_term({next_action, self_echoes}),
         selfEchoes: encoded_self_echoes,
         status: command_status,
         subReceiptAdds: encoded_sub_receipt_adds,
@@ -541,17 +551,21 @@ defmodule Hologram.Controller do
         # typed, where a token means nothing and an inserted value brings quotes that end the
         # attribute it lands in.
         #
-        # The mount data and the Realtime values go in ONE pass rather than two, so no value can
-        # be read as a token by a later substitution: a page param or a database row holding the
-        # text of another token would otherwise have that token honoured inside it.
+        # The mount data, the Realtime values and the chunk digests go in ONE pass rather than
+        # three, so no value can be read as a token by a later substitution: a page param or a
+        # database row holding the text of another token would otherwise have that token honoured
+        # inside it. The chunk script tags are elements rather than script text, so they go into
+        # the tree apart - the digests they carry are the compiler's own, which name no token.
         replacements =
           result.mount_data
           |> Renderer.mount_replacements()
           |> Map.merge(realtime_js(result))
+          |> Map.merge(Renderer.chunk_replacements(result.chunk_digests))
 
         final_html =
           result.tree
           |> Renderer.interpolate_js_in_tree(replacements)
+          |> Renderer.interpolate_chunk_script_tags_in_tree(result.chunk_digests)
           |> Renderer.print_dom()
 
         conn
@@ -612,6 +626,7 @@ defmodule Hologram.Controller do
         conn
         |> Controller.json(%{
           handshakeId: handshake_id,
+          heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
           refreshedReceipts: encoded_refreshed_receipts
         })
         |> Plug.Conn.halt()
@@ -659,6 +674,7 @@ defmodule Hologram.Controller do
         # encoder output into the tree's encoding and unescaping it again on arrival.
         payload =
           build_page_data_payload(%{
+            chunk_digests: result.chunk_digests,
             mount_data: result.mount_data,
             page_digest: PageDigestRegistry.lookup(page_module),
             self_echoes: result.self_echoes,
@@ -820,12 +836,45 @@ defmodule Hologram.Controller do
   # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
   # untouched on the common path. Applied after the handler's own ops so
   # `server.user_id` stays the source of truth for the key.
+  # In dev a live reload may still be building the page's bundle: the render names the bundle, so
+  # it waits for it, and asking for the page has it built next. This is what serves a page the
+  # live reload could not tell was about to be visited, a path computed at runtime or a redirect,
+  # with its current bundle.
+  defp maybe_await_page_bundle(page_module) do
+    if Hologram.env() == :dev do
+      LiveReload.await_page(page_module)
+    end
+  end
+
+  # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
+  # it rendered last.
+  defp maybe_note_page_rendered(nil, _page_module), do: :ok
+
+  defp maybe_note_page_rendered(instance_id, page_module) do
+    if Hologram.env() == :dev do
+      LiveReload.page_rendered(instance_id, page_module)
+    end
+  end
+
   defp maybe_persist_user_id(conn, %Server{user_id: user_id}, %Server{user_id: user_id}) do
     conn
   end
 
   defp maybe_persist_user_id(conn, _pre_server, %Server{user_id: user_id}) do
     Session.put_user_id(conn, user_id)
+  end
+
+  # The chunks a rendered page needs before it mounts: the ones it preloads for the struct types
+  # its client code names, the ones its state needs, and the ones its self echoes need.
+  defp page_chunk_digests(page_module, state_chunk_digests, self_echoes) do
+    [
+      ChunkRegistry.lookup_page(page_module),
+      state_chunk_digests,
+      ChunkRegistry.lookup_term(self_echoes)
+    ]
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   # Transport only: what a batch becomes is Hologram.Mutation's, the spelling of its answer
@@ -872,6 +921,8 @@ defmodule Hologram.Controller do
          client_claimed_sub_keys,
          renderer_opts
        ) do
+    maybe_await_page_bundle(page_module)
+
     conn = Session.init(initial_conn)
 
     server_struct = %{
@@ -894,11 +945,14 @@ defmodule Hologram.Controller do
        middleware_server_struct}
     else
       %{
+        chunk_digests: state_chunk_digests,
         component_registry: component_registry,
         mount_data: mount_data,
         server_struct: rendered_server_struct,
         tree: rendered_tree
       } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
+
+      maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
       # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
@@ -917,6 +971,7 @@ defmodule Hologram.Controller do
       flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
 
       result = %{
+        chunk_digests: page_chunk_digests(page_module, state_chunk_digests, self_echoes),
         component_registry: component_registry,
         mount_data: mount_data,
         self_echoes: self_echoes,

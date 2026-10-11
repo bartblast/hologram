@@ -29,7 +29,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module106
   alias Hologram.Test.Fixtures.Template.Renderer.Module107
   alias Hologram.Test.Fixtures.Template.Renderer.Module108
-  alias Hologram.Test.Fixtures.Template.Renderer.Module93
+  alias Hologram.Test.Fixtures.Template.Renderer.Module109
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
   alias Hologram.Test.Fixtures.Template.Renderer.Module98
@@ -37,12 +37,14 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :query_cache
 
   setup :set_mox_global
 
   setup do
+    setup_chunk_registry(ChunkRegistryStub)
     setup_query_cache(QueryCacheStub, false)
 
     dump_query_cache(QueryCacheStub, [Module97, Module105, Module106, Module108, Module95])
@@ -464,7 +466,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
       setup_asset_manifest_cache(AssetManifestCacheStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module93, :dummy_module_93_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module109, :dummy_module_109_digest)
 
       :ok
     end
@@ -475,7 +477,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Module14.new()
         |> DB.create!()
 
-      html = render_page_html(Module93, %Server{user_id: user.id})
+      html = render_page_html(Module109, %Server{user_id: user.id})
 
       assert String.contains?(html, "current user = renderer_2@example.com")
     end
@@ -487,7 +489,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> DB.create!()
 
       %{component_registry: component_registry} =
-        render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
+        render_page(Module109, %{}, %Server{user_id: user.id}, @page_opts)
 
       context_user = component_registry["page"].struct.emitted_context[{Hologram, :user}]
 
@@ -496,7 +498,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     test "exposes nil for an anonymous session" do
-      html = render_page_html(Module93)
+      html = render_page_html(Module109)
 
       assert String.contains?(html, "current user = none")
     end
@@ -504,13 +506,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
     test "exposes nil when no row carries the session user id" do
       dangling_user_id = Entity.generate_id()
 
-      html = render_page_html(Module93, %Server{user_id: dangling_user_id})
+      html = render_page_html(Module109, %Server{user_id: dangling_user_id})
 
       assert String.contains?(html, "current user = none")
     end
 
     test "exposes nil for a session user id that is not a canonical entity id" do
-      html = render_page_html(Module93, %Server{user_id: 7})
+      html = render_page_html(Module109, %Server{user_id: 7})
 
       assert String.contains?(html, "current user = none")
     end

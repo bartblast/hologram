@@ -9,14 +9,18 @@ defmodule Hologram.RouterTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Realtime.Handshake
+  alias Hologram.Reflection
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Router.Module1
   alias Hologram.Test.Fixtures.Router.Module2
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
+  use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
+
+  @page_modules Reflection.list_pages()
 
   setup :set_mox_global
 
@@ -37,6 +41,11 @@ defmodule Hologram.RouterTest do
 
     setup_asset_manifest_cache(AssetManifestCacheStub)
 
+    setup_chunk_registry(ChunkRegistryStub)
+
+    # Every page of the test build preloads no chunk.
+    Enum.each(@page_modules, &ETS.put(ChunkRegistryStub.ets_table_name(), {:page, &1}, []))
+
     setup_page_digest_registry(PageDigestRegistryStub)
 
     setup_page_module_resolver(PageModuleResolverStub)
@@ -56,6 +65,10 @@ defmodule Hologram.RouterTest do
   describe "/hologram/command" do
     test "routes POST command request" do
       {masked_csrf_token, unmasked_csrf_token} = CSRFProtection.generate_tokens()
+
+      # A command reaches a component the server rendered, so its module, and the command name
+      # the request carries, are loaded.
+      Code.ensure_loaded!(Module2)
 
       # Simulate that JSON has already been parsed upstream by Plug.Parsers
       parsed_json = [
@@ -83,6 +96,7 @@ defmodule Hologram.RouterTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "action" => ~s'Type.atom("nil")',
+               "chunks" => [],
                "selfEchoes" => "Type.list([])",
                "status" => 1,
                "subReceiptAdds" => "Type.list([])",
@@ -107,10 +121,13 @@ defmodule Hologram.RouterTest do
         }
       ]
 
+      # An atom param is cast to an atom that already exists, one the app's own code holds.
+      param_atom = :xyz
+
       conn =
         :post
         |> Plug.Test.conn(
-          "/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz",
+          "/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=#{param_atom}",
           ""
         )
         |> Plug.Conn.put_req_header("content-type", "application/json")
@@ -123,7 +140,7 @@ defmodule Hologram.RouterTest do
       assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
       assert response["type"] == "page"
       # The page renders its params, so the tree carrying the render shows them cast.
-      assert Jason.encode!(response["tree"]) =~ "a = 123, b = :xyz"
+      assert Jason.encode!(response["tree"]) =~ "a = 123, b = #{inspect(param_atom)}"
     end
   end
 
@@ -186,7 +203,6 @@ defmodule Hologram.RouterTest do
 
       assert result_conn.resp_headers == [
                {"cache-control", "no-cache"},
-               {"connection", "keep-alive"},
                {"content-type", "text/event-stream"}
              ]
     end
@@ -216,13 +232,16 @@ defmodule Hologram.RouterTest do
     test "request path is matched" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
+      # An atom param is cast to an atom that already exists, one the app's own code holds.
+      param_atom = :xyz
+
       conn =
         :get
-        |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
+        |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/#{param_atom}")
         |> Plug.Test.init_test_session(%{})
         |> call([])
 
-      assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
+      assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = #{inspect(param_atom)}")
 
       # Initial pages include runtime script
       assert String.contains?(conn.resp_body, "hologram/runtime")

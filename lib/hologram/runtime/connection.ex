@@ -7,17 +7,12 @@ defmodule Hologram.Runtime.Connection do
   @behaviour WebSock
 
   alias Hologram.Assets.PageDigestRegistry
-  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Runtime.Deserializer
 
   @type state :: %{plug_conn: Plug.Conn.t()}
 
   @impl WebSock
   def init(plug_conn) do
-    if Hologram.env() == :dev do
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
-    end
-
     connection_id = UUID.uuid4()
 
     # context = gproc_context(Hologram.env())
@@ -39,18 +34,6 @@ defmodule Hologram.Runtime.Connection do
     reply = encode(reply_type, reply_payload, correlation_id)
 
     {:reply, :ok, {:text, reply}, new_state}
-  end
-
-  @impl WebSock
-  def handle_info({:compilation_error, lines}, state) do
-    message = encode("compilation_error", lines, nil)
-    {:push, {:text, message}, state}
-  end
-
-  @impl WebSock
-  def handle_info(:reload, state) do
-    message = encode("reload", :__no_payload__, nil)
-    {:push, {:text, message}, state}
   end
 
   @impl WebSock
@@ -80,10 +63,6 @@ defmodule Hologram.Runtime.Connection do
     Jason.encode!(type)
   end
 
-  defp encode(type, payload, nil) do
-    Jason.encode!([type, payload])
-  end
-
   defp encode(type, payload, correlation_id) do
     Jason.encode!([type, payload, correlation_id])
   end
@@ -94,13 +73,8 @@ defmodule Hologram.Runtime.Connection do
 
   # defp gproc_context(_env), do: :g
 
-  defp handle_message("page_bundle_path", page_module, connection_state) do
-    page_bundle_path =
-      page_module
-      |> PageDigestRegistry.lookup()
-      |> RouterHelpers.page_bundle_path()
-
-    {"reply", page_bundle_path, connection_state}
+  defp handle_message("page_digest", page_module, connection_state) do
+    {"reply", PageDigestRegistry.lookup(page_module), connection_state}
   end
 
   defp handle_message("ping", nil, connection_state) do

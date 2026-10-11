@@ -12,12 +12,12 @@ defmodule App1.MixProject do
     [
       {:app_2, in_umbrella: true},
       {:app_3, in_umbrella: true},
+      {:bandit, "~> 1.5"},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
        ref: "eb7d39c21088347d61cb2cda97cda59fc63c3519"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
-      {:plug_cowboy, "~> 2.0"},
       {:wallaby, "~> 0.30", only: :test}
     ]
   end

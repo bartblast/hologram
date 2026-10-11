@@ -1,6 +1,7 @@
 import Config
 
 config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
+  adapter: Bandit.PhoenixAdapter,
   pubsub_server: HologramFeatureTests.PubSub,
   render_errors: [
     formats: [json: HologramFeatureTestsWeb.ErrorJSON],

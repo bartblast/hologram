@@ -59,6 +59,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> assert_text(css("#call_result"), "{300, true}")
     end
 
+    feature "async andalso", %{session: session} do
+      session
+      |> visit(AsyncPage)
+      |> click(button("Async andalso"))
+      |> assert_text(css("#call_result"), ":andalso_right")
+    end
+
     feature "async anonymous function call", %{session: session} do
       session
       |> visit(AsyncPage)
@@ -99,6 +106,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> visit(AsyncPage)
       |> click(button("Async dynamic call"))
       |> assert_text(css("#call_result"), "{33, true}")
+    end
+
+    feature "async orelse", %{session: session} do
+      session
+      |> visit(AsyncPage)
+      |> click(button("Async orelse"))
+      |> assert_text(css("#call_result"), ":orelse_right")
     end
 
     feature "async with", %{session: session} do

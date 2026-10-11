@@ -1,27 +1,22 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Controller.Module35 do
   use Hologram.Page
 
-  alias Hologram.Auth
-  alias Hologram.Test.Fixtures.LayoutFixture
-
   route "/hologram-test-fixtures-controller-module35"
 
-  layout LayoutFixture
-
-  middleware :capture_actor
-
-  def capture_actor(server, _opts) do
-    put_stash(server, :actor, Auth.user_id())
-  end
+  layout Hologram.Test.Fixtures.LayoutWithRuntime
 
   @impl Page
   def init(_params, component, server) do
-    put_state(component, actor: get_stash(server, :actor))
+    new_server =
+      server
+      |> put_subscription({:instance, server.instance_id})
+      |> put_broadcast({:instance, server.instance_id}, :test_action, time: ~T[12:34:56])
+
+    {component, new_server}
   end
 
   @impl Page
   def template do
-    ~HOLO"actor={@actor}"
+    ~HOLO""
   end
 end

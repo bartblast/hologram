@@ -15,7 +15,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Stateless components cannot handle events. You need a `cid` to make a component stateful.
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
 - Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
-- Protocol implementations ship to the browser only for types the compiler can see: structs referenced in client code, in `init`/command code, or in action broadcasts. A type resolved purely at runtime (e.g. from a string or external data) won't have its implementations bundled - reference its struct module anywhere in client-reachable code if needed.
+- The code of a struct type, its protocol implementations and its `__struct__` functions, is not in the runtime or page bundles. The browser loads it as separate chunks when a struct of the type or the type's module atom reaches it: in the state `init/3` sets, in an action a command returns, or in an action the server broadcasts. A page also preloads the chunks of the struct types its own client code names. This covers every struct type, whether or not the app's code names it, so never reference a struct module only to get its code bundled. A module the client builds from a string (`String.to_existing_atom/1`, `Module.concat/2`) loads nothing.
+- Reflection functions (`__changeset__/0`, `__schema__/1,2`) called on a named module (`User.__changeset__()`) ship like any other function. Called on a module the code does not name (`mod.__changeset__()`, `apply(mod, :__schema__, [:fields])`), they ship with a page only for the types the page can see: the struct types its client code names, and the ones `init/3`, a command or code that broadcasts an action creates. A call through `apply/3` with a function name known only at runtime is not detected, so a reflection function reached only that way raises `UndefinedFunctionError` on the client - write the function name in the call (`apply(mod, :__schema__, args)`), or call the function on its module somewhere in client-reachable code. Naming the module alone is not enough.
 - `try` (with `rescue`/`catch`/`else`/`after`), `raise`, `reraise`, `throw`, and `exit` work client-side, and so does `__STACKTRACE__`. Client errors carry the same messages and stacktraces as server errors, except in environments where `:client_stacktraces` is disabled (the default outside `dev`/`test`), where a trace holds only the frame the error was raised in.
 - Realtime: inside `init/3`/commands use `put_subscription`/`put_broadcast` on the `server` struct (deferred until the handler succeeds). The `Hologram.Realtime.*` functions fire immediately and are only for code outside a handler (background jobs, workers).
 
@@ -144,6 +145,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Update context: `put_context(component, :key, value)`.
 - Chain another action: `put_action(component, :action_name)` or `put_action(component, :action_name, param: value)`.
 - Delays are available for actions only (not commands): `put_action(component, name: :my_action, delay: 750)`.
+- A component's actions run one at a time, in dispatch order, and each sees the state the previous one left. An action that awaits a `Task` holds back later actions for that component only - other components keep running.
 
 ## Commands
 

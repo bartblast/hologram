@@ -15,10 +15,11 @@ defmodule Mix.Tasks.Holo.Compiler.ExRuntimeMfas do
   @doc false
   @impl Mix.Task
   def run(_args) do
+    call_graph = CallGraph.remove_manually_ported_mfas(Compiler.build_call_graph())
+
     mfas =
-      Compiler.build_call_graph()
-      |> CallGraph.remove_manually_ported_mfas()
-      |> CallGraph.list_runtime_mfas(Reflection.list_pages())
+      call_graph
+      |> CallGraph.list_runtime_mfas()
       |> Enum.filter(fn {module, _fun, _arity} -> Reflection.elixir_module?(module) end)
 
     # credo:disable-for-lines:2 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
