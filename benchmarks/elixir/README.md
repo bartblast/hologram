@@ -217,7 +217,7 @@ no module changes                       17733.43
 
 ```
 Name                                    ips        average  deviation         median         99th %
-remove_manually_ported_mfas/1      437.86 K        2.28 μs    ±41.60%        2.33 μs        6.44 μs
+remove_manually_ported_mfas/1         73.80       13.55 ms     ±2.07%       13.42 ms       14.40 ms
 ```
 
 
@@ -225,7 +225,7 @@ remove_manually_ported_mfas/1      437.86 K        2.28 μs    ±41.60%        2
 
 ```
 Name                             ips        average  deviation         median         99th %
-remove_runtime_mfas!/2       43.45 K       23.02 μs     ±9.09%       22.67 μs       38.07 μs
+remove_runtime_mfas!/2         19.13       52.27 ms     ±3.52%       51.82 ms       63.21 ms
 ```
 
 
@@ -233,20 +233,20 @@ remove_runtime_mfas!/2       43.45 K       23.02 μs     ±9.09%       22.67 μs
 
 ```
 Name                  ips        average  deviation         median         99th %
-1 vertex         473.03 K        2.11 μs    ±56.02%        1.79 μs        6.58 μs
-2 vertices       344.47 K        2.90 μs    ±30.67%        3.13 μs        5.65 μs
-16 vertices      343.50 K        2.91 μs    ±40.73%        2.52 μs        6.83 μs
-4 vertices       339.03 K        2.95 μs    ±27.88%           3 μs        5.27 μs
-8 vertices       317.49 K        3.15 μs    ±26.83%        3.29 μs        5.33 μs
-32 vertices      183.42 K        5.45 μs    ±23.54%        5.60 μs        9.83 μs
+1 vertex          39.83 K       25.10 μs   ±120.06%       22.73 μs      194.09 μs
+2 vertices        35.25 K       28.37 μs   ±114.93%       26.92 μs       54.81 μs
+4 vertices        29.82 K       33.54 μs    ±24.33%       33.25 μs       67.55 μs
+8 vertices        19.52 K       51.23 μs    ±16.54%       51.13 μs       81.53 μs
+16 vertices       10.44 K       95.80 μs    ±11.33%       94.75 μs      123.90 μs
+32 vertices        3.24 K      308.58 μs    ±27.35%      294.75 μs      400.79 μs
 
 Comparison: 
-1 vertex         473.03 K
-2 vertices       344.47 K - 1.37x slower +0.79 μs
-16 vertices      343.50 K - 1.38x slower +0.80 μs
-4 vertices       339.03 K - 1.40x slower +0.84 μs
-8 vertices       317.49 K - 1.49x slower +1.04 μs
-32 vertices      183.42 K - 2.58x slower +3.34 μs
+1 vertex          39.83 K
+2 vertices        35.25 K - 1.13x slower +3.26 μs
+4 vertices        29.82 K - 1.34x slower +8.43 μs
+8 vertices        19.52 K - 2.04x slower +26.13 μs
+16 vertices       10.44 K - 3.82x slower +70.69 μs
+32 vertices        3.24 K - 12.29x slower +283.48 μs
 ```
 
 
