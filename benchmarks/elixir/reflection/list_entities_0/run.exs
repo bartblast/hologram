@@ -1,9 +1,9 @@
 alias Hologram.Reflection
 
-# The sweep every builder of the compile pays once per build, and the one the query extractor used
-# to pay once per replayed variant - every app's ebin directory is globbed and every module it
-# holds is asked whether it is an entity type. Warm: the code server already has the paths and the
-# filesystem has the directory listings cached, which is the state a build runs in.
+# What a listing of the entity types from the beams costs: every app's ebin directory is globbed
+# and the export table of every beam it holds is read, concurrently. A compile lists the entity
+# types from its module info PLT and pays none of it. Warm: the code server already has the paths
+# and the filesystem has the directory listings cached.
 Benchee.run(
   %{
     "list_entities/0" => fn ->

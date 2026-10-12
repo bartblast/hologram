@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_page_windows/3</td>
-    <td style="white-space: nowrap; text-align: right">2.44</td>
-    <td style="white-space: nowrap; text-align: right">410.09 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.24%</td>
-    <td style="white-space: nowrap; text-align: right">407.41 ms</td>
-    <td style="white-space: nowrap; text-align: right">437.42 ms</td>
+    <td style="white-space: nowrap; text-align: right">475.44</td>
+    <td style="white-space: nowrap; text-align: right">2.10 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.00%</td>
+    <td style="white-space: nowrap; text-align: right">2.06 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.59 ms</td>
   </tr>
 
 </table>

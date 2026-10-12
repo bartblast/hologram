@@ -1,8 +1,8 @@
 alias Hologram.Compiler
 alias Hologram.Reflection
 
-# Swept outside the measured function because the compile task sweeps once and passes both lists
-# down - Hologram.Reflection.list_entities/0 and list_components/0 have benchmarks of their own.
+# Listed outside the measured function because the compile task lists both once, from its module
+# info PLT, and passes them down.
 component_modules = Reflection.list_components()
 entity_types = Reflection.list_entities()
 

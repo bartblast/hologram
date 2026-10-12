@@ -5,8 +5,8 @@ alias Hologram.Benchmarks.Fixtures.Entity1
 alias Hologram.Compiler.QueryExtractor
 alias Hologram.Reflection
 
-# Swept once because the build sweeps once and passes the list down -
-# Hologram.Reflection.list_entities/0 has a benchmark of its own.
+# Listed once because the build lists the entity types once, from its module info PLT, and passes
+# the list down.
 all_entity_types = Reflection.list_entities()
 one_entity_type = [Entity1]
 
