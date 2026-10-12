@@ -10,6 +10,10 @@ defmodule Hologram.Reflection do
     :size,
     :page?,
     :component?,
+    :entity?,
+    :policy?,
+    :role?,
+    :user_entity?,
     :protocol?,
     :protocol_implementation?,
     :struct?,
@@ -86,8 +90,8 @@ defmodule Hologram.Reflection do
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
   seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
-  a protocol, a protocol implementation, a struct, an exception or an Ecto schema, and whether it declares
-  JS imports. Each flag is the export table check that the `Reflection` predicate of the same name
+  an entity type, a policy, a role, the user entity type, a protocol, a protocol implementation, a struct,
+  an exception or an Ecto schema, and whether it declares JS imports. Each flag is the export table check that the `Reflection` predicate of the same name
   performs after loading the module, read from the file instead. The source path is the `:source` of
   the BEAM's compile info, the value `module.module_info(:compile)[:source]` returns once the module is
   loaded, as a string (nil when the compile info has none).
@@ -113,6 +117,10 @@ defmodule Hologram.Reflection do
         size: 1355821,
         page?: true,
         component?: false,
+        entity?: false,
+        policy?: false,
+        role?: false,
+        user_entity?: false,
         protocol?: false,
         protocol_implementation?: false,
         struct?: false,
@@ -130,7 +138,9 @@ defmodule Hologram.Reflection do
   """
   # WARNING: a change in what this records about a module needs a bump of the call graph's
   # @dump_version (see the warning in Hologram.Compiler.CallGraph), or a kept module info dump keeps
-  # what the previous code recorded for every module whose beam did not change.
+  # what the previous code recorded for every module whose beam did not change. A new key needs no
+  # bump: beam_info_keys/0 makes an entry that lacks it be read again (see
+  # Hologram.Compiler.build_module_info_plt!/3).
   # TODO: Narrow the spec back to charlist, and rename the param back to
   # beam_path, when beam_source/1 goes (see the removal note there) - nothing
   # passes a BEAM binary here once the umbrella fallback is gone.
@@ -141,6 +151,10 @@ defmodule Hologram.Reflection do
             size: non_neg_integer | nil,
             page?: boolean,
             component?: boolean,
+            entity?: boolean,
+            policy?: boolean,
+            role?: boolean,
+            user_entity?: boolean,
             protocol?: boolean,
             protocol_implementation?: boolean,
             struct?: boolean,
@@ -192,6 +206,10 @@ defmodule Hologram.Reflection do
         size: size,
         page?: page?,
         component?: {:__is_hologram_component__, 0} in exports,
+        entity?: {:__is_hologram_entity__, 0} in exports,
+        policy?: {:__is_hologram_policy__, 0} in exports,
+        role?: {:__is_hologram_role__, 0} in exports,
+        user_entity?: {:__is_hologram_user_entity__, 0} in exports,
         protocol?: protocol?,
         protocol_implementation?: protocol_implementation?,
         struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,

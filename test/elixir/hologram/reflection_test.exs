@@ -179,6 +179,10 @@ defmodule Hologram.ReflectionTest do
                size: ^size,
                page?: false,
                component?: false,
+               entity?: false,
+               policy?: false,
+               role?: false,
+               user_entity?: false,
                protocol?: false,
                protocol_implementation?: false,
                struct?: false,
@@ -280,6 +284,34 @@ defmodule Hologram.ReflectionTest do
 
     test "component module" do
       assert %{page?: false, component?: true} = beam_info(:code.which(Module3))
+    end
+
+    test "entity type module" do
+      assert %{entity?: true, policy?: false, role?: false, user_entity?: false} =
+               beam_info(:code.which(Entity.Module1))
+
+      assert entity?(Entity.Module1)
+    end
+
+    test "policy module" do
+      assert %{entity?: false, policy?: true, role?: false, user_entity?: false} =
+               beam_info(:code.which(Policy.Shared.Module1))
+
+      assert policy?(Policy.Shared.Module1)
+    end
+
+    test "role module" do
+      assert %{entity?: false, policy?: false, role?: true, user_entity?: false} =
+               beam_info(:code.which(Role.Module1))
+
+      assert role?(Role.Module1)
+    end
+
+    test "user entity type module" do
+      assert %{entity?: true, policy?: false, role?: false, user_entity?: true} =
+               beam_info(:code.which(Entity.Module14))
+
+      assert user_entity?(Entity.Module14)
     end
 
     test "protocol module" do
