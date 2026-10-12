@@ -18,8 +18,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
-  @entity_types_key {Hologram.Entity.Model, :entity_types}
-  @exists_key {Hologram.Entity.Model, :exists?}
+  @facts_key {Hologram.Entity.Model, :facts}
   @hash_key {Hologram.Entity.Model, :hash}
 
   defp task_model(entry_overrides) do
@@ -49,15 +48,14 @@ defmodule Hologram.Entity.ModelTest do
       assert entity_types() == Reflection.list_entities()
     end
 
-    # The sweep behind this walks every module the project holds and runs for every batch of
-    # writes a node routes, so the cache is the point rather than a nicety. Asserted through the
-    # store rather than by timing.
-    test "remembers the list rather than sweeping the modules again" do
-      assert :persistent_term.get(@entity_types_key, nil) == nil
+    # This runs for every batch of writes a node routes, so the cache is the point rather than a
+    # nicety. Asserted through the store rather than by timing.
+    test "remembers the list rather than listing the modules again" do
+      assert :persistent_term.get(@facts_key, nil) == nil
 
       entity_types()
 
-      assert :persistent_term.get(@entity_types_key, nil) == Reflection.list_entities()
+      assert :persistent_term.get(@facts_key).entity_types == Reflection.list_entities()
     end
   end
 
@@ -1433,6 +1431,40 @@ defmodule Hologram.Entity.ModelTest do
     end
   end
 
+  describe "put_facts/3" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "drops the hash derived from the previous facts" do
+      hash()
+
+      assert put_facts([Module1], [RoleModule1], Module1) == :ok
+      assert :persistent_term.get(@hash_key, nil) == nil
+    end
+
+    test "stores the given entity types, roles and user entity type" do
+      assert put_facts([Module1], [RoleModule1], Module1) == :ok
+
+      assert entity_types() == [Module1]
+      assert roles() == [RoleModule1]
+      assert user_entity() == Module1
+    end
+
+    test "the hash is derived from the stored entity types and roles" do
+      put_facts([Module1], [RoleModule1], nil)
+
+      expected =
+        [Module1]
+        |> from_modules([RoleModule1])
+        |> hash()
+
+      assert hash() == expected
+    end
+  end
+
   describe "reset_caches/0" do
     test "drops the derived hash" do
       hash()
@@ -1441,19 +1473,52 @@ defmodule Hologram.Entity.ModelTest do
       assert :persistent_term.get(@hash_key, nil) == nil
     end
 
-    # All three, or a recompiled model would be picked up by one answer and not the others.
-    test "drops the remembered answer about whether a model exists" do
-      exists?()
-
-      assert reset_caches() == :ok
-      assert :persistent_term.get(@exists_key, nil) == nil
-    end
-
-    test "drops the remembered entity types" do
+    # Both, or a recompiled model would be picked up by one answer and not the others.
+    test "drops the remembered entity types, roles and user entity type" do
       entity_types()
 
       assert reset_caches() == :ok
-      assert :persistent_term.get(@entity_types_key, nil) == nil
+      assert :persistent_term.get(@facts_key, nil) == nil
+    end
+  end
+
+  describe "roles/0" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "lists the global roles of the project's compiled data model" do
+      assert roles() == Reflection.list_roles()
+    end
+
+    test "remembers the list rather than listing the modules again" do
+      assert :persistent_term.get(@facts_key, nil) == nil
+
+      roles()
+
+      assert :persistent_term.get(@facts_key).roles == Reflection.list_roles()
+    end
+  end
+
+  describe "user_entity/0" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "returns the user entity type of the project's compiled data model" do
+      assert user_entity() == Module14
+    end
+
+    test "remembers the answer rather than listing the modules again" do
+      assert :persistent_term.get(@facts_key, nil) == nil
+
+      user_entity()
+
+      assert :persistent_term.get(@facts_key).user_entity == Module14
     end
   end
 
@@ -1464,16 +1529,24 @@ defmodule Hologram.Entity.ModelTest do
       assert exists?() == true
     end
 
-    # The sweep behind this takes tens of milliseconds and runs on every client handshake, so the
-    # cache is the point rather than a nicety. Asserted through the store rather than by timing.
-    test "remembers the answer rather than sweeping the modules again" do
+    # This runs on every client handshake, so the cache is the point rather than a nicety.
+    # Asserted through the store rather than by timing.
+    test "answers from the remembered entity types rather than listing the modules again" do
       reset_caches()
 
-      assert :persistent_term.get(@exists_key, nil) == nil
+      assert :persistent_term.get(@facts_key, nil) == nil
 
       exists?()
 
-      assert :persistent_term.get(@exists_key, nil) == true
+      assert :persistent_term.get(@facts_key).entity_types == Reflection.list_entities()
+    end
+
+    test "says a build declaring no entity type has no data model" do
+      on_exit(&reset_caches/0)
+
+      put_facts([], [], nil)
+
+      assert exists?() == false
     end
   end
 
