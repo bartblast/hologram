@@ -343,26 +343,49 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
-  Reloads the application after a file change by recompiling the Elixir code, reconciling the
-  database schema with the recompiled entity types, and then running the Hologram compile with the
-  given options, `:next_batch` and `:bundles_built`, through which the scheduler orders the pages
-  and reloads the tabs batch by batch (see `handle_call/3`). The runtime registries are reloaded
-  once more at the end, for a compile that built no bundle.
+  Reloads the application after a file change by recompiling the Elixir code and then running the
+  Hologram compile with the given options, `:next_batch` and `:bundles_built`, through which the
+  scheduler orders the pages and reloads the tabs batch by batch (see `handle_call/3`). The compile
+  validates the data model and has the database schema reconciled with it (see
+  `reload_database/2`) before it builds anything. The runtime registries are reloaded once more at
+  the end, for a compile that built no bundle.
 
-  If code reloading or schema reconciliation fails, broadcasts a compilation error instead -
-  clients only ever reload into a converged database, since the schema is reconciled before the
-  first batch is built and its tabs told to reload.
+  If code reloading fails, broadcasts a compilation error instead. Clients only ever reload into a
+  converged database, since the schema is reconciled before the first batch is built and its tabs
+  told to reload.
   """
   @spec reload(String.t() | nil, any, keyword) :: :ok
   def reload(_file_path, endpoint, opts) do
-    with :ok <- reload_code(endpoint),
-         :ok <- reload_database() do
-      recompile_hologram(opts)
-      reload_runtime()
-      :ok
-    else
-      {:error, output} -> broadcast_compilation_error(output)
+    case reload_code(endpoint) do
+      :ok ->
+        recompile_hologram([data_model_ready: &reload_database/2] ++ opts)
+        reload_runtime()
+        :ok
+
+      {:error, output} ->
+        broadcast_compilation_error(output)
     end
+  end
+
+  # The query cache is not reloaded with the database: it reads the registered queries the Hologram
+  # compile dumps, so it reloads with the runtime registries, and a compile that refused a query
+  # builder fails before any registry is reloaded, leaving the previous dump in place.
+
+  @doc """
+  Re-derives the database mapping from the given entity type and global role modules and
+  reconciles the schema with it. A failure is logged, broadcast to the open tabs as a compilation
+  error, and raised again.
+  """
+  @spec reload_database(list(module), list(module)) :: :ok
+  def reload_database(entity_types, role_modules) do
+    DB.reload(entity_types, role_modules)
+  rescue
+    error ->
+      message = Exception.message(error)
+      Logger.error("Hologram: data layer reload failed: #{message}")
+      broadcast_compilation_error(message)
+
+      reraise error, __STACKTRACE__
   end
 
   @doc """
@@ -498,23 +521,6 @@ defmodule Hologram.LiveReload do
     # location and the stacktrace would all arrive as data. What the overlay
     # would take on in exchange is drawing the source excerpt itself, since
     # Elixir prints that rather than returning it.
-  end
-
-  # A schema reconciliation failure surfaces like a compilation error - logged loudly and
-  # broadcast to connected clients. It runs between the Elixir recompile and the Hologram compile:
-  # the recompiled entity types are what the schema converges to, and no batch of that compile
-  # tells a tab to reload before this returns. The query cache reloads with the runtime registries
-  # instead, since it reads the registered queries the Hologram compile dumps, and a compile that
-  # refused a query builder fails before any registry is reloaded, leaving the previous dump in
-  # place.
-  defp reload_database do
-    DB.reload(Reflection.list_entities(), Reflection.list_roles())
-  rescue
-    error ->
-      message = Exception.message(error)
-      Logger.error("Hologram: data layer reload failed: #{message}")
-
-      {:error, message}
   end
 
   defp reload_runtime do
