@@ -1915,13 +1915,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     Model.reset_caches()
     Policy.reset_model_facts_cache()
 
+    # Listed from the beams, not from a module info PLT: this runs before the compile has one, and
+    # in a VM that just recompiled a module the dump on disk still describes the module as it was.
     entity_types = Reflection.list_entities()
+    role_modules = Reflection.list_roles()
 
     EntityValidator.validate_model!(entity_types)
-    PolicyValidator.validate_model!(entity_types, Reflection.list_roles())
+    PolicyValidator.validate_model!(entity_types, role_modules)
 
     # The mapping value is discarded - only the fail-fast derivation checks matter here.
-    Mapper.derive!(entity_types, Reflection.list_roles())
+    Mapper.derive!(entity_types, role_modules)
 
     :ok
   end
