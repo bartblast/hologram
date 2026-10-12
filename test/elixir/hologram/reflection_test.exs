@@ -611,7 +611,7 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "entity?" do
+  describe "entity?/1" do
     test "is an entity type module" do
       assert entity?(Entity.Module1)
     end
@@ -622,6 +622,46 @@ defmodule Hologram.ReflectionTest do
 
     test "is not an entity type module" do
       refute entity?(__MODULE__)
+    end
+  end
+
+  describe "entity?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{entity?: true})
+
+      assert entity?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Entity.Module1, %{entity?: false})
+
+      refute entity?(Entity.Module1, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the entity?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert entity?(Entity.Module1, module_info_plt)
+      refute entity?(Hologram.Reflection, module_info_plt)
+    end
+
+    test "entry without the flag is decided the entity?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Entity.Module1, %{digest: 1})
+
+      assert entity?(Entity.Module1, module_info_plt)
+    end
+
+    test "nil PLT decides the entity?/1 way" do
+      assert entity?(Entity.Module1, nil)
+      refute entity?(Hologram.Reflection, nil)
     end
   end
 
@@ -1396,7 +1436,7 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "policy?" do
+  describe "policy?/1" do
     test "is a policy module" do
       assert policy?(Policy.Shared.Module1)
     end
@@ -1407,6 +1447,46 @@ defmodule Hologram.ReflectionTest do
 
     test "is not a policy module" do
       refute policy?(Entity.Module1)
+    end
+  end
+
+  describe "policy?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{policy?: true})
+
+      assert policy?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Policy.Shared.Module1, %{policy?: false})
+
+      refute policy?(Policy.Shared.Module1, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the policy?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert policy?(Policy.Shared.Module1, module_info_plt)
+      refute policy?(Entity.Module1, module_info_plt)
+    end
+
+    test "entry without the flag is decided the policy?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Policy.Shared.Module1, %{digest: 1})
+
+      assert policy?(Policy.Shared.Module1, module_info_plt)
+    end
+
+    test "nil PLT decides the policy?/1 way" do
+      assert policy?(Policy.Shared.Module1, nil)
+      refute policy?(Entity.Module1, nil)
     end
   end
 
@@ -1599,7 +1679,7 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "role?" do
+  describe "role?/1" do
     test "is a global role module" do
       assert role?(Role.Module1)
     end
@@ -1610,6 +1690,46 @@ defmodule Hologram.ReflectionTest do
 
     test "is not a global role module" do
       refute role?(Entity.Module1)
+    end
+  end
+
+  describe "role?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{role?: true})
+
+      assert role?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Role.Module1, %{role?: false})
+
+      refute role?(Role.Module1, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the role?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert role?(Role.Module1, module_info_plt)
+      refute role?(Entity.Module1, module_info_plt)
+    end
+
+    test "entry without the flag is decided the role?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Role.Module1, %{digest: 1})
+
+      assert role?(Role.Module1, module_info_plt)
+    end
+
+    test "nil PLT decides the role?/1 way" do
+      assert role?(Role.Module1, nil)
+      refute role?(Entity.Module1, nil)
     end
   end
 

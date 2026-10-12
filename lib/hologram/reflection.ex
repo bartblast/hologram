@@ -409,6 +409,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like entity?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  entity?/1 way.
+  """
+  @spec entity?(term, PLT.t() | nil) :: boolean
+  def entity?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :entity?) do
+      {:ok, entity?} -> entity?
+      :error -> entity?(term)
+    end
+  end
+
+  @doc """
   Returns true if the given term is an existing Erlang module, or false otherwise.
 
   An Erlang module is detected by the absence of the `__info__/1` function that the
@@ -980,6 +993,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like policy?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  policy?/1 way.
+  """
+  @spec policy?(term, PLT.t() | nil) :: boolean
+  def policy?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :policy?) do
+      {:ok, policy?} -> policy?
+      :error -> policy?(term)
+    end
+  end
+
+  @doc """
   Returns true if the given term is a protocol module, or false otherwise.
   """
   @spec protocol?(any) :: boolean
@@ -1116,6 +1142,19 @@ defmodule Hologram.Reflection do
   @spec role?(term) :: boolean
   def role?(term) do
     elixir_module?(term) && has_function?(term, :__is_hologram_role__, 0)
+  end
+
+  @doc """
+  Like role?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  role?/1 way.
+  """
+  @spec role?(term, PLT.t() | nil) :: boolean
+  def role?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :role?) do
+      {:ok, role?} -> role?
+      :error -> role?(term)
+    end
   end
 
   @doc """
