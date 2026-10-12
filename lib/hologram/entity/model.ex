@@ -3,6 +3,7 @@ defmodule Hologram.Entity.Model do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Commons.PLT
   alias Hologram.Reflection
 
   # Flag options, whose false is neutral. The option-introduction rule: no option may
@@ -34,9 +35,10 @@ defmodule Hologram.Entity.Model do
 
   Cached for the lifetime of the runtime, with the global roles and the user entity type (see
   `put_facts/3`): this is read for every batch of writes a node routes to its windows and for
-  every client that resumes with a place in the log. A read that finds the cache empty lists the
-  project's modules and fills it. The compiler and the application boot reset the cache, so a
-  recompiled data model is picked up.
+  every client that resumes with a place in the log. The compiler fills the cache in the VM it runs
+  in, and a read that finds the cache empty fills it from the module info dump the last compile
+  wrote, without reading a beam. A missing dump raises. The application boot resets the cache, so
+  a recompiled data model is picked up.
   """
   @spec entity_types() :: list(module)
   def entity_types, do: facts().entity_types
@@ -498,16 +500,10 @@ defmodule Hologram.Entity.Model do
         do: role_name
   end
 
-  # TODO: read the lists from the module info dump the compiler writes instead of listing the
-  # project's modules.
   defp facts do
     case :persistent_term.get(@facts_key, nil) do
       nil ->
-        entity_types = Reflection.list_entities()
-        role_modules = Reflection.list_roles()
-        user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
-
-        put_facts(entity_types, role_modules, user_entity)
+        load_facts()
 
         :persistent_term.get(@facts_key)
 
@@ -563,6 +559,25 @@ defmodule Hologram.Entity.Model do
 
       true ->
         List.insert_at(values, -1, op.value)
+    end
+  end
+
+  # Fills the cache from the module info dump, through a PLT that lives only for the read: the
+  # running app keeps the three lists, not the info of every module.
+  defp load_facts do
+    module_info_plt = PLT.start()
+
+    try do
+      dump_path = Path.join(Reflection.build_dir(), Reflection.module_info_plt_dump_file_name())
+      PLT.load(module_info_plt, dump_path)
+
+      put_facts(
+        Reflection.list_entities(module_info_plt),
+        Reflection.list_roles(module_info_plt),
+        Reflection.user_entity(module_info_plt)
+      )
+    after
+      PLT.stop(module_info_plt)
     end
   end
 

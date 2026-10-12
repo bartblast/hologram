@@ -48,9 +48,13 @@ defmodule Hologram.Entity.ModelTest do
       assert entity_types() == Reflection.list_entities()
     end
 
+    test "reads the module info dump, not the beams" do
+      assert count_calls({Reflection, :list_entities, 0}, &entity_types/0) == 0
+    end
+
     # This runs for every batch of writes a node routes, so the cache is the point rather than a
     # nicety. Asserted through the store rather than by timing.
-    test "remembers the list rather than listing the modules again" do
+    test "remembers the list rather than reading the dump again" do
       assert :persistent_term.get(@facts_key, nil) == nil
 
       entity_types()
@@ -1493,7 +1497,7 @@ defmodule Hologram.Entity.ModelTest do
       assert roles() == Reflection.list_roles()
     end
 
-    test "remembers the list rather than listing the modules again" do
+    test "remembers the list rather than reading the dump again" do
       assert :persistent_term.get(@facts_key, nil) == nil
 
       roles()
@@ -1513,7 +1517,7 @@ defmodule Hologram.Entity.ModelTest do
       assert user_entity() == Module14
     end
 
-    test "remembers the answer rather than listing the modules again" do
+    test "remembers the answer rather than reading the dump again" do
       assert :persistent_term.get(@facts_key, nil) == nil
 
       user_entity()
@@ -1531,7 +1535,7 @@ defmodule Hologram.Entity.ModelTest do
 
     # This runs on every client handshake, so the cache is the point rather than a nicety.
     # Asserted through the store rather than by timing.
-    test "answers from the remembered entity types rather than listing the modules again" do
+    test "answers from the remembered entity types rather than reading the dump again" do
       reset_caches()
 
       assert :persistent_term.get(@facts_key, nil) == nil
