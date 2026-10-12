@@ -112,18 +112,22 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts) do
     opts = Keyword.merge(build_default_opts(), opts)
 
-    # Positioned before the skip guards - the cheap whole-model checks must run on every
-    # invocation (including dev/test and language-server builds), while only the expensive
-    # bundle build stays behind them.
-    validate_data_model!()
-
     result =
       cond do
-        opts[:force?] -> compile_with_lock(opts)
-        language_server_build?(opts) -> :noop
-        !compiler_enabled?() -> :noop
-        nothing_changed?(opts) -> :noop
-        true -> compile_with_lock(opts)
+        opts[:force?] ->
+          compile_with_lock(opts)
+
+        # These invocations never compile, so the data model is validated here, from the beams.
+        language_server_build?(opts) or not compiler_enabled?() ->
+          validate_uncompiled_data_model!()
+          :noop
+
+        # No module changed since the compile that validated the data model.
+        nothing_changed?(opts) ->
+          :noop
+
+        true ->
+          compile_with_lock(opts)
       end
 
     # TODO: Remove this block together with refresh_umbrella_app_manifests/0
@@ -218,6 +222,9 @@ defmodule Mix.Tasks.Compile.Hologram do
           compiled_modules,
           sup
         )
+
+      # Before anything is derived or built from the data model.
+      {_entity_types, _role_modules} = load_data_model!(new_module_info_plt)
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
@@ -1467,6 +1474,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     })
   end
 
+  # Replaces what the running app knows of the data model. The two caches derived from the model
+  # cache are dropped with it.
+  defp put_model_facts(entity_types, role_modules, user_entity) do
+    RoleGrant.reset_resolution_cache()
+    Model.put_facts(entity_types, role_modules, user_entity)
+    Policy.reset_model_facts_cache()
+  end
+
   # The components of the build. Overridable so this project's own test suite can compile: it
   # holds components the build must refuse - the extractor's and the validators' negative fixtures
   # - which a real app never has. Defaulted here rather than in build_default_opts/0 so a run that
@@ -1749,6 +1764,20 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The data model as this compile's module info PLT records it: no beam is read. The model cache
+  # is filled before the validation, since the validators read it (the role grant store answers its
+  # relationships from it).
+  defp load_data_model!(module_info_plt) do
+    entity_types = Reflection.list_entities(module_info_plt)
+    role_modules = Reflection.list_roles(module_info_plt)
+    user_entity = Reflection.user_entity(module_info_plt)
+
+    put_model_facts(entity_types, role_modules, user_entity)
+    validate_data_model!(entity_types, role_modules)
+
+    {entity_types, role_modules}
+  end
+
   # A dump of another version is not loaded (see Hologram.Compiler.Cache.load_compile_state/1): the
   # state stays empty, as it does with no dump.
   defp maybe_load_compile_state(compile_state_dump_path) do
@@ -1910,16 +1939,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.map(& &1.app)
   end
 
-  defp validate_data_model! do
-    RoleGrant.reset_resolution_cache()
-    Model.reset_caches()
-    Policy.reset_model_facts_cache()
-
-    # Listed from the beams, not from a module info PLT: this runs before the compile has one, and
-    # in a VM that just recompiled a module the dump on disk still describes the module as it was.
-    entity_types = Reflection.list_entities()
-    role_modules = Reflection.list_roles()
-
+  defp validate_data_model!(entity_types, role_modules) do
     EntityValidator.validate_model!(entity_types)
     PolicyValidator.validate_model!(entity_types, role_modules)
 
@@ -1927,6 +1947,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     Mapper.derive!(entity_types, role_modules)
 
     :ok
+  end
+
+  # Listed from the beams: no compile runs, so no module info PLT is in line with them.
+  defp validate_uncompiled_data_model! do
+    entity_types = Reflection.list_entities()
+    role_modules = Reflection.list_roles()
+    user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
+
+    put_model_facts(entity_types, role_modules, user_entity)
+    validate_data_model!(entity_types, role_modules)
   end
 
   # An empty lock file is a lock in the middle of being acquired, not an invalid one:

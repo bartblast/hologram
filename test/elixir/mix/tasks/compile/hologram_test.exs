@@ -870,6 +870,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "validates the data model of a language server build", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      defmodule LanguageServerInvalidEntityFixture do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      load_entity_fixture_app(:hologram_language_server_invalid_entity_fixture_app, [
+        LanguageServerInvalidEntityFixture
+      ])
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.LanguageServerInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        run(ls_opts)
+      end
+    end
+
     test "fails the build on mapping errors even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
 
@@ -935,6 +956,42 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # Reused or re-read, an untouched module keeps its entry across runs
     assert load_module_info_items(opts)[Module1] == first_run_module_info
+  end
+
+  describe "data model" do
+    setup do
+      on_exit(fn ->
+        RoleGrant.reset_resolution_cache()
+        Model.reset_caches()
+        Policy.reset_model_facts_cache()
+      end)
+    end
+
+    # Read from the store, since a read through the model would fill an empty cache itself.
+    test "a compile fills the model cache from its module info PLT", %{opts: opts} do
+      Model.reset_caches()
+
+      assert run(opts) == :ok
+
+      module_info_items =
+        opts
+        |> load_module_info_items()
+        |> Map.to_list()
+
+      module_info_plt = PLT.start(items: module_info_items)
+
+      assert :persistent_term.get({Model, :facts}, nil) == %{
+               entity_types: Reflection.list_entities(module_info_plt),
+               roles: Reflection.list_roles(module_info_plt),
+               user_entity: Reflection.user_entity(module_info_plt)
+             }
+    end
+
+    test "a compile validates the data model once", %{opts: opts} do
+      assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
+               assert run(opts) == :ok
+             end) == 1
+    end
   end
 
   describe "kept compile state" do
@@ -3380,6 +3437,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a new VM with nothing changed does not compile", %{opts: opts} do
       assert count_calls({CallGraph, :load, 2}, fn ->
+               assert run(opts) == :noop
+             end) == 0
+    end
+
+    # No module changed since the compile that validated the data model.
+    test "a new VM with nothing changed validates nothing", %{opts: opts} do
+      assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
                assert run(opts) == :noop
              end) == 0
     end
