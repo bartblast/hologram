@@ -92,6 +92,7 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @empty_sync_constants %{
     entity_types: MapSet.new(),
+    model_hash: "my_model_hash",
     permission_checking?: false,
     prop_params: %{}
   }
@@ -1516,6 +1517,42 @@ defmodule Hologram.CompilerTest do
 
       refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
     end
+
+    test "records no model hash when the module info PLT records no entity type" do
+      assert build_sync_constants([], PLT.start()) == %{
+               entity_types: MapSet.new(),
+               model_hash: nil,
+               permission_checking?: false,
+               prop_params: %{}
+             }
+    end
+
+    # Whatever the pages reach: the hash is of the project's whole data model, the one the running
+    # app answers a client's greeting by.
+    test "records the hash of the data model the module info PLT records", %{
+      sync_constants: sync_constants
+    } do
+      expected =
+        Reflection.list_entities()
+        |> Model.from_modules(Reflection.list_roles())
+        |> Model.hash()
+
+      assert sync_constants.model_hash == expected
+    end
+  end
+
+  describe "build_sync_constants_js/1" do
+    test "renders the model hash the sync constants carry" do
+      assert build_sync_constants_js(@empty_sync_constants) ==
+               ~s/globalThis.Hologram.sync = {model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+    end
+
+    # A build declaring no entity type says null, so no client of it asks to sync.
+    test "renders null when the sync constants carry no model hash" do
+      sync_constants = %{@empty_sync_constants | model_hash: nil}
+
+      assert build_sync_constants_js(sync_constants) == "globalThis.Hologram.sync = null;"
+    end
   end
 
   test "build_call_graph/2", %{ir_plt: ir_plt} do
@@ -2564,15 +2601,10 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
 
-    # A build declaring NO entity types says `null` here, so no client of it asks to sync - which
-    # cannot be shown from this suite, whose own model has entity types and whose reflection
-    # nothing stubs. It is asserted in the umbrella app, which declares none.
     test "injects the model the bundle was built against", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      refute Reflection.list_entities() == []
-
       js =
         build_runtime_js(
           runtime_mfas,
@@ -2584,7 +2616,7 @@ defmodule Hologram.CompilerTest do
           js_dir: @js_dir
         )
 
-      assert String.contains?(js, ~s/modelHash: "#{Model.hash()}", /)
+      assert String.contains?(js, ~s/modelHash: "my_model_hash", /)
     end
 
     # Every admitted attribute type in one entry, since a value's type is not recoverable from

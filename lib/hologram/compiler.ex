@@ -78,6 +78,7 @@ defmodule Hologram.Compiler do
   """
   @type sync_constants :: %{
           entity_types: MapSet.t(module),
+          model_hash: String.t() | nil,
           permission_checking?: boolean,
           prop_params: %{module => keyword(list(atom))}
         }
@@ -1886,6 +1887,10 @@ defmodule Hologram.Compiler do
   way the server would. What is left out is exactly the types declaring no policy, which is what
   lets the client read an ABSENT entry as the server's own default deny.
 
+  `:model_hash` is the hash of the project's data model, of every entity type and global role the
+  module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
+  the application declares no data model.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
   @spec build_sync_constants([{module, page_reach}], PLT.t(), boolean) :: sync_constants
@@ -1899,9 +1904,11 @@ defmodule Hologram.Compiler do
 
     component_modules = reached_components(reached_modules, module_info_plt)
 
-    # One sweep for both the extraction below and the policied set: the extractor forks over this
-    # list once per variant if it reads it itself, and policied_entity_types/1 filters the same one.
-    all_entity_types = Reflection.list_entities()
+    # One listing, from the module info PLT, for the extraction below, the policied set and the
+    # model hash: the extractor forks over this list once per variant if it reads it itself, and
+    # policied_entity_types/1 filters the same one.
+    all_entity_types = Reflection.list_entities(module_info_plt)
+    role_modules = Reflection.list_roles(module_info_plt)
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
     # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
@@ -1943,6 +1950,7 @@ defmodule Hologram.Compiler do
     # grants would hand each client the whole authorization model to read for nothing.
     %{
       entity_types: entity_types,
+      model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
       prop_params: prop_params(component_modules)
     }
@@ -1959,10 +1967,10 @@ defmodule Hologram.Compiler do
   is stale, and a value the current server puts in the page would always agree with the current
   server.
 
-  `null` when the APPLICATION declares no entity type - `Reflection.list_entities() == []`, the
-  same predicate `application.ex` gates the database children on and `Handshake.check/1` refuses
-  sync by. The three answer alike on purpose: the bundle claims a data layer exactly when the
-  server has one. Null rather than nothing, so a client reads one unambiguous value instead of
+  `null` when the APPLICATION declares no entity type - the sync constants carry no model hash
+  then (see `build_sync_constants/3`) - which is the fact `application.ex` gates the database
+  children on and `Handshake.check/1` refuses sync by. The three answer alike on purpose: the
+  bundle claims a data layer exactly when the server has one. Null rather than nothing, so a client reads one unambiguous value instead of
   probing for a missing global - and rather than `{}`, which is truthy, so every "does this
   bundle sync?" check would pass on a bundle that never syncs.
 
@@ -1972,15 +1980,15 @@ defmodule Hologram.Compiler do
   opens with no windows, and its model is empty because nothing syncs yet - not because nothing
   can.
 
-  Rendered from what the entity types declare when it is called, which is why the compile task
-  keeps it with the runtime bundle it built: a declaration or a policy that changed moves the
-  JavaScript while the sync constants stay the same.
+  The model is rendered from what the entity types declare when this is called, which is why the
+  compile task keeps the statement with the runtime bundle it built: a policy that changed moves
+  the JavaScript while the sync constants stay the same.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_js_1/README.md
   """
   @spec build_sync_constants_js(sync_constants) :: String.t()
   def build_sync_constants_js(sync_constants) do
-    if Reflection.list_entities() == [] do
+    if sync_constants.model_hash == nil do
       ~s/globalThis.Hologram.sync = null;/
     else
       model =
@@ -1988,7 +1996,7 @@ defmodule Hologram.Compiler do
 
       params = render_prop_params(sync_constants.prop_params)
 
-      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{Model.hash()}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{sync_constants.model_hash}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -3145,6 +3153,16 @@ defmodule Hologram.Compiler do
       opts[:required] && !opts[:from_context] && to_string(name) not in prop_names
     end)
     |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
+  # The hash of the data model the given entity type and global role modules declare, or nil for
+  # a project that declares no entity type and so has no data model.
+  defp model_hash([], _role_modules), do: nil
+
+  defp model_hash(entity_types, role_modules) do
+    entity_types
+    |> Model.from_modules(role_modules)
+    |> Model.hash()
   end
 
   # The application Reflection.list_module_applications/0 names for the module: the first loaded

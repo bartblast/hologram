@@ -1120,8 +1120,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       )
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
-    # its inputs: a declaration or a policy that changed moves the JavaScript while the constants
-    # stay the same (see Hologram.Compiler.build_sync_constants_js/1).
+    # its inputs: a policy that changed moves the JavaScript while the constants stay the same (see
+    # Hologram.Compiler.build_sync_constants_js/1).
     Compiler.build_sync_constants_js(sync_constants)
   end
 
