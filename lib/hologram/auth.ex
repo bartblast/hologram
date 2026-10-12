@@ -11,6 +11,7 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
@@ -806,7 +807,7 @@ defmodule Hologram.Auth do
   end
 
   defp unknown_global_role_message(role) do
-    case Reflection.list_roles() do
+    case Model.roles() do
       [] ->
         "unknown global role #{inspect(role)} - no module is defined with use Hologram.Role"
 
