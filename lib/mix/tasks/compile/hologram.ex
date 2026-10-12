@@ -20,6 +20,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       with the page modules built, preceded by `:runtime` when the runtime bundle was built and
       by `:chunks` when the chunk bundles were, in that order. Defaults to doing nothing.
 
+  ## Data model
+
+  A compile validates the data model once its module info PLT is in line with the beams, before it
+  derives or builds anything from the model. A caller that has work of its own to do on a valid
+  model before the bundles are built (live reload, to bring the database schema in line) does it
+  with one option:
+
+    * `:data_model_ready` - called once per compile, right after the validation, with the entity
+      types and the roles. A compile that raises here builds nothing. Defaults to doing nothing.
+
   ## Build dir
 
   A compile leaves eight files in the build dir, so that the first compile in the next VM (the next
@@ -150,6 +160,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
+      data_model_ready: fn _entity_types, _role_modules -> :ok end,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
       next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
@@ -224,7 +235,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # Before anything is derived or built from the data model.
-      {_entity_types, _role_modules} = load_data_model!(new_module_info_plt)
+      {entity_types, role_modules} = load_data_model!(new_module_info_plt)
+      opts[:data_model_ready].(entity_types, role_modules)
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before

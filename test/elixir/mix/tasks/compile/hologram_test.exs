@@ -987,10 +987,54 @@ defmodule Mix.Tasks.Compile.HologramTest do
              }
     end
 
+    test "a compile calls the data model hook before it asks for the first batch", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      {record, recorded} = record_calls()
+
+      data_model_ready = fn entity_types, role_modules ->
+        record.({:data_model_ready, entity_types, role_modules})
+      end
+
+      next_batch = fn remaining_pages, _links ->
+        record.(:next_batch)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.merge(opts, data_model_ready: data_model_ready, next_batch: next_batch))
+
+      module_info_items =
+        opts
+        |> load_module_info_items()
+        |> Map.to_list()
+
+      module_info_plt = PLT.start(items: module_info_items)
+
+      assert recorded.() == [
+               {:data_model_ready, Reflection.list_entities(module_info_plt),
+                Reflection.list_roles(module_info_plt)},
+               :next_batch
+             ]
+    end
+
     test "a compile validates the data model once", %{opts: opts} do
       assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
                assert run(opts) == :ok
              end) == 1
+    end
+
+    test "a compile builds nothing when the data model hook raises", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      data_model_ready = fn _entity_types, _role_modules -> raise "hook failed" end
+
+      assert count_built_bundles(fn ->
+               assert_error RuntimeError, "hook failed", fn ->
+                 run(Keyword.put(opts, :data_model_ready, data_model_ready))
+               end
+             end) == 0
     end
   end
 
