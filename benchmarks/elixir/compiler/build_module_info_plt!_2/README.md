@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
-    <td style="white-space: nowrap; text-align: right">9.53</td>
-    <td style="white-space: nowrap; text-align: right">104.89 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;6.49%</td>
-    <td style="white-space: nowrap; text-align: right">103.28 ms</td>
-    <td style="white-space: nowrap; text-align: right">129.87 ms</td>
+    <td style="white-space: nowrap; text-align: right">10.31</td>
+    <td style="white-space: nowrap; text-align: right">96.97 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.24%</td>
+    <td style="white-space: nowrap; text-align: right">96.49 ms</td>
+    <td style="white-space: nowrap; text-align: right">107.17 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no previous dump (every beam read)</td>
     <td style="white-space: nowrap; text-align: right">5.29</td>
-    <td style="white-space: nowrap; text-align: right">189.04 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.63%</td>
-    <td style="white-space: nowrap; text-align: right">187.30 ms</td>
-    <td style="white-space: nowrap; text-align: right">211.66 ms</td>
+    <td style="white-space: nowrap; text-align: right">189.00 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.36%</td>
+    <td style="white-space: nowrap; text-align: right">188.35 ms</td>
+    <td style="white-space: nowrap; text-align: right">210.23 ms</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">previous dump, nothing changed (every entry reused)</td>
-    <td style="white-space: nowrap;text-align: right">9.53</td>
+    <td style="white-space: nowrap;text-align: right">10.31</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no previous dump (every beam read)</td>
     <td style="white-space: nowrap; text-align: right">5.29</td>
-    <td style="white-space: nowrap; text-align: right">1.8x</td>
+    <td style="white-space: nowrap; text-align: right">1.95x</td>
   </tr>
 
 </table>

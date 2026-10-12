@@ -257,6 +257,8 @@ defmodule Hologram.Compiler do
   evaluates permissions against is grant rows, so a page that checks them on the client needs
   them held like any other rows it reads. The list is derived apart, from the pages' reach on the
   call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/1`.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
   @spec build_page_windows([{module, page_reach}], PLT.t(), list(module)) ::
           %{module => list(String.t())}
@@ -1639,6 +1641,8 @@ defmodule Hologram.Compiler do
   its slot bindings (see `validate_slot_bindings!/2`), whether it checks permissions (see
   `pages_checking_permissions/1`) and the entity types its client holds or mentions (see
   `build_sync_constants/3`).
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
   """
   @spec list_reach_by_page([module], CallGraph.t()) :: [{module, page_reach}]
   def list_reach_by_page([], _call_graph), do: []
@@ -1878,6 +1882,8 @@ defmodule Hologram.Compiler do
   queries. Shipping every policied type's rules is what lets the client answer every check the
   way the server would. What is left out is exactly the types declaring no policy, which is what
   lets the client read an ABSENT entry as the server's own default deny.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
   @spec build_sync_constants([{module, page_reach}], PLT.t(), boolean) :: sync_constants
   def build_sync_constants(reach_by_page, module_info_plt, permission_checking? \\ false) do
@@ -1966,6 +1972,8 @@ defmodule Hologram.Compiler do
   Rendered from what the entity types declare when it is called, which is why the compile task
   keeps it with the runtime bundle it built: a declaration or a policy that changed moves the
   JavaScript while the sync constants stay the same.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_js_1/README.md
   """
   @spec build_sync_constants_js(sync_constants) :: String.t()
   def build_sync_constants_js(sync_constants) do
@@ -2198,6 +2206,8 @@ defmodule Hologram.Compiler do
 
   The opts go to `operation_asks/3`: with `:modules`, only the asks of those modules' callers are
   judged.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_operations!_4/README.md
   """
   @spec validate_operations!(list(module), CallGraph.t(), PLT.t(), T.opts()) :: :ok
   def validate_operations!(entity_types, call_graph, ir_plt, opts \\ []) do
@@ -2259,6 +2269,8 @@ defmodule Hologram.Compiler do
 
   Raises Hologram.CompileError when a capture argument names no declared slot, or
   when an argument position is named by no clause of the capture's target.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_slot_bindings!_2/README.md
   """
   @spec validate_slot_bindings!([{module, page_reach}], PLT.t()) :: :ok
   def validate_slot_bindings!(reach_by_page, module_info_plt) do

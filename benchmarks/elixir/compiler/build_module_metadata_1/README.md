@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_module_metadata/1</td>
-    <td style="white-space: nowrap; text-align: right">375.20</td>
-    <td style="white-space: nowrap; text-align: right">2.67 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;12.48%</td>
-    <td style="white-space: nowrap; text-align: right">2.60 ms</td>
-    <td style="white-space: nowrap; text-align: right">3.54 ms</td>
+    <td style="white-space: nowrap; text-align: right">372.80</td>
+    <td style="white-space: nowrap; text-align: right">2.68 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;10.54%</td>
+    <td style="white-space: nowrap; text-align: right">2.55 ms</td>
+    <td style="white-space: nowrap; text-align: right">3.60 ms</td>
   </tr>
 
 </table>

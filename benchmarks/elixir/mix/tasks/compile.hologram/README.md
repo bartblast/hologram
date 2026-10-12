@@ -62,21 +62,39 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap; text-align: right">0.76</td>
-    <td style="white-space: nowrap; text-align: right">1.32 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.48%</td>
-    <td style="white-space: nowrap; text-align: right">1.31 s</td>
-    <td style="white-space: nowrap; text-align: right">1.39 s</td>
+    <td style="white-space: nowrap">nothing changed, new VM</td>
+    <td style="white-space: nowrap; text-align: right">0.74</td>
+    <td style="white-space: nowrap; text-align: right">1.36 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.10%</td>
+    <td style="white-space: nowrap; text-align: right">1.34 s</td>
+    <td style="white-space: nowrap; text-align: right">1.43 s</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">no cache</td>
-    <td style="white-space: nowrap; text-align: right">0.104</td>
-    <td style="white-space: nowrap; text-align: right">9.62 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.00%</td>
-    <td style="white-space: nowrap; text-align: right">9.62 s</td>
-    <td style="white-space: nowrap; text-align: right">9.62 s</td>
+    <td style="white-space: nowrap">nothing changed, same VM</td>
+    <td style="white-space: nowrap; text-align: right">0.69</td>
+    <td style="white-space: nowrap; text-align: right">1.45 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.97%</td>
+    <td style="white-space: nowrap; text-align: right">1.39 s</td>
+    <td style="white-space: nowrap; text-align: right">1.54 s</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">one page edited, same VM</td>
+    <td style="white-space: nowrap; text-align: right">0.175</td>
+    <td style="white-space: nowrap; text-align: right">5.71 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.52%</td>
+    <td style="white-space: nowrap; text-align: right">5.71 s</td>
+    <td style="white-space: nowrap; text-align: right">5.77 s</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">cold</td>
+    <td style="white-space: nowrap; text-align: right">0.133</td>
+    <td style="white-space: nowrap; text-align: right">7.50 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;0.86%</td>
+    <td style="white-space: nowrap; text-align: right">7.50 s</td>
+    <td style="white-space: nowrap; text-align: right">7.55 s</td>
   </tr>
 
 </table>
@@ -90,15 +108,27 @@ Run Time Comparison
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Slower</th>
   <tr>
-    <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap;text-align: right">0.76</td>
+    <td style="white-space: nowrap">nothing changed, new VM</td>
+    <td style="white-space: nowrap;text-align: right">0.74</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">no cache</td>
-    <td style="white-space: nowrap; text-align: right">0.104</td>
-    <td style="white-space: nowrap; text-align: right">7.27x</td>
+    <td style="white-space: nowrap">nothing changed, same VM</td>
+    <td style="white-space: nowrap; text-align: right">0.69</td>
+    <td style="white-space: nowrap; text-align: right">1.07x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">one page edited, same VM</td>
+    <td style="white-space: nowrap; text-align: right">0.175</td>
+    <td style="white-space: nowrap; text-align: right">4.21x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">cold</td>
+    <td style="white-space: nowrap; text-align: right">0.133</td>
+    <td style="white-space: nowrap; text-align: right">5.54x</td>
   </tr>
 
 </table>

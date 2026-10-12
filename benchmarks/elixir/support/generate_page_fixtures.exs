@@ -3,12 +3,24 @@
 
 alias Hologram.Reflection
 
+pages_dir =
+  Path.join([
+    Reflection.root_dir(),
+    "benchmarks",
+    "elixir",
+    "support",
+    "fixtures",
+    "pages"
+  ])
+
 Enum.each(1..100, fn i ->
   content = """
   # credo:disable-for-this-file Credo.Check.Readability.Specs
   defmodule Hologram.Benchmarks.Fixtures.Page#{i} do
+    @moduledoc false
+
     use Hologram.Page
-    
+
     import Hologram.Commons.KernelUtils, only: [inspect: 1]
     import Kernel, except: [inspect: 1]
 
@@ -129,18 +141,43 @@ Enum.each(1..100, fn i ->
     def action(:.., %{left: left, right: right}, component) do
       put_state(component, :result, left..right)
     end
-  end            
+  end
   """
 
-  file_path =
-    Path.join([
-      Reflection.root_dir(),
-      "benchmarks",
-      "support",
-      "fixtures",
-      "pages",
-      "page#{i}.ex"
-    ])
+  pages_dir
+  |> Path.join("page#{i}.ex")
+  |> File.write!(content)
+end)
 
-  File.write!(file_path, content)
+# The pages whose client code reaches a registered query, so that what the data layer derives
+# from the pages' reach has something to derive: both query components are rendered, and the
+# entity type handed over is one the template names.
+Enum.each(1..10, fn i ->
+  content = """
+  # credo:disable-for-this-file Credo.Check.Readability.Specs
+  defmodule Hologram.Benchmarks.Fixtures.QueryPage#{i} do
+    @moduledoc false
+
+    use Hologram.Page
+
+    alias Hologram.Benchmarks.Fixtures.Components.EntityPropComponent
+    alias Hologram.Benchmarks.Fixtures.Components.QueryPropComponent
+    alias Hologram.Benchmarks.Fixtures.Entity1
+
+    route "/query-page-#{i}"
+
+    layout Hologram.Benchmarks.Fixtures.Components.DefaultLayout
+
+    def template do
+      ~HOLO\"""
+      <EntityPropComponent cid="entity_prop" entity={%Entity1{name: "entity", position: 1}} />
+      <QueryPropComponent cid="query_prop" min_position={1} />
+      \"\"\"
+    end
+  end
+  """
+
+  pages_dir
+  |> Path.join("query_page#{i}.ex")
+  |> File.write!(content)
 end)

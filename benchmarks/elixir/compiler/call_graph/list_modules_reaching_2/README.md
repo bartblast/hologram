@@ -63,29 +63,29 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">1 leaf module</td>
-    <td style="white-space: nowrap; text-align: right">996.87</td>
-    <td style="white-space: nowrap; text-align: right">1.00 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;157.26%</td>
-    <td style="white-space: nowrap; text-align: right">0.90 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.77 ms</td>
+    <td style="white-space: nowrap; text-align: right">1140.45</td>
+    <td style="white-space: nowrap; text-align: right">0.88 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.89%</td>
+    <td style="white-space: nowrap; text-align: right">0.86 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.10 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">1 core module</td>
-    <td style="white-space: nowrap; text-align: right">858.02</td>
-    <td style="white-space: nowrap; text-align: right">1.17 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.39%</td>
+    <td style="white-space: nowrap; text-align: right">828.84</td>
+    <td style="white-space: nowrap; text-align: right">1.21 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;12.95%</td>
     <td style="white-space: nowrap; text-align: right">1.13 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.44 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.77 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">10 modules</td>
-    <td style="white-space: nowrap; text-align: right">10.33</td>
-    <td style="white-space: nowrap; text-align: right">96.76 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.12%</td>
-    <td style="white-space: nowrap; text-align: right">95.59 ms</td>
-    <td style="white-space: nowrap; text-align: right">123.52 ms</td>
+    <td style="white-space: nowrap; text-align: right">10.47</td>
+    <td style="white-space: nowrap; text-align: right">95.49 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.59%</td>
+    <td style="white-space: nowrap; text-align: right">94.43 ms</td>
+    <td style="white-space: nowrap; text-align: right">113.20 ms</td>
   </tr>
 
 </table>
@@ -100,20 +100,20 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">1 leaf module</td>
-    <td style="white-space: nowrap;text-align: right">996.87</td>
+    <td style="white-space: nowrap;text-align: right">1140.45</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">1 core module</td>
-    <td style="white-space: nowrap; text-align: right">858.02</td>
-    <td style="white-space: nowrap; text-align: right">1.16x</td>
+    <td style="white-space: nowrap; text-align: right">828.84</td>
+    <td style="white-space: nowrap; text-align: right">1.38x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">10 modules</td>
-    <td style="white-space: nowrap; text-align: right">10.33</td>
-    <td style="white-space: nowrap; text-align: right">96.46x</td>
+    <td style="white-space: nowrap; text-align: right">10.47</td>
+    <td style="white-space: nowrap; text-align: right">108.9x</td>
   </tr>
 
 </table>
