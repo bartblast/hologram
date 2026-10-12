@@ -2066,8 +2066,9 @@ defmodule Hologram.Compiler do
   @doc """
   Brings the module info PLT of the last finished compile in this VM in line with the beams now, in
   place, and returns what changed: the module digests diff (as `diff_module_info_plts/2` returns it,
-  each list sorted) and whether any entry changed at all (an entry whose mtime moved but whose
-  digest did not is changed, but no edit).
+  each list sorted), whether any entry changed at all (an entry whose mtime moved but whose digest
+  did not is changed, but no edit), and the entries the call replaced or removed, by module, with
+  `nil` for a module it added (see `restore_module_infos/2`).
 
   A module the compiler reported since the last compile (`compiled_modules`, see
   `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. The entry of any other module
@@ -2086,7 +2087,7 @@ defmodule Hologram.Compiler do
           MapSet.t(module),
           list({module, charlist}),
           MapSet.t(module)
-        ) :: {map, boolean}
+        ) :: {map, boolean, %{module => map | nil}}
   def patch_module_info_plt!(plt, dumped_at, editable_modules, editable_beams, compiled_modules) do
     beam_results =
       TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
@@ -2109,7 +2110,12 @@ defmodule Hologram.Compiler do
       removed_modules: list_results(results, :removed)
     }
 
-    {diff, Enum.any?(results, &(&1 != :kept))}
+    previous_infos =
+      for {_kind, module, old_info} <- results, into: %{} do
+        {module, old_info}
+      end
+
+    {diff, previous_infos != %{}, previous_infos}
   end
 
   @doc """
@@ -2155,6 +2161,20 @@ defmodule Hologram.Compiler do
     Enum.each(dropped_modules, &PLT.delete(ir_plt, &1))
 
     dropped_modules
+  end
+
+  @doc """
+  Puts back the entries a `patch_module_info_plt!/5` call replaced or removed in the given module
+  info PLT, and deletes the ones it added: the PLT is as it was before that call.
+  """
+  @spec restore_module_infos(PLT.t(), %{module => map | nil}) :: PLT.t()
+  def restore_module_infos(module_info_plt, previous_infos) do
+    Enum.each(previous_infos, fn
+      {module, nil} -> PLT.delete(module_info_plt, module)
+      {module, info} -> PLT.put(module_info_plt, module, info)
+    end)
+
+    module_info_plt
   end
 
   @doc """
@@ -2990,7 +3010,7 @@ defmodule Hologram.Compiler do
   defp list_results(results, kind) do
     results
     |> Enum.flat_map(fn
-      {^kind, module} -> [module]
+      {^kind, module, _old_info} -> [module]
       _other -> []
     end)
     |> Enum.sort()
@@ -3273,14 +3293,14 @@ defmodule Hologram.Compiler do
   end
 
   # Read gives nil: not an Elixir module.
-  # Puts the new entry in place of the old one and says what that was: an addition, an edit (another
-  # digest), a touch (the same digest, another mtime or size), a removal (a beam that no longer reads
-  # as an Elixir module, or none), or nothing.
+  # Puts the new entry in place of the old one and says what that was, with the module and the old
+  # entry: an addition, an edit (another digest), a touch (the same digest, another mtime or size), a
+  # removal (a beam that no longer reads as an Elixir module, or none), or nothing.
   defp put_compared_module_info(_plt, _module, nil, nil), do: :kept
 
-  defp put_compared_module_info(plt, module, _old_info, nil) do
+  defp put_compared_module_info(plt, module, old_info, nil) do
     PLT.delete(plt, module)
-    {:removed, module}
+    {:removed, module, old_info}
   end
 
   defp put_compared_module_info(_plt, _module, info, info), do: :kept
@@ -3289,9 +3309,9 @@ defmodule Hologram.Compiler do
     PLT.put(plt, module, new_info)
 
     cond do
-      old_info == nil -> {:added, module}
-      old_info.digest != new_info.digest -> {:edited, module}
-      true -> {:touched, module}
+      old_info == nil -> {:added, module, nil}
+      old_info.digest != new_info.digest -> {:edited, module, old_info}
+      true -> {:touched, module, old_info}
     end
   end
 

@@ -806,7 +806,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
-    {module_digests_diff, infos_changed?} =
+    {module_digests_diff, infos_changed?, _previous_infos} =
       Compiler.patch_module_info_plt!(
         cache.module_info_plt,
         dumped_at,
