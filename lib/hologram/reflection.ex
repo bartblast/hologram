@@ -711,10 +711,11 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists the Hologram entity type modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name: the modules the applications' specs and, in dev and test, their ebin
-  directories name (see `list_candidate_modules/0`) that export `__is_hologram_entity__/0`. The specs
-  are read as well as the beams, so that an entity type compiled in memory, with no beam on disk, is a
-  type of the model it is listed by: a test's, loaded with an application spec alone.
+  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_entity__/0`. The beams are read once each, concurrently, and no module is loaded. A
+  module an application's spec names that has no beam in any of those directories is asked instead
+  (see `has_function?/3`), so that an entity type compiled in memory is a type of the model it is
+  listed by: a test's, loaded with an application spec alone.
 
   The framework's role grant store joins the data model only when an entity type is designated
   as the user entity - without one there is nothing for its grants to point at.
@@ -724,8 +725,8 @@ defmodule Hologram.Reflection do
   @spec list_entities() :: list(module)
   def list_entities do
     entity_types =
-      list_candidate_modules()
-      |> Enum.filter(&entity?/1)
+      project_apps()
+      |> list_modules_exporting_or_declared(:__is_hologram_entity__, 0)
       |> Enum.sort()
 
     user_entity_designated? = Enum.any?(entity_types, &user_entity?/1)
@@ -812,14 +813,14 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists the Hologram global role modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name: the modules the apps' specs and, in dev and test, their ebin directories
-  name (see `list_candidate_modules/1`) that export `__is_hologram_role__/0`. The specs are read as
-  well as the beams, for the reason `list_entities/0` reads them.
+  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_role__/0`, and the ones an application's spec names with no beam there that export
+  it. The beams and the specs are read as `list_entities/0` reads them.
   """
   @spec list_roles() :: list(module)
   def list_roles do
-    list_candidate_modules()
-    |> Enum.filter(&role?/1)
+    project_apps()
+    |> list_modules_exporting_or_declared(:__is_hologram_role__, 0)
     |> Enum.sort()
   end
 
@@ -1343,6 +1344,14 @@ defmodule Hologram.Reflection do
     |> Path.expand()
   end
 
+  # The modules of the beams at the given paths whose export table has the given function, in the
+  # order of the paths, read in concurrent tasks.
+  defp filter_beams_exporting(beam_paths, function, arity) do
+    beam_paths
+    |> TaskUtils.map_concurrently(&module_exporting(&1, function, arity))
+    |> Enum.reject(&is_nil/1)
+  end
+
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -1407,8 +1416,31 @@ defmodule Hologram.Reflection do
   defp list_modules_exporting(apps, function, arity) do
     apps
     |> Enum.flat_map(&list_app_elixir_beam_paths/1)
-    |> TaskUtils.map_concurrently(&module_exporting(&1, function, arity))
-    |> Enum.reject(&is_nil/1)
+    |> filter_beams_exporting(function, arity)
+  end
+
+  # The modules list_modules_exporting/3 lists, and the modules the applications' specs name that
+  # have no beam in any of their ebin directories and export the function: a module compiled in
+  # memory, which has no export table on disk to read, so it is asked (see has_function?/3). The
+  # spec names are compared with the beam file names as strings, so no name is turned into an atom.
+  defp list_modules_exporting_or_declared(apps, function, arity) do
+    beam_paths = Enum.flat_map(apps, &list_app_elixir_beam_paths/1)
+    beam_names = MapSet.new(beam_paths, &Path.basename(&1, ".beam"))
+
+    declared_modules =
+      for app <- apps,
+          spec_modules = Application.spec(app, :modules),
+          module <- spec_modules,
+          alias?(module),
+          not MapSet.member?(beam_names, Atom.to_string(module)),
+          has_function?(module, function, arity) do
+        module
+      end
+
+    beam_paths
+    |> filter_beams_exporting(function, arity)
+    |> Kernel.++(declared_modules)
+    |> Enum.uniq()
   end
 
   # The value returned by the clause of the named function that takes exactly the given literal

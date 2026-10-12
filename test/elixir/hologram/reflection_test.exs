@@ -1074,7 +1074,7 @@ defmodule Hologram.ReflectionTest do
   end
 
   describe "list_entities/0" do
-    test "lists the entity types of the project" do
+    test "lists the entity types of the project, sorted by name" do
       result = list_entities()
 
       assert Entity.Module1 in result
@@ -1082,10 +1082,25 @@ defmodule Hologram.ReflectionTest do
 
       refute Hologram.Compiler.Context in result
       refute Module2 in result
+
+      assert result == Enum.sort(result)
     end
 
     test "includes the role grant store, since the project designates a user entity type" do
       assert Hologram.Auth.RoleGrant in list_entities()
+    end
+
+    test "lists an entity type whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.EntityInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, "use Hologram.Entity")
+
+      assert module in list_entities()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_entities/0) == 0
     end
 
     test "lists an entity type compiled in memory that an application spec declares" do
@@ -1272,14 +1287,45 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_roles/0" do
-    result = list_roles()
+  describe "list_roles/0" do
+    test "lists the global roles of the project, sorted by name" do
+      result = list_roles()
 
-    assert Role.Module1 in result
-    assert Role.Module2 in result
+      assert Role.Module1 in result
+      assert Role.Module2 in result
 
-    refute Entity.Module1 in result
-    refute Hologram.Reflection in result
+      refute Entity.Module1 in result
+      refute Hologram.Reflection in result
+
+      assert result == Enum.sort(result)
+    end
+
+    test "lists a role whose beam is in an application's ebin directory without loading it" do
+      module = Hologram.Test.Fixtures.Reflection.RoleInEbinOnly
+
+      write_unloaded_module_to_ebin(module, :hologram, "use Hologram.Role")
+
+      assert module in list_roles()
+      assert :code.is_loaded(module) == false
+    end
+
+    test "lists a role compiled in memory that an application spec declares" do
+      defmodule InMemoryRoleFixture do
+        use Hologram.Role
+      end
+
+      load_app_with_modules(:hologram_reflection_in_memory_role_fixture_app, [
+        InMemoryRoleFixture
+      ])
+
+      # No beam on the code path: the module is in the VM alone.
+      assert :code.get_object_code(InMemoryRoleFixture) == :error
+      assert InMemoryRoleFixture in list_roles()
+    end
+
+    test "asks the code server about no module" do
+      assert count_calls({:code, :which, 1}, &list_roles/0) == 0
+    end
   end
 
   describe "list_roles/1" do
