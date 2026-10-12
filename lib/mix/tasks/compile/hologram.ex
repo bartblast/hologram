@@ -1073,7 +1073,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # A check spells the entity operation it asks about, and a name no allow line on any
     # entity type declares is a typo or a rename - refused here rather than answered no
-    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/1 below: the ask
+    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/2 below: the ask
     # functions are hand-ported, so the runtime graph no longer holds the vertices whose
     # callers this reads. Before the IR prune, which drops the IR this builds for a caller no
     # page reaches.
@@ -1087,7 +1087,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions()
+      |> Compiler.pages_checking_permissions(module_info_plt)
 
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.

@@ -257,7 +257,7 @@ defmodule Hologram.Compiler do
   Pages listed in `permission_checking_pages` also download the grants window: what a client
   evaluates permissions against is grant rows, so a page that checks them on the client needs
   them held like any other rows it reads. The list is derived apart, from the pages' reach on the
-  call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/1`.
+  call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/2`.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
@@ -366,11 +366,12 @@ defmodule Hologram.Compiler do
 
   An app that designates no user entity type has no grant store at all - the framework's grant
   entity joins the data model only with one - so no page checks permissions against anything and
-  the answer is empty whatever the pages reach.
+  the answer is empty whatever the pages reach. Whether one is designated is read from the given
+  module info PLT.
   """
-  @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
-  def pages_checking_permissions(reach_by_page) do
-    if Reflection.user_entity() do
+  @spec pages_checking_permissions([{module, page_reach}], PLT.t()) :: list(module)
+  def pages_checking_permissions(reach_by_page, module_info_plt) do
+    if Reflection.user_entity(module_info_plt) do
       for {page_module, %{mfas: mfas}} <- reach_by_page,
           Enum.any?(mfas, &(&1 in @permission_mfas)) do
         page_module
@@ -1643,7 +1644,7 @@ defmodule Hologram.Compiler do
 
   What the data layer derives per page reads it: the page's windows (see `build_page_windows/3`),
   its slot bindings (see `validate_slot_bindings!/2`), whether it checks permissions (see
-  `pages_checking_permissions/1`) and the entity types its client holds or mentions (see
+  `pages_checking_permissions/2`) and the entity types its client holds or mentions (see
   `build_sync_constants/3`).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
