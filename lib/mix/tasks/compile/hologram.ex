@@ -218,11 +218,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       editable_beams = Reflection.list_editable_beams()
       editable_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
 
-      # Taken on a cold compile too, so that the modules its full scan covers are forgotten.
-      compiled_modules =
+      # Read on a cold compile too, so that the modules its full scan covers are forgotten.
+      {compiled_modules, compiled_records} =
         editable_beams
         |> Map.new()
-        |> Tracer.take()
+        |> Tracer.peek()
 
       {new_module_info_plt, module_digests_diff, infos_changed?} =
         build_module_info_plt(
@@ -237,6 +237,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Before anything is derived or built from the data model.
       {entity_types, role_modules} = load_data_model!(new_module_info_plt)
       opts[:data_model_ready].(entity_types, role_modules)
+
+      # Only now: a compile that fails on the data model leaves the records, so the next one reads
+      # the same modules again.
+      Tracer.forget(compiled_records)
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before

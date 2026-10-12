@@ -6,9 +6,41 @@ defmodule Hologram.Compiler.Tracer do
   # of the project (see Hologram.Compiler.patch_module_info_plt!/5). Hologram.Compiler.Cache
   # registers it when the cache starts, before the first scan in the VM, and owns the table, so the
   # records live exactly as long as the kept state they are for: without the cache the next compile
-  # is cold and scans everything.
+  # is cold and scans everything. A compile reads the records without deleting them and forgets
+  # them once it is past its data model step, so that one failing before that leaves them for the
+  # next compile.
 
   @table __MODULE__
+
+  @doc """
+  Forgets the given records, as `peek/1` returned them. A module compiled again since has a newer
+  record, which is kept. Does nothing when the table does not exist.
+  """
+  @spec forget(list({module, binary})) :: :ok
+  def forget(records) do
+    Enum.each(records, &:ets.delete_object(@table, &1))
+  rescue
+    ArgumentError -> :ok
+  end
+
+  @doc """
+  Returns the modules compiled since their records were last forgotten whose beams in `beam_paths`
+  hold what the compiler produced, with the records to forget once those modules are read (see
+  `forget/1`), and deletes nothing. The compiler reports a module before it writes its beam, and Mix
+  stamps the beam with the time its compile started, so the file's bytes are compared with the
+  reported bytecode rather than its mtime with the report's time: the record of a module whose file
+  does not hold its bytecode yet is not returned, so it stays for the next call. A module with no
+  beam in `beam_paths` has nothing to read, so its record is returned and the module is not. The
+  empty set and no record when the table does not exist.
+  """
+  @spec peek(%{module => charlist}) :: {MapSet.t(module), list({module, binary})}
+  def peek(beam_paths) do
+    @table
+    |> :ets.tab2list()
+    |> Enum.reduce({MapSet.new(), []}, &peek_record(&1, &2, beam_paths))
+  rescue
+    ArgumentError -> {MapSet.new(), []}
+  end
 
   @doc """
   Creates the table, owned by the caller, unless it exists, and adds the tracer to the compiler's
@@ -30,24 +62,6 @@ defmodule Hologram.Compiler.Tracer do
   end
 
   @doc """
-  Returns the modules compiled since the last take whose beams in `beam_paths` hold what the
-  compiler produced, and forgets their records. The compiler reports a module before it writes its
-  beam, and Mix stamps the beam with the time its compile started, so the file's bytes are compared
-  with the reported bytecode rather than its mtime with the report's time: a module whose file does
-  not hold its bytecode yet keeps its record for the next take. A module with no beam in
-  `beam_paths` has nothing to read, so its record is forgotten. A module compiled again after the
-  table was read keeps its newer record. The empty set when the table does not exist.
-  """
-  @spec take(%{module => charlist}) :: MapSet.t(module)
-  def take(beam_paths) do
-    @table
-    |> :ets.tab2list()
-    |> Enum.reduce(MapSet.new(), &take_record(&1, &2, beam_paths))
-  rescue
-    ArgumentError -> MapSet.new()
-  end
-
-  @doc """
   Compiler tracer callback: records the bytecode of the module of an `:on_module` event, and
   ignores the rest. Does nothing when the table is gone with the cache, so that no compile fails on
   Hologram's account.
@@ -62,19 +76,17 @@ defmodule Hologram.Compiler.Tracer do
 
   def trace(_event, _env), do: :ok
 
-  defp take_record({module, bytecode} = record, taken, beam_paths) do
+  defp peek_record({module, bytecode} = record, {modules, records}, beam_paths) do
     case beam_paths do
       %{^module => beam_path} ->
         if File.read(beam_path) == {:ok, bytecode} do
-          :ets.delete_object(@table, record)
-          MapSet.put(taken, module)
+          {MapSet.put(modules, module), [record | records]}
         else
-          taken
+          {modules, records}
         end
 
       _no_beam ->
-        :ets.delete_object(@table, record)
-        taken
+        {modules, [record | records]}
     end
   end
 end

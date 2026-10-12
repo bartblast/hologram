@@ -2071,7 +2071,7 @@ defmodule Hologram.Compiler do
   `nil` for a module it added (see `restore_module_infos/2`).
 
   A module the compiler reported since the last compile (`compiled_modules`, see
-  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. The entry of any other module
+  `Hologram.Compiler.Tracer.peek/1`) is read, whatever its entry says. The entry of any other module
   is left where it is, unless it is a protocol's, whose consolidated beam a new implementation
   rewrites without a compile, or there is none; that one is checked against the entry's mtime and
   size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the last compile
