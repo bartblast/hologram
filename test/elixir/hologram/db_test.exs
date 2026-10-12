@@ -13,6 +13,7 @@ defmodule Hologram.DBTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
   alias Hologram.Entity
+  alias Hologram.Entity.Model
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -53,6 +54,21 @@ defmodule Hologram.DBTest do
   end
 
   describe "init/1" do
+    test "derives the mapping from the model cache" do
+      mapping = mapping()
+
+      on_exit(fn ->
+        Model.reset_caches()
+        :persistent_term.put(mapping_key(), mapping)
+      end)
+
+      Model.put_facts([Module1], [], nil)
+
+      init([])
+
+      assert mapping() == Mapper.derive!([Module1], [])
+    end
+
     test "starts only the connection pool in test" do
       {:ok, {_flags, children}} = init([])
 
@@ -411,14 +427,26 @@ defmodule Hologram.DBTest do
     end
   end
 
-  describe "reload/0" do
+  describe "reload/2" do
     test "re-derives the mapping and reconciles the schema" do
       {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
       {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
 
-      assert reload() == :ok
+      assert reload(Reflection.list_entities(), Reflection.list_roles()) == :ok
 
       assert Introspection.schema() == Schema.from_mapping(mapping())
+    end
+
+    test "derives the mapping from the given modules" do
+      expected_msg =
+        normalize_newlines("""
+        colliding table names - rename modules so that every entity type derives a unique table name:
+          * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        reload([Hologram.Blog.Post, Hologram.BlogPost], [])
+      end
     end
   end
 

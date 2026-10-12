@@ -508,7 +508,7 @@ defmodule Hologram.LiveReload do
   # refused a query builder fails before any registry is reloaded, leaving the previous dump in
   # place.
   defp reload_database do
-    DB.reload()
+    DB.reload(Reflection.list_entities(), Reflection.list_roles())
   rescue
     error ->
       message = Exception.message(error)

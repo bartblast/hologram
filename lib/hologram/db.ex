@@ -13,6 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.Writer
   alias Hologram.Entity
+  alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
   alias Hologram.Query
@@ -488,14 +489,14 @@ defmodule Hologram.DB do
   # term reaches the same row through read/1, which is where the stages compose.
 
   @doc """
-  Re-derives and re-caches the mapping from the current entity type modules, then
-  reconciles the schema - the live-reload path after a dev code change. A no-op when
-  the database is not running (no entities declared at boot). Returns :ok.
+  Re-derives and re-caches the mapping from the given entity type and global role modules,
+  then reconciles the schema. A no-op when the database is not running (no entities declared
+  at boot). Returns :ok.
   """
-  @spec reload() :: :ok
-  def reload do
+  @spec reload(list(module), list(module)) :: :ok
+  def reload(entity_types, role_modules) do
     if Process.whereis(__MODULE__) do
-      mapping = Mapper.derive!(Reflection.list_entities(), Reflection.list_roles())
+      mapping = Mapper.derive!(entity_types, role_modules)
       :persistent_term.put(@mapping_key, mapping)
 
       SchemaReconciler.reconcile(reconciliation_context())
@@ -525,7 +526,7 @@ defmodule Hologram.DB do
     # The mapping derived here is the one every consumer reads for the lifetime of the
     # runtime - companions included, since they derive from the declarations like every
     # other column.
-    mapping = Mapper.derive!(Reflection.list_entities(), Reflection.list_roles())
+    mapping = Mapper.derive!(Model.entity_types(), Model.roles())
     :persistent_term.put(@mapping_key, mapping)
 
     # The clock every server-tier write stamps its column revisions from - a boot-time fact like
