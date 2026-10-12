@@ -1281,6 +1281,15 @@ defmodule Hologram.CompilerTest do
       assert queries.windows[Registry.id(grants_window)] == grants_window
     end
 
+    # No user entity type, no grant store: there is no table to evaluate the window against.
+    test "registers no grants window when the given entity types hold no role grant store", %{
+      entity_types: entity_types
+    } do
+      queries = build_queries([QueryExtractorModule1], entity_types -- [RoleGrant])
+
+      refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
+    end
+
     test "leaves out a component declaring no parameterized capture", %{
       entity_types: entity_types
     } do

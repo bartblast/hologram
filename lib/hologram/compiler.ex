@@ -265,10 +265,10 @@ defmodule Hologram.Compiler do
   def build_page_windows(reach_by_page, module_info_plt, permission_checking_pages \\ []) do
     components_by_page = list_reached_components_by_page(reach_by_page, module_info_plt)
 
-    # Swept once here and handed to every extraction below. The extractor forks a placeholder
-    # entity over this list and re-enters the capture's body once per candidate, so a fork left to
-    # read it for itself reads it once per variant.
-    all_entity_types = Reflection.list_entities()
+    # Listed once here, from the module info PLT, and handed to every extraction below. The
+    # extractor forks a placeholder entity over this list and re-enters the capture's body once
+    # per candidate, so a fork left to read it for itself reads it once per variant.
+    all_entity_types = Reflection.list_entities(module_info_plt)
 
     # Each component's queries are extracted once, however many pages reach it.
     window_ids_by_component =
@@ -675,6 +675,9 @@ defmodule Hologram.Compiler do
   when a registered query claims the server's own authority with trust/1, which a component's
   query has no authority to claim on either tier.
 
+  The grants window is among the windows when the given entity types hold the role grant store,
+  which a data model does exactly when it designates a user entity type.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
   """
   @spec build_queries(list(module), list(module)) :: %{
@@ -696,7 +699,7 @@ defmodule Hologram.Compiler do
     windows =
       entries
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
-      |> put_grants_window()
+      |> put_grants_window(entity_types)
 
     %{entries: entries, prop_params: prop_params_index(component_modules), windows: windows}
   end
@@ -4150,10 +4153,10 @@ defmodule Hologram.Compiler do
   # :no_window to a client the build did tell to ask.
   #
   # An app designating no user entity type has no grant store - the grant entity joins the data
-  # model only with one - so there is no table to evaluate the window against and nothing to
-  # register.
-  defp put_grants_window(windows) do
-    if Reflection.user_entity() do
+  # model only with one, so it is among the entity types exactly then - and there is no table to
+  # evaluate the window against and nothing to register.
+  defp put_grants_window(windows, entity_types) do
+    if RoleGrant in entity_types do
       window = Auth.grants_window()
 
       Map.put_new(windows, Registry.id(window), window)
