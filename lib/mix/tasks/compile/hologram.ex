@@ -1066,6 +1066,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     reach_by_page = Compiler.list_reach_by_page(page_modules, call_graph_for_runtime)
 
+    # Listed once, from the module info PLT this compile brought in line with the beams: no beam
+    # is read and no module is asked.
+    entity_types = Reflection.list_entities(module_info_plt)
+
     # A builder's argument names bind the consuming component's like-named declared slots, and
     # a remote capture makes those names a cross-module contract - so a renamed argument fails
     # the build here, every reachable consumer at once, rather than one render at a time.
@@ -1077,8 +1081,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     # functions are hand-ported, so the runtime graph no longer holds the vertices whose
     # callers this reads. Before the IR prune, which drops the IR this builds for a caller no
     # page reaches.
-    Compiler.validate_operations!(Reflection.list_entities(), call_graph, context.ir_plt,
-      modules: operation_ask_modules(context.kept_runtime, context.module_digests_diff)
+    Compiler.validate_operations!(entity_types, call_graph, context.ir_plt,
+      modules:
+        operation_ask_modules(
+          context.kept_runtime,
+          context.module_digests_diff,
+          module_info_plt
+        )
     )
 
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
@@ -1104,7 +1113,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # the first boot, and a release starts without running the extractor at all.
     {queries_plt, queries_plt_dump_path} =
       context.component_modules
-      |> Compiler.build_queries(Reflection.list_entities())
+      |> Compiler.build_queries(entity_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     dump_queries_plt(queries_plt, queries_plt_dump_path)
@@ -1471,22 +1480,24 @@ defmodule Mix.Tasks.Compile.Hologram do
   # entity, role or policy module does - a removed module's kind cannot be read any more, so a
   # removal counts. Else the added and edited modules alone: the rest were judged by the compile
   # that kept the runtime, and their IR need not be built again (see
-  # Hologram.Compiler.operation_asks/3).
-  defp operation_ask_modules(nil, _module_digests_diff), do: nil
+  # Hologram.Compiler.operation_asks/3). An added or edited module's kind is read from the module
+  # info PLT, which holds this compile's entry for it.
+  defp operation_ask_modules(nil, _module_digests_diff, _module_info_plt), do: nil
 
-  defp operation_ask_modules(_kept_runtime, module_digests_diff) do
+  defp operation_ask_modules(_kept_runtime, module_digests_diff, module_info_plt) do
     %{added_modules: added, edited_modules: edited, removed_modules: removed} =
       module_digests_diff
 
-    if removed != [] or Enum.any?(added ++ edited, &data_model_module?/1) do
+    if removed != [] or Enum.any?(added ++ edited, &data_model_module?(&1, module_info_plt)) do
       nil
     else
       added ++ edited
     end
   end
 
-  defp data_model_module?(module) do
-    Reflection.entity?(module) or Reflection.role?(module) or Reflection.policy?(module)
+  defp data_model_module?(module, module_info_plt) do
+    Reflection.entity?(module, module_info_plt) or Reflection.role?(module, module_info_plt) or
+      Reflection.policy?(module, module_info_plt)
   end
 
   # The data layer's statement for the runtime script: the kept runtime's when the data layer is
