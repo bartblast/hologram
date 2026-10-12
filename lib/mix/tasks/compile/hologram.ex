@@ -224,7 +224,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Map.new()
         |> Tracer.peek()
 
-      {new_module_info_plt, module_digests_diff, infos_changed?} =
+      {new_module_info_plt, module_digests_diff, infos_changed?, previous_infos} =
         build_module_info_plt(
           cache,
           old_module_info_plt,
@@ -234,9 +234,16 @@ defmodule Mix.Tasks.Compile.Hologram do
           sup
         )
 
+      # What a compile that fails on the data model goes back to. The snapshot was taken before the
+      # kept state was marked as not to be trusted.
+      before = %{
+        dumped_at: before_dumped_at,
+        editable_modules: cache.editable_modules,
+        previous_infos: previous_infos
+      }
+
       # Before anything is derived or built from the data model.
-      {entity_types, role_modules} = load_data_model!(new_module_info_plt)
-      opts[:data_model_ready].(entity_types, role_modules)
+      load_data_model!(new_module_info_plt, before, opts)
 
       # Only now: a compile that fails on the data model leaves the records, so the next one reads
       # the same modules again.
@@ -783,8 +790,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
-  # whether any entry changed. A cold compile reads every module against the dump, diffs the two
+  # Returns the module info PLT of this compile, which is the cache's, the module digests diff,
+  # whether any entry changed, and the entries a warm compile replaced or removed (none for a cold
+  # one, which has nothing to go back to). A cold compile reads every module against the dump, diffs the two
   # PLTs, copies the result into the cache's PLT, once, and compares the two PLTs' entries. A warm
   # one brings the cache's PLT in line in place, reading the modules the compiler reported among the
   # beams a save can rewrite, and takes the diff from that scan (see
@@ -806,11 +814,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # An entry whose mtime moved but whose digest did not is a change the diff does not show, but
     # the dump must record it, or the next scan reads that beam again.
-    {cache.module_info_plt, module_digests_diff, new_infos != PLT.get_all(old_plt)}
+    {cache.module_info_plt, module_digests_diff, new_infos != PLT.get_all(old_plt), %{}}
   end
 
   defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
-    {module_digests_diff, infos_changed?, _previous_infos} =
+    {module_digests_diff, infos_changed?, previous_infos} =
       Compiler.patch_module_info_plt!(
         cache.module_info_plt,
         dumped_at,
@@ -819,7 +827,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         compiled_modules
       )
 
-    {cache.module_info_plt, module_digests_diff, infos_changed?}
+    {cache.module_info_plt, module_digests_diff, infos_changed?, previous_infos}
   end
 
   # Built once per VM when client stack traces are on, then patched with each compile's diff. Nothing
@@ -1782,16 +1790,27 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The data model as this compile's module info PLT records it: no beam is read. The model cache
   # is filled before the validation, since the validators read it (the role grant store answers its
-  # relationships from it).
-  defp load_data_model!(module_info_plt) do
+  # relationships from it). The :data_model_ready option is called once the model is valid.
+  #
+  # Nothing but the module info PLT has moved when this runs: the IR and the call graph are patched
+  # after it. So a failure here, of any kind, is undone. The entries the update replaced are put
+  # back, and the tracer still holds the compiled modules, so the next compile in this VM finds the
+  # same changes again, from the kept state and not from the dumps. The model cache keeps what
+  # this compile put there: it describes the modules that are loaded, valid or not.
+  defp load_data_model!(module_info_plt, before, opts) do
     entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
     user_entity = Reflection.user_entity(module_info_plt)
 
     put_model_facts(entity_types, role_modules, user_entity)
     validate_data_model!(entity_types, role_modules)
+    opts[:data_model_ready].(entity_types, role_modules)
 
-    {entity_types, role_modules}
+    :ok
+  catch
+    kind, reason ->
+      restore_before_state(module_info_plt, before)
+      :erlang.raise(kind, reason, __STACKTRACE__)
   end
 
   # A dump of another version is not loaded (see Hologram.Compiler.Cache.load_compile_state/1): the
@@ -1928,6 +1947,15 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp remove_unreadable_lock_file(lock_path) do
     Logger.info("Hologram: removing unreadable lock file")
     File.rm(lock_path)
+  end
+
+  # A cold compile kept nothing to go back to (its editable modules are nil): the next compile
+  # starts from the dumps, as it would have.
+  defp restore_before_state(_module_info_plt, %{editable_modules: nil}), do: :ok
+
+  defp restore_before_state(module_info_plt, before) do
+    Compiler.restore_module_infos(module_info_plt, before.previous_infos)
+    Cache.put_module_infos(before.dumped_at, before.editable_modules)
   end
 
   # Lists all apps of the enclosing umbrella project, whether the compiler runs in

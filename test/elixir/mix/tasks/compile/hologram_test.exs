@@ -466,6 +466,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     MapSet.new(page_modules)
   end
 
+  # A :data_model_ready option that fails.
+  defp raise_hook_failed(_entity_types, _role_modules) do
+    raise "hook failed"
+  end
+
   # A function that records each value it is called with, and one that returns them in call order.
   defp record_calls do
     {:ok, agent} = Agent.start_link(fn -> [] end)
@@ -3437,6 +3442,101 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       test_call_graph(opts)
       test_page_bundles(opts)
+    end
+
+    test "a compile that fails on the data model leaves the kept state as it found it", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(Module1)
+
+      state_before = cache_state()
+
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      state_after = cache_state()
+
+      assert state_after.dumped_at == state_before.dumped_at
+      assert state_after.editable_modules == state_before.editable_modules
+      assert state_after.module_infos == state_before.module_infos
+    end
+
+    test "a compile whose data model step exits leaves the kept state as it found it", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(Module1)
+
+      state_before = cache_state()
+      data_model_ready = fn _entity_types, _role_modules -> exit(:hook_failed) end
+
+      assert catch_exit(run(Keyword.put(opts, :data_model_ready, data_model_ready))) ==
+               :hook_failed
+
+      assert cache_state().module_infos == state_before.module_infos
+    end
+
+    test "the compile after one that failed on the data model finds the same edit, in the kept state",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      {record_remaining, recorded_remaining} = record_calls()
+
+      next_batch = fn remaining_pages, _links ->
+        record_remaining.(remaining_pages)
+        MapSet.to_list(remaining_pages)
+      end
+
+      # Only a compile that starts from the kept state brings the module infos in line in place.
+      assert count_calls({Compiler, :patch_module_info_plt!, 5}, fn ->
+               run(Keyword.put(opts, :next_batch, next_batch))
+             end) == 1
+
+      assert [remaining_pages] = recorded_remaining.()
+      assert MapSet.member?(remaining_pages, Module1)
+    end
+
+    test "a compile that fails on the data model leaves the model cache filled", %{opts: opts} do
+      on_exit(fn ->
+        RoleGrant.reset_resolution_cache()
+        Model.reset_caches()
+        Policy.reset_model_facts_cache()
+      end)
+
+      run(opts)
+      Model.reset_caches()
+
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      module_info_items =
+        opts
+        |> load_module_info_items()
+        |> Map.to_list()
+
+      module_info_plt = PLT.start(items: module_info_items)
+
+      assert :persistent_term.get({Model, :facts}, nil) == %{
+               entity_types: Reflection.list_entities(module_info_plt),
+               roles: Reflection.list_roles(module_info_plt),
+               user_entity: Reflection.user_entity(module_info_plt)
+             }
+    end
+
+    test "a first compile in a VM that fails on the data model leaves nothing kept", %{opts: opts} do
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      assert cache_state().editable_modules == nil
     end
   end
 
