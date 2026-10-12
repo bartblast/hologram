@@ -1087,21 +1087,73 @@ defmodule Hologram.ReflectionTest do
     test "includes the role grant store, since the project designates a user entity type" do
       assert Hologram.Auth.RoleGrant in list_entities()
     end
+
+    test "lists an entity type compiled in memory that an application spec declares" do
+      defmodule InMemoryEntityFixture do
+        use Hologram.Entity
+      end
+
+      load_app_with_modules(:hologram_reflection_in_memory_entity_fixture_app, [
+        InMemoryEntityFixture
+      ])
+
+      # No beam on the code path: the module is in the VM alone.
+      assert :code.get_object_code(InMemoryEntityFixture) == :error
+      assert InMemoryEntityFixture in list_entities()
+    end
   end
 
   describe "list_entities/1" do
-    test "includes the role grant store when an entity type is designated as the user entity" do
-      app = :hologram_reflection_designated_user_fixture_app
-      load_app_with_modules(app, [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant])
-
-      assert list_entities([app]) == [Hologram.Auth.RoleGrant, Entity.Module1, Entity.Module14]
+    setup do
+      [module_info_plt: PLT.start()]
     end
 
-    test "excludes the role grant store when no entity type is designated as the user entity" do
-      app = :hologram_reflection_undesignated_user_fixture_app
-      load_app_with_modules(app, [Entity.Module1, Entity.Module3, Hologram.Auth.RoleGrant])
+    test "excludes the role grant store when the PLT records no user entity type", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, [
+        {Entity.Module1, %{entity?: true, user_entity?: false}},
+        {Entity.Module3, %{entity?: true, user_entity?: false}},
+        {Hologram.Auth.RoleGrant, %{entity?: true, user_entity?: false}}
+      ])
 
-      assert list_entities([app]) == [Entity.Module1, Entity.Module3]
+      assert list_entities(module_info_plt) == [Entity.Module1, Entity.Module3]
+    end
+
+    test "includes the role grant store when the PLT records a user entity type", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, [
+        {Entity.Module1, %{entity?: true, user_entity?: false}},
+        {Entity.Module14, %{entity?: true, user_entity?: true}},
+        {Hologram.Auth.RoleGrant, %{entity?: true, user_entity?: false}}
+      ])
+
+      assert list_entities(module_info_plt) == [
+               Hologram.Auth.RoleGrant,
+               Entity.Module1,
+               Entity.Module14
+             ]
+    end
+
+    test "lists no module when the PLT records no entity type", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Module2, %{entity?: false, user_entity?: false})
+
+      assert list_entities(module_info_plt) == []
+    end
+
+    test "lists the entity types the PLT records, sorted by name, without consulting the code path",
+         %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, [
+        {Entity.Module3, %{entity?: true, user_entity?: false}},
+        {Aaa.Bbb, %{entity?: true, user_entity?: false}},
+        {Module2, %{entity?: false, user_entity?: false}},
+        {Entity.Module1, %{entity?: true, user_entity?: false}}
+      ])
+
+      assert list_entities(module_info_plt) == [Aaa.Bbb, Entity.Module1, Entity.Module3]
     end
   end
 
@@ -1228,6 +1280,31 @@ defmodule Hologram.ReflectionTest do
 
     refute Entity.Module1 in result
     refute Hologram.Reflection in result
+  end
+
+  describe "list_roles/1" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "lists no module when the PLT records no role", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Entity.Module1, %{role?: false})
+
+      assert list_roles(module_info_plt) == []
+    end
+
+    test "lists the roles the PLT records, sorted by name, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, [
+        {Role.Module2, %{role?: true}},
+        {Aaa.Bbb, %{role?: true}},
+        {Entity.Module1, %{role?: false}},
+        {Role.Module1, %{role?: true}}
+      ])
+
+      assert list_roles(module_info_plt) == [Aaa.Bbb, Role.Module1, Role.Module2]
+    end
   end
 
   test "list_std_lib_elixir_modules/0" do
@@ -1780,6 +1857,41 @@ defmodule Hologram.ReflectionTest do
 
   test "user_entity/0" do
     assert user_entity() == Entity.Module14
+  end
+
+  describe "user_entity/1" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "returns nil when the PLT records no user entity type", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Entity.Module1, %{entity?: true, user_entity?: false})
+
+      assert user_entity(module_info_plt) == nil
+    end
+
+    test "returns the entity type the PLT records as the user entity type, without consulting the code path",
+         %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, [
+        {Entity.Module1, %{entity?: true, user_entity?: false}},
+        {Aaa.Bbb, %{entity?: true, user_entity?: true}}
+      ])
+
+      assert user_entity(module_info_plt) == Aaa.Bbb
+    end
+
+    test "returns the first by name when the PLT records more than one", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, [
+        {Entity.Module14, %{entity?: true, user_entity?: true}},
+        {Aaa.Bbb, %{entity?: true, user_entity?: true}}
+      ])
+
+      assert user_entity(module_info_plt) == Aaa.Bbb
+    end
   end
 
   describe "user_entity?/1" do

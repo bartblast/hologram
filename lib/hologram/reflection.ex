@@ -711,7 +711,10 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists the Hologram entity type modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name (see `list_entities/1`).
+  :hex), sorted by name: the modules the applications' specs and, in dev and test, their ebin
+  directories name (see `list_candidate_modules/0`) that export `__is_hologram_entity__/0`. The specs
+  are read as well as the beams, so that an entity type compiled in memory, with no beam on disk, is a
+  type of the model it is listed by: a test's, loaded with an application spec alone.
 
   The framework's role grant store joins the data model only when an entity type is designated
   as the user entity - without one there is nothing for its grants to point at.
@@ -720,23 +723,30 @@ defmodule Hologram.Reflection do
   """
   @spec list_entities() :: list(module)
   def list_entities do
-    list_entities(project_apps())
+    entity_types =
+      list_candidate_modules()
+      |> Enum.filter(&entity?/1)
+      |> Enum.sort()
+
+    user_entity_designated? = Enum.any?(entity_types, &user_entity?/1)
+
+    reject_role_grant_without_user_entity(entity_types, user_entity_designated?)
   end
 
   @doc """
-  Lists the Hologram entity type modules of the given OTP apps, sorted by name: the modules the
-  apps' specs and, in dev and test, their ebin directories name (see `list_candidate_modules/1`)
-  that export `__is_hologram_entity__/0`. The specs are read as well as the beams, so that an
-  entity type compiled in memory, with no beam on disk, is a type of the model it is listed by:
-  a test's, loaded with an application spec alone.
+  Lists the modules the given module info PLT records as Hologram entity types, sorted by name,
+  without listing any directory, reading any BEAM or asking the code server about any module. The
+  framework's role grant store is listed only when the PLT records a user entity type (see
+  `list_entities/0`).
   """
-  @spec list_entities(list(atom)) :: list(module)
-  def list_entities(apps) do
-    apps
-    |> list_candidate_modules()
-    |> Enum.filter(&entity?/1)
+  @spec list_entities(PLT.t()) :: list(module)
+  def list_entities(module_info_plt) do
+    user_entity_designated? = user_entity(module_info_plt) != nil
+
+    module_info_plt
+    |> PLT.keys(%{entity?: true})
     |> Enum.sort()
-    |> reject_role_grant_without_user_entity()
+    |> reject_role_grant_without_user_entity(user_entity_designated?)
   end
 
   @doc """
@@ -804,12 +814,23 @@ defmodule Hologram.Reflection do
   Lists the Hologram global role modules of the loaded OTP applications used by the project (except
   :hex), sorted by name: the modules the apps' specs and, in dev and test, their ebin directories
   name (see `list_candidate_modules/1`) that export `__is_hologram_role__/0`. The specs are read as
-  well as the beams, for the reason `list_entities/1` reads them.
+  well as the beams, for the reason `list_entities/0` reads them.
   """
   @spec list_roles() :: list(module)
   def list_roles do
     list_candidate_modules()
     |> Enum.filter(&role?/1)
+    |> Enum.sort()
+  end
+
+  @doc """
+  Lists the modules the given module info PLT records as Hologram global roles, sorted by name,
+  without listing any directory, reading any BEAM or asking the code server about any module.
+  """
+  @spec list_roles(PLT.t()) :: list(module)
+  def list_roles(module_info_plt) do
+    module_info_plt
+    |> PLT.keys(%{role?: true})
     |> Enum.sort()
   end
 
@@ -1230,6 +1251,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the entity type module the given module info PLT records as the project's user entity type,
+  or nil when it records none, without reading any BEAM or asking the code server about any module.
+  When the PLT records more than one, the first by name is returned, as `user_entity/0` returns it.
+  """
+  @spec user_entity(PLT.t()) :: module | nil
+  def user_entity(module_info_plt) do
+    module_info_plt
+    |> PLT.keys(%{entity?: true, user_entity?: true})
+    |> Enum.sort()
+    |> List.first()
+  end
+
+  @doc """
   Returns true if the given term is the entity type module designated as the project's user entity type, or false otherwise.
 
   ## Examples
@@ -1489,17 +1523,16 @@ defmodule Hologram.Reflection do
     list_loaded_otp_apps() -- [:hex]
   end
 
-  # RoleGrant declares itself an entity type, so the sweep always finds it - what is in question
+  # RoleGrant declares itself an entity type, so a listing always finds it - what is in question
   # is whether it STAYS. It does only when the project designates a user entity, without which
   # there is nothing for its grants to point at.
   #
-  # The check runs over the entity types already swept, never through user_entity/0 - that
-  # function lists entity types itself, which would recurse.
-  defp reject_role_grant_without_user_entity(entity_types) do
-    if Enum.any?(entity_types, &user_entity?/1) do
-      entity_types
-    else
-      List.delete(entity_types, Hologram.Auth.RoleGrant)
-    end
+  # The listing says whether one is designated, from the entity types it already holds or from the
+  # module info PLT it reads, never through user_entity/0 - that function lists entity types
+  # itself, which would recurse.
+  defp reject_role_grant_without_user_entity(entity_types, true), do: entity_types
+
+  defp reject_role_grant_without_user_entity(entity_types, false) do
+    List.delete(entity_types, Hologram.Auth.RoleGrant)
   end
 end
