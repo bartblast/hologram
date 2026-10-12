@@ -24,8 +24,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   A compile validates the data model once its module info PLT is in line with the beams, before it
   derives or builds anything from the model. A caller that has work of its own to do on a valid
-  model before the bundles are built (live reload, to bring the database schema in line) does it
-  with one option:
+  model before the bundles are built (live reload, to bring the database schema in line), or that
+  wants to hear of an invalid one, does it with two options:
+
+    * `:data_model_failed` - called when the data model step fails, the validation or the
+      `:data_model_ready` call, with the kind and the reason as a `catch` binds them (`:error` and
+      the exception for a raise), before the failure is raised again. Defaults to doing nothing.
 
     * `:data_model_ready` - called once per compile, right after the validation, with the entity
       types and the roles. A compile that raises here builds nothing. Defaults to doing nothing.
@@ -160,6 +164,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
+      data_model_failed: fn _kind, _reason -> :ok end,
       data_model_ready: fn _entity_types, _role_modules -> :ok end,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
@@ -1796,7 +1801,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # after it. So a failure here, of any kind, is undone. The entries the update replaced are put
   # back, and the tracer still holds the compiled modules, so the next compile in this VM finds the
   # same changes again, from the kept state and not from the dumps. The model cache keeps what
-  # this compile put there: it describes the modules that are loaded, valid or not.
+  # this compile put there: it describes the modules that are loaded, valid or not. The failure is
+  # then told to the :data_model_failed option, with the kept state already back, and raised again.
   defp load_data_model!(module_info_plt, before, opts) do
     entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
@@ -1809,8 +1815,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     :ok
   catch
     kind, reason ->
+      stacktrace = __STACKTRACE__
+
       restore_before_state(module_info_plt, before)
-      :erlang.raise(kind, reason, __STACKTRACE__)
+      opts[:data_model_failed].(kind, reason)
+
+      :erlang.raise(kind, reason, stacktrace)
   end
 
   # A dump of another version is not loaded (see Hologram.Compiler.Cache.load_compile_state/1): the

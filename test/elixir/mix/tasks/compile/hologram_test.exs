@@ -1045,10 +1045,60 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert counts == [call_count: 0, call_count: 0]
     end
 
+    test "a compile reports a failure of the data model hook", %{opts: opts} do
+      test_pid = self()
+
+      data_model_failed = fn kind, reason ->
+        send(test_pid, {:data_model_failed, kind, reason})
+      end
+
+      failing_opts =
+        Keyword.merge(opts,
+          data_model_failed: data_model_failed,
+          data_model_ready: &raise_hook_failed/2
+        )
+
+      assert_error RuntimeError, "hook failed", fn -> run(failing_opts) end
+
+      assert_received {:data_model_failed, :error, %RuntimeError{message: "hook failed"}}
+    end
+
+    test "a compile reports an exit in the data model step", %{opts: opts} do
+      test_pid = self()
+
+      data_model_failed = fn kind, reason ->
+        send(test_pid, {:data_model_failed, kind, reason})
+      end
+
+      data_model_ready = fn _entity_types, _role_modules -> exit(:hook_failed) end
+
+      failing_opts =
+        Keyword.merge(opts,
+          data_model_failed: data_model_failed,
+          data_model_ready: data_model_ready
+        )
+
+      assert catch_exit(run(failing_opts)) == :hook_failed
+
+      assert_received {:data_model_failed, :exit, :hook_failed}
+    end
+
     test "a compile validates the data model once", %{opts: opts} do
       assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
                assert run(opts) == :ok
              end) == 1
+    end
+
+    test "a compile whose data model is valid reports no failure", %{opts: opts} do
+      test_pid = self()
+
+      data_model_failed = fn kind, reason ->
+        send(test_pid, {:data_model_failed, kind, reason})
+      end
+
+      assert run(Keyword.put(opts, :data_model_failed, data_model_failed)) == :ok
+
+      refute_received {:data_model_failed, _kind, _reason}
     end
 
     test "a compile builds nothing when the data model hook raises", %{opts: opts} do
