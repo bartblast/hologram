@@ -347,8 +347,9 @@ defmodule Hologram.LiveReload do
   Hologram compile with the given options, `:next_batch` and `:bundles_built`, through which the
   scheduler orders the pages and reloads the tabs batch by batch (see `handle_call/3`). The compile
   validates the data model and has the database schema reconciled with it (see
-  `reload_database/2`) before it builds anything. The runtime registries are reloaded once more at
-  the end, for a compile that built no bundle.
+  `Hologram.DB.reload/2`) before it builds anything, and a failure of either is shown in the open
+  tabs (see `report_data_model_failure/2`). The runtime registries are reloaded once more at the
+  end, for a compile that built no bundle.
 
   If code reloading fails, broadcasts a compilation error instead. Clients only ever reload into a
   converged database, since the schema is reconciled before the first batch is built and its tabs
@@ -358,7 +359,16 @@ defmodule Hologram.LiveReload do
   def reload(_file_path, endpoint, opts) do
     case reload_code(endpoint) do
       :ok ->
-        recompile_hologram([data_model_ready: &reload_database/2] ++ opts)
+        # The query cache is not reloaded with the database: it reads the registered queries the
+        # Hologram compile dumps, so it reloads with the runtime registries, and a compile that
+        # refused a query builder fails before any registry is reloaded, leaving the previous dump
+        # in place.
+        data_model_opts = [
+          data_model_failed: &report_data_model_failure/2,
+          data_model_ready: &DB.reload/2
+        ]
+
+        recompile_hologram(data_model_opts ++ opts)
         reload_runtime()
         :ok
 
@@ -367,25 +377,17 @@ defmodule Hologram.LiveReload do
     end
   end
 
-  # The query cache is not reloaded with the database: it reads the registered queries the Hologram
-  # compile dumps, so it reloads with the runtime registries, and a compile that refused a query
-  # builder fails before any registry is reloaded, leaving the previous dump in place.
-
   @doc """
-  Re-derives the database mapping from the given entity type and global role modules and
-  reconciles the schema with it. A failure is logged, broadcast to the open tabs as a compilation
-  error, and raised again.
+  Logs a failure of the Hologram compile's data model step, an invalid data model or a failed
+  schema reconciliation, and broadcasts it to the open tabs as a compilation error. Takes the kind
+  and the reason as a `catch` binds them.
   """
-  @spec reload_database(list(module), list(module)) :: :ok
-  def reload_database(entity_types, role_modules) do
-    DB.reload(entity_types, role_modules)
-  rescue
-    error ->
-      message = Exception.message(error)
-      Logger.error("Hologram: data layer reload failed: #{message}")
-      broadcast_compilation_error(message)
+  @spec report_data_model_failure(:error | :exit | :throw, any) :: :ok
+  def report_data_model_failure(kind, reason) do
+    message = data_model_failure_message(kind, reason)
+    Logger.error("Hologram: data model step failed: #{message}")
 
-      reraise error, __STACKTRACE__
+    broadcast_compilation_error(message)
   end
 
   @doc """
@@ -458,6 +460,14 @@ defmodule Hologram.LiveReload do
   # when they are :all.
   defp broadcast_reload(pages) do
     Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", {:reload, pages})
+  end
+
+  defp data_model_failure_message(:error, reason) when is_exception(reason) do
+    Exception.message(reason)
+  end
+
+  defp data_model_failure_message(kind, reason) do
+    Exception.format_banner(kind, reason)
   end
 
   # A pass ended, whether it finished or failed: the pages requested during it are no longer
