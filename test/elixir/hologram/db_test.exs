@@ -93,7 +93,7 @@ defmodule Hologram.DBTest do
 
   describe "mapping/0" do
     test "returns the mapping derived from the discovered entity types" do
-      assert mapping() == Mapper.derive!(Reflection.list_entities())
+      assert mapping() == Mapper.derive!(Reflection.list_entities(), Reflection.list_roles())
     end
   end
 

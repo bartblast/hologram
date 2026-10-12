@@ -1910,7 +1910,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     PolicyValidator.validate_model!(entity_types, Reflection.list_roles())
 
     # The mapping value is discarded - only the fail-fast derivation checks matter here.
-    Mapper.derive!(entity_types)
+    Mapper.derive!(entity_types, Reflection.list_roles())
 
     :ok
   end

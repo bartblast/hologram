@@ -62,7 +62,8 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
-  Derives the complete physical name mapping for the given entity type modules.
+  Derives the complete physical name mapping for the given entity type modules and global role
+  modules.
 
   Runs every derivation check exactly once - table name collisions, required to-one cycles,
   per-entity column collisions, and cross-entity within-kind derived name collisions (join
@@ -73,21 +74,21 @@ defmodule Hologram.DB.Mapper do
   `<table>_<attribute>_$uidx` entry per `unique: true` attribute, plus the role grant store's
   framework-owned one), and :join_tables (as returned by join_tables/1).
   """
-  @spec derive!(list(module)) :: %{module => %{atom => any}}
-  def derive!(entity_types) do
+  @spec derive!(list(module), list(module)) :: %{module => %{atom => any}}
+  def derive!(entity_types, role_modules) do
     # The collision check is a pure function of the module atoms - running it before
     # reflection keeps its readable error ahead of any missing-module crash.
     validate_table_names!(entity_types)
 
     entity_types
-    |> Model.from_modules(Reflection.list_roles())
+    |> Model.from_modules(role_modules)
     |> derive_from_model!()
   end
 
   @doc """
   Derives the complete physical name mapping for the given model term.
 
-  Same checks and result shape as derive!/1, plus the role grant store, whose entry is
+  Same checks and result shape as derive!/2, plus the role grant store, whose entry is
   derived from the term rather than declared. The term form derives without consulting
   any module, so a mapping is obtainable for entity types that no longer exist as code
   (a replayed migration history names them as plain module atoms).

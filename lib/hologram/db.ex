@@ -495,7 +495,7 @@ defmodule Hologram.DB do
   @spec reload() :: :ok
   def reload do
     if Process.whereis(__MODULE__) do
-      mapping = Mapper.derive!(Reflection.list_entities())
+      mapping = Mapper.derive!(Reflection.list_entities(), Reflection.list_roles())
       :persistent_term.put(@mapping_key, mapping)
 
       SchemaReconciler.reconcile(reconciliation_context())
@@ -525,7 +525,7 @@ defmodule Hologram.DB do
     # The mapping derived here is the one every consumer reads for the lifetime of the
     # runtime - companions included, since they derive from the declarations like every
     # other column.
-    mapping = Mapper.derive!(Reflection.list_entities())
+    mapping = Mapper.derive!(Reflection.list_entities(), Reflection.list_roles())
     :persistent_term.put(@mapping_key, mapping)
 
     # The clock every server-tier write stamps its column revisions from - a boot-time fact like

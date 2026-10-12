@@ -21,7 +21,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
   describe "compile/2" do
     test "assigns placeholders to placeholder slots" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       assert %{
@@ -33,7 +33,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles equality predicates into bound placeholders" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -50,7 +50,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "applies nested clauses to a to-many include" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -76,7 +76,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "applies the sort-key companion to a to-many include ordering" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -92,7 +92,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "binds membership element placeholders as scalar slots in an array constructor" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
 
       assert %{params: placeholders, sql: sql} = compile(term, mapping)
@@ -101,7 +101,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "binds membership element placeholders under the nil-inclusive branch" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, {:placeholder, :bound}]}]}
 
       assert %{params: [{:placeholder, :bound, :integer}], sql: sql} =
@@ -111,7 +111,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "binds membership placeholders with list types" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:c, :in, {:placeholder, :names}}]}
 
       assert %{
@@ -123,7 +123,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles a to-one reference field predicate against its reference column" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -143,7 +143,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "binds a to-one reference field placeholder as a uuid slot" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
       term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :owner}}]}
 
       assert %{
@@ -155,7 +155,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a policy rule after the authored filter" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module2
@@ -174,7 +174,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes several policy rules as an OR group" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = Query.normalize(Module2)
 
       rules = [
@@ -188,7 +188,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "drops the policy group for an unconditional rule" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -203,7 +203,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "drops the placeholders bound by the rules of a group an unconditional rule satisfies" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -226,7 +226,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes the included type's read policy into the include subquery, keyed on its alias" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
 
       term =
         PolicyModule1
@@ -250,7 +250,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "leaves include subqueries unfiltered without a policy" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
 
       term =
         PolicyModule1
@@ -266,7 +266,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "denies everything for a policy with no rules" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = Query.normalize(Module2)
 
       assert %{params: [], sql: sql} =
@@ -276,7 +276,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "binds one reserved slot for every actor reference" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
       term = Query.normalize(Module3)
 
       rules = [
@@ -291,7 +291,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "allocates the actor slot after the authored placeholders" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
 
@@ -304,7 +304,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a policy into a counting query before aggregation" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -322,7 +322,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes an own-roles grant reference as an EXISTS over the grant store" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}]
@@ -348,7 +348,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a global grant reference as an uncorrelated grant-store lookup" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule2)
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1, Role.Module2]}], via: nil}]
@@ -371,7 +371,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "elides a global grant reference for an anonymous session" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule2)
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1]}], via: nil}]
@@ -384,7 +384,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a namespaced grant reference as a type-wide lookup" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: [{:type, PolicyModule2, [:admin]}], via: nil}]
@@ -406,7 +406,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a relationship grant reference against the reference column" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
@@ -427,7 +427,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes grant references and predicates as one conjunction" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor]}], via: nil}]
@@ -438,7 +438,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes several grant references of one rule as an OR group" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [
@@ -452,7 +452,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a delegation as an EXISTS over the related entity's policy" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: nil, via: :parent}]
@@ -471,7 +471,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "denies a delegation to an operation the related entity type does not grant" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: nil, via: :parent}]
@@ -485,7 +485,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes a delegation alongside the rule's own predicates" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: :parent}]
@@ -498,7 +498,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes the delegated policy's grant references with the shared actor slot" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(PolicyModule1)
 
       rules = [
@@ -521,7 +521,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "composes the grant store's own visibility policy" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Query.normalize(RoleGrant)
       policy = %{operation: :read, rules: Policy.build(RoleGrant)[:read]}
 
@@ -553,7 +553,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles inequality null-inclusively on optional attributes" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -565,7 +565,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles inequality plainly on required attributes" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -577,7 +577,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles limit and offset as literal bounds" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -590,7 +590,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles membership as an array binding" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -602,7 +602,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles negated membership null-inclusively on optional attributes" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -614,7 +614,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles nil-holding membership into the IS NULL branch" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, 1]}]}
 
       assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
@@ -622,7 +622,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles nil-holding negated membership into the value-requiring branch" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil, 1]}]}
 
       assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
@@ -630,7 +630,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles nil-only membership as IS NULL without a bind slot" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil]}]}
 
       assert %{params: [], sql: sql} = compile(term, mapping)
@@ -638,7 +638,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles nil-only negated membership as IS NOT NULL without a bind slot" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil]}]}
 
       assert %{params: [], sql: sql} = compile(term, mapping)
@@ -646,7 +646,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "aliases sibling includes distinctly" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -668,7 +668,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles counting queries as a bare count" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -684,7 +684,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles counting over view bounds as a capped subquery" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -700,7 +700,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "embeds a to-many relationship as an aggregated array" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -726,7 +726,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "embeds a to-one relationship as a jsonb subselect" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -745,7 +745,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "embeds a self-referencing to-one unambiguously" do
-      mapping = Mapper.derive!([Module3, Module5])
+      mapping = Mapper.derive!([Module3, Module5], [])
 
       term =
         Module5
@@ -761,7 +761,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles nil equality as IS NULL without a bind slot" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -773,7 +773,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles nil inequality as IS NOT NULL without a bind slot" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -785,7 +785,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles ordering comparisons null-exclusively" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -797,7 +797,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles single-result queries with a unit limit" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -810,7 +810,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles ordering keys with directions and the id tiebreaker" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -824,7 +824,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     # A bound is a position in the list the attribute sorts into, so it compares by the same pair
     # ORDER BY sorts by - the key carries the order, the value settles what the key cannot.
     test "compiles a string comparison through the sort-key companion" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:c, :>=, "Zoe"}]}
 
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
@@ -833,7 +833,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "binds a placeholder compared against a string as a key slot and a value slot" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = %{Query.normalize(Module2) | filter: [{:c, :>=, {:placeholder, :min}}]}
 
       assert %{
@@ -845,7 +845,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compares a string inside an include through the include's companion" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -858,7 +858,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles string ordering through the sort-key companion" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -870,7 +870,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles single-result queries with a zero limit as zero" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
@@ -883,7 +883,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "encodes literal values with the attribute's codec type" do
-      mapping = Mapper.derive!([Module4])
+      mapping = Mapper.derive!([Module4], [])
 
       term =
         Module4
@@ -895,7 +895,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "mixes literal and placeholder bindings in placeholder order" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
 
       term = %{
         Query.normalize(Module2)
@@ -911,7 +911,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "nests a to-one inside a to-one include" do
-      mapping = Mapper.derive!([Module2, Module3, Module5])
+      mapping = Mapper.derive!([Module2, Module3, Module5], [])
 
       term =
         Module5
@@ -932,7 +932,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "nests an include inside a to-many aggregation" do
-      mapping = Mapper.derive!([Module2, Module3, Module6])
+      mapping = Mapper.derive!([Module2, Module3, Module6], [])
 
       term =
         Module6
@@ -955,7 +955,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "omits includes from counting queries" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       term =
         Module3
@@ -970,7 +970,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "selects the mapped columns in physical order" do
-      mapping = Mapper.derive!([Module2])
+      mapping = Mapper.derive!([Module2], [])
       term = Query.normalize(Module2)
 
       assert compile(term, mapping) == %{
@@ -981,7 +981,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "selects reference columns for to-one relationships" do
-      mapping = Mapper.derive!([Module2, Module3])
+      mapping = Mapper.derive!([Module2, Module3], [])
       term = Query.normalize(Module3)
 
       assert compile(term, mapping) == %{
@@ -992,7 +992,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "threads include placeholders after the root's" do
-      mapping = Mapper.derive!([Module1, Module2, Module3])
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
       base_term =
         Module3

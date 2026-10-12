@@ -93,14 +93,14 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp reconcile_context(entity_types) do
     mapping =
       entity_types
-      |> Mapper.derive!()
+      |> Mapper.derive!([])
       |> Map.drop([RoleGrant])
 
     Map.put(@context, :mapping, mapping)
   end
 
   defp reconcile_context_with_grant_store(entity_types) do
-    Map.put(@context, :mapping, Mapper.derive!(entity_types))
+    Map.put(@context, :mapping, Mapper.derive!(entity_types, Reflection.list_roles()))
   end
 
   defp update_mapping_indexes(context, entity_type, fun) do
