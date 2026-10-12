@@ -92,6 +92,7 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @empty_sync_constants %{
     entity_types: MapSet.new(),
+    model_hash: "my_model_hash",
     permission_checking?: false,
     prop_params: %{}
   }
@@ -1199,25 +1200,39 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "pages_checking_permissions/1" do
-    test "names a page whose template checks permissions", %{call_graph: call_graph} do
-      pages = pages_checking_permissions(page_reach(call_graph))
+  describe "pages_checking_permissions/2" do
+    test "names a page whose template checks permissions", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
 
       assert PageModule10 in pages
     end
 
     test "passes over a page that checks permissions only in a command handler", %{
-      call_graph: call_graph
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
     } do
-      pages = pages_checking_permissions(page_reach(call_graph))
+      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
 
       refute PageModule11 in pages
     end
 
-    test "passes over a page that checks nothing", %{call_graph: call_graph} do
-      pages = pages_checking_permissions(page_reach(call_graph))
+    test "passes over a page that checks nothing", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
 
       refute PageModule7 in pages
+    end
+
+    # No user entity type, no grant store: no page checks permissions against anything.
+    test "names no page when the module info PLT records no user entity type", %{
+      call_graph: call_graph
+    } do
+      assert pages_checking_permissions(page_reach(call_graph), PLT.start()) == []
     end
 
     # No fixture page calls the grant verbs in its client code, deliberately: until the verbs are
@@ -1226,20 +1241,26 @@ defmodule Hologram.CompilerTest do
     # can?/3 is taken OUT of that clone first: the verbs call it, so in the real graph a page
     # reaching a verb reaches can? too and would qualify under the old rule alone. Once the verbs
     # are ported their subtree is pruned from every build, which is the state this pins.
-    test "names a page whose client code grants a role", %{call_graph: call_graph} do
+    test "names a page whose client code grants a role", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
       CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 3})
 
-      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+      assert PageModule7 in pages_checking_permissions(page_reach(graph), module_info_plt)
     end
 
-    test "names a page whose client code revokes a role", %{call_graph: call_graph} do
+    test "names a page whose client code revokes a role", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
       CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 3})
 
-      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+      assert PageModule7 in pages_checking_permissions(page_reach(graph), module_info_plt)
     end
   end
 
@@ -1279,6 +1300,15 @@ defmodule Hologram.CompilerTest do
       grants_window = Auth.grants_window()
 
       assert queries.windows[Registry.id(grants_window)] == grants_window
+    end
+
+    # No user entity type, no grant store: there is no table to evaluate the window against.
+    test "registers no grants window when the given entity types hold no role grant store", %{
+      entity_types: entity_types
+    } do
+      queries = build_queries([QueryExtractorModule1], entity_types -- [RoleGrant])
+
+      refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
     end
 
     test "leaves out a component declaring no parameterized capture", %{
@@ -1506,6 +1536,42 @@ defmodule Hologram.CompilerTest do
       sync_constants = build_sync_constants(reach_by_page, module_info_plt, false)
 
       refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
+    end
+
+    test "records no model hash when the module info PLT records no entity type" do
+      assert build_sync_constants([], PLT.start()) == %{
+               entity_types: MapSet.new(),
+               model_hash: nil,
+               permission_checking?: false,
+               prop_params: %{}
+             }
+    end
+
+    # Whatever the pages reach: the hash is of the project's whole data model, the one the running
+    # app answers a client's greeting by.
+    test "records the hash of the data model the module info PLT records", %{
+      sync_constants: sync_constants
+    } do
+      expected =
+        Reflection.list_entities()
+        |> Model.from_modules(Reflection.list_roles())
+        |> Model.hash()
+
+      assert sync_constants.model_hash == expected
+    end
+  end
+
+  describe "build_sync_constants_js/1" do
+    test "renders the model hash the sync constants carry" do
+      assert build_sync_constants_js(@empty_sync_constants) ==
+               ~s/globalThis.Hologram.sync = {model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+    end
+
+    # A build declaring no entity type says null, so no client of it asks to sync.
+    test "renders null when the sync constants carry no model hash" do
+      sync_constants = %{@empty_sync_constants | model_hash: nil}
+
+      assert build_sync_constants_js(sync_constants) == "globalThis.Hologram.sync = null;"
     end
   end
 
@@ -2555,15 +2621,10 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
 
-    # A build declaring NO entity types says `null` here, so no client of it asks to sync - which
-    # cannot be shown from this suite, whose own model has entity types and whose reflection
-    # nothing stubs. It is asserted in the umbrella app, which declares none.
     test "injects the model the bundle was built against", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      refute Reflection.list_entities() == []
-
       js =
         build_runtime_js(
           runtime_mfas,
@@ -2575,7 +2636,7 @@ defmodule Hologram.CompilerTest do
           js_dir: @js_dir
         )
 
-      assert String.contains?(js, ~s/modelHash: "#{Model.hash()}", /)
+      assert String.contains?(js, ~s/modelHash: "my_model_hash", /)
     end
 
     # Every admitted attribute type in one entry, since a value's type is not recoverable from
@@ -6557,7 +6618,7 @@ defmodule Hologram.CompilerTest do
           MapSet.new()
         )
 
-      assert result == {empty_diff, false}
+      assert result == {empty_diff, false, %{}}
       assert PLT.get!(plt, Hologram.Reflection) == old_info
     end
 
@@ -6566,8 +6627,8 @@ defmodule Hologram.CompilerTest do
     } do
       beam_path = :code.which(Hologram.Reflection)
 
-      plt =
-        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | digest: 1})
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
 
       result =
         patch_module_info_plt!(
@@ -6578,7 +6639,10 @@ defmodule Hologram.CompilerTest do
           MapSet.new([Hologram.Reflection])
         )
 
-      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert result ==
+               {%{empty_diff | edited_modules: [Hologram.Reflection]}, true,
+                %{Hologram.Reflection => old_info}}
+
       assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
     end
 
@@ -6597,14 +6661,14 @@ defmodule Hologram.CompilerTest do
           MapSet.new([Hologram.Reflection])
         )
 
-      assert result == {empty_diff, false}
+      assert result == {empty_diff, false, %{}}
     end
 
     test "reports a change but no edit when only the mtime moved", %{empty_diff: empty_diff} do
       beam_path = :code.which(Hologram.Reflection)
 
-      plt =
-        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | mtime: 0})
+      old_info = %{Reflection.beam_info(beam_path) | mtime: 0}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
 
       result =
         patch_module_info_plt!(
@@ -6615,7 +6679,7 @@ defmodule Hologram.CompilerTest do
           MapSet.new([Hologram.Reflection])
         )
 
-      assert result == {empty_diff, true}
+      assert result == {empty_diff, true, %{Hologram.Reflection => old_info}}
       assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
     end
 
@@ -6632,16 +6696,23 @@ defmodule Hologram.CompilerTest do
           MapSet.new()
         )
 
-      assert result == {%{empty_diff | added_modules: [Hologram.Reflection]}, true}
+      assert result ==
+               {%{empty_diff | added_modules: [Hologram.Reflection]}, true,
+                %{Hologram.Reflection => nil}}
+
       assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
     end
 
     test "removes an editable module whose beam is gone", %{empty_diff: empty_diff} do
-      plt = PLT.put(PLT.start(), :removed_module, %{digest: "removed"})
+      old_info = %{digest: "removed"}
+      plt = PLT.put(PLT.start(), :removed_module, old_info)
 
       result = patch_module_info_plt!(plt, nil, MapSet.new([:removed_module]), [], MapSet.new())
 
-      assert result == {%{empty_diff | removed_modules: [:removed_module]}, true}
+      assert result ==
+               {%{empty_diff | removed_modules: [:removed_module]}, true,
+                %{removed_module: old_info}}
+
       assert PLT.get(plt, :removed_module) == :error
     end
 
@@ -6652,13 +6723,16 @@ defmodule Hologram.CompilerTest do
       # yet the VM loads it from another beam.
       beam_path = :code.which(Hologram.Reflection)
 
-      plt =
-        PLT.put(PLT.start(), Hologram.Reflection, %{Reflection.beam_info(beam_path) | digest: 1})
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
 
       result =
         patch_module_info_plt!(plt, nil, MapSet.new([Hologram.Reflection]), [], MapSet.new())
 
-      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert result ==
+               {%{empty_diff | edited_modules: [Hologram.Reflection]}, true,
+                %{Hologram.Reflection => old_info}}
+
       assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
     end
 
@@ -6676,19 +6750,20 @@ defmodule Hologram.CompilerTest do
       # A module compiled in memory: the VM names an empty path for it.
       assert :code.which(module) == []
 
-      plt = PLT.put(PLT.start(), module, %{digest: 1})
+      old_info = %{digest: 1}
+      plt = PLT.put(PLT.start(), module, old_info)
 
       result = patch_module_info_plt!(plt, nil, MapSet.new([module]), [], MapSet.new())
 
-      assert result == {%{empty_diff | removed_modules: [module]}, true}
+      assert result == {%{empty_diff | removed_modules: [module]}, true, %{module => old_info}}
       assert PLT.get(plt, module) == :error
     end
 
     test "checks the beam of a protocol the compiler did not report", %{empty_diff: empty_diff} do
       beam_path = :code.which(Enumerable)
 
-      plt =
-        PLT.put(PLT.start(), Enumerable, %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0})
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
+      plt = PLT.put(PLT.start(), Enumerable, old_info)
 
       result =
         patch_module_info_plt!(
@@ -6699,7 +6774,9 @@ defmodule Hologram.CompilerTest do
           MapSet.new()
         )
 
-      assert result == {%{empty_diff | edited_modules: [Enumerable]}, true}
+      assert result ==
+               {%{empty_diff | edited_modules: [Enumerable]}, true, %{Enumerable => old_info}}
+
       assert PLT.get!(plt, Enumerable) == Reflection.beam_info(beam_path)
     end
 
@@ -6720,7 +6797,7 @@ defmodule Hologram.CompilerTest do
           MapSet.new()
         )
 
-      assert result == {empty_diff, false}
+      assert result == {empty_diff, false, %{}}
       assert PLT.get!(plt, Enumerable) == old_info
     end
 
@@ -6731,6 +6808,9 @@ defmodule Hologram.CompilerTest do
 
       plt_path = :code.which(Hologram.Commons.PLT)
       kept_reflection_info = %{Reflection.beam_info(reflection_path) | digest: 1, mtime: 0}
+      old_compiler_info = %{Reflection.beam_info(compiler_path) | digest: 1}
+      old_enumerable_info = %{Reflection.beam_info(enumerable_path) | digest: 1, mtime: 0}
+      old_removed_info = %{digest: "removed"}
 
       plt =
         PLT.put(PLT.start(), [
@@ -6739,11 +6819,11 @@ defmodule Hologram.CompilerTest do
           # Editable, not reported, mtime moved: left as it is.
           {Hologram.Reflection, kept_reflection_info},
           # Reported: read again.
-          {Hologram.Compiler, %{Reflection.beam_info(compiler_path) | digest: 1}},
+          {Hologram.Compiler, old_compiler_info},
           # A protocol not reported, mtime moved: read again.
-          {Enumerable, %{Reflection.beam_info(enumerable_path) | digest: 1, mtime: 0}},
+          {Enumerable, old_enumerable_info},
           # Editable, no beam: removed.
-          {:removed_module, %{digest: "removed"}}
+          {:removed_module, old_removed_info}
         ])
 
       editable_modules =
@@ -6759,7 +6839,7 @@ defmodule Hologram.CompilerTest do
 
       compiled_modules = MapSet.new([Hologram.Compiler])
 
-      {diff, changed?} =
+      {diff, changed?, previous_infos} =
         patch_module_info_plt!(plt, nil, editable_modules, editable_beams, compiled_modules)
 
       assert PLT.get_all(plt) == %{
@@ -6777,6 +6857,13 @@ defmodule Hologram.CompilerTest do
              }
 
       assert changed?
+
+      assert previous_infos == %{
+               Hologram.Compiler => old_compiler_info,
+               Enumerable => old_enumerable_info,
+               Hologram.Commons.PLT => nil,
+               removed_module: old_removed_info
+             }
     end
   end
 
@@ -6891,6 +6978,56 @@ defmodule Hologram.CompilerTest do
 
     test "returns no module when every module is kept", %{ir_plt: ir_plt} do
       assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
+    end
+  end
+
+  describe "restore_module_infos/2" do
+    test "deletes an entry the update added" do
+      plt = PLT.start()
+      editable_beams = [{Hologram.Reflection, :code.which(Hologram.Reflection)}]
+
+      {_diff, _changed?, previous_infos} =
+        patch_module_info_plt!(plt, nil, MapSet.new(), editable_beams, MapSet.new())
+
+      assert PLT.get_all(plt) != %{}
+
+      assert restore_module_infos(plt, previous_infos) == plt
+      assert PLT.get_all(plt) == %{}
+    end
+
+    test "puts back an entry the update removed" do
+      old_infos = %{removed_module: %{digest: "removed"}}
+      plt = PLT.start(items: Map.to_list(old_infos))
+
+      {_diff, _changed?, previous_infos} =
+        patch_module_info_plt!(plt, nil, MapSet.new([:removed_module]), [], MapSet.new())
+
+      assert PLT.get_all(plt) != old_infos
+
+      restore_module_infos(plt, previous_infos)
+
+      assert PLT.get_all(plt) == old_infos
+    end
+
+    test "puts back an entry the update replaced" do
+      beam_path = :code.which(Hologram.Reflection)
+      old_infos = %{Hologram.Reflection => %{Reflection.beam_info(beam_path) | digest: 1}}
+      plt = PLT.start(items: Map.to_list(old_infos))
+
+      {_diff, _changed?, previous_infos} =
+        patch_module_info_plt!(
+          plt,
+          nil,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new([Hologram.Reflection])
+        )
+
+      assert PLT.get_all(plt) != old_infos
+
+      restore_module_infos(plt, previous_infos)
+
+      assert PLT.get_all(plt) == old_infos
     end
   end
 

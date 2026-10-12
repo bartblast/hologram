@@ -13,6 +13,7 @@ defmodule Hologram.DB.MapperTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Role
 
   defp column(entity_type, name) do
     entity_type
@@ -372,14 +373,17 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
-  describe "derive!/1" do
+  describe "derive!/2" do
     test "derives the role grant unique index comparing nulls as values" do
       mapping =
-        derive!([
-          Hologram.Auth.RoleGrant,
-          Hologram.Test.Fixtures.Entity.Module14,
-          Module1
-        ])
+        derive!(
+          [
+            Hologram.Auth.RoleGrant,
+            Hologram.Test.Fixtures.Entity.Module14,
+            Module1
+          ],
+          []
+        )
 
       assert mapping[Hologram.Auth.RoleGrant].indexes == %{
                "hologram_role_grant_$uidx" => %{
@@ -391,7 +395,7 @@ defmodule Hologram.DB.MapperTest do
     end
 
     test "derives a unique index per unique attribute" do
-      mapping = derive!([Module19])
+      mapping = derive!([Module19], [])
 
       assert mapping[Module19].indexes == %{
                "test_fixtures_entity_module19_code_$uidx" => %{
@@ -408,25 +412,36 @@ defmodule Hologram.DB.MapperTest do
     end
 
     test "derives no index for an attribute that is not unique" do
-      mapping = derive!([Module2])
+      mapping = derive!([Module2], [])
 
       assert mapping[Module2].indexes == %{}
     end
 
     test "carries a sort-key companion for every string attribute" do
-      mapping = derive!([Module2])
+      mapping = derive!([Module2], [])
 
       assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
     end
 
     test "derives the role grant store alongside the app's user entity type" do
-      mapping = derive!([Module1, Module14])
+      mapping = derive!([Module1, Module14], [])
 
       assert mapping[RoleGrant].table == "hologram_role_grant"
     end
 
+    test "derives the role grant store's role values from the given global role modules" do
+      mapping = derive!([Module1, Module14], [Role.Module2, Role.Module1])
+
+      role_column = Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :role}))
+
+      assert role_column.enum_values == [
+               "Hologram.Test.Fixtures.Role.Module1",
+               "Hologram.Test.Fixtures.Role.Module2"
+             ]
+    end
+
     test "derives no role grant store for a model without the user entity type" do
-      mapping = derive!([Module1])
+      mapping = derive!([Module1], [])
 
       assert Map.has_key?(mapping, RoleGrant) == false
     end
@@ -434,7 +449,7 @@ defmodule Hologram.DB.MapperTest do
     test "returns the mapping keyed by entity type" do
       mapping =
         [Module1, Module3]
-        |> derive!()
+        |> derive!([])
         |> Map.drop([RoleGrant])
 
       assert mapping == %{
@@ -463,7 +478,7 @@ defmodule Hologram.DB.MapperTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([Hologram.Blog.Post, Hologram.BlogPost])
+        derive!([Hologram.Blog.Post, Hologram.BlogPost], [])
       end
     end
 
@@ -481,7 +496,7 @@ defmodule Hologram.DB.MapperTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([InlineEntityFixture13])
+        derive!([InlineEntityFixture13], [])
       end
     end
 
@@ -505,7 +520,7 @@ defmodule Hologram.DB.MapperTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([InlineEntityFixture14, InlineEntityFixture14B])
+        derive!([InlineEntityFixture14, InlineEntityFixture14B], [])
       end
     end
 
@@ -529,7 +544,7 @@ defmodule Hologram.DB.MapperTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([InlineEntityFixture15, InlineEntityFixture15B])
+        derive!([InlineEntityFixture15, InlineEntityFixture15B], [])
       end
     end
 
@@ -558,17 +573,18 @@ defmodule Hologram.DB.MapperTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([InlineEntityFixture16, InlineEntityFixture16B])
+        derive!([InlineEntityFixture16, InlineEntityFixture16B], [])
       end
     end
   end
 
   describe "derive_from_model!/1" do
-    test "derives the same mapping as derive!/1" do
+    test "derives the same mapping as derive!/2" do
       entity_types = Reflection.list_entities()
-      model = Model.from_modules(entity_types, Reflection.list_roles())
+      role_modules = Reflection.list_roles()
+      model = Model.from_modules(entity_types, role_modules)
 
-      assert derive_from_model!(model) == derive!(entity_types)
+      assert derive_from_model!(model) == derive!(entity_types, role_modules)
     end
 
     test "derives a unique index from a term's attribute options" do
@@ -779,21 +795,21 @@ defmodule Hologram.DB.MapperTest do
 
   describe "referencing_relationship/2" do
     test "names the entity type and relationship of a to-one reference column" do
-      mapping = derive!([Module1, Module2, Module3])
+      mapping = derive!([Module1, Module2, Module3], [])
       constraint = "test_fixtures_entity_module3_c_id_$fk"
 
       assert referencing_relationship(mapping, constraint) == {Module3, :c}
     end
 
     test "names the entity type and relationship of a join table's target" do
-      mapping = derive!([Module1, Module2, Module3])
+      mapping = derive!([Module1, Module2, Module3], [])
       constraint = "test_fixtures_entity_module3_a_$join_target_id_$fk"
 
       assert referencing_relationship(mapping, constraint) == {Module3, :a}
     end
 
     test "names the grant store's user reference" do
-      mapping = derive!([Module1, Module14])
+      mapping = derive!([Module1, Module14], [])
 
       constraint =
         mapping[RoleGrant].columns
@@ -804,7 +820,7 @@ defmodule Hologram.DB.MapperTest do
     end
 
     test "returns nil for a constraint no relationship derives" do
-      mapping = derive!([Module1, Module2, Module3])
+      mapping = derive!([Module1, Module2, Module3], [])
 
       assert referencing_relationship(mapping, "nope_$fk") == nil
     end

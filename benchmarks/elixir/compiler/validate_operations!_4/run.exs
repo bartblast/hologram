@@ -10,8 +10,8 @@ ir_plt = Compiler.build_ir_plt()
 # operation are hand-ported, and it is their callers that are read.
 call_graph = Compiler.build_call_graph(ir_plt)
 
-# Swept outside the measured function because the compile task sweeps and passes the list down -
-# Hologram.Reflection.list_entities/0 has a benchmark of its own.
+# Listed outside the measured function because the compile task lists the entity types once, from
+# its module info PLT, and passes the list down.
 entity_types = Reflection.list_entities()
 
 # What the compile task pays to judge the entity operations the build asks about, once per

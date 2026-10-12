@@ -70,8 +70,8 @@ defmodule Hologram.Auth.RoleGrant do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Entity.Model
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Reflection
 
   # Sixteen bytes drawn once, on 2026-09-02, and fixed forever after: every grant id ever derived
   # hangs off them, so changing them would rename every row in the store.
@@ -247,14 +247,13 @@ defmodule Hologram.Auth.RoleGrant do
   @doc """
   Returns the entity type designated as the app's user, or nil when none is designated.
 
-  Read from the same cached resolution the store's own definition uses, so the answer costs
-  no module sweep - unlike `Hologram.Reflection.user_entity/0`, which computes it.
+  Read from the cached resolution the store's own definition uses.
   """
   @spec user_entity() :: module | nil
   def user_entity, do: resolved(:user_entity)
 
   defp build_resolution do
-    entity_types = Enum.reject(Reflection.list_entities(), &(&1 == __MODULE__))
+    entity_types = Enum.reject(Model.entity_types(), &(&1 == __MODULE__))
 
     entity_type_values = Enum.sort_by(entity_types, &Codec.encode(&1, :enum))
 
@@ -265,14 +264,14 @@ defmodule Hologram.Auth.RoleGrant do
 
     role_values =
       entity_role_names
-      |> Enum.concat(Reflection.list_roles())
+      |> Enum.concat(Model.roles())
       |> Enum.uniq()
       |> Enum.sort_by(&Codec.encode(&1, :enum))
 
     %{
       entity_type_values: entity_type_values,
       role_values: role_values,
-      user_entity: Reflection.user_entity()
+      user_entity: Model.user_entity()
     }
   end
 
@@ -286,9 +285,9 @@ defmodule Hologram.Auth.RoleGrant do
     "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
   end
 
-  # The resolution sweeps the app's modules, and definition reads happen per write and per
-  # query build - so the computed facts are cached for the lifetime of the runtime, like
-  # the physical name mapping. The compiler and the application boot reset the cache, so a
+  # The resolution is derived from the model cache (see Hologram.Entity.Model), and definition
+  # reads happen per write and per query build - so it is derived once and kept, like the
+  # physical name mapping. The compiler and the application boot reset the cache, so a
   # recompiled data model is picked up.
   defp resolved(key) do
     case :persistent_term.get(@resolution_key, nil) do

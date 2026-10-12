@@ -130,7 +130,7 @@ defmodule HologramClusterTests.MigrationHelpers do
   @spec reconciliation_context() :: %{atom => any}
   def reconciliation_context do
     %{
-      mapping: Mapper.derive!(Reflection.list_entities()),
+      mapping: Mapper.derive!(Reflection.list_entities(), Reflection.list_roles()),
       otp_app: "hologram_cluster_tests",
       env: "prod",
       hologram_version: to_string(Application.spec(:hologram, :vsn)),

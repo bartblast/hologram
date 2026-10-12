@@ -62,39 +62,39 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">nothing changed, new VM</td>
-    <td style="white-space: nowrap; text-align: right">0.74</td>
-    <td style="white-space: nowrap; text-align: right">1.36 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.10%</td>
-    <td style="white-space: nowrap; text-align: right">1.34 s</td>
-    <td style="white-space: nowrap; text-align: right">1.43 s</td>
+    <td style="white-space: nowrap">nothing changed, same VM</td>
+    <td style="white-space: nowrap; text-align: right">12.59</td>
+    <td style="white-space: nowrap; text-align: right">79.41 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.37%</td>
+    <td style="white-space: nowrap; text-align: right">78.54 ms</td>
+    <td style="white-space: nowrap; text-align: right">104.75 ms</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">nothing changed, same VM</td>
-    <td style="white-space: nowrap; text-align: right">0.69</td>
-    <td style="white-space: nowrap; text-align: right">1.45 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.97%</td>
-    <td style="white-space: nowrap; text-align: right">1.39 s</td>
-    <td style="white-space: nowrap; text-align: right">1.54 s</td>
+    <td style="white-space: nowrap">nothing changed, new VM</td>
+    <td style="white-space: nowrap; text-align: right">5.45</td>
+    <td style="white-space: nowrap; text-align: right">183.65 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.84%</td>
+    <td style="white-space: nowrap; text-align: right">180.65 ms</td>
+    <td style="white-space: nowrap; text-align: right">233.14 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">one page edited, same VM</td>
-    <td style="white-space: nowrap; text-align: right">0.175</td>
-    <td style="white-space: nowrap; text-align: right">5.71 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.52%</td>
-    <td style="white-space: nowrap; text-align: right">5.71 s</td>
-    <td style="white-space: nowrap; text-align: right">5.77 s</td>
+    <td style="white-space: nowrap; text-align: right">2.68</td>
+    <td style="white-space: nowrap; text-align: right">372.92 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.60%</td>
+    <td style="white-space: nowrap; text-align: right">370.25 ms</td>
+    <td style="white-space: nowrap; text-align: right">398.45 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">cold</td>
-    <td style="white-space: nowrap; text-align: right">0.133</td>
-    <td style="white-space: nowrap; text-align: right">7.50 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.86%</td>
-    <td style="white-space: nowrap; text-align: right">7.50 s</td>
-    <td style="white-space: nowrap; text-align: right">7.55 s</td>
+    <td style="white-space: nowrap; text-align: right">0.37</td>
+    <td style="white-space: nowrap; text-align: right">2680.35 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;10.46%</td>
+    <td style="white-space: nowrap; text-align: right">2553.84 ms</td>
+    <td style="white-space: nowrap; text-align: right">3097.89 ms</td>
   </tr>
 
 </table>
@@ -108,27 +108,27 @@ Run Time Comparison
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Slower</th>
   <tr>
-    <td style="white-space: nowrap">nothing changed, new VM</td>
-    <td style="white-space: nowrap;text-align: right">0.74</td>
+    <td style="white-space: nowrap">nothing changed, same VM</td>
+    <td style="white-space: nowrap;text-align: right">12.59</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">nothing changed, same VM</td>
-    <td style="white-space: nowrap; text-align: right">0.69</td>
-    <td style="white-space: nowrap; text-align: right">1.07x</td>
+    <td style="white-space: nowrap">nothing changed, new VM</td>
+    <td style="white-space: nowrap; text-align: right">5.45</td>
+    <td style="white-space: nowrap; text-align: right">2.31x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">one page edited, same VM</td>
-    <td style="white-space: nowrap; text-align: right">0.175</td>
-    <td style="white-space: nowrap; text-align: right">4.21x</td>
+    <td style="white-space: nowrap; text-align: right">2.68</td>
+    <td style="white-space: nowrap; text-align: right">4.7x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">cold</td>
-    <td style="white-space: nowrap; text-align: right">0.133</td>
-    <td style="white-space: nowrap; text-align: right">5.54x</td>
+    <td style="white-space: nowrap; text-align: right">0.37</td>
+    <td style="white-space: nowrap; text-align: right">33.76x</td>
   </tr>
 
 </table>

@@ -93,12 +93,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   The entity types are the replay's candidate set for a placeholder in an entity
   position. They are taken as an argument so that a build computes them once and
   passes the one list to every extraction, rather than every extraction reading
-  them - the default sweeps the build's apps, for one-off calls.
+  them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_2/README.md
   """
   @spec extract_module_queries(module, list(module)) :: list(Query.t())
-  def extract_module_queries(module, entity_types \\ Reflection.list_entities()) do
+  def extract_module_queries(module, entity_types) do
     if Reflection.has_function?(module, :__props__, 0) do
       Enum.flat_map(module.__props__(), &prop_queries!(module, &1, entity_types))
     else
@@ -143,7 +143,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   concatenated extract_module_queries/2 results in module order.
   """
   @spec extract_queries(list(module), list(module)) :: list(Query.t())
-  def extract_queries(modules, entity_types \\ Reflection.list_entities()) do
+  def extract_queries(modules, entity_types) do
     Enum.flat_map(modules, &extract_module_queries(&1, entity_types))
   end
 

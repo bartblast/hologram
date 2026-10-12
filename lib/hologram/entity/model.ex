@@ -3,6 +3,7 @@ defmodule Hologram.Entity.Model do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Commons.PLT
   alias Hologram.Reflection
 
   # Flag options, whose false is neutral. The option-introduction rule: no option may
@@ -19,8 +20,7 @@ defmodule Hologram.Entity.Model do
 
   @hash_bytes 16
 
-  @entity_types_key {__MODULE__, :entity_types}
-  @exists_key {__MODULE__, :exists?}
+  @facts_key {__MODULE__, :facts}
   @hash_key {__MODULE__, :hash}
 
   @doc """
@@ -31,28 +31,17 @@ defmodule Hologram.Entity.Model do
   def empty, do: %{entities: %{}, roles: %{}, user_entity: nil}
 
   @doc """
-  Returns the entity type modules of the project's compiled data model, sorted by name - the list
-  `Hologram.Reflection.list_entities/0` sweeps the project's modules for.
+  Returns the entity type modules of the project's compiled data model, sorted by name.
 
-  Cached for the lifetime of the runtime, like `hash/0`: the sweep behind it walks every module the
-  project holds, and this is read for every batch of writes a node routes to its windows and for
-  every client that resumes with a place in the log. The compiler and the application boot reset
-  the cache, so a recompiled data model is picked up.
+  Cached for the lifetime of the runtime, with the global roles and the user entity type (see
+  `put_facts/3`): this is read for every batch of writes a node routes to its windows and for
+  every client that resumes with a place in the log. The compiler fills the cache in the VM it runs
+  in, and a read that finds the cache empty fills it from the module info dump the last compile
+  wrote, without reading a beam. A missing dump raises. The application boot resets the cache, so
+  a recompiled data model is picked up.
   """
   @spec entity_types() :: list(module)
-  def entity_types do
-    case :persistent_term.get(@entity_types_key, nil) do
-      nil ->
-        entity_types = Reflection.list_entities()
-
-        :persistent_term.put(@entity_types_key, entity_types)
-
-        entity_types
-
-      entity_types ->
-        entity_types
-    end
-  end
+  def entity_types, do: facts().entity_types
 
   @doc """
   Returns the model term derived from the given entity type modules and global role
@@ -100,40 +89,29 @@ defmodule Hologram.Entity.Model do
   An app with no entity types has no database - the application tree gates the whole data layer on
   exactly that - so this is what tells a caller whether anything downstream of it can be reached.
 
-  Cached for the same reason `hash/0` is, and it matters more here: this is read on every client
-  handshake, and the sweep behind it takes tens of milliseconds where the cached answer takes a
-  fraction of a microsecond.
+  Answered from the cached entity types (see `entity_types/0`), and the cache matters here: this
+  is read on every client handshake.
   """
   @spec exists?() :: boolean
-  def exists? do
-    case :persistent_term.get(@exists_key, nil) do
-      nil ->
-        exists? = Reflection.list_entities() != []
-
-        :persistent_term.put(@exists_key, exists?)
-
-        exists?
-
-      exists? ->
-        exists?
-    end
-  end
+  def exists?, do: facts().entity_types != []
 
   @doc """
   Returns the hash identifying the project's compiled data model.
 
-  Deriving it sweeps every module the project holds, which costs far more than the writes that
-  stamp it, so the answer is cached for the lifetime of the runtime - like the grant store's
-  resolution. The compiler and the application boot reset the cache, so a recompiled data model
-  is picked up.
+  Derived from the cached entity types and global roles (see `entity_types/0` and `roles/0`) on
+  the first call, which reads what every one of them declares and costs far more than the writes
+  that stamp it, so the answer is cached beside them. Filling or resetting the cache drops it, so
+  a recompiled data model is picked up.
   """
   @spec hash() :: String.t()
   def hash do
     case :persistent_term.get(@hash_key, nil) do
       nil ->
+        %{entity_types: entity_types, roles: role_modules} = facts()
+
         model_hash =
-          Reflection.list_entities()
-          |> from_modules(Reflection.list_roles())
+          entity_types
+          |> from_modules(role_modules)
           |> hash()
 
         :persistent_term.put(@hash_key, model_hash)
@@ -174,15 +152,43 @@ defmodule Hologram.Entity.Model do
 
   def neutral_value(_key), do: nil
 
-  @doc false
-  @spec reset_caches() :: :ok
-  def reset_caches do
-    :persistent_term.erase(@entity_types_key)
-    :persistent_term.erase(@exists_key)
+  @doc """
+  Fills the cache of the project's compiled data model with the given entity type modules, global
+  role modules and user entity type (nil when none is designated), replacing what it held, and
+  drops the hash derived from the previous ones.
+  """
+  @spec put_facts(list(module), list(module), module | nil) :: :ok
+  def put_facts(entity_types, role_modules, user_entity) do
+    facts = %{entity_types: entity_types, roles: role_modules, user_entity: user_entity}
+
+    :persistent_term.put(@facts_key, facts)
     :persistent_term.erase(@hash_key)
 
     :ok
   end
+
+  @doc false
+  @spec reset_caches() :: :ok
+  def reset_caches do
+    :persistent_term.erase(@facts_key)
+    :persistent_term.erase(@hash_key)
+
+    :ok
+  end
+
+  @doc """
+  Returns the global role modules of the project's compiled data model, sorted by name. Cached
+  with the entity types (see `entity_types/0`).
+  """
+  @spec roles() :: list(module)
+  def roles, do: facts().roles
+
+  @doc """
+  Returns the entity type module designated as the user entity type of the project's compiled
+  data model, or nil when none is designated. Cached with the entity types (see `entity_types/0`).
+  """
+  @spec user_entity() :: module | nil
+  def user_entity, do: facts().user_entity
 
   @doc """
   Returns the given model term with the given migration ops applied, in order.
@@ -494,6 +500,18 @@ defmodule Hologram.Entity.Model do
         do: role_name
   end
 
+  defp facts do
+    case :persistent_term.get(@facts_key, nil) do
+      nil ->
+        load_facts()
+
+        :persistent_term.get(@facts_key)
+
+      facts ->
+        facts
+    end
+  end
+
   defp fetch_entity!(model, entity_type) do
     case Map.fetch(model.entities, entity_type) do
       {:ok, entry} ->
@@ -541,6 +559,25 @@ defmodule Hologram.Entity.Model do
 
       true ->
         List.insert_at(values, -1, op.value)
+    end
+  end
+
+  # Fills the cache from the module info dump, through a PLT that lives only for the read: the
+  # running app keeps the three lists, not the info of every module.
+  defp load_facts do
+    module_info_plt = PLT.start()
+
+    try do
+      dump_path = Path.join(Reflection.build_dir(), Reflection.module_info_plt_dump_file_name())
+      PLT.load(module_info_plt, dump_path)
+
+      put_facts(
+        Reflection.list_entities(module_info_plt),
+        Reflection.list_roles(module_info_plt),
+        Reflection.user_entity(module_info_plt)
+      )
+    after
+      PLT.stop(module_info_plt)
     end
   end
 

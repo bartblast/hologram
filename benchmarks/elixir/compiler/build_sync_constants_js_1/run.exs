@@ -6,10 +6,8 @@ alias Hologram.Reflection
 # layer constants with, once per compile that derives the data layer: the model of the entity
 # types the client holds, the prop params and the model hash.
 #
-# The function sweeps the entity types itself, once per call, to tell whether the project has a
-# data model at all, so the number holds one Hologram.Reflection.list_entities/0, which has a
-# benchmark of its own. The model hash is cached for the lifetime of the runtime, so every sample
-# after the first reads it rather than derives it.
+# The sync constants carry the model hash, nil for a project with no data model at all, so the
+# function lists no module and derives no hash: the number is the rendering alone.
 #
 # The fixtures give it a model of 11 entity types, the ones the 10 pages with a query reach, and
 # the prop params of two components. The statement is 4,593 bytes.
@@ -30,7 +28,7 @@ Benchee.run(
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions()
+      |> Compiler.pages_checking_permissions(module_info_plt)
 
     CallGraph.remove_manually_ported_mfas(call_graph)
 

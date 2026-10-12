@@ -10,6 +10,10 @@ defmodule Hologram.Reflection do
     :size,
     :page?,
     :component?,
+    :entity?,
+    :policy?,
+    :role?,
+    :user_entity?,
     :protocol?,
     :protocol_implementation?,
     :struct?,
@@ -86,8 +90,8 @@ defmodule Hologram.Reflection do
   Returns what the compiler needs to know about a module, read from its BEAM file in one pass and without
   loading it: a digest of the raw `Dbgi` chunk bytes for change detection, the BEAM file's mtime (posix
   seconds) and size for skipping unchanged files, and whether the module is a Hologram page or component,
-  a protocol, a protocol implementation, a struct, an exception or an Ecto schema, and whether it declares
-  JS imports. Each flag is the export table check that the `Reflection` predicate of the same name
+  an entity type, a policy, a role, the user entity type, a protocol, a protocol implementation, a struct,
+  an exception or an Ecto schema, and whether it declares JS imports. Each flag is the export table check that the `Reflection` predicate of the same name
   performs after loading the module, read from the file instead. The source path is the `:source` of
   the BEAM's compile info, the value `module.module_info(:compile)[:source]` returns once the module is
   loaded, as a string (nil when the compile info has none).
@@ -113,6 +117,10 @@ defmodule Hologram.Reflection do
         size: 1355821,
         page?: true,
         component?: false,
+        entity?: false,
+        policy?: false,
+        role?: false,
+        user_entity?: false,
         protocol?: false,
         protocol_implementation?: false,
         struct?: false,
@@ -130,7 +138,9 @@ defmodule Hologram.Reflection do
   """
   # WARNING: a change in what this records about a module needs a bump of the call graph's
   # @dump_version (see the warning in Hologram.Compiler.CallGraph), or a kept module info dump keeps
-  # what the previous code recorded for every module whose beam did not change.
+  # what the previous code recorded for every module whose beam did not change. A new key needs no
+  # bump: beam_info_keys/0 makes an entry that lacks it be read again (see
+  # Hologram.Compiler.build_module_info_plt!/3).
   # TODO: Narrow the spec back to charlist, and rename the param back to
   # beam_path, when beam_source/1 goes (see the removal note there) - nothing
   # passes a BEAM binary here once the umbrella fallback is gone.
@@ -141,6 +151,10 @@ defmodule Hologram.Reflection do
             size: non_neg_integer | nil,
             page?: boolean,
             component?: boolean,
+            entity?: boolean,
+            policy?: boolean,
+            role?: boolean,
+            user_entity?: boolean,
             protocol?: boolean,
             protocol_implementation?: boolean,
             struct?: boolean,
@@ -192,6 +206,10 @@ defmodule Hologram.Reflection do
         size: size,
         page?: page?,
         component?: {:__is_hologram_component__, 0} in exports,
+        entity?: {:__is_hologram_entity__, 0} in exports,
+        policy?: {:__is_hologram_policy__, 0} in exports,
+        role?: {:__is_hologram_role__, 0} in exports,
+        user_entity?: {:__is_hologram_user_entity__, 0} in exports,
         protocol?: protocol?,
         protocol_implementation?: protocol_implementation?,
         struct?: {:__struct__, 0} in exports and {:__struct__, 1} in exports,
@@ -388,6 +406,19 @@ defmodule Hologram.Reflection do
   @spec entity?(term) :: boolean
   def entity?(term) do
     elixir_module?(term) && has_function?(term, :__is_hologram_entity__, 0)
+  end
+
+  @doc """
+  Like entity?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  entity?/1 way.
+  """
+  @spec entity?(term, PLT.t() | nil) :: boolean
+  def entity?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :entity?) do
+      {:ok, entity?} -> entity?
+      :error -> entity?(term)
+    end
   end
 
   @doc """
@@ -680,7 +711,11 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists the Hologram entity type modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name (see `list_entities/1`).
+  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_entity__/0`. The beams are read once each, concurrently, and no module is loaded. A
+  module an application's spec names that has no beam in any of those directories is asked instead
+  (see `has_function?/3`), so that an entity type compiled in memory is a type of the model it is
+  listed by: a test's, loaded with an application spec alone.
 
   The framework's role grant store joins the data model only when an entity type is designated
   as the user entity - without one there is nothing for its grants to point at.
@@ -689,23 +724,30 @@ defmodule Hologram.Reflection do
   """
   @spec list_entities() :: list(module)
   def list_entities do
-    list_entities(project_apps())
+    entity_types =
+      project_apps()
+      |> list_modules_exporting_or_declared(:__is_hologram_entity__, 0)
+      |> Enum.sort()
+
+    user_entity_designated? = Enum.any?(entity_types, &user_entity?/1)
+
+    reject_role_grant_without_user_entity(entity_types, user_entity_designated?)
   end
 
   @doc """
-  Lists the Hologram entity type modules of the given OTP apps, sorted by name: the modules the
-  apps' specs and, in dev and test, their ebin directories name (see `list_candidate_modules/1`)
-  that export `__is_hologram_entity__/0`. The specs are read as well as the beams, so that an
-  entity type compiled in memory, with no beam on disk, is a type of the model it is listed by:
-  a test's, loaded with an application spec alone.
+  Lists the modules the given module info PLT records as Hologram entity types, sorted by name,
+  without listing any directory, reading any BEAM or asking the code server about any module. The
+  framework's role grant store is listed only when the PLT records a user entity type (see
+  `list_entities/0`).
   """
-  @spec list_entities(list(atom)) :: list(module)
-  def list_entities(apps) do
-    apps
-    |> list_candidate_modules()
-    |> Enum.filter(&entity?/1)
+  @spec list_entities(PLT.t()) :: list(module)
+  def list_entities(module_info_plt) do
+    user_entity_designated? = user_entity(module_info_plt) != nil
+
+    module_info_plt
+    |> PLT.keys(%{entity?: true})
     |> Enum.sort()
-    |> reject_role_grant_without_user_entity()
+    |> reject_role_grant_without_user_entity(user_entity_designated?)
   end
 
   @doc """
@@ -771,14 +813,25 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists the Hologram global role modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name: the modules the apps' specs and, in dev and test, their ebin directories
-  name (see `list_candidate_modules/1`) that export `__is_hologram_role__/0`. The specs are read as
-  well as the beams, for the reason `list_entities/1` reads them.
+  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  `__is_hologram_role__/0`, and the ones an application's spec names with no beam there that export
+  it. The beams and the specs are read as `list_entities/0` reads them.
   """
   @spec list_roles() :: list(module)
   def list_roles do
-    list_candidate_modules()
-    |> Enum.filter(&role?/1)
+    project_apps()
+    |> list_modules_exporting_or_declared(:__is_hologram_role__, 0)
+    |> Enum.sort()
+  end
+
+  @doc """
+  Lists the modules the given module info PLT records as Hologram global roles, sorted by name,
+  without listing any directory, reading any BEAM or asking the code server about any module.
+  """
+  @spec list_roles(PLT.t()) :: list(module)
+  def list_roles(module_info_plt) do
+    module_info_plt
+    |> PLT.keys(%{role?: true})
     |> Enum.sort()
   end
 
@@ -962,6 +1015,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like policy?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  policy?/1 way.
+  """
+  @spec policy?(term, PLT.t() | nil) :: boolean
+  def policy?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :policy?) do
+      {:ok, policy?} -> policy?
+      :error -> policy?(term)
+    end
+  end
+
+  @doc """
   Returns true if the given term is a protocol module, or false otherwise.
   """
   @spec protocol?(any) :: boolean
@@ -1101,6 +1167,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like role?/1, but answered from the given module info PLT when it holds the term, without
+  touching the module's code path. A nil PLT, or a term the PLT does not hold, is decided the
+  role?/1 way.
+  """
+  @spec role?(term, PLT.t() | nil) :: boolean
+  def role?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :role?) do
+      {:ok, role?} -> role?
+      :error -> role?(term)
+    end
+  end
+
+  @doc """
   Returns the file path of the given module's source code.
   """
   @spec source_path(module()) :: String.t()
@@ -1170,6 +1249,19 @@ defmodule Hologram.Reflection do
   @spec user_entity() :: module | nil
   def user_entity do
     Enum.find(list_entities(), &user_entity?/1)
+  end
+
+  @doc """
+  Returns the entity type module the given module info PLT records as the project's user entity type,
+  or nil when it records none, without reading any BEAM or asking the code server about any module.
+  When the PLT records more than one, the first by name is returned, as `user_entity/0` returns it.
+  """
+  @spec user_entity(PLT.t()) :: module | nil
+  def user_entity(module_info_plt) do
+    module_info_plt
+    |> PLT.keys(%{entity?: true, user_entity?: true})
+    |> Enum.sort()
+    |> List.first()
   end
 
   @doc """
@@ -1252,6 +1344,14 @@ defmodule Hologram.Reflection do
     |> Path.expand()
   end
 
+  # The modules of the beams at the given paths whose export table has the given function, in the
+  # order of the paths, read in concurrent tasks.
+  defp filter_beams_exporting(beam_paths, function, arity) do
+    beam_paths
+    |> TaskUtils.map_concurrently(&module_exporting(&1, function, arity))
+    |> Enum.reject(&is_nil/1)
+  end
+
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -1316,8 +1416,31 @@ defmodule Hologram.Reflection do
   defp list_modules_exporting(apps, function, arity) do
     apps
     |> Enum.flat_map(&list_app_elixir_beam_paths/1)
-    |> TaskUtils.map_concurrently(&module_exporting(&1, function, arity))
-    |> Enum.reject(&is_nil/1)
+    |> filter_beams_exporting(function, arity)
+  end
+
+  # The modules list_modules_exporting/3 lists, and the modules the applications' specs name that
+  # have no beam in any of their ebin directories and export the function: a module compiled in
+  # memory, which has no export table on disk to read, so it is asked (see has_function?/3). The
+  # spec names are compared with the beam file names as strings, so no name is turned into an atom.
+  defp list_modules_exporting_or_declared(apps, function, arity) do
+    beam_paths = Enum.flat_map(apps, &list_app_elixir_beam_paths/1)
+    beam_names = MapSet.new(beam_paths, &Path.basename(&1, ".beam"))
+
+    declared_modules =
+      for app <- apps,
+          spec_modules = Application.spec(app, :modules),
+          module <- spec_modules,
+          alias?(module),
+          not MapSet.member?(beam_names, Atom.to_string(module)),
+          has_function?(module, function, arity) do
+        module
+      end
+
+    beam_paths
+    |> filter_beams_exporting(function, arity)
+    |> Kernel.++(declared_modules)
+    |> Enum.uniq()
   end
 
   # The value returned by the clause of the named function that takes exactly the given literal
@@ -1432,17 +1555,16 @@ defmodule Hologram.Reflection do
     list_loaded_otp_apps() -- [:hex]
   end
 
-  # RoleGrant declares itself an entity type, so the sweep always finds it - what is in question
+  # RoleGrant declares itself an entity type, so a listing always finds it - what is in question
   # is whether it STAYS. It does only when the project designates a user entity, without which
   # there is nothing for its grants to point at.
   #
-  # The check runs over the entity types already swept, never through user_entity/0 - that
-  # function lists entity types itself, which would recurse.
-  defp reject_role_grant_without_user_entity(entity_types) do
-    if Enum.any?(entity_types, &user_entity?/1) do
-      entity_types
-    else
-      List.delete(entity_types, Hologram.Auth.RoleGrant)
-    end
+  # The listing says whether one is designated, from the entity types it already holds or from the
+  # module info PLT it reads, never through user_entity/0 - that function lists entity types
+  # itself, which would recurse.
+  defp reject_role_grant_without_user_entity(entity_types, true), do: entity_types
+
+  defp reject_role_grant_without_user_entity(entity_types, false) do
+    List.delete(entity_types, Hologram.Auth.RoleGrant)
   end
 end

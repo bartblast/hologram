@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
   alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11
@@ -65,151 +66,176 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   # one part of an expected message that cannot be spelled out and stay true across a release.
   @app "(hologram #{Application.spec(:hologram, :vsn)})"
 
-  describe "extract_module_queries/1" do
-    test "extracts a derived placeholder from a nested argument field read" do
+  # Listed once for the file: the candidate set a placeholder in an entity position is replayed over.
+  setup_all do
+    [entity_types: Reflection.list_entities()]
+  end
+
+  describe "extract_module_queries/2" do
+    test "extracts a derived placeholder from a nested argument field read", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(c: %Placeholder{name: :"entity.b.c"})
         |> Query.normalize()
 
-      assert extract_module_queries(Module28) == [expected_term]
+      assert extract_module_queries(Module28, entity_types) == [expected_term]
     end
 
-    test "extracts a derived placeholder from an argument field read" do
+    test "extracts a derived placeholder from an argument field read", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(b: %Placeholder{name: :"entity.b"})
         |> Query.normalize()
 
-      assert extract_module_queries(Module27) == [expected_term]
+      assert extract_module_queries(Module27, entity_types) == [expected_term]
     end
 
-    test "extracts a field read on a concrete map" do
+    test "extracts a field read on a concrete map", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> limit(5)
         |> Query.normalize()
 
-      assert extract_module_queries(Module29) == [expected_term]
+      assert extract_module_queries(Module29, entity_types) == [expected_term]
     end
 
-    test "extracts every relationship of the target when an include name is an argument" do
-      terms = extract_module_queries(Module37)
+    test "extracts every relationship of the target when an include name is an argument", %{
+      entity_types: entity_types
+    } do
+      terms = extract_module_queries(Module37, entity_types)
 
       assert Enum.map(terms, &Map.keys(&1.include)) == [[:a], [:b], [:c]]
     end
 
-    test "extracts every entity and relationship pair when both are arguments" do
-      terms = extract_module_queries(Module39)
+    test "extracts every entity and relationship pair when both are arguments", %{
+      entity_types: entity_types
+    } do
+      terms = extract_module_queries(Module39, entity_types)
 
       assert Enum.map(terms, &{&1.entity, Map.keys(&1.include)}) == [{Entity13, [:parent]}]
     end
 
-    test "drops a candidate a later stage cannot satisfy rather than failing the build" do
+    test "drops a candidate a later stage cannot satisfy rather than failing the build", %{
+      entity_types: entity_types
+    } do
       # Entity18 declares title and no relationships, so it survives the filter and has nothing for
       # the include to travel over - which used to fail the whole build rather than drop it.
       assert %{entity: Entity18} = filter(Entity18, title: "x")
 
-      terms = extract_module_queries(Module39)
+      terms = extract_module_queries(Module39, entity_types)
 
       assert Enum.map(terms, & &1.entity) == [Entity13]
     end
 
-    test "extracts every entity type admitting a query whose entity is an argument" do
-      terms = extract_module_queries(Module36)
+    test "extracts every entity type admitting a query whose entity is an argument", %{
+      entity_types: entity_types
+    } do
+      terms = extract_module_queries(Module36, entity_types)
 
       assert Enum.map(terms, & &1.entity) == [Entity2, Entity4]
     end
 
-    test "extracts only the relationships a sub-builder admits" do
-      terms = extract_module_queries(Module38)
+    test "extracts only the relationships a sub-builder admits", %{entity_types: entity_types} do
+      terms = extract_module_queries(Module38, entity_types)
 
       assert Enum.map(terms, &Map.keys(&1.include)) == [[:a]]
     end
 
-    test "extracts one entity type when only one admits the query" do
+    test "extracts one entity type when only one admits the query", %{entity_types: entity_types} do
       expected_term =
         Entity4
         |> filter(d: 1)
         |> Query.normalize()
 
-      assert extract_module_queries(Module34) == [expected_term]
+      assert extract_module_queries(Module34, entity_types) == [expected_term]
     end
 
-    test "extracts a guarded capture ignoring the guard" do
+    test "extracts a guarded capture ignoring the guard", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module10) == [expected_term]
+      assert extract_module_queries(Module10, entity_types) == [expected_term]
     end
 
-    test "extracts a placeholder as a membership list element" do
+    test "extracts a placeholder as a membership list element", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(b: [%Placeholder{name: :min_b}, 1])
         |> Query.normalize()
 
-      assert extract_module_queries(Module26) == [expected_term]
+      assert extract_module_queries(Module26, entity_types) == [expected_term]
     end
 
-    test "extracts a placeholder from a call on an argument" do
+    test "extracts a placeholder from a call on an argument", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(c: %Placeholder{name: :search})
         |> Query.normalize()
 
-      assert extract_module_queries(Module13) == [expected_term]
+      assert extract_module_queries(Module13, entity_types) == [expected_term]
     end
 
-    test "extracts a placeholder from arithmetic on an argument" do
+    test "extracts a placeholder from arithmetic on an argument", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(b: %Placeholder{name: :n})
         |> Query.normalize()
 
-      assert extract_module_queries(Module32) == [expected_term]
+      assert extract_module_queries(Module32, entity_types) == [expected_term]
     end
 
-    test "extracts a placeholder from a call whose argument nests it in a map" do
+    test "extracts a placeholder from a call whose argument nests it in a map", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(b: %Placeholder{name: :n})
         |> Query.normalize()
 
-      assert extract_module_queries(Module33) == [expected_term]
+      assert extract_module_queries(Module33, entity_types) == [expected_term]
     end
 
-    test "extracts a query registered through a cross-module capture" do
+    test "extracts a query registered through a cross-module capture", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(b: 123)
         |> Query.normalize()
 
-      assert extract_module_queries(Module4) == [expected_term]
+      assert extract_module_queries(Module4, entity_types) == [expected_term]
     end
 
-    test "extracts a zero-arity capture branching on compile-time values" do
+    test "extracts a zero-arity capture branching on compile-time values", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(b: {:>=, 100})
         |> Query.normalize()
 
-      assert extract_module_queries(Module12) == [expected_term]
+      assert extract_module_queries(Module12, entity_types) == [expected_term]
     end
 
-    test "extracts an anonymous sub-builder include" do
+    test "extracts an anonymous sub-builder include", %{entity_types: entity_types} do
       expected_term =
         Entity3
         |> include(:a, fn sub -> filter(sub, b: {:>=, %Placeholder{name: :min_b}}) end)
         |> Query.normalize()
 
-      assert extract_module_queries(Module20) == [expected_term]
+      assert extract_module_queries(Module20, entity_types) == [expected_term]
     end
 
-    test "extracts each clause of a multi-clause capture as a variant" do
+    test "extracts each clause of a multi-clause capture as a variant", %{
+      entity_types: entity_types
+    } do
       nil_clause_term =
         Entity2
         |> filter(a: true)
@@ -220,47 +246,53 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module9) == [nil_clause_term, bound_clause_term]
+      assert extract_module_queries(Module9, entity_types) == [nil_clause_term, bound_clause_term]
     end
 
-    test "extracts normalized terms from from_query props" do
+    test "extracts normalized terms from from_query props", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(a: true)
         |> order_by(:c)
         |> Query.normalize()
 
-      assert extract_module_queries(Module1) == [expected_term]
+      assert extract_module_queries(Module1, entity_types) == [expected_term]
     end
 
-    test "extracts placeholders from a local parameterized capture through its shim" do
+    test "extracts placeholders from a local parameterized capture through its shim", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module2) == [expected_term]
+      assert extract_module_queries(Module2, entity_types) == [expected_term]
     end
 
-    test "extracts placeholders from a remote parameterized capture in argument order" do
+    test "extracts placeholders from a remote parameterized capture in argument order", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}}, c: %Placeholder{name: :search})
         |> Query.normalize()
 
-      assert extract_module_queries(Module6) == [expected_term]
+      assert extract_module_queries(Module6, entity_types) == [expected_term]
     end
 
-    test "extracts placeholders from an inline from_query function" do
+    test "extracts placeholders from an inline from_query function", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module23) == [expected_term]
+      assert extract_module_queries(Module23, entity_types) == [expected_term]
     end
 
-    test "extracts through a cross-module helper forking its clauses" do
+    test "extracts through a cross-module helper forking its clauses", %{
+      entity_types: entity_types
+    } do
       nil_clause_term =
         Entity2
         |> filter(a: true)
@@ -271,29 +303,34 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module18) == [nil_clause_term, bound_clause_term]
+      assert extract_module_queries(Module18, entity_types) == [
+               nil_clause_term,
+               bound_clause_term
+             ]
     end
 
-    test "extracts through a local helper" do
+    test "extracts through a local helper", %{entity_types: entity_types} do
       expected_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module14) == [expected_term]
+      assert extract_module_queries(Module14, entity_types) == [expected_term]
     end
 
-    test "extracts through variable binds and concrete native calls" do
+    test "extracts through variable binds and concrete native calls", %{
+      entity_types: entity_types
+    } do
       expected_term =
         Entity2
         |> filter(a: true)
         |> filter(b: {:>=, %Placeholder{name: :min_b}}, c: "ABC")
         |> Query.normalize()
 
-      assert extract_module_queries(Module15) == [expected_term]
+      assert extract_module_queries(Module15, entity_types) == [expected_term]
     end
 
-    test "forks a case on a placeholder into per-clause variants" do
+    test "forks a case on a placeholder into per-clause variants", %{entity_types: entity_types} do
       any_clause_term = Query.normalize(Entity2)
 
       other_clause_term =
@@ -301,10 +338,13 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> filter(c: %Placeholder{name: :status})
         |> Query.normalize()
 
-      assert extract_module_queries(Module17) == [any_clause_term, other_clause_term]
+      assert extract_module_queries(Module17, entity_types) == [
+               any_clause_term,
+               other_clause_term
+             ]
     end
 
-    test "forks a cond into per-clause variants" do
+    test "forks a cond into per-clause variants", %{entity_types: entity_types} do
       bound_clause_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
@@ -315,10 +355,13 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> filter(a: true)
         |> Query.normalize()
 
-      assert extract_module_queries(Module16) == [bound_clause_term, fallback_clause_term]
+      assert extract_module_queries(Module16, entity_types) == [
+               bound_clause_term,
+               fallback_clause_term
+             ]
     end
 
-    test "forks an if into per-branch variants" do
+    test "forks an if into per-branch variants", %{entity_types: entity_types} do
       else_branch_term =
         Entity2
         |> filter(a: true)
@@ -329,14 +372,19 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module11) == [else_branch_term, then_branch_term]
+      assert extract_module_queries(Module11, entity_types) == [
+               else_branch_term,
+               then_branch_term
+             ]
     end
 
-    test "yields no terms for modules without prop declarations" do
-      assert extract_module_queries(Entity2) == []
+    test "yields no terms for modules without prop declarations", %{entity_types: entity_types} do
+      assert extract_module_queries(Entity2, entity_types) == []
     end
 
-    test "raises naming every function the refusal was reached through" do
+    test "raises naming every function the refusal was reached through", %{
+      entity_types: entity_types
+    } do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_43.ex:22: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module43 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
@@ -346,11 +394,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module43)
+        extract_module_queries(Module43, entity_types)
       end
     end
 
-    test "raises on a call to an undefined function" do
+    test "raises on a call to an undefined function", %{entity_types: entity_types} do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_24.ex:20: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module24 calls undefined function Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19.missing_helper/1
@@ -359,20 +407,24 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module24)
+        extract_module_queries(Module24, entity_types)
       end
     end
 
-    test "raises on an include name argument the target has no relationship for" do
+    test "raises on an include name argument the target has no relationship for", %{
+      entity_types: entity_types
+    } do
       expected_msg =
         "test/elixir/support/fixtures/compiler/query_extractor/module_40.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40 includes a relationship of Hologram.Test.Fixtures.Entity.Module4, which declares none - a prop with no window would read rows nothing ever fills"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module40)
+        extract_module_queries(Module40, entity_types)
       end
     end
 
-    test "raises on a concrete field read off a value that is not a map" do
+    test "raises on a concrete field read off a value that is not a map", %{
+      entity_types: entity_types
+    } do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_42.ex:20: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module42 reads field :limit off 5, which is not a map
@@ -381,11 +433,13 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module42)
+        extract_module_queries(Module42, entity_types)
       end
     end
 
-    test "raises on a concrete field read the value has no field for" do
+    test "raises on a concrete field read the value has no field for", %{
+      entity_types: entity_types
+    } do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_41.ex:20: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module41 reads field :mising off a value that has no such field - known fields: :limit
@@ -394,20 +448,20 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module41)
+        extract_module_queries(Module41, entity_types)
       end
     end
 
-    test "raises on a capture no entity type admits" do
+    test "raises on a capture no entity type admits", %{entity_types: entity_types} do
       expected_msg =
         "test/elixir/support/fixtures/compiler/query_extractor/module_35.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35 builds no query that any entity type of the build admits - it filters on :no_entity_declares_this - a prop with no window would read rows nothing ever fills"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module35)
+        extract_module_queries(Module35, entity_types)
       end
     end
 
-    test "raises on a capture targeting an undefined function" do
+    test "raises on a capture targeting an undefined function", %{entity_types: entity_types} do
       # Defined at runtime - a compile-time fixture cannot hold a missing-target
       # capture, because the fun value inlined into __props__/0 trips the
       # compiler's undefined-remote warning.
@@ -433,38 +487,41 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         "query capture for prop :entities in Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture targets undefined function Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19.missing_query/1"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture)
+        extract_module_queries(
+          Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture,
+          entity_types
+        )
       end
     end
 
-    test "raises on a destructured query capture argument" do
+    test "raises on a destructured query capture argument", %{entity_types: entity_types} do
       expected_msg =
         "test/elixir/support/fixtures/compiler/query_extractor/module_8.ex:15: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8 destructures an argument - arguments must be plain names, each binding to the like-named component assign"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module8)
+        extract_module_queries(Module8, entity_types)
       end
     end
 
-    test "raises on a non-capture from_query value" do
+    test "raises on a non-capture from_query value", %{entity_types: entity_types} do
       expected_msg =
         "test/elixir/support/fixtures/compiler/query_extractor/module_3.ex: from_query for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3 must be a function capture, got: 123"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module3)
+        extract_module_queries(Module3, entity_types)
       end
     end
 
-    test "raises on a query capture argument named vars" do
+    test "raises on a query capture argument named vars", %{entity_types: entity_types} do
       expected_msg =
         "test/elixir/support/fixtures/compiler/query_extractor/module_7.ex:15: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7 names an argument vars - the name is reserved, name arguments after the component assigns they bind to"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module7)
+        extract_module_queries(Module7, entity_types)
       end
     end
 
-    test "raises on helpers that call each other in a circle" do
+    test "raises on helpers that call each other in a circle", %{entity_types: entity_types} do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_44.ex:23: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44.narrow/1 - recursive helpers are not extractable
@@ -475,11 +532,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module44)
+        extract_module_queries(Module44, entity_types)
       end
     end
 
-    test "raises on a recursive helper" do
+    test "raises on a recursive helper", %{entity_types: entity_types} do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_21.ex:16: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21.entities_query/1 - recursive helpers are not extractable
@@ -488,11 +545,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module21)
+        extract_module_queries(Module21, entity_types)
       end
     end
 
-    test "raises on an argument the build cannot enumerate" do
+    test "raises on an argument the build cannot enumerate", %{entity_types: entity_types} do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_30.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to filter/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
@@ -501,11 +558,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module30)
+        extract_module_queries(Module30, entity_types)
       end
     end
 
-    test "raises on an invalid query built by a capture" do
+    test "raises on an invalid query built by a capture", %{entity_types: entity_types} do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_31.ex:18: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
@@ -514,11 +571,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module31)
+        extract_module_queries(Module31, entity_types)
       end
     end
 
-    test "raises on branching inside an anonymous sub-builder" do
+    test "raises on branching inside an anonymous sub-builder", %{entity_types: entity_types} do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_22.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22 branches inside an anonymous function - not extractable yet
@@ -527,7 +584,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module22)
+        extract_module_queries(Module22, entity_types)
       end
     end
   end
@@ -567,8 +624,10 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     end
   end
 
-  describe "extract_queries/1" do
-    test "collects queries from the given modules in order, skipping query-less ones" do
+  describe "extract_queries/2" do
+    test "collects queries from the given modules in order, skipping query-less ones", %{
+      entity_types: entity_types
+    } do
       module_1_term =
         Entity2
         |> filter(a: true)
@@ -580,7 +639,10 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> filter(b: 123)
         |> Query.normalize()
 
-      assert extract_queries([Module1, Entity2, Module4]) == [module_1_term, module_4_term]
+      assert extract_queries([Module1, Entity2, Module4], entity_types) == [
+               module_1_term,
+               module_4_term
+             ]
     end
   end
 

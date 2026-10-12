@@ -30,7 +30,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   end
 
   defp companion_mapping do
-    Mapper.derive!([Module1, Module2, Module3])
+    Mapper.derive!([Module1, Module2, Module3], [])
   end
 
   defp create_module2_rows(values) do

@@ -31,13 +31,13 @@ defmodule Hologram.DB.SchemaTest do
   # sees exactly the entity types it names.
   defp app_mapping(entity_types) do
     entity_types
-    |> Mapper.derive!()
+    |> Mapper.derive!([])
     |> Map.drop([Hologram.Auth.RoleGrant])
   end
 
   defp table(entity_type, table_name) do
     [entity_type]
-    |> Mapper.derive!()
+    |> Mapper.derive!([])
     |> from_mapping()
     |> get_in([:tables, table_name])
   end
@@ -800,7 +800,7 @@ defmodule Hologram.DB.SchemaTest do
     test "derives the role grant store's user references with the no action delete action" do
       foreign_keys =
         [Hologram.Auth.RoleGrant, Hologram.Test.Fixtures.Entity.Module14]
-        |> Mapper.derive!()
+        |> Mapper.derive!([])
         |> from_mapping()
         |> Map.fetch!(:tables)
         |> Map.fetch!("hologram_role_grant")

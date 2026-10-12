@@ -78,6 +78,7 @@ defmodule Hologram.Compiler do
   """
   @type sync_constants :: %{
           entity_types: MapSet.t(module),
+          model_hash: String.t() | nil,
           permission_checking?: boolean,
           prop_params: %{module => keyword(list(atom))}
         }
@@ -256,7 +257,7 @@ defmodule Hologram.Compiler do
   Pages listed in `permission_checking_pages` also download the grants window: what a client
   evaluates permissions against is grant rows, so a page that checks them on the client needs
   them held like any other rows it reads. The list is derived apart, from the pages' reach on the
-  call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/1`.
+  call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/2`.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
@@ -265,10 +266,10 @@ defmodule Hologram.Compiler do
   def build_page_windows(reach_by_page, module_info_plt, permission_checking_pages \\ []) do
     components_by_page = list_reached_components_by_page(reach_by_page, module_info_plt)
 
-    # Swept once here and handed to every extraction below. The extractor forks a placeholder
-    # entity over this list and re-enters the capture's body once per candidate, so a fork left to
-    # read it for itself reads it once per variant.
-    all_entity_types = Reflection.list_entities()
+    # Listed once here, from the module info PLT, and handed to every extraction below. The
+    # extractor forks a placeholder entity over this list and re-enters the capture's body once
+    # per candidate, so a fork left to read it for itself reads it once per variant.
+    all_entity_types = Reflection.list_entities(module_info_plt)
 
     # Each component's queries are extracted once, however many pages reach it.
     window_ids_by_component =
@@ -365,11 +366,12 @@ defmodule Hologram.Compiler do
 
   An app that designates no user entity type has no grant store at all - the framework's grant
   entity joins the data model only with one - so no page checks permissions against anything and
-  the answer is empty whatever the pages reach.
+  the answer is empty whatever the pages reach. Whether one is designated is read from the given
+  module info PLT.
   """
-  @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
-  def pages_checking_permissions(reach_by_page) do
-    if Reflection.user_entity() do
+  @spec pages_checking_permissions([{module, page_reach}], PLT.t()) :: list(module)
+  def pages_checking_permissions(reach_by_page, module_info_plt) do
+    if Reflection.user_entity(module_info_plt) do
       for {page_module, %{mfas: mfas}} <- reach_by_page,
           Enum.any?(mfas, &(&1 in @permission_mfas)) do
         page_module
@@ -675,6 +677,9 @@ defmodule Hologram.Compiler do
   when a registered query claims the server's own authority with trust/1, which a component's
   query has no authority to claim on either tier.
 
+  The grants window is among the windows when the given entity types hold the role grant store,
+  which a data model does exactly when it designates a user entity type.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
   """
   @spec build_queries(list(module), list(module)) :: %{
@@ -696,7 +701,7 @@ defmodule Hologram.Compiler do
     windows =
       entries
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
-      |> put_grants_window()
+      |> put_grants_window(entity_types)
 
     %{entries: entries, prop_params: prop_params_index(component_modules), windows: windows}
   end
@@ -1639,7 +1644,7 @@ defmodule Hologram.Compiler do
 
   What the data layer derives per page reads it: the page's windows (see `build_page_windows/3`),
   its slot bindings (see `validate_slot_bindings!/2`), whether it checks permissions (see
-  `pages_checking_permissions/1`) and the entity types its client holds or mentions (see
+  `pages_checking_permissions/2`) and the entity types its client holds or mentions (see
   `build_sync_constants/3`).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
@@ -1883,6 +1888,10 @@ defmodule Hologram.Compiler do
   way the server would. What is left out is exactly the types declaring no policy, which is what
   lets the client read an ABSENT entry as the server's own default deny.
 
+  `:model_hash` is the hash of the project's data model, of every entity type and global role the
+  module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
+  the application declares no data model.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
   @spec build_sync_constants([{module, page_reach}], PLT.t(), boolean) :: sync_constants
@@ -1896,9 +1905,11 @@ defmodule Hologram.Compiler do
 
     component_modules = reached_components(reached_modules, module_info_plt)
 
-    # One sweep for both the extraction below and the policied set: the extractor forks over this
-    # list once per variant if it reads it itself, and policied_entity_types/1 filters the same one.
-    all_entity_types = Reflection.list_entities()
+    # One listing, from the module info PLT, for the extraction below, the policied set and the
+    # model hash: the extractor forks over this list once per variant if it reads it itself, and
+    # policied_entity_types/1 filters the same one.
+    all_entity_types = Reflection.list_entities(module_info_plt)
+    role_modules = Reflection.list_roles(module_info_plt)
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
     # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
@@ -1940,6 +1951,7 @@ defmodule Hologram.Compiler do
     # grants would hand each client the whole authorization model to read for nothing.
     %{
       entity_types: entity_types,
+      model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
       prop_params: prop_params(component_modules)
     }
@@ -1956,10 +1968,10 @@ defmodule Hologram.Compiler do
   is stale, and a value the current server puts in the page would always agree with the current
   server.
 
-  `null` when the APPLICATION declares no entity type - `Reflection.list_entities() == []`, the
-  same predicate `application.ex` gates the database children on and `Handshake.check/1` refuses
-  sync by. The three answer alike on purpose: the bundle claims a data layer exactly when the
-  server has one. Null rather than nothing, so a client reads one unambiguous value instead of
+  `null` when the APPLICATION declares no entity type - the sync constants carry no model hash
+  then (see `build_sync_constants/3`) - which is the fact `application.ex` gates the database
+  children on and `Handshake.check/1` refuses sync by. The three answer alike on purpose: the
+  bundle claims a data layer exactly when the server has one. Null rather than nothing, so a client reads one unambiguous value instead of
   probing for a missing global - and rather than `{}`, which is truthy, so every "does this
   bundle sync?" check would pass on a bundle that never syncs.
 
@@ -1969,15 +1981,15 @@ defmodule Hologram.Compiler do
   opens with no windows, and its model is empty because nothing syncs yet - not because nothing
   can.
 
-  Rendered from what the entity types declare when it is called, which is why the compile task
-  keeps it with the runtime bundle it built: a declaration or a policy that changed moves the
-  JavaScript while the sync constants stay the same.
+  The model is rendered from what the entity types declare when this is called, which is why the
+  compile task keeps the statement with the runtime bundle it built: a policy that changed moves
+  the JavaScript while the sync constants stay the same.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_js_1/README.md
   """
   @spec build_sync_constants_js(sync_constants) :: String.t()
   def build_sync_constants_js(sync_constants) do
-    if Reflection.list_entities() == [] do
+    if sync_constants.model_hash == nil do
       ~s/globalThis.Hologram.sync = null;/
     else
       model =
@@ -1985,7 +1997,7 @@ defmodule Hologram.Compiler do
 
       params = render_prop_params(sync_constants.prop_params)
 
-      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{Model.hash()}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{sync_constants.model_hash}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -2054,11 +2066,12 @@ defmodule Hologram.Compiler do
   @doc """
   Brings the module info PLT of the last finished compile in this VM in line with the beams now, in
   place, and returns what changed: the module digests diff (as `diff_module_info_plts/2` returns it,
-  each list sorted) and whether any entry changed at all (an entry whose mtime moved but whose
-  digest did not is changed, but no edit).
+  each list sorted), whether any entry changed at all (an entry whose mtime moved but whose digest
+  did not is changed, but no edit), and the entries the call replaced or removed, by module, with
+  `nil` for a module it added (see `restore_module_infos/2`).
 
   A module the compiler reported since the last compile (`compiled_modules`, see
-  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. The entry of any other module
+  `Hologram.Compiler.Tracer.peek/1`) is read, whatever its entry says. The entry of any other module
   is left where it is, unless it is a protocol's, whose consolidated beam a new implementation
   rewrites without a compile, or there is none; that one is checked against the entry's mtime and
   size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the last compile
@@ -2074,7 +2087,7 @@ defmodule Hologram.Compiler do
           MapSet.t(module),
           list({module, charlist}),
           MapSet.t(module)
-        ) :: {map, boolean}
+        ) :: {map, boolean, %{module => map | nil}}
   def patch_module_info_plt!(plt, dumped_at, editable_modules, editable_beams, compiled_modules) do
     beam_results =
       TaskUtils.map_concurrently(editable_beams, fn {module, beam_path} ->
@@ -2097,7 +2110,12 @@ defmodule Hologram.Compiler do
       removed_modules: list_results(results, :removed)
     }
 
-    {diff, Enum.any?(results, &(&1 != :kept))}
+    previous_infos =
+      for {_kind, module, old_info} <- results, into: %{} do
+        {module, old_info}
+      end
+
+    {diff, previous_infos != %{}, previous_infos}
   end
 
   @doc """
@@ -2143,6 +2161,20 @@ defmodule Hologram.Compiler do
     Enum.each(dropped_modules, &PLT.delete(ir_plt, &1))
 
     dropped_modules
+  end
+
+  @doc """
+  Puts back the entries a `patch_module_info_plt!/5` call replaced or removed in the given module
+  info PLT, and deletes the ones it added: the PLT is as it was before that call.
+  """
+  @spec restore_module_infos(PLT.t(), %{module => map | nil}) :: PLT.t()
+  def restore_module_infos(module_info_plt, previous_infos) do
+    Enum.each(previous_infos, fn
+      {module, nil} -> PLT.delete(module_info_plt, module)
+      {module, info} -> PLT.put(module_info_plt, module, info)
+    end)
+
+    module_info_plt
   end
 
   @doc """
@@ -2978,7 +3010,7 @@ defmodule Hologram.Compiler do
   defp list_results(results, kind) do
     results
     |> Enum.flat_map(fn
-      {^kind, module} -> [module]
+      {^kind, module, _old_info} -> [module]
       _other -> []
     end)
     |> Enum.sort()
@@ -3144,6 +3176,16 @@ defmodule Hologram.Compiler do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
+  # The hash of the data model the given entity type and global role modules declare, or nil for
+  # a project that declares no entity type and so has no data model.
+  defp model_hash([], _role_modules), do: nil
+
+  defp model_hash(entity_types, role_modules) do
+    entity_types
+    |> Model.from_modules(role_modules)
+    |> Model.hash()
+  end
+
   # The application Reflection.list_module_applications/0 names for the module: the first loaded
   # application, in the same order, whose modules list it.
   defp module_application(module) do
@@ -3251,14 +3293,14 @@ defmodule Hologram.Compiler do
   end
 
   # Read gives nil: not an Elixir module.
-  # Puts the new entry in place of the old one and says what that was: an addition, an edit (another
-  # digest), a touch (the same digest, another mtime or size), a removal (a beam that no longer reads
-  # as an Elixir module, or none), or nothing.
+  # Puts the new entry in place of the old one and says what that was, with the module and the old
+  # entry: an addition, an edit (another digest), a touch (the same digest, another mtime or size), a
+  # removal (a beam that no longer reads as an Elixir module, or none), or nothing.
   defp put_compared_module_info(_plt, _module, nil, nil), do: :kept
 
-  defp put_compared_module_info(plt, module, _old_info, nil) do
+  defp put_compared_module_info(plt, module, old_info, nil) do
     PLT.delete(plt, module)
-    {:removed, module}
+    {:removed, module, old_info}
   end
 
   defp put_compared_module_info(_plt, _module, info, info), do: :kept
@@ -3267,9 +3309,9 @@ defmodule Hologram.Compiler do
     PLT.put(plt, module, new_info)
 
     cond do
-      old_info == nil -> {:added, module}
-      old_info.digest != new_info.digest -> {:edited, module}
-      true -> {:touched, module}
+      old_info == nil -> {:added, module, nil}
+      old_info.digest != new_info.digest -> {:edited, module, old_info}
+      true -> {:touched, module, old_info}
     end
   end
 
@@ -4150,10 +4192,10 @@ defmodule Hologram.Compiler do
   # :no_window to a client the build did tell to ask.
   #
   # An app designating no user entity type has no grant store - the grant entity joins the data
-  # model only with one - so there is no table to evaluate the window against and nothing to
-  # register.
-  defp put_grants_window(windows) do
-    if Reflection.user_entity() do
+  # model only with one, so it is among the entity types exactly then - and there is no table to
+  # evaluate the window against and nothing to register.
+  defp put_grants_window(windows, entity_types) do
+    if RoleGrant in entity_types do
       window = Auth.grants_window()
 
       Map.put_new(windows, Registry.id(window), window)

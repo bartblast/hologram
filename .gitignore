@@ -36,5 +36,4 @@ npm-debug.log
 /assets/node_modules/
 
 # Dialyzer PLTs.
-/priv/plts/*.plt
-/priv/plts/*.plt.hash
+/.dialyzer/

@@ -20,6 +20,20 @@ defmodule Mix.Tasks.Compile.Hologram do
       with the page modules built, preceded by `:runtime` when the runtime bundle was built and
       by `:chunks` when the chunk bundles were, in that order. Defaults to doing nothing.
 
+  ## Data model
+
+  A compile validates the data model once its module info PLT is in line with the beams, before it
+  derives or builds anything from the model. A caller that has work of its own to do on a valid
+  model before the bundles are built (live reload, to bring the database schema in line), or that
+  wants to hear of an invalid one, does it with two options:
+
+    * `:data_model_failed` - called when the data model step fails, the validation or the
+      `:data_model_ready` call, with the kind and the reason as a `catch` binds them (`:error` and
+      the exception for a raise), before the failure is raised again. Defaults to doing nothing.
+
+    * `:data_model_ready` - called once per compile, right after the validation, with the entity
+      types and the roles. A compile that raises here builds nothing. Defaults to doing nothing.
+
   ## Build dir
 
   A compile leaves eight files in the build dir, so that the first compile in the next VM (the next
@@ -112,18 +126,22 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts) do
     opts = Keyword.merge(build_default_opts(), opts)
 
-    # Positioned before the skip guards - the cheap whole-model checks must run on every
-    # invocation (including dev/test and language-server builds), while only the expensive
-    # bundle build stays behind them.
-    validate_data_model!()
-
     result =
       cond do
-        opts[:force?] -> compile_with_lock(opts)
-        language_server_build?(opts) -> :noop
-        !compiler_enabled?() -> :noop
-        nothing_changed?(opts) -> :noop
-        true -> compile_with_lock(opts)
+        opts[:force?] ->
+          compile_with_lock(opts)
+
+        # These invocations never compile, so the data model is validated here, from the beams.
+        language_server_build?(opts) or not compiler_enabled?() ->
+          validate_uncompiled_data_model!()
+          :noop
+
+        # No module changed since the compile that validated the data model.
+        nothing_changed?(opts) ->
+          :noop
+
+        true ->
+          compile_with_lock(opts)
       end
 
     # TODO: Remove this block together with refresh_umbrella_app_manifests/0
@@ -146,6 +164,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
+      data_model_failed: fn _kind, _reason -> :ok end,
+      data_model_ready: fn _entity_types, _role_modules -> :ok end,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
       next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
@@ -203,13 +223,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       editable_beams = Reflection.list_editable_beams()
       editable_modules = MapSet.new(editable_beams, fn {module, _beam_path} -> module end)
 
-      # Taken on a cold compile too, so that the modules its full scan covers are forgotten.
-      compiled_modules =
+      # Read on a cold compile too, so that the modules its full scan covers are forgotten.
+      {compiled_modules, compiled_records} =
         editable_beams
         |> Map.new()
-        |> Tracer.take()
+        |> Tracer.peek()
 
-      {new_module_info_plt, module_digests_diff, infos_changed?} =
+      {new_module_info_plt, module_digests_diff, infos_changed?, previous_infos} =
         build_module_info_plt(
           cache,
           old_module_info_plt,
@@ -218,6 +238,21 @@ defmodule Mix.Tasks.Compile.Hologram do
           compiled_modules,
           sup
         )
+
+      # What a compile that fails on the data model goes back to. The snapshot was taken before the
+      # kept state was marked as not to be trusted.
+      before = %{
+        dumped_at: before_dumped_at,
+        editable_modules: cache.editable_modules,
+        previous_infos: previous_infos
+      }
+
+      # Before anything is derived or built from the data model.
+      load_data_model!(new_module_info_plt, before, opts)
+
+      # Only now: a compile that fails on the data model leaves the records, so the next one reads
+      # the same modules again.
+      Tracer.forget(compiled_records)
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
@@ -760,8 +795,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
-  # whether any entry changed. A cold compile reads every module against the dump, diffs the two
+  # Returns the module info PLT of this compile, which is the cache's, the module digests diff,
+  # whether any entry changed, and the entries a warm compile replaced or removed (none for a cold
+  # one, which has nothing to go back to). A cold compile reads every module against the dump, diffs the two
   # PLTs, copies the result into the cache's PLT, once, and compares the two PLTs' entries. A warm
   # one brings the cache's PLT in line in place, reading the modules the compiler reported among the
   # beams a save can rewrite, and takes the diff from that scan (see
@@ -783,11 +819,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # An entry whose mtime moved but whose digest did not is a change the diff does not show, but
     # the dump must record it, or the next scan reads that beam again.
-    {cache.module_info_plt, module_digests_diff, new_infos != PLT.get_all(old_plt)}
+    {cache.module_info_plt, module_digests_diff, new_infos != PLT.get_all(old_plt), %{}}
   end
 
   defp build_module_info_plt(cache, _old_plt, dumped_at, editable_beams, compiled_modules, _sup) do
-    {module_digests_diff, infos_changed?} =
+    {module_digests_diff, infos_changed?, previous_infos} =
       Compiler.patch_module_info_plt!(
         cache.module_info_plt,
         dumped_at,
@@ -796,7 +832,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         compiled_modules
       )
 
-    {cache.module_info_plt, module_digests_diff, infos_changed?}
+    {cache.module_info_plt, module_digests_diff, infos_changed?, previous_infos}
   end
 
   # Built once per VM when client stack traces are on, then patched with each compile's diff. Nothing
@@ -1066,6 +1102,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     reach_by_page = Compiler.list_reach_by_page(page_modules, call_graph_for_runtime)
 
+    # Listed once, from the module info PLT this compile brought in line with the beams: no beam
+    # is read and no module is asked.
+    entity_types = Reflection.list_entities(module_info_plt)
+
     # A builder's argument names bind the consuming component's like-named declared slots, and
     # a remote capture makes those names a cross-module contract - so a renamed argument fails
     # the build here, every reachable consumer at once, rather than one render at a time.
@@ -1073,12 +1113,17 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # A check spells the entity operation it asks about, and a name no allow line on any
     # entity type declares is a typo or a rename - refused here rather than answered no
-    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/1 below: the ask
+    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/2 below: the ask
     # functions are hand-ported, so the runtime graph no longer holds the vertices whose
     # callers this reads. Before the IR prune, which drops the IR this builds for a caller no
     # page reaches.
-    Compiler.validate_operations!(Reflection.list_entities(), call_graph, context.ir_plt,
-      modules: operation_ask_modules(context.kept_runtime, context.module_digests_diff)
+    Compiler.validate_operations!(entity_types, call_graph, context.ir_plt,
+      modules:
+        operation_ask_modules(
+          context.kept_runtime,
+          context.module_digests_diff,
+          module_info_plt
+        )
     )
 
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
@@ -1087,7 +1132,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions()
+      |> Compiler.pages_checking_permissions(module_info_plt)
 
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.
@@ -1104,7 +1149,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # the first boot, and a release starts without running the extractor at all.
     {queries_plt, queries_plt_dump_path} =
       context.component_modules
-      |> Compiler.build_queries(Reflection.list_entities())
+      |> Compiler.build_queries(entity_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     dump_queries_plt(queries_plt, queries_plt_dump_path)
@@ -1120,8 +1165,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       )
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
-    # its inputs: a declaration or a policy that changed moves the JavaScript while the constants
-    # stay the same (see Hologram.Compiler.build_sync_constants_js/1).
+    # its inputs: a policy that changed moves the JavaScript while the constants stay the same (see
+    # Hologram.Compiler.build_sync_constants_js/1).
     Compiler.build_sync_constants_js(sync_constants)
   end
 
@@ -1458,6 +1503,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     })
   end
 
+  # Replaces what the running app knows of the data model. The two caches derived from the model
+  # cache are dropped with it.
+  defp put_model_facts(entity_types, role_modules, user_entity) do
+    RoleGrant.reset_resolution_cache()
+    Model.put_facts(entity_types, role_modules, user_entity)
+    Policy.reset_model_facts_cache()
+  end
+
   # The components of the build. Overridable so this project's own test suite can compile: it
   # holds components the build must refuse - the extractor's and the validators' negative fixtures
   # - which a real app never has. Defaulted here rather than in build_default_opts/0 so a run that
@@ -1471,22 +1524,24 @@ defmodule Mix.Tasks.Compile.Hologram do
   # entity, role or policy module does - a removed module's kind cannot be read any more, so a
   # removal counts. Else the added and edited modules alone: the rest were judged by the compile
   # that kept the runtime, and their IR need not be built again (see
-  # Hologram.Compiler.operation_asks/3).
-  defp operation_ask_modules(nil, _module_digests_diff), do: nil
+  # Hologram.Compiler.operation_asks/3). An added or edited module's kind is read from the module
+  # info PLT, which holds this compile's entry for it.
+  defp operation_ask_modules(nil, _module_digests_diff, _module_info_plt), do: nil
 
-  defp operation_ask_modules(_kept_runtime, module_digests_diff) do
+  defp operation_ask_modules(_kept_runtime, module_digests_diff, module_info_plt) do
     %{added_modules: added, edited_modules: edited, removed_modules: removed} =
       module_digests_diff
 
-    if removed != [] or Enum.any?(added ++ edited, &data_model_module?/1) do
+    if removed != [] or Enum.any?(added ++ edited, &data_model_module?(&1, module_info_plt)) do
       nil
     else
       added ++ edited
     end
   end
 
-  defp data_model_module?(module) do
-    Reflection.entity?(module) or Reflection.role?(module) or Reflection.policy?(module)
+  defp data_model_module?(module, module_info_plt) do
+    Reflection.entity?(module, module_info_plt) or Reflection.role?(module, module_info_plt) or
+      Reflection.policy?(module, module_info_plt)
   end
 
   # The data layer's statement for the runtime script: the kept runtime's when the data layer is
@@ -1738,6 +1793,36 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The data model as this compile's module info PLT records it: no beam is read. The model cache
+  # is filled before the validation, since the validators read it (the role grant store answers its
+  # relationships from it). The :data_model_ready option is called once the model is valid.
+  #
+  # Nothing but the module info PLT has moved when this runs: the IR and the call graph are patched
+  # after it. So a failure here, of any kind, is undone. The entries the update replaced are put
+  # back, and the tracer still holds the compiled modules, so the next compile in this VM finds the
+  # same changes again, from the kept state and not from the dumps. The model cache keeps what
+  # this compile put there: it describes the modules that are loaded, valid or not. The failure is
+  # then told to the :data_model_failed option, with the kept state already back, and raised again.
+  defp load_data_model!(module_info_plt, before, opts) do
+    entity_types = Reflection.list_entities(module_info_plt)
+    role_modules = Reflection.list_roles(module_info_plt)
+    user_entity = Reflection.user_entity(module_info_plt)
+
+    put_model_facts(entity_types, role_modules, user_entity)
+    validate_data_model!(entity_types, role_modules)
+    opts[:data_model_ready].(entity_types, role_modules)
+
+    :ok
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+
+      restore_before_state(module_info_plt, before)
+      opts[:data_model_failed].(kind, reason)
+
+      :erlang.raise(kind, reason, stacktrace)
+  end
+
   # A dump of another version is not loaded (see Hologram.Compiler.Cache.load_compile_state/1): the
   # state stays empty, as it does with no dump.
   defp maybe_load_compile_state(compile_state_dump_path) do
@@ -1874,6 +1959,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.rm(lock_path)
   end
 
+  # A cold compile kept nothing to go back to (its editable modules are nil): the next compile
+  # starts from the dumps, as it would have.
+  defp restore_before_state(_module_info_plt, %{editable_modules: nil}), do: :ok
+
+  defp restore_before_state(module_info_plt, before) do
+    Compiler.restore_module_infos(module_info_plt, before.previous_infos)
+    Cache.put_module_infos(before.dumped_at, before.editable_modules)
+  end
+
   # Lists all apps of the enclosing umbrella project, whether the compiler runs in
   # the umbrella root context or in a child app context. Empty in single-app projects.
   # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
@@ -1899,20 +1993,24 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.map(& &1.app)
   end
 
-  defp validate_data_model! do
-    RoleGrant.reset_resolution_cache()
-    Model.reset_caches()
-    Policy.reset_model_facts_cache()
-
-    entity_types = Reflection.list_entities()
-
+  defp validate_data_model!(entity_types, role_modules) do
     EntityValidator.validate_model!(entity_types)
-    PolicyValidator.validate_model!(entity_types)
+    PolicyValidator.validate_model!(entity_types, role_modules)
 
     # The mapping value is discarded - only the fail-fast derivation checks matter here.
-    Mapper.derive!(entity_types)
+    Mapper.derive!(entity_types, role_modules)
 
     :ok
+  end
+
+  # Listed from the beams: no compile runs, so no module info PLT is in line with them.
+  defp validate_uncompiled_data_model! do
+    entity_types = Reflection.list_entities()
+    role_modules = Reflection.list_roles()
+    user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
+
+    put_model_facts(entity_types, role_modules, user_entity)
+    validate_data_model!(entity_types, role_modules)
   end
 
   # An empty lock file is a lock in the middle of being acquired, not an invalid one:

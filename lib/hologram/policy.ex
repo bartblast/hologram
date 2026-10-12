@@ -57,6 +57,7 @@ defmodule Hologram.Policy do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.Types, as: T
   alias Hologram.Entity
+  alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Query
   alias Hologram.Reflection
@@ -527,17 +528,17 @@ defmodule Hologram.Policy do
     end
   end
 
-  # Both facts are model-wide sweeps over every module in the project, and policies are built
+  # Both facts are derived from the model cache (see Hologram.Entity.Model), and policies are built
   # on the request path - per policied query, per delegation hop and per can? call - so they are
-  # computed once and cached for the lifetime of the runtime, like the physical name mapping.
-  # The compiler and the application boot reset the cache, so a recompiled model is picked up.
+  # derived once and kept, like the physical name mapping. The compiler and the application boot
+  # reset the cache, so a recompiled model is picked up.
   defp model_facts do
     case :persistent_term.get(@model_facts_key, nil) do
       nil ->
         facts = %{
-          entity_types: Reflection.list_entities(),
+          entity_types: Model.entity_types(),
           extends_by_role_module:
-            Map.new(Reflection.list_roles(), fn module -> {module, module.__extends__()} end)
+            Map.new(Model.roles(), fn module -> {module, module.__extends__()} end)
         }
 
         :persistent_term.put(@model_facts_key, facts)

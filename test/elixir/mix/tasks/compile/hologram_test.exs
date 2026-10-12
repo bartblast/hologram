@@ -466,6 +466,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     MapSet.new(page_modules)
   end
 
+  # A :data_model_ready option that fails.
+  defp raise_hook_failed(_entity_types, _role_modules) do
+    raise "hook failed"
+  end
+
   # A function that records each value it is called with, and one that returns them in call order.
   defp record_calls do
     {:ok, agent} = Agent.start_link(fn -> [] end)
@@ -870,6 +875,27 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "validates the data model of a language server build", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      defmodule LanguageServerInvalidEntityFixture do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      load_entity_fixture_app(:hologram_language_server_invalid_entity_fixture_app, [
+        LanguageServerInvalidEntityFixture
+      ])
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.LanguageServerInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        run(ls_opts)
+      end
+    end
+
     test "fails the build on mapping errors even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
 
@@ -935,6 +961,158 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # Reused or re-read, an untouched module keeps its entry across runs
     assert load_module_info_items(opts)[Module1] == first_run_module_info
+  end
+
+  describe "data model" do
+    setup do
+      on_exit(fn ->
+        RoleGrant.reset_resolution_cache()
+        Model.reset_caches()
+        Policy.reset_model_facts_cache()
+      end)
+    end
+
+    # Read from the store, since a read through the model would fill an empty cache itself.
+    test "a compile fills the model cache from its module info PLT", %{opts: opts} do
+      Model.reset_caches()
+
+      assert run(opts) == :ok
+
+      module_info_items =
+        opts
+        |> load_module_info_items()
+        |> Map.to_list()
+
+      module_info_plt = PLT.start(items: module_info_items)
+
+      assert :persistent_term.get({Model, :facts}, nil) == %{
+               entity_types: Reflection.list_entities(module_info_plt),
+               roles: Reflection.list_roles(module_info_plt),
+               user_entity: Reflection.user_entity(module_info_plt)
+             }
+    end
+
+    test "a compile calls the data model hook before it asks for the first batch", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      {record, recorded} = record_calls()
+
+      data_model_ready = fn entity_types, role_modules ->
+        record.({:data_model_ready, entity_types, role_modules})
+      end
+
+      next_batch = fn remaining_pages, _links ->
+        record.(:next_batch)
+        MapSet.to_list(remaining_pages)
+      end
+
+      run(Keyword.merge(opts, data_model_ready: data_model_ready, next_batch: next_batch))
+
+      module_info_items =
+        opts
+        |> load_module_info_items()
+        |> Map.to_list()
+
+      module_info_plt = PLT.start(items: module_info_items)
+
+      assert recorded.() == [
+               {:data_model_ready, Reflection.list_entities(module_info_plt),
+                Reflection.list_roles(module_info_plt)},
+               :next_batch
+             ]
+    end
+
+    test "a compile reads no beam to list the data model", %{opts: opts} do
+      # Emptied, so that a read of the model before the compile fills its cache would list it from
+      # the beams.
+      RoleGrant.reset_resolution_cache()
+      Model.reset_caches()
+      Policy.reset_model_facts_cache()
+
+      mfas = [{Reflection, :list_entities, 0}, {Reflection, :list_roles, 0}]
+      Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      counts =
+        try do
+          run(Keyword.put(opts, :force?, true))
+
+          Enum.map(mfas, &:erlang.trace_info(&1, :call_count))
+        after
+          Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+        end
+
+      assert counts == [call_count: 0, call_count: 0]
+    end
+
+    test "a compile reports a failure of the data model hook", %{opts: opts} do
+      test_pid = self()
+
+      data_model_failed = fn kind, reason ->
+        send(test_pid, {:data_model_failed, kind, reason})
+      end
+
+      failing_opts =
+        Keyword.merge(opts,
+          data_model_failed: data_model_failed,
+          data_model_ready: &raise_hook_failed/2
+        )
+
+      assert_error RuntimeError, "hook failed", fn -> run(failing_opts) end
+
+      assert_received {:data_model_failed, :error, %RuntimeError{message: "hook failed"}}
+    end
+
+    test "a compile reports an exit in the data model step", %{opts: opts} do
+      test_pid = self()
+
+      data_model_failed = fn kind, reason ->
+        send(test_pid, {:data_model_failed, kind, reason})
+      end
+
+      data_model_ready = fn _entity_types, _role_modules -> exit(:hook_failed) end
+
+      failing_opts =
+        Keyword.merge(opts,
+          data_model_failed: data_model_failed,
+          data_model_ready: data_model_ready
+        )
+
+      assert catch_exit(run(failing_opts)) == :hook_failed
+
+      assert_received {:data_model_failed, :exit, :hook_failed}
+    end
+
+    test "a compile validates the data model once", %{opts: opts} do
+      assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
+               assert run(opts) == :ok
+             end) == 1
+    end
+
+    test "a compile whose data model is valid reports no failure", %{opts: opts} do
+      test_pid = self()
+
+      data_model_failed = fn kind, reason ->
+        send(test_pid, {:data_model_failed, kind, reason})
+      end
+
+      assert run(Keyword.put(opts, :data_model_failed, data_model_failed)) == :ok
+
+      refute_received {:data_model_failed, _kind, _reason}
+    end
+
+    test "a compile builds nothing when the data model hook raises", %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      data_model_ready = fn _entity_types, _role_modules -> raise "hook failed" end
+
+      assert count_built_bundles(fn ->
+               assert_error RuntimeError, "hook failed", fn ->
+                 run(Keyword.put(opts, :data_model_ready, data_model_ready))
+               end
+             end) == 0
+    end
   end
 
   describe "kept compile state" do
@@ -3337,6 +3515,101 @@ defmodule Mix.Tasks.Compile.HologramTest do
       test_call_graph(opts)
       test_page_bundles(opts)
     end
+
+    test "a compile that fails on the data model leaves the kept state as it found it", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(Module1)
+
+      state_before = cache_state()
+
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      state_after = cache_state()
+
+      assert state_after.dumped_at == state_before.dumped_at
+      assert state_after.editable_modules == state_before.editable_modules
+      assert state_after.module_infos == state_before.module_infos
+    end
+
+    test "a compile whose data model step exits leaves the kept state as it found it", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(Module1)
+
+      state_before = cache_state()
+      data_model_ready = fn _entity_types, _role_modules -> exit(:hook_failed) end
+
+      assert catch_exit(run(Keyword.put(opts, :data_model_ready, data_model_ready))) ==
+               :hook_failed
+
+      assert cache_state().module_infos == state_before.module_infos
+    end
+
+    test "the compile after one that failed on the data model finds the same edit, in the kept state",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      {record_remaining, recorded_remaining} = record_calls()
+
+      next_batch = fn remaining_pages, _links ->
+        record_remaining.(remaining_pages)
+        MapSet.to_list(remaining_pages)
+      end
+
+      # Only a compile that starts from the kept state brings the module infos in line in place.
+      assert count_calls({Compiler, :patch_module_info_plt!, 5}, fn ->
+               run(Keyword.put(opts, :next_batch, next_batch))
+             end) == 1
+
+      assert [remaining_pages] = recorded_remaining.()
+      assert MapSet.member?(remaining_pages, Module1)
+    end
+
+    test "a compile that fails on the data model leaves the model cache filled", %{opts: opts} do
+      on_exit(fn ->
+        RoleGrant.reset_resolution_cache()
+        Model.reset_caches()
+        Policy.reset_model_facts_cache()
+      end)
+
+      run(opts)
+      Model.reset_caches()
+
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      module_info_items =
+        opts
+        |> load_module_info_items()
+        |> Map.to_list()
+
+      module_info_plt = PLT.start(items: module_info_items)
+
+      assert :persistent_term.get({Model, :facts}, nil) == %{
+               entity_types: Reflection.list_entities(module_info_plt),
+               roles: Reflection.list_roles(module_info_plt),
+               user_entity: Reflection.user_entity(module_info_plt)
+             }
+    end
+
+    test "a first compile in a VM that fails on the data model leaves nothing kept", %{opts: opts} do
+      assert_error RuntimeError, "hook failed", fn ->
+        run(Keyword.put(opts, :data_model_ready, &raise_hook_failed/2))
+      end
+
+      assert cache_state().editable_modules == nil
+    end
   end
 
   describe "nothing changed since the last compile" do
@@ -3380,6 +3653,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a new VM with nothing changed does not compile", %{opts: opts} do
       assert count_calls({CallGraph, :load, 2}, fn ->
+               assert run(opts) == :noop
+             end) == 0
+    end
+
+    # No module changed since the compile that validated the data model.
+    test "a new VM with nothing changed validates nothing", %{opts: opts} do
+      assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
                assert run(opts) == :noop
              end) == 0
     end

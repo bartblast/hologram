@@ -30,7 +30,9 @@ Benchee.run(
     # The graph still holds the manually ported MFAs here, so one listing answers both what the
     # data layer is compiled with and whether a page checks permissions.
     reach_by_page = Compiler.list_reach_by_page(Reflection.list_pages(), call_graph)
-    permission_checking_pages = Compiler.pages_checking_permissions(reach_by_page)
+
+    permission_checking_pages =
+      Compiler.pages_checking_permissions(reach_by_page, module_info_plt)
 
     sync_constants_js =
       reach_by_page

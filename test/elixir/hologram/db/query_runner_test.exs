@@ -30,17 +30,20 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Role
 
-  @mapping Mapper.derive!([Module1, Module2, Module3])
+  @mapping Mapper.derive!([Module1, Module2, Module3], [])
 
-  @policy_mapping Mapper.derive!([
-                    Module14,
-                    PolicyModule1,
-                    PolicyModule2,
-                    PolicyModule3,
-                    RoleGrant
-                  ])
+  @policy_mapping Mapper.derive!(
+                    [
+                      Module14,
+                      PolicyModule1,
+                      PolicyModule2,
+                      PolicyModule3,
+                      RoleGrant
+                    ],
+                    [Role.Module1, Role.Module2]
+                  )
 
-  @time_mapping Mapper.derive!([Module22, Module23])
+  @time_mapping Mapper.derive!([Module22, Module23], [])
 
   defp create_module_2_entities do
     {:ok, first} =
@@ -363,7 +366,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> Module10.new()
         |> create()
 
-      mapping = Mapper.derive!([Module10])
+      mapping = Mapper.derive!([Module10], [])
       term = %{Query.normalize(Module10) | filter: [{:count, :==, {:placeholder, :count}}]}
 
       assert run(term, mapping, %{count: 999}) == []
@@ -609,7 +612,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       :ok = add_relationship(Module9, source.id, :a, first_target.id)
       :ok = add_relationship(Module9, source.id, :a, second_target.id)
 
-      mapping = Mapper.derive!([Module8, Module9])
+      mapping = Mapper.derive!([Module8, Module9], [])
 
       term =
         Module9

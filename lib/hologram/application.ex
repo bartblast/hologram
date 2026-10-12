@@ -6,10 +6,11 @@ defmodule Hologram.Application do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Model
   alias Hologram.Policy
-  alias Hologram.Reflection
 
   @impl Application
   def start(_type, _args) do
+    # Emptied also in a VM whose compile just filled them, so that the app always boots the same
+    # way: the first read of the data model fills them again.
     RoleGrant.reset_resolution_cache()
     Model.reset_caches()
     Policy.reset_model_facts_cache()
@@ -62,10 +63,10 @@ defmodule Hologram.Application do
   # restart-ordered unit - the cache compiles registered queries against the mapping the
   # database derives, and must repopulate whenever the database restarts.
   defp database_children do
-    if Reflection.list_entities() == [] do
-      []
-    else
+    if Model.exists?() do
       [Hologram.DB.Supervisor]
+    else
+      []
     end
   end
 end

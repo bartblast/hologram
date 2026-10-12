@@ -183,7 +183,7 @@ jobs:
           key: |
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
-            priv/plts
+            .dialyzer
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
 
       # Step: Create lib Dialyzer PLTs if no cache was found.
@@ -202,7 +202,7 @@ jobs:
           key: |
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
-            priv/plts
+            .dialyzer
 
       # Step: Run lib Elixir static code analysis with Dialyzer.
       - name: Run lib Elixir static code analysis with Dialyzer

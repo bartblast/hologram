@@ -9,13 +9,13 @@ defmodule Hologram.Policy.ValidatorTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Role
 
-  describe "validate_model!/1" do
+  describe "validate_model!/2" do
     test "returns :ok for empty model" do
-      assert validate_model!([]) == :ok
+      assert validate_model!([], []) == :ok
     end
 
     test "returns :ok for entity types without policy declarations" do
-      assert validate_model!([Module1, Module2]) == :ok
+      assert validate_model!([Module1, Module2], []) == :ok
     end
 
     test "returns :ok for every declared predicate value kind" do
@@ -33,11 +33,11 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :unlink, title: {:!=, nil}
       end
 
-      assert validate_model!([InlinePolicyFixture1]) == :ok
+      assert validate_model!([InlinePolicyFixture1], []) == :ok
     end
 
     test "returns :ok for a predicate on a to-one reference field" do
-      assert validate_model!([Module13, Module14]) == :ok
+      assert validate_model!([Module13, Module14], []) == :ok
     end
 
     test "returns :ok for bare allow lines" do
@@ -53,7 +53,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :publish, via: :parent
       end
 
-      assert validate_model!([Module14, InlinePolicyFixture2]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture2], []) == :ok
     end
 
     test "returns :ok for a to option naming a declared role" do
@@ -65,7 +65,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, to: :owner
       end
 
-      assert validate_model!([Module14, InlinePolicyFixture9]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture9], []) == :ok
     end
 
     test "returns :ok for a to option listing declared roles" do
@@ -78,7 +78,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, to: [:editor, :owner]
       end
 
-      assert validate_model!([Module14, InlinePolicyFixture10]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture10], []) == :ok
     end
 
     test "returns :ok for a to option referencing a role of another entity type" do
@@ -88,7 +88,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, to: {Module13, :editor}
       end
 
-      assert validate_model!([Module14, InlinePolicyFixture13]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture13], []) == :ok
     end
 
     test "returns :ok for a to option mixing role names and namespaced references" do
@@ -100,7 +100,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, to: [:owner, {Module13, :editor}]
       end
 
-      assert validate_model!([Module14, InlinePolicyFixture14]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture14], []) == :ok
     end
 
     test "returns :ok for a to option referencing a role on a to-one relationship target" do
@@ -112,7 +112,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, to: {:parent, :editor}
       end
 
-      assert validate_model!([Module14, InlinePolicyFixture17]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture17], []) == :ok
     end
 
     test "returns :ok for a via option delegating to a to-one relationship" do
@@ -126,7 +126,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, via: :parent, public: true
       end
 
-      assert validate_model!([InlinePolicyFixture21]) == :ok
+      assert validate_model!([InlinePolicyFixture21], []) == :ok
     end
 
     test "returns :ok for actor leaves on uuid-carrying names" do
@@ -139,7 +139,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, parent_id: {:!=, user_id()}
       end
 
-      assert validate_model!([InlinePolicyFixture7]) == :ok
+      assert validate_model!([InlinePolicyFixture7], []) == :ok
     end
 
     test "rejects multiple user entity designations" do
@@ -155,7 +155,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "multiple user entity designations in the data model: Hologram.Policy.ValidatorTest.InlinePolicyFixture27, Hologram.Policy.ValidatorTest.InlinePolicyFixture28 - exactly one entity type can be designated with use Hologram.Entity, user: true"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture28, InlinePolicyFixture27])
+        validate_model!([InlinePolicyFixture28, InlinePolicyFixture27], [])
       end
     end
 
@@ -170,7 +170,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "Hologram.Policy.ValidatorTest.InlinePolicyFixture29 declares roles or policy grant references, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture29])
+        validate_model!([InlinePolicyFixture29], [])
       end
     end
 
@@ -185,7 +185,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "Hologram.Policy.ValidatorTest.InlinePolicyFixture30 declares roles or policy grant references, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture30])
+        validate_model!([InlinePolicyFixture30], [])
       end
     end
 
@@ -202,7 +202,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture8 - user_id() requires a uuid attribute - attribute :title in Hologram.Policy.ValidatorTest.InlinePolicyFixture8 has type :string"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture8])
+        validate_model!([InlinePolicyFixture8], [])
       end
     end
 
@@ -220,7 +220,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture11 - declared roles are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture11])
+        validate_model!([Module14, InlinePolicyFixture11], [])
       end
     end
 
@@ -235,7 +235,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture15])
+        validate_model!([Module14, InlinePolicyFixture15], [])
       end
     end
 
@@ -250,7 +250,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture16 - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture16])
+        validate_model!([Module14, InlinePolicyFixture16], [])
       end
     end
 
@@ -267,7 +267,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown relationship :project in the to option of allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture18 - declared relationships are: :parent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture18])
+        validate_model!([Module14, InlinePolicyFixture18], [])
       end
     end
 
@@ -284,7 +284,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture19 - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture19])
+        validate_model!([Module14, InlinePolicyFixture19], [])
       end
     end
 
@@ -301,7 +301,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture20 - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture20])
+        validate_model!([Module14, InlinePolicyFixture20], [])
       end
     end
 
@@ -318,7 +318,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown relationship :project in the via option of allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture22 - declared relationships are: :parent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture22])
+        validate_model!([InlinePolicyFixture22], [])
       end
     end
 
@@ -335,7 +335,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid via option :children for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture23 - relationship :children is to-many, but delegation requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture23])
+        validate_model!([InlinePolicyFixture23], [])
       end
     end
 
@@ -352,7 +352,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture24 - the via option must be a relationship name"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture24])
+        validate_model!([InlinePolicyFixture24], [])
       end
     end
 
@@ -380,7 +380,7 @@ defmodule Hologram.Policy.ValidatorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture25, InlinePolicyFixture26])
+        validate_model!([InlinePolicyFixture25, InlinePolicyFixture26], [])
       end
     end
 
@@ -397,7 +397,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture3])
+        validate_model!([InlinePolicyFixture3], [])
       end
     end
 
@@ -414,7 +414,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture4 - :parent is a relationship in Hologram.Policy.ValidatorTest.InlinePolicyFixture4 - only attributes can be filtered - filter its reference via :parent_id"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture4])
+        validate_model!([InlinePolicyFixture4], [])
       end
     end
 
@@ -431,7 +431,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture5 - unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture5])
+        validate_model!([InlinePolicyFixture5], [])
       end
     end
 
@@ -448,7 +448,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 - operator :>= requires an orderable attribute - attribute :parent_id in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture6])
+        validate_model!([InlinePolicyFixture6], [])
       end
     end
 
@@ -461,7 +461,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, token: "tok_hidden"
       end
 
-      assert validate_model!([InlinePolicyFixture32]) == :ok
+      assert validate_model!([InlinePolicyFixture32], []) == :ok
     end
 
     test "accepts a non-read predicate over an attribute that is not server-only in this type" do
@@ -473,7 +473,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :publish, token: "tok_public"
       end
 
-      assert validate_model!([InlinePolicyFixture31]) == :ok
+      assert validate_model!([InlinePolicyFixture31], []) == :ok
     end
 
     test "rejects a non-read predicate over a server-only attribute" do
@@ -489,14 +489,27 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture33 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture33])
+        validate_model!([InlinePolicyFixture33], [])
+      end
+    end
+
+    test "rejects an invalid declaration of a given role module" do
+      defmodule InvalidTargetRoleFixture1 do
+        use Hologram.Role, extends: Module1
+      end
+
+      expected_msg =
+        "invalid extends target Hologram.Test.Fixtures.Entity.Module1 in use Hologram.Role for Hologram.Policy.ValidatorTest.InvalidTargetRoleFixture1 - extends targets must be modules defined with use Hologram.Role"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module1], [InvalidTargetRoleFixture1])
       end
     end
   end
 
   # Every message below has a local-line twin in the describe above, asserting the same text
   # WITHOUT the tail - so the pair pins that the tail appears exactly when the line was taken.
-  describe "validate_model!/1 for a line taken from a policy" do
+  describe "validate_model!/2 for a line taken from a policy" do
     test "rejects a to option naming a role the taking entity type does not declare" do
       defmodule TakenOwnReferencePolicy do
         use Hologram.Policy
@@ -516,7 +529,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenOwnReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenOwnReferencePolicy - declared roles are: :editor"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenOwnReferenceEntity])
+        validate_model!([Module14, TakenOwnReferenceEntity], [])
       end
     end
 
@@ -537,7 +550,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenTypeReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenTypeReferencePolicy - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenTypeReferenceEntity])
+        validate_model!([Module14, TakenTypeReferenceEntity], [])
       end
     end
 
@@ -558,7 +571,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenTargetRoleEntity, taken from Hologram.Policy.ValidatorTest.TakenTargetRolePolicy - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenTargetRoleEntity])
+        validate_model!([Module14, TakenTargetRoleEntity], [])
       end
     end
 
@@ -581,7 +594,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown relationship :project in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenUnknownRelationshipEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownRelationshipPolicy - declared relationships are: :parent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenUnknownRelationshipEntity])
+        validate_model!([Module14, TakenUnknownRelationshipEntity], [])
       end
     end
 
@@ -604,7 +617,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenToManyEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyPolicy - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenToManyEntity])
+        validate_model!([Module14, TakenToManyEntity], [])
       end
     end
 
@@ -625,7 +638,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option Hologram.Reflection for allow :update in Hologram.Policy.ValidatorTest.TakenGlobalReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenGlobalReferencePolicy - Hologram.Reflection is not a role module (define it with use Hologram.Role)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenGlobalReferenceEntity])
+        validate_model!([Module14, TakenGlobalReferenceEntity], [])
       end
     end
 
@@ -654,7 +667,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.TakenTwoHopsEntity, taken from Hologram.Policy.ValidatorTest.TakenInnerPolicy - declared roles are: :editor"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenTwoHopsEntity])
+        validate_model!([Module14, TakenTwoHopsEntity], [])
       end
     end
 
@@ -677,7 +690,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown relationship :project in the via option of allow :read in Hologram.Policy.ValidatorTest.TakenUnknownViaEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownViaPolicy - declared relationships are: :parent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([TakenUnknownViaEntity])
+        validate_model!([TakenUnknownViaEntity], [])
       end
     end
 
@@ -700,7 +713,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid via option :children for allow :read in Hologram.Policy.ValidatorTest.TakenToManyViaEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyViaPolicy - relationship :children is to-many, but delegation requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([TakenToManyViaEntity])
+        validate_model!([TakenToManyViaEntity], [])
       end
     end
 
@@ -723,7 +736,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.TakenNonAtomViaEntity, taken from Hologram.Policy.ValidatorTest.TakenNonAtomViaPolicy - the via option must be a relationship name"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([TakenNonAtomViaEntity])
+        validate_model!([TakenNonAtomViaEntity], [])
       end
     end
 
@@ -746,7 +759,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([TakenUnknownPredicateEntity])
+        validate_model!([TakenUnknownPredicateEntity], [])
       end
     end
 
@@ -769,7 +782,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.TakenServerOnlyEntity, taken from Hologram.Policy.ValidatorTest.TakenServerOnlyPolicy - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([TakenServerOnlyEntity])
+        validate_model!([TakenServerOnlyEntity], [])
       end
     end
 
@@ -792,7 +805,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.TakenRelationshipGateEntity, taken from Hologram.Policy.ValidatorTest.TakenRelationshipGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenRelationshipGateEntity])
+        validate_model!([Module14, TakenRelationshipGateEntity], [])
       end
     end
 
@@ -817,7 +830,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate :archived for allow :grant_role in Hologram.Policy.ValidatorTest.TakenPredicateGateEntity, taken from Hologram.Policy.ValidatorTest.TakenPredicateGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenPredicateGateEntity])
+        validate_model!([Module14, TakenPredicateGateEntity], [])
       end
     end
 
@@ -840,7 +853,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid via option :parent for allow :read_roles in Hologram.Policy.ValidatorTest.TakenDelegatedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenDelegatedGatePolicy - :read_roles is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenDelegatedGateEntity])
+        validate_model!([Module14, TakenDelegatedGateEntity], [])
       end
     end
 
@@ -874,7 +887,7 @@ defmodule Hologram.Policy.ValidatorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([TakenViaCycleEntityA, TakenViaCycleEntityB])
+        validate_model!([TakenViaCycleEntityA, TakenViaCycleEntityB], [])
       end
     end
 
@@ -908,7 +921,7 @@ defmodule Hologram.Policy.ValidatorTest do
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([MixedViaCycleEntityA, MixedViaCycleEntityB])
+        validate_model!([MixedViaCycleEntityA, MixedViaCycleEntityB], [])
       end
     end
 
@@ -931,12 +944,12 @@ defmodule Hologram.Policy.ValidatorTest do
         "missing to option for allow :grant_role in Hologram.Policy.ValidatorTest.TakenUnqualifiedGateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnqualifiedGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, TakenUnqualifiedGateEntity])
+        validate_model!([Module14, TakenUnqualifiedGateEntity], [])
       end
     end
   end
 
-  describe "validate_model!/1 for the grant lifecycle operations" do
+  describe "validate_model!/2 for the grant lifecycle operations" do
     test "accepts a tuple naming a declared role" do
       defmodule RoleTupleGateFixture do
         use Hologram.Entity
@@ -947,7 +960,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow {:grant_role, :viewer}, to: :editor
       end
 
-      assert validate_model!([Module14, RoleTupleGateFixture]) == :ok
+      assert validate_model!([Module14, RoleTupleGateFixture], []) == :ok
     end
 
     test "accepts a tuple naming several declared roles" do
@@ -960,7 +973,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow {:revoke_role, [:viewer, :editor]}, to: :editor
       end
 
-      assert validate_model!([Module14, RoleListGateFixture]) == :ok
+      assert validate_model!([Module14, RoleListGateFixture], []) == :ok
     end
 
     test "returns :ok for own role references" do
@@ -975,7 +988,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :revoke_role, to: :owner
       end
 
-      assert validate_model!([Module14, OwnGateFixture]) == :ok
+      assert validate_model!([Module14, OwnGateFixture], []) == :ok
     end
 
     test "accepts a global role module as a holder" do
@@ -987,7 +1000,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :grant_role, to: [:owner, Hologram.Test.Fixtures.Role.Module1]
       end
 
-      assert validate_model!([Module14, GlobalHolderGateFixture]) == :ok
+      assert validate_model!([Module14, GlobalHolderGateFixture], []) == :ok
     end
 
     test "accepts a global role module as the holder of a per-role line" do
@@ -999,7 +1012,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow {:grant_role, :viewer}, to: Hologram.Test.Fixtures.Role.Module1
       end
 
-      assert validate_model!([Module14, GlobalHolderRoleTupleGateFixture]) == :ok
+      assert validate_model!([Module14, GlobalHolderRoleTupleGateFixture], []) == :ok
     end
 
     test "rejects a reference the gate cannot honor" do
@@ -1015,7 +1028,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.RelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, RelationshipGateFixture])
+        validate_model!([Module14, RelationshipGateFixture], [])
       end
     end
 
@@ -1034,7 +1047,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate :archived for allow :revoke_role in Hologram.Policy.ValidatorTest.PredicateGateFixture - :revoke_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, PredicateGateFixture])
+        validate_model!([Module14, PredicateGateFixture], [])
       end
     end
 
@@ -1051,7 +1064,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "missing to option for allow :grant_role in Hologram.Policy.ValidatorTest.UnqualifiedGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, UnqualifiedGateFixture])
+        validate_model!([Module14, UnqualifiedGateFixture], [])
       end
     end
 
@@ -1068,7 +1081,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid via option :parent for allow :read_roles in Hologram.Policy.ValidatorTest.DelegatedGateFixture - :read_roles is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, DelegatedGateFixture])
+        validate_model!([Module14, DelegatedGateFixture], [])
       end
     end
 
@@ -1086,7 +1099,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "unknown role :admin in allow {:grant_role, [:viewer, :admin]} in Hologram.Policy.ValidatorTest.UndeclaredRoleTupleGateFixture - declared roles are: :editor, :viewer"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, UndeclaredRoleTupleGateFixture])
+        validate_model!([Module14, UndeclaredRoleTupleGateFixture], [])
       end
     end
 
@@ -1106,12 +1119,12 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid predicate :archived for allow {:grant_role, :viewer} in Hologram.Policy.ValidatorTest.PredicateRoleTupleGateFixture - {:grant_role, :viewer} is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, PredicateRoleTupleGateFixture])
+        validate_model!([Module14, PredicateRoleTupleGateFixture], [])
       end
     end
   end
 
-  describe "validate_model!/1 with global role references" do
+  describe "validate_model!/2 with global role references" do
     test "returns :ok for a declared role module reference" do
       defmodule ValidGlobalReferenceFixture do
         use Hologram.Entity
@@ -1119,7 +1132,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, to: Hologram.Test.Fixtures.Role.Module1
       end
 
-      assert validate_model!([Module14, ValidGlobalReferenceFixture]) == :ok
+      assert validate_model!([Module14, ValidGlobalReferenceFixture], []) == :ok
     end
 
     test "rejects a to option naming a module that is not a role" do
@@ -1133,7 +1146,7 @@ defmodule Hologram.Policy.ValidatorTest do
         "invalid to option Hologram.Test.Fixtures.Entity.Module1 for allow :read in Hologram.Policy.ValidatorTest.InvalidGlobalReferenceFixture - Hologram.Test.Fixtures.Entity.Module1 is not a role module (define it with use Hologram.Role)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InvalidGlobalReferenceFixture])
+        validate_model!([Module14, InvalidGlobalReferenceFixture], [])
       end
     end
   end

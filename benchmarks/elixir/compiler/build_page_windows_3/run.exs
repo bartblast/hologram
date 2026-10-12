@@ -6,8 +6,8 @@ alias Hologram.Reflection
 # derives the data layer: each page's reach narrowed to its components, the queries of every
 # distinct component extracted once, and each page's window ids collected from them.
 #
-# The function sweeps the entity types itself, once per call, so the number holds one
-# Hologram.Reflection.list_entities/0, which has a benchmark of its own.
+# The function lists the entity types from the module info PLT it is given, so the number holds no
+# read of the beams.
 #
 # The fixtures give it 110 pages. 10 of them reach the two components with a parameterized query
 # and hold 12 windows each, 11 of which come from the one query whose entity type is an argument,
@@ -29,7 +29,7 @@ Benchee.run(
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions()
+      |> Compiler.pages_checking_permissions(module_info_plt)
 
     CallGraph.remove_manually_ported_mfas(call_graph)
 

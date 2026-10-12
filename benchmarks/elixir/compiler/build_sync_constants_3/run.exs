@@ -7,8 +7,8 @@ alias Hologram.Reflection
 # them, the queries of every reached component and the entity types those name, and the argument
 # names of the parameterized captures.
 #
-# The function sweeps the entity types itself, once per call, so the number holds one
-# Hologram.Reflection.list_entities/0, which has a benchmark of its own.
+# The function lists the entity types from the module info PLT it is given, so the number holds no
+# read of the beams.
 #
 # The fixtures give it 110 pages, 10 of which reach the two components with a parameterized
 # query. The result names 11 of the 21 entity types, the ones the argument-entity query fits, and
@@ -31,7 +31,7 @@ Benchee.run(
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions()
+      |> Compiler.pages_checking_permissions(module_info_plt)
 
     CallGraph.remove_manually_ported_mfas(call_graph)
 

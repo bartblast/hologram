@@ -21,7 +21,7 @@ defmodule Hologram.Query.InterpreterTest do
 
   @entity_types [Module1, Module10, Module17, Module2, Module3, Module5]
 
-  @mapping Mapper.derive!(@entity_types)
+  @mapping Mapper.derive!(@entity_types, [])
 
   # The whole point of this module: the same term over the same rows, run by the database and by
   # the interpreter, agreeing. Every test goes through here and then asserts what came back, so
