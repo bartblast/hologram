@@ -1023,6 +1023,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
              ]
     end
 
+    test "a compile reads no beam to list the data model", %{opts: opts} do
+      # Emptied, so that a read of the model before the compile fills its cache would list it from
+      # the beams.
+      RoleGrant.reset_resolution_cache()
+      Model.reset_caches()
+      Policy.reset_model_facts_cache()
+
+      mfas = [{Reflection, :list_entities, 0}, {Reflection, :list_roles, 0}]
+      Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
+
+      counts =
+        try do
+          run(Keyword.put(opts, :force?, true))
+
+          Enum.map(mfas, &:erlang.trace_info(&1, :call_count))
+        after
+          Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:call_count]))
+        end
+
+      assert counts == [call_count: 0, call_count: 0]
+    end
+
     test "a compile validates the data model once", %{opts: opts} do
       assert count_calls({Hologram.Entity.Validator, :validate_model!, 1}, fn ->
                assert run(opts) == :ok
