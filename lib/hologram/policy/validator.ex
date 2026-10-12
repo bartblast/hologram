@@ -14,14 +14,14 @@ defmodule Hologram.Policy.Validator do
   @role_operations [:grant_role, :revoke_role]
 
   @doc """
-  Validates the policy declarations of the given entity type modules as a whole.
+  Validates the policy declarations of the given entity type modules and the given global role modules as a whole.
 
   Returns :ok, or raises Hologram.CompileError naming the first invalid declaration.
   Policy declarations are checked here rather than when they are declared, because they are validated against compiled reflection - neither the declaring module nor the entity types it references are compiled while its body is executing.
   """
-  @spec validate_model!(list(module)) :: :ok
-  def validate_model!(entity_types) do
-    validate_role_modules!(Reflection.list_roles())
+  @spec validate_model!(list(module), list(module)) :: :ok
+  def validate_model!(entity_types, role_modules) do
+    validate_role_modules!(role_modules)
     validate_user_entity!(entity_types)
 
     Enum.each(entity_types, &validate_entity_policies!/1)
