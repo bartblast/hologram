@@ -134,8 +134,8 @@ defmodule Hologram.MixProject do
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       dialyzer: [
         plt_add_apps: [:ex_unit, :iex, :inets, :mix, :wallaby],
-        plt_core_path: Path.join(["priv", "plts", "core.plt"]),
-        plt_local_path: Path.join(["priv", "plts", "project.plt"])
+        plt_core_path: Path.join(".dialyzer", "core.plt"),
+        plt_local_path: Path.join(".dialyzer", "project.plt")
       ],
       docs: [
         authors: ["Bart Blast"],

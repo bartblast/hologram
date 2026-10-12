@@ -36,8 +36,4 @@ npm-debug.log
 /assets/node_modules/
 
 # Dialyzer PLTs.
-/priv/plts/*.plt
-/priv/plts/*.plt.hash
-
-# The module info dump the test suite writes (see test/elixir/test_helper.exs).
-/priv/module_info.plt
+/.dialyzer/

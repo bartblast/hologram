@@ -32,12 +32,21 @@ Mix.ensure_application!(:tools)
 # The running app reads the project's data model from the module info dump the Hologram compiler
 # writes at the end of a compile. Mix compiles this project, not the Hologram compiler, so the
 # dump is written here, from the same beams.
-File.mkdir_p!(Reflection.build_dir())
+build_dir = Reflection.build_dir()
+
+# TODO: Remove once no build from before the Dialyzer PLTs left the priv dir is around (a local
+# _build, a CI cache). Mix linked the build dir to that priv dir and leaves the link behind now
+# that the dir is gone: a dangling link, under which nothing can be created.
+if match?({:ok, _target}, File.read_link(build_dir)) and not File.exists?(build_dir) do
+  File.rm!(build_dir)
+end
+
+File.mkdir_p!(build_dir)
 
 module_info_plt = Compiler.build_module_info_plt!(PLT.start(), nil)
 
 module_info_plt_dump_path =
-  Path.join(Reflection.build_dir(), Reflection.module_info_plt_dump_file_name())
+  Path.join(build_dir, Reflection.module_info_plt_dump_file_name())
 
 PLT.dump(module_info_plt, module_info_plt_dump_path)
 PLT.stop(module_info_plt)
