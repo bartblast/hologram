@@ -4405,7 +4405,13 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_install_js_deps/1" do
     setup do
-      setup_js_deps_test("maybe_install_js_deps_1")
+      [assets_dir: assets_dir, build_dir: build_dir] =
+        setup_js_deps_test("maybe_install_js_deps_1")
+
+      # The record an install leaves, without one: the deps are the lib's.
+      link_lib_js_deps(assets_dir, build_dir)
+
+      [assets_dir: assets_dir, build_dir: build_dir]
     end
 
     @tag timeout: 300_000
@@ -4413,8 +4419,6 @@ defmodule Hologram.CompilerTest do
       assets_dir: assets_dir,
       build_dir: build_dir
     } do
-      install_js_deps(assets_dir, build_dir)
-
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       File.rm!(package_json_digest_path)
 
@@ -4424,8 +4428,6 @@ defmodule Hologram.CompilerTest do
 
     @tag timeout: 300_000
     test "package-lock.json file doesn't exist", %{assets_dir: assets_dir, build_dir: build_dir} do
-      install_js_deps(assets_dir, build_dir)
-
       package_lock_json_path = Path.join(assets_dir, "package-lock.json")
       File.rm!(package_lock_json_path)
 
@@ -4435,8 +4437,6 @@ defmodule Hologram.CompilerTest do
 
     @tag timeout: 300_000
     test "package.json file changed", %{assets_dir: assets_dir, build_dir: build_dir} do
-      install_js_deps(assets_dir, build_dir)
-
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       package_json_digest = File.read!(package_json_digest_path)
 
@@ -4447,10 +4447,7 @@ defmodule Hologram.CompilerTest do
       assert File.read!(package_json_digest_path) != package_json_digest
     end
 
-    @tag timeout: 300_000
     test "install is not needed", %{assets_dir: assets_dir, build_dir: build_dir} do
-      install_js_deps(assets_dir, build_dir)
-
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       package_json_digest_mtime = File.stat!(package_json_digest_path).mtime
 
