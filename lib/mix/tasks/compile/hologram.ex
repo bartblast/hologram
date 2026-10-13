@@ -129,7 +129,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
-      esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(assets_dir, "js"),
       next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
       node_modules_path: node_modules_path,
@@ -155,6 +154,13 @@ defmodule Mix.Tasks.Compile.Hologram do
       File.mkdir_p!(opts[:tmp_dir])
 
       Compiler.maybe_install_js_deps(assets_dir, build_dir)
+
+      # Resolved once the deps are installed: on the first compile in a fresh checkout there is no
+      # node_modules before the install, and the binary of esbuild's platform package is in it.
+      opts =
+        Keyword.put_new_lazy(opts, :esbuild_bin_path, fn ->
+          Compiler.esbuild_bin_path(opts[:node_modules_path])
+        end)
 
       module_info_plt_dump_path =
         Path.join(build_dir, Reflection.module_info_plt_dump_file_name())

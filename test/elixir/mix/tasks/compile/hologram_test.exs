@@ -784,6 +784,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  describe "esbuild path" do
+    test "resolves the esbuild binary when the opt is not given", %{opts: opts} do
+      opts_without_path = Keyword.delete(opts, :esbuild_bin_path)
+
+      assert count_calls({Compiler, :esbuild_bin_path, 1}, fn -> run(opts_without_path) end) == 1
+    end
+
+    test "starts esbuild with the given path when the opt is given", %{opts: opts} do
+      assert count_calls({Compiler, :esbuild_bin_path, 1}, fn -> run(opts) end) == 0
+    end
+  end
+
   test "compilation artifacts", %{opts: initial_opts} do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
 
