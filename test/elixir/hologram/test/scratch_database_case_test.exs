@@ -7,8 +7,8 @@ defmodule Hologram.Test.ScratchDatabaseCaseTest do
   # committed, a contention test watches one session's index build from another, a claim
   # test needs a database with no Hologram schemas in it.
   #
-  # The other case templates have no tests because their guarantees cannot break quietly:
-  # a sandbox that stopped isolating would fail half the suite at once. This tier's can. A
+  # The other case templates' isolation has no tests because it cannot break quietly: a
+  # sandbox that stopped isolating would fail half the suite at once. This tier's can. A
   # scratch connection that wrapped each test in a transaction - the sandbox's own trick,
   # the obvious optimization - would leave the contention tests hanging on builds that
   # never see a commit, and a database shared between tests would turn every "virgin" and
@@ -65,5 +65,9 @@ defmodule Hologram.Test.ScratchDatabaseCaseTest do
     Postgrex.query!(scratch, ~s{CREATE TABLE "smoke" ("id" integer)}, [])
 
     assert smoke_table_exists?(scratch)
+  end
+
+  test "tags every module of the tier as a database test", context do
+    assert context.database == true
   end
 end
