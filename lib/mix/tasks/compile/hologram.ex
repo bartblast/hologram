@@ -129,7 +129,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_dir: build_dir,
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(assets_dir, "js"),
       next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
       node_modules_path: node_modules_path,

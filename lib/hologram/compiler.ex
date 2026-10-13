@@ -31,8 +31,10 @@ defmodule Hologram.Compiler do
   # The longest command line, in characters, that esbuild is started with for a group of chunks (see
   # bundle/2). The measured part: on Windows esbuild's launcher is a .cmd file, which is run
   # through cmd.exe (see Hologram.Commons.SystemUtils.cmd_cross_platform/3), and cmd.exe takes a
-  # command line of 8191 characters at most. The policy part: the bound is applied on every OS, so
-  # that the chunks are bundled the same way everywhere.
+  # command line of 8191 characters at most. The launcher is what esbuild is started through there
+  # when the binary of its platform package is not found (see esbuild_bin_path/1). The policy part:
+  # the bound is applied on every OS, and whichever of the two is started, so that the chunks are
+  # bundled the same way everywhere.
   @max_chunks_command_length 8_191
 
   @doc """
