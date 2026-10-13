@@ -734,7 +734,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assets_dir: @assets_dir,
       build_dir: @build_dir,
       build_lib_dir: @build_lib_dir,
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(@lib_assets_dir, "js"),
       node_modules_path: node_modules_path,
       static_dir: @static_dir,
