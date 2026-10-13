@@ -132,13 +132,119 @@ jobs:
       - name: Check lib project compiles without warnings
         run: mix compile --all-warnings --warnings-as-errors
 
-      # Step: Execute lib Elixir tests.
+      # Step: Execute lib Elixir tests, except the compile task tests, which run in
+      # lib_compile_task_tests.
       - name: Run lib Elixir tests
-        run: mix test --warnings-as-errors --exclude consistency
+        run: mix test --warnings-as-errors --exclude consistency --exclude compile_task
 
       # Step: Execute lib JavaScript tests.
       - name: Run lib JavaScript tests
         run: mix test.js
+
+  lib_compile_task_tests:
+    runs-on: ${{ matrix.os }}
+    name: Lib Compile Task Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      # Mix.Tasks.Compile.HologramTest (tagged :compile_task) is most of the lib suite's serial
+      # phase, and a test module cannot be split across jobs, so it runs in a job of its own on
+      # every tier, alongside the rest of the suite. The split is by tag rather than with
+      # --partitions, which assigns files by a hash of their names: the module's job would then
+      # also get whatever files hash with it.
+      #
+      # --only compile_task includes the tag and excludes everything else, and an include wins
+      # over an exclude, so a test in that module tagged :skip_on_windows or :skip_on_unix
+      # would run here regardless.
+      #
+      # The tiers must stay in sync with the lib_tests matrix. See the notes on the bounds there.
+      matrix:
+        include:
+          - os: ubuntu-latest
+            elixir: "1.19.5"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "29.0"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.20.0"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.20.0"
+            otp: "29.0"
+            node: "24.13.0"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### LIB CHECKS ###
+
+      # Step: Define how to cache the lib Elixir dependencies.
+      - name: Cache lib Elixir deps
+        id: cache-lib-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-deps
+        with:
+          path: deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Define how to cache the lib Elixir build.
+      - name: Cache lib Elixir build
+        id: cache-lib-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-build
+        with:
+          path: _build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Download lib Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download lib Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          command: mix deps.get
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download lib JavaScript dependencies.
+      - name: Download lib JavaScript deps
+        uses: nick-fields/retry@v4
+        with:
+          command: cd assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Execute lib compile task tests.
+      - name: Run lib compile task tests
+        run: mix test --warnings-as-errors --only compile_task
 
   lib_checks:
     runs-on: ubuntu-latest
