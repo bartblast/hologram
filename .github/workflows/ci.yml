@@ -40,8 +40,9 @@ jobs:
       # - Node.js only builds the JS step (actual JS runs in browsers), so we pin the latest LTS
       #   only, matching .tool-versions for dev/prod/CI parity. Floor rationale: the Web Crypto API
       #   requires Node 19+, and a few JS libs used by Hologram require Node 20+.
-      # - Windows only smoke-tests the newest Elixir across its OTP range: Windows failures are
-      #   OS-specific (paths, shell), not Elixir-version-specific, so Ubuntu carries full coverage.
+      # - Windows only smoke-tests the newest Elixir on the newest OTP: Windows failures are
+      #   OS-specific (paths, shell), not Elixir- or OTP-version-specific, so Ubuntu carries full
+      #   coverage.
       #   TODO: change windows-2022 back to windows-latest when erlef/setup-beam supports win25.
       matrix:
         include:
@@ -56,10 +57,6 @@ jobs:
           - os: ubuntu-latest
             elixir: "1.20.0"
             otp: "29.0"
-            node: "24.13.0"
-          - os: windows-2022
-            elixir: "1.20.0"
-            otp: "28.5"
             node: "24.13.0"
           - os: windows-2022
             elixir: "1.20.0"
@@ -170,10 +167,6 @@ jobs:
           - os: ubuntu-latest
             elixir: "1.20.0"
             otp: "29.0"
-            node: "24.13.0"
-          - os: windows-2022
-            elixir: "1.20.0"
-            otp: "28.5"
             node: "24.13.0"
           - os: windows-2022
             elixir: "1.20.0"
