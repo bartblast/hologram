@@ -708,6 +708,11 @@ jobs:
 
   cluster_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Cluster Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -863,6 +868,11 @@ jobs:
           path: test/cluster/tmp/screenshots
   cowboy_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Cowboy Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1018,6 +1028,11 @@ jobs:
           path: test/cowboy/tmp/screenshots
   ecosystem_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Ecosystem Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1173,6 +1188,11 @@ jobs:
           path: test/ecosystem/tmp/screenshots
   umbrella_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
