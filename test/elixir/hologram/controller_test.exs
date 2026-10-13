@@ -2321,6 +2321,8 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "marker=injected_by_middleware")
     end
 
+    # The page reads its session user through the query runner, so this one needs the server.
+    @tag :database
     test "runs page middleware as the session user" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module38, :dummy_module_38_digest)
 

@@ -58,9 +58,12 @@ excluded_tags = ExUnit.configuration()[:exclude]
 ExUnit.start(exclude: exclude_opts)
 
 # A run that excludes the database tests (the modules of DatabaseCase and ScratchDatabaseCase,
-# and the files tagged :database by hand) needs no server. Every other run boots the database
-# here, before the first test.
-unless :database in excluded_tags do
+# and the tests tagged :database by hand) needs no server. It still needs the mapping and the
+# clock, which code that never touches a server reads. Every other run boots the database
+# here, before the first test, and the boot sets up both.
+if :database in excluded_tags do
+  Hologram.DB.put_boot_facts()
+else
   # Boot the test database: server connectivity check (fail fast with instructions), database
   # creation when absent, Hologram schema drop (the suite starts virgin). Positioned after
   # ExUnit.start and before the pool boots - the drop guard recognizes the test env by the

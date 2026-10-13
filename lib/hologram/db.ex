@@ -440,6 +440,24 @@ defmodule Hologram.DB do
   end
 
   @doc """
+  Derives and caches the mapping and creates the node's clock: what the database sets up
+  before it has a server, and what code reading the mapping or stamping a write needs
+  whether or not one is running. Returns :ok.
+  """
+  @spec put_boot_facts() :: :ok
+  def put_boot_facts do
+    # The mapping derived here is the one every consumer reads for the lifetime of the
+    # runtime - companions included, since they derive from the declarations like every
+    # other column.
+    mapping = Mapper.derive!(Model.entity_types(), Model.roles())
+    :persistent_term.put(@mapping_key, mapping)
+
+    # The clock every server-tier write stamps its column revisions from - a boot-time fact like
+    # the mapping, and read the same way.
+    Clock.init()
+  end
+
+  @doc """
   Runs dev schema reconciliation as a one-shot supervision child after the pool starts
   and returns :ignore (no process stays running). A failed reconciliation fails the
   boot loudly.
@@ -523,15 +541,7 @@ defmodule Hologram.DB do
 
   @impl Supervisor
   def init(opts) do
-    # The mapping derived here is the one every consumer reads for the lifetime of the
-    # runtime - companions included, since they derive from the declarations like every
-    # other column.
-    mapping = Mapper.derive!(Model.entity_types(), Model.roles())
-    :persistent_term.put(@mapping_key, mapping)
-
-    # The clock every server-tier write stamps its column revisions from - a boot-time fact like
-    # the mapping, and read the same way.
-    Clock.init()
+    put_boot_facts()
 
     resolved_opts =
       :hologram
