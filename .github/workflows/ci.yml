@@ -220,8 +220,9 @@ jobs:
         run: mix eslint
 
       # Step: Execute lib Elixir tests.
+      # TODO: temporary, reverted at the end of #1060.
       - name: Run lib Elixir tests
-        run: mix test --warnings-as-errors --exclude consistency
+        run: mix test --warnings-as-errors --exclude consistency --slowest-modules 25 --slowest 40
 
       # Step: Execute lib Elixir consistency tests.
       - name: Run lib Elixir consistency tests
