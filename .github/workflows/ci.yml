@@ -40,8 +40,9 @@ jobs:
       # - Node.js only builds the JS step (actual JS runs in browsers), so we pin the latest LTS
       #   only, matching .tool-versions for dev/prod/CI parity. Floor rationale: the Web Crypto API
       #   requires Node 19+, and a few JS libs used by Hologram require Node 20+.
-      # - Windows only smoke-tests the newest Elixir across its OTP range: Windows failures are
-      #   OS-specific (paths, shell), not Elixir-version-specific, so Ubuntu carries full coverage.
+      # - Windows only smoke-tests the newest Elixir on the newest OTP: Windows failures are
+      #   OS-specific (paths, shell), not Elixir- or OTP-version-specific, so Ubuntu carries full
+      #   coverage.
       #   TODO: change windows-2022 back to windows-latest when erlef/setup-beam supports win25.
       matrix:
         include:
@@ -59,14 +60,8 @@ jobs:
             node: "24.13.0"
           - os: windows-2022
             elixir: "1.20.0"
-            otp: "28.5"
-            node: "24.13.0"
-          - os: windows-2022
-            elixir: "1.20.0"
             otp: "29.0"
             node: "24.13.0"
-    env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.20.0') && contains(matrix.otp, '29.0') && contains(matrix.node, '24.13.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -133,91 +128,6 @@ jobs:
       # Step: Compile the lib project treating any warnings as errors.
       - name: Check lib project compiles without warnings
         run: mix compile --all-warnings --warnings-as-errors
-
-      # Step: Check if lib mix.lock has any unused dependencies.
-      - name: Check lib unused Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
-      - name: Check lib retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
-      # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
-      - name: Check lib security vulnerabilities in Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix deps.audit
-
-      # Step: Check that the lib Elixir code has already been formatted.
-      - name: Check lib Elixir code formatted
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix format --check-formatted
-
-      # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
-      - name: Check lib JavaScript, JSON & YAML code formatted
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix format.js.check
-
-      # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
-      - name: Check lib doc and spec coverage
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix doctor
-
-      # Step: Run lib Elixir static code analysis with Credo.
-      - name: Run lib Elixir static code analysis with Credo
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix credo --strict
-
-      # Step: Run lib Elixir security-focused analysis with Sobelow.
-      - name: Run lib Elixir security-focused analysis with Sobelow
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix sobelow --config
-
-      # Step: Restore lib Dialyzer PLT cache.
-      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-      - name: Restore lib Dialyzer PLT cache
-        id: restore-lib-dialyzer-plt-cache
-        uses: actions/cache/restore@v6
-        with:
-          key: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-          path: |
-            .dialyzer
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-
-      # Step: Create lib Dialyzer PLTs if no cache was found.
-      - name: Create lib Dialyzer PLTs
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        run: mix dialyzer --plt
-
-      # Step: Save lib Dialyzer PLT cache.
-      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
-      # so we separate the cache restore and save steps in case running dialyzer fails.
-      - name: Save lib Dialyzer PLT cache
-        id: save-lib-dialyzer-plt-cache
-        uses: actions/cache/save@v6
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        with:
-          key: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-          path: |
-            .dialyzer
-
-      # Step: Run lib Elixir static code analysis with Dialyzer.
-      - name: Run lib Elixir static code analysis with Dialyzer
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix dialyzer --format github
-
-      # Step: Check that all lib test scripts have valid file names.
-      - name: Check lib test file names
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix holo.check.test_file_names test/elixir
-
-      # Step: Run lib JavaScript static code analysis with ESLint.
-      - name: Run lib JavaScript static code analysis with ESLint
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix eslint
 
       # Step: Start the runner image's preinstalled Postgres server (service containers are
       # Linux-only, so both OSes start the local server and align it with the zero-config
@@ -339,18 +249,442 @@ jobs:
             Start-Sleep -Seconds 2
           }
 
-      # Step: Execute lib Elixir tests.
+      # Step: Execute lib Elixir tests, except the compile task tests, which run in
+      # lib_compile_task_tests.
       - name: Run lib Elixir tests
-        run: mix test --warnings-as-errors --exclude consistency
-
-      # Step: Execute lib Elixir consistency tests.
-      - name: Run lib Elixir consistency tests
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix test --warnings-as-errors --only consistency
+        run: mix test --warnings-as-errors --exclude consistency --exclude compile_task
 
       # Step: Execute lib JavaScript tests.
       - name: Run lib JavaScript tests
         run: mix test.js
+
+      # Step: On failure, print what the server and the machine were doing - a stalled
+      # query is diagnosable only from this side, because the client's timeout destroys
+      # the evidence when it fires.
+      - name: Dump stall diagnostics (Linux)
+        if: ${{ failure() && runner.os == 'Linux' }}
+        run: |
+          sudo tail -n 300 /var/log/postgresql/postgresql-*-main.log || true
+          tail -n 200 "$RUNNER_TEMP/vmstat.log" || true
+
+  lib_compile_task_tests:
+    runs-on: ${{ matrix.os }}
+    name: Lib Compile Task Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      # Mix.Tasks.Compile.HologramTest (tagged :compile_task) is most of the lib suite's serial
+      # phase, and a test module cannot be split across jobs, so it runs in a job of its own on
+      # every tier, alongside the rest of the suite. The split is by tag rather than with
+      # --partitions, which assigns files by a hash of their names: the module's job would then
+      # also get whatever files hash with it.
+      #
+      # The module's file is named in the test step rather than selected with
+      # --only compile_task: selecting by tag makes ExUnit load every test file of the suite
+      # before it excludes the tests in them.
+      #
+      # The tiers must stay in sync with the lib_tests matrix. See the notes on the bounds there.
+      matrix:
+        include:
+          - os: ubuntu-latest
+            elixir: "1.19.5"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "29.0"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.20.0"
+            otp: "29.0"
+            node: "24.13.0"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### LIB CHECKS ###
+
+      # Step: Define how to cache the lib Elixir dependencies.
+      - name: Cache lib Elixir deps
+        id: cache-lib-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-deps
+        with:
+          path: deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Define how to cache the lib Elixir build.
+      - name: Cache lib Elixir build
+        id: cache-lib-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-build
+        with:
+          path: _build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Download lib Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download lib Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          command: mix deps.get
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download lib JavaScript dependencies.
+      - name: Download lib JavaScript deps
+        uses: nick-fields/retry@v4
+        with:
+          command: cd assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Start the runner image's preinstalled Postgres server (service containers are
+      # Linux-only, so both OSes start the local server and align it with the zero-config
+      # test defaults: localhost:5432, postgres/postgres).
+      - name: Start Postgres (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
+          # Make the server self-report what a stalled query was waiting on: lock waits
+          # name the blocking session, checkpoints show an I/O storm, and any statement
+          # over two seconds logs its true duration - the backend finishes and logs even
+          # when the client has given up on it. Dumped by the failure-only step below.
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_lock_waits = on;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_min_duration_statement = 2000;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_checkpoints = on;"
+          sudo -u postgres psql -c "SELECT pg_reload_conf();"
+
+      # Step: Sample the runner, so a stalled query can be told apart from a stalled
+      # machine - the st column is CPU stolen by the hypervisor, r is the run queue.
+      # Read by the failure-only step below.
+      - name: Sample runner activity (Linux)
+        if: runner.os == 'Linux'
+        run: nohup vmstat -t 5 > "$RUNNER_TEMP/vmstat.log" 2>&1 &
+
+      # The windows-2022 image preinstalls Postgres 14, below Hologram's Postgres 15 floor
+      # (NULLS NOT DISTINCT index + indnullsnotdistinct introspection) - install 16 instead
+      # of starting the preinstalled service.
+      - name: Start Postgres (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Installed from EDB's own installer rather than through Chocolatey: the community
+          # feed rate-limits CI runners and answers "package was not found" while it does,
+          # which no amount of retrying resolves (it outlasted three attempts on 2026-08-14).
+          # The Chocolatey package downloads this same installer, so this removes a feed from
+          # the path rather than a step. The version is pinned so a CI run is reproducible.
+          $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
+          $installer = "$env:RUNNER_TEMP\postgresql-16-windows-x64.exe"
+          $url = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64.exe"
+
+          # EDB publishes no checksum file, so this one was taken from the artifact itself
+          # and corroborated against the checksum the Chocolatey package pins for the same
+          # installer - two parties that fetched it independently agree on it. Nothing else
+          # authenticates what is about to run as administrator: the URL pins a name, not
+          # the bytes served under it.
+          $expectedSha256 = "F4BF0AC4B33471F18AAD7D1D9CC52613003F3A3A612AAE167366BF7F7840B2BC"
+
+          foreach ($attempt in 1..3) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+            } catch {
+              Write-Host "download attempt $attempt failed: $_"
+
+              # A failed transfer leaves what it managed to write, and those bytes would
+              # fail the checksum below - which is fatal by design, turning a dropped
+              # connection into a failed job. Removing them lets the retry mean something.
+              Remove-Item $installer -Force -ErrorAction SilentlyContinue
+            }
+
+            if (Test-Path $installer) {
+              $sha256 = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
+
+              # Fatal rather than retried: a mismatch means the bytes are not the artifact
+              # this workflow pinned, and downloading them again cannot make them so.
+              if ($sha256 -ne $expectedSha256) {
+                throw "Postgres installer checksum mismatch - expected $expectedSha256, got $sha256"
+              }
+
+              # The installer's exit code is not the signal - it reports on unpacking, not
+              # on the server being usable, so the checks below decide instead.
+              Start-Process -FilePath $installer -Wait -ArgumentList @(
+                "--mode", "unattended",
+                "--unattendedmodeui", "none",
+                "--superpassword", "postgres",
+                "--serverport", "5432",
+                "--disable-components", "stackbuilder"
+              )
+            }
+
+            if (Test-Path $psql) { break }
+
+            if ($attempt -eq 3) {
+              throw "Postgres 16 was not installed after 3 attempts - see the output above"
+            }
+
+            Start-Sleep -Seconds (15 * $attempt)
+          }
+
+          # Installed is not the same as accepting connections: the service registers and
+          # starts on its own schedule, and a query issued in that window fails a job that
+          # only needed to wait. Two-second probes for a minute - a server that has not
+          # answered by then is not slow, it is broken, and the message says so.
+          foreach ($attempt in 1..30) {
+            $reported = & $psql -U postgres -tAc "SHOW server_version_num"
+
+            if ($LASTEXITCODE -eq 0) {
+              $serverVersion = ($reported | Out-String).Trim()
+
+              # Answering is not the same as being ours: the client is 16, but the port is
+              # whatever holds it, and this image ships PostgreSQL 14. A running 14 service
+              # would answer here and the suite would quietly run below Hologram's floor.
+              if ([int]$serverVersion -lt 160000) {
+                throw "port 5432 is served by server_version_num $serverVersion, not the 16 this job installed - another server is holding it"
+              }
+
+              & $psql -U postgres -c "SELECT version();"
+
+              break
+            }
+
+            if ($attempt -eq 30) {
+              throw "Postgres 16 installed but never accepted connections - see the output above"
+            }
+
+            Start-Sleep -Seconds 2
+          }
+
+      # Step: Execute lib compile task tests.
+      - name: Run lib compile task tests
+        run: mix test --warnings-as-errors test/elixir/mix/tasks/compile/hologram_test.exs
+
+      # Step: On failure, print what the server and the machine were doing - a stalled
+      # query is diagnosable only from this side, because the client's timeout destroys
+      # the evidence when it fires.
+      - name: Dump stall diagnostics (Linux)
+        if: ${{ failure() && runner.os == 'Linux' }}
+        run: |
+          sudo tail -n 300 /var/log/postgresql/postgresql-*-main.log || true
+          tail -n 200 "$RUNNER_TEMP/vmstat.log" || true
+
+  lib_checks:
+    runs-on: ubuntu-latest
+    name: Lib Checks on ubuntu-latest, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      # Everything that inspects the codebase rather than running it gives the same answer on
+      # every tier of the lib_tests matrix, so it runs once, on the highest one, alongside the
+      # tests rather than after them. The consistency tests run here too: they compare the
+      # client runtime against one Elixir and Erlang/OTP version.
+      #
+      # The versions must match the highest tier of the lib_tests matrix, so that this job and
+      # that tier share the deps and build caches.
+      matrix:
+        elixir:
+          - "1.20.0"
+        otp:
+          - "29.0"
+        node:
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### LIB CHECKS ###
+
+      # Step: Define how to cache the lib Elixir dependencies.
+      - name: Cache lib Elixir deps
+        id: cache-lib-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-deps
+        with:
+          path: deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Define how to cache the lib Elixir build.
+      - name: Cache lib Elixir build
+        id: cache-lib-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-build
+        with:
+          path: _build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Download lib Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download lib Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          command: mix deps.get
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download lib JavaScript dependencies.
+      - name: Download lib JavaScript deps
+        uses: nick-fields/retry@v4
+        with:
+          command: cd assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the lib project.
+      - name: Compile lib project
+        run: mix compile
+
+      # Step: Check if lib mix.lock has any unused dependencies.
+      - name: Check lib unused Elixir deps
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
+      - name: Check lib retired Elixir deps
+        run: mix hex.audit
+
+      # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
+      - name: Check lib security vulnerabilities in Elixir deps
+        run: mix deps.audit
+
+      # Step: Check that the lib Elixir code has already been formatted.
+      - name: Check lib Elixir code formatted
+        run: mix format --check-formatted
+
+      # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
+      - name: Check lib JavaScript, JSON & YAML code formatted
+        run: mix format.js.check
+
+      # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
+      - name: Check lib doc and spec coverage
+        run: mix doctor
+
+      # Step: Run lib Elixir static code analysis with Credo.
+      - name: Run lib Elixir static code analysis with Credo
+        run: mix credo --strict
+
+      # Step: Run lib Elixir security-focused analysis with Sobelow.
+      - name: Run lib Elixir security-focused analysis with Sobelow
+        run: mix sobelow --config
+
+      # Step: Restore lib Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore lib Dialyzer PLT cache
+        id: restore-lib-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          path: |
+            .dialyzer
+
+      # Step: Create lib Dialyzer PLTs if no cache was found.
+      - name: Create lib Dialyzer PLTs
+        if: ${{ steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save lib Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save lib Dialyzer PLT cache
+        id: save-lib-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          path: |
+            .dialyzer
+
+      # Step: Run lib Elixir static code analysis with Dialyzer.
+      - name: Run lib Elixir static code analysis with Dialyzer
+        run: mix dialyzer --format github
+
+      # Step: Check that all lib test scripts have valid file names.
+      - name: Check lib test file names
+        run: mix holo.check.test_file_names test/elixir
+
+      # Step: Run lib JavaScript static code analysis with ESLint.
+      - name: Run lib JavaScript static code analysis with ESLint
+        run: mix eslint
+
+      # Step: Start the runner image's preinstalled Postgres server (service containers are
+      # Linux-only, so both OSes start the local server and align it with the zero-config
+      # test defaults: localhost:5432, postgres/postgres).
+      - name: Start Postgres (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
+          # Make the server self-report what a stalled query was waiting on: lock waits
+          # name the blocking session, checkpoints show an I/O storm, and any statement
+          # over two seconds logs its true duration - the backend finishes and logs even
+          # when the client has given up on it. Dumped by the failure-only step below.
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_lock_waits = on;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_min_duration_statement = 2000;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_checkpoints = on;"
+          sudo -u postgres psql -c "SELECT pg_reload_conf();"
+
+      # Step: Sample the runner, so a stalled query can be told apart from a stalled
+      # machine - the st column is CPU stolen by the hypervisor, r is the run queue.
+      # Read by the failure-only step below.
+      - name: Sample runner activity (Linux)
+        if: runner.os == 'Linux'
+        run: nohup vmstat -t 5 > "$RUNNER_TEMP/vmstat.log" 2>&1 &
+
+      # Step: Execute lib Elixir consistency tests.
+      - name: Run lib Elixir consistency tests
+        run: mix test --warnings-as-errors --only consistency
 
       # Step: On failure, print what the server and the machine were doing - a stalled
       # query is diagnosable only from this side, because the client's timeout destroys
@@ -682,6 +1016,11 @@ jobs:
 
   cluster_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Cluster Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -845,6 +1184,11 @@ jobs:
           path: test/cluster/tmp/screenshots
   cowboy_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Cowboy Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1000,6 +1344,11 @@ jobs:
           path: test/cowboy/tmp/screenshots
   ecosystem_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Ecosystem Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1155,6 +1504,11 @@ jobs:
           path: test/ecosystem/tmp/screenshots
   umbrella_tests:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
+    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
+    # ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:

@@ -98,8 +98,10 @@ defmodule Hologram.Compiler do
   # The longest command line, in characters, that esbuild is started with for a group of chunks (see
   # bundle/2). The measured part: on Windows esbuild's launcher is a .cmd file, which is run
   # through cmd.exe (see Hologram.Commons.SystemUtils.cmd_cross_platform/3), and cmd.exe takes a
-  # command line of 8191 characters at most. The policy part: the bound is applied on every OS, so
-  # that the chunks are bundled the same way everywhere.
+  # command line of 8191 characters at most. The launcher is what esbuild is started through there
+  # when the binary of its platform package is not found (see esbuild_bin_path/1). The policy part:
+  # the bound is applied on every OS, and whichever of the two is started, so that the chunks are
+  # bundled the same way everywhere.
   @max_chunks_command_length 8_191
 
   @doc """
@@ -1299,6 +1301,26 @@ defmodule Hologram.Compiler do
     end)
 
     :ok
+  end
+
+  @doc """
+  Returns the path esbuild is started with for the given `node_modules` dir: the esbuild binary of
+  the platform package npm installed, `@esbuild/win32-*/esbuild.exe`, when there is exactly one,
+  else the launcher `.bin/esbuild`. On Windows the launcher is a script that starts Node to start
+  the binary, which costs about 50 ms per start. On the other platforms the launcher is the binary
+  itself: esbuild's installer puts it there.
+  """
+  @spec esbuild_bin_path(T.file_path()) :: T.file_path()
+  def esbuild_bin_path(node_modules_path) do
+    binary_paths =
+      [node_modules_path, "@esbuild", "win32-*", "esbuild.exe"]
+      |> Path.join()
+      |> Path.wildcard()
+
+    case binary_paths do
+      [binary_path] -> binary_path
+      _none_or_several -> Path.join([node_modules_path, ".bin", "esbuild"])
+    end
   end
 
   @doc """

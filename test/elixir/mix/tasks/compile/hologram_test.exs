@@ -25,8 +25,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
+  # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
+  # lib_tests matrix in .github/workflows/ci.yml).
+  @moduletag :compile_task
+
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
-  @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
 
   @test_dir Path.join([
               Reflection.tmp_dir(),
@@ -40,6 +43,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
   @build_lib_dir Path.join(@test_dir, "build_lib")
+  @snapshot_build_dir Path.join(@test_dir, "snapshot_build")
+  @snapshot_static_dir Path.join(@test_dir, "snapshot_static")
   @static_dir Path.join(@test_dir, "static")
   @tmp_dir Path.join(@test_dir, "tmp")
 
@@ -299,20 +304,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
-  # Forgets what the last compile kept, in the VM and on disk: what the first compile in a fresh
-  # checkout finds. Cache.reset/0 alone is what the first compile in a new VM finds, the compile
-  # state dump next to the call graph dump.
-  defp forget_kept_state(opts) do
-    Cache.reset()
-    File.rm(@compile_inputs_path)
-
-    opts[:build_dir]
-    |> Path.join(Reflection.compile_state_dump_file_name())
-    |> File.rm()
-
-    :ok
-  end
-
   defp generate_old_bundle(name, opts) do
     opts[:static_dir]
     |> Path.join("#{name}.js")
@@ -486,30 +477,76 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Tracer.trace({:on_module, File.read!(:code.which(module)), :none}, %Macro.Env{module: module})
   end
 
+  # Puts the build dir and the static dir back as the snapshot has them: the build dir as a whole
+  # (a few small files), the static dir by file name (bundles are named by their content hash, so
+  # a file of the same name is the same file).
+  defp restore_snapshot do
+    clean_dir(@build_dir)
+    File.cp_r!(@snapshot_build_dir, @build_dir)
+
+    wanted =
+      @snapshot_static_dir
+      |> File.ls!()
+      |> MapSet.new()
+
+    present =
+      @static_dir
+      |> File.ls!()
+      |> MapSet.new()
+
+    present
+    |> MapSet.difference(wanted)
+    |> Enum.each(fn file_name ->
+      file_path = Path.join(@static_dir, file_name)
+      File.rm!(file_path)
+    end)
+
+    wanted
+    |> MapSet.difference(present)
+    |> Enum.each(fn file_name ->
+      snapshot_file_path = Path.join(@snapshot_static_dir, file_name)
+      file_path = Path.join(@static_dir, file_name)
+      File.cp!(snapshot_file_path, file_path)
+    end)
+  end
+
+  # An assets dir and a build dir with nothing compiled, the lib's JavaScript deps linked so that
+  # a compile into them installs nothing.
   defp setup_empty_assets_and_build_dirs(opts) do
-    assets_dir = setup_empty_assets_dir()
+    assets_dir = Path.join(@test_dir, "assets_empty")
+    clean_dir(assets_dir)
+
     build_dir = setup_empty_build_dir()
+    link_lib_js_deps(assets_dir, build_dir)
 
     opts
     |> Keyword.put(:assets_dir, assets_dir)
     |> Keyword.put(:build_dir, build_dir)
   end
 
-  defp setup_empty_assets_dir do
-    assets_dir = Path.join(@test_dir, "assets_empty")
-    clean_dir(assets_dir)
-
-    test_package_json_path = Path.join(assets_dir, "package.json")
-    FileUtils.cp_p!(@lib_package_json_path, test_package_json_path)
-
-    assets_dir
-  end
-
+  # A build dir with nothing compiled, holding the record of the lib's JavaScript deps being linked
+  # to the module's assets dir, so that a compile into it installs nothing.
   defp setup_empty_build_dir do
     build_dir = Path.join(@test_dir, "build_empty")
     clean_dir(build_dir)
+    link_lib_js_deps(@assets_dir, build_dir)
 
     build_dir
+  end
+
+  # Forgets what the last compile kept, in the VM and on disk, and removes the bundles it built: what
+  # the first compile in a fresh checkout finds. Cache.reset/0 alone is what the first compile in a
+  # new VM finds, the compile state dump next to the call graph dump.
+  defp start_cold(opts) do
+    Cache.reset()
+    File.rm(@compile_inputs_path)
+    clean_dir(opts[:static_dir])
+
+    opts[:build_dir]
+    |> Path.join(Reflection.compile_state_dump_file_name())
+    |> File.rm()
+
+    :ok
   end
 
   defp test_build_artifacts(opts) do
@@ -540,6 +577,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.delete(ir_plt, module)
 
     refute module in CallGraph.modules(call_graph)
+  end
+
+  # Keeps the build dir and the static dir of the compile just made, for restore_snapshot/0.
+  defp take_snapshot do
+    clean_dir(@snapshot_build_dir)
+    File.cp_r!(@build_dir, @snapshot_build_dir)
+
+    clean_dir(@snapshot_static_dir)
+    File.cp_r!(@static_dir, @snapshot_static_dir)
   end
 
   defp test_call_graph(opts) do
@@ -801,34 +847,37 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.mkdir_p!(@manifest_dir)
     File.write!(@manifest_path, "manifest 1")
 
-    test_node_modules_path = Path.join(@assets_dir, "node_modules")
+    node_modules_path = link_lib_js_deps(@assets_dir, @build_dir)
 
     opts = [
       assets_dir: @assets_dir,
       build_dir: @build_dir,
       build_lib_dir: @build_lib_dir,
       component_modules: buildable_component_modules(),
-      esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
+      esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(@lib_assets_dir, "js"),
-      node_modules_path: test_node_modules_path,
+      node_modules_path: node_modules_path,
       static_dir: @static_dir,
       tmp_dir: @tmp_dir
     ]
 
-    test_package_json_path = Path.join(@assets_dir, "package.json")
-    FileUtils.cp_p!(@lib_package_json_path, test_package_json_path)
-
-    Compiler.install_js_deps(@assets_dir, @build_dir)
+    # One finished compile, which every test starts from (see restore_snapshot/0).
+    run(opts)
+    take_snapshot()
 
     [opts: opts]
   end
 
   setup do
-    File.rm(@compile_inputs_path)
     File.rm(@lock_path)
-
-    clean_dir(@static_dir)
     clean_dir(@tmp_dir)
+
+    # Every test starts where the compile in setup_all ended: everything built, nothing in memory.
+    # The compile inputs dump goes after the restore: with it in place a run returns :noop before
+    # compiling, and every test here is about a run that compiles.
+    restore_snapshot()
+    File.rm(@compile_inputs_path)
+    Cache.reset()
   end
 
   describe "compiler skipping" do
@@ -943,8 +992,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  describe "esbuild path" do
+    test "resolves the esbuild binary when the opt is not given", %{opts: opts} do
+      opts_without_path = Keyword.delete(opts, :esbuild_bin_path)
+
+      assert count_calls({Compiler, :esbuild_bin_path, 1}, fn -> run(opts_without_path) end) == 1
+    end
+
+    test "starts esbuild with the given path when the opt is given", %{opts: opts} do
+      assert count_calls({Compiler, :esbuild_bin_path, 1}, fn -> run(opts) end) == 0
+    end
+  end
+
   test "compilation artifacts", %{opts: initial_opts} do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
+
+    # A compile with no record of an install installs the JavaScript deps too (see test_js_deps/1).
+    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    File.rm!(package_json_digest_path)
 
     # Test case 1: when there are no previous build artifacts
     run(opts)
@@ -1116,11 +1181,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "kept compile state" do
-    setup %{opts: opts} do
+    setup do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
       # rereads, since the modules they are for are not reported as compiled.
       on_exit(&Cache.reset/0)
-      forget_kept_state(opts)
     end
 
     test "the second run keeps what the first run built", %{opts: opts} do
@@ -1151,6 +1215,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "holds the IR of the pages and the modules they reach, and not of the rest", %{
       opts: opts
     } do
+      start_cold(opts)
       run(opts)
 
       ir_modules = PLT.keys(cache_state().ir_plt)
@@ -1466,6 +1531,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "a page rebuilt with no edit encodes no function again", %{opts: opts} do
+      start_cold(opts)
       run(opts)
       put_pending_kept_pages(1)
 
@@ -1474,6 +1540,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "an edited module's functions are encoded again, fewer than from scratch", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       fake_edit(Module2)
@@ -1549,6 +1616,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "keeps the encodings of the modules whose IR it keeps, no others", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       %{encode_plt: encode_plt, ir_plt: ir_plt} = cache_state()
@@ -1747,7 +1815,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a page no compile has built links to the pages its listing names", %{opts: opts} do
       run(opts)
 
-      forget_kept_state(opts)
+      start_cold(opts)
 
       {record_links, recorded_links} = record_calls()
 
@@ -1840,7 +1908,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # Once for its bundle, beside the data layer's two listings of every page's reach.
     test "a run with no page states lists each page once for its bundle", %{opts: opts} do
       run(opts)
-      forget_kept_state(opts)
+      start_cold(opts)
 
       assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 3 * @num_pages
       test_page_bundles(opts)
@@ -1954,7 +2022,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert pages_reaching_module_2 < @num_pages
       partial_digests = load_page_digest_items(opts)
 
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert load_page_digest_items(opts) == partial_digests
@@ -2841,6 +2909,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "the chunks are built with the first batch, after the runtime", %{opts: opts} do
+      start_cold(opts)
       {record_built, recorded_built} = record_calls()
 
       next_batch = fn remaining_pages, _links -> [Enum.min(remaining_pages)] end
@@ -2977,7 +3046,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       warm_app_versions = cache_state().app_versions
 
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert warm_app_versions == cache_state().app_versions
@@ -3231,6 +3300,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # One copy is left, the page digest PLT's, which PLT.dump/2 reads out to write it. The module
     # infos are neither copied into a PLT of the compile's nor out of one, for the diff or the cache.
     test "a kept page state holds no MFA list", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       %{page_mfas_plt: page_mfas_plt, pages_plt: pages_plt} = cache_state()
@@ -3615,7 +3685,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   describe "nothing changed since the last compile" do
     setup %{opts: opts} do
       on_exit(&Cache.reset/0)
-      forget_kept_state(opts)
       run(opts)
       Cache.reset()
 
@@ -3746,7 +3815,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no changes builds no module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert count_calls({Compiler, :build_module_metadata, 1}, fn -> run(opts) end) == 0
@@ -3754,7 +3823,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "the kept module metadata after an edit is the one a full build finds", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
       fake_edit(Module1)
       run(opts)
@@ -3769,7 +3838,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "turning client stack traces off forgets the module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert cache_state().module_metadata != nil
@@ -3782,14 +3851,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "dynamic call gate" do
-    setup %{opts: opts} do
+    setup do
       on_exit(&Cache.reset/0)
-      forget_kept_state(opts)
     end
 
     # The page's init/3 puts an Ecto schema and a struct into state, and its client code calls no
     # reflection function on a module it does not name.
     test "a page gets no reflection function only its server code could reach", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       {:ok, mfas} = PLT.get(cache_state().page_mfas_plt, @reflection_closed_page)
@@ -3802,6 +3871,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # The page's action calls __changeset__/0 on a module it reads from state.
     test "a page gets the reflection function its client code calls on a module it does not name",
          %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       {:ok, mfas} = PLT.get(cache_state().page_mfas_plt, @reflection_open_page)
