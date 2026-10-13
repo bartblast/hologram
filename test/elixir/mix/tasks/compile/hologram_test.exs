@@ -21,7 +21,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
 
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
-  @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
 
   @test_dir Path.join([
               Reflection.tmp_dir(),
@@ -410,39 +409,52 @@ defmodule Mix.Tasks.Compile.HologramTest do
     clean_dir(@build_dir)
     File.cp_r!(@snapshot_build_dir, @build_dir)
 
-    wanted = MapSet.new(File.ls!(@snapshot_static_dir))
-    present = MapSet.new(File.ls!(@static_dir))
+    wanted =
+      @snapshot_static_dir
+      |> File.ls!()
+      |> MapSet.new()
 
-    Enum.each(MapSet.difference(present, wanted), &File.rm!(Path.join(@static_dir, &1)))
+    present =
+      @static_dir
+      |> File.ls!()
+      |> MapSet.new()
 
-    Enum.each(
-      MapSet.difference(wanted, present),
-      &File.cp!(Path.join(@snapshot_static_dir, &1), Path.join(@static_dir, &1))
-    )
+    present
+    |> MapSet.difference(wanted)
+    |> Enum.each(fn file_name ->
+      file_path = Path.join(@static_dir, file_name)
+      File.rm!(file_path)
+    end)
+
+    wanted
+    |> MapSet.difference(present)
+    |> Enum.each(fn file_name ->
+      snapshot_file_path = Path.join(@snapshot_static_dir, file_name)
+      file_path = Path.join(@static_dir, file_name)
+      File.cp!(snapshot_file_path, file_path)
+    end)
   end
 
+  # An assets dir and a build dir with nothing compiled, the lib's JavaScript deps linked so that
+  # a compile into them installs nothing.
   defp setup_empty_assets_and_build_dirs(opts) do
-    assets_dir = setup_empty_assets_dir()
+    assets_dir = Path.join(@test_dir, "assets_empty")
+    clean_dir(assets_dir)
+
     build_dir = setup_empty_build_dir()
+    link_lib_js_deps(assets_dir, build_dir)
 
     opts
     |> Keyword.put(:assets_dir, assets_dir)
     |> Keyword.put(:build_dir, build_dir)
   end
 
-  defp setup_empty_assets_dir do
-    assets_dir = Path.join(@test_dir, "assets_empty")
-    clean_dir(assets_dir)
-
-    test_package_json_path = Path.join(assets_dir, "package.json")
-    FileUtils.cp_p!(@lib_package_json_path, test_package_json_path)
-
-    assets_dir
-  end
-
+  # A build dir with nothing compiled, holding the record of the lib's JavaScript deps being linked
+  # to the module's assets dir, so that a compile into it installs nothing.
   defp setup_empty_build_dir do
     build_dir = Path.join(@test_dir, "build_empty")
     clean_dir(build_dir)
+    link_lib_js_deps(@assets_dir, build_dir)
 
     build_dir
   end
@@ -712,23 +724,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.mkdir_p!(@manifest_dir)
     File.write!(@manifest_path, "manifest 1")
 
-    test_node_modules_path = Path.join(@assets_dir, "node_modules")
+    node_modules_path = link_lib_js_deps(@assets_dir, @build_dir)
 
     opts = [
       assets_dir: @assets_dir,
       build_dir: @build_dir,
       build_lib_dir: @build_lib_dir,
-      esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(@lib_assets_dir, "js"),
-      node_modules_path: test_node_modules_path,
+      node_modules_path: node_modules_path,
       static_dir: @static_dir,
       tmp_dir: @tmp_dir
     ]
-
-    test_package_json_path = Path.join(@assets_dir, "package.json")
-    FileUtils.cp_p!(@lib_package_json_path, test_package_json_path)
-
-    Compiler.install_js_deps(@assets_dir, @build_dir)
 
     # One finished compile, which every test starts from (see restore_snapshot/0).
     run(opts)
@@ -775,6 +782,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   test "compilation artifacts", %{opts: initial_opts} do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
+
+    # A compile with no record of an install installs the JavaScript deps too (see test_js_deps/1).
+    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    File.rm!(package_json_digest_path)
 
     # Test case 1: when there are no previous build artifacts
     run(opts)
