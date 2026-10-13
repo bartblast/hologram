@@ -35,6 +35,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
   @build_lib_dir Path.join(@test_dir, "build_lib")
+  @snapshot_build_dir Path.join(@test_dir, "snapshot_build")
+  @snapshot_static_dir Path.join(@test_dir, "snapshot_static")
   @static_dir Path.join(@test_dir, "static")
   @tmp_dir Path.join(@test_dir, "tmp")
 
@@ -401,6 +403,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Tracer.trace({:on_module, File.read!(:code.which(module)), :none}, %Macro.Env{module: module})
   end
 
+  # Puts the build dir and the static dir back as the snapshot has them: the build dir as a whole
+  # (a few small files), the static dir by file name (bundles are named by their content hash, so
+  # a file of the same name is the same file).
+  defp restore_snapshot do
+    clean_dir(@build_dir)
+    File.cp_r!(@snapshot_build_dir, @build_dir)
+
+    wanted = MapSet.new(File.ls!(@snapshot_static_dir))
+    present = MapSet.new(File.ls!(@static_dir))
+
+    Enum.each(MapSet.difference(present, wanted), &File.rm!(Path.join(@static_dir, &1)))
+
+    Enum.each(
+      MapSet.difference(wanted, present),
+      &File.cp!(Path.join(@snapshot_static_dir, &1), Path.join(@static_dir, &1))
+    )
+  end
+
   defp setup_empty_assets_and_build_dirs(opts) do
     assets_dir = setup_empty_assets_dir()
     build_dir = setup_empty_build_dir()
@@ -468,6 +488,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.delete(ir_plt, module)
 
     refute module in CallGraph.modules(call_graph)
+  end
+
+  # Keeps the build dir and the static dir of the compile just made, for restore_snapshot/0.
+  defp take_snapshot do
+    clean_dir(@snapshot_build_dir)
+    File.cp_r!(@build_dir, @snapshot_build_dir)
+
+    clean_dir(@snapshot_static_dir)
+    File.cp_r!(@static_dir, @snapshot_static_dir)
   end
 
   defp test_call_graph(opts) do
@@ -701,15 +730,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     Compiler.install_js_deps(@assets_dir, @build_dir)
 
+    # One finished compile, which every test starts from (see restore_snapshot/0).
+    run(opts)
+    take_snapshot()
+
     [opts: opts]
   end
 
   setup do
-    File.rm(@compile_inputs_path)
     File.rm(@lock_path)
-
-    clean_dir(@static_dir)
     clean_dir(@tmp_dir)
+
+    # Every test starts where the compile in setup_all ended: everything built, nothing in memory.
+    # The compile inputs dump goes after the restore: with it in place a run returns :noop before
+    # compiling, and every test here is about a run that compiles.
+    restore_snapshot()
+    File.rm(@compile_inputs_path)
+    Cache.reset()
   end
 
   describe "compiler skipping" do
@@ -757,11 +794,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "kept compile state" do
-    setup %{opts: opts} do
+    setup do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
       # rereads, since the modules they are for are not reported as compiled.
       on_exit(&Cache.reset/0)
-      start_cold(opts)
     end
 
     test "the second run keeps what the first run built", %{opts: opts} do
@@ -792,6 +828,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "holds the IR of the pages and the modules they reach, and not of the rest", %{
       opts: opts
     } do
+      start_cold(opts)
       run(opts)
 
       ir_modules = PLT.keys(cache_state().ir_plt)
@@ -1092,6 +1129,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "a page rebuilt with no edit encodes no function again", %{opts: opts} do
+      start_cold(opts)
       run(opts)
       put_pending_kept_pages(1)
 
@@ -1100,6 +1138,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "an edited module's functions are encoded again, fewer than from scratch", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       fake_edit(Module2)
@@ -1175,6 +1214,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "keeps the encodings of the modules whose IR it keeps, no others", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       %{encode_plt: encode_plt, ir_plt: ir_plt} = cache_state()
@@ -2466,6 +2506,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "the chunks are built with the first batch, after the runtime", %{opts: opts} do
+      start_cold(opts)
       {record_built, recorded_built} = record_calls()
 
       next_batch = fn remaining_pages, _links -> [Enum.min(remaining_pages)] end
@@ -2852,6 +2893,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # One copy is left, the page digest PLT's, which PLT.dump/2 reads out to write it. The module
     # infos are neither copied into a PLT of the compile's nor out of one, for the diff or the cache.
     test "a kept page state holds no MFA list", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       %{page_mfas_plt: page_mfas_plt, pages_plt: pages_plt} = cache_state()
@@ -3141,7 +3183,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   describe "nothing changed since the last compile" do
     setup %{opts: opts} do
       on_exit(&Cache.reset/0)
-      start_cold(opts)
       run(opts)
       Cache.reset()
 
@@ -3301,14 +3342,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "dynamic call gate" do
-    setup %{opts: opts} do
+    setup do
       on_exit(&Cache.reset/0)
-      start_cold(opts)
     end
 
     # The page's init/3 puts an Ecto schema and a struct into state, and its client code calls no
     # reflection function on a module it does not name.
     test "a page gets no reflection function only its server code could reach", %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       {:ok, mfas} = PLT.get(cache_state().page_mfas_plt, @reflection_closed_page)
@@ -3321,6 +3362,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # The page's action calls __changeset__/0 on a module it reads from state.
     test "a page gets the reflection function its client code calls on a module it does not name",
          %{opts: opts} do
+      start_cold(opts)
       run(opts)
 
       {:ok, mfas} = PLT.get(cache_state().page_mfas_plt, @reflection_open_page)
