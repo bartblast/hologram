@@ -2,6 +2,7 @@ defmodule Hologram.CompilerTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Compiler
 
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
@@ -3289,6 +3290,53 @@ defmodule Hologram.CompilerTest do
     } do
       assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new(), module_info_plt) ==
                :ok
+    end
+  end
+
+  describe "esbuild_bin_path/1" do
+    setup do
+      node_modules_path =
+        Path.join([@tmp_dir, "tests", "compiler", "esbuild_bin_path_1", "node_modules"])
+
+      clean_dir(node_modules_path)
+
+      [node_modules_path: node_modules_path]
+    end
+
+    test "the binary of the one installed Windows platform package", %{
+      node_modules_path: node_modules_path
+    } do
+      binary_path = Path.join([node_modules_path, "@esbuild", "win32-x64", "esbuild.exe"])
+      FileUtils.write_p!(binary_path, "")
+
+      assert esbuild_bin_path(node_modules_path) == binary_path
+    end
+
+    test "the launcher when no Windows platform package is installed", %{
+      node_modules_path: node_modules_path
+    } do
+      other_binary_path =
+        Path.join([node_modules_path, "@esbuild", "darwin-arm64", "bin", "esbuild"])
+
+      FileUtils.write_p!(other_binary_path, "")
+
+      launcher_path = Path.join([node_modules_path, ".bin", "esbuild"])
+
+      assert esbuild_bin_path(node_modules_path) == launcher_path
+    end
+
+    test "the launcher when several Windows platform packages are installed", %{
+      node_modules_path: node_modules_path
+    } do
+      ia32_binary_path = Path.join([node_modules_path, "@esbuild", "win32-ia32", "esbuild.exe"])
+      FileUtils.write_p!(ia32_binary_path, "")
+
+      x64_binary_path = Path.join([node_modules_path, "@esbuild", "win32-x64", "esbuild.exe"])
+      FileUtils.write_p!(x64_binary_path, "")
+
+      launcher_path = Path.join([node_modules_path, ".bin", "esbuild"])
+
+      assert esbuild_bin_path(node_modules_path) == launcher_path
     end
   end
 

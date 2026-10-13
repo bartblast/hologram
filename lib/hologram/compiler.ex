@@ -994,6 +994,26 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the path esbuild is started with for the given `node_modules` dir: the esbuild binary of
+  the platform package npm installed, `@esbuild/win32-*/esbuild.exe`, when there is exactly one,
+  else the launcher `.bin/esbuild`. On Windows the launcher is a script that starts Node to start
+  the binary, which costs about 50 ms per start. On the other platforms the launcher is the binary
+  itself: esbuild's installer puts it there.
+  """
+  @spec esbuild_bin_path(T.file_path()) :: T.file_path()
+  def esbuild_bin_path(node_modules_path) do
+    binary_paths =
+      [node_modules_path, "@esbuild", "win32-*", "esbuild.exe"]
+      |> Path.join()
+      |> Path.wildcard()
+
+    case binary_paths do
+      [binary_path] -> binary_path
+      _none_or_several -> Path.join([node_modules_path, ".bin", "esbuild"])
+    end
+  end
+
+  @doc """
   Returns the fingerprint of each given file, keyed by its path: `{:digest, digest}` of the content
   for a file outside any `node_modules` dir (the app's own JavaScript, which the dev saves,
   sometimes within the second of a compile), `{:stat, mtime, size}` for a file under one (packages
