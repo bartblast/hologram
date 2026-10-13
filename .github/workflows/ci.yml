@@ -236,9 +236,8 @@ jobs:
           max_attempts: 10
 
       # Step: Execute lib compile task tests.
-      # TODO: temporary, the --slowest flag is removed once the numbers are recorded (#1060).
       - name: Run lib compile task tests
-        run: mix test --warnings-as-errors --slowest 179 test/elixir/mix/tasks/compile/hologram_test.exs
+        run: mix test --warnings-as-errors test/elixir/mix/tasks/compile/hologram_test.exs
 
   lib_checks:
     runs-on: ubuntu-latest
