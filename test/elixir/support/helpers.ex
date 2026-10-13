@@ -4,6 +4,7 @@ defmodule Hologram.Test.Helpers do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Hologram.Template, only: [sigil_HOLO: 2]
 
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.ProcessUtils
@@ -14,6 +15,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.IR
   alias Hologram.Component
   alias Hologram.Realtime
+  alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
@@ -151,6 +153,37 @@ defmodule Hologram.Test.Helpers do
     code
     |> ir(%Context{})
     |> Encoder.encode_ir(%Context{})
+  end
+
+  @doc """
+  Gives the given assets dir the lib's installed JavaScript deps, so that a compile skips
+  `npm install`: copies `package.json` and `package-lock.json` from the lib's assets dir and writes
+  the digest file `Hologram.Compiler.maybe_install_js_deps/2` checks into the given build dir.
+  Returns the lib's `node_modules` path, to be given as the `:node_modules_path` opt.
+  """
+  @spec link_lib_js_deps(String.t(), String.t()) :: String.t()
+  def link_lib_js_deps(assets_dir, build_dir) do
+    lib_assets_dir = Path.join(Reflection.root_dir(), "assets")
+
+    File.mkdir_p!(assets_dir)
+    File.mkdir_p!(build_dir)
+
+    for file_name <- ["package.json", "package-lock.json"] do
+      lib_file_path = Path.join(lib_assets_dir, file_name)
+      file_path = Path.join(assets_dir, file_name)
+      File.cp!(lib_file_path, file_path)
+    end
+
+    package_json_digest =
+      lib_assets_dir
+      |> Path.join("package.json")
+      |> File.read!()
+      |> CryptographicUtils.digest(:sha256, :binary)
+
+    package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+    File.write!(package_json_digest_path, package_json_digest)
+
+    Path.join(lib_assets_dir, "node_modules")
   end
 
   @doc """

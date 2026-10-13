@@ -2,6 +2,7 @@ defmodule Hologram.CompilerTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Compiler
 
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
@@ -61,7 +62,7 @@ defmodule Hologram.CompilerTest do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
 
     opts = [
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      esbuild_bin_path: esbuild_bin_path(node_modules_path),
       js_dir: Path.join(test_tmp_dir, "hologram_js"),
       node_modules_path: node_modules_path,
       static_dir: Path.join(test_tmp_dir, "static"),
@@ -87,7 +88,7 @@ defmodule Hologram.CompilerTest do
     tmp_dir = Path.join(["tmp", "tests", "compiler", test_subdir])
 
     opts = [
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      esbuild_bin_path: esbuild_bin_path(node_modules_path),
       node_modules_path: node_modules_path,
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
@@ -1928,7 +1929,7 @@ defmodule Hologram.CompilerTest do
       tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2096,7 +2097,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_valid_entry_file"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2152,7 +2153,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_no_entry_name"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2181,7 +2182,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_string_entry_name"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2213,7 +2214,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_string_entry_names"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2254,7 +2255,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_same_digest"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2277,7 +2278,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_stale_output"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2307,7 +2308,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_invalid_entry_file"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2335,7 +2336,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2369,7 +2370,7 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_chunk_max_size"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
@@ -2598,7 +2599,7 @@ defmodule Hologram.CompilerTest do
       node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
 
       opts = [
-        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        esbuild_bin_path: esbuild_bin_path(node_modules_path),
         js_dir: Path.join(test_tmp_dir, "hologram_js"),
         node_modules_path: node_modules_path,
         static_dir: Path.join(test_tmp_dir, "static"),
@@ -3289,6 +3290,53 @@ defmodule Hologram.CompilerTest do
     } do
       assert encode_reachable_functions([], ir_plt, encode_plt, MapSet.new(), module_info_plt) ==
                :ok
+    end
+  end
+
+  describe "esbuild_bin_path/1" do
+    setup do
+      node_modules_path =
+        Path.join([@tmp_dir, "tests", "compiler", "esbuild_bin_path_1", "node_modules"])
+
+      clean_dir(node_modules_path)
+
+      [node_modules_path: node_modules_path]
+    end
+
+    test "the binary of the one installed Windows platform package", %{
+      node_modules_path: node_modules_path
+    } do
+      binary_path = Path.join([node_modules_path, "@esbuild", "win32-x64", "esbuild.exe"])
+      FileUtils.write_p!(binary_path, "")
+
+      assert esbuild_bin_path(node_modules_path) == binary_path
+    end
+
+    test "the launcher when no Windows platform package is installed", %{
+      node_modules_path: node_modules_path
+    } do
+      other_binary_path =
+        Path.join([node_modules_path, "@esbuild", "darwin-arm64", "bin", "esbuild"])
+
+      FileUtils.write_p!(other_binary_path, "")
+
+      launcher_path = Path.join([node_modules_path, ".bin", "esbuild"])
+
+      assert esbuild_bin_path(node_modules_path) == launcher_path
+    end
+
+    test "the launcher when several Windows platform packages are installed", %{
+      node_modules_path: node_modules_path
+    } do
+      ia32_binary_path = Path.join([node_modules_path, "@esbuild", "win32-ia32", "esbuild.exe"])
+      FileUtils.write_p!(ia32_binary_path, "")
+
+      x64_binary_path = Path.join([node_modules_path, "@esbuild", "win32-x64", "esbuild.exe"])
+      FileUtils.write_p!(x64_binary_path, "")
+
+      launcher_path = Path.join([node_modules_path, ".bin", "esbuild"])
+
+      assert esbuild_bin_path(node_modules_path) == launcher_path
     end
   end
 
@@ -4405,7 +4453,13 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_install_js_deps/1" do
     setup do
-      setup_js_deps_test("maybe_install_js_deps_1")
+      [assets_dir: assets_dir, build_dir: build_dir] =
+        setup_js_deps_test("maybe_install_js_deps_1")
+
+      # The record an install leaves, without one: the deps are the lib's.
+      link_lib_js_deps(assets_dir, build_dir)
+
+      [assets_dir: assets_dir, build_dir: build_dir]
     end
 
     @tag timeout: 300_000
@@ -4413,8 +4467,6 @@ defmodule Hologram.CompilerTest do
       assets_dir: assets_dir,
       build_dir: build_dir
     } do
-      install_js_deps(assets_dir, build_dir)
-
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       File.rm!(package_json_digest_path)
 
@@ -4424,8 +4476,6 @@ defmodule Hologram.CompilerTest do
 
     @tag timeout: 300_000
     test "package-lock.json file doesn't exist", %{assets_dir: assets_dir, build_dir: build_dir} do
-      install_js_deps(assets_dir, build_dir)
-
       package_lock_json_path = Path.join(assets_dir, "package-lock.json")
       File.rm!(package_lock_json_path)
 
@@ -4435,8 +4485,6 @@ defmodule Hologram.CompilerTest do
 
     @tag timeout: 300_000
     test "package.json file changed", %{assets_dir: assets_dir, build_dir: build_dir} do
-      install_js_deps(assets_dir, build_dir)
-
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       package_json_digest = File.read!(package_json_digest_path)
 
@@ -4447,10 +4495,7 @@ defmodule Hologram.CompilerTest do
       assert File.read!(package_json_digest_path) != package_json_digest
     end
 
-    @tag timeout: 300_000
     test "install is not needed", %{assets_dir: assets_dir, build_dir: build_dir} do
-      install_js_deps(assets_dir, build_dir)
-
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       package_json_digest_mtime = File.stat!(package_json_digest_path).mtime
 
