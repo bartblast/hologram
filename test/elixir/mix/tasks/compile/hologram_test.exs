@@ -247,20 +247,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
-  # Forgets what the last compile kept, in the VM and on disk: what the first compile in a fresh
-  # checkout finds. Cache.reset/0 alone is what the first compile in a new VM finds, the compile
-  # state dump next to the call graph dump.
-  defp forget_kept_state(opts) do
-    Cache.reset()
-    File.rm(@compile_inputs_path)
-
-    opts[:build_dir]
-    |> Path.join(Reflection.compile_state_dump_file_name())
-    |> File.rm()
-
-    :ok
-  end
-
   defp generate_old_bundle(name, opts) do
     opts[:static_dir]
     |> Path.join("#{name}.js")
@@ -439,6 +425,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     clean_dir(build_dir)
 
     build_dir
+  end
+
+  # Forgets what the last compile kept, in the VM and on disk, and removes the bundles it built: what
+  # the first compile in a fresh checkout finds. Cache.reset/0 alone is what the first compile in a
+  # new VM finds, the compile state dump next to the call graph dump.
+  defp start_cold(opts) do
+    Cache.reset()
+    File.rm(@compile_inputs_path)
+    clean_dir(opts[:static_dir])
+
+    opts[:build_dir]
+    |> Path.join(Reflection.compile_state_dump_file_name())
+    |> File.rm()
+
+    :ok
   end
 
   defp test_build_artifacts(opts) do
@@ -760,7 +761,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
       # rereads, since the modules they are for are not reported as compiled.
       on_exit(&Cache.reset/0)
-      forget_kept_state(opts)
+      start_cold(opts)
     end
 
     test "the second run keeps what the first run built", %{opts: opts} do
@@ -1372,7 +1373,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a page no compile has built links to the pages its listing names", %{opts: opts} do
       run(opts)
 
-      forget_kept_state(opts)
+      start_cold(opts)
 
       {record_links, recorded_links} = record_calls()
 
@@ -1464,7 +1465,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no page states lists each page once", %{opts: opts} do
       run(opts)
-      forget_kept_state(opts)
+      start_cold(opts)
 
       assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == @num_pages
       test_page_bundles(opts)
@@ -1578,7 +1579,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert pages_reaching_module_2 < @num_pages
       partial_digests = load_page_digest_items(opts)
 
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert load_page_digest_items(opts) == partial_digests
@@ -2601,7 +2602,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       warm_app_versions = cache_state().app_versions
 
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert warm_app_versions == cache_state().app_versions
@@ -3140,7 +3141,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   describe "nothing changed since the last compile" do
     setup %{opts: opts} do
       on_exit(&Cache.reset/0)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
       Cache.reset()
 
@@ -3264,7 +3265,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "a run with no changes builds no module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert count_calls({Compiler, :build_module_metadata, 1}, fn -> run(opts) end) == 0
@@ -3272,7 +3273,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "the kept module metadata after an edit is the one a full build finds", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
       fake_edit(Module1)
       run(opts)
@@ -3287,7 +3288,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "turning client stack traces off forgets the module metadata", %{opts: opts} do
       Application.put_env(:hologram, :client_stacktraces, true)
-      forget_kept_state(opts)
+      start_cold(opts)
       run(opts)
 
       assert cache_state().module_metadata != nil
@@ -3302,7 +3303,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   describe "dynamic call gate" do
     setup %{opts: opts} do
       on_exit(&Cache.reset/0)
-      forget_kept_state(opts)
+      start_cold(opts)
     end
 
     # The page's init/3 puts an Ecto schema and a struct into state, and its client code calls no
