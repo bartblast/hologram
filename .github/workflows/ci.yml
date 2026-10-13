@@ -149,9 +149,9 @@ jobs:
       # --partitions, which assigns files by a hash of their names: the module's job would then
       # also get whatever files hash with it.
       #
-      # --only compile_task includes the tag and excludes everything else, and an include wins
-      # over an exclude, so a test in that module tagged :skip_on_windows or :skip_on_unix
-      # would run here regardless.
+      # The module's file is named in the test step rather than selected with
+      # --only compile_task: selecting by tag makes ExUnit load every test file of the suite
+      # before it excludes the tests in them.
       #
       # The tiers must stay in sync with the lib_tests matrix. See the notes on the bounds there.
       matrix:
@@ -237,7 +237,7 @@ jobs:
 
       # Step: Execute lib compile task tests.
       - name: Run lib compile task tests
-        run: mix test --warnings-as-errors --only compile_task
+        run: mix test --warnings-as-errors test/elixir/mix/tasks/compile/hologram_test.exs
 
   lib_checks:
     runs-on: ubuntu-latest
