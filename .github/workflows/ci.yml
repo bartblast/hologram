@@ -355,6 +355,13 @@ jobs:
           sudo -u postgres psql -c "ALTER SYSTEM SET log_lock_waits = on;"
           sudo -u postgres psql -c "ALTER SYSTEM SET log_min_duration_statement = 2000;"
           sudo -u postgres psql -c "ALTER SYSTEM SET log_checkpoints = on;"
+
+          # The database lives for this job alone, so nothing is gained by waiting for the disk
+          # on every commit, and the scratch tier creates and drops a database per test.
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = off;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = off;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET full_page_writes = off;"
+
           sudo -u postgres psql -c "SELECT pg_reload_conf();"
 
       # Step: Sample the runner, so a stalled query can be told apart from a stalled
@@ -458,6 +465,13 @@ jobs:
 
             Start-Sleep -Seconds 2
           }
+
+          # The database lives for this job alone, so nothing is gained by waiting for the disk
+          # on every commit, and the scratch tier creates and drops a database per test.
+          & $psql -U postgres -c "ALTER SYSTEM SET fsync = off;"
+          & $psql -U postgres -c "ALTER SYSTEM SET synchronous_commit = off;"
+          & $psql -U postgres -c "ALTER SYSTEM SET full_page_writes = off;"
+          & $psql -U postgres -c "SELECT pg_reload_conf();"
 
       # Step: Execute lib database tests.
       - name: Run lib database tests
