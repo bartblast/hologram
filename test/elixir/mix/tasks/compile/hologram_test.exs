@@ -20,6 +20,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
 
+  # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
+  # lib_tests matrix in .github/workflows/ci.yml).
+  @moduletag :compile_task
+
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
 
   @test_dir Path.join([
