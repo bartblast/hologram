@@ -5,6 +5,10 @@ defmodule Hologram.DB.ConnectionTest do
 
   alias Hologram.DB.Config
 
+  # Reaches the server outside the sandbox: this is the transaction machinery the sandbox
+  # routes through, so it is tested on a real connection.
+  @moduletag :database
+
   @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at", "$revisions") VALUES ($1, now(), now(), '{}')|
 
   @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at", "$revisions") VALUES (gen_random_uuid(), now(), now(), '{}') RETURNING "id"|

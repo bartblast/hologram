@@ -51,22 +51,41 @@ module_info_plt_dump_path =
 PLT.dump(module_info_plt, module_info_plt_dump_path)
 PLT.stop(module_info_plt)
 
+# What the command line excludes, read before ExUnit.start/1 replaces the list with the
+# suite's own below. Mix merges the two again once this file has run.
+excluded_tags = ExUnit.configuration()[:exclude]
+
 ExUnit.start(exclude: exclude_opts)
 
-# Boot the test database: server connectivity check (fail fast with instructions), database
-# creation when absent, Hologram schema drop (the suite starts virgin). Positioned after
-# ExUnit.start and before the pool boots - the drop guard recognizes the test env by the
-# running ExUnit server.
-Hologram.Test.DatabaseBootstrap.run!()
+# A run that excludes the database tests (the modules of DatabaseCase and ScratchDatabaseCase,
+# and the files tagged :database by hand) needs no server. Every other run boots the database
+# here, before the first test.
+unless :database in excluded_tags do
+  # Boot the test database: server connectivity check (fail fast with instructions), database
+  # creation when absent, Hologram schema drop (the suite starts virgin). Positioned after
+  # ExUnit.start and before the pool boots - the drop guard recognizes the test env by the
+  # running ExUnit server.
+  Hologram.Test.DatabaseBootstrap.run!()
 
-# Boot the database gateway for the whole suite with a per-process ownership pool, so that
-# every test process transparently gets its own connection. Positioned after ExUnit.start,
-# because environment detection recognizes the test env by the running ExUnit server.
-{:ok, _database_pid} = Hologram.DB.start_link(pool: DBConnection.Ownership)
+  # Boot the database gateway for the whole suite with a per-process ownership pool, so that
+  # every test process transparently gets its own connection. Positioned after ExUnit.start,
+  # because environment detection recognizes the test env by the running ExUnit server.
+  {:ok, _database_pid} = Hologram.DB.start_link(pool: DBConnection.Ownership)
 
-# Create the fixture schema layout from scratch: reconciliation claims the virgin database
-# and converges it to the fixture entity model - the suite is auto-sync's first consumer.
-Hologram.DB.SchemaReconciler.reconcile(Hologram.DB.reconciliation_context())
+  # Create the fixture schema layout from scratch: reconciliation claims the virgin database
+  # and converges it to the fixture entity model - the suite is auto-sync's first consumer.
+  # Under an explicit checkout: this process lives for the whole run, and a connection the
+  # pool handed it implicitly would stay owned until the ownership timeout disconnected it,
+  # two minutes in.
+  pool_name = Hologram.DB.pool_name()
+  :ok = DBConnection.Ownership.ownership_checkout(pool_name, [])
+
+  try do
+    Hologram.DB.SchemaReconciler.reconcile(Hologram.DB.reconciliation_context())
+  after
+    :ok = DBConnection.Ownership.ownership_checkin(pool_name, [])
+  end
+end
 
 Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)
 Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMock)
