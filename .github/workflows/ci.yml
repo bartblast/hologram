@@ -125,35 +125,6 @@ jobs:
           timeout_minutes: 3
           max_attempts: 10
 
-      # TODO: temporary, removed once the numbers are recorded (#1060). Times three ways of
-      # starting esbuild on Windows, each 50 times after one warm-up start: through the .cmd shim
-      # in node_modules/.bin run by cmd.exe (what Hologram does), through Node on esbuild's
-      # launcher script, and the platform binary directly.
-      - name: Measure esbuild launch paths
-        if: ${{ runner.os == 'Windows' }}
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $shim = "assets\node_modules\.bin\esbuild.cmd"
-          $launcher = "assets\node_modules\esbuild\bin\esbuild"
-          $exe = "assets\node_modules\@esbuild\win32-x64\esbuild.exe"
-          $n = 50
-
-          foreach ($round in 1..2) {
-            cmd /c $shim --version | Out-Null
-            $viaCmd = (Measure-Command { 1..$n | ForEach-Object { cmd /c $shim --version | Out-Null } }).TotalMilliseconds
-
-            node $launcher --version | Out-Null
-            $viaNode = (Measure-Command { 1..$n | ForEach-Object { node $launcher --version | Out-Null } }).TotalMilliseconds
-
-            & $exe --version | Out-Null
-            $direct = (Measure-Command { 1..$n | ForEach-Object { & $exe --version | Out-Null } }).TotalMilliseconds
-
-            "round {0}: cmd.exe + node + esbuild.exe {1:N1} ms per start" -f $round, ($viaCmd / $n)
-            "round {0}: node + esbuild.exe {1:N1} ms per start" -f $round, ($viaNode / $n)
-            "round {0}: esbuild.exe {1:N1} ms per start" -f $round, ($direct / $n)
-          }
-
       # Step: Compile the lib project treating any warnings as errors.
       - name: Check lib project compiles without warnings
         run: mix compile --all-warnings --warnings-as-errors
