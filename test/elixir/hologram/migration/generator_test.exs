@@ -1,6 +1,9 @@
 defmodule Hologram.Migration.GeneratorTest do
   # async: false - resolve!-free generate outcomes shadow-verify against the scratch
   # database, a per-suite singleton (the configured name + "_shadow").
+  #
+  # The tests tagged :database are the ones that shadow-verify: the verifier opens its own
+  # connection to the server, so they need one, whatever the suite booted.
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Migration.Generator
@@ -40,6 +43,7 @@ defmodule Hologram.Migration.GeneratorTest do
   end
 
   describe "generate/3" do
+    @tag :database
     test "writes the migration taking the history to the model" do
       dir = migrations_dir!("writes_migration")
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
@@ -78,6 +82,7 @@ defmodule Hologram.Migration.GeneratorTest do
              |> String.contains?("resolve! :attributes")
     end
 
+    @tag :database
     test "does nothing when the history already produces the model" do
       contents = """
       use Hologram.Migration
@@ -94,6 +99,7 @@ defmodule Hologram.Migration.GeneratorTest do
       assert File.ls!(dir) == ["20260813091522.exs"]
     end
 
+    @tag :database
     test "writes an option's regex with the modifiers it was declared with" do
       dir = migrations_dir!("regex_option")
 
@@ -116,6 +122,7 @@ defmodule Hologram.Migration.GeneratorTest do
       assert File.read!(path) == expected
     end
 
+    @tag :database
     test "the history it writes for a model holding a regex produces that model" do
       dir = migrations_dir!("regex_round_trip")
 
@@ -132,6 +139,7 @@ defmodule Hologram.Migration.GeneratorTest do
       assert replayed == current
     end
 
+    @tag :database
     test "bumps the version while the minted name is taken" do
       dir = migrations_dir!("bumps_version", [{"20260813091522.exs", "use Hologram.Migration\n"}])
       current = model(%{MyApp.Task => %{}})
@@ -159,6 +167,7 @@ defmodule Hologram.Migration.GeneratorTest do
       assert File.ls!(dir) == ["20260813091522.exs"]
     end
 
+    @tag :database
     test "refuses a resolved history that cannot build the model's schema" do
       create_contents = """
       use Hologram.Migration
@@ -201,6 +210,7 @@ defmodule Hologram.Migration.GeneratorTest do
       end
     end
 
+    @tag :database
     test "leaves no file behind when the written migration fails verification" do
       create_contents = """
       use Hologram.Migration

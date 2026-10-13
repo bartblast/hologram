@@ -1,6 +1,9 @@
 defmodule Hologram.Migration.CheckerTest do
   # async: false - the green path shadow-verifies against the scratch database, a
   # per-suite singleton (the configured name + "_shadow").
+  #
+  # The tests tagged :database are the ones that shadow-verify: the verifier opens its own
+  # connection to the server, so they need one, whatever the suite booted.
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Migration.Checker
@@ -36,6 +39,7 @@ defmodule Hologram.Migration.CheckerTest do
   end
 
   describe "check!/2" do
+    @tag :database
     test "passes a resolved history producing the model" do
       contents = """
       use Hologram.Migration
@@ -93,6 +97,7 @@ defmodule Hologram.Migration.CheckerTest do
       assert_error RuntimeError, expected_msg, fn -> check!(dir, current) end
     end
 
+    @tag :database
     test "refuses a history that cannot build the model's schema" do
       create_contents = """
       use Hologram.Migration
