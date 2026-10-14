@@ -22,7 +22,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
+  alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
+  alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
   alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module16, as: ComponentModule16
   alias Hologram.Test.Fixtures.Component.Module17, as: ComponentModule17
@@ -4894,6 +4897,68 @@ defmodule Hologram.CompilerTest do
       launcher_path = Path.join([node_modules_path, ".bin", "esbuild"])
 
       assert esbuild_bin_path(node_modules_path) == launcher_path
+    end
+  end
+
+  describe "extract_component_queries/2" do
+    setup do
+      [entity_types: Reflection.list_entities()]
+    end
+
+    test "extracts the queries of every given component, keyed by module", %{
+      entity_types: entity_types
+    } do
+      module_1_term =
+        Entity2
+        |> filter(a: true)
+        |> order_by(:c)
+        |> Query.normalize()
+
+      module_11_term =
+        Entity2
+        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_component_queries([QueryExtractorModule1, ComponentModule11], entity_types) ==
+               %{
+                 ComponentModule11 => %{
+                   prop_params: [entities: [:min_b]],
+                   targets: [ComponentModule11],
+                   terms: [module_11_term]
+                 },
+                 QueryExtractorModule1 => %{
+                   prop_params: [],
+                   targets: [QueryExtractorModule1],
+                   terms: [module_1_term]
+                 }
+               }
+    end
+
+    test "records the module a remote capture points at", %{entity_types: entity_types} do
+      assert %{ComponentModule14 => %{targets: [ComponentModule13]}} =
+               extract_component_queries([ComponentModule14], entity_types)
+    end
+
+    test "records nothing for a component declaring no query prop", %{
+      entity_types: entity_types
+    } do
+      assert extract_component_queries([ComponentModule1], entity_types) == %{
+               ComponentModule1 => %{prop_params: [], targets: [], terms: []}
+             }
+    end
+
+    test "answers for no component with no entry" do
+      assert extract_component_queries([], Reflection.list_entities()) == %{}
+    end
+
+    test "raises for a capture the extractor refuses", %{entity_types: entity_types} do
+      expected_msg =
+        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
+          "whole query, includes and all, on the server's authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        extract_component_queries([ComponentModule29], entity_types)
+      end
     end
   end
 

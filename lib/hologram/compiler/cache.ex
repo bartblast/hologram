@@ -32,6 +32,7 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
 
@@ -72,7 +73,7 @@ defmodule Hologram.Compiler.Cache do
   # component of the build, what the data layer read of each page's reach, and the statement the
   # runtime script sets the client's data layer constants with.
   @type data_layer_state :: %{
-          components: %{module => map},
+          components: %{module => Compiler.component_queries()},
           pages: %{module => map},
           sync_constants_js: String.t()
         }

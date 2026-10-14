@@ -68,6 +68,19 @@ defmodule Hologram.Compiler do
   }
 
   @typedoc """
+  The registered queries of one component: the normalized terms its from_query props declare (see
+  `Hologram.Compiler.QueryExtractor.extract_module_queries/2`), the argument names of its
+  parameterized captures (see `Hologram.Compiler.QueryExtractor.extract_prop_params/1`) and the
+  modules those captures point at, sorted. A capture of the component's own function points at the
+  component itself.
+  """
+  @type component_queries :: %{
+          prop_params: keyword(list(atom | nil)),
+          targets: [module],
+          terms: [Query.t()]
+        }
+
+  @typedoc """
   What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, and
   the struct types it names, which carry no MFA of their own in the list.
   """
@@ -1324,6 +1337,29 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Extracts the registered queries of the given component modules, each once, keyed by module (see
+  `component_queries`). The entity types are the ones of the build, over which a query whose entity
+  type is an argument is replayed.
+
+  Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/2` and
+  `Hologram.Compiler.QueryExtractor.extract_prop_params/1` raise.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_2/README.md
+  """
+  @spec extract_component_queries([module], [module]) :: %{module => component_queries}
+  def extract_component_queries(component_modules, entity_types) do
+    Map.new(component_modules, fn module ->
+      queries = %{
+        prop_params: QueryExtractor.extract_prop_params(module),
+        targets: capture_targets(module),
+        terms: QueryExtractor.extract_module_queries(module, entity_types)
+      }
+
+      {module, queries}
+    end)
+  end
+
+  @doc """
   Returns the fingerprint of each given file, keyed by its path: `{:digest, digest}` of the content
   for a file outside any `node_modules` dir (the app's own JavaScript, which the dev saves,
   sometimes within the second of a compile), `{:stat, mtime, size}` for a file under one (packages
@@ -2384,6 +2420,21 @@ defmodule Hologram.Compiler do
 
       _fallback ->
         []
+    end
+  end
+
+  # The modules the from_query captures of the module's props point at, sorted: a capture of the
+  # module's own function points at the module itself.
+  defp capture_targets(module) do
+    if Reflection.has_function?(module, :__props__, 0) do
+      module.__props__()
+      |> Enum.map(fn {_name, _type, opts} -> opts[:from_query] end)
+      |> Enum.filter(&is_function/1)
+      |> Enum.map(&Function.info(&1)[:module])
+      |> Enum.uniq()
+      |> Enum.sort()
+    else
+      []
     end
   end
 
