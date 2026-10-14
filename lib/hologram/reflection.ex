@@ -54,6 +54,8 @@ defmodule Hologram.Reflection do
 
   @compiler_lock_file_name "hologram_compiler.lock"
 
+  @data_model_inputs_dump_file_name "data_model_inputs.bin"
+
   @ignored_modules [Kernel.SpecialForms]
 
   @module_info_plt_dump_file_name "module_info.plt"
@@ -335,6 +337,14 @@ defmodule Hologram.Reflection do
   @spec component?(term) :: boolean
   def component?(term) do
     elixir_module?(term) && has_function?(term, :__is_hologram_component__, 0)
+  end
+
+  @doc """
+  Returns the data model inputs dump file name.
+  """
+  @spec data_model_inputs_dump_file_name() :: String.t()
+  def data_model_inputs_dump_file_name do
+    @data_model_inputs_dump_file_name
   end
 
   @doc """

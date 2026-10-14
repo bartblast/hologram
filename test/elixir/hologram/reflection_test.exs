@@ -507,6 +507,10 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  test "data_model_inputs_dump_file_name/0" do
+    assert data_model_inputs_dump_file_name() == "data_model_inputs.bin"
+  end
+
   describe "ecto_schema?/1" do
     test "module which is an Ecto schema" do
       assert ecto_schema?(Module8)
