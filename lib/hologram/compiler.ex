@@ -557,11 +557,13 @@ defmodule Hologram.Compiler do
   module info PLT's keys.
   Pass `plt:` to fill an existing PLT instead of starting one; the compile task passes the PLT it keeps between
   compiles.
+  A module with a consolidated beam on the code path is read from it, whatever beam the VM loaded the
+  module from.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_ir_plt_0/README.md
   """
   @spec build_ir_plt(T.opts()) :: PLT.t()
-  # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
   def build_ir_plt(opts \\ []) do
     ir_plt = opts[:plt] || PLT.start(opts)
@@ -572,15 +574,17 @@ defmodule Hologram.Compiler do
     # (determined experimentally)
     chunk_size = 2
 
-    # TODO: Remove this flag and call :code.which/1 directly below when
-    # resolve_beam_source/2 goes (see the removal note there).
+    consolidated_beams = Reflection.list_consolidated_beams()
+
+    # TODO: Remove this flag and the argument it feeds to resolve_beam_source/3
+    # when resolve_beam_source/2 goes (see the removal note there).
     umbrella? = Reflection.umbrella?()
 
     modules
     |> Enum.chunk_every(chunk_size)
     |> TaskUtils.map_concurrently(fn module_chunk ->
       Enum.each(module_chunk, fn module ->
-        beam_source = resolve_beam_source(module, umbrella?)
+        beam_source = resolve_beam_source(module, consolidated_beams, umbrella?)
 
         if beam_source do
           ir = IR.for_module(module, beam_source)
@@ -644,20 +648,29 @@ defmodule Hologram.Compiler do
   Each module's BEAM is read once. A module whose entry in `old_plt` has the same mtime and size as its BEAM
   now, and whose BEAM was last written at least a second before `dumped_at` (the mtime of the dump `old_plt`
   was loaded from, in posix seconds), reuses that entry without reading the BEAM. Pass nil as `dumped_at` to
-  read every BEAM.
+  read every BEAM. A module with a consolidated beam on the code path is read from it, whatever beam the VM
+  loaded the module from.
   """
   @spec build_module_info_plt!(PLT.t(), non_neg_integer | nil, T.opts()) :: PLT.t()
   def build_module_info_plt!(old_plt, dumped_at, opts \\ []) do
     new_plt = PLT.start(opts)
+    consolidated_beams = Reflection.list_consolidated_beams()
 
     # TODO: Remove this flag and the argument it feeds to
-    # rebuild_module_info_plt_entry!/5 when resolve_beam_source/2 goes (see
+    # rebuild_module_info_plt_entry!/6 when resolve_beam_source/2 goes (see
     # the removal note there).
     umbrella? = Reflection.umbrella?()
 
     TaskUtils.map_concurrently(
       Reflection.list_candidate_modules(),
-      &rebuild_module_info_plt_entry!(&1, old_plt, dumped_at, new_plt, umbrella?)
+      &rebuild_module_info_plt_entry!(
+        &1,
+        old_plt,
+        dumped_at,
+        new_plt,
+        consolidated_beams,
+        umbrella?
+      )
     )
 
     new_plt
@@ -3445,9 +3458,16 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
-  defp rebuild_module_info_plt_entry!(module, old_plt, dumped_at, new_plt, umbrella?) do
+  defp rebuild_module_info_plt_entry!(
+         module,
+         old_plt,
+         dumped_at,
+         new_plt,
+         consolidated_beams,
+         umbrella?
+       ) do
     # No beam: not a module of this project.
-    if beam_source = resolve_beam_source(module, umbrella?) do
+    if beam_source = resolve_beam_source(module, consolidated_beams, umbrella?) do
       put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
     end
   end
@@ -4145,6 +4165,16 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  # A module with a consolidated beam on the code path is read from it, whatever the VM has loaded.
+  # The compile Phoenix's reloader runs takes the consolidated directory off the code path and
+  # purges its modules, a protocol the compiler calls in that window is loaded from its own beam
+  # again and stays so, and :code.which/1 then names that beam: another digest, mtime and size
+  # than the consolidated beam every other compile reads, so every page reaching the protocol
+  # would be rebuilt.
+  defp resolve_beam_source(module, consolidated_beams, umbrella?) do
+    consolidated_beams[module] || resolve_beam_source(module, umbrella?)
+  end
+
   # In umbrella projects a module can stay loaded from a consolidated protocol
   # beam that Phoenix's code reloader has purged: the reloader compiles with
   # --purge-consolidation-path-if-stale, which deletes the umbrella root
@@ -4159,8 +4189,8 @@ defmodule Hologram.Compiler do
   # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
   # them by then), plus unwinding the umbrella? flag threaded through
   # build_ir_plt/1, build_module_info_plt!/3 and
-  # rebuild_module_info_plt_entry!/5 - their bodies go back to resolving the
-  # beam path with :code.which/1 directly.
+  # rebuild_module_info_plt_entry!/6 - resolve_beam_source/3 stays, with
+  # :code.which/1 as its fallback.
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
   defp resolve_beam_source(module, false) do

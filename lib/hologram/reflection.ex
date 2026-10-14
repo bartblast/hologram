@@ -619,6 +619,20 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists the consolidated protocol beams on the code path, as a map of module to beam path with the
+  path as a charlist: the `Elixir.`-named beams in every consolidated protocols directory on the code
+  path, walked in code path order, with a module taken from the first directory that has it. Empty
+  when protocols are not consolidated, or the directory is off the code path.
+  """
+  @spec list_consolidated_beams() :: %{module => charlist}
+  def list_consolidated_beams do
+    list_consolidated_dirs()
+    |> Enum.flat_map(&list_beams_in_dir/1)
+    |> Enum.uniq_by(fn {module, _beam_path} -> module end)
+    |> Map.new()
+  end
+
+  @doc """
   Lists modules by scanning BEAM files in the given OTP app's ebin directory.
   This is useful for detecting newly compiled modules that haven't been added to
   Application.spec yet during development.
@@ -1445,6 +1459,14 @@ defmodule Hologram.Reflection do
       {module, String.to_charlist(beam_path)}
     end)
     |> Enum.filter(fn {module, _beam_path} -> alias?(module) end)
+  end
+
+  # The directories named "consolidated" on the code path, in code path order, each as an expanded
+  # path.
+  defp list_consolidated_dirs do
+    :code.get_path()
+    |> Enum.map(&expand_dir(&1, "."))
+    |> Enum.filter(&(Path.basename(&1) == "consolidated"))
   end
 
   # The modules of the given OTP applications whose beam exports the given function, from the
