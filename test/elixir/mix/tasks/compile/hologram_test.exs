@@ -24,13 +24,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
   alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
-  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
-  alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
   # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
@@ -1445,7 +1445,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_edit(ComponentModule15)
 
       failing_opts =
-        Keyword.update!(opts, :component_modules, &(&1 ++ [ComponentModule15]))
+        Keyword.update!(opts, :component_modules, &[ComponentModule15 | &1])
 
       expected_msg =
         "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>

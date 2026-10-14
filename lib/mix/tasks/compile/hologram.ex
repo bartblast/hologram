@@ -409,7 +409,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
       # every page it lists again.
-      runtime_graph_kept? = runtime_kept? and chunk_analysis_kept? and pages_to_list == []
+      runtime_graph_kept? = Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == []])
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_graph_kept?, sup)
 
       templatable_modules = page_modules ++ component_modules
@@ -426,20 +426,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # is read and no module is asked.
       entity_types = Reflection.list_entities(new_module_info_plt)
 
-      # A check spells the entity operation it asks about, and a name no allow line on any entity
-      # type declares is a typo or a rename - refused here rather than answered no forever. Judged
-      # on every compile whose diff is not empty, whether or not the data layer is kept: an edit of
-      # a module no page uses can add an ask. And on every compile that keeps no data layer, since
-      # no compile judged the asks for it. Asked of the UNSPLIT graph: the ask functions are
-      # hand-ported, so the runtime graph no longer holds the vertices whose callers this reads.
       # Before the IR prune, which drops the IR this builds for a caller no page reaches.
-      if cache.data_layer == nil or
-           module_digests_diff != %{added_modules: [], edited_modules: [], removed_modules: []} do
-        Compiler.validate_operations!(entity_types, call_graph, ir_plt,
-          modules:
-            operation_ask_modules(cache.data_layer, module_digests_diff, data_model_changed?)
-        )
-      end
+      maybe_validate_operations!(entity_types, call_graph, ir_plt, %{
+        data_model_changed?: data_model_changed?,
+        kept_data_layer: cache.data_layer,
+        module_digests_diff: module_digests_diff
+      })
 
       # The statement the runtime script sets the client's data layer constants with: rendered by
       # the derivation, or kept with the runtime bundle it was rendered into.
@@ -1555,6 +1547,17 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Map.merge(validated_template_modules)
   end
 
+  # The page's kept reach when it still holds: the page has one, and its modules do not meet the
+  # modules reaching the edit.
+  defp keepable_page_reach(kept_data_layer, page_module, reaching_modules) do
+    with {:ok, reach} <- Map.fetch(kept_data_layer.pages, page_module),
+         true <- MapSet.disjoint?(reach.modules, reaching_modules) do
+      {:ok, reach}
+    else
+      _fallback -> :error
+    end
+  end
+
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
     runtime_mfas
     |> page_state_modules()
@@ -1709,8 +1712,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     outside_modules =
       kept_data_layer.components
       |> Map.keys()
-      |> Enum.reject(&MapSet.member?(component_set, &1))
-      |> Enum.filter(&match?({:ok, %{component?: true}}, PLT.get(module_info_plt, &1)))
+      |> Enum.filter(fn module ->
+        not MapSet.member?(component_set, module) and
+          match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
+      end)
 
     component_modules ++ outside_modules
   end
@@ -1793,16 +1798,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp partition_kept_page_reach(kept_data_layer, page_modules, reaching_modules) do
     {kept_page_reach, pages_to_list} =
       Enum.reduce(page_modules, {%{}, []}, fn page_module, {kept, to_list} ->
-        case Map.fetch(kept_data_layer.pages, page_module) do
-          {:ok, reach} ->
-            if MapSet.disjoint?(reach.modules, reaching_modules) do
-              {Map.put(kept, page_module, reach), to_list}
-            else
-              {kept, [page_module | to_list]}
-            end
-
-          :error ->
-            {kept, [page_module | to_list]}
+        case keepable_page_reach(kept_data_layer, page_module, reaching_modules) do
+          {:ok, reach} -> {Map.put(kept, page_module, reach), to_list}
+          :error -> {kept, [page_module | to_list]}
         end
       end)
 
@@ -2130,6 +2128,27 @@ defmodule Mix.Tasks.Compile.Hologram do
         {:error, _reason} ->
           remove_unreadable_lock_file(lock_path)
       end
+    end
+  end
+
+  # A check spells the entity operation it asks about, and a name no allow line on any entity type
+  # declares is a typo or a rename - refused here rather than answered no forever. Judged on every
+  # compile whose diff is not empty, whether or not the data layer is kept: an edit of a module no
+  # page uses can add an ask. And on every compile that keeps no data layer, since no compile judged
+  # the asks for it. Asked of the UNSPLIT graph: the ask functions are hand-ported, so the runtime
+  # graph no longer holds the vertices whose callers this reads.
+  defp maybe_validate_operations!(entity_types, call_graph, ir_plt, inputs) do
+    %{
+      data_model_changed?: data_model_changed?,
+      kept_data_layer: kept_data_layer,
+      module_digests_diff: module_digests_diff
+    } = inputs
+
+    if kept_data_layer == nil or
+         module_digests_diff != %{added_modules: [], edited_modules: [], removed_modules: []} do
+      Compiler.validate_operations!(entity_types, call_graph, ir_plt,
+        modules: operation_ask_modules(kept_data_layer, module_digests_diff, data_model_changed?)
+      )
     end
   end
 
