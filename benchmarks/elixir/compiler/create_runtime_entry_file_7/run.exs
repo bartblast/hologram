@@ -33,8 +33,7 @@ Benchee.run(
     permission_checking_pages = Compiler.pages_checking_permissions(listed_reach)
 
     reach_by_page =
-      listed_reach
-      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+      Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
 
     component_queries =
       reach_by_page

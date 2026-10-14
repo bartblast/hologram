@@ -1,13 +1,11 @@
+alias Hologram.Benchmarks.DataLayer
 alias Hologram.Compiler
-alias Hologram.Compiler.CallGraph
-alias Hologram.Reflection
 
-# What the compile task pays to derive the windows every page downloads, once per compile that
-# derives the data layer: each page's reach narrowed to its components, the queries of every
-# distinct component extracted once, and each page's window ids collected from them.
-#
-# The function lists the entity types from the module info PLT it is given, so the number holds no
-# read of the beams.
+# What the compile task pays to fold the windows every page downloads, once per compile that
+# derives the data layer: each component's window ids derived once from its kept queries, and each
+# page's collected from the components its kept reach names. No page is walked and no query is
+# extracted here: the data layer keeps both between compiles (see the build_kept_page_reach_3 and
+# extract_component_queries_2 benchmarks for what they cost when they are not kept).
 #
 # The fixtures give it 110 pages. 10 of them reach the two components with a parameterized query
 # and hold 12 windows each, 11 of which come from the one query whose entity type is an argument,
@@ -18,36 +16,8 @@ Benchee.run(
       Compiler.build_page_windows(reach_by_page, component_queries, module_info_plt)
     end
   },
-  before_scenario: fn _input ->
-    ir_plt = Compiler.build_ir_plt()
-    call_graph = Compiler.build_call_graph(ir_plt)
-    module_info_plt = CallGraph.module_info_plt(call_graph)
-    page_modules = Reflection.list_pages()
-
-    # Asked before remove_manually_ported_mfas/1: the permission checks are manually ported, so
-    # the graph the reach below is listed on no longer holds the vertices to ask about.
-    permission_checking_pages =
-      page_modules
-      |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions()
-
-    CallGraph.remove_manually_ported_mfas(call_graph)
-
-    # Listed with the runtime's MFAs still in the graph, as the compile task lists it: a
-    # component reached through a runtime MFA is still one the page can reach.
-    reach_by_page =
-      page_modules
-      |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
-
-    component_queries =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
-
-    {reach_by_page, component_queries, module_info_plt}
-  end,
+  # Derived the way a cold compile derives them (see Hologram.Benchmarks.DataLayer).
+  before_scenario: fn _input -> DataLayer.kept_inputs() end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
