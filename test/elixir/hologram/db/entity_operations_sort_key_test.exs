@@ -1,5 +1,5 @@
 defmodule Hologram.DB.EntityOperationsSortKeyTest do
-  use Hologram.Test.DatabaseCase, async: false
+  use Hologram.Test.DatabaseCase, async: true
 
   import Hologram.DB.EntityOperations, only: [create: 1, get: 2, update: 3]
 
