@@ -20,6 +20,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
+  alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
   alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
@@ -27,6 +29,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
@@ -155,6 +158,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     after
       :erlang.trace_pattern(mfa, false, [:local, :call_count])
     end
+  end
+
+  # How many components' registered queries are extracted while the given function runs.
+  defp count_extractions(fun) do
+    count_calls({QueryExtractor, :extract_module_queries, 2}, fun)
   end
 
   # How many times the page windows PLT and the queries PLT are dumped while the given function
@@ -1152,6 +1160,111 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "data layer" do
+    test "a run with no changes extracts no component's queries", %{opts: opts} do
+      run(opts)
+
+      assert count_extractions(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module no page reaches extracts no component's queries", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_extractions(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page extracts no component's queries", %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+
+      assert count_extractions(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a component extracts its queries and no other's", %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule21)
+
+      assert count_extractions(fn -> run(opts) end) == 1
+    end
+
+    # Module14's query is a remote capture of a function of Module13, which is no component.
+    test "an edit of a module a component's capture points at extracts that component's queries",
+         %{opts: opts} do
+      run(opts)
+
+      %{components: components} = cache_state().data_layer
+
+      assert ComponentModule13 in components[ComponentModule14].targets
+
+      num_pointing =
+        Enum.count(components, fn {_module, queries} -> ComponentModule13 in queries.targets end)
+
+      fake_edit(ComponentModule13)
+
+      assert count_extractions(fn -> run(opts) end) == num_pointing
+    end
+
+    # The extractor replays a query whose entity type is an argument over every entity type, and
+    # the query validations read what the entity types declare.
+    test "an edit of an entity type extracts every component's queries", %{opts: opts} do
+      run(opts)
+      num_components = map_size(cache_state().data_layer.components)
+
+      fake_edit(Entity2)
+
+      assert count_extractions(fn -> run(opts) end) == num_components
+    end
+
+    # Page 8 reaches Module21. Taken out of the graph, Module21 is built into it again by the walk
+    # an edit of the page starts, as a component a page starts reaching is.
+    test "a component a walk builds into the graph has its queries extracted", %{opts: opts} do
+      run(opts)
+
+      take_out_of_graph(ComponentModule21)
+      fake_edit(PageModule8)
+
+      assert count_extractions(fn -> run(opts) end) == 1
+      assert ComponentModule21 in CallGraph.modules(cache_state().call_graph)
+    end
+
+    test "the kept component queries after an edit are the ones a cold compile extracts", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(ComponentModule21)
+      run(opts)
+
+      components = cache_state().data_layer.components
+
+      start_cold(opts)
+      run(opts)
+
+      assert cache_state().data_layer.components == components
+    end
+
+    test "a removed component is forgotten from the kept component queries", %{opts: opts} do
+      run(opts)
+
+      %{
+        data_layer: data_layer,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = cache_state()
+
+      removed_entry = %{prop_params: [], targets: [], terms: []}
+      components = Map.put(data_layer.components, :removed_component, removed_entry)
+      Cache.put_data_layer(%{data_layer | components: components})
+
+      module_infos
+      |> Map.put(:removed_component, %{component?: true, digest: "removed"})
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_component))
+
+      run(opts)
+
+      refute Map.has_key?(cache_state().data_layer.components, :removed_component)
+    end
+
     test "a compile keeps what the data layer derived", %{opts: opts} do
       run(opts)
 
@@ -1236,11 +1349,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # A builder's argument names bind the consuming component's like-named props, so a component
     # whose capture names a prop it does not declare fails the build once a page reaches it. The
     # page is made to reach one through an edge in the kept graph, and the edit is of a module no
-    # page reaches, so the patch leaves that edge in place.
+    # page reaches, so the patch leaves that edge in place. The component has no kept entry, as one
+    # new to the build: a kept entry is validated with its queries, when they are extracted again.
     test "refuses a component a page reaches whose query binds a prop it does not declare", %{
       opts: opts
     } do
       run(opts)
+
+      data_layer = cache_state().data_layer
+      components = Map.delete(data_layer.components, ComponentModule11)
+      Cache.put_data_layer(%{data_layer | components: components})
 
       CallGraph.add_edge(
         cache_state().call_graph,
@@ -1701,9 +1819,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Code.ensure_loaded!(IR)
 
-      # The query extractor reads a component's IR of its own, for the data layer the edit has it
-      # derive again (see Hologram.Compiler.QueryExtractor); the compile builds none into the IR
-      # PLT.
+      # The query extractor reads a component's IR of its own (see
+      # Hologram.Compiler.QueryExtractor), and the edit reaches no component, so no component's
+      # queries are extracted again.
       extractor_mfa = {QueryExtractor, :module_funs, 1}
       :erlang.trace_pattern(extractor_mfa, true, [:local, :call_count])
 
@@ -1720,7 +1838,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The edit was seen: the digest read from the beam replaced the faked one.
       assert cache_state().module_infos[@unreached_module].digest != "edited"
 
-      assert count == extractor_count
+      assert count == 0
+      assert extractor_count == 0
       refute PLT.member?(cache_state().ir_plt, @unreached_module)
       refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end
