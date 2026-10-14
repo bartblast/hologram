@@ -1249,6 +1249,67 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().data_layer.components == components
     end
 
+    test "an edit of a module no page reaches writes neither data layer dump", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+    end
+
+    # The runtime bundle carries the data layer's statement, so a statement derived again would be
+    # compared with the one the bundle was built with.
+    test "an edit of a module no page reaches keeps the data layer and the runtime bundle", %{
+      opts: opts
+    } do
+      run(opts)
+      data_layer = cache_state().data_layer
+
+      fake_edit(@unreached_module)
+
+      assert count_built_bundles(fn -> run(opts) end) == 0
+      assert cache_state().data_layer == data_layer
+    end
+
+    test "an edit of a component derives the data layer again", %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule21)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "an edit of an entity type derives the data layer again", %{opts: opts} do
+      run(opts)
+      fake_edit(Entity2)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a kept data layer whose dump is gone is derived again", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.page_windows_plt_dump_file_name())
+      |> File.rm!()
+
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a run with no changes judges no operation ask", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({Compiler, :validate_operations!, 4}, fn -> run(opts) end) == 0
+    end
+
+    # The data layer is kept, and the edited module may spell an operation all the same.
+    test "an edit of a module no page reaches judges the operation asks", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_calls({Compiler, :validate_operations!, 4}, fn -> run(opts) end) == 1
+    end
+
     test "an edit of a module no page reaches lists no page's reach", %{opts: opts} do
       run(opts)
       fake_edit(@unreached_module)
@@ -1309,8 +1370,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.put(:removed_page, %{digest: "removed", page?: true})
       |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_page))
 
-      run(opts)
-
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
       refute Map.has_key?(cache_state().data_layer.pages, :removed_page)
       assert map_size(cache_state().data_layer.pages) == @num_pages
     end

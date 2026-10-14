@@ -390,10 +390,22 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       runtime_kept? = runtime_kept?(cache.runtime, graph_unchanged?, module_digests_diff)
 
-      # What the data layer derives from the build (see derive_data_layer!/1) is kept while no
-      # editable module changed: its dumps are on disk from the compile that derived it, and the
-      # data layer state holds what it rendered into the runtime bundle.
-      data_layer_kept? = data_layer_kept?(cache.data_layer, module_digests_diff, opts)
+      # What the data layer derives from the build (see derive_data_layer!/1) is kept whole while
+      # the edit touches nothing it reads (see data_layer_kept?/3): its dumps are on disk from the
+      # compile that derived it, and the data layer state holds what it rendered into the runtime
+      # bundle.
+      data_layer_kept? =
+        data_layer_kept?(
+          cache.data_layer,
+          %{
+            data_model_changed?: data_model_changed?,
+            kept_page_reach: kept_page_reach,
+            pages_to_list: pages_to_list,
+            stale_components: stale_components,
+            tracked_component_modules: tracked_component_modules
+          },
+          opts
+        )
 
       # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
       # every page it lists again.
@@ -410,6 +422,25 @@ defmodule Mix.Tasks.Compile.Hologram do
           ir_plt
         )
 
+      # Listed once, from the module info PLT this compile brought in line with the beams: no beam
+      # is read and no module is asked.
+      entity_types = Reflection.list_entities(new_module_info_plt)
+
+      # A check spells the entity operation it asks about, and a name no allow line on any entity
+      # type declares is a typo or a rename - refused here rather than answered no forever. Judged
+      # on every compile whose diff is not empty, whether or not the data layer is kept: an edit of
+      # a module no page uses can add an ask. And on every compile that keeps no data layer, since
+      # no compile judged the asks for it. Asked of the UNSPLIT graph: the ask functions are
+      # hand-ported, so the runtime graph no longer holds the vertices whose callers this reads.
+      # Before the IR prune, which drops the IR this builds for a caller no page reaches.
+      if cache.data_layer == nil or
+           module_digests_diff != %{added_modules: [], edited_modules: [], removed_modules: []} do
+        Compiler.validate_operations!(entity_types, call_graph, ir_plt,
+          modules:
+            operation_ask_modules(cache.data_layer, module_digests_diff, data_model_changed?)
+        )
+      end
+
       # The statement the runtime script sets the client's data layer constants with: rendered by
       # the derivation, or kept with the runtime bundle it was rendered into.
       sync_constants_js =
@@ -417,11 +448,9 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph: call_graph,
           call_graph_for_runtime: call_graph_for_runtime,
           component_modules: component_modules,
-          data_model_changed?: data_model_changed?,
-          ir_plt: ir_plt,
+          entity_types: entity_types,
           kept_data_layer: cache.data_layer,
           kept_page_reach: kept_page_reach,
-          module_digests_diff: module_digests_diff,
           module_info_plt: new_module_info_plt,
           opts: opts,
           pages_to_list: pages_to_list,
@@ -1110,23 +1139,40 @@ defmodule Mix.Tasks.Compile.Hologram do
     PLT.stop(chunk_registry_plt)
   end
 
-  # The data layer's derivations are kept while no editable module changed since the compile that
-  # derived them, which must have finished: the runtime state is the proof, since a compile that
-  # fails forgets it (see keep_runtime_state/3), and the dumps it wrote must still be there.
-  defp data_layer_kept?(nil, _module_digests_diff, _opts), do: false
-
-  defp data_layer_kept?(_kept_data_layer, module_digests_diff, opts) do
+  # Whether the dumps the data layer derivation writes are in the build dir.
+  defp data_layer_dumps_exist?(opts) do
     dump_file_names = [
       Reflection.page_windows_plt_dump_file_name(),
       Reflection.queries_plt_dump_file_name()
     ]
 
-    module_digests_diff == %{added_modules: [], edited_modules: [], removed_modules: []} and
-      Enum.all?(dump_file_names, fn dump_file_name ->
-        opts[:build_dir]
-        |> Path.join(dump_file_name)
-        |> File.exists?()
-      end)
+    Enum.all?(dump_file_names, fn dump_file_name ->
+      opts[:build_dir]
+      |> Path.join(dump_file_name)
+      |> File.exists?()
+    end)
+  end
+
+  # The data layer is kept whole when the edit touches nothing it reads: no page's reach to list
+  # again, no page gone, no component's queries stale, no kept component gone, the vocabulary the
+  # queries are judged against unchanged, and its dumps on disk from the compile that derived it,
+  # which put the state only once both were written. A page is gone when the kept reach holds a
+  # page the build no longer has, and a component when a kept entry is no longer one of the tracked
+  # components.
+  defp data_layer_kept?(nil, _parts, _opts), do: false
+
+  defp data_layer_kept?(kept_data_layer, parts, opts) do
+    tracked_component_set = MapSet.new(parts.tracked_component_modules)
+
+    kept_components_tracked? =
+      kept_data_layer.components
+      |> Map.keys()
+      |> Enum.all?(&MapSet.member?(tracked_component_set, &1))
+
+    parts.pages_to_list == [] and parts.stale_components == [] and
+      not parts.data_model_changed? and
+      map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
+      kept_components_tracked? and data_layer_dumps_exist?(opts)
   end
 
   # What the data layer derives from the build, validated and dumped for the running app: the
@@ -1149,31 +1195,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{
       call_graph: call_graph,
       call_graph_for_runtime: call_graph_for_runtime,
+      entity_types: entity_types,
       module_info_plt: module_info_plt,
       opts: opts,
       pages_to_list: pages_to_list
     } = context
 
     listed_reach = Compiler.list_reach_by_page(pages_to_list, call_graph_for_runtime)
-
-    # Listed once, from the module info PLT this compile brought in line with the beams: no beam
-    # is read and no module is asked.
-    entity_types = Reflection.list_entities(module_info_plt)
-
-    # A check spells the entity operation it asks about, and a name no allow line on any
-    # entity type declares is a typo or a rename - refused here rather than answered no
-    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/1 below: the ask
-    # functions are hand-ported, so the runtime graph no longer holds the vertices whose
-    # callers this reads. Before the IR prune, which drops the IR this builds for a caller no
-    # page reaches.
-    Compiler.validate_operations!(entity_types, call_graph, context.ir_plt,
-      modules:
-        operation_ask_modules(
-          context.kept_data_layer,
-          context.module_digests_diff,
-          context.data_model_changed?
-        )
-    )
 
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
     # bundles are derived from no longer holds the vertex to ask about - while the question is
