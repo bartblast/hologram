@@ -61,6 +61,20 @@ defmodule Hologram.Compiler.CompileInputs do
   end
 
   @doc """
+  Digests the Elixir compile manifest of every loaded application that has one in the given build
+  lib dir, in application name order. Content rather than mtime: the compile task touches the
+  umbrella apps' manifests after every run (see `Mix.Tasks.Compile.Hologram`).
+  """
+  @spec list_manifest_digests(String.t()) :: [{atom, non_neg_integer}]
+  def list_manifest_digests(build_lib_dir) do
+    for app <- Enum.sort(Reflection.list_loaded_otp_apps()),
+        path = Path.join([build_lib_dir, Atom.to_string(app), ".mix", "compile.elixir"]),
+        {:ok, content} <- [File.read(path)] do
+      {app, :erlang.phash2(content)}
+    end
+  end
+
+  @doc """
   Reads the record at the given path, or returns nil when there is none or it is of another version.
   """
   @spec load(String.t()) :: t | nil
@@ -90,17 +104,6 @@ defmodule Hologram.Compiler.CompileInputs do
       |> Compiler.fingerprint_js_inputs(nil)
 
     rest == build(opts) and not Compiler.js_inputs_changed?(js_inputs, js_fingerprints)
-  end
-
-  # The Elixir compile manifest of every loaded application that has one, in application name order,
-  # digested. Content rather than mtime: the compile task touches the umbrella apps' manifests after
-  # every run (see refresh_umbrella_app_manifests/0 there).
-  defp list_manifest_digests(build_lib_dir) do
-    for app <- Enum.sort(Reflection.list_loaded_otp_apps()),
-        path = Path.join([build_lib_dir, Atom.to_string(app), ".mix", "compile.elixir"]),
-        {:ok, content} <- [File.read(path)] do
-      {app, :erlang.phash2(content)}
-    end
   end
 
   defp list_static_files(static_dir) do

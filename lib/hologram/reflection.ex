@@ -54,6 +54,8 @@ defmodule Hologram.Reflection do
 
   @compiler_lock_file_name "hologram_compiler.lock"
 
+  @data_model_inputs_dump_file_name "data_model_inputs.bin"
+
   @ignored_modules [Kernel.SpecialForms]
 
   @module_info_plt_dump_file_name "module_info.plt"
@@ -335,6 +337,14 @@ defmodule Hologram.Reflection do
   @spec component?(term) :: boolean
   def component?(term) do
     elixir_module?(term) && has_function?(term, :__is_hologram_component__, 0)
+  end
+
+  @doc """
+  Returns the data model inputs dump file name.
+  """
+  @spec data_model_inputs_dump_file_name() :: String.t()
+  def data_model_inputs_dump_file_name do
+    @data_model_inputs_dump_file_name
   end
 
   @doc """
@@ -710,8 +720,9 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists the Hologram entity type modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  Lists the Hologram entity type modules of Hologram and of the loaded OTP applications that depend
+  on it, directly or through other applications, sorted by name: the modules whose beam in an
+  application's ebin directory exports
   `__is_hologram_entity__/0`. The beams are read once each, concurrently, and no module is loaded. A
   module an application's spec names that has no beam in any of those directories is asked instead
   (see `has_function?/3`), so that an entity type compiled in memory is a type of the model it is
@@ -725,7 +736,7 @@ defmodule Hologram.Reflection do
   @spec list_entities() :: list(module)
   def list_entities do
     entity_types =
-      project_apps()
+      apps_reaching_hologram()
       |> list_modules_exporting_or_declared(:__is_hologram_entity__, 0)
       |> Enum.sort()
 
@@ -812,14 +823,15 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Lists the Hologram global role modules of the loaded OTP applications used by the project (except
-  :hex), sorted by name: the modules whose beam in an application's ebin directory exports
+  Lists the Hologram global role modules of Hologram and of the loaded OTP applications that depend
+  on it, directly or through other applications, sorted by name: the modules whose beam in an
+  application's ebin directory exports
   `__is_hologram_role__/0`, and the ones an application's spec names with no beam there that export
   it. The beams and the specs are read as `list_entities/0` reads them.
   """
   @spec list_roles() :: list(module)
   def list_roles do
-    project_apps()
+    apps_reaching_hologram()
     |> list_modules_exporting_or_declared(:__is_hologram_role__, 0)
     |> Enum.sort()
   end
@@ -1291,6 +1303,20 @@ defmodule Hologram.Reflection do
     Enum.sort(apps)
   end
 
+  # Hologram and the loaded OTP applications that depend on it, directly or through other
+  # applications, in project_apps/0 order. A module that declares an entity type or a role uses
+  # Hologram, so its application reaches it: the other applications hold none, and their beams need
+  # not be read. Grown from Hologram until a pass over the applications adds none.
+  #
+  # A list rather than a MapSet: the compiler folds a MapSet built from a literal into a plain map,
+  # which Dialyzer refuses where the opaque type is expected, and a project has few applications.
+  defp apps_reaching_hologram do
+    apps = project_apps()
+    deps_by_app = Map.new(apps, &{&1, Application.spec(&1, :applications) || []})
+
+    grow_apps_reaching_hologram(apps, deps_by_app, [:hologram])
+  end
+
   defp beam_mtime_and_size(beam_path) when is_list(beam_path) do
     %File.Stat{mtime: mtime, size: size} = File.stat!(beam_path, time: :posix)
     {mtime, size}
@@ -1350,6 +1376,19 @@ defmodule Hologram.Reflection do
     beam_paths
     |> TaskUtils.map_concurrently(&module_exporting(&1, function, arity))
     |> Enum.reject(&is_nil/1)
+  end
+
+  defp grow_apps_reaching_hologram(apps, deps_by_app, reaching) do
+    grown =
+      Enum.filter(apps, fn app ->
+        app in reaching or Enum.any?(deps_by_app[app], &(&1 in reaching))
+      end)
+
+    if grown == reaching do
+      grown
+    else
+      grow_apps_reaching_hologram(apps, deps_by_app, grown)
+    end
   end
 
   defp include_app_elixir_modules(app, modules) do

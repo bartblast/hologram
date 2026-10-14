@@ -11,6 +11,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
+  alias Hologram.Compiler.DataModelInputs
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
@@ -49,6 +50,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @tmp_dir Path.join(@test_dir, "tmp")
 
   @compile_inputs_path Path.join(@build_dir, Reflection.compile_inputs_dump_file_name())
+  @data_model_inputs_path Path.join(@build_dir, Reflection.data_model_inputs_dump_file_name())
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
 
@@ -335,8 +337,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # Registering a fake app changes the data model for as long as it is loaded, and the compile
   # task's validation caches what it resolves against that model - so the caches go with the app.
   # Unloading alone leaves every later test reading a grant store resolved against the fixture.
+  #
+  # The spec says the app depends on Hologram, as a real one that holds a model does: the entity
+  # and role listings read only the applications that reach it.
   defp load_entity_fixture_app(app, modules) do
-    :ok = :application.load({:application, app, [modules: modules]})
+    :ok = :application.load({:application, app, [applications: [:hologram], modules: modules]})
 
     on_exit(fn ->
       :application.unload(app)
@@ -882,7 +887,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "compiler skipping" do
     setup do
-      on_exit(fn -> System.put_env("HOLOGRAM_START", "1") end)
+      # A validation with Hologram off fills the model caches from the beams.
+      on_exit(fn ->
+        System.put_env("HOLOGRAM_START", "1")
+        RoleGrant.reset_resolution_cache()
+        Model.reset_caches()
+        Policy.reset_model_facts_cache()
+      end)
     end
 
     test "skips compilation when HOLOGRAM_START env var is not set", %{opts: opts} do
@@ -901,6 +912,58 @@ defmodule Mix.Tasks.Compile.HologramTest do
       System.put_env("HOLOGRAM_START", "1")
 
       assert run(opts) == :ok
+    end
+
+    test "records the manifests a passing validation was made against when compilation is skipped",
+         %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      assert run(opts) == :noop
+
+      assert DataModelInputs.load(@data_model_inputs_path) == DataModelInputs.build(opts)
+    end
+
+    test "validates nothing for language server builds", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      defmodule LanguageServerInvalidEntityFixture do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      load_entity_fixture_app(:hologram_language_server_invalid_entity_fixture_app, [
+        LanguageServerInvalidEntityFixture
+      ])
+
+      assert count_calls({Reflection, :list_entities, 0}, fn ->
+               assert run(ls_opts) == :noop
+             end) == 0
+    end
+
+    test "validates nothing when no manifest moved since the last validation and compilation is skipped",
+         %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      # The record of a validation against the manifests as they are now.
+      assert run(opts) == :noop
+
+      # An invalid entity type in an application with no manifest: a listing of the beams would
+      # find it, the manifests do not see it. So a run that validates refuses it, and a run that
+      # skips does not look.
+      defmodule UnseenInvalidEntityFixture do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      load_entity_fixture_app(:hologram_unseen_invalid_entity_fixture_app, [
+        UnseenInvalidEntityFixture
+      ])
+
+      assert count_calls({Reflection, :list_entities, 0}, fn ->
+               assert run(opts) == :noop
+             end) == 0
     end
 
     test "validates the data model even when compilation is skipped", %{opts: opts} do
@@ -924,24 +987,54 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
-    test "validates the data model of a language server build", %{opts: opts} do
-      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+    test "records nothing when the data model fails validation and compilation is skipped",
+         %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
 
-      defmodule LanguageServerInvalidEntityFixture do
+      defmodule UnrecordedInvalidEntityFixture do
         use Hologram.Entity
 
         relationship :owner, NonExistent.Module
       end
 
-      load_entity_fixture_app(:hologram_language_server_invalid_entity_fixture_app, [
-        LanguageServerInvalidEntityFixture
+      load_entity_fixture_app(:hologram_unrecorded_invalid_entity_fixture_app, [
+        UnrecordedInvalidEntityFixture
       ])
 
       expected_msg =
-        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.LanguageServerInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.UnrecordedInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        run(ls_opts)
+        run(opts)
+      end
+
+      refute File.exists?(@data_model_inputs_path)
+    end
+
+    test "validates the data model again when a manifest moved and compilation is skipped",
+         %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      # The record of a validation against the manifests as they are now.
+      assert run(opts) == :noop
+
+      defmodule RevalidatedInvalidEntityFixture do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      load_entity_fixture_app(:hologram_revalidated_invalid_entity_fixture_app, [
+        RevalidatedInvalidEntityFixture
+      ])
+
+      fake_recompile()
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.RevalidatedInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        run(opts)
       end
     end
 

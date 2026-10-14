@@ -62,39 +62,57 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">nothing changed, same VM</td>
-    <td style="white-space: nowrap; text-align: right">12.59</td>
-    <td style="white-space: nowrap; text-align: right">79.41 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.37%</td>
-    <td style="white-space: nowrap; text-align: right">78.54 ms</td>
-    <td style="white-space: nowrap; text-align: right">104.75 ms</td>
+    <td style="white-space: nowrap">nothing changed, Hologram off</td>
+    <td style="white-space: nowrap; text-align: right">1393.07</td>
+    <td style="white-space: nowrap; text-align: right">0.72 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;34.07%</td>
+    <td style="white-space: nowrap; text-align: right">0.61 ms</td>
+    <td style="white-space: nowrap; text-align: right">1.53 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">nothing changed, new VM</td>
-    <td style="white-space: nowrap; text-align: right">5.45</td>
-    <td style="white-space: nowrap; text-align: right">183.65 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.84%</td>
-    <td style="white-space: nowrap; text-align: right">180.65 ms</td>
-    <td style="white-space: nowrap; text-align: right">233.14 ms</td>
+    <td style="white-space: nowrap; text-align: right">90.74</td>
+    <td style="white-space: nowrap; text-align: right">11.02 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;14.79%</td>
+    <td style="white-space: nowrap; text-align: right">11.07 ms</td>
+    <td style="white-space: nowrap; text-align: right">14.53 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">a module changed, Hologram off</td>
+    <td style="white-space: nowrap; text-align: right">22.86</td>
+    <td style="white-space: nowrap; text-align: right">43.75 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;45.65%</td>
+    <td style="white-space: nowrap; text-align: right">38.96 ms</td>
+    <td style="white-space: nowrap; text-align: right">182.59 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">nothing changed, same VM</td>
+    <td style="white-space: nowrap; text-align: right">12.02</td>
+    <td style="white-space: nowrap; text-align: right">83.21 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.40%</td>
+    <td style="white-space: nowrap; text-align: right">82.01 ms</td>
+    <td style="white-space: nowrap; text-align: right">118.97 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">one page edited, same VM</td>
-    <td style="white-space: nowrap; text-align: right">2.68</td>
-    <td style="white-space: nowrap; text-align: right">372.92 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.60%</td>
-    <td style="white-space: nowrap; text-align: right">370.25 ms</td>
-    <td style="white-space: nowrap; text-align: right">398.45 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.66</td>
+    <td style="white-space: nowrap; text-align: right">376.64 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.15%</td>
+    <td style="white-space: nowrap; text-align: right">376.00 ms</td>
+    <td style="white-space: nowrap; text-align: right">409.57 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">cold</td>
-    <td style="white-space: nowrap; text-align: right">0.37</td>
-    <td style="white-space: nowrap; text-align: right">2680.35 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;10.46%</td>
-    <td style="white-space: nowrap; text-align: right">2553.84 ms</td>
-    <td style="white-space: nowrap; text-align: right">3097.89 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.38</td>
+    <td style="white-space: nowrap; text-align: right">2665.75 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.22%</td>
+    <td style="white-space: nowrap; text-align: right">2664.02 ms</td>
+    <td style="white-space: nowrap; text-align: right">2805.18 ms</td>
   </tr>
 
 </table>
@@ -108,27 +126,39 @@ Run Time Comparison
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Slower</th>
   <tr>
-    <td style="white-space: nowrap">nothing changed, same VM</td>
-    <td style="white-space: nowrap;text-align: right">12.59</td>
+    <td style="white-space: nowrap">nothing changed, Hologram off</td>
+    <td style="white-space: nowrap;text-align: right">1393.07</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">nothing changed, new VM</td>
-    <td style="white-space: nowrap; text-align: right">5.45</td>
-    <td style="white-space: nowrap; text-align: right">2.31x</td>
+    <td style="white-space: nowrap; text-align: right">90.74</td>
+    <td style="white-space: nowrap; text-align: right">15.35x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">a module changed, Hologram off</td>
+    <td style="white-space: nowrap; text-align: right">22.86</td>
+    <td style="white-space: nowrap; text-align: right">60.95x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">nothing changed, same VM</td>
+    <td style="white-space: nowrap; text-align: right">12.02</td>
+    <td style="white-space: nowrap; text-align: right">115.92x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">one page edited, same VM</td>
-    <td style="white-space: nowrap; text-align: right">2.68</td>
-    <td style="white-space: nowrap; text-align: right">4.7x</td>
+    <td style="white-space: nowrap; text-align: right">2.66</td>
+    <td style="white-space: nowrap; text-align: right">524.69x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">cold</td>
-    <td style="white-space: nowrap; text-align: right">0.37</td>
-    <td style="white-space: nowrap; text-align: right">33.76x</td>
+    <td style="white-space: nowrap; text-align: right">0.38</td>
+    <td style="white-space: nowrap; text-align: right">3713.57x</td>
   </tr>
 
 </table>
