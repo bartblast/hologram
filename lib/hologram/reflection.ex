@@ -1307,11 +1307,14 @@ defmodule Hologram.Reflection do
   # applications, in project_apps/0 order. A module that declares an entity type or a role uses
   # Hologram, so its application reaches it: the other applications hold none, and their beams need
   # not be read. Grown from Hologram until a pass over the applications adds none.
+  #
+  # A list rather than a MapSet: the compiler folds a MapSet built from a literal into a plain map,
+  # which Dialyzer refuses where the opaque type is expected, and a project has few applications.
   defp apps_reaching_hologram do
     apps = project_apps()
     deps_by_app = Map.new(apps, &{&1, Application.spec(&1, :applications) || []})
 
-    grow_apps_reaching_hologram(apps, deps_by_app, MapSet.new([:hologram]))
+    grow_apps_reaching_hologram(apps, deps_by_app, [:hologram])
   end
 
   defp beam_mtime_and_size(beam_path) when is_list(beam_path) do
@@ -1377,16 +1380,12 @@ defmodule Hologram.Reflection do
 
   defp grow_apps_reaching_hologram(apps, deps_by_app, reaching) do
     grown =
-      Enum.reduce(apps, reaching, fn app, acc ->
-        if Enum.any?(deps_by_app[app], &MapSet.member?(acc, &1)) do
-          MapSet.put(acc, app)
-        else
-          acc
-        end
+      Enum.filter(apps, fn app ->
+        app in reaching or Enum.any?(deps_by_app[app], &(&1 in reaching))
       end)
 
-    if MapSet.size(grown) == MapSet.size(reaching) do
-      Enum.filter(apps, &MapSet.member?(reaching, &1))
+    if grown == reaching do
+      grown
     else
       grow_apps_reaching_hologram(apps, deps_by_app, grown)
     end
