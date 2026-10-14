@@ -676,14 +676,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Collects the registered queries of the given component modules and derives what a running
-  Hologram app holds for them: the registry entries keyed by query content id, the argument names
-  of every parameterized capture keyed by `{module, prop name}`, and the term behind each window
-  keyed by window id.
+  Derives what a running Hologram app holds for the given registered queries of components, as
+  `extract_component_queries/2` extracts them: the registry entries keyed by query content id, the
+  argument names of every parameterized capture keyed by `{module, prop name}`, and the term behind
+  each window keyed by window id.
 
-  The component modules are every component of the build rather than the ones pages reach, because
-  what reads the result is the renderer and the sync layer, which answer for any component that
-  renders.
+  The components are every component of the build rather than the ones pages reach, because what
+  reads the result is the renderer and the sync layer, which answer for any component that renders.
 
   Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
   lines - default deny makes it statically dead, returning no rows when it is the query's root and
@@ -697,14 +696,17 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
   """
-  @spec build_queries(list(module), list(module)) :: %{
+  @spec build_queries(%{module => component_queries}, list(module)) :: %{
           entries: %{String.t() => %{atom => any}},
           prop_params: %{{module, atom} => list(atom | nil)},
           windows: %{String.t() => Query.t()}
         }
-  def build_queries(component_modules, entity_types) do
+  def build_queries(component_queries, entity_types) do
+    # In module order, so that the registry and the first refusal do not depend on the map's order.
     module_queries =
-      Enum.map(component_modules, &{&1, QueryExtractor.extract_module_queries(&1, entity_types)})
+      component_queries
+      |> Enum.map(fn {module, queries} -> {module, queries.terms} end)
+      |> Enum.sort()
 
     Enum.each(module_queries, &validate_readable_queries!/1)
     Enum.each(module_queries, &validate_client_evaluable_queries!/1)
@@ -718,7 +720,7 @@ defmodule Hologram.Compiler do
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
       |> put_grants_window(entity_types)
 
-    %{entries: entries, prop_params: prop_params_index(component_modules), windows: windows}
+    %{entries: entries, prop_params: prop_params_index(component_queries), windows: windows}
   end
 
   @doc """
@@ -3179,10 +3181,9 @@ defmodule Hologram.Compiler do
   # The same params `prop_params/1` collects for the bundle, keyed by the pair a renderer asks
   # about rather than by module - the bundle ships one entry per component and reads it whole,
   # while a render looks up one prop of one component at a time.
-  defp prop_params_index(component_modules) do
-    component_modules
-    |> prop_params()
-    |> Enum.flat_map(fn {module, params} ->
+  defp prop_params_index(component_queries) do
+    component_queries
+    |> Enum.flat_map(fn {module, %{prop_params: params}} ->
       Enum.map(params, fn {prop_name, param_names} -> {{module, prop_name}, param_names} end)
     end)
     |> Map.new()

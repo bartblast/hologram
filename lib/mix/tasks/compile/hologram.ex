@@ -1167,6 +1167,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # the first boot, and a release starts without running the extractor at all.
     {queries_plt, queries_plt_dump_path} =
       context.component_modules
+      |> Compiler.extract_component_queries(entity_types)
       |> Compiler.build_queries(entity_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 

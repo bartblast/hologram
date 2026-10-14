@@ -1276,7 +1276,10 @@ defmodule Hologram.CompilerTest do
     test "collects the entries, prop params and windows of the given components", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1, ComponentModule11], entity_types)
+      component_queries =
+        extract_component_queries([QueryExtractorModule1, ComponentModule11], entity_types)
+
+      queries = build_queries(component_queries, entity_types)
 
       module_1_term =
         Entity2
@@ -1300,7 +1303,9 @@ defmodule Hologram.CompilerTest do
     test "registers the grants window beside the windows the queries download", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1], entity_types)
+      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      queries = build_queries(component_queries, entity_types)
+
       grants_window = Auth.grants_window()
 
       assert queries.windows[Registry.id(grants_window)] == grants_window
@@ -1310,7 +1315,8 @@ defmodule Hologram.CompilerTest do
     test "registers no grants window when the given entity types hold no role grant store", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1], entity_types -- [RoleGrant])
+      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      queries = build_queries(component_queries, entity_types -- [RoleGrant])
 
       refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
     end
@@ -1318,14 +1324,16 @@ defmodule Hologram.CompilerTest do
     test "leaves out a component declaring no parameterized capture", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1], entity_types)
+      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      queries = build_queries(component_queries, entity_types)
 
       assert queries.prop_params == %{}
     end
 
     test "collects a registered query reading a type with server-only attributes it does not reference",
          %{entity_types: entity_types} do
-      queries = build_queries([ComponentModule20], entity_types)
+      component_queries = extract_component_queries([ComponentModule20], entity_types)
+      queries = build_queries(component_queries, entity_types)
 
       assert map_size(queries.entries) == 1
     end
@@ -1338,8 +1346,10 @@ defmodule Hologram.CompilerTest do
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny returns no rows to any session. Add allow lines, or drop the query."
 
+      component_queries = extract_component_queries([ComponentModule15], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule15], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1351,8 +1361,10 @@ defmodule Hologram.CompilerTest do
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
 
+      component_queries = extract_component_queries([ComponentModule16], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule16], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1365,8 +1377,10 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
+      component_queries = extract_component_queries([ComponentModule17], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule17], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1379,8 +1393,10 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
+      component_queries = extract_component_queries([ComponentModule18], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule18], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1394,8 +1410,10 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
+      component_queries = extract_component_queries([ComponentModule19], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule19], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1408,29 +1426,23 @@ defmodule Hologram.CompilerTest do
           "tiers, so it cannot claim another. Drop trust(), or read through the backend API in " <>
           "a command."
 
+      component_queries = extract_component_queries([ComponentModule28], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule28], entity_types)
-      end
-    end
-
-    # The refusal is the query stage's rather than a validation's - an include sub-term cannot
-    # carry the mark at all, so the build never reaches a term to object to.
-    test "raises for a registered query whose include claims the server's authority", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
-          "whole query, includes and all, on the server's authority"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        build_queries([ComponentModule29], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
   end
 
   describe "build_queries_plt/2" do
     test "holds the entries, prop params and windows, and dumps beside the other build artifacts" do
-      queries = build_queries([ComponentModule11], Reflection.list_entities())
+      entity_types = Reflection.list_entities()
+
+      queries =
+        [ComponentModule11]
+        |> extract_component_queries(entity_types)
+        |> build_queries(entity_types)
+
       opts = [build_dir: "/my_build_dir"]
 
       {plt, dump_path} = build_queries_plt(queries, opts)
@@ -4951,6 +4963,8 @@ defmodule Hologram.CompilerTest do
       assert extract_component_queries([], Reflection.list_entities()) == %{}
     end
 
+    # The refusal is the query stage's rather than a validation's - an include sub-term cannot
+    # carry the mark at all, so the extraction never reaches a term to object to.
     test "raises for a capture the extractor refuses", %{entity_types: entity_types} do
       expected_msg =
         "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>

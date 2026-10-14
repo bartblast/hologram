@@ -13,7 +13,9 @@ entity_types = Reflection.list_entities()
 Benchee.run(
   %{
     "build_queries/2" => fn ->
-      Compiler.build_queries(component_modules, entity_types)
+      component_modules
+      |> Compiler.extract_component_queries(entity_types)
+      |> Compiler.build_queries(entity_types)
     end
   },
   formatters: [

@@ -85,7 +85,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # while the extractor evaluates the capture (ArgumentError). The question is whether the build
   # can produce this component's queries at all, not which tier said no.
   defp buildable_queries?(module, entity_types) do
-    Compiler.build_queries([module], entity_types)
+    [module]
+    |> Compiler.extract_component_queries(entity_types)
+    |> Compiler.build_queries(entity_types)
+
     true
   rescue
     ArgumentError -> false
