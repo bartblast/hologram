@@ -14,9 +14,6 @@ on:
 # Sets the ENV `MIX_ENV` to `test` for running tests
 env:
   MIX_ENV: test
-  # TODO: remove once Bandit releases the fix for EEF-CVE-2026-105659 and the test apps' locks
-  # are bumped past 1.12.5.
-  HEX_IGNORE_ADVISORIES: EEF-CVE-2026-105659
 
 permissions:
   contents: read
