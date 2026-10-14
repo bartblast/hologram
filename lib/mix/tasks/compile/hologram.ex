@@ -1118,7 +1118,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       page_modules: page_modules
     } = context
 
-    reach_by_page = Compiler.list_reach_by_page(page_modules, call_graph_for_runtime)
+    listed_reach = Compiler.list_reach_by_page(page_modules, call_graph_for_runtime)
 
     # Listed once, from the module info PLT this compile brought in line with the beams: no beam
     # is read and no module is asked.
@@ -1127,7 +1127,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # A builder's argument names bind the consuming component's like-named declared slots, and
     # a remote capture makes those names a cross-module contract - so a renamed argument fails
     # the build here, every reachable consumer at once, rather than one render at a time.
-    Compiler.validate_slot_bindings!(reach_by_page, module_info_plt)
+    Compiler.validate_slot_bindings!(listed_reach, module_info_plt)
 
     # A check spells the entity operation it asks about, and a name no allow line on any
     # entity type declares is a typo or a rename - refused here rather than answered no
@@ -1157,11 +1157,30 @@ defmodule Mix.Tasks.Compile.Hologram do
         []
       end
 
+    reach_by_page =
+      Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
+
+    reached_components =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+
+    # The components whose queries the data layer keeps: the ones the queries dump holds, and any
+    # a page reaches besides them. In an app the two are one list, since the dump holds every
+    # component of the build. This project's own suite narrows the dump to the components the build
+    # accepts, while its fixture pages reach some it refuses.
+    kept_component_modules =
+      context.component_modules
+      |> Enum.concat(reached_components)
+      |> Enum.uniq()
+
+    component_queries = Compiler.extract_component_queries(kept_component_modules, entity_types)
+
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.
     {page_windows_plt, page_windows_plt_dump_path} =
       reach_by_page
-      |> Compiler.build_page_windows(module_info_plt, permission_checking_pages)
+      |> Compiler.build_page_windows(component_queries, module_info_plt)
       |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
@@ -1171,8 +1190,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     # like the page windows - so the two registered-query validations fail the BUILD rather than
     # the first boot, and a release starts without running the extractor at all.
     {queries_plt, queries_plt_dump_path} =
-      context.component_modules
-      |> Compiler.extract_component_queries(entity_types)
+      component_queries
+      |> Map.take(context.component_modules)
       |> Compiler.build_queries(entity_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
@@ -1183,7 +1202,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # along with the empty-policy clause of Compiler's render_policy/2 that reads it.
     sync_constants =
       Compiler.build_sync_constants(
-        reach_by_page,
+        listed_reach,
         module_info_plt,
         permission_checking_pages != []
       )

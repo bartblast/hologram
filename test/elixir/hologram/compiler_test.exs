@@ -152,6 +152,26 @@ defmodule Hologram.CompilerTest do
     opts
   end
 
+  # The windows of the given pages, derived the way the compile task derives them: each page's reach
+  # on the given graph folded into what the data layer keeps, and the queries of the components the
+  # pages reach.
+  defp derive_page_windows(pages, call_graph, module_info_plt, permission_checking_pages) do
+    reach_by_page =
+      pages
+      |> list_reach_by_page(call_graph)
+      |> build_kept_page_reach(permission_checking_pages, module_info_plt)
+
+    entity_types = Reflection.list_entities(module_info_plt)
+
+    component_queries =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+      |> extract_component_queries(entity_types)
+
+    build_page_windows(reach_by_page, component_queries, module_info_plt)
+  end
+
   # What every page of the test build reaches on the given graph, as the compile task lists it for
   # the data layer.
   defp page_reach(call_graph) do
@@ -991,7 +1011,9 @@ defmodule Hologram.CompilerTest do
 
   describe "build_page_windows/3" do
     setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      [page_windows: build_page_windows(page_reach(call_graph), module_info_plt)]
+      page_windows = derive_page_windows(Reflection.list_pages(), call_graph, module_info_plt, [])
+
+      [page_windows: page_windows]
     end
 
     test "gives a page the window of a component it renders", %{page_windows: page_windows} do
@@ -1024,8 +1046,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule7], call_graph)
-      page_windows = build_page_windows(reach_by_page, module_info_plt, [PageModule7])
+      page_windows =
+        derive_page_windows([PageModule7], call_graph, module_info_plt, [PageModule7])
 
       assert page_windows[PageModule7] == [Registry.id(Auth.grants_window())]
     end
@@ -1040,8 +1062,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      page_windows = build_page_windows(reach_by_page, module_info_plt, [PageModule8])
+      page_windows =
+        derive_page_windows([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert Registry.id(Auth.grants_window()) in page_windows[PageModule8]
       assert length(page_windows[PageModule8]) == 2
@@ -1054,10 +1076,27 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule12], call_graph)
-      page_windows = build_page_windows(reach_by_page, module_info_plt, [PageModule12])
+      page_windows =
+        derive_page_windows([PageModule12], call_graph, module_info_plt, [PageModule12])
 
       assert page_windows[PageModule12] == [Registry.id(Auth.grants_window())]
+    end
+
+    # No user entity type, no grant store: a page checking permissions has nothing to check them
+    # against.
+    test "leaves the grants window out of a checking page when the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      items =
+        module_info_plt
+        |> PLT.get_all()
+        |> Enum.map(fn {module, info} -> {module, Map.put(info, :user_entity?, false)} end)
+
+      plt_without_user_entity = PLT.start(items: items)
+
+      page_windows =
+        derive_page_windows([PageModule7], call_graph, plt_without_user_entity, [PageModule7])
+
+      assert page_windows[PageModule7] == []
     end
   end
 

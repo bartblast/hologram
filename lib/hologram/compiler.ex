@@ -269,8 +269,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the ids of the windows each page downloads, keyed by page module and sorted, from what
-  each page's client code reaches, as `list_reach_by_page/2` lists it. The components among the
-  modules a page reaches are told by the given module info PLT.
+  the data layer keeps of each page's reach (see `build_kept_page_reach/3`) and the registered
+  queries of the components the pages reach (see `extract_component_queries/2`). Nothing is
+  extracted or walked here.
 
   A page's windows are those of every component it can reach, not only the ones a given render
   mounts. A panel that opens on a click is reachable without being rendered, and its rows have to
@@ -280,39 +281,35 @@ defmodule Hologram.Compiler do
   A page reaching no query at all has no windows, and answers with an empty list rather than
   being left out.
 
-  Pages listed in `permission_checking_pages` also download the grants window: what a client
-  evaluates permissions against is grant rows, so a page that checks them on the client needs
-  them held like any other rows it reads. The list is derived apart, from the pages' reach on the
-  call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/2`.
+  A page that checks permissions on the client also downloads the grants window: what a client
+  evaluates permissions against is grant rows, so a page that checks them needs them held like any
+  other rows it reads. Only when the given module info PLT records a user entity type: a data model
+  without one has no grant store, so no page checks permissions against anything.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
-  @spec build_page_windows([{module, page_reach}], PLT.t(), list(module)) ::
+  @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
           %{module => list(String.t())}
-  def build_page_windows(reach_by_page, module_info_plt, permission_checking_pages \\ []) do
-    components_by_page = list_reached_components_by_page(reach_by_page, module_info_plt)
+  def build_page_windows(reach_by_page, component_queries, module_info_plt) do
+    grant_store? = Reflection.user_entity(module_info_plt) != nil
 
-    # Listed once here, from the module info PLT, and handed to every extraction below. The
-    # extractor forks a placeholder entity over this list and re-enters the capture's body once
-    # per candidate, so a fork left to read it for itself reads it once per variant.
-    all_entity_types = Reflection.list_entities(module_info_plt)
-
-    # Each component's queries are extracted once, however many pages reach it.
+    # Each component's window ids are derived once, however many pages reach it.
     window_ids_by_component =
-      components_by_page
-      |> Enum.flat_map(fn {_page_module, component_modules} -> component_modules end)
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
       |> Map.new(fn component_module ->
         window_ids =
-          component_module
-          |> QueryExtractor.extract_module_queries(all_entity_types)
+          component_queries
+          |> Map.fetch!(component_module)
+          |> Map.fetch!(:terms)
           |> Enum.map(&window_id/1)
 
         {component_module, window_ids}
       end)
 
-    Map.new(components_by_page, fn {page_module, component_modules} ->
-      window_ids = Enum.flat_map(component_modules, &Map.fetch!(window_ids_by_component, &1))
+    Map.new(reach_by_page, fn {page_module, reach} ->
+      window_ids = Enum.flat_map(reach.components, &Map.fetch!(window_ids_by_component, &1))
 
       # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
       # is an entity type like any other, so a page listing grants and checking permissions reaches
@@ -322,7 +319,7 @@ defmodule Hologram.Compiler do
       # before its :page marker, rather than arriving with the background set - is one of the
       # two things the modularization work revisits. The other is the policy-baking gate.
       page_window_ids =
-        if page_module in permission_checking_pages do
+        if grant_store? and reach.checks_permissions? do
           [grants_window_id() | window_ids]
         else
           window_ids
