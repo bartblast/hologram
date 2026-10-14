@@ -119,6 +119,23 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "put_boot_facts/0" do
+    test "derives the mapping from the model cache" do
+      mapping = mapping()
+
+      on_exit(fn ->
+        Model.reset_caches()
+        :persistent_term.put(mapping_key(), mapping)
+      end)
+
+      Model.put_facts([Module1], [], nil)
+
+      assert put_boot_facts() == :ok
+
+      assert mapping() == Mapper.derive!([Module1], [])
+    end
+  end
+
   describe "reconciliation_context/0" do
     test "carries the mapping, guard facts, and marker diagnostics" do
       context = reconciliation_context()

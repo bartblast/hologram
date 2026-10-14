@@ -6,6 +6,9 @@ defmodule Hologram.DB.CodecTest do
   alias Hologram.DB.Connection
   alias Hologram.Test.Fixtures.Role.Module1
 
+  # Reaches the server outside the sandbox, for two casts the driver does. Nothing is written.
+  @moduletag :database
+
   @uuid_binary Base.decode16!("0192b1e97a2b7c3d8e4f5a6b7c8d9e0f", case: :lower)
   @uuid_string "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 

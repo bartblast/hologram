@@ -22,6 +22,9 @@ defmodule Hologram.Test.DatabaseCase do
       import Hologram.Commons.TestUtils
       import Hologram.Test.Helpers
 
+      # What a run selects the database tests by: they are the ones that need a server.
+      @moduletag :database
+
       @fixtures_dir Path.join([File.cwd!(), "test", "elixir", "support", "fixtures"])
     end
   end

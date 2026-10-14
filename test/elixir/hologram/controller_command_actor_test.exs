@@ -1,4 +1,6 @@
 defmodule Hologram.ControllerCommandActorTest do
+  # async: false - each test starts the subscription registry, Hologram.PubSub and the tombstone
+  # server under their registered names, which one test on the node can hold at a time.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Controller

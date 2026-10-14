@@ -129,143 +129,16 @@ jobs:
       - name: Check lib project compiles without warnings
         run: mix compile --all-warnings --warnings-as-errors
 
-      # Step: Start the runner image's preinstalled Postgres server (service containers are
-      # Linux-only, so both OSes start the local server and align it with the zero-config
-      # test defaults: localhost:5432, postgres/postgres).
-      - name: Start Postgres (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo systemctl start postgresql.service
-          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
-
-          # Make the server self-report what a stalled query was waiting on: lock waits
-          # name the blocking session, checkpoints show an I/O storm, and any statement
-          # over two seconds logs its true duration - the backend finishes and logs even
-          # when the client has given up on it. Dumped by the failure-only step below.
-          sudo -u postgres psql -c "ALTER SYSTEM SET log_lock_waits = on;"
-          sudo -u postgres psql -c "ALTER SYSTEM SET log_min_duration_statement = 2000;"
-          sudo -u postgres psql -c "ALTER SYSTEM SET log_checkpoints = on;"
-          sudo -u postgres psql -c "SELECT pg_reload_conf();"
-
-      # Step: Sample the runner, so a stalled query can be told apart from a stalled
-      # machine - the st column is CPU stolen by the hypervisor, r is the run queue.
-      # Read by the failure-only step below.
-      - name: Sample runner activity (Linux)
-        if: runner.os == 'Linux'
-        run: nohup vmstat -t 5 > "$RUNNER_TEMP/vmstat.log" 2>&1 &
-
-      # The windows-2022 image preinstalls Postgres 14, below Hologram's Postgres 15 floor
-      # (NULLS NOT DISTINCT index + indnullsnotdistinct introspection) - install 16 instead
-      # of starting the preinstalled service.
-      - name: Start Postgres (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          PGPASSWORD: postgres
-        run: |
-          # Installed from EDB's own installer rather than through Chocolatey: the community
-          # feed rate-limits CI runners and answers "package was not found" while it does,
-          # which no amount of retrying resolves (it outlasted three attempts on 2026-08-14).
-          # The Chocolatey package downloads this same installer, so this removes a feed from
-          # the path rather than a step. The version is pinned so a CI run is reproducible.
-          $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
-          $installer = "$env:RUNNER_TEMP\postgresql-16-windows-x64.exe"
-          $url = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64.exe"
-
-          # EDB publishes no checksum file, so this one was taken from the artifact itself
-          # and corroborated against the checksum the Chocolatey package pins for the same
-          # installer - two parties that fetched it independently agree on it. Nothing else
-          # authenticates what is about to run as administrator: the URL pins a name, not
-          # the bytes served under it.
-          $expectedSha256 = "F4BF0AC4B33471F18AAD7D1D9CC52613003F3A3A612AAE167366BF7F7840B2BC"
-
-          foreach ($attempt in 1..3) {
-            try {
-              Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-            } catch {
-              Write-Host "download attempt $attempt failed: $_"
-
-              # A failed transfer leaves what it managed to write, and those bytes would
-              # fail the checksum below - which is fatal by design, turning a dropped
-              # connection into a failed job. Removing them lets the retry mean something.
-              Remove-Item $installer -Force -ErrorAction SilentlyContinue
-            }
-
-            if (Test-Path $installer) {
-              $sha256 = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
-
-              # Fatal rather than retried: a mismatch means the bytes are not the artifact
-              # this workflow pinned, and downloading them again cannot make them so.
-              if ($sha256 -ne $expectedSha256) {
-                throw "Postgres installer checksum mismatch - expected $expectedSha256, got $sha256"
-              }
-
-              # The installer's exit code is not the signal - it reports on unpacking, not
-              # on the server being usable, so the checks below decide instead.
-              Start-Process -FilePath $installer -Wait -ArgumentList @(
-                "--mode", "unattended",
-                "--unattendedmodeui", "none",
-                "--superpassword", "postgres",
-                "--serverport", "5432",
-                "--disable-components", "stackbuilder"
-              )
-            }
-
-            if (Test-Path $psql) { break }
-
-            if ($attempt -eq 3) {
-              throw "Postgres 16 was not installed after 3 attempts - see the output above"
-            }
-
-            Start-Sleep -Seconds (15 * $attempt)
-          }
-
-          # Installed is not the same as accepting connections: the service registers and
-          # starts on its own schedule, and a query issued in that window fails a job that
-          # only needed to wait. Two-second probes for a minute - a server that has not
-          # answered by then is not slow, it is broken, and the message says so.
-          foreach ($attempt in 1..30) {
-            $reported = & $psql -U postgres -tAc "SHOW server_version_num"
-
-            if ($LASTEXITCODE -eq 0) {
-              $serverVersion = ($reported | Out-String).Trim()
-
-              # Answering is not the same as being ours: the client is 16, but the port is
-              # whatever holds it, and this image ships PostgreSQL 14. A running 14 service
-              # would answer here and the suite would quietly run below Hologram's floor.
-              if ([int]$serverVersion -lt 160000) {
-                throw "port 5432 is served by server_version_num $serverVersion, not the 16 this job installed - another server is holding it"
-              }
-
-              & $psql -U postgres -c "SELECT version();"
-
-              break
-            }
-
-            if ($attempt -eq 30) {
-              throw "Postgres 16 installed but never accepted connections - see the output above"
-            }
-
-            Start-Sleep -Seconds 2
-          }
-
-      # Step: Execute lib Elixir tests, except the compile task tests, which run in
-      # lib_compile_task_tests.
+      # Step: Execute lib Elixir tests, except the ones that run in a job of their own: the
+      # compile task tests (lib_compile_task_tests), the database tests (lib_database_tests)
+      # and the consistency tests (lib_checks). Excluding the database tests also tells the
+      # suite's test helper not to boot the database, so this job needs no server.
       - name: Run lib Elixir tests
-        run: mix test --warnings-as-errors --exclude consistency --exclude compile_task
+        run: mix test --warnings-as-errors --exclude consistency --exclude compile_task --exclude database
 
       # Step: Execute lib JavaScript tests.
       - name: Run lib JavaScript tests
         run: mix test.js
-
-      # Step: On failure, print what the server and the machine were doing - a stalled
-      # query is diagnosable only from this side, because the client's timeout destroys
-      # the evidence when it fires.
-      - name: Dump stall diagnostics (Linux)
-        if: ${{ failure() && runner.os == 'Linux' }}
-        run: |
-          sudo tail -n 300 /var/log/postgresql/postgresql-*-main.log || true
-          tail -n 200 "$RUNNER_TEMP/vmstat.log" || true
 
   lib_compile_task_tests:
     runs-on: ${{ matrix.os }}
@@ -281,6 +154,108 @@ jobs:
       # The module's file is named in the test step rather than selected with
       # --only compile_task: selecting by tag makes ExUnit load every test file of the suite
       # before it excludes the tests in them.
+      #
+      # The tiers must stay in sync with the lib_tests matrix. See the notes on the bounds there.
+      matrix:
+        include:
+          - os: ubuntu-latest
+            elixir: "1.19.5"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "29.0"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.20.0"
+            otp: "29.0"
+            node: "24.13.0"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### LIB CHECKS ###
+
+      # Step: Define how to cache the lib Elixir dependencies.
+      - name: Cache lib Elixir deps
+        id: cache-lib-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-deps
+        with:
+          path: deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Define how to cache the lib Elixir build.
+      - name: Cache lib Elixir build
+        id: cache-lib-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-lib-elixir-build
+        with:
+          path: _build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Download lib Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download lib Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          command: mix deps.get
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download lib JavaScript dependencies.
+      - name: Download lib JavaScript deps
+        uses: nick-fields/retry@v4
+        with:
+          command: cd assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Execute lib compile task tests. The module holds no database test, and
+      # --exclude database tells the suite's test helper not to boot the database, so this job
+      # needs no server.
+      - name: Run lib compile task tests
+        run: mix test --warnings-as-errors --exclude database test/elixir/mix/tasks/compile/hologram_test.exs
+
+  lib_database_tests:
+    runs-on: ${{ matrix.os }}
+    name: Lib Database Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      # The database tests (tagged :database: the modules of DatabaseCase and
+      # ScratchDatabaseCase, and the files tagged by hand) are the only lib tests that need a
+      # Postgres server, so they run in a job of their own and only this job starts one.
+      #
+      # They are selected by the tag alone, which makes ExUnit load every test file of the
+      # suite before it excludes the rest. A list of paths would load fewer, but the other lib
+      # jobs exclude by the same tag, so a database test in a file off such a list would run
+      # in no job and nothing would fail.
       #
       # The tiers must stay in sync with the lib_tests matrix. See the notes on the bounds there.
       matrix:
@@ -389,87 +364,133 @@ jobs:
         if: runner.os == 'Linux'
         run: nohup vmstat -t 5 > "$RUNNER_TEMP/vmstat.log" 2>&1 &
 
+      # Step: Restore Postgres 16's server files on Windows, the folders "Start Postgres
+      # (Windows)" unpacks from EDB's binaries zip on a miss. The key names the version, so a
+      # version change downloads the new zip.
+      - name: Restore Postgres cache (Windows)
+        id: restore-postgres-cache-windows
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@v6
+        with:
+          key: postgres-windows-16.4-1
+          path: ${{ runner.temp }}\pgsql
+
       # The windows-2022 image preinstalls Postgres 14, below Hologram's Postgres 15 floor
-      # (NULLS NOT DISTINCT index + indnullsnotdistinct introspection) - install 16 instead
-      # of starting the preinstalled service.
+      # (NULLS NOT DISTINCT index + indnullsnotdistinct introspection) - run 16 instead of
+      # starting the preinstalled service.
       - name: Start Postgres (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           PGPASSWORD: postgres
         run: |
-          # Installed from EDB's own installer rather than through Chocolatey: the community
-          # feed rate-limits CI runners and answers "package was not found" while it does,
-          # which no amount of retrying resolves (it outlasted three attempts on 2026-08-14).
-          # The Chocolatey package downloads this same installer, so this removes a feed from
-          # the path rather than a step. The version is pinned so a CI run is reproducible.
-          $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
-          $installer = "$env:RUNNER_TEMP\postgresql-16-windows-x64.exe"
-          $url = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64.exe"
+          # The server's files from EDB's binaries zip, then initdb and pg_ctl. EDB's installer
+          # unpacks a full distribution and registers a Windows service, which a test run has
+          # no use for. Downloaded from EDB rather than through Chocolatey: the community feed
+          # rate-limits CI runners and answers "package was not found" while it does, which no
+          # amount of retrying resolves (it outlasted three attempts on 2026-08-14). The
+          # version is pinned so a CI run is reproducible.
+          $pgsql = "$env:RUNNER_TEMP\pgsql"
+          $pgdata = "$env:RUNNER_TEMP\pgdata"
+          $psql = "$pgsql\bin\psql.exe"
+          $zip = "$env:RUNNER_TEMP\postgresql-16-windows-x64-binaries.zip"
+          $url = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64-binaries.zip"
 
-          # EDB publishes no checksum file, so this one was taken from the artifact itself
-          # and corroborated against the checksum the Chocolatey package pins for the same
-          # installer - two parties that fetched it independently agree on it. Nothing else
-          # authenticates what is about to run as administrator: the URL pins a name, not
-          # the bytes served under it.
-          $expectedSha256 = "F4BF0AC4B33471F18AAD7D1D9CC52613003F3A3A612AAE167366BF7F7840B2BC"
+          # EDB publishes no checksum file, so this one was taken from the artifact itself on
+          # 2026-10-14, a download of 338,727,828 bytes. Nothing else authenticates what is
+          # about to run as administrator: the URL pins a name, not the bytes served under it.
+          $expectedSha256 = "3508D8F085BC3980F38211A82E3F31E5FCAE9952105D3DC2F8BE67B64A822BAA"
 
-          foreach ($attempt in 1..3) {
-            try {
-              Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-            } catch {
-              Write-Host "download attempt $attempt failed: $_"
+          function Write-Phase($phase) { Write-Host "$(Get-Date -Format HH:mm:ss) $phase" }
 
-              # A failed transfer leaves what it managed to write, and those bytes would
-              # fail the checksum below - which is fatal by design, turning a dropped
-              # connection into a failed job. Removing them lets the retry mean something.
-              Remove-Item $installer -Force -ErrorAction SilentlyContinue
-            }
+          # The files come from the restore step above while its entry lasts. A miss - a
+          # version change, or an entry evicted after a week unused - downloads the zip.
+          if (Test-Path "$pgsql\bin\pg_ctl.exe") {
+            Write-Phase "server files restored from the cache"
+          } else {
+            Write-Phase "cache miss, downloading the zip"
 
-            if (Test-Path $installer) {
-              $sha256 = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
+            foreach ($attempt in 1..3) {
+              try {
+                Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+              } catch {
+                Write-Host "download attempt $attempt failed: $_"
 
-              # Fatal rather than retried: a mismatch means the bytes are not the artifact
-              # this workflow pinned, and downloading them again cannot make them so.
-              if ($sha256 -ne $expectedSha256) {
-                throw "Postgres installer checksum mismatch - expected $expectedSha256, got $sha256"
+                # A failed transfer leaves what it managed to write, and those bytes would
+                # fail the checksum below - which is fatal by design, turning a dropped
+                # connection into a failed job. Removing them lets the retry mean something.
+                Remove-Item $zip -Force -ErrorAction SilentlyContinue
               }
 
-              # The installer's exit code is not the signal - it reports on unpacking, not
-              # on the server being usable, so the checks below decide instead.
-              Start-Process -FilePath $installer -Wait -ArgumentList @(
-                "--mode", "unattended",
-                "--unattendedmodeui", "none",
-                "--superpassword", "postgres",
-                "--serverport", "5432",
-                "--disable-components", "stackbuilder"
-              )
+              if (Test-Path $zip) { break }
+
+              if ($attempt -eq 3) {
+                throw "the Postgres 16 zip was not downloaded after 3 attempts - see the output above"
+              }
+
+              Start-Sleep -Seconds (15 * $attempt)
             }
 
-            if (Test-Path $psql) { break }
+            $sha256 = (Get-FileHash -Path $zip -Algorithm SHA256).Hash
 
-            if ($attempt -eq 3) {
-              throw "Postgres 16 was not installed after 3 attempts - see the output above"
+            # Fatal rather than retried: a mismatch means the bytes are not the artifact this
+            # workflow pinned, and downloading them again cannot make them so.
+            if ($sha256 -ne $expectedSha256) {
+              throw "Postgres zip checksum mismatch - expected $expectedSha256, got $sha256"
             }
 
-            Start-Sleep -Seconds (15 * $attempt)
+            Write-Phase "unpacking the server's folders"
+
+            # Only what a server needs: the executables with their DLLs, the extensions, and
+            # what initdb reads. They are 119 MB of the archive's 920 MB unpacked - pgAdmin,
+            # the debug symbols, StackBuilder, the headers and the docs stay out of the cache.
+            # Windows' own tar, by its full path: it reads zip archives, and a GNU tar earlier
+            # on the PATH would not.
+            & "$env:SystemRoot\System32\tar.exe" -xf $zip -C $env:RUNNER_TEMP pgsql/bin pgsql/lib pgsql/share
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "unpacking the Postgres zip failed - see the output above"
+            }
+
+            Remove-Item $zip -Force
           }
 
-          # Installed is not the same as accepting connections: the service registers and
-          # starts on its own schedule, and a query issued in that window fails a job that
-          # only needed to wait. Two-second probes for a minute - a server that has not
-          # answered by then is not slow, it is broken, and the message says so.
+          Write-Phase "initdb"
+
+          # A fresh data directory every run, never cached. Trust auth: the suite's
+          # postgres/postgres credentials are accepted as they are.
+          & "$pgsql\bin\initdb.exe" -U postgres --auth=trust -E UTF8 -D $pgdata
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "initdb failed - see the output above"
+          }
+
+          Write-Phase "starting the server"
+
+          # Postgres refuses to run under an administrative account, and the runner's is one:
+          # pg_ctl and initdb start it under a restricted token. A refused start leaves its
+          # reason in the server's log, printed here.
+          & "$pgsql\bin\pg_ctl.exe" -D $pgdata -l "$env:RUNNER_TEMP\pg.log" -o "-p 5432" start -w
+
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content "$env:RUNNER_TEMP\pg.log" -ErrorAction SilentlyContinue
+            throw "Postgres 16 did not start - its log is above"
+          }
+
+          Write-Phase "checking the server"
+
+          # pg_ctl -w returns once the server accepts connections, so the first probe should
+          # answer. The loop stays for the version check: the port is whatever holds it, and
+          # this image ships Postgres 14. A running 14 would answer here and the suite would
+          # quietly run below Hologram's floor.
           foreach ($attempt in 1..30) {
             $reported = & $psql -U postgres -tAc "SHOW server_version_num"
 
             if ($LASTEXITCODE -eq 0) {
               $serverVersion = ($reported | Out-String).Trim()
 
-              # Answering is not the same as being ours: the client is 16, but the port is
-              # whatever holds it, and this image ships PostgreSQL 14. A running 14 service
-              # would answer here and the suite would quietly run below Hologram's floor.
               if ([int]$serverVersion -lt 160000) {
-                throw "port 5432 is served by server_version_num $serverVersion, not the 16 this job installed - another server is holding it"
+                throw "port 5432 is served by server_version_num $serverVersion, not the 16 this job started - another server is holding it"
               }
 
               & $psql -U postgres -c "SELECT version();"
@@ -478,15 +499,36 @@ jobs:
             }
 
             if ($attempt -eq 30) {
-              throw "Postgres 16 installed but never accepted connections - see the output above"
+              throw "Postgres 16 started but never accepted connections - see the output above"
             }
 
             Start-Sleep -Seconds 2
           }
 
-      # Step: Execute lib compile task tests.
-      - name: Run lib compile task tests
-        run: mix test --warnings-as-errors test/elixir/mix/tasks/compile/hologram_test.exs
+          # The database lives for this job alone, so nothing is gained by waiting for the disk
+          # on every commit, and the scratch tier creates and drops a database per test.
+          # Measured on this runner: the tests' serial phase took about 113 s with the three
+          # settings off against about 132 s with the server as installed. The Linux step
+          # does not set them, since the same trial showed no difference there.
+          & $psql -U postgres -c "ALTER SYSTEM SET fsync = off;"
+          & $psql -U postgres -c "ALTER SYSTEM SET synchronous_commit = off;"
+          & $psql -U postgres -c "ALTER SYSTEM SET full_page_writes = off;"
+          & $psql -U postgres -c "SELECT pg_reload_conf();"
+
+          Write-Phase "ready"
+
+      # Step: Save Postgres 16's server files on a cache miss, right after they are unpacked
+      # rather than at the end of the job, so that a run whose tests fail still keeps them.
+      - name: Save Postgres cache (Windows)
+        if: runner.os == 'Windows' && steps.restore-postgres-cache-windows.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          key: postgres-windows-16.4-1
+          path: ${{ runner.temp }}\pgsql
+
+      # Step: Execute lib database tests.
+      - name: Run lib database tests
+        run: mix test --warnings-as-errors --only database
 
       # Step: On failure, print what the server and the machine were doing - a stalled
       # query is diagnosable only from this side, because the client's timeout destroys
@@ -657,43 +699,10 @@ jobs:
       - name: Run lib JavaScript static code analysis with ESLint
         run: mix eslint
 
-      # Step: Start the runner image's preinstalled Postgres server (service containers are
-      # Linux-only, so both OSes start the local server and align it with the zero-config
-      # test defaults: localhost:5432, postgres/postgres).
-      - name: Start Postgres (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo systemctl start postgresql.service
-          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
-
-          # Make the server self-report what a stalled query was waiting on: lock waits
-          # name the blocking session, checkpoints show an I/O storm, and any statement
-          # over two seconds logs its true duration - the backend finishes and logs even
-          # when the client has given up on it. Dumped by the failure-only step below.
-          sudo -u postgres psql -c "ALTER SYSTEM SET log_lock_waits = on;"
-          sudo -u postgres psql -c "ALTER SYSTEM SET log_min_duration_statement = 2000;"
-          sudo -u postgres psql -c "ALTER SYSTEM SET log_checkpoints = on;"
-          sudo -u postgres psql -c "SELECT pg_reload_conf();"
-
-      # Step: Sample the runner, so a stalled query can be told apart from a stalled
-      # machine - the st column is CPU stolen by the hypervisor, r is the run queue.
-      # Read by the failure-only step below.
-      - name: Sample runner activity (Linux)
-        if: runner.os == 'Linux'
-        run: nohup vmstat -t 5 > "$RUNNER_TEMP/vmstat.log" 2>&1 &
-
-      # Step: Execute lib Elixir consistency tests.
+      # Step: Execute lib Elixir consistency tests. --exclude database tells the suite's test
+      # helper not to boot the database, so this job needs no server.
       - name: Run lib Elixir consistency tests
-        run: mix test --warnings-as-errors --only consistency
-
-      # Step: On failure, print what the server and the machine were doing - a stalled
-      # query is diagnosable only from this side, because the client's timeout destroys
-      # the evidence when it fires.
-      - name: Dump stall diagnostics (Linux)
-        if: ${{ failure() && runner.os == 'Linux' }}
-        run: |
-          sudo tail -n 300 /var/log/postgresql/postgresql-*-main.log || true
-          tail -n 200 "$RUNNER_TEMP/vmstat.log" || true
+        run: mix test --warnings-as-errors --only consistency --exclude database
 
   feature_tests:
     runs-on: ubuntu-latest
@@ -900,6 +909,11 @@ jobs:
 
   feature_tests_https:
     runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
     name: Feature Tests over HTTPS on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1016,9 +1030,9 @@ jobs:
 
   cluster_tests:
     runs-on: ubuntu-latest
-    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
-    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
-    # ended, and it is still done long before the longest jobs are.
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
     name: Cluster Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
@@ -1184,9 +1198,9 @@ jobs:
           path: test/cluster/tmp/screenshots
   cowboy_tests:
     runs-on: ubuntu-latest
-    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
-    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
-    # ended, and it is still done long before the longest jobs are.
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
     name: Cowboy Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
@@ -1344,9 +1358,9 @@ jobs:
           path: test/cowboy/tmp/screenshots
   ecosystem_tests:
     runs-on: ubuntu-latest
-    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
-    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
-    # ended, and it is still done long before the longest jobs are.
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
     name: Ecosystem Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
@@ -1504,9 +1518,9 @@ jobs:
           path: test/ecosystem/tmp/screenshots
   umbrella_tests:
     runs-on: ubuntu-latest
-    # Started once the lib checks have ended, so that 18 jobs start together and none waits on
-    # the account's limit of 20 concurrent jobs. Not a dependency: it runs however the checks
-    # ended, and it is still done long before the longest jobs are.
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
     name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}

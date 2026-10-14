@@ -1,4 +1,7 @@
 defmodule Hologram.DB.QueryCacheTest do
+  # async: false - the tests write the query cache's persistent term, shared by the whole node,
+  # and one drops the Hologram schemas, which takes AccessExclusiveLock and deadlocks with row
+  # locks that concurrent sandboxed tests hold until rollback.
   use Hologram.Test.DatabaseCase, async: false
   use Hologram.DB
 

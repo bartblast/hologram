@@ -40,6 +40,8 @@ defmodule Hologram.Test.ScratchDatabaseCase do
       import Hologram.Test.Helpers
       import Hologram.Test.ScratchDatabaseCase
 
+      # What a run selects the database tests by: they are the ones that need a server.
+      @moduletag :database
       @moduletag :scratch_database
     end
   end
