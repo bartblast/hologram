@@ -49,8 +49,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       the beams against.
 
     * the compile state dump - the after picture: what each page, the runtime bundle and the
-      chunk bundles were built from, the pages still to build and what the compile derived for the
-      bundles. The next compile keeps the bundles the diff does not reach.
+      chunk bundles were built from, the pages still to build, what the compile derived for the
+      bundles and what the data layer was derived from. The next compile keeps the bundles the diff
+      does not reach.
 
     * the page digest dump - the digest of each page's bundle, which the router serves.
 
@@ -365,8 +366,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # What the data layer derives from the build (see derive_data_layer!/1) is kept while no
       # editable module changed: its dumps are on disk from the compile that derived it, and the
-      # runtime state holds what it rendered into the runtime bundle.
-      data_layer_kept? = data_layer_kept?(cache.runtime, module_digests_diff, opts)
+      # data layer state holds what it rendered into the runtime bundle.
+      data_layer_kept? = data_layer_kept?(cache.data_layer, module_digests_diff, opts)
 
       # The chunks' MFAs are listed on the runtime's copy too, and so is every page's reach for the
       # data layer.
@@ -391,7 +392,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph_for_runtime: call_graph_for_runtime,
           component_modules: component_modules,
           ir_plt: ir_plt,
-          kept_runtime: cache.runtime,
+          kept_data_layer: cache.data_layer,
           module_digests_diff: module_digests_diff,
           module_info_plt: new_module_info_plt,
           opts: opts,
@@ -1084,7 +1085,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # fails forgets it (see keep_runtime_state/3), and the dumps it wrote must still be there.
   defp data_layer_kept?(nil, _module_digests_diff, _opts), do: false
 
-  defp data_layer_kept?(_kept_runtime, module_digests_diff, opts) do
+  defp data_layer_kept?(_kept_data_layer, module_digests_diff, opts) do
     dump_file_names = [
       Reflection.page_windows_plt_dump_file_name(),
       Reflection.queries_plt_dump_file_name()
@@ -1098,9 +1099,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       end)
   end
 
-  # What the data layer derives from the build, dumped for the running app and validated: the
+  # What the data layer derives from the build, validated and dumped for the running app: the
   # windows each page downloads, the registered queries of every component, and the statement the
-  # runtime script sets the client's data layer constants with, which is returned.
+  # runtime script sets the client's data layer constants with, which is returned. What it was
+  # derived from is kept with the statement (see Hologram.Compiler.Cache.put_data_layer/1). A
+  # derivation that raises writes no dump and keeps nothing.
   #
   # Every page's reach is listed on the runtime's copy of the graph: without the manually ported
   # MFAs, which is what the bundles are derived from, and with the runtime's MFAs still in it (see
@@ -1134,7 +1137,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     Compiler.validate_operations!(entity_types, call_graph, context.ir_plt,
       modules:
         operation_ask_modules(
-          context.kept_runtime,
+          context.kept_data_layer,
           context.module_digests_diff,
           module_info_plt
         )
@@ -1179,8 +1182,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Compiler.build_page_windows(component_queries, module_info_plt)
       |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
-    dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
-
     # Every component of the build, not the ones pages reach: what reads this is the renderer and
     # the sync layer, which answer for any component that renders. Built here and loaded at boot,
     # like the page windows - so the two registered-query validations fail the BUILD rather than
@@ -1191,24 +1192,36 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Compiler.build_queries(entity_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
-    dump_queries_plt(queries_plt, queries_plt_dump_path)
-
     sync_constants =
       Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
     # its inputs: a policy that changed moves the JavaScript while the constants stay the same (see
     # Hologram.Compiler.build_sync_constants_js/1).
-    Compiler.build_sync_constants_js(sync_constants)
+    sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
+
+    # Both dumps once everything above passed, so that a derivation that raises leaves the dumps of
+    # the last one that did not, which the kept data layer state describes.
+    dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
+    dump_queries_plt(queries_plt, queries_plt_dump_path)
+
+    Cache.put_data_layer(%{
+      components: component_queries,
+      pages: reach_by_page,
+      sync_constants_js: sync_constants_js
+    })
+
+    sync_constants_js
   end
 
-  # The page windows PLT is dumped once, before the batches: the windows are derived from every
-  # page's reach rather than from the bundles.
+  # The page windows PLT is dumped once, after the data layer is validated and before the batches:
+  # the windows are derived from every page's reach rather than from the bundles.
   defp dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path) do
     PLT.dump(page_windows_plt, page_windows_plt_dump_path)
   end
 
-  # The queries PLT is dumped once, before the batches, like the page windows PLT.
+  # The queries PLT is dumped once, after the data layer is validated and before the batches, like
+  # the page windows PLT.
   defp dump_queries_plt(queries_plt, queries_plt_dump_path) do
     PLT.dump(queries_plt, queries_plt_dump_path)
   end
@@ -1555,12 +1568,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   # vocabulary the asks are judged against can have moved, which an edited, added or removed
   # entity, role or policy module does - a removed module's kind cannot be read any more, so a
   # removal counts. Else the added and edited modules alone: the rest were judged by the compile
-  # that kept the runtime, and their IR need not be built again (see
+  # that derived the kept data layer, and their IR need not be built again (see
   # Hologram.Compiler.operation_asks/3). An added or edited module's kind is read from the module
   # info PLT, which holds this compile's entry for it.
   defp operation_ask_modules(nil, _module_digests_diff, _module_info_plt), do: nil
 
-  defp operation_ask_modules(_kept_runtime, module_digests_diff, module_info_plt) do
+  defp operation_ask_modules(_kept_data_layer, module_digests_diff, module_info_plt) do
     %{added_modules: added, edited_modules: edited, removed_modules: removed} =
       module_digests_diff
 
@@ -1576,9 +1589,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       Reflection.policy?(module, module_info_plt)
   end
 
-  # The data layer's statement for the runtime script: the kept runtime's when the data layer is
-  # kept (see data_layer_kept?/3), else the one derived now (see derive_data_layer!/1).
-  defp sync_constants_js(true, context), do: context.kept_runtime.sync_constants_js
+  # The data layer's statement for the runtime script: the kept data layer's when it is kept (see
+  # data_layer_kept?/3), else the one derived now (see derive_data_layer!/1).
+  defp sync_constants_js(true, context), do: context.kept_data_layer.sync_constants_js
 
   defp sync_constants_js(false, context), do: derive_data_layer!(context)
 

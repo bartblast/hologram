@@ -20,11 +20,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
+  alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
+  alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
   # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
@@ -151,6 +154,29 @@ defmodule Mix.Tasks.Compile.HologramTest do
       count
     after
       :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
+  # How many times the page windows PLT and the queries PLT are dumped while the given function
+  # runs, in that order: each goes through a private function of the task, whose local calls are
+  # counted.
+  defp count_data_layer_dumps(fun) do
+    mfas = [
+      {Mix.Tasks.Compile.Hologram, :dump_page_windows_plt, 2},
+      {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2}
+    ]
+
+    Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:local, :call_count]))
+
+    try do
+      fun.()
+
+      Enum.map(mfas, fn mfa ->
+        {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+        count
+      end)
+    after
+      Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:local, :call_count]))
     end
   end
 
@@ -1126,6 +1152,87 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "data layer" do
+    test "a compile keeps what the data layer derived", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer, runtime: runtime} = cache_state()
+
+      assert map_size(data_layer.pages) == @num_pages
+      assert Enum.all?(opts[:component_modules], &Map.has_key?(data_layer.components, &1))
+      assert data_layer.sync_constants_js == runtime.sync_constants_js
+    end
+
+    test "the kept reach of a page names the components it reaches", %{opts: opts} do
+      run(opts)
+
+      assert %{checks_permissions?: false, components: [ComponentModule21, LayoutFixture]} =
+               cache_state().data_layer.pages[PageModule8]
+    end
+
+    test "a new VM reads the kept data layer from the compile state dump", %{opts: opts} do
+      run(opts)
+      data_layer = cache_state().data_layer
+
+      Cache.reset()
+      fake_recompile()
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert cache_state().data_layer == data_layer
+    end
+
+    test "a compile that fails on a registered query writes no dump and keeps nothing new", %{
+      opts: opts
+    } do
+      run(opts)
+      data_layer = cache_state().data_layer
+
+      dump_paths =
+        Enum.map(
+          [Reflection.page_windows_plt_dump_file_name(), Reflection.queries_plt_dump_file_name()],
+          &Path.join(opts[:build_dir], &1)
+        )
+
+      Enum.each(dump_paths, &File.write!(&1, "untouched"))
+
+      # The component joins the build with the edit, as a component saved with a refused query
+      # does: an edited templatable is validated without a kept entry of its own.
+      fake_edit(ComponentModule15)
+
+      failing_opts =
+        Keyword.update!(opts, :component_modules, &(&1 ++ [ComponentModule15]))
+
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny returns no rows to any session. Add allow lines, or drop the query."
+
+      assert_error Hologram.CompileError, expected_msg, fn -> run(failing_opts) end
+
+      assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched"]
+      assert Cache.get().data_layer == data_layer
+    end
+
+    # A run that fails while bundling the runtime forgets the runtime state, which held the
+    # statement the runtime bundle was built with. The data layer state holds it too.
+    test "a compile after one that failed while bundling the runtime keeps the data layer", %{
+      opts: opts
+    } do
+      run(opts)
+
+      fake_edit(find_editable_runtime_module())
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      data_layer = cache_state().data_layer
+
+      assert cache_state().runtime == nil
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert cache_state().data_layer == data_layer
+    end
+
     # A builder's argument names bind the consuming component's like-named props, so a component
     # whose capture names a prop it does not declare fails the build once a page reaches it. The
     # page is made to reach one through an edge in the kept graph, and the edit is of a module no
