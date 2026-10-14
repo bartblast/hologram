@@ -10,10 +10,11 @@ defmodule Hologram.Compiler.DataModelInputsTest do
 
   @build_lib_dir Path.join(@test_dir, "build_lib")
   @manifest_path Path.join([@build_lib_dir, "hologram", ".mix", "compile.elixir"])
+  @manifest_dir Path.dirname(@manifest_path)
 
   setup_all do
     clean_dir(@test_dir)
-    File.mkdir_p!(Path.dirname(@manifest_path))
+    File.mkdir_p!(@manifest_dir)
     File.write!(@manifest_path, "manifest 1")
 
     [opts: [build_lib_dir: @build_lib_dir]]

@@ -34,6 +34,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     * `:data_model_ready` - called once per compile, right after the validation, with the entity
       types and the roles. A compile that raises here builds nothing. Defaults to doing nothing.
 
+  An invocation that never compiles (Hologram off in dev and test) validates the model from the
+  beams instead, and only when the Elixir compile manifest of a loaded application moved since the
+  last validation that passed in the same build dir, which leaves the data model inputs dump there
+  (see `Hologram.Compiler.DataModelInputs`). A language server's build validates nothing.
+
   ## Build dir
 
   A compile leaves eight files in the build dir, so that the first compile in the next VM (the next
@@ -86,6 +91,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
+  alias Hologram.Compiler.DataModelInputs
   alias Hologram.Compiler.Tracer
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
@@ -131,9 +137,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         opts[:force?] ->
           compile_with_lock(opts)
 
-        # These invocations never compile, so the data model is validated here, from the beams.
-        language_server_build?(opts) or not compiler_enabled?() ->
-          validate_uncompiled_data_model!()
+        # A language server builds in a build root of its own, for its diagnostics: the data model
+        # is validated by the developer's own mix invocations, not here.
+        language_server_build?(opts) ->
+          :noop
+
+        # This invocation never compiles, so the data model is validated here, from the beams, when
+        # a module may have changed since the last validation.
+        not compiler_enabled?() ->
+          validate_uncompiled_data_model!(opts)
           :noop
 
         # No module changed since the compile that validated the data model.
@@ -2009,14 +2021,33 @@ defmodule Mix.Tasks.Compile.Hologram do
     :ok
   end
 
-  # Listed from the beams: no compile runs, so no module info PLT is in line with them.
-  defp validate_uncompiled_data_model! do
-    entity_types = Reflection.list_entities()
-    role_modules = Reflection.list_roles()
-    user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
+  # Listed from the beams: no compile runs, so no module info PLT is in line with them. Listed and
+  # validated only when an application's compile manifest moved since the record of the last
+  # validation that passed (see Hologram.Compiler.DataModelInputs): a manifest moves whenever a
+  # module of its application is compiled or removed, so a model that was valid against the same
+  # manifests still is. A validation that fails raises before the record is written, so the next
+  # invocation validates again.
+  defp validate_uncompiled_data_model!(opts) do
+    record_path = Path.join(opts[:build_dir], Reflection.data_model_inputs_dump_file_name())
+    record = DataModelInputs.load(record_path)
 
-    put_model_facts(entity_types, role_modules, user_entity)
-    validate_data_model!(entity_types, role_modules)
+    if record == nil or not DataModelInputs.unchanged?(record, opts) do
+      entity_types = Reflection.list_entities()
+      role_modules = Reflection.list_roles()
+      user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
+
+      put_model_facts(entity_types, role_modules, user_entity)
+      validate_data_model!(entity_types, role_modules)
+
+      # An invocation that never compiles may be the first thing to run in a fresh build.
+      File.mkdir_p!(opts[:build_dir])
+
+      opts
+      |> DataModelInputs.build()
+      |> DataModelInputs.dump(record_path)
+    end
+
+    :ok
   end
 
   # An empty lock file is a lock in the middle of being acquired, not an invalid one:
