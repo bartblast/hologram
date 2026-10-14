@@ -488,18 +488,40 @@ describe("Hologram", () => {
 
     // A next action is a continuation of the one that produced it, so it belongs to the same page
     // - which is not necessarily the page current by the time it is scheduled, since the parent
-    // may have been asynchronous.
+    // may have been asynchronous. One with no delay runs before the browser paints, so that two
+    // components a chain changes are never painted disagreeing: the browser paints between tasks,
+    // so these tests check that it runs with the fake clock never ticked.
     describe("next action", () => {
-      let clock, nextActionStruct, scheduleActionStub;
+      let clock, scheduleActionStub;
+
+      const delayedNextActionStruct = Type.actionStruct({
+        name: Type.atom("the_delayed_next_action"),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(5),
+      });
+
+      const nextActionStruct = Type.actionStruct({
+        name: Type.atom("the_next_action"),
+        params: Type.map(),
+        target: cid1,
+      });
+
+      const resultWith = (nextAction) =>
+        Type.componentStruct({nextAction: nextAction, state: Type.map()});
+
+      const executedActionNames = () =>
+        callNamedFunctionStub.getCalls().map((call) => call.args[2].data[0]);
 
       beforeEach(() => {
-        clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
-
-        nextActionStruct = Type.actionStruct({
-          name: Type.atom("the_next_action"),
-          params: Type.map(),
-          target: cid1,
+        // The fake clock would hold a microtask until it ticks, and a zero-delay next action runs
+        // on one when its parent is asynchronous.
+        clock = sinon.useFakeTimers({
+          shouldClearNativeTimers: true,
+          toNotFake: ["queueMicrotask"],
         });
+
+        ActionQueue.entries = [];
 
         ComponentRegistry.putEntry(
           cid1,
@@ -512,11 +534,9 @@ describe("Hologram", () => {
           ]),
         );
 
+        // Only the parent puts a next action, so a next action that runs ends the chain.
         callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
-          Type.componentStruct({
-            nextAction: nextActionStruct,
-            state: Type.map(),
-          }),
+          resultWith(Type.nil()),
         );
 
         scheduleActionStub = sinon
@@ -524,21 +544,21 @@ describe("Hologram", () => {
           .callsFake((_action, _epoch) => null);
       });
 
-      afterEach(() => clock.restore());
+      afterEach(async () => {
+        // Lets a walk the microtask started finish before the next test.
+        await Promise.resolve();
 
-      it("inherits the epoch its parent carried", () => {
-        Hologram.executeAction(actionFor(cid1), 7);
-
-        sinon.assert.calledOnceWithExactly(
-          scheduleActionStub,
-          nextActionStruct,
-          7,
-        );
+        ActionQueue.entries = [];
+        clock.restore();
       });
 
       // Reading the epoch afresh at this point would stamp the next action with whatever page the
       // client has reached, which is exactly how a late continuation lands on a stranger.
-      it("does not take the epoch current when it is scheduled", () => {
+      it("a delayed next action does not take the epoch current when it is scheduled", () => {
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(resultWith(delayedNextActionStruct));
+
         Hologram.domEpoch = 3;
         Hologram.registryEpoch = 3;
 
@@ -547,13 +567,120 @@ describe("Hologram", () => {
 
           sinon.assert.calledOnceWithExactly(
             scheduleActionStub,
-            nextActionStruct,
+            delayedNextActionStruct,
             1,
           );
         } finally {
           Hologram.domEpoch = 0;
           Hologram.registryEpoch = 0;
         }
+      });
+
+      // A delay is a request to wait, so the browser may paint before the action runs.
+      it("a delayed next action goes on a timer with its parent's epoch", () => {
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(resultWith(delayedNextActionStruct));
+
+        Hologram.executeAction(actionFor(cid1), 7);
+
+        sinon.assert.calledOnceWithExactly(
+          scheduleActionStub,
+          delayedNextActionStruct,
+          7,
+        );
+
+        assert.deepStrictEqual(ActionQueue.entries, []);
+      });
+
+      it("a zero-delay next action inherits its parent's epoch", () => {
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(resultWith(nextActionStruct));
+
+        Hologram.executeAction(actionFor(cid1), 7);
+
+        assert.deepStrictEqual(ActionQueue.entries, [
+          {action: nextActionStruct, epoch: 7},
+        ]);
+      });
+
+      // The parent's promise resolves when no walk is running, so the next action needs a walk of
+      // its own, started before the browser can paint.
+      it("a zero-delay next action of an asynchronous parent runs before any timer", async () => {
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(Promise.resolve(resultWith(nextActionStruct)));
+
+        await Hologram.executeAction(actionFor(cid1));
+
+        assert.deepStrictEqual(executedActionNames(), [
+          Type.atom("test_action"),
+          Type.atom("the_next_action"),
+        ]);
+
+        sinon.assert.calledTwice(renderStub);
+        sinon.assert.notCalled(scheduleActionStub);
+      });
+
+      it("a zero-delay next action runs before any timer", async () => {
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(resultWith(nextActionStruct));
+
+        Hologram.executeAction(actionFor(cid1));
+        await Promise.resolve();
+
+        assert.deepStrictEqual(executedActionNames(), [
+          Type.atom("test_action"),
+          Type.atom("the_next_action"),
+        ]);
+
+        sinon.assert.notCalled(scheduleActionStub);
+      });
+
+      // The ordinary case, a parent dispatched from the DOM: its own walk takes the next action
+      // once the parent is done, on the dispatch's stack.
+      it("a zero-delay next action runs on the walk that ran its parent", () => {
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(resultWith(nextActionStruct));
+
+        Hologram.enqueueAction(actionFor(cid1), 0);
+
+        assert.deepStrictEqual(executedActionNames(), [
+          Type.atom("test_action"),
+          Type.atom("the_next_action"),
+        ]);
+
+        sinon.assert.calledTwice(renderStub);
+      });
+
+      // The parent's render is what shows its result, a spinner say, while the next action awaits:
+      // the next action renders nothing until its promise resolves.
+      it("an asynchronous zero-delay next action leaves its parent's render on screen while it awaits", async () => {
+        let settle;
+
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(resultWith(nextActionStruct));
+
+        callNamedFunctionStub.onSecondCall().returns(
+          new Promise((resolve) => {
+            settle = resolve;
+          }),
+        );
+
+        Hologram.executeAction(actionFor(cid1));
+        await Promise.resolve();
+
+        sinon.assert.calledTwice(callNamedFunctionStub);
+        sinon.assert.calledOnce(renderStub);
+
+        settle(resultWith(Type.nil()));
+        await clock.tickAsync(0);
+
+        sinon.assert.calledTwice(renderStub);
       });
     });
   });
