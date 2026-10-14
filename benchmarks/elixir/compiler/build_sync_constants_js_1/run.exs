@@ -28,7 +28,7 @@ Benchee.run(
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions(module_info_plt)
+      |> Compiler.pages_checking_permissions()
 
     CallGraph.remove_manually_ported_mfas(call_graph)
 

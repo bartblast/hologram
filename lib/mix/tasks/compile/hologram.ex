@@ -1146,11 +1146,16 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
     # bundles are derived from no longer holds the vertex to ask about - while the question is
-    # exactly whether the bundles reach it.
+    # exactly whether the bundles reach it. A data model with no user entity type has no grant
+    # store, so no page checks permissions against anything then.
     permission_checking_pages =
-      page_modules
-      |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions(module_info_plt)
+      if Reflection.user_entity(module_info_plt) do
+        page_modules
+        |> Compiler.list_reach_by_page(call_graph)
+        |> Compiler.pages_checking_permissions()
+      else
+        []
+      end
 
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.

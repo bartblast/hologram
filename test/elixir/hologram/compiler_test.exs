@@ -1204,39 +1204,25 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "pages_checking_permissions/2" do
-    test "names a page whose template checks permissions", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
+  describe "pages_checking_permissions/1" do
+    test "names a page whose template checks permissions", %{call_graph: call_graph} do
+      pages = pages_checking_permissions(page_reach(call_graph))
 
       assert PageModule10 in pages
     end
 
     test "passes over a page that checks permissions only in a command handler", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
+      call_graph: call_graph
     } do
-      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
+      pages = pages_checking_permissions(page_reach(call_graph))
 
       refute PageModule11 in pages
     end
 
-    test "passes over a page that checks nothing", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
+    test "passes over a page that checks nothing", %{call_graph: call_graph} do
+      pages = pages_checking_permissions(page_reach(call_graph))
 
       refute PageModule7 in pages
-    end
-
-    # No user entity type, no grant store: no page checks permissions against anything.
-    test "names no page when the module info PLT records no user entity type", %{
-      call_graph: call_graph
-    } do
-      assert pages_checking_permissions(page_reach(call_graph), PLT.start()) == []
     end
 
     # No fixture page calls the grant verbs in its client code, deliberately: until the verbs are
@@ -1245,26 +1231,20 @@ defmodule Hologram.CompilerTest do
     # can?/3 is taken OUT of that clone first: the verbs call it, so in the real graph a page
     # reaching a verb reaches can? too and would qualify under the old rule alone. Once the verbs
     # are ported their subtree is pruned from every build, which is the state this pins.
-    test "names a page whose client code grants a role", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
+    test "names a page whose client code grants a role", %{call_graph: call_graph} do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
       CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 3})
 
-      assert PageModule7 in pages_checking_permissions(page_reach(graph), module_info_plt)
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
 
-    test "names a page whose client code revokes a role", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
+    test "names a page whose client code revokes a role", %{call_graph: call_graph} do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
       CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 3})
 
-      assert PageModule7 in pages_checking_permissions(page_reach(graph), module_info_plt)
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
   end
 

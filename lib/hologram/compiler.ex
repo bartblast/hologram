@@ -379,20 +379,16 @@ defmodule Hologram.Compiler do
   grants window is what actually ships - a `can?` reached only from command handlers, which run
   on the server, does not.
 
-  An app that designates no user entity type has no grant store at all - the framework's grant
-  entity joins the data model only with one - so no page checks permissions against anything and
-  the answer is empty whatever the pages reach. Whether one is designated is read from the given
-  module info PLT.
+  Whether the app has a grant store at all is not asked here: a data model with no user entity
+  type has none - the framework's grant entity joins the data model only with one - and what
+  registers the grants window checks that where it reads this list (see `build_page_windows/3`
+  and `build_sync_constants/3`).
   """
-  @spec pages_checking_permissions([{module, page_reach}], PLT.t()) :: list(module)
-  def pages_checking_permissions(reach_by_page, module_info_plt) do
-    if Reflection.user_entity(module_info_plt) do
-      for {page_module, %{mfas: mfas}} <- reach_by_page,
-          Enum.any?(mfas, &(&1 in @permission_mfas)) do
-        page_module
-      end
-    else
-      []
+  @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
+  def pages_checking_permissions(reach_by_page) do
+    for {page_module, %{mfas: mfas}} <- reach_by_page,
+        Enum.any?(mfas, &(&1 in @permission_mfas)) do
+      page_module
     end
   end
 

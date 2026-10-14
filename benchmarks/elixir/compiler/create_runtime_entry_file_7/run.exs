@@ -32,7 +32,7 @@ Benchee.run(
     reach_by_page = Compiler.list_reach_by_page(Reflection.list_pages(), call_graph)
 
     permission_checking_pages =
-      Compiler.pages_checking_permissions(reach_by_page, module_info_plt)
+      Compiler.pages_checking_permissions(reach_by_page)
 
     sync_constants_js =
       reach_by_page
