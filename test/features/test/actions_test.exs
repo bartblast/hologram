@@ -21,6 +21,8 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page25
   alias HologramFeatureTests.Actions.Page26
   alias HologramFeatureTests.Actions.Page27
+  alias HologramFeatureTests.Actions.Page28
+  alias HologramFeatureTests.Actions.Page29
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -574,6 +576,51 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_page(Page27)
       |> click(button("Put page 27 result"))
       |> assert_text(css("#page_result"), ~s/"Page 27 result"/)
+    end
+  end
+
+  describe "a next action with no delay" do
+    # The submit action's render is the only thing that shows "loading": the next action awaits,
+    # and renders nothing until its promise resolves. A next action that ran before the browser
+    # paints must not take that paint away.
+    feature "leaves the result of its parent on screen while it awaits", %{session: session} do
+      session
+      |> visit(Page29)
+      |> click(button("Submit Page 29 Form"))
+      |> assert_text(css("#status"), "loading")
+      |> assert_text(css("#status"), "done")
+    end
+
+    # The editor shows its draft while editing and the owner's value otherwise. The commit leaves
+    # editing and forwards the draft to the owner in a next action, so a frame painted between the
+    # two would show the owner's old value in the editor. The text is sampled on every animation
+    # frame, since a mutation observer would also record the DOM change of the editor's own render,
+    # which still happens before the owner's.
+    feature "runs before the browser paints", %{session: session} do
+      session
+      |> visit(Page28)
+      |> assert_text(css("#component_24_shown"), "ORIGINAL")
+      |> click(button("Edit Component 24 Draft"))
+      |> assert_text(css("#component_24_shown"), "NEW")
+      |> execute_script("""
+      globalThis.shownSamples = [];
+
+      const sample = () => {
+        globalThis.shownSamples.push(document.getElementById("component_24_shown").textContent);
+        requestAnimationFrame(sample);
+      };
+
+      requestAnimationFrame(sample);
+      """)
+      |> click(button("Commit Component 24 Draft"))
+      |> assert_text(css("#component_24_shown"), "NEW")
+      # Gives the sampler a few frames past the commit's last render. The real bound is one frame,
+      # the rest is margin.
+      |> sleep(200)
+      |> execute_script("return globalThis.shownSamples;", [], fn samples ->
+        assert samples != []
+        assert Enum.uniq(samples) == ["NEW"]
+      end)
     end
   end
 end
