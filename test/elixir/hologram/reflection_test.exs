@@ -86,10 +86,12 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> :application.unload(app) end)
   end
 
-  defp load_app_with_modules(app, modules) do
+  # A real application that holds a model depends on Hologram, and the entity and role listings
+  # read only the applications that reach it.
+  defp load_app_with_modules(app, modules, deps \\ [:hologram]) do
     spec =
       {:application, app,
-       applications: [],
+       applications: deps,
        description: ~c"fixture",
        modules: modules,
        registered: [],
@@ -1120,6 +1122,36 @@ defmodule Hologram.ReflectionTest do
       assert :code.get_object_code(InMemoryEntityFixture) == :error
       assert InMemoryEntityFixture in list_entities()
     end
+
+    test "lists an entity type of an application that depends on Hologram through another one" do
+      defmodule IndirectEntityFixture do
+        use Hologram.Entity
+      end
+
+      load_app_with_modules(:hologram_reflection_indirect_entity_bridge_app, [])
+
+      load_app_with_modules(
+        :hologram_reflection_indirect_entity_fixture_app,
+        [IndirectEntityFixture],
+        [:hologram_reflection_indirect_entity_bridge_app]
+      )
+
+      assert IndirectEntityFixture in list_entities()
+    end
+
+    test "lists no entity type of an application that does not depend on Hologram" do
+      defmodule UnrelatedAppEntityFixture do
+        use Hologram.Entity
+      end
+
+      load_app_with_modules(
+        :hologram_reflection_unrelated_entity_fixture_app,
+        [UnrelatedAppEntityFixture],
+        []
+      )
+
+      refute UnrelatedAppEntityFixture in list_entities()
+    end
   end
 
   describe "list_entities/1" do
@@ -1329,6 +1361,36 @@ defmodule Hologram.ReflectionTest do
 
     test "asks the code server about no module" do
       assert count_calls({:code, :which, 1}, &list_roles/0) == 0
+    end
+
+    test "lists a role of an application that depends on Hologram through another one" do
+      defmodule IndirectRoleFixture do
+        use Hologram.Role
+      end
+
+      load_app_with_modules(:hologram_reflection_indirect_role_bridge_app, [])
+
+      load_app_with_modules(
+        :hologram_reflection_indirect_role_fixture_app,
+        [IndirectRoleFixture],
+        [:hologram_reflection_indirect_role_bridge_app]
+      )
+
+      assert IndirectRoleFixture in list_roles()
+    end
+
+    test "lists no role of an application that does not depend on Hologram" do
+      defmodule UnrelatedAppRoleFixture do
+        use Hologram.Role
+      end
+
+      load_app_with_modules(
+        :hologram_reflection_unrelated_role_fixture_app,
+        [UnrelatedAppRoleFixture],
+        []
+      )
+
+      refute UnrelatedAppRoleFixture in list_roles()
     end
   end
 

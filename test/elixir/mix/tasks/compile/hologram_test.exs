@@ -335,8 +335,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # Registering a fake app changes the data model for as long as it is loaded, and the compile
   # task's validation caches what it resolves against that model - so the caches go with the app.
   # Unloading alone leaves every later test reading a grant store resolved against the fixture.
+  #
+  # The spec says the app depends on Hologram, as a real one that holds a model does: the entity
+  # and role listings read only the applications that reach it.
   defp load_entity_fixture_app(app, modules) do
-    :ok = :application.load({:application, app, [modules: modules]})
+    :ok = :application.load({:application, app, [applications: [:hologram], modules: modules]})
 
     on_exit(fn ->
       :application.unload(app)
