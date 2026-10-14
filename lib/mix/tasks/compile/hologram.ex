@@ -359,6 +359,11 @@ defmodule Mix.Tasks.Compile.Hologram do
           chunk_analysis_kept?
         )
 
+      # What the data layer kept of each page's reach that still holds, and the pages whose reach it
+      # lists again, if it derives at all (see partition_kept_page_reach/3).
+      {kept_page_reach, pages_to_list} =
+        partition_kept_page_reach(cache.data_layer, page_modules, reaching_modules)
+
       # Whether the vocabulary the registered queries and the operation asks are judged against
       # can have moved (see data_model_changed?/2).
       data_model_changed? = data_model_changed?(module_digests_diff, new_module_info_plt)
@@ -390,9 +395,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       # data layer state holds what it rendered into the runtime bundle.
       data_layer_kept? = data_layer_kept?(cache.data_layer, module_digests_diff, opts)
 
-      # The chunks' MFAs are listed on the runtime's copy too, and so is every page's reach for the
-      # data layer.
-      runtime_graph_kept? = Enum.all?([runtime_kept?, chunk_analysis_kept?, data_layer_kept?])
+      # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
+      # every page it lists again.
+      runtime_graph_kept? = runtime_kept? and chunk_analysis_kept? and pages_to_list == []
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_graph_kept?, sup)
 
       templatable_modules = page_modules ++ component_modules
@@ -415,10 +420,11 @@ defmodule Mix.Tasks.Compile.Hologram do
           data_model_changed?: data_model_changed?,
           ir_plt: ir_plt,
           kept_data_layer: cache.data_layer,
+          kept_page_reach: kept_page_reach,
           module_digests_diff: module_digests_diff,
           module_info_plt: new_module_info_plt,
           opts: opts,
-          page_modules: page_modules,
+          pages_to_list: pages_to_list,
           stale_components: stale_components,
           supervisor: sup,
           tracked_component_modules: tracked_component_modules
@@ -930,9 +936,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     Compiler.build_chunk_reach!(call_graph, ir_plt, page_modules, component_modules)
   end
 
-  # The copy of the graph the runtime's MFAs and the chunks' are listed on, and every page's reach
-  # for the data layer, without the manually ported MFAs. None when all three are kept: nothing
-  # lists them then.
+  # The copy of the graph the runtime's MFAs and the chunks' are listed on, and the data layer's
+  # reach of every page it lists again, without the manually ported MFAs. None when all three are
+  # kept: nothing lists them then.
   defp build_runtime_graph(_call_graph, true, _sup), do: nil
 
   defp build_runtime_graph(call_graph, false, sup) do
@@ -1129,10 +1135,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   # derived from is kept with the statement (see Hologram.Compiler.Cache.put_data_layer/1). A
   # derivation that raises writes no dump and keeps nothing.
   #
-  # Every page's reach is listed on the runtime's copy of the graph: without the manually ported
-  # MFAs, which is what the bundles are derived from, and with the runtime's MFAs still in it (see
-  # build_pages_graph/2), so that a component reached through a runtime MFA is still one the page
-  # can reach.
+  # A page's reach is listed again only when the edit can have moved it (see
+  # partition_kept_page_reach/3); every other page keeps what the last derivation listed. It is
+  # listed on the runtime's copy of the graph: without the manually ported MFAs, which is what the
+  # bundles are derived from, and with the runtime's MFAs still in it (see build_pages_graph/2), so
+  # that a component reached through a runtime MFA is still one the page can reach.
   #
   # The registered queries of a component are extracted again only when the edit can have changed
   # them (see list_stale_components/7), and of a component a page reaches that has no entry; every
@@ -1144,10 +1151,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       call_graph_for_runtime: call_graph_for_runtime,
       module_info_plt: module_info_plt,
       opts: opts,
-      page_modules: page_modules
+      pages_to_list: pages_to_list
     } = context
 
-    listed_reach = Compiler.list_reach_by_page(page_modules, call_graph_for_runtime)
+    listed_reach = Compiler.list_reach_by_page(pages_to_list, call_graph_for_runtime)
 
     # Listed once, from the module info PLT this compile brought in line with the beams: no beam
     # is read and no module is asked.
@@ -1172,12 +1179,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     # bundles are derived from no longer holds the vertex to ask about - while the question is
     # exactly whether the bundles reach it.
     permission_checking_pages =
-      page_modules
+      pages_to_list
       |> Compiler.list_reach_by_page(call_graph)
       |> Compiler.pages_checking_permissions()
 
     reach_by_page =
-      Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
+      listed_reach
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+      |> then(&Map.merge(context.kept_page_reach, &1))
 
     reached_components =
       reach_by_page
@@ -1744,6 +1753,32 @@ defmodule Mix.Tasks.Compile.Hologram do
     mfas
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> MapSet.new()
+  end
+
+  # Splits the pages into the ones whose kept reach still holds, keyed by page, and the ones whose
+  # reach the data layer lists again: a page with no kept reach (a new page, or nothing kept), and a
+  # page whose kept modules meet the modules reaching the edit, for the reason a page's bundle is
+  # rebuilt then (see Hologram.Compiler.partition_affected_pages/6). A page no longer in the build
+  # is left out of both.
+  defp partition_kept_page_reach(nil, page_modules, _reaching_modules), do: {%{}, page_modules}
+
+  defp partition_kept_page_reach(kept_data_layer, page_modules, reaching_modules) do
+    {kept_page_reach, pages_to_list} =
+      Enum.reduce(page_modules, {%{}, []}, fn page_module, {kept, to_list} ->
+        case Map.fetch(kept_data_layer.pages, page_module) do
+          {:ok, reach} ->
+            if MapSet.disjoint?(reach.modules, reaching_modules) do
+              {Map.put(kept, page_module, reach), to_list}
+            else
+              {kept, [page_module | to_list]}
+            end
+
+          :error ->
+            {kept, [page_module | to_list]}
+        end
+      end)
+
+    {kept_page_reach, Enum.reverse(pages_to_list)}
   end
 
   # With the inputs unchanged, the edited modules' encodings are dropped and the rest are kept; a

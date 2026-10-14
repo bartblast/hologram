@@ -233,6 +233,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # How many pages hold the given module in the reach the data layer kept of them.
+  defp count_pages_holding(module) do
+    Enum.count(cache_state().data_layer.pages, fn {_page_module, reach} ->
+      MapSet.member?(reach.modules, module)
+    end)
+  end
+
   # How many kept pages reach the given module, as their states record it.
   defp count_pages_reaching(module) do
     cache_state().pages_plt
@@ -1242,6 +1249,72 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().data_layer.components == components
     end
 
+    test "an edit of a module no page reaches lists no page's reach", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    # Twice for the data layer, on the runtime's copy and on the unsplit graph, and once for the
+    # page's bundle.
+    test "an edit of a page lists its reach three times", %{opts: opts} do
+      run(opts)
+
+      assert count_pages_holding(Module1) == 1
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 3
+    end
+
+    test "an edit of a component lists the reach of the pages holding it", %{opts: opts} do
+      run(opts)
+      num_pages = count_pages_holding(LayoutFixture)
+
+      fake_edit(LayoutFixture)
+
+      assert num_pages > 1
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 3 * num_pages
+    end
+
+    test "the kept page reach after an edit is the one a cold compile lists", %{opts: opts} do
+      run(opts)
+      fake_edit(PageModule8)
+      run(opts)
+
+      pages = cache_state().data_layer.pages
+
+      start_cold(opts)
+      run(opts)
+
+      assert cache_state().data_layer.pages == pages
+    end
+
+    test "a removed page is forgotten from the kept page reach", %{opts: opts} do
+      run(opts)
+
+      %{
+        data_layer: data_layer,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = cache_state()
+
+      removed_reach = %{checks_permissions?: false, components: [], modules: MapSet.new()}
+      pages = Map.put(data_layer.pages, :removed_page, removed_reach)
+      Cache.put_data_layer(%{data_layer | pages: pages})
+
+      module_infos
+      |> Map.put(:removed_page, %{digest: "removed", page?: true})
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_page))
+
+      run(opts)
+
+      refute Map.has_key?(cache_state().data_layer.pages, :removed_page)
+      assert map_size(cache_state().data_layer.pages) == @num_pages
+    end
+
     test "a removed component is forgotten from the kept component queries", %{opts: opts} do
       run(opts)
 
@@ -1349,16 +1422,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # A builder's argument names bind the consuming component's like-named props, so a component
     # whose capture names a prop it does not declare fails the build once a page reaches it. The
     # page is made to reach one through an edge in the kept graph, and the edit is of a module no
-    # page reaches, so the patch leaves that edge in place. The component has no kept entry, as one
-    # new to the build: a kept entry is validated with its queries, when they are extracted again.
+    # page reaches, so the patch leaves that edge in place. The page and the component have no kept
+    # entries, as ones new to the build: a kept page reach is listed again only when the edit can
+    # move it, and a kept component is validated with its queries, when they are extracted again.
     test "refuses a component a page reaches whose query binds a prop it does not declare", %{
       opts: opts
     } do
       run(opts)
 
       data_layer = cache_state().data_layer
-      components = Map.delete(data_layer.components, ComponentModule11)
-      Cache.put_data_layer(%{data_layer | components: components})
+
+      Cache.put_data_layer(%{
+        data_layer
+        | components: Map.delete(data_layer.components, ComponentModule11),
+          pages: Map.delete(data_layer.pages, Module1)
+      })
 
       CallGraph.add_edge(
         cache_state().call_graph,
@@ -2253,7 +2331,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_calls({CallGraph, :with_shared_graph, 2}, fn -> run(opts) end) == 0
     end
 
-    # Once for its bundle, beside the data layer's two listings of every page's reach.
+    # Once for its bundle, beside the data layer's two listings of every page's reach, which no
+    # compile has kept.
     test "a run with no page states lists each page once for its bundle", %{opts: opts} do
       run(opts)
       start_cold(opts)
@@ -3483,15 +3562,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
     end
 
-    # The one copy is the runtime's, which the data layer lists every page's reach on once a module
-    # changed (see Hologram.Compiler.list_reach_by_page/2).
-    test "an edit of a module the graph does not hold copies the call graph once, for the data layer",
-         %{opts: opts} do
+    # The runtime's copy is what the data layer lists a page's reach on, and the edit moves no
+    # page's reach.
+    test "an edit of a module the graph does not hold copies no call graph", %{opts: opts} do
       run(opts)
 
       fake_edit(@unreached_module)
 
-      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 1
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
     end
 
     test "a run that rebuilds a pending page copies the call graph once", %{opts: opts} do
