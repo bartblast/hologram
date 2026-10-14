@@ -61,8 +61,8 @@ defmodule HologramFeatureTests.MixProject do
       # TODO: drop this entry once Bandit releases the fix for EEF-CVE-2026-105659 and the lock
       # is bumped past 1.12.5.
       #
-      # The advisory is in Bandit's HTTP/2 flow control, and this app only serves plain HTTP/1
-      # on localhost during a test run.
+      # The advisory is in Bandit's HTTP/2 flow control. This app serves HTTP/2 only over TLS
+      # with HOLOGRAM_FEATURE_TESTS_HTTPS set, and either way only on 127.0.0.1 during a test run.
       hex: [ignore_advisories: ["EEF-CVE-2026-105659"]],
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
