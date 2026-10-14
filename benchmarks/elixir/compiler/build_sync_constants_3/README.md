@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_sync_constants/3</td>
-    <td style="white-space: nowrap; text-align: right">532.00</td>
-    <td style="white-space: nowrap; text-align: right">1.88 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.75%</td>
-    <td style="white-space: nowrap; text-align: right">1.87 ms</td>
-    <td style="white-space: nowrap; text-align: right">2.17 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.17 K</td>
+    <td style="white-space: nowrap; text-align: right">460.90 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.88%</td>
+    <td style="white-space: nowrap; text-align: right">454.92 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">549.11 &micro;s</td>
   </tr>
 
 </table>
