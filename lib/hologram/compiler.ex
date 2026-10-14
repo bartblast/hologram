@@ -81,6 +81,17 @@ defmodule Hologram.Compiler do
         }
 
   @typedoc """
+  What the data layer keeps of a page's reach between compiles: whether the page's client code
+  reaches a permission check (see `pages_checking_permissions/1`), the components among the modules
+  it reaches, sorted, and those modules, the struct types it names included.
+  """
+  @type kept_page_reach :: %{
+          checks_permissions?: boolean,
+          components: [module],
+          modules: MapSet.t(module)
+        }
+
+  @typedoc """
   What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, and
   the struct types it names, which carry no MFA of their own in the list.
   """
@@ -582,6 +593,39 @@ defmodule Hologram.Compiler do
     end)
 
     ir_plt
+  end
+
+  @doc """
+  Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
+  layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
+  modules are told by the given module info PLT. The pages checking permissions are given as
+  `pages_checking_permissions/1` lists them, from the pages' reach on the call graph BEFORE manually
+  ported MFAs are removed.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_3/README.md
+  """
+  @spec build_kept_page_reach([{module, page_reach}], [module], PLT.t()) :: %{
+          module => kept_page_reach
+        }
+  def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt) do
+    checking_pages = MapSet.new(permission_checking_pages)
+
+    Map.new(reach_by_page, fn {page_module, reach} ->
+      modules = list_reached_modules(reach)
+
+      components =
+        modules
+        |> reached_components(module_info_plt)
+        |> Enum.sort()
+
+      kept_reach = %{
+        checks_permissions?: MapSet.member?(checking_pages, page_module),
+        components: components,
+        modules: MapSet.new(modules)
+      }
+
+      {page_module, kept_reach}
+    end)
   end
 
   @doc """

@@ -1882,6 +1882,71 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_kept_page_reach/3" do
+    setup do
+      info = fn component? ->
+        %{digest: 1, mtime: 1, size: 1, page?: false, component?: component?}
+      end
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, info.(false))
+        |> PLT.put(Module2, info.(true))
+        |> PLT.put(Module3, info.(true))
+
+      [module_info_plt: module_info_plt]
+    end
+
+    test "keeps the modules a page reaches, the struct types it names included, and the components among them, sorted",
+         %{module_info_plt: module_info_plt} do
+      reach = %{
+        mfas: [{Module1, :fun_1, 0}, {Module3, :fun_2, 1}, {Module2, :fun_3, 0}],
+        types: [Module4]
+      }
+
+      assert build_kept_page_reach([{Module1, reach}], [], module_info_plt) == %{
+               Module1 => %{
+                 checks_permissions?: false,
+                 components: [Module2, Module3],
+                 modules: MapSet.new([Module1, Module2, Module3, Module4])
+               }
+             }
+    end
+
+    test "leaves out a reached module the module info PLT does not hold as a component", %{
+      module_info_plt: module_info_plt
+    } do
+      reach = %{mfas: [{Module1, :fun_1, 0}, {Enum, :map, 2}], types: []}
+
+      assert %{Module1 => %{components: []}} =
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt)
+    end
+
+    test "marks the pages given as checking permissions", %{module_info_plt: module_info_plt} do
+      reach = %{mfas: [], types: []}
+
+      assert %{
+               Module1 => %{checks_permissions?: true},
+               Module11 => %{checks_permissions?: false}
+             } =
+               build_kept_page_reach(
+                 [{Module1, reach}, {Module11, reach}],
+                 [Module1],
+                 module_info_plt
+               )
+    end
+
+    test "answers for every page it was given", %{module_info_plt: module_info_plt} do
+      reach = %{mfas: [], types: []}
+
+      assert build_kept_page_reach([{Module1, reach}, {Module11, reach}], [], module_info_plt) ==
+               %{
+                 Module1 => %{checks_permissions?: false, components: [], modules: MapSet.new()},
+                 Module11 => %{checks_permissions?: false, components: [], modules: MapSet.new()}
+               }
+    end
+  end
+
   describe "build_missing_ir!/2" do
     test "builds the IR of modules the PLT doesn't hold" do
       ir_plt = PLT.start()

@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.Cache do
   # runtime script sets the client's data layer constants with.
   @type data_layer_state :: %{
           components: %{module => Compiler.component_queries()},
-          pages: %{module => map},
+          pages: %{module => Compiler.kept_page_reach()},
           sync_constants_js: String.t()
         }
 
