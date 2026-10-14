@@ -1264,6 +1264,16 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(ir_plt, Hologram.Reflection) == :error
     end
 
+    test "builds a protocol's IR from its consolidated beam when the VM loaded it from its own beam" do
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+      {own_beam_path, consolidated_beam_path} = load_protocol_from_own_beam(protocol)
+
+      ir_plt = build_ir_plt(modules: [protocol])
+
+      assert PLT.get!(ir_plt, protocol) == IR.for_module(protocol, consolidated_beam_path)
+      refute PLT.get!(ir_plt, protocol) == IR.for_module(protocol, own_beam_path)
+    end
+
     test "fills the given PLT" do
       plt = PLT.start()
 
