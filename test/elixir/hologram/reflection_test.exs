@@ -808,6 +808,79 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "list_consolidated_beams/0" do
+    test "leaves out the beams of modules that are not Elixir-named" do
+      # The listing reads only the file names, so the files need no content.
+      dir =
+        Path.join([tmp_dir(), "tests", "reflection", "list_consolidated_beams_0", "consolidated"])
+
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+
+      elixir_beam_path =
+        Path.join(dir, "Elixir.Hologram.Test.Fixtures.Reflection.ConsolidatedModule.beam")
+
+      File.write!(elixir_beam_path, "")
+
+      dir
+      |> Path.join("erlang_named_module.beam")
+      |> File.write!("")
+
+      Code.prepend_path(dir)
+      on_exit(fn -> Code.delete_path(dir) end)
+
+      beam_paths = list_consolidated_beams()
+
+      assert beam_paths[Hologram.Test.Fixtures.Reflection.ConsolidatedModule] ==
+               String.to_charlist(elixir_beam_path)
+
+      refute Map.has_key?(beam_paths, :erlang_named_module)
+    end
+
+    test "leaves out the beams of the other directories on the code path" do
+      refute Map.has_key?(list_consolidated_beams(), Hologram.Reflection)
+    end
+
+    test "maps a consolidated protocol to its consolidated beam" do
+      beam_path = :code.which(Enumerable)
+
+      # The test build consolidates protocols.
+      assert :string.find(beam_path, ~c"/consolidated/") != :nomatch
+
+      assert list_consolidated_beams()[Enumerable] == beam_path
+    end
+
+    test "takes a module from the first consolidated directory on the code path" do
+      base_dir = Path.join([tmp_dir(), "tests", "reflection", "list_consolidated_beams_0"])
+      first_dir = Path.join([base_dir, "first", "consolidated"])
+      second_dir = Path.join([base_dir, "second", "consolidated"])
+      beam_file_name = "Elixir.Hologram.Test.Fixtures.Reflection.ConsolidatedModule.beam"
+
+      for dir <- [first_dir, second_dir] do
+        File.rm_rf!(dir)
+        File.mkdir_p!(dir)
+
+        dir
+        |> Path.join(beam_file_name)
+        |> File.write!("")
+      end
+
+      # Prepended second, so it is first on the path.
+      Code.prepend_path(second_dir)
+      Code.prepend_path(first_dir)
+
+      on_exit(fn ->
+        Code.delete_path(first_dir)
+        Code.delete_path(second_dir)
+      end)
+
+      first_beam_path = Path.join(first_dir, beam_file_name)
+
+      assert list_consolidated_beams()[Hologram.Test.Fixtures.Reflection.ConsolidatedModule] ==
+               String.to_charlist(first_beam_path)
+    end
+  end
+
   describe "list_ebin_modules/1" do
     test "OTP app has ebin dir" do
       result = list_ebin_modules(:websock_adapter)
