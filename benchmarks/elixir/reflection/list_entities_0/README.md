@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_entities/0</td>
-    <td style="white-space: nowrap; text-align: right">9.62</td>
-    <td style="white-space: nowrap; text-align: right">103.90 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.77%</td>
-    <td style="white-space: nowrap; text-align: right">102.83 ms</td>
-    <td style="white-space: nowrap; text-align: right">117.83 ms</td>
+    <td style="white-space: nowrap; text-align: right">40.80</td>
+    <td style="white-space: nowrap; text-align: right">24.51 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.09%</td>
+    <td style="white-space: nowrap; text-align: right">24.17 ms</td>
+    <td style="white-space: nowrap; text-align: right">33.29 ms</td>
   </tr>
 
 </table>
