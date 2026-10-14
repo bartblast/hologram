@@ -164,6 +164,40 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
+  # Reproduces what the compile Phoenix's reloader runs leaves behind: the protocol loaded from its
+  # own beam while its consolidated beam is back on the code path. Returns the own beam path and the
+  # consolidated one, and restores the consolidated module when the test exits.
+  defp load_protocol_from_own_beam(protocol) do
+    consolidated_beam_path = :code.which(protocol)
+
+    # The test build consolidates protocols.
+    assert :string.find(consolidated_beam_path, ~c"/consolidated/") != :nomatch
+
+    consolidated_dir = Path.dirname(consolidated_beam_path)
+
+    own_beam_path =
+      :hologram
+      |> :code.lib_dir()
+      |> Path.join("ebin/#{protocol}.beam")
+      |> String.to_charlist()
+
+    :code.purge(protocol)
+    :code.delete(protocol)
+    Code.delete_path(consolidated_dir)
+    {:module, ^protocol} = Code.ensure_loaded(protocol)
+    Code.prepend_path(consolidated_dir)
+
+    on_exit(fn ->
+      :code.purge(protocol)
+      :code.delete(protocol)
+      {:module, ^protocol} = Code.ensure_loaded(protocol)
+    end)
+
+    assert :code.which(protocol) == own_beam_path
+
+    {own_beam_path, consolidated_beam_path}
+  end
+
   # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
   # a compiled module carries it. Built by hand rather than taken from a fixture module, because a
   # fixture with a deliberately invalid usage would fail the compile.hologram Mix task tests.
@@ -1230,6 +1264,16 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(ir_plt, Hologram.Reflection) == :error
     end
 
+    test "builds a protocol's IR from its consolidated beam when the VM loaded it from its own beam" do
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+      {own_beam_path, consolidated_beam_path} = load_protocol_from_own_beam(protocol)
+
+      ir_plt = build_ir_plt(modules: [protocol])
+
+      assert PLT.get!(ir_plt, protocol) == IR.for_module(protocol, consolidated_beam_path)
+      refute PLT.get!(ir_plt, protocol) == IR.for_module(protocol, own_beam_path)
+    end
+
     test "fills the given PLT" do
       plt = PLT.start()
 
@@ -1327,6 +1371,16 @@ defmodule Hologram.CompilerTest do
       beam_path = :code.which(Hologram.Reflection)
 
       assert PLT.get!(plt, Hologram.Reflection) == Reflection.beam_info(beam_path)
+    end
+
+    test "reads a protocol from its consolidated beam when the VM loaded it from its own beam" do
+      protocol = Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+      {own_beam_path, consolidated_beam_path} = load_protocol_from_own_beam(protocol)
+
+      plt = build_module_info_plt!(PLT.start(), nil)
+
+      assert PLT.get!(plt, protocol) == Reflection.beam_info(consolidated_beam_path)
+      refute PLT.get!(plt, protocol) == Reflection.beam_info(own_beam_path)
     end
 
     test "reuses the old entry when the BEAM is untouched and older than the dump" do
