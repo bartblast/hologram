@@ -965,9 +965,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp build_runtime_graph(call_graph, false, sup) do
     call_graph
     |> CallGraph.clone(supervisor: sup)
-    # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
-    # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
-    # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
     |> CallGraph.remove_manually_ported_mfas()
   end
 
