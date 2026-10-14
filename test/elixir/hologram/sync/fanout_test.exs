@@ -1,4 +1,7 @@
 defmodule Hologram.Sync.FanoutTest do
+  # async: false - each test writes the query cache's persistent term, shared by the whole node,
+  # and starts the sync result store, the evaluator registry and the evaluators supervisor under
+  # their registered names, which one test on the node can hold at a time.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Sync.Fanout

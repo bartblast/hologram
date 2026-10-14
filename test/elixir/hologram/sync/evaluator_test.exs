@@ -1,4 +1,6 @@
 defmodule Hologram.Sync.EvaluatorTest do
+  # async: false - each test starts the sync result store and the evaluator registry under their
+  # registered names, which one test on the node can hold at a time.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Sync.Evaluator

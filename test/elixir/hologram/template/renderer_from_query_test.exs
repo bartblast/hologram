@@ -1,4 +1,6 @@
 defmodule Hologram.Template.RendererFromQueryTest do
+  # async: false - the tests write the query cache's persistent term (QueryCache.init/1) and
+  # restart the asset path registry under its registered name, both shared by the whole node.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
