@@ -16,8 +16,8 @@ alias Hologram.Reflection
 # the policied types join.
 Benchee.run(
   %{
-    "build_sync_constants/3" => fn {reach_by_page, module_info_plt, permission_checking?} ->
-      Compiler.build_sync_constants(reach_by_page, module_info_plt, permission_checking?)
+    "build_sync_constants/3" => fn {reach_by_page, component_queries, module_info_plt} ->
+      Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
     end
   },
   before_scenario: fn _input ->
@@ -37,9 +37,18 @@ Benchee.run(
 
     # Listed with the runtime's MFAs still in the graph, as the compile task lists it: a
     # component reached through a runtime MFA is still one the page can reach.
-    reach_by_page = Compiler.list_reach_by_page(page_modules, call_graph)
+    reach_by_page =
+      page_modules
+      |> Compiler.list_reach_by_page(call_graph)
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
 
-    {reach_by_page, module_info_plt, permission_checking_pages != []}
+    component_queries =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
+
+    {reach_by_page, component_queries, module_info_plt}
   end,
   formatters: [
     Benchee.Formatters.Console,

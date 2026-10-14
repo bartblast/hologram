@@ -1146,16 +1146,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
     # bundles are derived from no longer holds the vertex to ask about - while the question is
-    # exactly whether the bundles reach it. A data model with no user entity type has no grant
-    # store, so no page checks permissions against anything then.
+    # exactly whether the bundles reach it.
     permission_checking_pages =
-      if Reflection.user_entity(module_info_plt) do
-        page_modules
-        |> Compiler.list_reach_by_page(call_graph)
-        |> Compiler.pages_checking_permissions()
-      else
-        []
-      end
+      page_modules
+      |> Compiler.list_reach_by_page(call_graph)
+      |> Compiler.pages_checking_permissions()
 
     reach_by_page =
       Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
@@ -1197,15 +1192,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     dump_queries_plt(queries_plt, queries_plt_dump_path)
 
-    # TODO: the modularization work decides whether a build bakes policy rules only when some
-    # page checks permissions. If every build with a user entity bakes them, this flag goes,
-    # along with the empty-policy clause of Compiler's render_policy/2 that reads it.
     sync_constants =
-      Compiler.build_sync_constants(
-        listed_reach,
-        module_info_plt,
-        permission_checking_pages != []
-      )
+      Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
     # its inputs: a policy that changed moves the JavaScript while the constants stay the same (see

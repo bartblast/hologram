@@ -63,10 +63,20 @@ Benchee.run(
 
     # Derived before the graph is split too: the data layer reads every page's reach with the
     # runtime's MFAs in it.
-    sync_constants_js =
+    reach_by_page =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.build_sync_constants(module_info_plt, permission_checking_pages != [])
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+
+    component_queries =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
+
+    sync_constants_js =
+      reach_by_page
+      |> Compiler.build_sync_constants(component_queries, module_info_plt)
       |> Compiler.build_sync_constants_js()
 
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)

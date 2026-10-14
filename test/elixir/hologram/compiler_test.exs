@@ -152,10 +152,10 @@ defmodule Hologram.CompilerTest do
     opts
   end
 
-  # The windows of the given pages, derived the way the compile task derives them: each page's reach
-  # on the given graph folded into what the data layer keeps, and the queries of the components the
-  # pages reach.
-  defp derive_page_windows(pages, call_graph, module_info_plt, permission_checking_pages) do
+  # What the data layer folds its outputs from, for the given pages, derived the way the compile task
+  # derives it: each page's reach on the given graph folded into what the data layer keeps, and the
+  # queries of the components the pages reach.
+  defp derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages) do
     reach_by_page =
       pages
       |> list_reach_by_page(call_graph)
@@ -169,7 +169,32 @@ defmodule Hologram.CompilerTest do
       |> Enum.uniq()
       |> extract_component_queries(entity_types)
 
+    {reach_by_page, component_queries}
+  end
+
+  defp derive_page_windows(pages, call_graph, module_info_plt, permission_checking_pages) do
+    {reach_by_page, component_queries} =
+      derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
+
     build_page_windows(reach_by_page, component_queries, module_info_plt)
+  end
+
+  defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
+    {reach_by_page, component_queries} =
+      derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
+
+    build_sync_constants(reach_by_page, component_queries, module_info_plt)
+  end
+
+  # A copy of the given module info PLT in which no entity type is the user entity type: a data model
+  # with no grant store.
+  defp without_user_entity(module_info_plt) do
+    items =
+      module_info_plt
+      |> PLT.get_all()
+      |> Enum.map(fn {module, info} -> {module, Map.put(info, :user_entity?, false)} end)
+
+    PLT.start(items: items)
   end
 
   # What every page of the test build reaches on the given graph, as the compile task lists it for
@@ -1086,12 +1111,7 @@ defmodule Hologram.CompilerTest do
     # against.
     test "leaves the grants window out of a checking page when the data model designates no user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      items =
-        module_info_plt
-        |> PLT.get_all()
-        |> Enum.map(fn {module, info} -> {module, Map.put(info, :user_entity?, false)} end)
-
-      plt_without_user_entity = PLT.start(items: items)
+      plt_without_user_entity = without_user_entity(module_info_plt)
 
       page_windows =
         derive_page_windows([PageModule7], call_graph, plt_without_user_entity, [PageModule7])
@@ -1473,7 +1493,10 @@ defmodule Hologram.CompilerTest do
 
   describe "build_sync_constants/3" do
     setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      [sync_constants: build_sync_constants(page_reach(call_graph), module_info_plt)]
+      sync_constants =
+        derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, [])
+
+      [sync_constants: sync_constants]
     end
 
     test "collects the types the queries the given pages reach read", %{
@@ -1532,8 +1555,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, true)
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -1542,8 +1565,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, false)
+      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -1556,8 +1578,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, true)
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute MapSet.member?(sync_constants.entity_types, Entity4)
@@ -1567,14 +1589,35 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, false)
+      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
     end
 
+    test "marks the constants as permission-checking when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert sync_constants.permission_checking?
+    end
+
+    # No user entity type, no grant store: a page checking permissions has nothing to check them
+    # against, so neither the grant type nor the policies ship.
+    test "leaves the grant type out when a page checks permissions and the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, plt_without_user_entity, [PageModule8])
+
+      refute sync_constants.permission_checking?
+      refute MapSet.member?(sync_constants.entity_types, RoleGrant)
+      refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
+    end
+
     test "records no model hash when the module info PLT records no entity type" do
-      assert build_sync_constants([], PLT.start()) == %{
+      assert build_sync_constants(%{}, %{}, PLT.start()) == %{
                entity_types: MapSet.new(),
                model_hash: nil,
                permission_checking?: false,

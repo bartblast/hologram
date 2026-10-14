@@ -1958,9 +1958,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns what the client's data layer is compiled with, derived from what each page's client code
-  reaches, as `list_reach_by_page/2` lists it. The components among the modules a page reaches are
-  told by the given module info PLT.
+  Returns what the client's data layer is compiled with, derived from what the data layer keeps of
+  each page's reach (see `build_kept_page_reach/3`) and the registered queries of the components
+  the pages reach (see `extract_component_queries/2`). Nothing is extracted or walked here.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
   everything it includes, plus every entity type the pages' client code mentions. A client
@@ -1973,10 +1973,11 @@ defmodule Hologram.Compiler do
   there, but the names its arguments were written with do not survive encoding - and those names
   are what each argument binds by.
 
-  When any of the pages checks permissions on the client (`permission_checking?`), the grant
-  type joins the entity types: those clients hold grant rows, and a row of a type the model does
-  not name cannot be read back at all. No query names that type - the grants window is registered
-  rather than extracted - so it is added here rather than derived.
+  When any of the pages checks permissions on the client and the given module info PLT records a
+  user entity type (`:permission_checking?`), the grant type joins the entity types: those clients
+  hold grant rows, and a row of a type the model does not name cannot be read back at all. No query
+  names that type - the grants window is registered rather than extracted - so it is added here
+  rather than derived.
 
   Every entity type declaring a policy joins them too: a check's argument is whatever a template
   passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})` being
@@ -1991,22 +1992,31 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
-  @spec build_sync_constants([{module, page_reach}], PLT.t(), boolean) :: sync_constants
-  def build_sync_constants(reach_by_page, module_info_plt, permission_checking? \\ false) do
-    # One listing per page, read twice: the modules a page reaches carry both its components
-    # and the entity types below.
-    reached_modules =
+  @spec build_sync_constants(
+          %{module => kept_page_reach},
+          %{module => component_queries},
+          PLT.t()
+        ) ::
+          sync_constants
+  def build_sync_constants(reach_by_page, component_queries, module_info_plt) do
+    component_modules =
       reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> list_reached_modules(reach) end)
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
+      |> Enum.sort()
 
-    component_modules = reached_components(reached_modules, module_info_plt)
-
-    # One listing, from the module info PLT, for the extraction below, the policied set and the
-    # model hash: the extractor forks over this list once per variant if it reads it itself, and
-    # policied_entity_types/1 filters the same one.
+    # One listing, from the module info PLT, for the mentions, the policied set and the model hash.
     all_entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
+
+    # A data model with no user entity type has no grant store, so no page checks permissions
+    # against anything then.
+    # TODO: the modularization work decides whether a build bakes policy rules only when some
+    # page checks permissions. If every build with a user entity bakes them, this flag goes,
+    # along with the empty-policy clause of render_policy/2 that reads it.
+    permission_checking? =
+      Reflection.user_entity(module_info_plt) != nil and
+        Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
     # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
@@ -2015,17 +2025,17 @@ defmodule Hologram.Compiler do
     # module has a struct (`CallGraph.maybe_add_struct_call_graph_edges/2`). Every entity type has
     # one, so every spelling lands among the struct types the page names (its MFAs leave the
     # struct functions out, which ship in the type's chunks), and telling a mention apart from a
-    # call would answer nothing this does not.
+    # call would answer nothing this does not. Each page's modules are asked about the entity types
+    # rather than joined into one set: a page reaches far more modules than there are entity types.
     mentioned_entity_types =
-      reached_modules
-      |> MapSet.new()
-      |> MapSet.intersection(MapSet.new(all_entity_types))
+      Enum.reduce(reach_by_page, MapSet.new(), fn {_page_module, reach}, types ->
+        all_entity_types
+        |> Enum.filter(&MapSet.member?(reach.modules, &1))
+        |> MapSet.new()
+        |> MapSet.union(types)
+      end)
 
-    terms =
-      Enum.flat_map(
-        component_modules,
-        &QueryExtractor.extract_module_queries(&1, all_entity_types)
-      )
+    terms = Enum.flat_map(component_modules, &Map.fetch!(component_queries, &1).terms)
 
     queried_entity_types =
       Enum.reduce(terms, MapSet.new(), fn term, types ->
@@ -2050,7 +2060,7 @@ defmodule Hologram.Compiler do
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
-      prop_params: prop_params(component_modules)
+      prop_params: prop_params(component_modules, component_queries)
     }
   end
 
@@ -3208,14 +3218,14 @@ defmodule Hologram.Compiler do
 
   # A component declaring no parameterized capture is left out rather than carried as an empty
   # entry - the client reads a missing entry the same way, as nothing to bind.
-  defp prop_params(component_modules) do
+  defp prop_params(component_modules, component_queries) do
     component_modules
-    |> Enum.map(&{&1, QueryExtractor.extract_prop_params(&1)})
+    |> Enum.map(&{&1, Map.fetch!(component_queries, &1).prop_params})
     |> Enum.reject(fn {_module, params} -> params == [] end)
     |> Map.new()
   end
 
-  # The same params `prop_params/1` collects for the bundle, keyed by the pair a renderer asks
+  # The same params `prop_params/2` collects for the bundle, keyed by the pair a renderer asks
   # about rather than by module - the bundle ships one entry per component and reads it whole,
   # while a render looks up one prop of one component at a time.
   defp prop_params_index(component_queries) do
