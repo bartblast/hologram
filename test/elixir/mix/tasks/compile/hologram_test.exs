@@ -1284,6 +1284,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
     end
 
+    # Another Hologram build can extract and render differently, so the bundle inputs moving is
+    # reason enough, with no module edited.
+    test "a run whose bundle inputs changed derives the data layer again", %{opts: opts} do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      run(opts)
+
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert map_size(cache_state().data_layer.pages) == @num_pages
+    end
+
     test "a kept data layer whose dump is gone is derived again", %{opts: opts} do
       run(opts)
 

@@ -1431,6 +1431,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{
       cache
       | chunks: nil,
+        data_layer: nil,
         encoding_inputs: nil,
         js_input_paths: MapSet.new(),
         pending_pages: MapSet.new(),
