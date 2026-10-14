@@ -52,8 +52,8 @@ defmodule Hologram.Compiler.CompileInputsTest do
   end
 
   describe "build/1" do
-    test "digests the manifest of every loaded application that has one", %{opts: opts} do
-      assert build(opts).manifests == [{:hologram, :erlang.phash2("manifest 1")}]
+    test "digests the manifests", %{opts: opts} do
+      assert build(opts).manifests == list_manifest_digests(@build_lib_dir)
     end
 
     test "lists no static file when the static dir is missing", %{opts: opts} do
@@ -99,6 +99,16 @@ defmodule Hologram.Compiler.CompileInputsTest do
       dump(record, path)
 
       assert load(path) == record
+    end
+  end
+
+  describe "list_manifest_digests/1" do
+    test "digests the manifest of every loaded application that has one" do
+      assert list_manifest_digests(@build_lib_dir) == [{:hologram, :erlang.phash2("manifest 1")}]
+    end
+
+    test "no manifest" do
+      assert list_manifest_digests(Path.join(@test_dir, "missing")) == []
     end
   end
 
