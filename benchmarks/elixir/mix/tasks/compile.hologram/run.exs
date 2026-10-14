@@ -1,4 +1,5 @@
 alias Hologram.Benchmarks.Fixtures.Page1
+alias Hologram.Benchmarks.Fixtures.UnusedModule
 alias Hologram.Commons.FileUtils
 alias Hologram.Commons.PLT
 alias Hologram.Compiler
@@ -53,12 +54,29 @@ off_opts =
   |> Keyword.put(:build_lib_dir, build_lib_dir)
   |> Keyword.put(:force?, false)
 
+# A running VM sees an edit as a module the compiler reports whose beam has another digest than the
+# kept one. The compile reads the beam again and keeps its true digest, so an edit is faked before
+# every run.
+fake_edit = fn module ->
+  %{module_info_plt: module_info_plt} = Cache.get()
+
+  info = PLT.get!(module_info_plt, module)
+  PLT.put(module_info_plt, module, %{info | digest: "edited"})
+
+  bytecode =
+    module
+    |> :code.which()
+    |> File.read!()
+
+  Tracer.trace({:on_module, bytecode, :none}, %Macro.Env{module: module})
+end
+
 # Hologram is on in every scenario but the two that say otherwise. The suite runs in dev, where the
 # task treats an unset flag as Hologram off, so an unforced run would take that path instead of the
 # skip it is meant to measure.
 System.put_env("HOLOGRAM_START", "1")
 
-# The six states a compile is run in.
+# The seven states a compile is run in.
 #
 # Cold: nothing on disk but the deps and nothing kept in the VM, as the first build of a project.
 # The task keeps its call graph, its IR and the state of every bundle between compiles in one VM,
@@ -71,8 +89,13 @@ System.put_env("HOLOGRAM_START", "1")
 # past the skip, it goes through every step and keeps everything.
 #
 # One page edited, same VM: the compile a running dev server makes after a save of one page, the
-# live reload loop. The graph is patched, the data layer is derived again and the page's bundle is
-# rebuilt.
+# live reload loop. The graph is patched, the page's reach is listed again for the data layer and
+# the page's bundle is rebuilt.
+#
+# A module no page uses edited, same VM: the same loop after a save of a module outside the graph.
+# The module's beam is read again and the operation asks it may spell are judged, and nothing else:
+# no page's reach is listed, no query is extracted, no bundle is rebuilt and the graph is not
+# copied.
 #
 # Nothing changed, Hologram off: a mix command in dev or test without HOLOGRAM_START, with no module
 # changed. The task never compiles there, reads the record of the manifests the data model was last
@@ -141,20 +164,21 @@ Benchee.run(
          opts
        end,
        before_each: fn opts ->
-         %{module_info_plt: module_info_plt} = Cache.get()
+         fake_edit.(Page1)
 
-         # A running VM sees an edit as a module the compiler reports whose beam has another
-         # digest than the kept one. The compile reads the beam again and keeps its true digest,
-         # so the edit is faked before every run.
-         info = PLT.get!(module_info_plt, Page1)
-         PLT.put(module_info_plt, Page1, %{info | digest: "edited"})
+         opts
+       end},
+    "a module no page uses edited, same VM" =>
+      {fn opts ->
+         Mix.Tasks.Compile.Hologram.run(opts)
+       end,
+       before_scenario: fn _input ->
+         Mix.Tasks.Compile.Hologram.run(opts)
 
-         bytecode =
-           Page1
-           |> :code.which()
-           |> File.read!()
-
-         Tracer.trace({:on_module, bytecode, :none}, %Macro.Env{module: Page1})
+         opts
+       end,
+       before_each: fn opts ->
+         fake_edit.(UnusedModule)
 
          opts
        end},

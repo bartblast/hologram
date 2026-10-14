@@ -22,6 +22,20 @@ defmodule Hologram.Compiler.CacheTest do
     }
   end
 
+  defp data_layer_state do
+    %{
+      components: %{Module1 => %{prop_params: [], targets: [], terms: []}},
+      pages: %{
+        Module2 => %{
+          checks_permissions?: false,
+          components: [Module1],
+          modules: MapSet.new([Module1, Module2])
+        }
+      },
+      sync_constants_js: "globalThis.Hologram.sync = null;"
+    }
+  end
+
   defp page_state_reading(js_inputs) do
     %{bundle_info: %{digest: "a", js_inputs: js_inputs}, modules: MapSet.new()}
   end
@@ -42,6 +56,7 @@ defmodule Hologram.Compiler.CacheTest do
       modules: MapSet.new([String.Chars.Date])
     })
 
+    put_data_layer(data_layer_state())
     put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
     put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
 
@@ -75,6 +90,7 @@ defmodule Hologram.Compiler.CacheTest do
       fn -> put_app_versions(hologram: "1.0.0") end,
       fn -> put_bundle_inputs(%{client_stacktraces?: true}) end,
       fn -> put_chunks(chunks_state_reading(%{})) end,
+      fn -> put_data_layer(data_layer_state()) end,
       fn -> put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true}) end,
       fn -> put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}}) end,
       fn -> put_pending_pages([Module1]) end,
@@ -331,6 +347,7 @@ defmodule Hologram.Compiler.CacheTest do
                     },
                     modules: MapSet.new([String.Chars.Date])
                   },
+                  data_layer: data_layer_state(),
                   encoding_inputs: %{async_mfas: MapSet.new(), client_stacktraces?: true},
                   js_input_paths:
                     MapSet.new([
@@ -449,8 +466,9 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(pages_plt) == []
     end
 
-    test "forgets the pending pages, the runtime, the chunks, the template modules and the encoding inputs" do
+    test "forgets the pending pages, the runtime, the chunks, the data layer, the template modules and the encoding inputs" do
       put_chunks(chunks_state_reading(%{}))
+      put_data_layer(data_layer_state())
       put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
       put_pending_pages([Module1])
       put_template_modules(%{Module1 => MapSet.new()})
@@ -464,7 +482,13 @@ defmodule Hologram.Compiler.CacheTest do
 
       forget_bundles()
 
-      assert %{chunks: nil, encoding_inputs: nil, runtime: nil, template_modules: nil} = get()
+      assert %{
+               chunks: nil,
+               data_layer: nil,
+               encoding_inputs: nil,
+               runtime: nil,
+               template_modules: nil
+             } = get()
 
       assert get().pending_pages == MapSet.new()
     end
@@ -526,6 +550,7 @@ defmodule Hologram.Compiler.CacheTest do
                call_graph: %CallGraph{} = call_graph,
                chunks: nil,
                compile_state_changed?: false,
+               data_layer: nil,
                dumped_at: nil,
                editable_modules: nil,
                encode_plt: %PLT{} = encode_plt,
@@ -685,6 +710,7 @@ defmodule Hologram.Compiler.CacheTest do
                app_versions: [hologram: "1.0.0"],
                bundle_inputs: %{client_stacktraces?: true},
                chunks: chunks,
+               data_layer: data_layer,
                encoding_inputs: %{async_mfas: async_mfas, client_stacktraces?: true},
                js_input_paths: js_input_paths,
                module_metadata: %{Module1 => %{app: :hologram, file: "lib/module_1.ex"}},
@@ -716,6 +742,7 @@ defmodule Hologram.Compiler.CacheTest do
                modules: MapSet.new([String.Chars.Date])
              }
 
+      assert data_layer == data_layer_state()
       assert dynamic_calls_open == MapSet.new([{:__struct__, 0}])
 
       assert js_input_paths ==
@@ -789,6 +816,26 @@ defmodule Hologram.Compiler.CacheTest do
       assert pending_pages == MapSet.new([Module2])
     end
 
+    test "a dump written before the data layer state existed loads with no data layer state", %{
+      path: path
+    } do
+      put_full_state()
+      dump_compile_state(path, false)
+
+      {1, compile_state} = read_compile_state_dump(path)
+
+      File.write!(
+        path,
+        SerializationUtils.serialize({1, Map.delete(compile_state, :data_layer)})
+      )
+
+      stop_cache()
+
+      assert load_compile_state(path) == :ok
+      assert %{data_layer: nil, pending_pages: pending_pages} = get()
+      assert pending_pages == MapSet.new([Module2])
+    end
+
     test "a dump of another version is not loaded", %{path: path} do
       File.write!(
         path,
@@ -833,6 +880,20 @@ defmodule Hologram.Compiler.CacheTest do
 
       assert put_chunks(nil) == :ok
       assert %{chunks: nil} = get()
+    end
+  end
+
+  describe "put_data_layer/1" do
+    test "keeps the data layer state" do
+      assert put_data_layer(data_layer_state()) == :ok
+      assert get().data_layer == data_layer_state()
+    end
+
+    test "nil forgets the kept data layer state" do
+      put_data_layer(data_layer_state())
+
+      assert put_data_layer(nil) == :ok
+      assert get().data_layer == nil
     end
   end
 
@@ -966,10 +1027,11 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the template modules and the bundle inputs, and marks the compile state as unchanged" do
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the data layer, the template modules and the bundle inputs, and marks the compile state as unchanged" do
       %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
       put_bundle_inputs(%{client_stacktraces?: true})
+      put_data_layer(data_layer_state())
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
       put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
@@ -987,6 +1049,7 @@ defmodule Hologram.Compiler.CacheTest do
         app_versions: app_versions,
         bundle_inputs: bundle_inputs,
         compile_state_changed?: compile_state_changed?,
+        data_layer: data_layer,
         module_metadata: module_metadata,
         page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
@@ -1003,6 +1066,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert app_versions == nil
       assert bundle_inputs == nil
       refute compile_state_changed?
+      assert data_layer == nil
       assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil

@@ -22,7 +22,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
+  alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
+  alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
   alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module16, as: ComponentModule16
   alias Hologram.Test.Fixtures.Component.Module17, as: ComponentModule17
@@ -147,6 +150,51 @@ defmodule Hologram.CompilerTest do
     File.mkdir!(opts[:static_dir])
 
     opts
+  end
+
+  # What the data layer folds its outputs from, for the given pages, derived the way the compile task
+  # derives it: each page's reach on the given graph folded into what the data layer keeps, and the
+  # queries of the components the pages reach.
+  defp derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages) do
+    reach_by_page =
+      pages
+      |> list_reach_by_page(call_graph)
+      |> build_kept_page_reach(permission_checking_pages, module_info_plt)
+
+    entity_types = Reflection.list_entities(module_info_plt)
+
+    component_queries =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+      |> extract_component_queries(entity_types)
+
+    {reach_by_page, component_queries}
+  end
+
+  defp derive_page_windows(pages, call_graph, module_info_plt, permission_checking_pages) do
+    {reach_by_page, component_queries} =
+      derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
+
+    build_page_windows(reach_by_page, component_queries, module_info_plt)
+  end
+
+  defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
+    {reach_by_page, component_queries} =
+      derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
+
+    build_sync_constants(reach_by_page, component_queries, module_info_plt)
+  end
+
+  # A copy of the given module info PLT in which no entity type is the user entity type: a data model
+  # with no grant store.
+  defp without_user_entity(module_info_plt) do
+    items =
+      module_info_plt
+      |> PLT.get_all()
+      |> Enum.map(fn {module, info} -> {module, Map.put(info, :user_entity?, false)} end)
+
+    PLT.start(items: items)
   end
 
   # What every page of the test build reaches on the given graph, as the compile task lists it for
@@ -988,7 +1036,9 @@ defmodule Hologram.CompilerTest do
 
   describe "build_page_windows/3" do
     setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      [page_windows: build_page_windows(page_reach(call_graph), module_info_plt)]
+      page_windows = derive_page_windows(Reflection.list_pages(), call_graph, module_info_plt, [])
+
+      [page_windows: page_windows]
     end
 
     test "gives a page the window of a component it renders", %{page_windows: page_windows} do
@@ -1021,8 +1071,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule7], call_graph)
-      page_windows = build_page_windows(reach_by_page, module_info_plt, [PageModule7])
+      page_windows =
+        derive_page_windows([PageModule7], call_graph, module_info_plt, [PageModule7])
 
       assert page_windows[PageModule7] == [Registry.id(Auth.grants_window())]
     end
@@ -1037,8 +1087,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      page_windows = build_page_windows(reach_by_page, module_info_plt, [PageModule8])
+      page_windows =
+        derive_page_windows([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert Registry.id(Auth.grants_window()) in page_windows[PageModule8]
       assert length(page_windows[PageModule8]) == 2
@@ -1051,10 +1101,22 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule12], call_graph)
-      page_windows = build_page_windows(reach_by_page, module_info_plt, [PageModule12])
+      page_windows =
+        derive_page_windows([PageModule12], call_graph, module_info_plt, [PageModule12])
 
       assert page_windows[PageModule12] == [Registry.id(Auth.grants_window())]
+    end
+
+    # No user entity type, no grant store: a page checking permissions has nothing to check them
+    # against.
+    test "leaves the grants window out of a checking page when the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      page_windows =
+        derive_page_windows([PageModule7], call_graph, plt_without_user_entity, [PageModule7])
+
+      assert page_windows[PageModule7] == []
     end
   end
 
@@ -1201,39 +1263,25 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "pages_checking_permissions/2" do
-    test "names a page whose template checks permissions", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
+  describe "pages_checking_permissions/1" do
+    test "names a page whose template checks permissions", %{call_graph: call_graph} do
+      pages = pages_checking_permissions(page_reach(call_graph))
 
       assert PageModule10 in pages
     end
 
     test "passes over a page that checks permissions only in a command handler", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
+      call_graph: call_graph
     } do
-      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
+      pages = pages_checking_permissions(page_reach(call_graph))
 
       refute PageModule11 in pages
     end
 
-    test "passes over a page that checks nothing", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      pages = pages_checking_permissions(page_reach(call_graph), module_info_plt)
+    test "passes over a page that checks nothing", %{call_graph: call_graph} do
+      pages = pages_checking_permissions(page_reach(call_graph))
 
       refute PageModule7 in pages
-    end
-
-    # No user entity type, no grant store: no page checks permissions against anything.
-    test "names no page when the module info PLT records no user entity type", %{
-      call_graph: call_graph
-    } do
-      assert pages_checking_permissions(page_reach(call_graph), PLT.start()) == []
     end
 
     # No fixture page calls the grant verbs in its client code, deliberately: until the verbs are
@@ -1242,26 +1290,20 @@ defmodule Hologram.CompilerTest do
     # can?/3 is taken OUT of that clone first: the verbs call it, so in the real graph a page
     # reaching a verb reaches can? too and would qualify under the old rule alone. Once the verbs
     # are ported their subtree is pruned from every build, which is the state this pins.
-    test "names a page whose client code grants a role", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
+    test "names a page whose client code grants a role", %{call_graph: call_graph} do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
       CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 3})
 
-      assert PageModule7 in pages_checking_permissions(page_reach(graph), module_info_plt)
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
 
-    test "names a page whose client code revokes a role", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
+    test "names a page whose client code revokes a role", %{call_graph: call_graph} do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
       CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 3})
 
-      assert PageModule7 in pages_checking_permissions(page_reach(graph), module_info_plt)
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
   end
 
@@ -1273,7 +1315,10 @@ defmodule Hologram.CompilerTest do
     test "collects the entries, prop params and windows of the given components", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1, ComponentModule11], entity_types)
+      component_queries =
+        extract_component_queries([QueryExtractorModule1, ComponentModule11], entity_types)
+
+      queries = build_queries(component_queries, entity_types)
 
       module_1_term =
         Entity2
@@ -1297,7 +1342,9 @@ defmodule Hologram.CompilerTest do
     test "registers the grants window beside the windows the queries download", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1], entity_types)
+      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      queries = build_queries(component_queries, entity_types)
+
       grants_window = Auth.grants_window()
 
       assert queries.windows[Registry.id(grants_window)] == grants_window
@@ -1307,7 +1354,8 @@ defmodule Hologram.CompilerTest do
     test "registers no grants window when the given entity types hold no role grant store", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1], entity_types -- [RoleGrant])
+      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      queries = build_queries(component_queries, entity_types -- [RoleGrant])
 
       refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
     end
@@ -1315,14 +1363,16 @@ defmodule Hologram.CompilerTest do
     test "leaves out a component declaring no parameterized capture", %{
       entity_types: entity_types
     } do
-      queries = build_queries([QueryExtractorModule1], entity_types)
+      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      queries = build_queries(component_queries, entity_types)
 
       assert queries.prop_params == %{}
     end
 
     test "collects a registered query reading a type with server-only attributes it does not reference",
          %{entity_types: entity_types} do
-      queries = build_queries([ComponentModule20], entity_types)
+      component_queries = extract_component_queries([ComponentModule20], entity_types)
+      queries = build_queries(component_queries, entity_types)
 
       assert map_size(queries.entries) == 1
     end
@@ -1335,8 +1385,10 @@ defmodule Hologram.CompilerTest do
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny returns no rows to any session. Add allow lines, or drop the query."
 
+      component_queries = extract_component_queries([ComponentModule15], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule15], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1348,8 +1400,10 @@ defmodule Hologram.CompilerTest do
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
 
+      component_queries = extract_component_queries([ComponentModule16], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule16], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1362,8 +1416,10 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
+      component_queries = extract_component_queries([ComponentModule17], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule17], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1376,8 +1432,10 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
+      component_queries = extract_component_queries([ComponentModule18], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule18], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1391,8 +1449,10 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
+      component_queries = extract_component_queries([ComponentModule19], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule19], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
 
@@ -1405,29 +1465,23 @@ defmodule Hologram.CompilerTest do
           "tiers, so it cannot claim another. Drop trust(), or read through the backend API in " <>
           "a command."
 
+      component_queries = extract_component_queries([ComponentModule28], entity_types)
+
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries([ComponentModule28], entity_types)
-      end
-    end
-
-    # The refusal is the query stage's rather than a validation's - an include sub-term cannot
-    # carry the mark at all, so the build never reaches a term to object to.
-    test "raises for a registered query whose include claims the server's authority", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
-          "whole query, includes and all, on the server's authority"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        build_queries([ComponentModule29], entity_types)
+        build_queries(component_queries, entity_types)
       end
     end
   end
 
   describe "build_queries_plt/2" do
     test "holds the entries, prop params and windows, and dumps beside the other build artifacts" do
-      queries = build_queries([ComponentModule11], Reflection.list_entities())
+      entity_types = Reflection.list_entities()
+
+      queries =
+        [ComponentModule11]
+        |> extract_component_queries(entity_types)
+        |> build_queries(entity_types)
+
       opts = [build_dir: "/my_build_dir"]
 
       {plt, dump_path} = build_queries_plt(queries, opts)
@@ -1439,7 +1493,10 @@ defmodule Hologram.CompilerTest do
 
   describe "build_sync_constants/3" do
     setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      [sync_constants: build_sync_constants(page_reach(call_graph), module_info_plt)]
+      sync_constants =
+        derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, [])
+
+      [sync_constants: sync_constants]
     end
 
     test "collects the types the queries the given pages reach read", %{
@@ -1498,8 +1555,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, true)
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -1508,8 +1565,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, false)
+      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -1522,8 +1578,8 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, true)
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute MapSet.member?(sync_constants.entity_types, Entity4)
@@ -1533,14 +1589,35 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      reach_by_page = list_reach_by_page([PageModule8], call_graph)
-      sync_constants = build_sync_constants(reach_by_page, module_info_plt, false)
+      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
     end
 
+    test "marks the constants as permission-checking when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert sync_constants.permission_checking?
+    end
+
+    # No user entity type, no grant store: a page checking permissions has nothing to check them
+    # against, so neither the grant type nor the policies ship.
+    test "leaves the grant type out when a page checks permissions and the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, plt_without_user_entity, [PageModule8])
+
+      refute sync_constants.permission_checking?
+      refute MapSet.member?(sync_constants.entity_types, RoleGrant)
+      refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
+    end
+
     test "records no model hash when the module info PLT records no entity type" do
-      assert build_sync_constants([], PLT.start()) == %{
+      assert build_sync_constants(%{}, %{}, PLT.start()) == %{
                entity_types: MapSet.new(),
                model_hash: nil,
                permission_checking?: false,
@@ -1884,6 +1961,71 @@ defmodule Hologram.CompilerTest do
                PLT.get(plt, Module1)
 
       PLT.stop(plt)
+    end
+  end
+
+  describe "build_kept_page_reach/3" do
+    setup do
+      info = fn component? ->
+        %{digest: 1, mtime: 1, size: 1, page?: false, component?: component?}
+      end
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, info.(false))
+        |> PLT.put(Module2, info.(true))
+        |> PLT.put(Module3, info.(true))
+
+      [module_info_plt: module_info_plt]
+    end
+
+    test "keeps the modules a page reaches, the struct types it names included, and the components among them, sorted",
+         %{module_info_plt: module_info_plt} do
+      reach = %{
+        mfas: [{Module1, :fun_1, 0}, {Module3, :fun_2, 1}, {Module2, :fun_3, 0}],
+        types: [Module4]
+      }
+
+      assert build_kept_page_reach([{Module1, reach}], [], module_info_plt) == %{
+               Module1 => %{
+                 checks_permissions?: false,
+                 components: [Module2, Module3],
+                 modules: MapSet.new([Module1, Module2, Module3, Module4])
+               }
+             }
+    end
+
+    test "leaves out a reached module the module info PLT does not hold as a component", %{
+      module_info_plt: module_info_plt
+    } do
+      reach = %{mfas: [{Module1, :fun_1, 0}, {Enum, :map, 2}], types: []}
+
+      assert %{Module1 => %{components: []}} =
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt)
+    end
+
+    test "marks the pages given as checking permissions", %{module_info_plt: module_info_plt} do
+      reach = %{mfas: [], types: []}
+
+      assert %{
+               Module1 => %{checks_permissions?: true},
+               Module11 => %{checks_permissions?: false}
+             } =
+               build_kept_page_reach(
+                 [{Module1, reach}, {Module11, reach}],
+                 [Module1],
+                 module_info_plt
+               )
+    end
+
+    test "answers for every page it was given", %{module_info_plt: module_info_plt} do
+      reach = %{mfas: [], types: []}
+
+      assert build_kept_page_reach([{Module1, reach}, {Module11, reach}], [], module_info_plt) ==
+               %{
+                 Module1 => %{checks_permissions?: false, components: [], modules: MapSet.new()},
+                 Module11 => %{checks_permissions?: false, components: [], modules: MapSet.new()}
+               }
     end
   end
 
@@ -4897,6 +5039,70 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "extract_component_queries/2" do
+    setup do
+      [entity_types: Reflection.list_entities()]
+    end
+
+    test "extracts the queries of every given component, keyed by module", %{
+      entity_types: entity_types
+    } do
+      module_1_term =
+        Entity2
+        |> filter(a: true)
+        |> order_by(:c)
+        |> Query.normalize()
+
+      module_11_term =
+        Entity2
+        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_component_queries([QueryExtractorModule1, ComponentModule11], entity_types) ==
+               %{
+                 ComponentModule11 => %{
+                   prop_params: [entities: [:min_b]],
+                   targets: [ComponentModule11],
+                   terms: [module_11_term]
+                 },
+                 QueryExtractorModule1 => %{
+                   prop_params: [],
+                   targets: [QueryExtractorModule1],
+                   terms: [module_1_term]
+                 }
+               }
+    end
+
+    test "records the module a remote capture points at", %{entity_types: entity_types} do
+      assert %{ComponentModule14 => %{targets: [ComponentModule13]}} =
+               extract_component_queries([ComponentModule14], entity_types)
+    end
+
+    test "records nothing for a component declaring no query prop", %{
+      entity_types: entity_types
+    } do
+      assert extract_component_queries([ComponentModule1], entity_types) == %{
+               ComponentModule1 => %{prop_params: [], targets: [], terms: []}
+             }
+    end
+
+    test "answers for no component with no entry" do
+      assert extract_component_queries([], Reflection.list_entities()) == %{}
+    end
+
+    # The refusal is the query stage's rather than a validation's - an include sub-term cannot
+    # carry the mark at all, so the extraction never reaches a term to object to.
+    test "raises for a capture the extractor refuses", %{entity_types: entity_types} do
+      expected_msg =
+        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
+          "whole query, includes and all, on the server's authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        extract_component_queries([ComponentModule29], entity_types)
+      end
+    end
+  end
+
   describe "fingerprint_js_inputs/2" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "fingerprint_js_inputs_2"])
@@ -7781,39 +7987,6 @@ defmodule Hologram.CompilerTest do
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_page_modules([InlinePageModuleFixture4], plt)
-      end
-    end
-  end
-
-  # The validation rules live in QueryExtractor's own suite - what is asserted here is the wiring:
-  # the components swept are the ones the given pages reach through the call graph.
-  describe "validate_slot_bindings!/2" do
-    test "passes when every reachable component binds declared slots", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      assert validate_slot_bindings!(page_reach(call_graph), module_info_plt) == :ok
-    end
-
-    test "raises when a reachable component binds an undeclared slot", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      patched_call_graph =
-        call_graph
-        |> CallGraph.clone()
-        |> CallGraph.add_edge(
-          {PageModule7, :template, 0},
-          {ComponentModule11, :template, 0}
-        )
-
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
-
-      reach_by_page = list_reach_by_page([PageModule7], patched_call_graph)
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_slot_bindings!(reach_by_page, module_info_plt)
       end
     end
   end

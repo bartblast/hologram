@@ -19,6 +19,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
+  alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
+  alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
+  alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
@@ -85,7 +92,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # while the extractor evaluates the capture (ArgumentError). The question is whether the build
   # can produce this component's queries at all, not which tier said no.
   defp buildable_queries?(module, entity_types) do
-    Compiler.build_queries([module], entity_types)
+    [module]
+    |> Compiler.extract_component_queries(entity_types)
+    |> Compiler.build_queries(entity_types)
+
     true
   rescue
     ArgumentError -> false
@@ -150,6 +160,34 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
+  # How many components' registered queries are extracted while the given function runs.
+  defp count_extractions(fun) do
+    count_calls({QueryExtractor, :extract_module_queries, 2}, fun)
+  end
+
+  # How many times the page windows PLT and the queries PLT are dumped while the given function
+  # runs, in that order: each goes through a private function of the task, whose local calls are
+  # counted.
+  defp count_data_layer_dumps(fun) do
+    mfas = [
+      {Mix.Tasks.Compile.Hologram, :dump_page_windows_plt, 2},
+      {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2}
+    ]
+
+    Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:local, :call_count]))
+
+    try do
+      fun.()
+
+      Enum.map(mfas, fn mfa ->
+        {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+        count
+      end)
+    after
+      Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:local, :call_count]))
+    end
+  end
+
   # How many times the call graph and the module info PLT are dumped while the given function runs.
   # PLT.dump/2 also writes the page digest PLT and the chunk registry PLT, once before the batches
   # and once after each, and the page windows PLT and the queries PLT, once before the batches,
@@ -193,6 +231,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         :erlang.trace_pattern({module, function, arity}, false, flags)
       end)
     end
+  end
+
+  # How many pages hold the given module in the reach the data layer kept of them.
+  defp count_pages_holding(module) do
+    Enum.count(cache_state().data_layer.pages, fn {_page_module, reach} ->
+      MapSet.member?(reach.modules, module)
+    end)
   end
 
   # How many kept pages reach the given module, as their states record it.
@@ -1121,6 +1166,365 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert load_module_info_items(opts)[Module1] == first_run_module_info
   end
 
+  describe "data layer" do
+    test "a run with no changes extracts no component's queries", %{opts: opts} do
+      run(opts)
+
+      assert count_extractions(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a module no page reaches extracts no component's queries", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_extractions(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a page extracts no component's queries", %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+
+      assert count_extractions(fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a component extracts its queries and no other's", %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule21)
+
+      assert count_extractions(fn -> run(opts) end) == 1
+    end
+
+    # Module14's query is a remote capture of a function of Module13, which is no component.
+    test "an edit of a module a component's capture points at extracts that component's queries",
+         %{opts: opts} do
+      run(opts)
+
+      %{components: components} = cache_state().data_layer
+
+      assert ComponentModule13 in components[ComponentModule14].targets
+
+      num_pointing =
+        Enum.count(components, fn {_module, queries} -> ComponentModule13 in queries.targets end)
+
+      fake_edit(ComponentModule13)
+
+      assert count_extractions(fn -> run(opts) end) == num_pointing
+    end
+
+    # The extractor replays a query whose entity type is an argument over every entity type, and
+    # the query validations read what the entity types declare.
+    test "an edit of an entity type extracts every component's queries", %{opts: opts} do
+      run(opts)
+      num_components = map_size(cache_state().data_layer.components)
+
+      fake_edit(Entity2)
+
+      assert count_extractions(fn -> run(opts) end) == num_components
+    end
+
+    # Page 8 reaches Module21. Taken out of the graph, Module21 is built into it again by the walk
+    # an edit of the page starts, as a component a page starts reaching is.
+    test "a component a walk builds into the graph has its queries extracted", %{opts: opts} do
+      run(opts)
+
+      take_out_of_graph(ComponentModule21)
+      fake_edit(PageModule8)
+
+      assert count_extractions(fn -> run(opts) end) == 1
+      assert ComponentModule21 in CallGraph.modules(cache_state().call_graph)
+    end
+
+    test "the kept component queries after an edit are the ones a cold compile extracts", %{
+      opts: opts
+    } do
+      run(opts)
+      fake_edit(ComponentModule21)
+      run(opts)
+
+      components = cache_state().data_layer.components
+
+      start_cold(opts)
+      run(opts)
+
+      assert cache_state().data_layer.components == components
+    end
+
+    test "an edit of a module no page reaches writes neither data layer dump", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+    end
+
+    # The runtime bundle carries the data layer's statement, so a statement derived again would be
+    # compared with the one the bundle was built with.
+    test "an edit of a module no page reaches keeps the data layer and the runtime bundle", %{
+      opts: opts
+    } do
+      run(opts)
+      data_layer = cache_state().data_layer
+
+      fake_edit(@unreached_module)
+
+      assert count_built_bundles(fn -> run(opts) end) == 0
+      assert cache_state().data_layer == data_layer
+    end
+
+    test "an edit of a component derives the data layer again", %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule21)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "an edit of an entity type derives the data layer again", %{opts: opts} do
+      run(opts)
+      fake_edit(Entity2)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    # Another Hologram build can extract and render differently, so the bundle inputs moving is
+    # reason enough, with no module edited.
+    test "a run whose bundle inputs changed derives the data layer again", %{opts: opts} do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      run(opts)
+
+      Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert map_size(cache_state().data_layer.pages) == @num_pages
+    end
+
+    test "a kept data layer whose dump is gone is derived again", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.page_windows_plt_dump_file_name())
+      |> File.rm!()
+
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a run with no changes judges no operation ask", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({Compiler, :validate_operations!, 4}, fn -> run(opts) end) == 0
+    end
+
+    # The data layer is kept, and the edited module may spell an operation all the same.
+    test "an edit of a module no page reaches judges the operation asks", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_calls({Compiler, :validate_operations!, 4}, fn -> run(opts) end) == 1
+    end
+
+    test "an edit of a module no page reaches lists no page's reach", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    # Twice for the data layer, on the runtime's copy and on the unsplit graph, and once for the
+    # page's bundle.
+    test "an edit of a page lists its reach three times", %{opts: opts} do
+      run(opts)
+
+      assert count_pages_holding(Module1) == 1
+
+      fake_edit(Module1)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 3
+    end
+
+    test "an edit of a component lists the reach of the pages holding it", %{opts: opts} do
+      run(opts)
+      num_pages = count_pages_holding(LayoutFixture)
+
+      fake_edit(LayoutFixture)
+
+      assert num_pages > 1
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 3 * num_pages
+    end
+
+    test "the kept page reach after an edit is the one a cold compile lists", %{opts: opts} do
+      run(opts)
+      fake_edit(PageModule8)
+      run(opts)
+
+      pages = cache_state().data_layer.pages
+
+      start_cold(opts)
+      run(opts)
+
+      assert cache_state().data_layer.pages == pages
+    end
+
+    test "a removed page is forgotten from the kept page reach", %{opts: opts} do
+      run(opts)
+
+      %{
+        data_layer: data_layer,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = cache_state()
+
+      removed_reach = %{checks_permissions?: false, components: [], modules: MapSet.new()}
+      pages = Map.put(data_layer.pages, :removed_page, removed_reach)
+      Cache.put_data_layer(%{data_layer | pages: pages})
+
+      module_infos
+      |> Map.put(:removed_page, %{digest: "removed", page?: true})
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_page))
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      refute Map.has_key?(cache_state().data_layer.pages, :removed_page)
+      assert map_size(cache_state().data_layer.pages) == @num_pages
+    end
+
+    test "a removed component is forgotten from the kept component queries", %{opts: opts} do
+      run(opts)
+
+      %{
+        data_layer: data_layer,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = cache_state()
+
+      removed_entry = %{prop_params: [], targets: [], terms: []}
+      components = Map.put(data_layer.components, :removed_component, removed_entry)
+      Cache.put_data_layer(%{data_layer | components: components})
+
+      module_infos
+      |> Map.put(:removed_component, %{component?: true, digest: "removed"})
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_component))
+
+      run(opts)
+
+      refute Map.has_key?(cache_state().data_layer.components, :removed_component)
+    end
+
+    test "a compile keeps what the data layer derived", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer, runtime: runtime} = cache_state()
+
+      assert map_size(data_layer.pages) == @num_pages
+      assert Enum.all?(opts[:component_modules], &Map.has_key?(data_layer.components, &1))
+      assert data_layer.sync_constants_js == runtime.sync_constants_js
+    end
+
+    test "the kept reach of a page names the components it reaches", %{opts: opts} do
+      run(opts)
+
+      assert %{checks_permissions?: false, components: [ComponentModule21, LayoutFixture]} =
+               cache_state().data_layer.pages[PageModule8]
+    end
+
+    test "a new VM reads the kept data layer from the compile state dump", %{opts: opts} do
+      run(opts)
+      data_layer = cache_state().data_layer
+
+      Cache.reset()
+      fake_recompile()
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert cache_state().data_layer == data_layer
+    end
+
+    test "a compile that fails on a registered query writes no dump and keeps nothing new", %{
+      opts: opts
+    } do
+      run(opts)
+      data_layer = cache_state().data_layer
+
+      dump_paths =
+        Enum.map(
+          [Reflection.page_windows_plt_dump_file_name(), Reflection.queries_plt_dump_file_name()],
+          &Path.join(opts[:build_dir], &1)
+        )
+
+      Enum.each(dump_paths, &File.write!(&1, "untouched"))
+
+      # The component joins the build with the edit, as a component saved with a refused query
+      # does: an edited templatable is validated without a kept entry of its own.
+      fake_edit(ComponentModule15)
+
+      failing_opts =
+        Keyword.update!(opts, :component_modules, &[ComponentModule15 | &1])
+
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny returns no rows to any session. Add allow lines, or drop the query."
+
+      assert_error Hologram.CompileError, expected_msg, fn -> run(failing_opts) end
+
+      assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched"]
+      assert Cache.get().data_layer == data_layer
+    end
+
+    # A run that fails while bundling the runtime forgets the runtime state, which held the
+    # statement the runtime bundle was built with. The data layer state holds it too.
+    test "a compile after one that failed while bundling the runtime keeps the data layer", %{
+      opts: opts
+    } do
+      run(opts)
+
+      fake_edit(find_editable_runtime_module())
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      data_layer = cache_state().data_layer
+
+      assert cache_state().runtime == nil
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert cache_state().data_layer == data_layer
+    end
+
+    # A builder's argument names bind the consuming component's like-named props, so a component
+    # whose capture names a prop it does not declare fails the build once a page reaches it. The
+    # page is made to reach one through an edge in the kept graph, and the edit is of a module no
+    # page reaches, so the patch leaves that edge in place. The page and the component have no kept
+    # entries, as ones new to the build: a kept page reach is listed again only when the edit can
+    # move it, and a kept component is validated with its queries, when they are extracted again.
+    test "refuses a component a page reaches whose query binds a prop it does not declare", %{
+      opts: opts
+    } do
+      run(opts)
+
+      data_layer = cache_state().data_layer
+
+      Cache.put_data_layer(%{
+        data_layer
+        | components: Map.delete(data_layer.components, ComponentModule11),
+          pages: Map.delete(data_layer.pages, Module1)
+      })
+
+      CallGraph.add_edge(
+        cache_state().call_graph,
+        {Module1, :template, 0},
+        {ComponentModule11, :template, 0}
+      )
+
+      fake_edit(@unreached_module)
+
+      expected_msg =
+        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
+    end
+  end
+
   describe "data model" do
     setup do
       on_exit(fn ->
@@ -1565,9 +1969,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Code.ensure_loaded!(IR)
 
-      # The query extractor reads a component's IR of its own, for the data layer the edit has it
-      # derive again (see Hologram.Compiler.QueryExtractor); the compile builds none into the IR
-      # PLT.
+      # The query extractor reads a component's IR of its own (see
+      # Hologram.Compiler.QueryExtractor), and the edit reaches no component, so no component's
+      # queries are extracted again.
       extractor_mfa = {QueryExtractor, :module_funs, 1}
       :erlang.trace_pattern(extractor_mfa, true, [:local, :call_count])
 
@@ -1584,7 +1988,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The edit was seen: the digest read from the beam replaced the faked one.
       assert cache_state().module_infos[@unreached_module].digest != "edited"
 
-      assert count == extractor_count
+      assert count == 0
+      assert extractor_count == 0
       refute PLT.member?(cache_state().ir_plt, @unreached_module)
       refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end
@@ -1998,7 +2403,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_calls({CallGraph, :with_shared_graph, 2}, fn -> run(opts) end) == 0
     end
 
-    # Once for its bundle, beside the data layer's two listings of every page's reach.
+    # Once for its bundle, beside the data layer's two listings of every page's reach, which no
+    # compile has kept.
     test "a run with no page states lists each page once for its bundle", %{opts: opts} do
       run(opts)
       start_cold(opts)
@@ -3228,15 +3634,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
     end
 
-    # The one copy is the runtime's, which the data layer lists every page's reach on once a module
-    # changed (see Hologram.Compiler.list_reach_by_page/2).
-    test "an edit of a module the graph does not hold copies the call graph once, for the data layer",
-         %{opts: opts} do
+    # The runtime's copy is what the data layer lists a page's reach on, and the edit moves no
+    # page's reach.
+    test "an edit of a module the graph does not hold copies no call graph", %{opts: opts} do
       run(opts)
 
       fake_edit(@unreached_module)
 
-      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 1
+      assert count_calls({CallGraph, :clone, 2}, fn -> run(opts) end) == 0
     end
 
     test "a run that rebuilds a pending page copies the call graph once", %{opts: opts} do

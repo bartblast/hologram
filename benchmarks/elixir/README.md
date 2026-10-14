@@ -4,9 +4,9 @@ Last run: 2026-10-11 23:08:28 UTC
 
 ## Summary
 
-Total benchmarks: 46
+Total benchmarks: 47
 
-Successful: 46\
+Successful: 47\
 Warnings: 0\
 Failed: 0
 
@@ -41,6 +41,14 @@ build_call_graph/1          1.40      712.53 ms     ±4.91%      719.47 ms      
 ```
 Name                     ips        average  deviation         median         99th %
 build_ir_plt/0          1.37      728.76 ms     ±1.47%      727.00 ms      754.24 ms
+```
+
+
+### ✅ compiler » build_kept_page_reach_3
+
+```
+Name                              ips        average  deviation         median         99th %
+build_kept_page_reach/3        565.97        1.77 ms    ±11.77%        1.72 ms        2.41 ms
 ```
 
 
@@ -90,7 +98,7 @@ build_page_js/5        233.59        4.28 ms    ±12.15%        4.30 ms        5
 
 ```
 Name                           ips        average  deviation         median         99th %
-build_page_windows/3          2.44      410.09 ms     ±2.24%      407.41 ms      437.42 ms
+build_page_windows/3        6.64 K      150.53 μs    ±10.67%      147.13 μs      184.17 μs
 ```
 
 
@@ -98,7 +106,7 @@ build_page_windows/3          2.44      410.09 ms     ±2.24%      407.41 ms    
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_queries/2          2.33      428.66 ms     ±4.78%      420.63 ms      511.21 ms
+build_queries/2       22.67 K       44.11 μs    ±41.94%       41.04 μs      103.96 μs
 ```
 
 
@@ -106,7 +114,7 @@ build_queries/2          2.33      428.66 ms     ±4.78%      420.63 ms      511
 
 ```
 Name                             ips        average  deviation         median         99th %
-build_sync_constants/3          2.41      415.53 ms     ±7.52%      403.26 ms      517.45 ms
+build_sync_constants/3        2.17 K      460.90 μs     ±8.88%      454.92 μs      549.11 μs
 ```
 
 
@@ -338,6 +346,14 @@ Comparison:
 ```
 
 
+### ✅ compiler » extract_component_queries_2
+
+```
+Name                                  ips        average  deviation         median         99th %
+extract_component_queries/2        1.44 K      695.54 μs    ±13.65%      678.63 μs      916.11 μs
+```
+
+
 ### ✅ compiler » list_reach_by_page_2
 
 ```
@@ -423,28 +439,26 @@ validate_page_modules/2       55.47 K       18.03 μs    ±37.66%       17.21 μ
 ```
 
 
-### ✅ compiler » validate_slot_bindings!_2
-
-```
-Name                                ips        average  deviation         median         99th %
-validate_slot_bindings!/2        597.64        1.67 ms     ±3.12%        1.67 ms        1.95 ms
-```
-
-
 ### ✅ mix » tasks » compile » hologram
 
 ```
-Name                               ips        average  deviation         median         99th %
-nothing changed, new VM           0.74         1.36 s     ±3.10%         1.34 s         1.43 s
-nothing changed, same VM          0.69         1.45 s     ±4.97%         1.39 s         1.54 s
-one page edited, same VM         0.175         5.71 s     ±1.52%         5.71 s         5.77 s
-cold                             0.133         7.50 s     ±0.86%         7.50 s         7.55 s
+Name                                            ips        average  deviation         median         99th %
+nothing changed, Hologram off               1506.64        0.66 ms    ±29.87%        0.61 ms        1.16 ms
+nothing changed, new VM                       96.48       10.36 ms    ±16.89%        9.91 ms       15.12 ms
+a module changed, Hologram off                25.19       39.70 ms    ±23.89%       35.44 ms       78.12 ms
+a module no page uses edited, same VM         12.14       82.38 ms     ±5.69%       81.59 ms      105.76 ms
+nothing changed, same VM                      11.71       85.36 ms     ±7.30%       83.84 ms      116.28 ms
+one page edited, same VM                       3.40      294.49 ms     ±2.62%      293.01 ms      322.04 ms
+cold                                           0.38     2616.21 ms     ±1.30%     2621.57 ms     2647.84 ms
 
 Comparison: 
-nothing changed, new VM           0.74
-nothing changed, same VM          0.69 - 1.07x slower +0.0901 s
-one page edited, same VM         0.175 - 4.21x slower +4.36 s
-cold                             0.133 - 5.54x slower +6.15 s
+nothing changed, Hologram off               1506.64
+nothing changed, new VM                       96.48 - 15.62x slower +9.70 ms
+a module changed, Hologram off                25.19 - 59.82x slower +39.04 ms
+a module no page uses edited, same VM         12.14 - 124.11x slower +81.71 ms
+nothing changed, same VM                      11.71 - 128.61x slower +84.70 ms
+one page edited, same VM                       3.40 - 443.69x slower +293.82 ms
+cold                                           0.38 - 3941.68x slower +2615.54 ms
 ```
 
 

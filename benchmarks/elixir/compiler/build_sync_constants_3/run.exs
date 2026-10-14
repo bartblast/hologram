@@ -1,11 +1,11 @@
+alias Hologram.Benchmarks.DataLayer
 alias Hologram.Compiler
-alias Hologram.Compiler.CallGraph
-alias Hologram.Reflection
 
-# What the compile task pays to derive what the client's data layer is compiled with, once per
-# compile that derives the data layer: the modules every page reaches, the entity types among
-# them, the queries of every reached component and the entity types those name, and the argument
-# names of the parameterized captures.
+# What the compile task pays to fold what the client's data layer is compiled with, once per
+# compile that derives the data layer: the entity types each page's kept modules name, the ones
+# the kept queries of every reached component name, and the argument names of the parameterized
+# captures. No page is walked and no query is extracted here: the data layer keeps both between
+# compiles.
 #
 # The function lists the entity types from the module info PLT it is given, so the number holds no
 # read of the beams.
@@ -16,31 +16,12 @@ alias Hologram.Reflection
 # the policied types join.
 Benchee.run(
   %{
-    "build_sync_constants/3" => fn {reach_by_page, module_info_plt, permission_checking?} ->
-      Compiler.build_sync_constants(reach_by_page, module_info_plt, permission_checking?)
+    "build_sync_constants/3" => fn {reach_by_page, component_queries, module_info_plt} ->
+      Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
     end
   },
-  before_scenario: fn _input ->
-    ir_plt = Compiler.build_ir_plt()
-    call_graph = Compiler.build_call_graph(ir_plt)
-    module_info_plt = CallGraph.module_info_plt(call_graph)
-    page_modules = Reflection.list_pages()
-
-    # Asked before remove_manually_ported_mfas/1: the permission checks are manually ported, so
-    # the graph the reach below is listed on no longer holds the vertices to ask about.
-    permission_checking_pages =
-      page_modules
-      |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions(module_info_plt)
-
-    CallGraph.remove_manually_ported_mfas(call_graph)
-
-    # Listed with the runtime's MFAs still in the graph, as the compile task lists it: a
-    # component reached through a runtime MFA is still one the page can reach.
-    reach_by_page = Compiler.list_reach_by_page(page_modules, call_graph)
-
-    {reach_by_page, module_info_plt, permission_checking_pages != []}
-  end,
+  # Derived the way a cold compile derives them (see Hologram.Benchmarks.DataLayer).
+  before_scenario: fn _input -> DataLayer.kept_inputs() end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,

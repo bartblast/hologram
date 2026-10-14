@@ -49,8 +49,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       the beams against.
 
     * the compile state dump - the after picture: what each page, the runtime bundle and the
-      chunk bundles were built from, the pages still to build and what the compile derived for the
-      bundles. The next compile keeps the bundles the diff does not reach.
+      chunk bundles were built from, the pages still to build, what the compile derived for the
+      bundles and what the data layer was derived from. The next compile keeps the bundles the diff
+      does not reach.
 
     * the page digest dump - the digest of each page's bundle, which the router serves.
 
@@ -92,6 +93,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
   alias Hologram.Compiler.DataModelInputs
+  alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
@@ -357,19 +359,57 @@ defmodule Mix.Tasks.Compile.Hologram do
           chunk_analysis_kept?
         )
 
+      # What the data layer kept of each page's reach that still holds, and the pages whose reach it
+      # lists again, if it derives at all (see partition_kept_page_reach/3).
+      {kept_page_reach, pages_to_list} =
+        partition_kept_page_reach(cache.data_layer, page_modules, reaching_modules)
+
+      # Whether the vocabulary the registered queries and the operation asks are judged against
+      # can have moved (see data_model_changed?/2).
+      data_model_changed? = data_model_changed?(module_digests_diff, new_module_info_plt)
+
+      tracked_component_modules =
+        list_tracked_component_modules(cache.data_layer, component_modules, new_module_info_plt)
+
+      # The components whose registered queries the data layer extracts again, if it derives at all
+      # (see list_stale_components/7). Listed once both walks are done: a component a walk built
+      # into the graph is one of them.
+      stale_components =
+        list_stale_components(
+          cache.data_layer,
+          tracked_component_modules,
+          module_digests_diff,
+          reaching_modules,
+          built_modules ++ chunk_built_modules(chunk_reach),
+          data_model_changed?,
+          call_graph
+        )
+
       # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
       async_mfas = list_async_mfas(cache.encoding_inputs, call_graph, graph_unchanged?)
 
       runtime_kept? = runtime_kept?(cache.runtime, graph_unchanged?, module_digests_diff)
 
-      # What the data layer derives from the build (see derive_data_layer!/1) is kept while no
-      # editable module changed: its dumps are on disk from the compile that derived it, and the
-      # runtime state holds what it rendered into the runtime bundle.
-      data_layer_kept? = data_layer_kept?(cache.runtime, module_digests_diff, opts)
+      # What the data layer derives from the build (see derive_data_layer!/1) is kept whole while
+      # the edit touches nothing it reads (see data_layer_kept?/3): its dumps are on disk from the
+      # compile that derived it, and the data layer state holds what it rendered into the runtime
+      # bundle.
+      data_layer_kept? =
+        data_layer_kept?(
+          cache.data_layer,
+          %{
+            data_model_changed?: data_model_changed?,
+            kept_page_reach: kept_page_reach,
+            pages_to_list: pages_to_list,
+            stale_components: stale_components,
+            tracked_component_modules: tracked_component_modules
+          },
+          opts
+        )
 
-      # The chunks' MFAs are listed on the runtime's copy too, and so is every page's reach for the
-      # data layer.
-      runtime_graph_kept? = Enum.all?([runtime_kept?, chunk_analysis_kept?, data_layer_kept?])
+      # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
+      # every page it lists again.
+      runtime_graph_kept? = Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == []])
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_graph_kept?, sup)
 
       templatable_modules = page_modules ++ component_modules
@@ -382,6 +422,17 @@ defmodule Mix.Tasks.Compile.Hologram do
           ir_plt
         )
 
+      # Listed once, from the module info PLT this compile brought in line with the beams: no beam
+      # is read and no module is asked.
+      entity_types = Reflection.list_entities(new_module_info_plt)
+
+      # Before the IR prune, which drops the IR this builds for a caller no page reaches.
+      maybe_validate_operations!(entity_types, call_graph, ir_plt, %{
+        data_model_changed?: data_model_changed?,
+        kept_data_layer: cache.data_layer,
+        module_digests_diff: module_digests_diff
+      })
+
       # The statement the runtime script sets the client's data layer constants with: rendered by
       # the derivation, or kept with the runtime bundle it was rendered into.
       sync_constants_js =
@@ -389,13 +440,15 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph: call_graph,
           call_graph_for_runtime: call_graph_for_runtime,
           component_modules: component_modules,
-          ir_plt: ir_plt,
-          kept_runtime: cache.runtime,
-          module_digests_diff: module_digests_diff,
+          entity_types: entity_types,
+          kept_data_layer: cache.data_layer,
+          kept_page_reach: kept_page_reach,
           module_info_plt: new_module_info_plt,
           opts: opts,
-          page_modules: page_modules,
-          supervisor: sup
+          pages_to_list: pages_to_list,
+          stale_components: stale_components,
+          supervisor: sup,
+          tracked_component_modules: tracked_component_modules
         })
 
       runtime_analysis = runtime_analysis(cache.runtime, call_graph_for_runtime, runtime_kept?)
@@ -904,17 +957,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     Compiler.build_chunk_reach!(call_graph, ir_plt, page_modules, component_modules)
   end
 
-  # The copy of the graph the runtime's MFAs and the chunks' are listed on, and every page's reach
-  # for the data layer, without the manually ported MFAs. None when all three are kept: nothing
-  # lists them then.
+  # The copy of the graph the runtime's MFAs and the chunks' are listed on, and the data layer's
+  # reach of every page it lists again, without the manually ported MFAs. None when all three are
+  # kept: nothing lists them then.
   defp build_runtime_graph(_call_graph, true, _sup), do: nil
 
   defp build_runtime_graph(call_graph, false, sup) do
     call_graph
     |> CallGraph.clone(supervisor: sup)
-    # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
-    # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
-    # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
     |> CallGraph.remove_manually_ported_mfas()
   end
 
@@ -1078,123 +1128,164 @@ defmodule Mix.Tasks.Compile.Hologram do
     PLT.stop(chunk_registry_plt)
   end
 
-  # The data layer's derivations are kept while no editable module changed since the compile that
-  # derived them, which must have finished: the runtime state is the proof, since a compile that
-  # fails forgets it (see keep_runtime_state/3), and the dumps it wrote must still be there.
-  defp data_layer_kept?(nil, _module_digests_diff, _opts), do: false
-
-  defp data_layer_kept?(_kept_runtime, module_digests_diff, opts) do
+  # Whether the dumps the data layer derivation writes are in the build dir.
+  defp data_layer_dumps_exist?(opts) do
     dump_file_names = [
       Reflection.page_windows_plt_dump_file_name(),
       Reflection.queries_plt_dump_file_name()
     ]
 
-    module_digests_diff == %{added_modules: [], edited_modules: [], removed_modules: []} and
-      Enum.all?(dump_file_names, fn dump_file_name ->
-        opts[:build_dir]
-        |> Path.join(dump_file_name)
-        |> File.exists?()
-      end)
+    Enum.all?(dump_file_names, fn dump_file_name ->
+      opts[:build_dir]
+      |> Path.join(dump_file_name)
+      |> File.exists?()
+    end)
   end
 
-  # What the data layer derives from the build, dumped for the running app and validated: the
+  # The data layer is kept whole when the edit touches nothing it reads: no page's reach to list
+  # again, no page gone, no component's queries stale, no kept component gone, the vocabulary the
+  # queries are judged against unchanged, and its dumps on disk from the compile that derived it,
+  # which put the state only once both were written. A page is gone when the kept reach holds a
+  # page the build no longer has, and a component when a kept entry is no longer one of the tracked
+  # components.
+  defp data_layer_kept?(nil, _parts, _opts), do: false
+
+  defp data_layer_kept?(kept_data_layer, parts, opts) do
+    tracked_component_set = MapSet.new(parts.tracked_component_modules)
+
+    kept_components_tracked? =
+      kept_data_layer.components
+      |> Map.keys()
+      |> Enum.all?(&MapSet.member?(tracked_component_set, &1))
+
+    parts.pages_to_list == [] and parts.stale_components == [] and
+      not parts.data_model_changed? and
+      map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
+      kept_components_tracked? and data_layer_dumps_exist?(opts)
+  end
+
+  # What the data layer derives from the build, validated and dumped for the running app: the
   # windows each page downloads, the registered queries of every component, and the statement the
-  # runtime script sets the client's data layer constants with, which is returned.
+  # runtime script sets the client's data layer constants with, which is returned. What it was
+  # derived from is kept with the statement (see Hologram.Compiler.Cache.put_data_layer/1). A
+  # derivation that raises writes no dump and keeps nothing.
   #
-  # Every page's reach is listed on the runtime's copy of the graph: without the manually ported
-  # MFAs, which is what the bundles are derived from, and with the runtime's MFAs still in it (see
-  # build_pages_graph/2), so that a component reached through a runtime MFA is still one the page
-  # can reach.
+  # A page's reach is listed again only when the edit can have moved it (see
+  # partition_kept_page_reach/3); every other page keeps what the last derivation listed. It is
+  # listed on the runtime's copy of the graph: without the manually ported MFAs, which is what the
+  # bundles are derived from, and with the runtime's MFAs still in it (see build_pages_graph/2), so
+  # that a component reached through a runtime MFA is still one the page can reach.
   #
-  # TODO: derive the page windows, the sync constants and the permission-checking pages from the
-  # kept page states, the way the bundles are kept, instead of walking every page whenever a module
-  # changed.
+  # The registered queries of a component are extracted again only when the edit can have changed
+  # them (see list_stale_components/7), and of a component a page reaches that has no entry; every
+  # other component keeps the entry the last derivation left. A component's slot bindings depend on
+  # what its queries do, so they are validated for the components extracted again.
   defp derive_data_layer!(context) do
     %{
       call_graph: call_graph,
       call_graph_for_runtime: call_graph_for_runtime,
+      entity_types: entity_types,
       module_info_plt: module_info_plt,
       opts: opts,
-      page_modules: page_modules
+      pages_to_list: pages_to_list
     } = context
 
-    reach_by_page = Compiler.list_reach_by_page(page_modules, call_graph_for_runtime)
-
-    # Listed once, from the module info PLT this compile brought in line with the beams: no beam
-    # is read and no module is asked.
-    entity_types = Reflection.list_entities(module_info_plt)
-
-    # A builder's argument names bind the consuming component's like-named declared slots, and
-    # a remote capture makes those names a cross-module contract - so a renamed argument fails
-    # the build here, every reachable consumer at once, rather than one render at a time.
-    Compiler.validate_slot_bindings!(reach_by_page, module_info_plt)
-
-    # A check spells the entity operation it asks about, and a name no allow line on any
-    # entity type declares is a typo or a rename - refused here rather than answered no
-    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/2 below: the ask
-    # functions are hand-ported, so the runtime graph no longer holds the vertices whose
-    # callers this reads. Before the IR prune, which drops the IR this builds for a caller no
-    # page reaches.
-    Compiler.validate_operations!(entity_types, call_graph, context.ir_plt,
-      modules:
-        operation_ask_modules(
-          context.kept_runtime,
-          context.module_digests_diff,
-          module_info_plt
-        )
-    )
+    listed_reach = Compiler.list_reach_by_page(pages_to_list, call_graph_for_runtime)
 
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
     # bundles are derived from no longer holds the vertex to ask about - while the question is
     # exactly whether the bundles reach it.
     permission_checking_pages =
-      page_modules
+      pages_to_list
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions(module_info_plt)
+      |> Compiler.pages_checking_permissions()
+
+    reach_by_page =
+      listed_reach
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+      |> then(&Map.merge(context.kept_page_reach, &1))
+
+    reached_components =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+
+    kept_component_queries =
+      keep_component_queries(
+        context.kept_data_layer,
+        context.tracked_component_modules,
+        context.stale_components
+      )
+
+    # The stale components, and a component a page reaches with no entry kept or to extract, which
+    # only this project's own suite has (see list_tracked_component_modules/3).
+    fresh_components =
+      reached_components
+      |> Enum.reject(&Map.has_key?(kept_component_queries, &1))
+      |> Enum.concat(context.stale_components)
+      |> Enum.uniq()
+
+    fresh_component_set = MapSet.new(fresh_components)
+
+    # A builder's argument names bind the consuming component's like-named declared slots, and
+    # a remote capture makes those names a cross-module contract - so a renamed argument fails
+    # the build here, every reachable consumer at once, rather than one render at a time.
+    reached_components
+    |> Enum.filter(&MapSet.member?(fresh_component_set, &1))
+    |> Enum.each(&QueryExtractor.validate_slot_bindings!/1)
+
+    component_queries =
+      fresh_components
+      |> Compiler.extract_component_queries(entity_types)
+      |> then(&Map.merge(kept_component_queries, &1))
 
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.
     {page_windows_plt, page_windows_plt_dump_path} =
       reach_by_page
-      |> Compiler.build_page_windows(module_info_plt, permission_checking_pages)
+      |> Compiler.build_page_windows(component_queries, module_info_plt)
       |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, context.supervisor))
-
-    dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
 
     # Every component of the build, not the ones pages reach: what reads this is the renderer and
     # the sync layer, which answer for any component that renders. Built here and loaded at boot,
     # like the page windows - so the two registered-query validations fail the BUILD rather than
     # the first boot, and a release starts without running the extractor at all.
     {queries_plt, queries_plt_dump_path} =
-      context.component_modules
+      component_queries
+      |> Map.take(context.component_modules)
       |> Compiler.build_queries(entity_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
-    dump_queries_plt(queries_plt, queries_plt_dump_path)
-
-    # TODO: the modularization work decides whether a build bakes policy rules only when some
-    # page checks permissions. If every build with a user entity bakes them, this flag goes,
-    # along with the empty-policy clause of Compiler's render_policy/2 that reads it.
     sync_constants =
-      Compiler.build_sync_constants(
-        reach_by_page,
-        module_info_plt,
-        permission_checking_pages != []
-      )
+      Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
     # its inputs: a policy that changed moves the JavaScript while the constants stay the same (see
     # Hologram.Compiler.build_sync_constants_js/1).
-    Compiler.build_sync_constants_js(sync_constants)
+    sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
+
+    # Both dumps once everything above passed, so that a derivation that raises leaves the dumps of
+    # the last one that did not, which the kept data layer state describes.
+    dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
+    dump_queries_plt(queries_plt, queries_plt_dump_path)
+
+    Cache.put_data_layer(%{
+      components: component_queries,
+      pages: reach_by_page,
+      sync_constants_js: sync_constants_js
+    })
+
+    sync_constants_js
   end
 
-  # The page windows PLT is dumped once, before the batches: the windows are derived from every
-  # page's reach rather than from the bundles.
+  # The page windows PLT is dumped once, after the data layer is validated and before the batches:
+  # the windows are derived from every page's reach rather than from the bundles.
   defp dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path) do
     PLT.dump(page_windows_plt, page_windows_plt_dump_path)
   end
 
-  # The queries PLT is dumped once, before the batches, like the page windows PLT.
+  # The queries PLT is dumped once, after the data layer is validated and before the batches, like
+  # the page windows PLT.
   defp dump_queries_plt(queries_plt, queries_plt_dump_path) do
     PLT.dump(queries_plt, queries_plt_dump_path)
   end
@@ -1340,6 +1431,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{
       cache
       | chunks: nil,
+        data_layer: nil,
         encoding_inputs: nil,
         js_input_paths: MapSet.new(),
         pending_pages: MapSet.new(),
@@ -1388,6 +1480,17 @@ defmodule Mix.Tasks.Compile.Hologram do
   # and when the client config or the data layer constants it sets differ from this compile's.
   # Both of its files are required, since nothing else in the compile would recreate a missing
   # source map.
+  # The kept component entries still to use: the ones of the tracked components (see
+  # list_tracked_component_modules/3) that are not stale. A removed module, and a module no longer
+  # a component, is not tracked any more, so its entry goes.
+  defp keep_component_queries(nil, _tracked_component_modules, _stale_components), do: %{}
+
+  defp keep_component_queries(kept_data_layer, tracked_component_modules, stale_components) do
+    kept_data_layer.components
+    |> Map.take(tracked_component_modules)
+    |> Map.drop(stale_components)
+  end
+
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -1440,6 +1543,17 @@ defmodule Mix.Tasks.Compile.Hologram do
     kept_template_modules
     |> Map.take(templatable_modules)
     |> Map.merge(validated_template_modules)
+  end
+
+  # The page's kept reach when it still holds: the page has one, and its modules do not meet the
+  # modules reaching the edit.
+  defp keepable_page_reach(kept_data_layer, page_module, reaching_modules) do
+    with {:ok, reach} <- Map.fetch(kept_data_layer.pages, page_module),
+         true <- MapSet.disjoint?(reach.modules, reaching_modules) do
+      {:ok, reach}
+    else
+      _fallback -> :error
+    end
   end
 
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
@@ -1537,24 +1651,94 @@ defmodule Mix.Tasks.Compile.Hologram do
     opts[:component_modules] || Compiler.list_components(module_info_plt)
   end
 
-  # The modules whose callers' asks are judged: every one when nothing was kept, and when the
-  # vocabulary the asks are judged against can have moved, which an edited, added or removed
-  # entity, role or policy module does - a removed module's kind cannot be read any more, so a
-  # removal counts. Else the added and edited modules alone: the rest were judged by the compile
-  # that kept the runtime, and their IR need not be built again (see
-  # Hologram.Compiler.operation_asks/3). An added or edited module's kind is read from the module
-  # info PLT, which holds this compile's entry for it.
-  defp operation_ask_modules(nil, _module_digests_diff, _module_info_plt), do: nil
+  # The components whose registered queries are extracted again: every tracked one when nothing is
+  # kept or the data model changed (see data_model_changed?/2), else the ones with no kept entry,
+  # the ones a walk of this compile built into the graph, the ones the edit reaches in the graph,
+  # and the ones the graph does not hold whose module or capture targets were edited or removed
+  # (see stale_component?/3).
+  defp list_stale_components(nil, component_modules, _diff, _reaching, _built, _changed?, _graph) do
+    component_modules
+  end
 
-  defp operation_ask_modules(_kept_runtime, module_digests_diff, module_info_plt) do
+  defp list_stale_components(_kept, component_modules, _diff, _reaching, _built, true, _graph) do
+    component_modules
+  end
+
+  defp list_stale_components(
+         kept_data_layer,
+         component_modules,
+         module_digests_diff,
+         reaching_modules,
+         built_modules,
+         false,
+         call_graph
+       ) do
+    graph_modules = CallGraph.modules(call_graph)
+    built_module_set = MapSet.new(built_modules)
+
+    changed_modules =
+      MapSet.new(module_digests_diff.edited_modules ++ module_digests_diff.removed_modules)
+
+    Enum.filter(component_modules, fn module ->
+      case Map.fetch(kept_data_layer.components, module) do
+        {:ok, kept_entry} ->
+          stale_component?(module, kept_entry, %{
+            built_modules: built_module_set,
+            changed_modules: changed_modules,
+            graph_modules: graph_modules,
+            reaching_modules: reaching_modules
+          })
+
+        :error ->
+          true
+      end
+    end)
+  end
+
+  # The components whose queries the data layer keeps: the components of the build, and the kept
+  # entries of components outside them, while the module info PLT still records them as components.
+  # In an app the second part is empty, since the build's components are every component. This
+  # project's own suite narrows them to the components the build accepts, while its fixture pages
+  # reach some it refuses, which the data layer keeps for the page windows.
+  defp list_tracked_component_modules(nil, component_modules, _module_info_plt) do
+    component_modules
+  end
+
+  defp list_tracked_component_modules(kept_data_layer, component_modules, module_info_plt) do
+    component_set = MapSet.new(component_modules)
+
+    outside_modules =
+      kept_data_layer.components
+      |> Map.keys()
+      |> Enum.filter(fn module ->
+        not MapSet.member?(component_set, module) and
+          match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
+      end)
+
+    component_modules ++ outside_modules
+  end
+
+  # The modules whose callers' asks are judged: every one when nothing was kept, and when the
+  # vocabulary the asks are judged against can have moved (see data_model_changed?/2). Else the
+  # added and edited modules alone: the rest were judged by the compile that derived the kept data
+  # layer, and their IR need not be built again (see Hologram.Compiler.operation_asks/3).
+  defp operation_ask_modules(nil, _module_digests_diff, _data_model_changed?), do: nil
+
+  defp operation_ask_modules(_kept_data_layer, _module_digests_diff, true), do: nil
+
+  defp operation_ask_modules(_kept_data_layer, module_digests_diff, false) do
+    module_digests_diff.added_modules ++ module_digests_diff.edited_modules
+  end
+
+  # Whether the vocabulary the registered queries and the operation asks are judged against can have
+  # moved: an edited, added or removed entity, role or policy module moves it. A removed module's
+  # kind cannot be read any more, so a removal counts. An added or edited module's kind is read from
+  # the module info PLT, which holds this compile's entry for it.
+  defp data_model_changed?(module_digests_diff, module_info_plt) do
     %{added_modules: added, edited_modules: edited, removed_modules: removed} =
       module_digests_diff
 
-    if removed != [] or Enum.any?(added ++ edited, &data_model_module?(&1, module_info_plt)) do
-      nil
-    else
-      added ++ edited
-    end
+    removed != [] or Enum.any?(added ++ edited, &data_model_module?(&1, module_info_plt))
   end
 
   defp data_model_module?(module, module_info_plt) do
@@ -1562,9 +1746,30 @@ defmodule Mix.Tasks.Compile.Hologram do
       Reflection.policy?(module, module_info_plt)
   end
 
-  # The data layer's statement for the runtime script: the kept runtime's when the data layer is
-  # kept (see data_layer_kept?/3), else the one derived now (see derive_data_layer!/1).
-  defp sync_constants_js(true, context), do: context.kept_runtime.sync_constants_js
+  # Whether a kept component entry can be out of date. A component the graph holds is linked to
+  # every function its queries run (its prop declarations call its capture targets), so it is stale
+  # when the edit reaches it. A component a walk of this compile built into the graph was not in it
+  # before, so its entry can predate an edit the graph could not see. A component the graph does
+  # not hold is stale when it or a module its captures point at was edited or removed. An edit of a
+  # helper beyond those leaves its entry as it was: no page reaches the component, so nothing reads
+  # the entry, and the compile in which a page starts reaching it builds it into the graph.
+  defp stale_component?(module, kept_entry, sets) do
+    cond do
+      MapSet.member?(sets.built_modules, module) ->
+        true
+
+      MapSet.member?(sets.graph_modules, module) ->
+        MapSet.member?(sets.reaching_modules, module)
+
+      true ->
+        MapSet.member?(sets.changed_modules, module) or
+          Enum.any?(kept_entry.targets, &MapSet.member?(sets.changed_modules, &1))
+    end
+  end
+
+  # The data layer's statement for the runtime script: the kept data layer's when it is kept (see
+  # data_layer_kept?/3), else the one derived now (see derive_data_layer!/1).
+  defp sync_constants_js(true, context), do: context.kept_data_layer.sync_constants_js
 
   defp sync_constants_js(false, context), do: derive_data_layer!(context)
 
@@ -1579,6 +1784,25 @@ defmodule Mix.Tasks.Compile.Hologram do
     mfas
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> MapSet.new()
+  end
+
+  # Splits the pages into the ones whose kept reach still holds, keyed by page, and the ones whose
+  # reach the data layer lists again: a page with no kept reach (a new page, or nothing kept), and a
+  # page whose kept modules meet the modules reaching the edit, for the reason a page's bundle is
+  # rebuilt then (see Hologram.Compiler.partition_affected_pages/6). A page no longer in the build
+  # is left out of both.
+  defp partition_kept_page_reach(nil, page_modules, _reaching_modules), do: {%{}, page_modules}
+
+  defp partition_kept_page_reach(kept_data_layer, page_modules, reaching_modules) do
+    {kept_page_reach, pages_to_list} =
+      Enum.reduce(page_modules, {%{}, []}, fn page_module, {kept, to_list} ->
+        case keepable_page_reach(kept_data_layer, page_module, reaching_modules) do
+          {:ok, reach} -> {Map.put(kept, page_module, reach), to_list}
+          :error -> {kept, [page_module | to_list]}
+        end
+      end)
+
+    {kept_page_reach, Enum.reverse(pages_to_list)}
   end
 
   # With the inputs unchanged, the edited modules' encodings are dropped and the rest are kept; a
@@ -1902,6 +2126,27 @@ defmodule Mix.Tasks.Compile.Hologram do
         {:error, _reason} ->
           remove_unreadable_lock_file(lock_path)
       end
+    end
+  end
+
+  # A check spells the entity operation it asks about, and a name no allow line on any entity type
+  # declares is a typo or a rename - refused here rather than answered no forever. Judged on every
+  # compile whose diff is not empty, whether or not the data layer is kept: an edit of a module no
+  # page uses can add an ask. And on every compile that keeps no data layer, since no compile judged
+  # the asks for it. Asked of the UNSPLIT graph: the ask functions are hand-ported, so the runtime
+  # graph no longer holds the vertices whose callers this reads.
+  defp maybe_validate_operations!(entity_types, call_graph, ir_plt, inputs) do
+    %{
+      data_model_changed?: data_model_changed?,
+      kept_data_layer: kept_data_layer,
+      module_digests_diff: module_digests_diff
+    } = inputs
+
+    if kept_data_layer == nil or
+         module_digests_diff != %{added_modules: [], edited_modules: [], removed_modules: []} do
+      Compiler.validate_operations!(entity_types, call_graph, ir_plt,
+        modules: operation_ask_modules(kept_data_layer, module_digests_diff, data_model_changed?)
+      )
     end
   end
 

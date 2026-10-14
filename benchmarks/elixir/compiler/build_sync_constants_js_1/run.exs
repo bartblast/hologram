@@ -28,15 +28,24 @@ Benchee.run(
     permission_checking_pages =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.pages_checking_permissions(module_info_plt)
+      |> Compiler.pages_checking_permissions()
 
     CallGraph.remove_manually_ported_mfas(call_graph)
 
     # Listed with the runtime's MFAs still in the graph, as the compile task lists it: a
     # component reached through a runtime MFA is still one the page can reach.
-    page_modules
-    |> Compiler.list_reach_by_page(call_graph)
-    |> Compiler.build_sync_constants(module_info_plt, permission_checking_pages != [])
+    reach_by_page =
+      page_modules
+      |> Compiler.list_reach_by_page(call_graph)
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+
+    component_queries =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
+
+    Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
   end,
   formatters: [
     Benchee.Formatters.Console,

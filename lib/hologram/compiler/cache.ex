@@ -15,12 +15,14 @@ defmodule Hologram.Compiler.Cache do
   # that the next compile rebuilds them whether or not its own edit reaches them. So are the modules
   # each page's and component's template uses, so that a compile validates only the templates its
   # edit can affect, and each module's stack trace metadata, so that a compile rebuilds only the
-  # entries of the modules it changed. The inputs every bundle depends on besides its modules
-  # (Hologram's own code and JavaScript, the esbuild version, the client stack traces setting) are
-  # kept with the bundles, so that a compile whose inputs differ forgets them. Started on first use
-  # and not linked to the caller, so it outlives the compile that started it. A compile that finds
-  # the module infos untrusted here (no editable modules kept) starts from the build dir, so nothing
-  # depends on the cache for correctness.
+  # entries of the modules it changed. So is what the data layer was derived from, so that a compile
+  # derives again only the pages' part an edit reaches and the queries of the components it
+  # touched. The inputs every bundle depends on besides its modules (Hologram's own code and
+  # JavaScript, the esbuild version, the client stack traces setting) are kept with the bundles, so
+  # that a compile whose inputs differ forgets them. Started on first use and not linked to the
+  # caller, so it outlives the compile that started it. A compile that finds the module infos
+  # untrusted here (no editable modules kept) starts from the build dir, so nothing depends on the
+  # cache for correctness.
   # The cache also registers Hologram.Compiler.Tracer when it starts, and owns its table: the
   # modules the tracer records are only of use to a compile that has the kept state to apply them
   # to, so the two live and die together.
@@ -30,6 +32,7 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
 
@@ -56,6 +59,7 @@ defmodule Hologram.Compiler.Cache do
           app_versions: keyword(String.t()) | nil,
           bundle_inputs: map | nil,
           chunks: chunks_state | nil,
+          data_layer: data_layer_state | nil,
           encoding_inputs: encoding_inputs | nil,
           js_input_paths: MapSet.t(String.t()),
           module_metadata: %{module => %{app: atom | nil, file: String.t()}} | nil,
@@ -63,6 +67,15 @@ defmodule Hologram.Compiler.Cache do
           pending_pages: MapSet.t(module),
           runtime: runtime_state | nil,
           template_modules: %{module => MapSet.t(module)} | nil
+        }
+
+  # What the data layer was derived from and what it rendered: the registered queries of every
+  # component of the build, what the data layer read of each page's reach, and the statement the
+  # runtime script sets the client's data layer constants with.
+  @type data_layer_state :: %{
+          components: %{module => Compiler.component_queries()},
+          pages: %{module => Compiler.kept_page_reach()},
+          sync_constants_js: String.t()
         }
 
   @type encoding_inputs :: %{async_mfas: MapSet.t(mfa), client_stacktraces?: boolean}
@@ -86,6 +99,7 @@ defmodule Hologram.Compiler.Cache do
           call_graph: CallGraph.t(),
           chunks: chunks_state | nil,
           compile_state_changed?: boolean,
+          data_layer: data_layer_state | nil,
           dumped_at: non_neg_integer | nil,
           editable_modules: MapSet.t(module) | nil,
           encode_plt: PLT.t(),
@@ -133,15 +147,16 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Writes the compile state to the given path: the page states, the pending pages, the runtime state,
-  the chunk state, the app versions, the encoding inputs, the module metadata, the template modules,
-  the bundle inputs and the paths of the files the kept bundles read, which a compile in a new VM
-  needs to keep this VM's bundles (the after picture of a compile, next to the before picture the
-  call graph and module info dumps are). The page MFA lists are left out: they are read only after a
-  change of the runtime's MFAs, and a page without one is rebuilt then. Skipped when nothing in it
-  changed since it was last written or loaded, unless forced: the compile task forces it when the
-  dumps on disk are not this VM's. A change is marked by the functions that change what it holds,
-  and a put of the value already kept marks none, so a compile that changes nothing neither copies
-  the page states out of their PLT nor writes. Returns `:written` or `:unchanged`.
+  the chunk state, the data layer state, the app versions, the encoding inputs, the module metadata,
+  the template modules, the bundle inputs and the paths of the files the kept bundles read, which a
+  compile in a new VM needs to keep this VM's bundles (the after picture of a compile, next to the
+  before picture the call graph and module info dumps are). The page MFA lists are left out: they
+  are read only after a change of the runtime's MFAs, and a page without one is rebuilt then.
+  Skipped when nothing in it changed since it was last written or loaded, unless forced: the compile
+  task forces it when the dumps on disk are not this VM's. A change is marked by the functions that
+  change what it holds, and a put of the value already kept marks none, so a compile that changes
+  nothing neither copies the page states out of their PLT nor writes. Returns `:written` or
+  `:unchanged`.
   """
   @spec dump_compile_state(String.t(), boolean) :: :written | :unchanged
   def dump_compile_state(path, force?) do
@@ -150,13 +165,13 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Forgets every kept bundle and what was derived for it: the page states and MFA lists, the pending
-  pages, the runtime state, the chunk state, the template modules, the encoding inputs, the encoded
-  functions and the paths of the files the kept bundles read. The call graph, the IR PLT, the module
-  infos, the module metadata, the app versions and the bundle inputs describe the modules, not the
-  JavaScript made from them, and stay. The compile task calls it when the bundle inputs changed (see
-  `put_bundle_inputs/1`): the kept bundles were made by another Hologram build, so every page, the
-  runtime and the chunks are built again, as on a fresh build dir. The PLTs are emptied in place, so
-  their references stay valid.
+  pages, the runtime state, the chunk state, the data layer state, the template modules, the
+  encoding inputs, the encoded functions and the paths of the files the kept bundles read. The call
+  graph, the IR PLT, the module infos, the module metadata, the app versions and the bundle inputs
+  describe the modules, not the JavaScript made from them, and stay. The compile task calls it when
+  the bundle inputs changed (see `put_bundle_inputs/1`): the kept bundles were made by another
+  Hologram build, so every page, the runtime and the chunks are built again, as on a fresh build
+  dir. The PLTs are emptied in place, so their references stay valid.
   """
   @spec forget_bundles() :: :ok
   def forget_bundles do
@@ -167,14 +182,15 @@ defmodule Hologram.Compiler.Cache do
   Returns the kept call graph, IR PLT, encode PLT and page states, the encoding inputs, the pending
   pages, the application versions, the module info PLT of the last finished compile with the mtime
   of the module info dump it wrote and the modules whose beams a save can rewrite, what the runtime
-  bundle and the chunk bundles were built from, the stack trace metadata of every module, the MFA
-  list of each page (apart from the rest of its state, since only a relisting after a change of the
-  runtime's MFAs reads it), the modules each template uses and the inputs the bundles were built
-  with (the dump time, the editable modules, the encoding inputs, the module metadata, the runtime
-  state, the chunk state, the template modules and the bundle inputs are nil when no compile has
-  finished in this VM, and the module info PLT's entries are then not to be trusted), the paths of
-  the files the kept bundles read, and whether the compile state changed since it was last dumped or
-  loaded. Starts the cache on first use.
+  bundle and the chunk bundles were built from, what the data layer was derived from, the stack
+  trace metadata of every module, the MFA list of each page (apart from the rest of its state, since
+  only a relisting after a change of the runtime's MFAs reads it), the modules each template uses
+  and the inputs the bundles were built with (the dump time, the editable modules, the encoding
+  inputs, the module metadata, the runtime state, the chunk state, the data layer state, the
+  template modules and the bundle inputs are nil when no compile has finished in this VM, and the
+  module info PLT's entries are then not to be trusted), the paths of the files the kept bundles
+  read, and whether the compile state changed since it was last dumped or loaded. Starts the cache
+  on first use.
   """
   @spec get() :: t
   def get do
@@ -218,6 +234,7 @@ defmodule Hologram.Compiler.Cache do
       state
       | chunks: nil,
         compile_state_changed?: true,
+        data_layer: nil,
         encoding_inputs: nil,
         js_input_paths: MapSet.new(),
         pending_pages: MapSet.new(),
@@ -246,6 +263,8 @@ defmodule Hologram.Compiler.Cache do
             # A dump written before the chunk state existed has no such key.
             chunks: Map.get(compile_state, :chunks),
             compile_state_changed?: false,
+            # A dump written before the data layer state existed has no such key.
+            data_layer: Map.get(compile_state, :data_layer),
             encoding_inputs: compile_state.encoding_inputs,
             js_input_paths: compile_state.js_input_paths,
             module_metadata: compile_state.module_metadata,
@@ -280,6 +299,10 @@ defmodule Hologram.Compiler.Cache do
       |> Enum.reduce(put_dumped_field(state, :chunks, chunks_state), &add_js_input_paths(&2, &1))
 
     {:reply, :ok, new_state}
+  end
+
+  def handle_call({:put_data_layer, data_layer_state}, _from, state) do
+    {:reply, :ok, put_dumped_field(state, :data_layer, data_layer_state)}
   end
 
   def handle_call({:put_encoding_inputs, encoding_inputs}, _from, state) do
@@ -383,6 +406,17 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
+  Keeps what the data layer was derived from and what it rendered: the registered queries of every
+  component of the build, what the data layer read of each page's reach, and the statement the
+  runtime script sets the client's data layer constants with. nil forgets it, so that the next
+  compile derives the whole data layer again.
+  """
+  @spec put_data_layer(data_layer_state | nil) :: :ok
+  def put_data_layer(data_layer_state) do
+    GenServer.call(server(), {:put_data_layer, data_layer_state})
+  end
+
+  @doc """
   Keeps what the kept function encodings depend on besides their modules' IR: the async MFAs, which
   decide what a function awaits and whether it is awaited, and the client stacktraces setting. The
   next compile keeps the encodings only while its own inputs are equal to these.
@@ -471,9 +505,9 @@ defmodule Hologram.Compiler.Cache do
   Replaces the kept call graph, module info PLT, IR PLT, encode PLT, page states and page MFA lists
   with empty ones
   and forgets the kept dump time, editable modules, encoding inputs, module metadata, pending pages,
-  application versions, runtime state, chunk state, template modules, bundle inputs and the paths of
-  the files the kept bundles read, and marks the compile state as unchanged, so the next compile
-  starts from the build dir, as the first one in the VM does.
+  application versions, runtime state, chunk state, data layer state, template modules, bundle
+  inputs and the paths of the files the kept bundles read, and marks the compile state as unchanged,
+  so the next compile starts from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -492,6 +526,7 @@ defmodule Hologram.Compiler.Cache do
       app_versions: state.app_versions,
       bundle_inputs: state.bundle_inputs,
       chunks: state.chunks,
+      data_layer: state.data_layer,
       encoding_inputs: state.encoding_inputs,
       js_input_paths: state.js_input_paths,
       module_metadata: state.module_metadata,
@@ -511,6 +546,7 @@ defmodule Hologram.Compiler.Cache do
       call_graph: CallGraph.start(),
       chunks: nil,
       compile_state_changed?: false,
+      data_layer: nil,
       dumped_at: nil,
       editable_modules: nil,
       encode_plt: PLT.start(),

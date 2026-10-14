@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.validate_slot_bindings!/2
+Hologram.Compiler.build_kept_page_reach/3
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">validate_slot_bindings!/2</td>
-    <td style="white-space: nowrap; text-align: right">597.64</td>
-    <td style="white-space: nowrap; text-align: right">1.67 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.12%</td>
-    <td style="white-space: nowrap; text-align: right">1.67 ms</td>
-    <td style="white-space: nowrap; text-align: right">1.95 ms</td>
+    <td style="white-space: nowrap">build_kept_page_reach/3</td>
+    <td style="white-space: nowrap; text-align: right">565.97</td>
+    <td style="white-space: nowrap; text-align: right">1.77 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;11.77%</td>
+    <td style="white-space: nowrap; text-align: right">1.72 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.41 ms</td>
   </tr>
 
 </table>

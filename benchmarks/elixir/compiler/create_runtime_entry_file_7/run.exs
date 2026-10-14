@@ -29,14 +29,21 @@ Benchee.run(
 
     # The graph still holds the manually ported MFAs here, so one listing answers both what the
     # data layer is compiled with and whether a page checks permissions.
-    reach_by_page = Compiler.list_reach_by_page(Reflection.list_pages(), call_graph)
+    listed_reach = Compiler.list_reach_by_page(Reflection.list_pages(), call_graph)
+    permission_checking_pages = Compiler.pages_checking_permissions(listed_reach)
 
-    permission_checking_pages =
-      Compiler.pages_checking_permissions(reach_by_page, module_info_plt)
+    reach_by_page =
+      Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
+
+    component_queries =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
+      |> Enum.uniq()
+      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
 
     sync_constants_js =
       reach_by_page
-      |> Compiler.build_sync_constants(module_info_plt, permission_checking_pages != [])
+      |> Compiler.build_sync_constants(component_queries, module_info_plt)
       |> Compiler.build_sync_constants_js()
 
     opts = [

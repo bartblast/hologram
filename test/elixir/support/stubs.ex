@@ -138,7 +138,12 @@ defmodule Hologram.Test.Stubs do
 
     File.rm(dump_path)
 
-    queries = Compiler.build_queries(component_modules, Reflection.list_entities())
+    entity_types = Reflection.list_entities()
+
+    queries =
+      component_modules
+      |> Compiler.extract_component_queries(entity_types)
+      |> Compiler.build_queries(entity_types)
 
     PLT.start()
     |> PLT.put(Map.to_list(queries))

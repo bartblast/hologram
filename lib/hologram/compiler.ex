@@ -68,6 +68,30 @@ defmodule Hologram.Compiler do
   }
 
   @typedoc """
+  The registered queries of one component: the normalized terms its from_query props declare (see
+  `Hologram.Compiler.QueryExtractor.extract_module_queries/2`), the argument names of its
+  parameterized captures (see `Hologram.Compiler.QueryExtractor.extract_prop_params/1`) and the
+  modules those captures point at, sorted. A capture of the component's own function points at the
+  component itself.
+  """
+  @type component_queries :: %{
+          prop_params: keyword(list(atom | nil)),
+          targets: [module],
+          terms: [Query.t()]
+        }
+
+  @typedoc """
+  What the data layer keeps of a page's reach between compiles: whether the page's client code
+  reaches a permission check (see `pages_checking_permissions/1`), the components among the modules
+  it reaches, sorted, and those modules, the struct types it names included.
+  """
+  @type kept_page_reach :: %{
+          checks_permissions?: boolean,
+          components: [module],
+          modules: MapSet.t(module)
+        }
+
+  @typedoc """
   What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, and
   the struct types it names, which carry no MFA of their own in the list.
   """
@@ -245,8 +269,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the ids of the windows each page downloads, keyed by page module and sorted, from what
-  each page's client code reaches, as `list_reach_by_page/2` lists it. The components among the
-  modules a page reaches are told by the given module info PLT.
+  the data layer keeps of each page's reach (see `build_kept_page_reach/3`) and the registered
+  queries of the components the pages reach (see `extract_component_queries/2`). Nothing is
+  extracted or walked here.
 
   A page's windows are those of every component it can reach, not only the ones a given render
   mounts. A panel that opens on a click is reachable without being rendered, and its rows have to
@@ -256,39 +281,35 @@ defmodule Hologram.Compiler do
   A page reaching no query at all has no windows, and answers with an empty list rather than
   being left out.
 
-  Pages listed in `permission_checking_pages` also download the grants window: what a client
-  evaluates permissions against is grant rows, so a page that checks them on the client needs
-  them held like any other rows it reads. The list is derived apart, from the pages' reach on the
-  call graph BEFORE manually ported MFAs are removed - see `pages_checking_permissions/2`.
+  A page that checks permissions on the client also downloads the grants window: what a client
+  evaluates permissions against is grant rows, so a page that checks them needs them held like any
+  other rows it reads. Only when the given module info PLT records a user entity type: a data model
+  without one has no grant store, so no page checks permissions against anything.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
-  @spec build_page_windows([{module, page_reach}], PLT.t(), list(module)) ::
+  @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
           %{module => list(String.t())}
-  def build_page_windows(reach_by_page, module_info_plt, permission_checking_pages \\ []) do
-    components_by_page = list_reached_components_by_page(reach_by_page, module_info_plt)
+  def build_page_windows(reach_by_page, component_queries, module_info_plt) do
+    grant_store? = Reflection.user_entity(module_info_plt) != nil
 
-    # Listed once here, from the module info PLT, and handed to every extraction below. The
-    # extractor forks a placeholder entity over this list and re-enters the capture's body once
-    # per candidate, so a fork left to read it for itself reads it once per variant.
-    all_entity_types = Reflection.list_entities(module_info_plt)
-
-    # Each component's queries are extracted once, however many pages reach it.
+    # Each component's window ids are derived once, however many pages reach it.
     window_ids_by_component =
-      components_by_page
-      |> Enum.flat_map(fn {_page_module, component_modules} -> component_modules end)
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
       |> Map.new(fn component_module ->
         window_ids =
-          component_module
-          |> QueryExtractor.extract_module_queries(all_entity_types)
+          component_queries
+          |> Map.fetch!(component_module)
+          |> Map.fetch!(:terms)
           |> Enum.map(&window_id/1)
 
         {component_module, window_ids}
       end)
 
-    Map.new(components_by_page, fn {page_module, component_modules} ->
-      window_ids = Enum.flat_map(component_modules, &Map.fetch!(window_ids_by_component, &1))
+    Map.new(reach_by_page, fn {page_module, reach} ->
+      window_ids = Enum.flat_map(reach.components, &Map.fetch!(window_ids_by_component, &1))
 
       # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
       # is an entity type like any other, so a page listing grants and checking permissions reaches
@@ -298,7 +319,7 @@ defmodule Hologram.Compiler do
       # before its :page marker, rather than arriving with the background set - is one of the
       # two things the modularization work revisits. The other is the policy-baking gate.
       page_window_ids =
-        if page_module in permission_checking_pages do
+        if grant_store? and reach.checks_permissions? do
           [grants_window_id() | window_ids]
         else
           window_ids
@@ -366,20 +387,16 @@ defmodule Hologram.Compiler do
   grants window is what actually ships - a `can?` reached only from command handlers, which run
   on the server, does not.
 
-  An app that designates no user entity type has no grant store at all - the framework's grant
-  entity joins the data model only with one - so no page checks permissions against anything and
-  the answer is empty whatever the pages reach. Whether one is designated is read from the given
-  module info PLT.
+  Whether the app has a grant store at all is not asked here: a data model with no user entity
+  type has none - the framework's grant entity joins the data model only with one - and what
+  registers the grants window checks that where it reads this list (see `build_page_windows/3`
+  and `build_sync_constants/3`).
   """
-  @spec pages_checking_permissions([{module, page_reach}], PLT.t()) :: list(module)
-  def pages_checking_permissions(reach_by_page, module_info_plt) do
-    if Reflection.user_entity(module_info_plt) do
-      for {page_module, %{mfas: mfas}} <- reach_by_page,
-          Enum.any?(mfas, &(&1 in @permission_mfas)) do
-        page_module
-      end
-    else
-      []
+  @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
+  def pages_checking_permissions(reach_by_page) do
+    for {page_module, %{mfas: mfas}} <- reach_by_page,
+        Enum.any?(mfas, &(&1 in @permission_mfas)) do
+      page_module
     end
   end
 
@@ -576,6 +593,39 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
+  layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
+  modules are told by the given module info PLT. The pages checking permissions are given as
+  `pages_checking_permissions/1` lists them, from the pages' reach on the call graph BEFORE manually
+  ported MFAs are removed.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_3/README.md
+  """
+  @spec build_kept_page_reach([{module, page_reach}], [module], PLT.t()) :: %{
+          module => kept_page_reach
+        }
+  def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt) do
+    checking_pages = MapSet.new(permission_checking_pages)
+
+    Map.new(reach_by_page, fn {page_module, reach} ->
+      modules = list_reached_modules(reach)
+
+      components =
+        modules
+        |> reached_components(module_info_plt)
+        |> Enum.sort()
+
+      kept_reach = %{
+        checks_permissions?: MapSet.member?(checking_pages, page_module),
+        components: components,
+        modules: MapSet.new(modules)
+      }
+
+      {page_module, kept_reach}
+    end)
+  end
+
+  @doc """
   Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
   calls it for the modules it is about to read, once the call graph says which they are.
 
@@ -663,14 +713,13 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Collects the registered queries of the given component modules and derives what a running
-  Hologram app holds for them: the registry entries keyed by query content id, the argument names
-  of every parameterized capture keyed by `{module, prop name}`, and the term behind each window
-  keyed by window id.
+  Derives what a running Hologram app holds for the given registered queries of components, as
+  `extract_component_queries/2` extracts them: the registry entries keyed by query content id, the
+  argument names of every parameterized capture keyed by `{module, prop name}`, and the term behind
+  each window keyed by window id.
 
-  The component modules are every component of the build rather than the ones pages reach, because
-  what reads the result is the renderer and the sync layer, which answer for any component that
-  renders.
+  The components are every component of the build rather than the ones pages reach, because what
+  reads the result is the renderer and the sync layer, which answer for any component that renders.
 
   Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
   lines - default deny makes it statically dead, returning no rows when it is the query's root and
@@ -684,14 +733,17 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
   """
-  @spec build_queries(list(module), list(module)) :: %{
+  @spec build_queries(%{module => component_queries}, list(module)) :: %{
           entries: %{String.t() => %{atom => any}},
           prop_params: %{{module, atom} => list(atom | nil)},
           windows: %{String.t() => Query.t()}
         }
-  def build_queries(component_modules, entity_types) do
+  def build_queries(component_queries, entity_types) do
+    # In module order, so that the registry and the first refusal do not depend on the map's order.
     module_queries =
-      Enum.map(component_modules, &{&1, QueryExtractor.extract_module_queries(&1, entity_types)})
+      component_queries
+      |> Enum.map(fn {module, queries} -> {module, queries.terms} end)
+      |> Enum.sort()
 
     Enum.each(module_queries, &validate_readable_queries!/1)
     Enum.each(module_queries, &validate_client_evaluable_queries!/1)
@@ -705,7 +757,7 @@ defmodule Hologram.Compiler do
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
       |> put_grants_window(entity_types)
 
-    %{entries: entries, prop_params: prop_params_index(component_modules), windows: windows}
+    %{entries: entries, prop_params: prop_params_index(component_queries), windows: windows}
   end
 
   @doc """
@@ -1324,6 +1376,29 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Extracts the registered queries of the given component modules, each once, keyed by module (see
+  `component_queries`). The entity types are the ones of the build, over which a query whose entity
+  type is an argument is replayed.
+
+  Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/2` and
+  `Hologram.Compiler.QueryExtractor.extract_prop_params/1` raise.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_2/README.md
+  """
+  @spec extract_component_queries([module], [module]) :: %{module => component_queries}
+  def extract_component_queries(component_modules, entity_types) do
+    Map.new(component_modules, fn module ->
+      queries = %{
+        prop_params: QueryExtractor.extract_prop_params(module),
+        targets: capture_targets(module),
+        terms: QueryExtractor.extract_module_queries(module, entity_types)
+      }
+
+      {module, queries}
+    end)
+  end
+
+  @doc """
   Returns the fingerprint of each given file, keyed by its path: `{:digest, digest}` of the content
   for a file outside any `node_modules` dir (the app's own JavaScript, which the dev saves,
   sometimes within the second of a compile), `{:stat, mtime, size}` for a file under one (packages
@@ -1664,10 +1739,9 @@ defmodule Hologram.Compiler do
   the reader of a graph shared with the page tasks (see `CallGraph.with_shared_graph/2`) and the
   server callback analyses they compute, for this call. With no page, the graph is not read.
 
-  What the data layer derives per page reads it: the page's windows (see `build_page_windows/3`),
-  its slot bindings (see `validate_slot_bindings!/2`), whether it checks permissions (see
-  `pages_checking_permissions/2`) and the entity types its client holds or mentions (see
-  `build_sync_constants/3`).
+  What the data layer derives per page reads it: what the data layer keeps of the page's reach (see
+  `build_kept_page_reach/3`) and whether the page checks permissions (see
+  `pages_checking_permissions/1`).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
   """
@@ -1883,9 +1957,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns what the client's data layer is compiled with, derived from what each page's client code
-  reaches, as `list_reach_by_page/2` lists it. The components among the modules a page reaches are
-  told by the given module info PLT.
+  Returns what the client's data layer is compiled with, derived from what the data layer keeps of
+  each page's reach (see `build_kept_page_reach/3`) and the registered queries of the components
+  the pages reach (see `extract_component_queries/2`). Nothing is extracted or walked here.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
   everything it includes, plus every entity type the pages' client code mentions. A client
@@ -1898,10 +1972,11 @@ defmodule Hologram.Compiler do
   there, but the names its arguments were written with do not survive encoding - and those names
   are what each argument binds by.
 
-  When any of the pages checks permissions on the client (`permission_checking?`), the grant
-  type joins the entity types: those clients hold grant rows, and a row of a type the model does
-  not name cannot be read back at all. No query names that type - the grants window is registered
-  rather than extracted - so it is added here rather than derived.
+  When any of the pages checks permissions on the client and the given module info PLT records a
+  user entity type (`:permission_checking?`), the grant type joins the entity types: those clients
+  hold grant rows, and a row of a type the model does not name cannot be read back at all. No query
+  names that type - the grants window is registered rather than extracted - so it is added here
+  rather than derived.
 
   Every entity type declaring a policy joins them too: a check's argument is whatever a template
   passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})` being
@@ -1916,22 +1991,31 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
-  @spec build_sync_constants([{module, page_reach}], PLT.t(), boolean) :: sync_constants
-  def build_sync_constants(reach_by_page, module_info_plt, permission_checking? \\ false) do
-    # One listing per page, read twice: the modules a page reaches carry both its components
-    # and the entity types below.
-    reached_modules =
+  @spec build_sync_constants(
+          %{module => kept_page_reach},
+          %{module => component_queries},
+          PLT.t()
+        ) ::
+          sync_constants
+  def build_sync_constants(reach_by_page, component_queries, module_info_plt) do
+    component_modules =
       reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> list_reached_modules(reach) end)
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
+      |> Enum.sort()
 
-    component_modules = reached_components(reached_modules, module_info_plt)
-
-    # One listing, from the module info PLT, for the extraction below, the policied set and the
-    # model hash: the extractor forks over this list once per variant if it reads it itself, and
-    # policied_entity_types/1 filters the same one.
+    # One listing, from the module info PLT, for the mentions, the policied set and the model hash.
     all_entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
+
+    # A data model with no user entity type has no grant store, so no page checks permissions
+    # against anything then.
+    # TODO: the modularization work decides whether a build bakes policy rules only when some
+    # page checks permissions. If every build with a user entity bakes them, this flag goes,
+    # along with the empty-policy clause of render_policy/2 that reads it.
+    permission_checking? =
+      Reflection.user_entity(module_info_plt) != nil and
+        Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
     # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
@@ -1940,17 +2024,17 @@ defmodule Hologram.Compiler do
     # module has a struct (`CallGraph.maybe_add_struct_call_graph_edges/2`). Every entity type has
     # one, so every spelling lands among the struct types the page names (its MFAs leave the
     # struct functions out, which ship in the type's chunks), and telling a mention apart from a
-    # call would answer nothing this does not.
+    # call would answer nothing this does not. Each page's modules are asked about the entity types
+    # rather than joined into one set: a page reaches far more modules than there are entity types.
     mentioned_entity_types =
-      reached_modules
-      |> MapSet.new()
-      |> MapSet.intersection(MapSet.new(all_entity_types))
+      Enum.reduce(reach_by_page, MapSet.new(), fn {_page_module, reach}, types ->
+        all_entity_types
+        |> Enum.filter(&MapSet.member?(reach.modules, &1))
+        |> MapSet.new()
+        |> MapSet.union(types)
+      end)
 
-    terms =
-      Enum.flat_map(
-        component_modules,
-        &QueryExtractor.extract_module_queries(&1, all_entity_types)
-      )
+    terms = Enum.flat_map(component_modules, &Map.fetch!(component_queries, &1).terms)
 
     queried_entity_types =
       Enum.reduce(terms, MapSet.new(), fn term, types ->
@@ -1975,7 +2059,7 @@ defmodule Hologram.Compiler do
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
-      prop_params: prop_params(component_modules)
+      prop_params: prop_params(component_modules, component_queries)
     }
   end
 
@@ -2316,26 +2400,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Validates the from_query slot bindings of every component the pages reach, from what each
-  page's client code reaches, as `list_reach_by_page/2` lists it, and the module info PLT that
-  tells the components among them - a parameterized builder's argument names must bind like-named
-  declared slots (today, declared props) on the consuming component.
-
-  Raises Hologram.CompileError when a capture argument names no declared slot, or
-  when an argument position is named by no clause of the capture's target.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_slot_bindings!_2/README.md
-  """
-  @spec validate_slot_bindings!([{module, page_reach}], PLT.t()) :: :ok
-  def validate_slot_bindings!(reach_by_page, module_info_plt) do
-    reach_by_page
-    |> list_reached_components_by_page(module_info_plt)
-    |> Enum.flat_map(fn {_page_module, component_modules} -> component_modules end)
-    |> Enum.uniq()
-    |> Enum.each(&QueryExtractor.validate_slot_bindings!/1)
-  end
-
-  @doc """
   Raises a compilation error if a template uses a component without one of its required props.
 
   Only usages the compiler can decide are checked. A usage carrying a `...{expr}` spread is skipped,
@@ -2384,6 +2448,21 @@ defmodule Hologram.Compiler do
 
       _fallback ->
         []
+    end
+  end
+
+  # The modules the from_query captures of the module's props point at, sorted: a capture of the
+  # module's own function points at the module itself.
+  defp capture_targets(module) do
+    if Reflection.has_function?(module, :__props__, 0) do
+      module.__props__()
+      |> Enum.map(fn {_name, _type, opts} -> opts[:from_query] end)
+      |> Enum.filter(&is_function/1)
+      |> Enum.map(&Function.info(&1)[:module])
+      |> Enum.uniq()
+      |> Enum.sort()
+    else
+      []
     end
   end
 
@@ -3095,19 +3174,6 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # The components each page reaches, by page, as the module info PLT records them: what a page's
-  # windows, its slot bindings and the queries its client holds are read from.
-  defp list_reached_components_by_page(reach_by_page, module_info_plt) do
-    Enum.map(reach_by_page, fn {page_module, reach} ->
-      component_modules =
-        reach
-        |> list_reached_modules()
-        |> reached_components(module_info_plt)
-
-      {page_module, component_modules}
-    end)
-  end
-
   # The modules a page reaches: those of its MFAs, and the struct types it names, each once.
   defp list_reached_modules(%{mfas: mfas, types: types}) do
     mfas
@@ -3118,20 +3184,19 @@ defmodule Hologram.Compiler do
 
   # A component declaring no parameterized capture is left out rather than carried as an empty
   # entry - the client reads a missing entry the same way, as nothing to bind.
-  defp prop_params(component_modules) do
+  defp prop_params(component_modules, component_queries) do
     component_modules
-    |> Enum.map(&{&1, QueryExtractor.extract_prop_params(&1)})
+    |> Enum.map(&{&1, Map.fetch!(component_queries, &1).prop_params})
     |> Enum.reject(fn {_module, params} -> params == [] end)
     |> Map.new()
   end
 
-  # The same params `prop_params/1` collects for the bundle, keyed by the pair a renderer asks
+  # The same params `prop_params/2` collects for the bundle, keyed by the pair a renderer asks
   # about rather than by module - the bundle ships one entry per component and reads it whole,
   # while a render looks up one prop of one component at a time.
-  defp prop_params_index(component_modules) do
-    component_modules
-    |> prop_params()
-    |> Enum.flat_map(fn {module, params} ->
+  defp prop_params_index(component_queries) do
+    component_queries
+    |> Enum.flat_map(fn {module, %{prop_params: params}} ->
       Enum.map(params, fn {prop_name, param_names} -> {{module, prop_name}, param_names} end)
     end)
     |> Map.new()

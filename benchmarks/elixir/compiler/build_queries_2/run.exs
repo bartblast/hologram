@@ -1,19 +1,20 @@
 alias Hologram.Compiler
 alias Hologram.Reflection
 
-# Listed outside the measured function because the compile task lists both once, from its module
-# info PLT, and passes them down.
-component_modules = Reflection.list_components()
+# Listed outside the measured function because the compile task lists the entity types once, from
+# its module info PLT, and keeps the extracted queries between compiles (see the
+# extract_component_queries_2 benchmark for what an extraction costs).
 entity_types = Reflection.list_entities()
 
-# What the compile task pays to collect everything a running app holds about registered queries:
-# every component's queries extracted, both validations run over them, the registry built, and the
-# windows derived. Until this became a build artifact the SAME work ran again on every boot and
-# every live reload, which is what the dump exists to stop.
+component_queries = Compiler.extract_component_queries(Reflection.list_components(), entity_types)
+
+# What the compile task pays to derive everything a running app holds about registered queries from
+# the extracted queries of every component, once per compile that derives the data layer: the three
+# validations run over them, the registry built, the windows derived and the prop params indexed.
 Benchee.run(
   %{
     "build_queries/2" => fn ->
-      Compiler.build_queries(component_modules, entity_types)
+      Compiler.build_queries(component_queries, entity_types)
     end
   },
   formatters: [
