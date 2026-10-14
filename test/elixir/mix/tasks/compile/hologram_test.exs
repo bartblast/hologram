@@ -19,6 +19,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
@@ -1122,6 +1123,31 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # Reused or re-read, an untouched module keeps its entry across runs
     assert load_module_info_items(opts)[Module1] == first_run_module_info
+  end
+
+  describe "data layer" do
+    # A builder's argument names bind the consuming component's like-named props, so a component
+    # whose capture names a prop it does not declare fails the build once a page reaches it. The
+    # page is made to reach one through an edge in the kept graph, and the edit is of a module no
+    # page reaches, so the patch leaves that edge in place.
+    test "refuses a component a page reaches whose query binds a prop it does not declare", %{
+      opts: opts
+    } do
+      run(opts)
+
+      CallGraph.add_edge(
+        cache_state().call_graph,
+        {Module1, :template, 0},
+        {ComponentModule11, :template, 0}
+      )
+
+      fake_edit(@unreached_module)
+
+      expected_msg =
+        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
+    end
   end
 
   describe "data model" do

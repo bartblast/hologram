@@ -92,6 +92,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
   alias Hologram.Compiler.DataModelInputs
+  alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
@@ -1124,14 +1125,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     # is read and no module is asked.
     entity_types = Reflection.list_entities(module_info_plt)
 
-    # A builder's argument names bind the consuming component's like-named declared slots, and
-    # a remote capture makes those names a cross-module contract - so a renamed argument fails
-    # the build here, every reachable consumer at once, rather than one render at a time.
-    Compiler.validate_slot_bindings!(listed_reach, module_info_plt)
-
     # A check spells the entity operation it asks about, and a name no allow line on any
     # entity type declares is a typo or a rename - refused here rather than answered no
-    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/2 below: the ask
+    # forever. Asked of the UNSPLIT graph, like pages_checking_permissions/1 below: the ask
     # functions are hand-ported, so the runtime graph no longer holds the vertices whose
     # callers this reads. Before the IR prune, which drops the IR this builds for a caller no
     # page reaches.
@@ -1159,6 +1155,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       reach_by_page
       |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
+
+    # A builder's argument names bind the consuming component's like-named declared slots, and
+    # a remote capture makes those names a cross-module contract - so a renamed argument fails
+    # the build here, every reachable consumer at once, rather than one render at a time.
+    Enum.each(reached_components, &QueryExtractor.validate_slot_bindings!/1)
 
     # The components whose queries the data layer keeps: the ones the queries dump holds, and any
     # a page reaches besides them. In an app the two are one list, since the dump holds every

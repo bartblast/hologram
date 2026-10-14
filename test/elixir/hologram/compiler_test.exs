@@ -7990,37 +7990,4 @@ defmodule Hologram.CompilerTest do
       end
     end
   end
-
-  # The validation rules live in QueryExtractor's own suite - what is asserted here is the wiring:
-  # the components swept are the ones the given pages reach through the call graph.
-  describe "validate_slot_bindings!/2" do
-    test "passes when every reachable component binds declared slots", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      assert validate_slot_bindings!(page_reach(call_graph), module_info_plt) == :ok
-    end
-
-    test "raises when a reachable component binds an undeclared slot", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      patched_call_graph =
-        call_graph
-        |> CallGraph.clone()
-        |> CallGraph.add_edge(
-          {PageModule7, :template, 0},
-          {ComponentModule11, :template, 0}
-        )
-
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
-
-      reach_by_page = list_reach_by_page([PageModule7], patched_call_graph)
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_slot_bindings!(reach_by_page, module_info_plt)
-      end
-    end
-  end
 end

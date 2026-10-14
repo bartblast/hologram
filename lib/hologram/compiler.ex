@@ -1739,10 +1739,9 @@ defmodule Hologram.Compiler do
   the reader of a graph shared with the page tasks (see `CallGraph.with_shared_graph/2`) and the
   server callback analyses they compute, for this call. With no page, the graph is not read.
 
-  What the data layer derives per page reads it: the page's windows (see `build_page_windows/3`),
-  its slot bindings (see `validate_slot_bindings!/2`), whether it checks permissions (see
-  `pages_checking_permissions/2`) and the entity types its client holds or mentions (see
-  `build_sync_constants/3`).
+  What the data layer derives per page reads it: what the data layer keeps of the page's reach (see
+  `build_kept_page_reach/3`) and whether the page checks permissions (see
+  `pages_checking_permissions/1`).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
   """
@@ -2398,26 +2397,6 @@ defmodule Hologram.Compiler do
       validate_page_route(page_module, info.route)
       validate_page_layout(page_module, info.layout_module)
     end)
-  end
-
-  @doc """
-  Validates the from_query slot bindings of every component the pages reach, from what each
-  page's client code reaches, as `list_reach_by_page/2` lists it, and the module info PLT that
-  tells the components among them - a parameterized builder's argument names must bind like-named
-  declared slots (today, declared props) on the consuming component.
-
-  Raises Hologram.CompileError when a capture argument names no declared slot, or
-  when an argument position is named by no clause of the capture's target.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_slot_bindings!_2/README.md
-  """
-  @spec validate_slot_bindings!([{module, page_reach}], PLT.t()) :: :ok
-  def validate_slot_bindings!(reach_by_page, module_info_plt) do
-    reach_by_page
-    |> list_reached_components_by_page(module_info_plt)
-    |> Enum.flat_map(fn {_page_module, component_modules} -> component_modules end)
-    |> Enum.uniq()
-    |> Enum.each(&QueryExtractor.validate_slot_bindings!/1)
   end
 
   @doc """
@@ -3193,19 +3172,6 @@ defmodule Hologram.Compiler do
     else
       function_defs
     end
-  end
-
-  # The components each page reaches, by page, as the module info PLT records them: what a page's
-  # windows, its slot bindings and the queries its client holds are read from.
-  defp list_reached_components_by_page(reach_by_page, module_info_plt) do
-    Enum.map(reach_by_page, fn {page_module, reach} ->
-      component_modules =
-        reach
-        |> list_reached_modules()
-        |> reached_components(module_info_plt)
-
-      {page_module, component_modules}
-    end)
   end
 
   # The modules a page reaches: those of its MFAs, and the struct types it names, each once.
