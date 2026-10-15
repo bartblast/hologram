@@ -335,7 +335,8 @@ jobs:
       # Both audits read mix.lock and fail on a retirement or an advisory published since the
       # lock was last touched, which would turn every branch red on the day it's published. The
       # lock is what Hologram is built and tested with, not what users install, so the audits run
-      # on a push to master only, which is how a release reaches it.
+      # on master only: pull requests skip them, and a merge commit goes red when master's lock
+      # needs a fix.
       - name: Check lib retired Elixir deps
         if: ${{ github.ref == 'refs/heads/master' }}
         run: mix hex.audit
