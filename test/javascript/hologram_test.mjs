@@ -623,6 +623,36 @@ describe("Hologram", () => {
         sinon.assert.notCalled(scheduleActionStub);
       });
 
+      // Run through the queue, the parent holds its component until its promise settles, and the
+      // next action targets that same component, so the walk the parent's result starts passes
+      // it over. The walk resumed once the parent settles takes it, still before any timer.
+      it("a zero-delay next action of an asynchronous parent the queue awaits runs on the parent's own component before any timer", async () => {
+        let nextActionRan;
+
+        const nextActionRun = new Promise((resolve) => {
+          nextActionRan = resolve;
+        });
+
+        callNamedFunctionStub
+          .onFirstCall()
+          .returns(Promise.resolve(resultWith(nextActionStruct)));
+
+        callNamedFunctionStub.onSecondCall().callsFake(() => {
+          nextActionRan();
+          return resultWith(Type.nil());
+        });
+
+        Hologram.enqueueAction(actionFor(cid1), 0);
+        await nextActionRun;
+
+        assert.deepStrictEqual(executedActionNames(), [
+          Type.atom("test_action"),
+          Type.atom("the_next_action"),
+        ]);
+
+        sinon.assert.notCalled(scheduleActionStub);
+      });
+
       it("a zero-delay next action runs before any timer", async () => {
         callNamedFunctionStub
           .onFirstCall()

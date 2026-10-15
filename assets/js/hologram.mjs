@@ -2178,11 +2178,14 @@ export default class Hologram {
           $.#awaitingTargets.set(targetKey, epoch);
           blockedTargets.add(targetKey);
 
-          // Resumed from a macrotask rather than from the promise's own continuation, so that an
+          // Resumed from a microtask rather than from the promise's own continuation, so that an
           // action raising in the resumed run surfaces as an uncaught error, the way every
           // timer-driven action does, and not as the rejection of a promise nobody holds. The
           // promise's own rejection still reaches the "unhandledrejection" listener: finally()
-          // passes it through.
+          // passes it through. A microtask and not a timer, so that what waited behind the action
+          // runs before the browser paints - a next action with no delay the action put on its own
+          // component among them, which the walk its result started passed over while the
+          // component was still awaiting.
           result.finally(() => {
             // The page may have been left since, which empties the map, and the destination may
             // be awaiting an action of its own under the same cid - that entry is not this one's.
@@ -2190,7 +2193,7 @@ export default class Hologram {
               $.#awaitingTargets.delete(targetKey);
             }
 
-            setTimeout(() => Hologram.#runActions(), 0);
+            queueMicrotask(() => Hologram.#runActions());
           });
         }
       }
