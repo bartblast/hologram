@@ -21,7 +21,7 @@ import ManuallyPortedElixirHologramQuery from "../../assets/js/elixir/hologram/q
 import Model from "../../assets/js/model.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
 import Replica from "../../assets/js/replica.mjs";
-import Sse from "../../assets/js/sse.mjs";
+import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -387,7 +387,7 @@ describe("DataLayer", () => {
         Durability.persisted = true;
         Durability.storedBatches = 3;
         Replica.adopt({id: "r-held", token: "SFMyNTY.held"});
-        Sse.syncCursor = "Nzc4LjA";
+        SyncStream.syncCursor = "Nzc4LjA";
         Tabs.leader = false;
         Tabs.name = "hologram.1.a3f9c2.u1";
       });
@@ -397,7 +397,7 @@ describe("DataLayer", () => {
         Durability.persisted = originals.persisted;
         Durability.storedBatches = originals.storedBatches;
         Replica.reset();
-        Sse.syncCursor = null;
+        SyncStream.syncCursor = null;
         Tabs.leader = originals.leader;
         Tabs.name = originals.name;
       });
@@ -433,6 +433,20 @@ describe("DataLayer", () => {
           );
         });
       }
+    });
+  });
+
+  describe("buildStreamGreeting()", () => {
+    it("answers the greeting the sync stream builds", () => {
+      const pageModule = Type.atom("Elixir.MyApp.BoardPage");
+      const greeting = {page: "MyApp.BoardPage"};
+
+      const building = sinon
+        .stub(SyncStream, "buildGreeting")
+        .returns(greeting);
+
+      assert.strictEqual(DataLayer.buildStreamGreeting(pageModule), greeting);
+      sinon.assert.calledOnceWithExactly(building, pageModule);
     });
   });
 
@@ -683,6 +697,17 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("listenToStream()", () => {
+    it("hands the stream to the sync stream to listen on", () => {
+      const eventSource = {addEventListener: () => {}};
+      const listening = sinon.stub(SyncStream, "listen");
+
+      DataLayer.listenToStream(eventSource);
+
+      sinon.assert.calledOnceWithExactly(listening, eventSource);
+    });
+  });
+
   describe("openBatch()", () => {
     it("opens the action's batch for its target", () => {
       const opening = sinon.stub(Batches, "open");
@@ -705,7 +730,7 @@ describe("DataLayer", () => {
     });
 
     afterEach(() => {
-      Sse.syncCursor = null;
+      SyncStream.syncCursor = null;
       Tabs.leader = true;
     });
 
@@ -729,7 +754,7 @@ describe("DataLayer", () => {
       sinon.assert.calledOnceWithExactly(posting, {kind: "joined"});
       sinon.assert.calledOnce(readying);
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
 
       // The counter first, then the batches it counts on from; the tab ready before it asks the
       // group for what the store could not tell it.
@@ -752,7 +777,7 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(posting);
       sinon.assert.notCalled(flushing);
 
-      assert.isNull(Sse.syncCursor);
+      assert.isNull(SyncStream.syncCursor);
     });
   });
 

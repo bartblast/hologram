@@ -17,6 +17,7 @@ import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -88,7 +89,7 @@ describe("Batches", () => {
       LocalDatabase.reset();
       Model.reset();
 
-      renderStub = sinon.stub(Sse, "scheduleRender");
+      renderStub = sinon.stub(SyncStream, "scheduleRender");
       sendStub = sinon.stub(Client, "sendMutation");
     });
 
@@ -1068,7 +1069,7 @@ describe("Batches", () => {
       LocalDatabase.reset();
       Model.reset();
 
-      sinon.stub(Sse, "scheduleRender");
+      sinon.stub(SyncStream, "scheduleRender");
     });
 
     afterEach(() => {
@@ -1104,7 +1105,7 @@ describe("Batches", () => {
 
       Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
 
-      assert.isTrue(Sse.scheduleRender.called);
+      assert.isTrue(SyncStream.scheduleRender.called);
     });
 
     // A tab that never took the batch up, or has settled it already, has nothing to do - and every
@@ -1395,7 +1396,7 @@ describe("Batches", () => {
       });
 
       // Adopting repaints, and this describe installs no animation frame to repaint into.
-      sinon.stub(Sse, "scheduleRender");
+      sinon.stub(SyncStream, "scheduleRender");
 
       Durability.mode = "indexeddb";
 
@@ -1433,7 +1434,7 @@ describe("Batches", () => {
       const filings = [];
 
       // Adopting repaints, and this describe installs no animation frame to repaint into.
-      sinon.stub(Sse, "scheduleRender");
+      sinon.stub(SyncStream, "scheduleRender");
 
       Durability.mode = "indexeddb";
 
@@ -1491,7 +1492,7 @@ describe("Batches", () => {
       LocalDatabase.reset();
       Model.reset();
 
-      sinon.stub(Sse, "scheduleRender");
+      sinon.stub(SyncStream, "scheduleRender");
     });
 
     afterEach(() => {
@@ -1647,7 +1648,7 @@ describe("Batches", () => {
 
       // Taking a batch up puts a row on the screen, so it asks for a repaint - and this describe
       // installs no animation frame to repaint into.
-      sinon.stub(Sse, "scheduleRender");
+      sinon.stub(SyncStream, "scheduleRender");
     });
 
     afterEach(() => {
@@ -1766,7 +1767,7 @@ describe("Batches", () => {
     });
 
     it("repaints for what it took, and not for what it passed over", () => {
-      const rendering = Sse.scheduleRender;
+      const rendering = SyncStream.scheduleRender;
 
       Batches.adopt([{...stored(3, "t1"), actorUserId: "u2"}]);
 

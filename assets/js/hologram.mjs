@@ -32,6 +32,7 @@ import Replica from "./replica.mjs";
 import ScriptRegistry from "./script_registry.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
+import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
@@ -1917,7 +1918,7 @@ export default class Hologram {
     // presenting, and how many writes are still on their way down. Reads only, and nothing in the
     // framework reads them.
     globalThis.Hologram.durability = {
-      cursor: () => Sse.syncCursor,
+      cursor: () => SyncStream.syncCursor,
       group: () => Tabs.name,
       leader: () => Tabs.leader,
       mode: () => Durability.mode,
@@ -2545,7 +2546,7 @@ export default class Hologram {
       return;
     }
 
-    Sse.syncCursor = resumed.cursor;
+    SyncStream.syncCursor = resumed.cursor;
     Batches.resumeFrom(resumed.seq);
     Batches.adopt(resumed.batches);
 

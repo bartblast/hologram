@@ -10,6 +10,7 @@ import LocalDatabase from "./local_database.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
+import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
@@ -116,7 +117,7 @@ export default class Batches {
 
     if (taken) {
       Batches.#sort();
-      Sse.scheduleRender();
+      SyncStream.scheduleRender();
     }
   }
 
@@ -445,7 +446,7 @@ export default class Batches {
       Batches.#reject(batch, answer);
     }
 
-    Sse.scheduleRender();
+    SyncStream.scheduleRender();
   }
 
   // Where the previous page load's numbering got to, so this one counts on from there. Never

@@ -24,6 +24,7 @@ import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
+import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -107,8 +108,8 @@ describe("Sse", () => {
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
     fetchStub = sinon.stub(globalThis, "fetch");
 
-    Sse.renderScheduled = false;
-    Sse.syncCursor = null;
+    SyncStream.renderScheduled = false;
+    SyncStream.syncCursor = null;
 
     // Level, which is what "not mid-navigation" is - the state a repaint is allowed to run in.
     // Reset here rather than by the one test that parts them, so a failing assertion cannot leave
@@ -176,7 +177,7 @@ describe("Sse", () => {
     });
   });
 
-  describe("buildSyncGreeting()", () => {
+  describe("buildGreeting()", () => {
     const pageModule = Type.atom("Elixir.MyApp.BoardPage");
 
     // Both sides, so a test asserting that NO identity is presented states its own premise
@@ -193,7 +194,7 @@ describe("Sse", () => {
     it("tells the server what the bundle speaks, what it was built against, and where it is", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
-      assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {
+      assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {
         model_hash: "a3f9c2",
         page: "MyApp.BoardPage",
         protocol_version: 1,
@@ -210,29 +211,29 @@ describe("Sse", () => {
       Tabs.leader = false;
 
       try {
-        assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {});
+        assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {});
       } finally {
         Tabs.leader = true;
       }
     });
 
     it("says nothing for a bundle built before any of this existed", () => {
-      assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {});
+      assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {});
     });
 
     it("says nothing before the page has mounted", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
-      assert.deepStrictEqual(Sse.buildSyncGreeting(null), {});
+      assert.deepStrictEqual(SyncStream.buildGreeting(null), {});
     });
 
     // A client coming back names where it got to, and is told what moved since instead of
     // everything it may see.
     it("names the place the client has been brought up to", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
-      Sse.syncCursor = "Nzc4LjA";
+      SyncStream.syncCursor = "Nzc4LjA";
 
-      assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {
+      assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {
         cursor: "Nzc4LjA",
         model_hash: "a3f9c2",
         page: "MyApp.BoardPage",
@@ -243,7 +244,7 @@ describe("Sse", () => {
     it("names no place for a client arriving with nothing", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
-      assert.notProperty(Sse.buildSyncGreeting(pageModule), "cursor");
+      assert.notProperty(SyncStream.buildGreeting(pageModule), "cursor");
     });
 
     // The pair the browser is presenting, unchanged - what earns this client frames that say how
@@ -252,7 +253,7 @@ describe("Sse", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       Replica.adopt({id: "r1", token: "SFMyNTY.stated"});
 
-      const greeting = Sse.buildSyncGreeting(pageModule);
+      const greeting = SyncStream.buildGreeting(pageModule);
 
       assert.equal(greeting.replica_id, "r1");
       assert.equal(greeting.replica_token, "SFMyNTY.stated");
@@ -263,7 +264,7 @@ describe("Sse", () => {
     it("presents neither half when the browser holds no identity", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
-      const greeting = Sse.buildSyncGreeting(pageModule);
+      const greeting = SyncStream.buildGreeting(pageModule);
 
       assert.notProperty(greeting, "replica_id");
       assert.notProperty(greeting, "replica_token");
@@ -273,7 +274,7 @@ describe("Sse", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       Replica.adopt({id: "r1", token: null});
 
-      const greeting = Sse.buildSyncGreeting(pageModule);
+      const greeting = SyncStream.buildGreeting(pageModule);
 
       assert.notProperty(greeting, "replica_id");
       assert.notProperty(greeting, "replica_token");
@@ -512,7 +513,7 @@ describe("Sse", () => {
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
 
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
-      Sse.syncCursor = "Nzc4LjA";
+      SyncStream.syncCursor = "Nzc4LjA";
       stubHandshakeResponse({handshakeId: "abc-handshake-id"});
 
       await Sse.connect();
@@ -690,7 +691,7 @@ describe("Sse", () => {
       const applying = sinon.stub(Deltas, "apply").returns(written);
       const landing = sinon.stub(Batches, "land");
 
-      const answered = Sse.receiveFrame("sync_deltas", {
+      const answered = SyncStream.receiveFrame("sync_deltas", {
         applied_seq: 7,
         cursor: "Nzc4LjA",
         deltas: {put_entity: {}},
@@ -699,7 +700,7 @@ describe("Sse", () => {
       sinon.assert.calledOnceWithExactly(applying, {put_entity: {}});
       sinon.assert.calledOnceWithExactly(landing, 7, written);
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.equal(animationFrames.length, 1);
       assert.strictEqual(answered, written);
     });
@@ -707,22 +708,22 @@ describe("Sse", () => {
     it("keeps the cursor a mid-fill deltas frame does not name", () => {
       sinon.stub(Deltas, "apply").returns(new Set());
 
-      Sse.syncCursor = "Nzc4LjA";
+      SyncStream.syncCursor = "Nzc4LjA";
 
-      Sse.receiveFrame("sync_deltas", {
+      SyncStream.receiveFrame("sync_deltas", {
         applied_seq: null,
         cursor: null,
         deltas: {},
       });
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
     });
 
     it("marks the scope a synced marker names and takes its place", () => {
-      Sse.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
+      SyncStream.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
 
       assert.isTrue(LocalDatabase.isSynced("all"));
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.equal(animationFrames.length, 1);
     });
 
@@ -731,7 +732,7 @@ describe("Sse", () => {
     it("starts over on a resync naming a change of identity", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
 
-      Sse.receiveFrame("sync_resync", {reason: "identity"});
+      SyncStream.receiveFrame("sync_resync", {reason: "identity"});
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
       assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
@@ -741,9 +742,9 @@ describe("Sse", () => {
     it("keeps what it holds on a resync, awaiting the refill", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
 
-      Sse.syncCursor = "Nzc4LjA";
+      SyncStream.syncCursor = "Nzc4LjA";
 
-      Sse.receiveFrame("sync_resync", {reason: "cursor"});
+      SyncStream.receiveFrame("sync_resync", {reason: "cursor"});
 
       assert.deepStrictEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
         id: "t1",
@@ -754,7 +755,7 @@ describe("Sse", () => {
         ["MyApp.Task", "t1"],
       ]);
 
-      assert.isNull(Sse.syncCursor);
+      assert.isNull(SyncStream.syncCursor);
       assert.equal(animationFrames.length, 0);
     });
   });
@@ -1265,7 +1266,7 @@ describe("Sse", () => {
       await Sse.connect();
       Sse.eventSource.listeners.sync_deltas({data: frame()});
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
     });
 
     // Mid-fill the server hands over no place, because a client holding part of a pot could not
@@ -1278,7 +1279,7 @@ describe("Sse", () => {
       Sse.eventSource.listeners.sync_deltas({data: frame()});
       Sse.eventSource.listeners.sync_deltas({data: frame({cursor: null})});
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
     });
 
     // The frame says how far this client's own batches are applied in what it carries, and the
@@ -1511,15 +1512,15 @@ describe("Sse", () => {
     // The place described the rows, so it goes with them - a client cut off before the refill
     // lands would otherwise ask for what moved since a place it holds nothing from, and be given
     // deltas where it needs everything. What a client with no place greets with is pinned by
-    // buildSyncGreeting()'s own case.
+    // SyncStream.buildGreeting()'s own case.
     it("drops the place it had been brought up to", async () => {
       stubHandshakeResponse();
-      Sse.syncCursor = "Nzc4LjA";
+      SyncStream.syncCursor = "Nzc4LjA";
 
       await Sse.connect();
       Sse.eventSource.listeners.sync_resync({data: envelope()});
 
-      assert.isNull(Sse.syncCursor);
+      assert.isNull(SyncStream.syncCursor);
     });
 
     // Repainting here would draw the rows exactly as they already are - the refill has changed
@@ -1823,7 +1824,7 @@ describe("Sse", () => {
       await Sse.connect();
       Sse.eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
     });
 
     it("writes the place the completeness marker names", async () => {
@@ -1856,7 +1857,7 @@ describe("Sse", () => {
 
       Sse.eventSource.listeners.synced({data: envelope("page")});
 
-      assert.equal(Sse.syncCursor, "Nzc4LjA");
+      assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.isTrue(persisting.calledOnce);
     });
   });

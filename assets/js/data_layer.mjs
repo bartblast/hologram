@@ -14,7 +14,7 @@ import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
 import Model from "./model.mjs";
 import QueryKernel from "./query_kernel.mjs";
 import Replica from "./replica.mjs";
-import Sse from "./sse.mjs";
+import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
 
@@ -98,7 +98,7 @@ export default class DataLayer {
     // presenting, and how many writes are still on their way down. Reads only, and nothing in the
     // framework reads them.
     globalThis.Hologram.durability = {
-      cursor: () => Sse.syncCursor,
+      cursor: () => SyncStream.syncCursor,
       group: () => Tabs.name,
       leader: () => Tabs.leader,
       mode: () => Durability.mode,
@@ -107,6 +107,11 @@ export default class DataLayer {
       replicaId: () => Replica.id,
       storedBatches: () => Durability.storedBatches,
     };
+  }
+
+  // What the client greets the stream with (see SyncStream.buildGreeting).
+  static buildStreamGreeting(pageModule) {
+    return SyncStream.buildGreeting(pageModule);
   }
 
   // Awaiting is where an action stops running and another may run in full before this one comes
@@ -501,6 +506,11 @@ export default class DataLayer {
     }
   }
 
+  // The four sync kinds the stream delivers (see SyncStream.listen).
+  static listenToStream(eventSource) {
+    SyncStream.listen(eventSource);
+  }
+
   // An action's writes are one batch: opened when it starts, sealed when it returns, discarded
   // when it raises. That is what makes "the writes of one action" need no bookkeeping from the app
   // - a DB verb writes to whichever batch is open, and there is one open only while an action
@@ -520,7 +530,7 @@ export default class DataLayer {
       return;
     }
 
-    Sse.syncCursor = resumed.cursor;
+    SyncStream.syncCursor = resumed.cursor;
     Batches.resumeFrom(resumed.seq);
     Batches.adopt(resumed.batches);
 

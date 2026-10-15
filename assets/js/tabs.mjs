@@ -9,6 +9,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
+import SyncStream from "./sync_stream.mjs";
 
 // The tabs of one replica, and which of them speaks to the server for the rest.
 //
@@ -217,7 +218,7 @@ export default class Tabs {
           return;
         }
 
-        Sse.receiveFrame(message.event, message.frame);
+        SyncStream.receiveFrame(message.event, message.frame);
 
         return;
 
@@ -317,7 +318,7 @@ export default class Tabs {
   // place the stream has reached, and the scopes the server has declared complete.
   static postState() {
     Tabs.post({
-      cursor: Sse.syncCursor,
+      cursor: SyncStream.syncCursor,
       kind: "state",
       page: GlobalRegistry.get("connectPageModule"),
       replica: Replica.current(),
@@ -346,7 +347,7 @@ export default class Tabs {
   //
   // Everything it needs is in its own memory, in the store, or in the grant itself.
   static async #lead() {
-    if (Sse.syncCursor === null) {
+    if (SyncStream.syncCursor === null) {
       // Nowhere to be brought up to date FROM: the tab that was leading died mid-fill, or never
       // got far enough to have a place. So this one asks for everything again, and says so to the
       // group, whose tabs hold the same rows out of the same store.
@@ -368,7 +369,7 @@ export default class Tabs {
       // on from the next frame would leave the store naming a place it does not hold the rows for.
       await Durability.repair(
         LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
-        Sse.syncCursor,
+        SyncStream.syncCursor,
       );
     }
 
@@ -394,8 +395,8 @@ export default class Tabs {
       Replica.adopt(message.replica);
     }
 
-    if (Sse.syncCursor === null && message.cursor !== null) {
-      Sse.syncCursor = message.cursor;
+    if (SyncStream.syncCursor === null && message.cursor !== null) {
+      SyncStream.syncCursor = message.cursor;
     }
 
     for (const scope of message.synced) {
