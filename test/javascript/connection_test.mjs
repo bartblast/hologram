@@ -56,6 +56,10 @@ describe("Connection", () => {
     globalThis.WebSocket.CLOSED = closed;
   });
 
+  // A timer is seen cleared through the clock's own count, never through a spy on a timer global.
+  // Under the fake clock such a spy wraps the fake, and the sandbox's restore, running after the
+  // clock's, writes the fake back - so every later file would clear its real timers through a
+  // function that does not know them.
   afterEach(() => {
     clock.restore();
     sinon.restore();
@@ -392,7 +396,6 @@ describe("Connection", () => {
         const onSuccess = sinon.spy();
         const onError = sinon.spy();
         const timerId = setTimeout(() => {}, 10_000);
-        const clearTimeoutSpy = sinon.spy(globalThis, "clearTimeout");
 
         Connection.pendingRequests.set(correlationId, {
           timerId,
@@ -403,14 +406,14 @@ describe("Connection", () => {
         const message = `["reply","payload","${correlationId}"]`;
         const event = {data: message};
 
+        assert.equal(clock.countTimers(), 1);
+
         Connection.handleMessage(event);
 
         sinon.assert.calledOnce(onSuccess);
         sinon.assert.notCalled(onError);
-        sinon.assert.calledOnceWithExactly(clearTimeoutSpy, timerId);
+        assert.equal(clock.countTimers(), 0);
         assert.isFalse(Connection.pendingRequests.has(correlationId));
-
-        clearTimeoutSpy.restore();
       });
 
       it("ignores reply message with unknown correlation ID", () => {
@@ -669,13 +672,12 @@ describe("Connection", () => {
 
     it("calls callbacks and rejects promise on send failure", async () => {
       Connection.status = "disconnected";
-      const clearTimeoutSpy = sinon.spy(globalThis, "clearTimeout");
 
       const promise = Connection.sendRequest("test", Type.atom("abc"), opts);
 
       sinon.assert.calledOnce(opts.onError);
       assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
-      sinon.assert.calledOnce(clearTimeoutSpy);
+      assert.equal(clock.countTimers(), 0);
 
       try {
         await promise;
@@ -836,15 +838,11 @@ describe("Connection", () => {
       const existingTimer = setInterval(() => {}, 10_000);
       Connection.pingTimer = existingTimer;
 
-      const clearIntervalSpy = sinon.spy(globalThis, "clearInterval");
-
       Connection.startPing();
 
-      sinon.assert.calledOnceWithExactly(clearIntervalSpy, existingTimer);
+      assert.equal(clock.countTimers(), 1);
       assert.isNotNull(Connection.pingTimer);
       assert.notEqual(Connection.pingTimer, existingTimer);
-
-      clearIntervalSpy.restore();
     });
 
     it("sends ping at regular intervals when connected", () => {
