@@ -6,6 +6,10 @@ import Durability from "./durability.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
+import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
+import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
+import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
+import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
 import Model from "./model.mjs";
 import QueryKernel from "./query_kernel.mjs";
@@ -117,6 +121,354 @@ export default class DataLayer {
   // boundary being the action.
   static closeBatch() {
     Batches.close();
+  }
+
+  // Defines the hand-written client versions of the Hologram.Auth, Hologram.DB, Hologram.Entity,
+  // Hologram.Job and Hologram.Query functions as the functions of their modules. No bundle carries
+  // their Elixir originals.
+  static defineManuallyPortedFunctions() {
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "can?/3",
+      "public",
+      ManuallyPortedElixirHologramAuth["can?/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "grant_role/2",
+      "public",
+      ManuallyPortedElixirHologramAuth["grant_role/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "grant_role/3",
+      "public",
+      ManuallyPortedElixirHologramAuth["grant_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "revoke_role/2",
+      "public",
+      ManuallyPortedElixirHologramAuth["revoke_role/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "revoke_role/3",
+      "public",
+      ManuallyPortedElixirHologramAuth["revoke_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "create!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["create!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "create/1",
+      "public",
+      ManuallyPortedElixirHologramDB["create/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["delete!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete!/2",
+      "public",
+      ManuallyPortedElixirHologramDB["delete!/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete/1",
+      "public",
+      ManuallyPortedElixirHologramDB["delete/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "delete/2",
+      "public",
+      ManuallyPortedElixirHologramDB["delete/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "read/1",
+      "public",
+      ManuallyPortedElixirHologramDB["read/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "read/2",
+      "public",
+      ManuallyPortedElixirHologramDB["read/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "rollback/1",
+      "public",
+      ManuallyPortedElixirHologramDB["rollback/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "transaction/1",
+      "public",
+      ManuallyPortedElixirHologramDB["transaction/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "transaction/2",
+      "public",
+      ManuallyPortedElixirHologramDB["transaction/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update!/1",
+      "public",
+      ManuallyPortedElixirHologramDB["update!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update!/3",
+      "public",
+      ManuallyPortedElixirHologramDB["update!/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update/1",
+      "public",
+      ManuallyPortedElixirHologramDB["update/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.DB",
+      "update/3",
+      "public",
+      ManuallyPortedElixirHologramDB["update/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "generate_id/0",
+      "public",
+      ManuallyPortedElixirHologramEntity["generate_id/0"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "new/1",
+      "public",
+      ManuallyPortedElixirHologramEntity["new/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "new/2",
+      "public",
+      ManuallyPortedElixirHologramEntity["new/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "validate/1",
+      "public",
+      ManuallyPortedElixirHologramEntity["validate/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Entity",
+      "validate/2",
+      "public",
+      ManuallyPortedElixirHologramEntity["validate/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "add_relationship/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["add_relationship/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "authorize/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["authorize/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "count/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["count/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "decrement/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["decrement/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "delete_relationship/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["delete_relationship/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "filter/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["filter/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "include/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["include/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "include/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["include/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "increment/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["increment/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "limit/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["limit/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "normalize/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["normalize/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "offset/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["offset/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "one/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["one/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "order_by/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["order_by/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "put_attribute/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["put_attribute/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "put_attribute/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["put_attribute/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "trust/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["trust/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/1",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/2",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create!/3",
+      "public",
+      ManuallyPortedElixirHologramJob["create!/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/1",
+      "public",
+      ManuallyPortedElixirHologramJob["create/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/2",
+      "public",
+      ManuallyPortedElixirHologramJob["create/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "create/3",
+      "public",
+      ManuallyPortedElixirHologramJob["create/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Job",
+      "framework_attribute_names/0",
+      "public",
+      ManuallyPortedElixirHologramJob["framework_attribute_names/0"],
+    );
   }
 
   // Nothing half-done: an action that raises leaves no rows behind, and dropping the batch is the

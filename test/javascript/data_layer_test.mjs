@@ -13,6 +13,10 @@ import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
+import ManuallyPortedElixirHologramAuth from "../../assets/js/elixir/hologram/auth.mjs";
+import ManuallyPortedElixirHologramDB from "../../assets/js/elixir/hologram/db.mjs";
+import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/entity.mjs";
+import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQuery from "../../assets/js/elixir/hologram/query.mjs";
 import Model from "../../assets/js/model.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
@@ -453,6 +457,154 @@ describe("DataLayer", () => {
       DataLayer.closeBatch();
 
       sinon.assert.calledOnceWithExactly(closing);
+    });
+  });
+
+  describe("defineManuallyPortedFunctions()", () => {
+    // Global module proxies, so each is put back the way it was found: a proxy left behind here
+    // would answer for its module in every file that runs after this one.
+    const MODULES = [
+      "Elixir_Hologram_Auth",
+      "Elixir_Hologram_DB",
+      "Elixir_Hologram_Entity",
+      "Elixir_Hologram_Job",
+      "Elixir_Hologram_Query",
+    ];
+
+    let originals;
+
+    beforeEach(() => {
+      originals = Object.fromEntries(
+        MODULES.map((name) => [name, globalThis[name]]),
+      );
+
+      MODULES.forEach((name) => delete globalThis[name]);
+    });
+
+    afterEach(() => {
+      MODULES.forEach((name) => {
+        if (originals[name] === undefined) {
+          delete globalThis[name];
+        } else {
+          globalThis[name] = originals[name];
+        }
+      });
+    });
+
+    it("defines the hand-written Auth, DB, Entity, Job and Query functions as public functions of their modules", () => {
+      DataLayer.defineManuallyPortedFunctions();
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Hologram_Auth.__exports__,
+        new Set([
+          "can?/3",
+          "grant_role/2",
+          "grant_role/3",
+          "revoke_role/2",
+          "revoke_role/3",
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Hologram_DB.__exports__,
+        new Set([
+          "create!/1",
+          "create/1",
+          "delete!/1",
+          "delete!/2",
+          "delete/1",
+          "delete/2",
+          "read/1",
+          "read/2",
+          "rollback/1",
+          "transaction/1",
+          "transaction/2",
+          "update!/1",
+          "update!/3",
+          "update/1",
+          "update/3",
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Hologram_Entity.__exports__,
+        new Set([
+          "generate_id/0",
+          "new/1",
+          "new/2",
+          "validate/1",
+          "validate/2",
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Hologram_Job.__exports__,
+        new Set([
+          "create!/1",
+          "create!/2",
+          "create!/3",
+          "create/1",
+          "create/2",
+          "create/3",
+          "framework_attribute_names/0",
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Hologram_Query.__exports__,
+        new Set([
+          "add_relationship/3",
+          "authorize/2",
+          "count/1",
+          "decrement/3",
+          "delete_relationship/3",
+          "filter/2",
+          "include/2",
+          "include/3",
+          "increment/3",
+          "limit/2",
+          "normalize/1",
+          "offset/2",
+          "one/1",
+          "order_by/2",
+          "put_attribute/2",
+          "put_attribute/3",
+          "trust/1",
+        ]),
+      );
+    });
+
+    // Every port function is stubbed before the definitions read it, so each definition is seen
+    // reaching its own port function with the arguments it was called with - a definition pointing
+    // at another port function, or at a key the port does not have, answers something else.
+    it("defines each function as its own hand-written version", () => {
+      const ports = {
+        Elixir_Hologram_Auth: ManuallyPortedElixirHologramAuth,
+        Elixir_Hologram_DB: ManuallyPortedElixirHologramDB,
+        Elixir_Hologram_Entity: ManuallyPortedElixirHologramEntity,
+        Elixir_Hologram_Job: ManuallyPortedElixirHologramJob,
+        Elixir_Hologram_Query: ManuallyPortedElixirHologramQuery,
+      };
+
+      for (const [moduleName, port] of Object.entries(ports)) {
+        for (const key of Object.keys(port)) {
+          sinon.stub(port, key).callsFake((...args) => [moduleName, key, args]);
+        }
+      }
+
+      DataLayer.defineManuallyPortedFunctions();
+
+      for (const moduleName of MODULES) {
+        for (const key of globalThis[moduleName].__exports__) {
+          const arg = Type.atom("arg");
+
+          assert.deepStrictEqual(globalThis[moduleName][key](arg), [
+            moduleName,
+            key,
+            [arg],
+          ]);
+        }
+      }
     });
   });
 
