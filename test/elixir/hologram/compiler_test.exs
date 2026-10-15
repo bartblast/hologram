@@ -3756,21 +3756,26 @@ defmodule Hologram.CompilerTest do
         )
         |> normalize_newlines()
 
-      assert String.starts_with?(js, """
-             "use strict";
+      expected_imports =
+        normalize_newlines("""
+        "use strict";
 
-             import Bitstring from "#{@js_dir}/bitstring.mjs";
-             import DataLayer from "#{@js_dir}/data_layer.mjs";
-             import ERTS from "#{@js_dir}/erts.mjs";
-             import Hologram from "#{@js_dir}/hologram.mjs";
-             import HologramBoxedError from "#{@js_dir}/errors/boxed_error.mjs";
-             import HologramInterpreterError from "#{@js_dir}/errors/interpreter_error.mjs";
-             import Interpreter from "#{@js_dir}/interpreter.mjs";
-             import MemoryStorage from "#{@js_dir}/memory_storage.mjs";
-             import PerformanceTimer from "#{@js_dir}/performance_timer.mjs";
-             import Type from "#{@js_dir}/type.mjs";
-             import Utils from "#{@js_dir}/utils.mjs";
-             """)
+        import Bitstring from "#{@js_dir}/bitstring.mjs";
+        import DataLayer from "#{@js_dir}/data_layer.mjs";
+        import ERTS from "#{@js_dir}/erts.mjs";
+        import Hologram from "#{@js_dir}/hologram.mjs";
+        import HologramBoxedError from "#{@js_dir}/errors/boxed_error.mjs";
+        import HologramInterpreterError from "#{@js_dir}/errors/interpreter_error.mjs";
+        import Interpreter from "#{@js_dir}/interpreter.mjs";
+        import MemoryStorage from "#{@js_dir}/memory_storage.mjs";
+        import PerformanceTimer from "#{@js_dir}/performance_timer.mjs";
+        import Type from "#{@js_dir}/type.mjs";
+        import Utils from "#{@js_dir}/utils.mjs";
+
+        const startTime = PerformanceTimer.start();
+        """)
+
+      assert String.starts_with?(js, expected_imports)
 
       assert String.contains?(js, "\n\nHologram.dataLayer = DataLayer;\n\nHologram.run();\n\n")
     end
@@ -3784,20 +3789,25 @@ defmodule Hologram.CompilerTest do
         )
         |> normalize_newlines()
 
-      assert String.starts_with?(js, """
-             "use strict";
+      expected_imports =
+        normalize_newlines("""
+        "use strict";
 
-             import Bitstring from "#{@js_dir}/bitstring.mjs";
-             import ERTS from "#{@js_dir}/erts.mjs";
-             import Hologram from "#{@js_dir}/hologram.mjs";
-             import HologramBoxedError from "#{@js_dir}/errors/boxed_error.mjs";
-             import HologramInterpreterError from "#{@js_dir}/errors/interpreter_error.mjs";
-             import Interpreter from "#{@js_dir}/interpreter.mjs";
-             import MemoryStorage from "#{@js_dir}/memory_storage.mjs";
-             import PerformanceTimer from "#{@js_dir}/performance_timer.mjs";
-             import Type from "#{@js_dir}/type.mjs";
-             import Utils from "#{@js_dir}/utils.mjs";
-             """)
+        import Bitstring from "#{@js_dir}/bitstring.mjs";
+        import ERTS from "#{@js_dir}/erts.mjs";
+        import Hologram from "#{@js_dir}/hologram.mjs";
+        import HologramBoxedError from "#{@js_dir}/errors/boxed_error.mjs";
+        import HologramInterpreterError from "#{@js_dir}/errors/interpreter_error.mjs";
+        import Interpreter from "#{@js_dir}/interpreter.mjs";
+        import MemoryStorage from "#{@js_dir}/memory_storage.mjs";
+        import PerformanceTimer from "#{@js_dir}/performance_timer.mjs";
+        import Type from "#{@js_dir}/type.mjs";
+        import Utils from "#{@js_dir}/utils.mjs";
+
+        const startTime = PerformanceTimer.start();
+        """)
+
+      assert String.starts_with?(js, expected_imports)
 
       refute String.contains?(js, "Hologram.dataLayer")
     end
