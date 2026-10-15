@@ -24,6 +24,39 @@ updates:
           - "*"
 
   - package-ecosystem: "mix"
+    directory: "/test/cluster"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "hologram"
+    groups:
+      cluster-tests:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "mix"
+    directory: "/test/cowboy"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "hologram"
+    groups:
+      cowboy-tests:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "mix"
+    directory: "/test/ecosystem"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "hologram"
+    groups:
+      ecosystem-tests:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "mix"
     directory: "/test/features"
     schedule:
       interval: "weekly"
@@ -31,6 +64,17 @@ updates:
       - dependency-name: "hologram"
     groups:
       feature-tests:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "mix"
+    directory: "/test/umbrella"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "hologram"
+    groups:
+      umbrella-tests:
         patterns:
           - "*"
 
