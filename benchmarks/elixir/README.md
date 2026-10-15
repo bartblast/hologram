@@ -130,7 +130,7 @@ build_sync_constants_js/1          2.38      420.59 ms     ±2.90%      420.75 m
 
 ```
 Name               ips        average  deviation         median         99th %
-bundle/2          2.55      392.87 ms     ±3.82%      390.57 ms      433.05 ms
+bundle/2          2.74      364.74 ms     ±1.90%      362.61 ms      382.42 ms
 ```
 
 
@@ -278,7 +278,7 @@ create_page_entry_files/6          5.01      199.73 ms     ±5.64%      199.33 m
 
 ```
 Name                                  ips        average  deviation         median         99th %
-create_runtime_entry_file/7          8.80      113.59 ms     ±4.16%      113.18 ms      142.02 ms
+create_runtime_entry_file/7          8.68      115.26 ms     ±4.40%      114.32 ms      142.16 ms
 ```
 
 
