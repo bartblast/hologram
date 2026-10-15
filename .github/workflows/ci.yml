@@ -331,11 +331,19 @@ jobs:
         run: mix deps.unlock --check-unused
 
       # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
+      #
+      # Both audits read mix.lock and fail on a retirement or an advisory published since the
+      # lock was last touched, which would turn every branch red on the day it's published. The
+      # lock is what Hologram is built and tested with, not what users install, so the audits run
+      # on master only: pull requests skip them, and a merge commit goes red when master's lock
+      # needs a fix.
       - name: Check lib retired Elixir deps
+        if: ${{ github.ref == 'refs/heads/master' }}
         run: mix hex.audit
 
       # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
       - name: Check lib security vulnerabilities in Elixir deps
+        if: ${{ github.ref == 'refs/heads/master' }}
         run: mix deps.audit
 
       # Step: Check that the lib Elixir code has already been formatted.
@@ -525,11 +533,6 @@ jobs:
       - name: Check feature tests app unused Elixir deps
         if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
-      - name: Check feature tests app retired Elixir deps
-        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
-        run: mix hex.audit
 
       # Step: Check that the feature tests app Elixir code has already been formatted.
       - name: Check feature tests app Elixir code formatted
@@ -799,11 +802,6 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
 
-      # Step: Check if there are any cluster tests app Elixir dependencies which have been marked as retired.
-      - name: Check cluster tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
       # Step: Check that the cluster tests app Elixir code has already been formatted.
       - name: Check cluster tests app Elixir code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
@@ -959,11 +957,6 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
 
-      # Step: Check if there are any cowboy tests app Elixir dependencies which have been marked as retired.
-      - name: Check cowboy tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
       # Step: Check that the cowboy tests app Elixir code has already been formatted.
       - name: Check cowboy tests app Elixir code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
@@ -1118,11 +1111,6 @@ jobs:
       - name: Check ecosystem tests app unused Elixir deps
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any ecosystem tests app Elixir dependencies which have been marked as retired.
-      - name: Check ecosystem tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
 
       # Step: Check that the ecosystem tests app Elixir code has already been formatted.
       - name: Check ecosystem tests app Elixir code formatted
@@ -1287,11 +1275,6 @@ jobs:
       - name: Check umbrella tests app unused Elixir deps
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any umbrella tests app Elixir dependencies which have been marked as retired.
-      - name: Check umbrella tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
 
       # Step: Check that the umbrella tests app Elixir code has already been formatted.
       - name: Check umbrella tests app Elixir code formatted
