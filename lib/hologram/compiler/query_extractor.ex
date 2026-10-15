@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler.QueryExtractor do
   @moduledoc false
 
+  alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.Compiler.IR
   alias Hologram.Query
   alias Hologram.Query.Placeholder
@@ -95,12 +97,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   passes the one list to every extraction, rather than every extraction reading
   them.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_2/README.md
+  The IR a capture is walked over is read from the given IR PLT, the compile's: a
+  module the PLT lacks is built into it (see Hologram.Compiler.build_missing_ir!/2),
+  so that no module's IR is built twice in a compile.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_3/README.md
   """
-  @spec extract_module_queries(module, list(module)) :: list(Query.t())
-  def extract_module_queries(module, entity_types) do
+  @spec extract_module_queries(module, list(module), PLT.t()) :: list(Query.t())
+  def extract_module_queries(module, entity_types, ir_plt) do
     if Reflection.has_function?(module, :__props__, 0) do
-      Enum.flat_map(module.__props__(), &prop_queries!(module, &1, entity_types))
+      Enum.flat_map(module.__props__(), &prop_queries!(module, &1, entity_types, ir_plt))
     else
       []
     end
@@ -127,12 +133,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   into the prop's own opts, because a remote capture's names are unreadable while
   the consuming component compiles: a target module compiling in the same batch
   exists only in memory, and its beam - the only carrier of its clauses - is
-  written when the batch ends.
+  written when the batch ends. The beam is read through its IR, from the given IR
+  PLT, as extract_module_queries/3 reads it.
   """
-  @spec extract_prop_params(module) :: keyword(list(atom | nil))
-  def extract_prop_params(module) do
+  @spec extract_prop_params(module, PLT.t()) :: keyword(list(atom | nil))
+  def extract_prop_params(module, ir_plt) do
     if Reflection.has_function?(module, :__props__, 0) do
-      Enum.flat_map(module.__props__(), &prop_params(module, &1))
+      Enum.flat_map(module.__props__(), &prop_params(module, &1, ir_plt))
     else
       []
     end
@@ -140,11 +147,11 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   @doc """
   Extracts the registered query terms declared by the given modules - the
-  concatenated extract_module_queries/2 results in module order.
+  concatenated extract_module_queries/3 results in module order.
   """
-  @spec extract_queries(list(module), list(module)) :: list(Query.t())
-  def extract_queries(modules, entity_types) do
-    Enum.flat_map(modules, &extract_module_queries(&1, entity_types))
+  @spec extract_queries(list(module), list(module), PLT.t()) :: list(Query.t())
+  def extract_queries(modules, entity_types, ir_plt) do
+    Enum.flat_map(modules, &extract_module_queries(&1, entity_types, ir_plt))
   end
 
   @doc """
@@ -159,11 +166,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   by no clause of the capture's target. Modules without parameterized captures pass
   vacuously.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/validate_slot_bindings!_1/README.md
+  The argument names are the ones extract_prop_params/2 extracted from the module, so
+  that the check reads no IR of its own.
   """
-  @spec validate_slot_bindings!(module) :: :ok
-  def validate_slot_bindings!(module) do
-    case extract_prop_params(module) do
+  @spec validate_slot_bindings!(module, keyword(list(atom | nil))) :: :ok
+  def validate_slot_bindings!(module, prop_params) do
+    case prop_params do
       [] ->
         :ok
 
@@ -256,21 +264,6 @@ defmodule Hologram.Compiler.QueryExtractor do
                 stack: context.stack
               ],
               __STACKTRACE__
-  end
-
-  # A cover-compiled module (coverage runs) is loaded from instrumented code,
-  # but its beam still lives on disk in the code path.
-  defp beam_path(module) do
-    case :code.which(module) do
-      :cover_compiled ->
-        case :code.get_object_code(module) do
-          {^module, _binary, path} -> path
-          :error -> :error
-        end
-
-      other ->
-        other
-    end
   end
 
   defp call_binding!(%IR.Variable{name: name}, value, _context), do: {name, value}
@@ -749,7 +742,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       )
     end
 
-    {funs, state_after_funs} = module_funs_cached(module, state)
+    {funs, state_after_funs} = module_funs_cached(module, state, context.ir_plt)
 
     clauses = fetch_function_clauses!(funs, module, function, arity, context)
 
@@ -886,16 +879,22 @@ defmodule Hologram.Compiler.QueryExtractor do
     )
   end
 
-  defp module_funs(module) do
-    beam_source =
-      case beam_path(module) do
-        path when is_list(path) -> path
-        _other -> nil
+  # A module the PLT holds is read from it, one it lacks is built into it, so that the next read of
+  # it, by this extraction or another, finds it. Looked up before the build is asked for: building
+  # nothing still lists the consolidated beams of the code path (see
+  # Hologram.Compiler.build_ir_plt/1).
+  defp module_funs(module, ir_plt) do
+    ir =
+      case PLT.get(ir_plt, module) do
+        {:ok, ir} ->
+          ir
+
+        :error ->
+          Compiler.build_missing_ir!(ir_plt, [module])
+          PLT.get!(ir_plt, module)
       end
 
-    module
-    |> IR.for_module(beam_source)
-    |> IR.aggregate_module_funs()
+    IR.aggregate_module_funs(ir)
   end
 
   defp param_name(clause, index) do
@@ -905,11 +904,11 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp prop_params(module, {name, _type, opts}) do
+  defp prop_params(module, {name, _type, opts}, ir_plt) do
     with {:ok, capture} <- Keyword.fetch(opts, :from_query),
          true <- is_function(capture) and not is_function(capture, 0) do
       {_target_module, _fun_name, _arity, clauses} =
-        resolve_capture_clauses!(module, name, capture)
+        resolve_capture_clauses!(module, name, capture, ir_plt)
 
       arity = Function.info(capture)[:arity]
 
@@ -919,32 +918,33 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp module_funs_cached(module, state) do
+  defp module_funs_cached(module, state, ir_plt) do
     case state.funs_cache do
       %{^module => funs} ->
         {funs, state}
 
       _missing ->
-        funs = module_funs(module)
+        funs = module_funs(module, ir_plt)
 
         {funs, %{state | funs_cache: Map.put(state.funs_cache, module, funs)}}
     end
   end
 
-  defp prop_queries!(module, {name, _type, opts}, entity_types) do
+  defp prop_queries!(module, {name, _type, opts}, entity_types, ir_plt) do
     case Keyword.fetch(opts, :from_query) do
-      {:ok, capture} -> prop_query!(module, name, capture, entity_types)
+      {:ok, capture} -> prop_query!(module, name, capture, entity_types, ir_plt)
       :error -> []
     end
   end
 
-  defp prop_query!(_module, _prop_name, capture, _entity_types) when is_function(capture, 0) do
+  defp prop_query!(_module, _prop_name, capture, _entity_types, _ir_plt)
+       when is_function(capture, 0) do
     [Query.normalize(capture.())]
   end
 
-  defp prop_query!(module, prop_name, capture, entity_types) when is_function(capture) do
+  defp prop_query!(module, prop_name, capture, entity_types, ir_plt) when is_function(capture) do
     {target_module, fun_name, arity, clauses} =
-      resolve_capture_clauses!(module, prop_name, capture)
+      resolve_capture_clauses!(module, prop_name, capture, ir_plt)
 
     # The capture's own frame opens the stack, so a refusal in its body has a path to show even
     # when it called nothing - the innermost frame is always the function being walked, which is
@@ -952,6 +952,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     context = %{
       current_module: target_module,
       entity_types: entity_types,
+      ir_plt: ir_plt,
       line: nil,
       prop_module: module,
       prop_name: prop_name,
@@ -980,7 +981,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     terms
   end
 
-  defp prop_query!(module, prop_name, value, _entity_types) do
+  defp prop_query!(module, prop_name, value, _entity_types, _ir_plt) do
     compile_error!(
       "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}",
       module,
@@ -1024,14 +1025,14 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp resolve(term, _entity_types), do: [term]
 
-  defp resolve_capture_clauses!(prop_module, prop_name, capture) do
+  defp resolve_capture_clauses!(prop_module, prop_name, capture, ir_plt) do
     capture_info = Function.info(capture)
     target_module = capture_info[:module]
 
     fun_name = shim_target(target_module, capture_info[:name])
     arity = capture_info[:arity]
 
-    funs = module_funs(target_module)
+    funs = module_funs(target_module, ir_plt)
 
     case List.keyfind(funs, {fun_name, arity}, 0) do
       {_fun_key, {_visibility, clauses}} ->

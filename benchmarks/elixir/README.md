@@ -4,9 +4,9 @@ Last run: 2026-10-11 23:08:28 UTC
 
 ## Summary
 
-Total benchmarks: 47
+Total benchmarks: 46
 
-Successful: 47\
+Successful: 46\
 Warnings: 0\
 Failed: 0
 
@@ -346,11 +346,11 @@ Comparison:
 ```
 
 
-### ✅ compiler » extract_component_queries_2
+### ✅ compiler » extract_component_queries_3
 
 ```
 Name                                  ips        average  deviation         median         99th %
-extract_component_queries/2        1.44 K      695.54 μs    ±13.65%      678.63 μs      916.11 μs
+extract_component_queries/3       11.32 K       88.33 μs     ±9.96%       87.79 μs      108.63 μs
 ```
 
 
@@ -388,33 +388,20 @@ do load        0.22 K - 326.65x slower +4.53 ms
 ```
 
 
-### ✅ compiler » query_extractor » extract_module_queries_2
+### ✅ compiler » query_extractor » extract_module_queries_3
 
 ```
 Name                                                         ips        average  deviation         median         99th %
-no parameterized captures                              2909.91 K        0.34 μs  ±1508.69%        0.29 μs        0.54 μs
-capture whose entity is an argument, 1 candidate          6.57 K      152.20 μs     ±8.26%      151.21 μs      192.13 μs
-capture naming its entity                                 6.46 K      154.90 μs    ±33.56%      153.42 μs      211.10 μs
-capture whose entity is an argument, 21 candidates        4.62 K      216.53 μs     ±5.06%      214.04 μs      246.13 μs
+no parameterized captures                              2836.72 K        0.35 μs  ±2357.77%        0.29 μs        0.50 μs
+capture naming its entity                               127.92 K        7.82 μs   ±171.30%        7.33 μs       22.08 μs
+capture whose entity is an argument, 1 candidate        103.48 K        9.66 μs    ±62.75%        9.08 μs       22.13 μs
+capture whose entity is an argument, 21 candidates       14.26 K       70.12 μs     ±9.37%       71.54 μs       87.04 μs
 
 Comparison: 
-no parameterized captures                              2909.91 K
-capture whose entity is an argument, 1 candidate          6.57 K - 442.89x slower +151.86 μs
-capture naming its entity                                 6.46 K - 450.73x slower +154.55 μs
-capture whose entity is an argument, 21 candidates        4.62 K - 630.08x slower +216.18 μs
-```
-
-
-### ✅ compiler » query_extractor » validate_slot_bindings!_1
-
-```
-Name                                ips        average  deviation         median         99th %
-no parameterized captures        2.75 M        0.36 μs  ±2036.94%        0.29 μs        0.54 μs
-parameterized capture         0.00711 M      140.69 μs    ±18.97%      140.13 μs      181.81 μs
-
-Comparison: 
-no parameterized captures        2.75 M
-parameterized capture         0.00711 M - 386.40x slower +140.33 μs
+no parameterized captures                              2836.72 K
+capture naming its entity                               127.92 K - 22.18x slower +7.46 μs
+capture whose entity is an argument, 1 candidate        103.48 K - 27.41x slower +9.31 μs
+capture whose entity is an argument, 21 candidates       14.26 K - 198.91x slower +69.77 μs
 ```
 
 
@@ -443,22 +430,22 @@ validate_page_modules/2       55.47 K       18.03 μs    ±37.66%       17.21 μ
 
 ```
 Name                                            ips        average  deviation         median         99th %
-nothing changed, Hologram off               1506.64        0.66 ms    ±29.87%        0.61 ms        1.16 ms
-nothing changed, new VM                       96.48       10.36 ms    ±16.89%        9.91 ms       15.12 ms
-a module changed, Hologram off                25.19       39.70 ms    ±23.89%       35.44 ms       78.12 ms
-a module no page uses edited, same VM         12.14       82.38 ms     ±5.69%       81.59 ms      105.76 ms
-nothing changed, same VM                      11.71       85.36 ms     ±7.30%       83.84 ms      116.28 ms
-one page edited, same VM                       3.40      294.49 ms     ±2.62%      293.01 ms      322.04 ms
-cold                                           0.38     2616.21 ms     ±1.30%     2621.57 ms     2647.84 ms
+nothing changed, Hologram off               1630.68        0.61 ms    ±17.30%        0.58 ms        1.11 ms
+nothing changed, new VM                      106.00        9.43 ms     ±5.02%        9.26 ms       11.20 ms
+a module changed, Hologram off                26.23       38.13 ms    ±18.58%       35.24 ms       63.59 ms
+a module no page uses edited, same VM         13.16       75.98 ms     ±6.38%       75.22 ms      111.53 ms
+nothing changed, same VM                      12.90       77.51 ms     ±6.04%       75.85 ms       99.62 ms
+one page edited, same VM                       3.52      284.13 ms     ±1.91%      283.39 ms      304.71 ms
+cold                                           0.39     2592.58 ms     ±1.20%     2589.86 ms     2631.87 ms
 
 Comparison: 
-nothing changed, Hologram off               1506.64
-nothing changed, new VM                       96.48 - 15.62x slower +9.70 ms
-a module changed, Hologram off                25.19 - 59.82x slower +39.04 ms
-a module no page uses edited, same VM         12.14 - 124.11x slower +81.71 ms
-nothing changed, same VM                      11.71 - 128.61x slower +84.70 ms
-one page edited, same VM                       3.40 - 443.69x slower +293.82 ms
-cold                                           0.38 - 3941.68x slower +2615.54 ms
+nothing changed, Hologram off               1630.68
+nothing changed, new VM                      106.00 - 15.38x slower +8.82 ms
+a module changed, Hologram off                26.23 - 62.17x slower +37.51 ms
+a module no page uses edited, same VM         13.16 - 123.89x slower +75.36 ms
+nothing changed, same VM                      12.90 - 126.39x slower +76.90 ms
+one page edited, same VM                       3.52 - 463.32x slower +283.51 ms
+cold                                           0.39 - 4227.67x slower +2591.97 ms
 ```
 
 

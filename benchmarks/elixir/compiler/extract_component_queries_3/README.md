@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.extract_component_queries/2
+Hologram.Compiler.extract_component_queries/3
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">extract_component_queries/2</td>
-    <td style="white-space: nowrap; text-align: right">1.44 K</td>
-    <td style="white-space: nowrap; text-align: right">695.54 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;13.65%</td>
-    <td style="white-space: nowrap; text-align: right">678.63 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">916.11 &micro;s</td>
+    <td style="white-space: nowrap">extract_component_queries/3</td>
+    <td style="white-space: nowrap; text-align: right">11.32 K</td>
+    <td style="white-space: nowrap; text-align: right">88.33 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;9.96%</td>
+    <td style="white-space: nowrap; text-align: right">87.79 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">108.63 &micro;s</td>
   </tr>
 
 </table>

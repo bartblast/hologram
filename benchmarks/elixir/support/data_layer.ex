@@ -40,7 +40,7 @@ defmodule Hologram.Benchmarks.DataLayer do
       reach_by_page
       |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
-      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
+      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt), ir_plt)
 
     {reach_by_page, component_queries, module_info_plt}
   end

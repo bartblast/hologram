@@ -441,6 +441,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph_for_runtime: call_graph_for_runtime,
           component_modules: component_modules,
           entity_types: entity_types,
+          ir_plt: ir_plt,
           kept_data_layer: cache.data_layer,
           kept_page_reach: kept_page_reach,
           module_info_plt: new_module_info_plt,
@@ -1178,13 +1179,15 @@ defmodule Mix.Tasks.Compile.Hologram do
   #
   # The registered queries of a component are extracted again only when the edit can have changed
   # them (see list_stale_components/7), and of a component a page reaches that has no entry; every
-  # other component keeps the entry the last derivation left. A component's slot bindings depend on
-  # what its queries do, so they are validated for the components extracted again.
+  # other component keeps the entry the last derivation left. A component's slot bindings are the
+  # argument names its extraction produced, so they are validated for the components extracted
+  # again, once they are.
   defp derive_data_layer!(context) do
     %{
       call_graph: call_graph,
       call_graph_for_runtime: call_graph_for_runtime,
       entity_types: entity_types,
+      ir_plt: ir_plt,
       module_info_plt: module_info_plt,
       opts: opts,
       pages_to_list: pages_to_list
@@ -1225,19 +1228,19 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Enum.concat(context.stale_components)
       |> Enum.uniq()
 
-    fresh_component_set = MapSet.new(fresh_components)
+    fresh_component_queries =
+      Compiler.extract_component_queries(fresh_components, entity_types, ir_plt)
 
     # A builder's argument names bind the consuming component's like-named declared slots, and
     # a remote capture makes those names a cross-module contract - so a renamed argument fails
     # the build here, every reachable consumer at once, rather than one render at a time.
     reached_components
-    |> Enum.filter(&MapSet.member?(fresh_component_set, &1))
-    |> Enum.each(&QueryExtractor.validate_slot_bindings!/1)
+    |> Enum.filter(&Map.has_key?(fresh_component_queries, &1))
+    |> Enum.each(fn module ->
+      QueryExtractor.validate_slot_bindings!(module, fresh_component_queries[module].prop_params)
+    end)
 
-    component_queries =
-      fresh_components
-      |> Compiler.extract_component_queries(entity_types)
-      |> then(&Map.merge(kept_component_queries, &1))
+    component_queries = Map.merge(kept_component_queries, fresh_component_queries)
 
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.

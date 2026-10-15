@@ -69,8 +69,8 @@ defmodule Hologram.Compiler do
 
   @typedoc """
   The registered queries of one component: the normalized terms its from_query props declare (see
-  `Hologram.Compiler.QueryExtractor.extract_module_queries/2`), the argument names of its
-  parameterized captures (see `Hologram.Compiler.QueryExtractor.extract_prop_params/1`) and the
+  `Hologram.Compiler.QueryExtractor.extract_module_queries/3`), the argument names of its
+  parameterized captures (see `Hologram.Compiler.QueryExtractor.extract_prop_params/2`) and the
   modules those captures point at, sorted. A capture of the component's own function points at the
   component itself.
   """
@@ -270,7 +270,7 @@ defmodule Hologram.Compiler do
   @doc """
   Returns the ids of the windows each page downloads, keyed by page module and sorted, from what
   the data layer keeps of each page's reach (see `build_kept_page_reach/3`) and the registered
-  queries of the components the pages reach (see `extract_component_queries/2`). Nothing is
+  queries of the components the pages reach (see `extract_component_queries/3`). Nothing is
   extracted or walked here.
 
   A page's windows are those of every component it can reach, not only the ones a given render
@@ -631,14 +631,19 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
-  calls it for the modules it is about to read, once the call graph says which they are.
+  calls it for the modules it is about to read, once the call graph says which they are. When the PLT holds
+  every given module, it returns the PLT without reading the code path.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_missing_ir!_2/README.md
   """
   @spec build_missing_ir!(PLT.t(), [module]) :: PLT.t()
   def build_missing_ir!(ir_plt, modules) do
-    missing_modules = Enum.reject(modules, &PLT.member?(ir_plt, &1))
-    build_ir_plt(plt: ir_plt, modules: missing_modules)
+    # Asked before building: build_ir_plt/1 scans the code path for consolidated beams first, which
+    # costs more than reading a module's IR from the PLT.
+    case Enum.reject(modules, &PLT.member?(ir_plt, &1)) do
+      [] -> ir_plt
+      missing_modules -> build_ir_plt(plt: ir_plt, modules: missing_modules)
+    end
   end
 
   @doc """
@@ -727,7 +732,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Derives what a running Hologram app holds for the given registered queries of components, as
-  `extract_component_queries/2` extracts them: the registry entries keyed by query content id, the
+  `extract_component_queries/3` extracts them: the registry entries keyed by query content id, the
   argument names of every parameterized capture keyed by `{module, prop name}`, and the term behind
   each window keyed by window id.
 
@@ -1393,18 +1398,31 @@ defmodule Hologram.Compiler do
   `component_queries`). The entity types are the ones of the build, over which a query whose entity
   type is an argument is replayed.
 
-  Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/2` and
-  `Hologram.Compiler.QueryExtractor.extract_prop_params/1` raise.
+  The IR the captures are walked over is read from the given IR PLT, the compile's, and the capture
+  targets it lacks are built into it first, in one go.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_2/README.md
+  Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/3` and
+  `Hologram.Compiler.QueryExtractor.extract_prop_params/2` raise.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_3/README.md
   """
-  @spec extract_component_queries([module], [module]) :: %{module => component_queries}
-  def extract_component_queries(component_modules, entity_types) do
+  @spec extract_component_queries([module], [module], PLT.t()) :: %{module => component_queries}
+  def extract_component_queries(component_modules, entity_types, ir_plt) do
+    targets_by_module = Map.new(component_modules, &{&1, capture_targets(&1)})
+
+    # The IR the captures are walked over, built in one go for the batch: the targets of every given
+    # component, each once. A helper a walk reaches is built at its first use.
+    targets_by_module
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.uniq()
+    |> then(&build_missing_ir!(ir_plt, &1))
+
     Map.new(component_modules, fn module ->
       queries = %{
-        prop_params: QueryExtractor.extract_prop_params(module),
-        targets: capture_targets(module),
-        terms: QueryExtractor.extract_module_queries(module, entity_types)
+        prop_params: QueryExtractor.extract_prop_params(module, ir_plt),
+        targets: targets_by_module[module],
+        terms: QueryExtractor.extract_module_queries(module, entity_types, ir_plt)
       }
 
       {module, queries}
@@ -1972,7 +1990,7 @@ defmodule Hologram.Compiler do
   @doc """
   Returns what the client's data layer is compiled with, derived from what the data layer keeps of
   each page's reach (see `build_kept_page_reach/3`) and the registered queries of the components
-  the pages reach (see `extract_component_queries/2`). Nothing is extracted or walked here.
+  the pages reach (see `extract_component_queries/3`). Nothing is extracted or walked here.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
   everything it includes, plus every entity type the pages' client code mentions. A client
@@ -2725,6 +2743,16 @@ defmodule Hologram.Compiler do
         ~s/prop "#{name}" of component #{Reflection.module_name(component_module)} must be one of / <>
           "#{inspect(values)}, got: #{inspect(value)}, " <>
           "in #{Reflection.module_name(module)}'s template"
+  end
+
+  # A cover-compiled module (coverage runs) is loaded from instrumented code, but its beam still
+  # lives on disk in the code path. Its path is returned rather than its binary, so the module is
+  # read, stat-ed and digested as any other.
+  defp cover_compiled_beam_path(module) do
+    case :code.get_object_code(module) do
+      {^module, _binary, beam_path} -> beam_path
+      :error -> nil
+    end
   end
 
   defp create_entry_file(js, entry_name, tmp_dir) do
@@ -4170,7 +4198,7 @@ defmodule Hologram.Compiler do
   # purges its modules, a protocol the compiler calls in that window is loaded from its own beam
   # again and stays so, and :code.which/1 then names that beam: another digest, mtime and size
   # than the consolidated beam every other compile reads, so every page reaching the protocol
-  # would be rebuilt.
+  # would be rebuilt. A cover-compiled module is read from the beam its object code names.
   defp resolve_beam_source(module, consolidated_beams, umbrella?) do
     consolidated_beams[module] || resolve_beam_source(module, umbrella?)
   end
@@ -4194,10 +4222,10 @@ defmodule Hologram.Compiler do
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
   defp resolve_beam_source(module, false) do
-    beam_path = :code.which(module)
-
-    if beam_path != :non_existing do
-      beam_path
+    case :code.which(module) do
+      :non_existing -> nil
+      :cover_compiled -> cover_compiled_beam_path(module)
+      beam_path -> beam_path
     end
   end
 
