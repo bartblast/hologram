@@ -167,7 +167,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page
       |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
-      |> extract_component_queries(entity_types)
+      |> extract_component_queries(entity_types, PLT.start())
 
     {reach_by_page, component_queries}
   end
@@ -1350,7 +1350,11 @@ defmodule Hologram.CompilerTest do
       entity_types: entity_types
     } do
       component_queries =
-        extract_component_queries([QueryExtractorModule1, ComponentModule11], entity_types)
+        extract_component_queries(
+          [QueryExtractorModule1, ComponentModule11],
+          entity_types,
+          PLT.start()
+        )
 
       queries = build_queries(component_queries, entity_types)
 
@@ -1376,7 +1380,9 @@ defmodule Hologram.CompilerTest do
     test "registers the grants window beside the windows the queries download", %{
       entity_types: entity_types
     } do
-      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      component_queries =
+        extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
+
       queries = build_queries(component_queries, entity_types)
 
       grants_window = Auth.grants_window()
@@ -1388,7 +1394,9 @@ defmodule Hologram.CompilerTest do
     test "registers no grants window when the given entity types hold no role grant store", %{
       entity_types: entity_types
     } do
-      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      component_queries =
+        extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
+
       queries = build_queries(component_queries, entity_types -- [RoleGrant])
 
       refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
@@ -1397,7 +1405,9 @@ defmodule Hologram.CompilerTest do
     test "leaves out a component declaring no parameterized capture", %{
       entity_types: entity_types
     } do
-      component_queries = extract_component_queries([QueryExtractorModule1], entity_types)
+      component_queries =
+        extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
+
       queries = build_queries(component_queries, entity_types)
 
       assert queries.prop_params == %{}
@@ -1405,7 +1415,9 @@ defmodule Hologram.CompilerTest do
 
     test "collects a registered query reading a type with server-only attributes it does not reference",
          %{entity_types: entity_types} do
-      component_queries = extract_component_queries([ComponentModule20], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule20], entity_types, PLT.start())
+
       queries = build_queries(component_queries, entity_types)
 
       assert map_size(queries.entries) == 1
@@ -1419,7 +1431,8 @@ defmodule Hologram.CompilerTest do
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny returns no rows to any session. Add allow lines, or drop the query."
 
-      component_queries = extract_component_queries([ComponentModule15], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule15], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1434,7 +1447,8 @@ defmodule Hologram.CompilerTest do
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
 
-      component_queries = extract_component_queries([ComponentModule16], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule16], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1450,7 +1464,8 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
-      component_queries = extract_component_queries([ComponentModule17], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule17], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1466,7 +1481,8 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
-      component_queries = extract_component_queries([ComponentModule18], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule18], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1483,7 +1499,8 @@ defmodule Hologram.CompilerTest do
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
 
-      component_queries = extract_component_queries([ComponentModule19], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule19], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1499,7 +1516,8 @@ defmodule Hologram.CompilerTest do
           "tiers, so it cannot claim another. Drop trust(), or read through the backend API in " <>
           "a command."
 
-      component_queries = extract_component_queries([ComponentModule28], entity_types)
+      component_queries =
+        extract_component_queries([ComponentModule28], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1513,7 +1531,7 @@ defmodule Hologram.CompilerTest do
 
       queries =
         [ComponentModule11]
-        |> extract_component_queries(entity_types)
+        |> extract_component_queries(entity_types, PLT.start())
         |> build_queries(entity_types)
 
       opts = [build_dir: "/my_build_dir"]
@@ -5104,13 +5122,23 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "extract_component_queries/2" do
+  describe "extract_component_queries/3" do
     setup do
-      [entity_types: Reflection.list_entities()]
+      [entity_types: Reflection.list_entities(), ir_plt: PLT.start()]
+    end
+
+    test "builds the capture targets the PLT lacks into it", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      extract_component_queries([ComponentModule14], entity_types, ir_plt)
+
+      assert PLT.member?(ir_plt, ComponentModule13)
     end
 
     test "extracts the queries of every given component, keyed by module", %{
-      entity_types: entity_types
+      entity_types: entity_types,
+      ir_plt: ir_plt
     } do
       module_1_term =
         Entity2
@@ -5123,7 +5151,11 @@ defmodule Hologram.CompilerTest do
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_component_queries([QueryExtractorModule1, ComponentModule11], entity_types) ==
+      assert extract_component_queries(
+               [QueryExtractorModule1, ComponentModule11],
+               entity_types,
+               ir_plt
+             ) ==
                %{
                  ComponentModule11 => %{
                    prop_params: [entities: [:min_b]],
@@ -5138,32 +5170,53 @@ defmodule Hologram.CompilerTest do
                }
     end
 
-    test "records the module a remote capture points at", %{entity_types: entity_types} do
+    test "reads the IR the PLT holds instead of building it", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      build_missing_ir!(ir_plt, [ComponentModule13])
+
+      count =
+        count_calls({IR, :for_module, 2}, fn ->
+          extract_component_queries([ComponentModule14], entity_types, ir_plt)
+        end)
+
+      assert count == 0
+    end
+
+    test "records the module a remote capture points at", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
       assert %{ComponentModule14 => %{targets: [ComponentModule13]}} =
-               extract_component_queries([ComponentModule14], entity_types)
+               extract_component_queries([ComponentModule14], entity_types, ir_plt)
     end
 
     test "records nothing for a component declaring no query prop", %{
-      entity_types: entity_types
+      entity_types: entity_types,
+      ir_plt: ir_plt
     } do
-      assert extract_component_queries([ComponentModule1], entity_types) == %{
+      assert extract_component_queries([ComponentModule1], entity_types, ir_plt) == %{
                ComponentModule1 => %{prop_params: [], targets: [], terms: []}
              }
     end
 
-    test "answers for no component with no entry" do
-      assert extract_component_queries([], Reflection.list_entities()) == %{}
+    test "answers for no component with no entry", %{entity_types: entity_types, ir_plt: ir_plt} do
+      assert extract_component_queries([], entity_types, ir_plt) == %{}
     end
 
     # The refusal is the query stage's rather than a validation's - an include sub-term cannot
     # carry the mark at all, so the extraction never reaches a term to object to.
-    test "raises for a capture the extractor refuses", %{entity_types: entity_types} do
+    test "raises for a capture the extractor refuses", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
       expected_msg =
         "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
           "whole query, includes and all, on the server's authority"
 
       assert_error ArgumentError, expected_msg, fn ->
-        extract_component_queries([ComponentModule29], entity_types)
+        extract_component_queries([ComponentModule29], entity_types, ir_plt)
       end
     end
   end

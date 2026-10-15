@@ -142,7 +142,7 @@ defmodule Hologram.Test.Stubs do
 
     queries =
       component_modules
-      |> Compiler.extract_component_queries(entity_types)
+      |> Compiler.extract_component_queries(entity_types, PLT.start())
       |> Compiler.build_queries(entity_types)
 
     PLT.start()

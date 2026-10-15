@@ -93,7 +93,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # can produce this component's queries at all, not which tier said no.
   defp buildable_queries?(module, entity_types) do
     [module]
-    |> Compiler.extract_component_queries(entity_types)
+    |> Compiler.extract_component_queries(entity_types, PLT.start())
     |> Compiler.build_queries(entity_types)
 
     true
@@ -162,7 +162,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # How many components' registered queries are extracted while the given function runs.
   defp count_extractions(fun) do
-    count_calls({QueryExtractor, :extract_module_queries, 2}, fun)
+    count_calls({QueryExtractor, :extract_module_queries, 3}, fun)
   end
 
   # How many times the page windows PLT and the queries PLT are dumped while the given function
@@ -1969,27 +1969,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Code.ensure_loaded!(IR)
 
-      # The query extractor reads a component's IR of its own (see
-      # Hologram.Compiler.QueryExtractor), and the edit reaches no component, so no component's
-      # queries are extracted again.
-      extractor_mfa = {QueryExtractor, :module_funs, 1}
-      :erlang.trace_pattern(extractor_mfa, true, [:local, :call_count])
-
-      {count, extractor_count} =
-        try do
-          count = count_calls({IR, :for_module, 2}, fn -> run(opts) end)
-          {:call_count, extractor_count} = :erlang.trace_info(extractor_mfa, :call_count)
-
-          {count, extractor_count}
-        after
-          :erlang.trace_pattern(extractor_mfa, false, [:local, :call_count])
-        end
+      count = count_calls({IR, :for_module, 2}, fn -> run(opts) end)
 
       # The edit was seen: the digest read from the beam replaced the faked one.
       assert cache_state().module_infos[@unreached_module].digest != "edited"
 
       assert count == 0
-      assert extractor_count == 0
       refute PLT.member?(cache_state().ir_plt, @unreached_module)
       refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end

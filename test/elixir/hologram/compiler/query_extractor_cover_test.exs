@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
 
   import Hologram.Compiler.QueryExtractor
 
+  alias Hologram.Commons.PLT
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
@@ -13,7 +14,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
-  describe "extract_module_queries/2" do
+  describe "extract_module_queries/3" do
     test "extracts through a cover-compiled helper module" do
       # Stop the cover server only when this test started it - an externally
       # started server (mix test --cover) owns its lifecycle and data.
@@ -34,7 +35,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
-      assert extract_module_queries(Module18, Reflection.list_entities()) == [
+      assert extract_module_queries(Module18, Reflection.list_entities(), PLT.start()) == [
                nil_clause_term,
                bound_clause_term
              ]
