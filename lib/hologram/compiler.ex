@@ -2732,6 +2732,16 @@ defmodule Hologram.Compiler do
           "in #{Reflection.module_name(module)}'s template"
   end
 
+  # A cover-compiled module (coverage runs) is loaded from instrumented code, but its beam still
+  # lives on disk in the code path. Its path is returned rather than its binary, so the module is
+  # read, stat-ed and digested as any other.
+  defp cover_compiled_beam_path(module) do
+    case :code.get_object_code(module) do
+      {^module, _binary, beam_path} -> beam_path
+      :error -> nil
+    end
+  end
+
   defp create_entry_file(js, entry_name, tmp_dir) do
     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
@@ -4175,7 +4185,7 @@ defmodule Hologram.Compiler do
   # purges its modules, a protocol the compiler calls in that window is loaded from its own beam
   # again and stays so, and :code.which/1 then names that beam: another digest, mtime and size
   # than the consolidated beam every other compile reads, so every page reaching the protocol
-  # would be rebuilt.
+  # would be rebuilt. A cover-compiled module is read from the beam its object code names.
   defp resolve_beam_source(module, consolidated_beams, umbrella?) do
     consolidated_beams[module] || resolve_beam_source(module, umbrella?)
   end
@@ -4199,10 +4209,10 @@ defmodule Hologram.Compiler do
   defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
 
   defp resolve_beam_source(module, false) do
-    beam_path = :code.which(module)
-
-    if beam_path != :non_existing do
-      beam_path
+    case :code.which(module) do
+      :non_existing -> nil
+      :cover_compiled -> cover_compiled_beam_path(module)
+      beam_path -> beam_path
     end
   end
 
