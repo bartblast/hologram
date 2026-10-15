@@ -24,6 +24,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
   alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
+  alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
@@ -143,6 +144,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
     module_infos = if state.editable_modules, do: PLT.get_all(state.module_info_plt)
 
     Map.put(state, :module_infos, module_infos)
+  end
+
+  # Gathers the modules list_ir_builds/1 is told were built, until it is asked for them.
+  defp collect_ir_builds(modules) do
+    receive do
+      {:trace, _pid, :call, {IR, :for_module, [_module, _beam_source]}, module} ->
+        collect_ir_builds([module | modules])
+
+      {:list, from} ->
+        send(from, {:ir_builds, Enum.reverse(modules)})
+    end
   end
 
   # How many times the compile state dump is written while the given function runs: each write goes
@@ -385,6 +397,29 @@ defmodule Mix.Tasks.Compile.HologramTest do
   #
   # The spec says the app depends on Hologram, as a real one that holds a model does: the entity
   # and role listings read only the applications that reach it.
+  # The modules whose IR was built while the given function ran, one entry per build, in call order.
+  # The compile builds IR in tasks, so every process is traced, and the trace messages go to a
+  # collector, since a process cannot trace itself to itself.
+  defp list_ir_builds(fun) do
+    collector = spawn_link(fn -> collect_ir_builds([]) end)
+
+    :erlang.trace_pattern({IR, :for_module, 2}, [{[:"$1", :_], [], [{:message, :"$1"}]}], [])
+    :erlang.trace(:all, true, [:call, {:tracer, collector}])
+
+    try do
+      fun.()
+    after
+      :erlang.trace(:all, false, [:call])
+      :erlang.trace_pattern({IR, :for_module, 2}, false, [])
+    end
+
+    send(collector, {:list, self()})
+
+    receive do
+      {:ir_builds, modules} -> modules
+    end
+  end
+
   defp load_entity_fixture_app(app, modules) do
     :ok = :application.load({:application, app, [applications: [:hologram], modules: modules]})
 
@@ -1979,6 +2014,33 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end
 
+    # Page 9 reaches Module24, whose query is a parameterized capture of its own function, so the
+    # page's rebuild reads the component's IR and its queries are extracted again from the same IR.
+    # The first run loads the dumps, which hold no IR, so the rebuild builds what the page reads too.
+    test "an edit of a component builds its IR once", %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule24)
+
+      Code.ensure_loaded!(IR)
+      built_modules = list_ir_builds(fn -> run(opts) end)
+
+      assert ComponentModule24 in built_modules
+      assert built_modules == Enum.uniq(built_modules)
+    end
+
+    # Every component's queries are extracted again, and the components and capture targets whose
+    # IR the last compile dropped are built for it.
+    test "an edit of an entity type builds each module's IR once", %{opts: opts} do
+      run(opts)
+      fake_edit(Entity2)
+
+      Code.ensure_loaded!(IR)
+      built_modules = list_ir_builds(fn -> run(opts) end)
+
+      assert built_modules != []
+      assert built_modules == Enum.uniq(built_modules)
+    end
+
     test "an edit that starts reaching a module builds it", %{opts: opts} do
       run(opts)
 
@@ -2319,10 +2381,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fresh_build_dir_opts = Keyword.put(opts, :build_dir, setup_empty_build_dir())
 
       Code.ensure_loaded!(IR)
-      count = count_calls({IR, :for_module, 2}, fn -> run(fresh_build_dir_opts) end)
+      built_modules = list_ir_builds(fn -> run(fresh_build_dir_opts) end)
+
+      assert built_modules == Enum.uniq(built_modules)
 
       # Fewer than the modules it knows: the IR of the modules nothing reaches is never built.
-      assert count < map_size(load_module_info_items(fresh_build_dir_opts))
+      assert length(built_modules) < map_size(load_module_info_items(fresh_build_dir_opts))
       test_page_bundles(fresh_build_dir_opts)
     end
 
