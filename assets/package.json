@@ -15,7 +15,7 @@
     "sinon": "^22"
   },
   "scripts": {
-    "test": "mocha ../test/javascript/*.mjs ../test/javascript/*/*.mjs ../test/javascript/*/*/*.mjs ../test/javascript/*/*/*/*.mjs --color --require jsdom-global/register",
-    "test-file": "mocha --color --require jsdom-global/register"
+    "test": "mocha ../test/javascript/*.mjs ../test/javascript/*/*.mjs ../test/javascript/*/*/*.mjs ../test/javascript/*/*/*/*.mjs --color --require jsdom-global/register --require ../test/javascript/support/root_hooks.mjs",
+    "test-file": "mocha --color --require jsdom-global/register --require ../test/javascript/support/root_hooks.mjs"
   }
 }
