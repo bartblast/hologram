@@ -50,6 +50,7 @@ Benchee.run(
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),
       module_info_plt: module_info_plt,
       module_metadata: Compiler.build_module_metadata(module_info_plt),
+      subsystems: [:data_layer],
       tmp_dir:
         Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_runtime_entry_file_7"])
     ]

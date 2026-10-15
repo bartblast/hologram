@@ -1297,6 +1297,12 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "optional_runtime_subsystems/0" do
+    assert optional_runtime_subsystems() == [
+             data_layer: %{class: "DataLayer", file: "data_layer.mjs", handle: "dataLayer"}
+           ]
+  end
+
   describe "pages_checking_permissions/1" do
     test "names a page whose template checks permissions", %{call_graph: call_graph} do
       pages = pages_checking_permissions(page_reach(call_graph))
@@ -2415,7 +2421,8 @@ defmodule Hologram.CompilerTest do
             MapSet.new(),
             [],
             @empty_sync_constants_js,
-            js_dir: @js_dir
+            js_dir: @js_dir,
+            subsystems: [:data_layer]
           )
         end)
 
@@ -2429,7 +2436,8 @@ defmodule Hologram.CompilerTest do
             [],
             @empty_sync_constants_js,
             js_dir: @js_dir,
-            module_info_plt: module_info_plt
+            module_info_plt: module_info_plt,
+            subsystems: [:data_layer]
           )
         end)
 
@@ -2451,7 +2459,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2507,7 +2516,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert {:ok, into_js} = PLT.get(encode_plt, {Enum, :into, 2})
@@ -2525,7 +2535,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert js_2 == js_1
@@ -2544,7 +2555,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       # A clone, so the PLT shared by the whole test module keeps its Enum entry.
@@ -2561,7 +2573,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert js_2 == js_1
@@ -2582,7 +2595,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       expected_js =
@@ -2593,7 +2607,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert js == expected_js
@@ -2609,7 +2624,8 @@ defmodule Hologram.CompilerTest do
 
       js_1 =
         build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       # A clone, so the PLT shared by the whole test module keeps its Enum entry.
@@ -2626,7 +2642,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert js_2 == js_1
@@ -2645,7 +2662,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2669,7 +2687,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       {into_pos, _length} = :binary.match(js, ~s/defineElixirFunction("Enum", "into", 2/)
@@ -2688,7 +2707,8 @@ defmodule Hologram.CompilerTest do
       result =
         runtime_mfas
         |> build_runtime_js(ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
         |> normalize_newlines()
 
@@ -2709,7 +2729,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2740,7 +2761,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2765,7 +2787,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2789,7 +2812,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2815,7 +2839,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           app_versions,
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2841,7 +2866,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           app_versions,
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
@@ -2859,7 +2885,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(@empty_sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/modelHash: "my_model_hash", /)
@@ -2881,7 +2908,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2909,7 +2937,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
@@ -2933,7 +2962,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -2957,7 +2987,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"creatorRoles":["maintainer","owner"],/)
@@ -2979,7 +3010,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"bio":{"max_length":10,"optional":true},/)
@@ -3004,7 +3036,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3032,7 +3065,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3060,7 +3094,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3085,7 +3120,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3112,7 +3148,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3140,7 +3177,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3167,7 +3205,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
@@ -3187,7 +3226,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"frameworkAttributes":["actor_id","error","status"]/)
@@ -3207,7 +3247,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3234,7 +3275,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"serverOnly":["secret_note","token"]/)
@@ -3256,7 +3298,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       refute String.contains?(js, "Hologram.Test.Fixtures.Entity.Module15")
@@ -3285,7 +3328,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       # A predicate rule, a grant reference on the entity itself and one on its whole type, and a
@@ -3324,7 +3368,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       owner_rule = ~s/{"predicates":[],"to":[["own",["owner"]]],"via":null}/
@@ -3356,7 +3401,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3381,7 +3427,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"policy":{},"relationships":/)
@@ -3406,7 +3453,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"policy":{},"relationships":/)
@@ -3431,7 +3479,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/model: {"Hologram.Auth.RoleGrant":{"attributes":{/)
@@ -3459,7 +3508,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"constraints":{},/)
@@ -3481,7 +3531,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"defaults":{},/)
@@ -3503,7 +3554,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"enumValues":{},/)
@@ -3525,7 +3577,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/"frameworkAttributes":[],/)
@@ -3548,7 +3601,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           build_sync_constants_js(sync_constants),
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       # The names are written in argument order, not sorted: they are read positionally, so the
@@ -3562,7 +3616,8 @@ defmodule Hologram.CompilerTest do
     test "injects the wire format the bundle speaks" do
       js =
         build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, ~s/protocolVersion: #{Frame.protocol_version()}};/)
@@ -3585,7 +3640,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           app_versions,
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, "ERTS.appVersions = {};")
@@ -3607,7 +3663,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(
@@ -3641,7 +3698,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert js =~ ~r/globalThis\.Hologram\.config = \{errorOverlay: \w+, liveReload: false, /
@@ -3652,7 +3710,8 @@ defmodule Hologram.CompilerTest do
 
       js =
         build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       refute String.contains?(js, "import {")
@@ -3669,7 +3728,8 @@ defmodule Hologram.CompilerTest do
 
       js =
         build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
@@ -3685,6 +3745,70 @@ defmodule Hologram.CompilerTest do
                js,
                ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}, "Hologram.Test.Fixtures.Compiler.Module22": {"alias_2": $2}});'
              )
+    end
+
+    test "imports the optional subsystems the build ships and hands each to the runtime" do
+      js =
+        []
+        |> build_runtime_js(PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+        |> normalize_newlines()
+
+      assert String.starts_with?(js, """
+             "use strict";
+
+             import Bitstring from "#{@js_dir}/bitstring.mjs";
+             import DataLayer from "#{@js_dir}/data_layer.mjs";
+             import ERTS from "#{@js_dir}/erts.mjs";
+             import Hologram from "#{@js_dir}/hologram.mjs";
+             import HologramBoxedError from "#{@js_dir}/errors/boxed_error.mjs";
+             import HologramInterpreterError from "#{@js_dir}/errors/interpreter_error.mjs";
+             import Interpreter from "#{@js_dir}/interpreter.mjs";
+             import MemoryStorage from "#{@js_dir}/memory_storage.mjs";
+             import PerformanceTimer from "#{@js_dir}/performance_timer.mjs";
+             import Type from "#{@js_dir}/type.mjs";
+             import Utils from "#{@js_dir}/utils.mjs";
+             """)
+
+      assert String.contains?(js, "\n\nHologram.dataLayer = DataLayer;\n\nHologram.run();\n\n")
+    end
+
+    test "imports no optional subsystem the build does not ship" do
+      js =
+        []
+        |> build_runtime_js(PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
+          js_dir: @js_dir,
+          subsystems: []
+        )
+        |> normalize_newlines()
+
+      assert String.starts_with?(js, """
+             "use strict";
+
+             import Bitstring from "#{@js_dir}/bitstring.mjs";
+             import ERTS from "#{@js_dir}/erts.mjs";
+             import Hologram from "#{@js_dir}/hologram.mjs";
+             import HologramBoxedError from "#{@js_dir}/errors/boxed_error.mjs";
+             import HologramInterpreterError from "#{@js_dir}/errors/interpreter_error.mjs";
+             import Interpreter from "#{@js_dir}/interpreter.mjs";
+             import MemoryStorage from "#{@js_dir}/memory_storage.mjs";
+             import PerformanceTimer from "#{@js_dir}/performance_timer.mjs";
+             import Type from "#{@js_dir}/type.mjs";
+             import Utils from "#{@js_dir}/utils.mjs";
+             """)
+
+      refute String.contains?(js, "Hologram.dataLayer")
+    end
+
+    test "raises on an optional subsystem it does not know" do
+      assert_error ArgumentError, "unknown optional runtime subsystem: :unknown", fn ->
+        build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
+          js_dir: @js_dir,
+          subsystems: [:unknown]
+        )
+      end
     end
   end
 
@@ -4509,7 +4633,8 @@ defmodule Hologram.CompilerTest do
           MapSet.new(),
           [],
           @empty_sync_constants_js,
-          js_dir: @js_dir
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
         )
 
       assert String.contains?(js, "globalThis.Hologram.config = #{client_config()};")
@@ -4793,6 +4918,7 @@ defmodule Hologram.CompilerTest do
   test "create_runtime_entry_file/7", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
+      subsystems: [:data_layer],
       tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_6"])
     ]
 

@@ -48,10 +48,8 @@ defmodule Hologram.Compiler do
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
   # locally before it writes.
   #
-  # TODO: what being a checker buys a page is decided by the modularization work - today it is the
-  # grants window in the page's own list (first-render completeness) and, build-wide, that policy
-  # rules are baked at all. Prune whatever that work makes unconditional; the list itself stays
-  # for as long as either consequence does.
+  # What being a checker buys a page: the grants window in the page's own list (first-render
+  # completeness) and, build-wide, that policy rules are baked at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
@@ -66,6 +64,29 @@ defmodule Hologram.Compiler do
     {Hologram.Job, :create!, 3} => {:option, 2, :authorize},
     {Hologram.Query, :authorize, 2} => 1
   }
+
+  # The modules the runtime entry file always imports, by class and file under the js dir.
+  @runtime_imports [
+    {"Bitstring", "bitstring.mjs"},
+    {"ERTS", "erts.mjs"},
+    {"Hologram", "hologram.mjs"},
+    {"HologramBoxedError", "errors/boxed_error.mjs"},
+    {"HologramInterpreterError", "errors/interpreter_error.mjs"},
+    {"Interpreter", "interpreter.mjs"},
+    {"MemoryStorage", "memory_storage.mjs"},
+    {"PerformanceTimer", "performance_timer.mjs"},
+    {"Type", "type.mjs"},
+    {"Utils", "utils.mjs"}
+  ]
+
+  # The hand-written runtime modules a build ships only when it needs them, each with its file under
+  # the js dir, its class and the handle the runtime reads it through: a public static of Hologram,
+  # null when the module is not shipped, which the runtime calls through `?.`. The bundler only
+  # follows imports, so a module no other runtime module imports is left out of a bundle whose entry
+  # file does not import it either.
+  @optional_runtime_subsystems [
+    data_layer: %{class: "DataLayer", file: "data_layer.mjs", handle: "dataLayer"}
+  ]
 
   @typedoc """
   The registered queries of one component: the normalized terms its from_query props declare (see
@@ -374,6 +395,15 @@ defmodule Hologram.Compiler do
 
     Enum.flat_map(callers, &caller_operation_asks(&1, ir_plt))
   end
+
+  @doc """
+  Returns the optional runtime subsystems: the hand-written runtime modules a build ships only when
+  it needs them, by key, each with its file under the js dir, its class and the name of the
+  `Hologram` static the runtime reads it through.
+  """
+  @spec optional_runtime_subsystems() ::
+          keyword(%{class: String.t(), file: String.t(), handle: String.t()})
+  def optional_runtime_subsystems, do: @optional_runtime_subsystems
 
   @doc """
   Returns the pages that can check permissions on the CLIENT - the ones whose bundled code
@@ -863,6 +893,10 @@ defmodule Hologram.Compiler do
       each module is asked, which reads the BEAM of a module that is not loaded (default: none).
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
+    * `:subsystems` - the keys of the optional runtime subsystems the build ships (see
+      `optional_runtime_subsystems/0`), each rendered as an import and a handle the runtime reads it
+      through (required). Raises `ArgumentError` for a key that is not an optional runtime
+      subsystem.
   """
   @spec build_runtime_js(
           list(mfa),
@@ -883,6 +917,20 @@ defmodule Hologram.Compiler do
         opts
       ) do
     js_dir = Keyword.fetch!(opts, :js_dir)
+
+    subsystems =
+      opts
+      |> Keyword.fetch!(:subsystems)
+      |> Enum.map(&fetch_optional_runtime_subsystem!/1)
+
+    runtime_import_statements =
+      subsystems
+      |> Enum.map(&{&1.class, &1.file})
+      |> Enum.concat(@runtime_imports)
+      |> Enum.sort()
+      |> Enum.map_join("\n", fn {class, file} ->
+        ~s/import #{class} from "#{js_dir}\/#{file}";/
+      end)
 
     %{imports: imports, bindings: bindings} =
       aggregate_js_imports(runtime_mfas, ir_plt, opts[:module_info_plt])
@@ -920,19 +968,15 @@ defmodule Hologram.Compiler do
       |> render_manually_ported_clause_heads()
       |> render_block()
 
+    subsystem_handles =
+      subsystems
+      |> Enum.map_join("\n", &"Hologram.#{&1.handle} = #{&1.class};")
+      |> render_block()
+
     """
     "use strict";
 
-    import Bitstring from "#{js_dir}/bitstring.mjs";
-    import ERTS from "#{js_dir}/erts.mjs";
-    import Hologram from "#{js_dir}/hologram.mjs";
-    import HologramBoxedError from "#{js_dir}/errors/boxed_error.mjs";
-    import HologramInterpreterError from "#{js_dir}/errors/interpreter_error.mjs";
-    import Interpreter from "#{js_dir}/interpreter.mjs";
-    import MemoryStorage from "#{js_dir}/memory_storage.mjs";
-    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";
-    import Type from "#{js_dir}/type.mjs";
-    import Utils from "#{js_dir}/utils.mjs";#{import_statements}
+    #{runtime_import_statements}#{import_statements}
 
     const startTime = PerformanceTimer.start();
 
@@ -940,7 +984,7 @@ defmodule Hologram.Compiler do
 
     #{sync_constants_js}
 
-    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
+    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}#{subsystem_handles}
 
     Hologram.run();
 
@@ -1247,7 +1291,8 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Creates runtime bundle entry file.
+  Creates runtime bundle entry file. Requires the `:subsystems` option: the keys of the optional
+  runtime subsystems to render.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_7/README.md
   """
@@ -1273,7 +1318,8 @@ defmodule Hologram.Compiler do
     |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions, sync_constants_js,
       js_dir: opts[:js_dir],
       module_info_plt: opts[:module_info_plt],
-      module_metadata: opts[:module_metadata]
+      module_metadata: opts[:module_metadata],
+      subsystems: Keyword.fetch!(opts, :subsystems)
     )
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
@@ -2041,9 +2087,10 @@ defmodule Hologram.Compiler do
 
     # A data model with no user entity type has no grant store, so no page checks permissions
     # against anything then.
-    # TODO: the modularization work decides whether a build bakes policy rules only when some
-    # page checks permissions. If every build with a user entity bakes them, this flag goes,
-    # along with the empty-policy clause of render_policy/2 that reads it.
+    # Policy rules are baked only when some page checks permissions, and then for every policied
+    # type, reached or not. Trimming them to the reached types would save at most about 0.5 KB
+    # gzipped on the feature test app, and a type that reaches the client as data the compiler
+    # cannot see would be denied there while the server allows it.
     permission_checking? =
       Reflection.user_entity(module_info_plt) != nil and
         Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
@@ -2886,6 +2933,16 @@ defmodule Hologram.Compiler do
     case Regex.run(regex, file_contents) do
       [_full_capture, js] -> js
       nil -> nil
+    end
+  end
+
+  defp fetch_optional_runtime_subsystem!(key) do
+    case Keyword.fetch(@optional_runtime_subsystems, key) do
+      {:ok, subsystem} ->
+        subsystem
+
+      :error ->
+        raise ArgumentError, "unknown optional runtime subsystem: #{inspect(key)}"
     end
   end
 

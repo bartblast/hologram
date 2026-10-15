@@ -38,7 +38,8 @@ Benchee.run(
     entry_file_opts =
       Keyword.merge(opts,
         module_info_plt: module_info_plt,
-        module_metadata: Compiler.build_module_metadata(module_info_plt)
+        module_metadata: Compiler.build_module_metadata(module_info_plt),
+        subsystems: [:data_layer]
       )
 
     page_modules = Reflection.list_pages()

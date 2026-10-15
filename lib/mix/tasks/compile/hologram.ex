@@ -594,10 +594,15 @@ defmodule Mix.Tasks.Compile.Hologram do
       module_metadata =
         build_module_metadata(cache.module_metadata, module_digests_diff, new_module_info_plt)
 
+      # The optional runtime subsystems this build ships (see runtime_subsystems/1), rendered into
+      # the runtime entry file and kept with its bundle as one of its inputs.
+      subsystems = runtime_subsystems(entity_types)
+
       entry_file_opts =
         Keyword.merge(opts,
           module_info_plt: new_module_info_plt,
-          module_metadata: module_metadata
+          module_metadata: module_metadata,
+          subsystems: subsystems
         )
 
       # The runtime bundle is kept like a page's: rebuilt when its inputs differ from the ones it
@@ -614,6 +619,7 @@ defmodule Mix.Tasks.Compile.Hologram do
              js_fingerprints: js_fingerprints,
              mfas: runtime_mfas,
              static_dir: opts[:static_dir],
+             subsystems: subsystems,
              sync_constants_js: sync_constants_js
            ) do
           []
@@ -772,6 +778,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         runtime_js_binding_modules: runtime_js_binding_modules,
         runtime_mfas: runtime_mfas,
         runtime_types: runtime_analysis.types,
+        subsystems: subsystems,
         supervisor: sup,
         sync_constants_js: sync_constants_js
       }
@@ -1399,6 +1406,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           js_binding_modules: context.runtime_js_binding_modules,
           mfas: context.runtime_mfas,
           dynamic_calls: context.gate.runtime,
+          subsystems: context.subsystems,
           sync_constants_js: context.sync_constants_js,
           types: context.runtime_types
         })
@@ -1504,6 +1512,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       inputs[:app_versions]
     ) and
       kept_runtime.client_config == inputs[:client_config] and
+      kept_runtime.subsystems == inputs[:subsystems] and
       kept_runtime.sync_constants_js == inputs[:sync_constants_js] and
       not Compiler.js_inputs_changed?(
         kept_runtime.bundle_info.js_inputs,
@@ -1876,6 +1885,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp runtime_mfas_changed?(kept_runtime, runtime_mfas) do
     kept_runtime.mfas != runtime_mfas
   end
+
+  # The optional runtime subsystems this build needs (see
+  # Hologram.Compiler.optional_runtime_subsystems/0), one predicate per subsystem: the data layer
+  # when the application declares an entity type, the same fact that gates the database children,
+  # the sync handshake and the sync constants statement.
+  defp runtime_subsystems([]), do: []
+
+  defp runtime_subsystems(_entity_types), do: [:data_layer]
 
   defp compiler_enabled? do
     # credo:disable-for-next-line Credo.Check.Warning.MixEnv
