@@ -331,11 +331,18 @@ jobs:
         run: mix deps.unlock --check-unused
 
       # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
+      #
+      # Both audits read mix.lock and fail on an advisory published since the lock was last
+      # touched, which would turn every branch red on the day it's published. The lock is what
+      # Hologram is built and tested with, not what users install, so the audits run on the
+      # release path only: a push to master and a pull request into it.
       - name: Check lib retired Elixir deps
+        if: ${{ github.ref == 'refs/heads/master' || github.base_ref == 'master' }}
         run: mix hex.audit
 
       # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
       - name: Check lib security vulnerabilities in Elixir deps
+        if: ${{ github.ref == 'refs/heads/master' || github.base_ref == 'master' }}
         run: mix deps.audit
 
       # Step: Check that the lib Elixir code has already been formatted.
