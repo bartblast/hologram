@@ -383,7 +383,7 @@ describe("Hologram", () => {
   });
 
   describe("executeAction()", () => {
-    let callNamedFunctionStub, renderStub;
+    let callNamedFunctionStub, flushStub, renderStub;
 
     const actionFor = (target) =>
       Type.actionStruct({
@@ -401,6 +401,10 @@ describe("Hologram", () => {
         .callsFake((_module, _fun, _args, _context) =>
           Type.componentStruct({state: Type.map()}),
         );
+
+      // Sending is the queue's own business, specified in batches_test.mjs. Left real, every batch
+      // sealed here would go to a fetch that rejects, and the retry that arms would outlive the test.
+      flushStub = sinon.stub(Batches, "flush");
 
       // The result of a dispatch is rendered, which needs a page these tests don't mount.
       renderStub = sinon.stub(Hologram, "render").callsFake(() => null);
@@ -524,12 +528,9 @@ describe("Hologram", () => {
         sinon.assert.calledOnce(renderStub);
       });
 
-      // flush() does nothing yet - the sender loop is not built - so what binds the ORDER is the
-      // call sequence rather than an effect. The screen must not wait on the network.
+      // What binds the ORDER is the call sequence: the screen must not wait on the network.
       it("ships the batch after the render, not before it", () => {
         writing("t1");
-
-        const flushStub = sinon.stub(Batches, "flush");
 
         Hologram.executeAction(actionFor(registered(cid1)));
 
