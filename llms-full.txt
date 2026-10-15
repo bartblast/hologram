@@ -1787,6 +1787,8 @@ Using an `%Action{}` struct:
 put_action(component, %Action{name: :my_action})
 ```
 
+A chained action with no `delay` runs right after the current one, before the browser paints, so two components the chain updates are never shown out of step. The browser paints once the chain has finished, or earlier while one of its actions awaits a task with `Task.await/1`. To update the page between other steps, for example to show progress, give the chained action a `delay`.
+
 #### Triggering Actions
 
 Actions can be triggered using event attributes in templates. For detailed information about event binding syntax and available event types, see the Events documentation.
