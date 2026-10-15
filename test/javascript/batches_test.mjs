@@ -8,12 +8,12 @@ import {
 } from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
-import Client from "../../assets/js/client.mjs";
 import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
+import Mutations from "../../assets/js/mutations.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
@@ -90,7 +90,7 @@ describe("Batches", () => {
       Model.reset();
 
       renderStub = sinon.stub(SyncStream, "scheduleRender");
-      sendStub = sinon.stub(Client, "sendMutation");
+      sendStub = sinon.stub(Mutations, "send");
     });
 
     afterEach(() => {
@@ -1695,7 +1695,7 @@ describe("Batches", () => {
     // a synchronous assertion here passes whether or not this function sends - it would be reading
     // the moment before the first await either way.
     it("sends nothing", async () => {
-      const sendStub = sinon.stub(Client, "sendMutation");
+      const sendStub = sinon.stub(Mutations, "send");
 
       Batches.adopt([stored(3, "t1")]);
 

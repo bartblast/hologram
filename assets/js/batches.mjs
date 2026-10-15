@@ -1,12 +1,12 @@
 "use strict";
 
 import Batch from "./batch.mjs";
-import Client from "./client.mjs";
 import Clock from "./clock.mjs";
 import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
+import Mutations from "./mutations.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
@@ -534,7 +534,7 @@ export default class Batches {
   // and it is raised rather than retried forever.
   static async #answerFor(batch) {
     try {
-      return await Client.sendMutation(batch);
+      return await Mutations.send(batch);
     } catch (error) {
       if (error instanceof HologramRuntimeError) {
         batch.mark("pending");
