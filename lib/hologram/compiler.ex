@@ -631,14 +631,19 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds the IR of the given modules that the IR PLT does not hold yet, and returns the PLT. The compile task
-  calls it for the modules it is about to read, once the call graph says which they are.
+  calls it for the modules it is about to read, once the call graph says which they are. When the PLT holds
+  every given module, it returns the PLT without reading the code path.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_missing_ir!_2/README.md
   """
   @spec build_missing_ir!(PLT.t(), [module]) :: PLT.t()
   def build_missing_ir!(ir_plt, modules) do
-    missing_modules = Enum.reject(modules, &PLT.member?(ir_plt, &1))
-    build_ir_plt(plt: ir_plt, modules: missing_modules)
+    # Asked before building: build_ir_plt/1 scans the code path for consolidated beams first, which
+    # costs more than reading a module's IR from the PLT.
+    case Enum.reject(modules, &PLT.member?(ir_plt, &1)) do
+      [] -> ir_plt
+      missing_modules -> build_ir_plt(plt: ir_plt, modules: missing_modules)
+    end
   end
 
   @doc """

@@ -2095,6 +2095,17 @@ defmodule Hologram.CompilerTest do
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module2)
     end
 
+    test "lists no consolidated beam when the PLT holds every module" do
+      ir_plt = PLT.put(PLT.start(), Module1, :ir_1)
+
+      count =
+        count_calls({Reflection, :list_consolidated_beams, 0}, fn ->
+          build_missing_ir!(ir_plt, [Module1])
+        end)
+
+      assert count == 0
+    end
+
     test "returns the PLT" do
       ir_plt = PLT.start()
 
