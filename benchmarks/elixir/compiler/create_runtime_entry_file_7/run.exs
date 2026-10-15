@@ -39,7 +39,7 @@ Benchee.run(
       reach_by_page
       |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
       |> Enum.uniq()
-      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt))
+      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt), ir_plt)
 
     sync_constants_js =
       reach_by_page

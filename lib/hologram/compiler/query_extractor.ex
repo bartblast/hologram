@@ -100,6 +100,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   The IR a capture is walked over is read from the given IR PLT, the compile's: a
   module the PLT lacks is built into it (see Hologram.Compiler.build_missing_ir!/2),
   so that no module's IR is built twice in a compile.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_3/README.md
   """
   @spec extract_module_queries(module, list(module), PLT.t()) :: list(Query.t())
   def extract_module_queries(module, entity_types, ir_plt) do

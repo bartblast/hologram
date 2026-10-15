@@ -4,9 +4,9 @@ Last run: 2026-10-11 23:08:28 UTC
 
 ## Summary
 
-Total benchmarks: 47
+Total benchmarks: 46
 
-Successful: 47\
+Successful: 46\
 Warnings: 0\
 Failed: 0
 
@@ -346,7 +346,7 @@ Comparison:
 ```
 
 
-### ✅ compiler » extract_component_queries_2
+### ✅ compiler » extract_component_queries_3
 
 ```
 Name                                  ips        average  deviation         median         99th %
@@ -388,7 +388,7 @@ do load        0.22 K - 326.65x slower +4.53 ms
 ```
 
 
-### ✅ compiler » query_extractor » extract_module_queries_2
+### ✅ compiler » query_extractor » extract_module_queries_3
 
 ```
 Name                                                         ips        average  deviation         median         99th %
@@ -402,19 +402,6 @@ no parameterized captures                              2909.91 K
 capture whose entity is an argument, 1 candidate          6.57 K - 442.89x slower +151.86 μs
 capture naming its entity                                 6.46 K - 450.73x slower +154.55 μs
 capture whose entity is an argument, 21 candidates        4.62 K - 630.08x slower +216.18 μs
-```
-
-
-### ✅ compiler » query_extractor » validate_slot_bindings!_1
-
-```
-Name                                ips        average  deviation         median         99th %
-no parameterized captures        2.75 M        0.36 μs  ±2036.94%        0.29 μs        0.54 μs
-parameterized capture         0.00711 M      140.69 μs    ±18.97%      140.13 μs      181.81 μs
-
-Comparison: 
-no parameterized captures        2.75 M
-parameterized capture         0.00711 M - 386.40x slower +140.33 μs
 ```
 
 

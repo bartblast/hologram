@@ -2,6 +2,8 @@ alias Hologram.Benchmarks.Fixtures.Components.EntityPropComponent
 alias Hologram.Benchmarks.Fixtures.Components.PlainPropComponent
 alias Hologram.Benchmarks.Fixtures.Components.QueryPropComponent
 alias Hologram.Benchmarks.Fixtures.Entity1
+alias Hologram.Commons.PLT
+alias Hologram.Compiler
 alias Hologram.Compiler.QueryExtractor
 alias Hologram.Reflection
 
@@ -10,10 +12,18 @@ alias Hologram.Reflection
 all_entity_types = Reflection.list_entities()
 one_entity_type = [Entity1]
 
-# The per-component cost the build pays once per component the pages reach. The parameterized
-# cases decode the capture target's IR from its beam file and walk it once, which is what
-# dominates them - the no-capture case is the fast path every component without a query prop
-# takes.
+# Built outside the measured functions because the compile task has every component's IR in its IR
+# PLT before the data layer derives, and the extractor reads it from there.
+ir_plt =
+  Compiler.build_missing_ir!(PLT.start(), [
+    EntityPropComponent,
+    PlainPropComponent,
+    QueryPropComponent
+  ])
+
+# The per-component cost the build pays once per component whose queries it extracts. The
+# parameterized cases read the capture target's IR from the IR PLT and walk it once - the
+# no-capture case is the fast path every component without a query prop takes.
 #
 # The two argument-entity cases differ only in how many candidates the recorded stages are
 # replayed over, and that is the point: the walk happens ONCE either way, so the gap between them
@@ -22,22 +32,22 @@ one_entity_type = [Entity1]
 Benchee.run(
   %{
     "no parameterized captures" => fn ->
-      QueryExtractor.extract_module_queries(PlainPropComponent, all_entity_types)
+      QueryExtractor.extract_module_queries(PlainPropComponent, all_entity_types, ir_plt)
     end,
     "capture naming its entity" => fn ->
-      QueryExtractor.extract_module_queries(QueryPropComponent, all_entity_types)
+      QueryExtractor.extract_module_queries(QueryPropComponent, all_entity_types, ir_plt)
     end,
     "capture whose entity is an argument, 1 candidate" => fn ->
-      QueryExtractor.extract_module_queries(EntityPropComponent, one_entity_type)
+      QueryExtractor.extract_module_queries(EntityPropComponent, one_entity_type, ir_plt)
     end,
     "capture whose entity is an argument, #{length(all_entity_types)} candidates" => fn ->
-      QueryExtractor.extract_module_queries(EntityPropComponent, all_entity_types)
+      QueryExtractor.extract_module_queries(EntityPropComponent, all_entity_types, ir_plt)
     end
   },
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.QueryExtractor.extract_module_queries/2",
+     description: "Hologram.Compiler.QueryExtractor.extract_module_queries/3",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

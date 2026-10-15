@@ -1,12 +1,14 @@
+alias Hologram.Commons.PLT
 alias Hologram.Compiler
 alias Hologram.Reflection
 
 # Listed outside the measured function because the compile task lists the entity types once, from
 # its module info PLT, and keeps the extracted queries between compiles (see the
-# extract_component_queries_2 benchmark for what an extraction costs).
+# extract_component_queries_3 benchmark for what an extraction costs).
 entity_types = Reflection.list_entities()
 
-component_queries = Compiler.extract_component_queries(Reflection.list_components(), entity_types)
+component_queries =
+  Compiler.extract_component_queries(Reflection.list_components(), entity_types, PLT.start())
 
 # What the compile task pays to derive everything a running app holds about registered queries from
 # the extracted queries of every component, once per compile that derives the data layer: the three

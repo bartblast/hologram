@@ -1403,6 +1403,8 @@ defmodule Hologram.Compiler do
 
   Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/3` and
   `Hologram.Compiler.QueryExtractor.extract_prop_params/2` raise.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_3/README.md
   """
   @spec extract_component_queries([module], [module], PLT.t()) :: %{module => component_queries}
   def extract_component_queries(component_modules, entity_types, ir_plt) do
