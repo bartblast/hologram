@@ -4,9 +4,11 @@ import {
   assert,
   contextFixture,
   defineRuntimeGlobals,
+  setDataLayer,
 } from "./support/helpers.mjs";
 
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
+import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -127,6 +129,7 @@ describe("Renderer from_query props", () => {
 
   beforeEach(() => {
     renderedVars = null;
+    setDataLayer();
 
     globalThis.Hologram.sync = {
       model: {
@@ -152,6 +155,10 @@ describe("Renderer from_query props", () => {
     LocalDatabase.putRow(TASK, taskRow("t1", "Buy milk", false));
     LocalDatabase.putRow(TASK, taskRow("t2", "Call Ann", true));
     LocalDatabase.putRow(TASK, taskRow("t3", "Draft memo", false));
+  });
+
+  afterEach(() => {
+    Hologram.dataLayer = null;
   });
 
   it("injects a parameterized from_query prop bound to a like-named prop", () => {

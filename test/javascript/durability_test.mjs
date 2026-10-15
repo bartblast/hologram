@@ -619,14 +619,6 @@ describe("Durability", () => {
       }
     });
 
-    it("stays in memory mode when the build carries no data model", async () => {
-      delete globalThis.Hologram.sync;
-
-      await Durability.open();
-
-      assert.equal(Durability.mode, "memory");
-    });
-
     // A database another tab already moved past this bundle's version cannot be opened by it at
     // all - which is the shape every open failure has from here: no store, and a page that carries
     // on without one.

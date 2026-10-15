@@ -136,8 +136,7 @@ export default class Durability {
   }
 
   // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
-  // model, opens a database of its own. Null when the build has no data model, and so nothing to
-  // name one for.
+  // model, opens a database of its own.
   //
   // The framework's half comes first and the app's second, broad before narrow: the layout is
   // Hologram's own and moves when the shape of the store does, the model hash is the app's and
@@ -148,9 +147,7 @@ export default class Durability {
   // Public because the group of tabs sharing this database is named from it, and so is the lock
   // that elects their leader - one database, one queue, one leader.
   static databaseName() {
-    const modelHash = globalThis.Hologram.sync?.modelHash;
-
-    return modelHash ? `hologram.${LAYOUT}.${modelHash}` : null;
+    return `hologram.${LAYOUT}.${globalThis.Hologram.sync.modelHash}`;
   }
 
   // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
@@ -252,10 +249,6 @@ export default class Durability {
   // from memory. Every way that can happen is named, because the reason is what a developer needs
   // when a page is unexpectedly re-downloading everything.
   static async open() {
-    if (!globalThis.Hologram.sync) {
-      return Durability.#memoryMode("no data model");
-    }
-
     // Reaching the API AT ALL is inside the try, not only awaiting its answer. Where storage is
     // restricted - a sandboxed iframe, an opaque origin, a browser told to block site data - both
     // the property read and the open() call throw SYNCHRONOUSLY, and a throw escaping here would

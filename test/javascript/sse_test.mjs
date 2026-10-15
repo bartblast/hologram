@@ -5,6 +5,7 @@ import {
   defineRuntimeGlobals,
   initComponentRegistryEntry,
   registerWebApis,
+  setDataLayer,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -129,6 +130,7 @@ describe("Sse", () => {
 
     delete globalThis.EventSource;
     globalThis.window = originalWindow;
+    Hologram.dataLayer = null;
 
     App.instanceId = originalInstanceId;
 
@@ -186,6 +188,7 @@ describe("Sse", () => {
     // The greeting is built at connect time and nowhere else, so a client whose identity changed
     // has to open a stream again for the server to hear about it.
     it("closes the stream and opens a new one carrying the current identity", async () => {
+      setDataLayer();
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
       sinon
@@ -357,7 +360,32 @@ describe("Sse", () => {
       );
     });
 
+    // An app without a data model has no data layer to greet for or to listen with: the stream
+    // carries its realtime traffic and nothing else.
+    it("greets with nothing and listens for no sync kind without a data layer", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      try {
+        await Sse.connect();
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
+
+      sinon.assert.calledOnceWithExactly(
+        globalThis.EventSource,
+        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id",
+      );
+
+      assert.notProperty(mockEventSource.listeners, "sync_deltas");
+    });
+
     it("opens the EventSource with the sync greeting when the bundle carries one", async () => {
+      setDataLayer();
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       sinon
         .stub(Hologram, "pageModule")
@@ -376,6 +404,7 @@ describe("Sse", () => {
     // A fill follows a greeting that names no place, with no resync frame in front of it - which
     // is where a client cut off part way through a fill comes back.
     it("marks every held row when it greets with no place", async () => {
+      setDataLayer();
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       sinon
         .stub(Hologram, "pageModule")
@@ -392,6 +421,7 @@ describe("Sse", () => {
     });
 
     it("leaves the rows alone when it greets with a place", async () => {
+      setDataLayer();
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       sinon
         .stub(Hologram, "pageModule")
@@ -408,9 +438,9 @@ describe("Sse", () => {
 
     // A tab that does not lead greets with nothing about sync, so NO fill follows - and rows
     // marked here would be swept the moment the leading tab says the pot is complete, taking away
-    // rows this browser holds rightly. The same goes for a page that has not mounted and for a
-    // bundle carrying no sync at all.
+    // rows this browser holds rightly. The same goes for a page that has not mounted.
     it("leaves the rows alone for a tab greeting with no sync at all", async () => {
+      setDataLayer();
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       sinon
         .stub(Hologram, "pageModule")
@@ -433,6 +463,7 @@ describe("Sse", () => {
     // The listeners are registered again on every new stream, so the place has to outlive the
     // one that delivered it - a reconnect is exactly when the client needs to say what it has.
     it("opens the EventSource naming the place a previous stream left it at", async () => {
+      setDataLayer();
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
       sinon
         .stub(Hologram, "pageModule")
@@ -671,12 +702,19 @@ describe("Sse", () => {
     // A batch whose send got no answer is still pending, and this is the one signal that means
     // the network is worth trying again.
     it("sends the pending batches again when the stream comes back", async () => {
+      // A build that ships the data layer carries its sync constants.
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      setDataLayer();
       stubHandshakeResponse();
 
       const flushStub = sinon.stub(Batches, "flush");
 
-      await Sse.connect();
-      Sse.eventSource.onopen({});
+      try {
+        await Sse.connect();
+        Sse.eventSource.onopen({});
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
 
       sinon.assert.calledOnce(flushStub);
     });

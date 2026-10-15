@@ -5,11 +5,14 @@ import {
   assertBoxedError,
   buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
+  setDataLayer,
+  sinon,
 } from "../support/helpers.mjs";
 
 import Batches from "../../../assets/js/batches.mjs";
 import Elixir_Task from "../../../assets/js/elixir/task.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
+import Hologram from "../../../assets/js/hologram.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -26,6 +29,7 @@ describe("Elixir_Task", () => {
     beforeEach(() => {
       ERTS.promiseRegistry.clear();
       Batches.reset();
+      setDataLayer();
 
       const promise = Promise.resolve(42);
       taskStruct = ERTS.registerPromise(promise);
@@ -33,6 +37,8 @@ describe("Elixir_Task", () => {
 
     afterEach(() => {
       Batches.reset();
+      sinon.restore();
+      Hologram.dataLayer = null;
     });
 
     it("returns a Promise (is async)", () => {
@@ -59,6 +65,18 @@ describe("Elixir_Task", () => {
       await awaited;
 
       assert.strictEqual(Batches.current(), batch);
+    });
+
+    // An app without a data model has no batch to carry - client-only, so this one has no
+    // consistency twin either.
+    it("awaits the task as it is without a data layer", async () => {
+      const carrying = sinon.spy(Batches, "carryAcrossSuspension");
+      Hologram.dataLayer = null;
+
+      const result = await taskAwait(taskStruct);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+      sinon.assert.notCalled(carrying);
     });
 
     // The attempted function clauses come from the clause heads the runtime script

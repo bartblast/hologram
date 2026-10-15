@@ -6,17 +6,12 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
-import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
-import LocalDatabase from "./local_database.mjs";
-import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
-import Model from "./model.mjs";
 import Once from "./once.mjs";
-import QueryKernel from "./query_kernel.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -646,36 +641,6 @@ export default class Renderer {
   }
 
   // Based on cast_props/2
-  // What the render that handed this page over counted, for as long as this client's own database
-  // cannot count for itself.
-  //
-  // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
-  // for the rows it counts, counting locally would count a pot that is still filling and report a
-  // number climbing towards the truth. The marker says when that stops - the page's own scope for
-  // the page this client connected on, whose rows the server declares complete first, and the
-  // whole pot's for any page reached since, whose rows are only promised at "all".
-  //
-  // The key names the component, the prop and the arguments the builder was called with - which
-  // is what tells two instances of one component apart, and what both tiers can spell alike.
-  static #carriedCount(module, propName, args, term) {
-    if (term.cardinality !== "count") {
-      return null;
-    }
-
-    const scope =
-      module === GlobalRegistry.get("connectPageModule") ? "page" : "all";
-
-    if (LocalDatabase.isSynced(scope)) {
-      return null;
-    }
-
-    const key = `${module}/${propName.value}/${args
-      .map((arg) => Interpreter.inspect(arg))
-      .join(",")}`;
-
-    return LocalDatabase.syncCounts[key] ?? null;
-  }
-
   static #castProps(propsDom, moduleProxy) {
     const propsTuples = Renderer.#filterAllowedProps(
       Renderer.#expandPropSpreads(propsDom),
@@ -1413,31 +1378,14 @@ export default class Renderer {
 
   // Based on run_prop_query!/4
   //
-  // The builder is ordinary transpiled code piping the ported query stages, so calling it yields
-  // the plain term the kernel evaluates - normalized first, exactly as the server normalizes
-  // before running, so the client answers the same query the same way.
-  //
-  // The result is boxed here and nowhere else: rows live plain, and this is the boundary where
-  // one becomes something a template can read.
+  // The data layer answers the query (see DataLayer.answerPropQuery). The handle is read without
+  // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
+  // build ships the data layer.
   static #runPropQuery(alias, propName, capture, props) {
     const module = Interpreter.moduleExName(alias);
     const args = Renderer.#fromQueryArgs(module, propName, capture, props);
 
-    const term = ManuallyPortedElixirHologramQuery["normalize/1"](
-      Interpreter.callAnonymousFunction(capture, args),
-    );
-
-    const carried = Renderer.#carriedCount(module, propName, args, term);
-
-    if (carried !== null) {
-      return Type.integer(carried);
-    }
-
-    const result = QueryKernel.run(term, {
-      actorUserId: LocalDatabase.actorUserId,
-    });
-
-    return Model.boxResult(term, result);
+    return Hologram.dataLayer.answerPropQuery(module, propName, args, capture);
   }
 
   // Based on inject_props_from_query/2

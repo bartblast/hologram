@@ -28,22 +28,18 @@ export default class SyncStream {
   // the bundle rather than read from the page, because what they answer is whether THIS
   // JavaScript is stale - a value the current server put in the page would always agree with it.
   //
-  // A bundle built before any of this existed carries no constants and sends no greeting, which
-  // is what leaves it with the realtime stream it already had.
-  //
   // A greeting asking for everything also marks what this client holds as awaiting the fill.
   static buildGreeting(pageModule) {
     const sync = globalThis.Hologram.sync;
 
-    // A tab that does not lead its group says nothing about sync, which is what a bundle built
-    // before any of this existed says - so the server starts no session for it and sends it no
-    // frames. ONE session per browser, however many tabs are open: the tab that leads is served
-    // sync and hands what it receives to the rest.
+    // A tab that does not lead its group says nothing about sync, so the server starts no session
+    // for it and sends it no frames. ONE session per browser, however many tabs are open: the tab
+    // that leads is served sync and hands what it receives to the rest.
     //
     // The connection itself stays. It carries this tab's own realtime traffic - the actions and
     // receipts the server addresses to this instance - which is per tab by design and not the
     // sync session's to consolidate.
-    if (!sync || pageModule === null || !Tabs.leader) {
+    if (pageModule === null || !Tabs.leader) {
       return {};
     }
 
@@ -75,10 +71,9 @@ export default class SyncStream {
       // unfinished fill had already delivered are unmarked, which would leave one revoked since
       // standing for the life of the tab.
       //
-      // Only here, past the returns above: a tab that does not lead, a page that has not mounted
-      // and a bundle carrying no sync all greet with nothing, and marking rows for a fill that never
-      // arrives would have the leader's own completeness sweep take away rows this browser rightly
-      // holds.
+      // Only here, past the return above: a tab that does not lead and a page that has not mounted
+      // greet with nothing, and marking rows for a fill that never arrives would have the leader's
+      // own completeness sweep take away rows this browser rightly holds.
       LocalDatabase.beginRefill();
     }
 

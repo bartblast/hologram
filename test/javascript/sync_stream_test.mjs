@@ -297,10 +297,6 @@ describe("SyncStream", () => {
       }
     });
 
-    it("says nothing for a bundle built before any of this existed", () => {
-      assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {});
-    });
-
     it("says nothing before the page has mounted", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 

@@ -1,7 +1,6 @@
 "use strict";
 
 import App from "./app.mjs";
-import Batches from "./batches.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
@@ -9,7 +8,6 @@ import Interpreter from "./interpreter.mjs";
 import LiveReload from "./live_reload.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
-import SyncStream from "./sync_stream.mjs";
 import Type from "./type.mjs";
 
 export default class Sse {
@@ -125,7 +123,9 @@ export default class Sse {
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       $.heartbeatIntervalMs = heartbeatIntervalMs;
 
-      const greeting = SyncStream.buildGreeting(Hologram.pageModule());
+      // An app without a data model greets with nothing, the way a tab that does not lead does.
+      const greeting =
+        Hologram.dataLayer?.buildStreamGreeting(Hologram.pageModule()) ?? {};
 
       const params = new URLSearchParams({
         instance_id: App.instanceId,
@@ -203,7 +203,7 @@ export default class Sse {
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
-      SyncStream.listen($.eventSource);
+      Hologram.dataLayer?.listenToStream($.eventSource);
 
       $.eventSource.addEventListener("reload", (event) => {
         LiveReload.handleReload(JSON.parse(event.data), Hologram.pageModule());
@@ -213,10 +213,9 @@ export default class Sse {
         GlobalRegistry.set("sseConnected?", true);
         $.armHeartbeatWatchdog();
 
-        // The one signal that actually means the network is worth trying again. A batch whose
-        // send got no answer is still pending, and this is what wakes the queue that stopped
-        // behind it.
-        Batches.flush();
+        // The one signal that actually means the network is worth trying again (see
+        // DataLayer.streamOpened).
+        Hologram.dataLayer?.streamOpened();
 
         // Opening reports liveness. Clearing the failure count is a separate judgement
         // the stream has to earn by lasting, so one that opens and dies still counts as

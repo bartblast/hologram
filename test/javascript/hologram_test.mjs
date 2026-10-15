@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   defineRuntimeGlobals,
   registerWebApis,
+  setDataLayer,
   sinon,
   UUID_REGEX,
   waitForEventLoop,
@@ -484,6 +485,14 @@ describe("Hologram", () => {
     });
 
     describe("the action's batch", () => {
+      beforeEach(() => {
+        setDataLayer();
+      });
+
+      afterEach(() => {
+        Hologram.dataLayer = null;
+      });
+
       it("seals what the action wrote, taking the first sequence number", () => {
         writing("t1");
 
@@ -651,6 +660,18 @@ describe("Hologram", () => {
             [cid2, "t2"],
           ],
         );
+      });
+
+      // An app without a data model has no batch to open: the action runs and writes nothing down.
+      it("opens no batch without a data layer", () => {
+        const opening = sinon.spy(Batches, "open");
+        Hologram.dataLayer = null;
+
+        Hologram.executeAction(actionFor(registered(cid1)));
+
+        sinon.assert.calledOnce(callNamedFunctionStub);
+        sinon.assert.notCalled(opening);
+        assert.deepStrictEqual(Batches.pending, []);
       });
     });
 
