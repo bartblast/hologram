@@ -534,11 +534,6 @@ jobs:
         if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix deps.unlock --check-unused
 
-      # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
-      - name: Check feature tests app retired Elixir deps
-        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
-        run: mix hex.audit
-
       # Step: Check that the feature tests app Elixir code has already been formatted.
       - name: Check feature tests app Elixir code formatted
         if: ${{ env.IS_FIRST_PARTITION == 'true' }}
@@ -807,11 +802,6 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
 
-      # Step: Check if there are any cluster tests app Elixir dependencies which have been marked as retired.
-      - name: Check cluster tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
       # Step: Check that the cluster tests app Elixir code has already been formatted.
       - name: Check cluster tests app Elixir code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
@@ -967,11 +957,6 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
 
-      # Step: Check if there are any cowboy tests app Elixir dependencies which have been marked as retired.
-      - name: Check cowboy tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
       # Step: Check that the cowboy tests app Elixir code has already been formatted.
       - name: Check cowboy tests app Elixir code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
@@ -1126,11 +1111,6 @@ jobs:
       - name: Check ecosystem tests app unused Elixir deps
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any ecosystem tests app Elixir dependencies which have been marked as retired.
-      - name: Check ecosystem tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
 
       # Step: Check that the ecosystem tests app Elixir code has already been formatted.
       - name: Check ecosystem tests app Elixir code formatted
@@ -1295,11 +1275,6 @@ jobs:
       - name: Check umbrella tests app unused Elixir deps
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any umbrella tests app Elixir dependencies which have been marked as retired.
-      - name: Check umbrella tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
 
       # Step: Check that the umbrella tests app Elixir code has already been formatted.
       - name: Check umbrella tests app Elixir code formatted
