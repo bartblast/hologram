@@ -732,7 +732,8 @@ export default class Hologram {
     });
   }
 
-  // Execute action asynchronously to allow animations and prevent blocking the event loop
+  // Runs the action once its delay has elapsed. The timer's callback is a new task, so the browser
+  // can paint before the action runs, with no delay too.
   // Deps: [:maps.get/3]
   // The default stamp covers every caller that reasoned about the registry rather than about the
   // markup - server-pushed actions and command responses. A caller whose action came from the DOM
@@ -1925,7 +1926,7 @@ export default class Hologram {
     $.#mountWhenReady(isPageModuleRegistered);
   }
 
-  // Deps: [:maps.get/2, :maps.put/3]
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
   static #processActionResult(
     resultComponentStruct,
     name,
@@ -1994,11 +1995,32 @@ export default class Hologram {
         );
       }
 
+      const delay = Erlang_Maps["get/3"](
+        Type.atom("delay"),
+        nextAction,
+        Type.integer(0),
+      );
+
       // A next action belongs to whatever page its parent belonged to, so it inherits the
       // parent's stamp rather than reading the epoch afresh. That matters most when the parent
       // was asynchronous: its promise can resolve after a navigation, and the inherited stamp is
       // what makes the next action drop instead of landing on a page that never produced it.
-      Hologram.scheduleAction(nextAction, epoch);
+      //
+      // A next action with no delay runs before the browser paints, so that two components a
+      // chain changes are never painted disagreeing. The browser paints between tasks, and a
+      // timer would start a new one. The walk that ran a synchronous parent takes the action
+      // once the parent is done. An asynchronous parent resolves when no walk is running, and the
+      // microtask starts one - a microtask runs before the paint, and an error raised in it is an
+      // "error" event, the way a timer-driven action's is, not the rejection of the parent's
+      // promise (see the result.finally in #runActions). After a synchronous parent the
+      // microtask's walk finds nothing left to do. A chain with no delay doesn't yield until it
+      // ends, so an action that puts itself again with no delay is an infinite loop.
+      if (delay.value === 0n) {
+        ActionQueue.enqueue(nextAction, epoch);
+        queueMicrotask(() => $.#runActions());
+      } else {
+        Hologram.scheduleAction(nextAction, epoch);
+      }
     }
 
     if (!Type.isNil(nextPage)) {
@@ -2156,11 +2178,14 @@ export default class Hologram {
           $.#awaitingTargets.set(targetKey, epoch);
           blockedTargets.add(targetKey);
 
-          // Resumed from a macrotask rather than from the promise's own continuation, so that an
+          // Resumed from a microtask rather than from the promise's own continuation, so that an
           // action raising in the resumed run surfaces as an uncaught error, the way every
           // timer-driven action does, and not as the rejection of a promise nobody holds. The
           // promise's own rejection still reaches the "unhandledrejection" listener: finally()
-          // passes it through.
+          // passes it through. A microtask and not a timer, so that what waited behind the action
+          // runs before the browser paints - a next action with no delay the action put on its own
+          // component among them, which the walk its result started passed over while the
+          // component was still awaiting.
           result.finally(() => {
             // The page may have been left since, which empties the map, and the destination may
             // be awaiting an action of its own under the same cid - that entry is not this one's.
@@ -2168,7 +2193,7 @@ export default class Hologram {
               $.#awaitingTargets.delete(targetKey);
             }
 
-            setTimeout(() => Hologram.#runActions(), 0);
+            queueMicrotask(() => Hologram.#runActions());
           });
         }
       }
