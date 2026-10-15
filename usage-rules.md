@@ -143,7 +143,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Trigger a command: `put_command(component, :cmd_name)` or `put_command(component, :cmd_name, param: value)`.
 - Navigate: `put_page(component, PageModule)` or `put_page(component, PageModule, param: value)`.
 - Update context: `put_context(component, :key, value)`.
-- Chain another action: `put_action(component, :action_name)` or `put_action(component, :action_name, param: value)`.
+- Chain another action: `put_action(component, :action_name)` or `put_action(component, :action_name, param: value)`. A chained action with no `delay` runs right after the current one, before the browser paints, and the browser paints only once the whole chain has finished. To update the page between steps, give the chained action a `delay`.
 - Delays are available for actions only (not commands): `put_action(component, name: :my_action, delay: 750)`.
 - A component's actions run one at a time, in dispatch order, and each sees the state the previous one left. An action that awaits a `Task` holds back later actions for that component only - other components keep running.
 
