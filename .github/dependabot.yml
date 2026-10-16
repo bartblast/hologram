@@ -68,6 +68,17 @@ updates:
           - "*"
 
   - package-ecosystem: "mix"
+    directory: "/test/minimal"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "hologram"
+    groups:
+      minimal-tests:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "mix"
     directory: "/test/umbrella"
     schedule:
       interval: "weekly"
