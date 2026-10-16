@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -724,9 +725,15 @@ defmodule Hologram.Realtime.SSE do
 
   # Live reload runs in dev only, so nothing publishes on the topic elsewhere except a test,
   # which is why test streams listen too: the feature tests reload tabs this way.
+  #
+  # The outcome of the last live reload is asked for once subscribed, since a broadcast reaches
+  # only the streams attached when it is sent: a tab reloaded while a live reload was still
+  # building, or one reconnecting, would otherwise miss the compilation error, or keep one a
+  # later live reload compiled past.
   defp maybe_subscribe_to_live_reload(conn) do
     if Hologram.env() in [:dev, :test] do
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+      LiveReload.replay_outcome(self())
     end
 
     conn

@@ -7,6 +7,7 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -1750,6 +1751,18 @@ defmodule Hologram.Realtime.SSETest do
       wait_until(fn -> Registry.lookup(Hologram.PubSub, topic) != [] end)
 
       refute live_reload_subscriber?(pid)
+    end
+
+    test "asks live reload for the outcome of its last pass once listening" do
+      # Stands in for live reload, which does not run in the test env.
+      Process.register(self(), LiveReload)
+
+      conn = conn_with_instance_id()
+      pid = spawn(fn -> stream(conn) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
+
+      assert_receive {:"$gen_cast", {:replay_outcome, ^pid}}
+      assert live_reload_subscriber?(pid)
     end
   end
 

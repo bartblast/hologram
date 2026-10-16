@@ -170,6 +170,11 @@ defmodule Hologram.LiveReload do
     {:noreply, %{state | open_pages: open_pages}}
   end
 
+  def handle_cast({:replay_outcome, pid}, state) do
+    if state.outcome, do: send(pid, state.outcome)
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_info({:file_event, _pid, :stop}, state) do
     {:noreply, state}
@@ -211,11 +216,16 @@ defmodule Hologram.LiveReload do
 
     # A superseded pass reports nothing: the pass its save starts reports on the newer code, so the
     # tabs never show the outcome of code a newer save has replaced.
-    if state.superseded_by == nil do
-      broadcast_outcome(result)
-    end
+    new_state =
+      if state.superseded_by == nil do
+        outcome = to_outcome(result)
+        Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", outcome)
+        %{state | outcome: outcome}
+      else
+        state
+      end
 
-    {:noreply, finish_pass(state)}
+    {:noreply, finish_pass(new_state)}
   end
 
   # A pass that crashed reports nothing to the tabs: what failed is live reload, not the code. A
@@ -266,6 +276,8 @@ defmodule Hologram.LiveReload do
       # What each tab showed at its last render, by instance id, with when it was first seen without
       # an SSE connection (nil while it holds one).
       open_pages: %{},
+      # The outcome the last pass reported, as broadcast, nil before any did and while a pass runs.
+      outcome: nil,
       # The live reload pass running, if any.
       pass: nil,
       # The pages the running or the last pass has not built.
@@ -370,6 +382,17 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
+  Sends the given process the outcome the last live reload pass reported, the message it was
+  broadcast as. Sends nothing while a pass runs, before any pass reported, and when live reload is
+  not running. The outcome comes from the process that broadcasts the outcomes, so it arrives in
+  order with them.
+  """
+  @spec replay_outcome(pid) :: :ok
+  def replay_outcome(pid) do
+    GenServer.cast(__MODULE__, {:replay_outcome, pid})
+  end
+
+  @doc """
   Returns the list of directories that are watched for file changes.
 
   In a single-app project the directories are the project's own
@@ -423,16 +446,6 @@ defmodule Hologram.LiveReload do
     Mix.Project.in_project(app, app_path, fn _module ->
       Mix.Project.config()[:elixirc_paths]
     end)
-  end
-
-  # The tabs' SSE streams forward it: a tab takes its compilation error down once a pass compiled,
-  # and shows the error when a pass did not.
-  defp broadcast_outcome(:ok) do
-    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :compiled)
-  end
-
-  defp broadcast_outcome({:error, lines}) do
-    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", {:compilation_error, lines})
   end
 
   # The tabs' SSE streams forward it, and each tab reloads when its page is among the pages, or
@@ -578,6 +591,14 @@ defmodule Hologram.LiveReload do
         impl().reload(file_path, endpoint, opts)
       end)
 
-    %{state | pass: %{ref: task.ref, registries_reloaded?: false}}
+    # The outcome is forgotten while the pass runs: the code it was about has changed, and a tab
+    # reloaded or opened meanwhile must not be shown an error a newer save may have fixed. A stream
+    # attached by the time the pass ends gets its outcome broadcast.
+    %{state | outcome: nil, pass: %{ref: task.ref, registries_reloaded?: false}}
   end
+
+  # The message a pass's outcome is broadcast as. The tabs' SSE streams forward it: a tab takes its
+  # compilation error down once a pass compiled, and shows the error when a pass did not.
+  defp to_outcome(:ok), do: :compiled
+  defp to_outcome({:error, lines}), do: {:compilation_error, lines}
 end
