@@ -3037,6 +3037,42 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().runtime.client_config == Compiler.client_config()
     end
 
+    test "keeps the optional subsystems the runtime bundle was built with", %{opts: opts} do
+      run(opts)
+
+      assert cache_state().runtime.subsystems == [:data_layer]
+    end
+
+    # The test build declares entity types, so its runtime carries the data layer: the bundle's
+    # source map lists every file bundled into it.
+    test "bundles the data layer into the runtime of a build with entity types", %{opts: opts} do
+      run(opts)
+
+      sources =
+        cache_state().runtime.bundle_info.static_source_map_path
+        |> File.read!()
+        |> Jason.decode!()
+        |> Map.fetch!("sources")
+
+      assert Enum.any?(sources, &String.ends_with?(&1, "/assets/js/data_layer.mjs"))
+    end
+
+    test "rebuilds the runtime alone when the subsystems it was built with differ", %{opts: opts} do
+      run(opts)
+
+      cache_state().runtime
+      |> Map.put(:subsystems, [])
+      |> Cache.put_runtime()
+
+      {record_built, recorded_built} = record_calls()
+
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert recorded_built.() == [[:runtime]]
+      assert cache_state().runtime.subsystems == [:data_layer]
+      test_runtime_bundle(opts)
+    end
+
     test "keeps the bundles of the pages it doesn't rebuild", %{opts: opts} do
       run(opts)
 

@@ -61,7 +61,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
-  @runtime_js_path Path.join([Reflection.root_dir(), "assets", "js", "hologram.mjs"])
+  # The client runtime files that define the manually ported functions: the runtime's own, and the
+  # data layer's, which defines the functions of Hologram.Auth, DB, Entity, Job and Query.
+  @runtime_js_paths [
+    Path.join([Reflection.root_dir(), "assets", "js", "data_layer.mjs"]),
+    Path.join([Reflection.root_dir(), "assets", "js", "hologram.mjs"])
+  ]
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -3766,16 +3771,17 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   # Registering an MFA here takes the transpiled original OUT of every bundle, and the client
-  # runtime is where the replacement is put in - by hand, in hologram.mjs. Miss that half and the
-  # function is simply gone: the browser answers a call to it with UndefinedFunctionError, which
-  # no Elixir test and no JavaScript test of the port itself can see, because both call the port
-  # directly rather than through the interpreter's registry.
+  # runtime is where the replacement is put in - by hand, in hologram.mjs or, for the data layer's
+  # modules, in data_layer.mjs. Miss that half and the function is simply gone: the browser answers
+  # a call to it with UndefinedFunctionError, which no Elixir test and no JavaScript test of the
+  # port itself can see, because both call the port directly rather than through the interpreter's
+  # registry.
   #
   # Matched over ANY whitespace between the two arguments rather than over the newline and indent
   # the formatter happens to write: a Windows checkout reads that file with CRLF, and a run there
   # found every one of them missing.
   test "every manually ported Elixir MFA is defined in the client runtime" do
-    runtime_js = File.read!(@runtime_js_path)
+    runtime_js = Enum.map_join(@runtime_js_paths, "\n", &File.read!/1)
 
     unregistered =
       Enum.reject(manually_ported_elixir_mfas(), fn {module, function, arity} ->
@@ -3788,6 +3794,29 @@ defmodule Hologram.Compiler.CallGraphTest do
       end)
 
     assert unregistered == []
+  end
+
+  test "every module the data layer defines ports for is a ported module of its subsystem, and the reverse" do
+    subsystem = Keyword.fetch!(Compiler.optional_runtime_subsystems(), :data_layer)
+
+    data_layer_js =
+      [Reflection.root_dir(), "assets", "js", subsystem.file]
+      |> Path.join()
+      |> File.read!()
+
+    defined_module_names =
+      ~r/defineManuallyPortedFunction\(\s*"([^"]+)"/
+      |> Regex.scan(data_layer_js, capture: :all_but_first)
+      |> List.flatten()
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    ported_module_names =
+      subsystem.ported_modules
+      |> Enum.map(&Reflection.module_name/1)
+      |> Enum.sort()
+
+    assert defined_module_names == ported_module_names
   end
 
   test "manually_ported_elixir_mfas/0" do

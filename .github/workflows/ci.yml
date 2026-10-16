@@ -913,7 +913,7 @@ jobs:
   feature_tests_https:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
@@ -1034,7 +1034,7 @@ jobs:
   cluster_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
@@ -1197,7 +1197,7 @@ jobs:
   cowboy_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
@@ -1352,7 +1352,7 @@ jobs:
   ecosystem_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}
@@ -1504,10 +1504,156 @@ jobs:
         with:
           name: ecosystem-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/ecosystem/tmp/screenshots
+  minimal_tests:
+    runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    if: ${{ !cancelled() }}
+    name: Minimal Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    defaults:
+      run:
+        working-directory: test/minimal
+    strategy:
+      fail-fast: false
+      # Specify the Elixir and OTP versions to use when building
+      # and running the workflow steps.
+      matrix:
+        elixir:
+          # Run minimal tests on latest pinned stable Elixir version only
+          - "1.20.0"
+        otp:
+          # Run minimal tests on latest pinned stable OTP version only
+          - "29.0"
+        node:
+          # Run minimal tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### MINIMAL TESTS APP CHECKS ###
+
+      # Step: Define how to cache the minimal tests app Elixir dependencies.
+      - name: Cache minimal tests app Elixir deps
+        id: cache-minimal-tests-app-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-minimal-tests-app-elixir-deps
+        with:
+          path: test/minimal/deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/minimal/mix.lock') }}
+
+      # Step: Define how to cache the minimal tests app Elixir build.
+      - name: Cache minimal tests app Elixir build
+        id: cache-minimal-tests-app-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-minimal-tests-app-elixir-build
+        with:
+          path: test/minimal/_build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/minimal/mix.lock') }}
+
+      # Step: Download minimal tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download minimal tests app Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
+          command: cd test/minimal && mix deps.get
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the minimal tests app project treating any warnings as errors.
+      - name: Check minimal tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if minimal tests app mix.lock has any unused dependencies.
+      - name: Check minimal tests app unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check that the minimal tests app Elixir code has already been formatted.
+      - name: Check minimal tests app Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Run minimal tests app Elixir static code analysis with Credo.
+      - name: Run minimal tests app Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Restore minimal tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore minimal tests app Dialyzer PLT cache
+        id: restore-minimal-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-minimal-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/minimal/mix.lock') }}
+          path: |
+            test/minimal/priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create minimal tests app Dialyzer PLTs if no cache was found.
+      - name: Create minimal tests app Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-minimal-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save minimal tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save minimal tests app Dialyzer PLT cache
+        id: save-minimal-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-minimal-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-minimal-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/minimal/mix.lock') }}
+          path: |
+            test/minimal/priv/plts
+
+      # Step: Run minimal tests app Elixir static code analysis with Dialyzer.
+      - name: Run minimal tests app Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all minimal tests app test scripts have valid file names.
+      - name: Check minimal tests app test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.check.test_file_names test
+
+      # Step: Execute minimal tests app Elixir tests.
+      - name: Run minimal tests app Elixir tests
+        run: mix test --warnings-as-errors
   umbrella_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not six. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     if: ${{ !cancelled() }}

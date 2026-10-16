@@ -16,6 +16,7 @@ import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -258,11 +259,11 @@ describe("Tabs", () => {
       LocalDatabase.reset();
       Model.reset();
 
-      Sse.syncCursor = null;
+      SyncStream.syncCursor = null;
     });
 
     it("opens a stream of its own and starts sending", async () => {
-      Sse.syncCursor = "place-1";
+      SyncStream.syncCursor = "place-1";
 
       await succeed(nextGroup());
 
@@ -278,7 +279,7 @@ describe("Tabs", () => {
     it("brings the store up to what it holds, when it has a place", async () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "from the stream"});
 
-      Sse.syncCursor = "place-1";
+      SyncStream.syncCursor = "place-1";
 
       await succeed(nextGroup());
 
@@ -339,7 +340,7 @@ describe("Tabs", () => {
       LocalDatabase.reset();
       Replica.reset();
 
-      Sse.syncCursor = null;
+      SyncStream.syncCursor = null;
     });
 
     // The three things a joining tab cannot read out of the store: the scopes, which nothing writes
@@ -351,7 +352,7 @@ describe("Tabs", () => {
       LocalDatabase.markSynced("page");
       Replica.offer({id: "r-group", token: "statement-group"});
 
-      Sse.syncCursor = "place-1";
+      SyncStream.syncCursor = "place-1";
 
       Tabs.postState();
 
@@ -376,7 +377,7 @@ describe("Tabs", () => {
         .returns(name === null ? null : Type.alias(name));
 
     beforeEach(() => {
-      sinon.stub(Sse, "receiveFrame");
+      sinon.stub(SyncStream, "receiveFrame");
       sinon.stub(LocalDatabase, "markSynced");
 
       mountPage(PAGE);
@@ -385,7 +386,7 @@ describe("Tabs", () => {
     afterEach(() => {
       LocalDatabase.reset();
       Replica.reset();
-      Sse.syncCursor = null;
+      SyncStream.syncCursor = null;
     });
 
     it("applies a frame to this tab's own memory", () => {
@@ -394,7 +395,7 @@ describe("Tabs", () => {
       Tabs.receive({event: "sync_deltas", frame, kind: "frame"});
 
       assert.isTrue(
-        Sse.receiveFrame.calledOnceWithExactly("sync_deltas", frame),
+        SyncStream.receiveFrame.calledOnceWithExactly("sync_deltas", frame),
       );
     });
 
@@ -406,7 +407,7 @@ describe("Tabs", () => {
         page: PAGE,
       });
 
-      assert.isTrue(Sse.receiveFrame.calledOnce);
+      assert.isTrue(SyncStream.receiveFrame.calledOnce);
     });
 
     // The claim is that the page the stream was greeted with can be answered from what the client
@@ -419,7 +420,7 @@ describe("Tabs", () => {
         page: "MyApp.SettingsPage",
       });
 
-      assert.isFalse(Sse.receiveFrame.called);
+      assert.isFalse(SyncStream.receiveFrame.called);
     });
 
     it("applies a whole-app completeness marker whatever page this tab is on", () => {
@@ -430,7 +431,7 @@ describe("Tabs", () => {
         page: "MyApp.SettingsPage",
       });
 
-      assert.isTrue(Sse.receiveFrame.calledOnce);
+      assert.isTrue(SyncStream.receiveFrame.calledOnce);
     });
 
     it("takes up a batch another tab has filed", () => {
@@ -530,7 +531,7 @@ describe("Tabs", () => {
       });
 
       assert.equal(Replica.id, "r-group");
-      assert.equal(Sse.syncCursor, "place-1");
+      assert.equal(SyncStream.syncCursor, "place-1");
 
       assert.deepStrictEqual(
         LocalDatabase.markSynced.args.map(([scope]) => scope),
@@ -540,7 +541,7 @@ describe("Tabs", () => {
 
     // Its own reading has already brought it further, or to somewhere else entirely.
     it("keeps a place it already holds", () => {
-      Sse.syncCursor = "place-2";
+      SyncStream.syncCursor = "place-2";
 
       Tabs.receive({
         cursor: "place-1",
@@ -550,7 +551,7 @@ describe("Tabs", () => {
         synced: [],
       });
 
-      assert.equal(Sse.syncCursor, "place-2");
+      assert.equal(SyncStream.syncCursor, "place-2");
     });
 
     it("takes no scope for a page this tab is not on", () => {

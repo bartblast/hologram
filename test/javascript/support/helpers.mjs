@@ -4,6 +4,7 @@ import {assert} from "../../../assets/node_modules/chai/index.js";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../../assets/js/component_registry.mjs";
+import DataLayer from "../../../assets/js/data_layer.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Exception from "../../../assets/js/elixir/exception.mjs";
 import Elixir_FunctionClauseError from "../../../assets/js/elixir/function_clause_error.mjs";
@@ -29,6 +30,7 @@ import Erlang_Re from "../../../assets/js/erlang/re.mjs";
 import Erlang_Sets from "../../../assets/js/erlang/sets.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import Erlang_Uri_String from "../../../assets/js/erlang/uri_string.mjs";
+import Hologram from "../../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -1209,6 +1211,11 @@ export function registerWebApis() {
   globalThis.history = window.history;
   globalThis.sessionStorage = window.sessionStorage;
   globalThis.WebSocket = window.WebSocket;
+}
+
+// Hands the data layer to the runtime, as the runtime entry file of an app with a data model does.
+export function setDataLayer() {
+  Hologram.dataLayer = DataLayer;
 }
 
 // Waits for asynchronous operations scheduled with setTimeout(..., 0) to complete.

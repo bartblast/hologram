@@ -89,6 +89,7 @@ defmodule Hologram.Compiler.Cache do
           js_binding_modules: MapSet.t(module),
           mfas: [mfa],
           dynamic_calls: CallGraph.runtime_dynamic_calls(),
+          subsystems: [atom],
           sync_constants_js: String.t(),
           types: MapSet.t(module)
         }
