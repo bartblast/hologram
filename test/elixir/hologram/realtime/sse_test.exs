@@ -257,6 +257,12 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_compiled_envelope/1" do
+    test "wraps the id in a compiled SSE event envelope with no data" do
+      assert encode_compiled_envelope(42) == "event: compiled\nid: 42\ndata:\n\n"
+    end
+  end
+
   describe "encode_drop_sub_receipts_envelope/2" do
     test "wraps the keys list in a drop_sub_receipts SSE event envelope" do
       keys = [{:notifications, "c1"}]
@@ -808,6 +814,17 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: compilation_error\nid: "
       assert updated_conn.resp_body =~ ~s|\ndata: [[{"text":"boom","tone":"banner"}]]\n\n|
+    end
+  end
+
+  describe "process_message/4 on :compiled" do
+    test "pushes a compiled SSE event" do
+      conn = prepared_test_conn()
+      send(self(), :compiled)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~r/\Aevent: compiled\nid: \d+\ndata:\n\n\z/
     end
   end
 

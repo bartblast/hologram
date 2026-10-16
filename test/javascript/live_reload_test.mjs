@@ -73,6 +73,14 @@ describe("LiveReload", () => {
     });
   });
 
+  it("hideErrorOverlay()", () => {
+    const hideStub = sinon.stub(ErrorOverlay, "hide");
+
+    LiveReload.hideErrorOverlay();
+
+    sinon.assert.calledOnceWithExactly(hideStub, OVERLAY_ID);
+  });
+
   describe("holdsOldPageBundle()", () => {
     const pageModule = Type.atom("Elixir.MyApp.Page1");
 

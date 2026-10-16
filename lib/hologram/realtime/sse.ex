@@ -79,11 +79,22 @@ defmodule Hologram.Realtime.SSE do
   @doc """
   Builds the SSE event-stream chunk for a `compilation_error` event: the standard
   `event:`/`id:`/`data:` framing with the given id and the JSON-encoded lines of the
-  diagnostic (see `Hologram.LiveReload.Diagnostic.to_lines/1`) as the data payload.
+  error (see `Hologram.LiveReload.Diagnostic`) as the data payload.
   """
   @spec encode_compilation_error_envelope(integer, [[map]]) :: String.t()
   def encode_compilation_error_envelope(id, lines) do
     "event: compilation_error\nid: #{id}\ndata: #{Jason.encode!(lines)}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk for a `compiled` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and an empty data payload,
+  since the event says only that a live reload compiled. The empty `data:` line
+  is still sent: the browser drops an event that carries no data field.
+  """
+  @spec encode_compiled_envelope(integer) :: String.t()
+  def encode_compiled_envelope(id) do
+    "event: compiled\nid: #{id}\ndata:\n\n"
   end
 
   @doc """
@@ -260,11 +271,22 @@ defmodule Hologram.Realtime.SSE do
       {:close, _reason} ->
         {:halt, conn}
 
-      # A live reload whose Elixir compile failed. Forwarded as it came: the tab shows it
-      # until a compile succeeds and reloads the page.
+      # A live reload whose compile failed, Elixir's or Hologram's. Forwarded as it came:
+      # the tab shows it until a live reload compiles.
       {:compilation_error, lines} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = encode_compilation_error_envelope(id, lines)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      # A live reload compiled. Forwarded to every tab: one showing a compilation error
+      # takes it down, whether or not the live reload rebuilt its page.
+      :compiled ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_compiled_envelope(id)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}

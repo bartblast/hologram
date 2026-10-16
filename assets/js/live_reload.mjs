@@ -22,6 +22,14 @@ export default class LiveReload {
     }
   }
 
+  // Taken down once a live reload compiled, whether or not it rebuilt the page this
+  // tab shows: a rebuilt page reloads the tab, which takes the overlay down with the
+  // document, and a live reload that left the page as it was still compiled the code
+  // the error was in.
+  static hideErrorOverlay() {
+    ErrorOverlay.hide(OVERLAY_ID);
+  }
+
   // Whether this tab holds the page's code under a digest other than the given one, the
   // digest the server serves the page under now. Answered only where live reload runs:
   // elsewhere a digest can change only with a deploy, which is not this module's concern.
@@ -77,7 +85,7 @@ export default class LiveReload {
   // read and nothing here has to make sense of them.
   //
   // Not dismissable: a compilation error leaves the page meaningless, and the
-  // overlay goes away when a successful recompilation reloads the page.
+  // overlay goes away once a live reload compiles.
   static showErrorOverlay(lines) {
     ErrorOverlay.show({
       content: lines,
