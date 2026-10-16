@@ -3796,6 +3796,29 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert unregistered == []
   end
 
+  test "every module the data layer defines ports for is a ported module of its subsystem, and the reverse" do
+    subsystem = Keyword.fetch!(Compiler.optional_runtime_subsystems(), :data_layer)
+
+    data_layer_js =
+      [Reflection.root_dir(), "assets", "js", subsystem.file]
+      |> Path.join()
+      |> File.read!()
+
+    defined_module_names =
+      ~r/defineManuallyPortedFunction\(\s*"([^"]+)"/
+      |> Regex.scan(data_layer_js, capture: :all_but_first)
+      |> List.flatten()
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    ported_module_names =
+      subsystem.ported_modules
+      |> Enum.map(&Reflection.module_name/1)
+      |> Enum.sort()
+
+    assert defined_module_names == ported_module_names
+  end
+
   test "manually_ported_elixir_mfas/0" do
     result = manually_ported_elixir_mfas()
 

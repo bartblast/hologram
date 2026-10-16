@@ -1299,7 +1299,18 @@ defmodule Hologram.CompilerTest do
 
   test "optional_runtime_subsystems/0" do
     assert optional_runtime_subsystems() == [
-             data_layer: %{class: "DataLayer", file: "data_layer.mjs", handle: "dataLayer"}
+             data_layer: %{
+               class: "DataLayer",
+               file: "data_layer.mjs",
+               handle: "dataLayer",
+               ported_modules: [
+                 Hologram.Auth,
+                 Hologram.DB,
+                 Hologram.Entity,
+                 Hologram.Job,
+                 Hologram.Query
+               ]
+             }
            ]
   end
 
@@ -2739,6 +2750,56 @@ defmodule Hologram.CompilerTest do
              )
 
       # A default argument makes the ported arity differ from the raised one.
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineFunctionClauseHeads("Task", "await", 2, "public"/
+             )
+    end
+
+    test "renders the clause heads of a subsystem's manually ported functions when it ships", %{
+      encode_plt: encode_plt,
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          encode_plt,
+          MapSet.new(),
+          [],
+          @empty_sync_constants_js,
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      for module_name <- ~w(Hologram.Auth Hologram.DB Hologram.Entity Hologram.Job Hologram.Query) do
+        assert String.contains?(js, ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", /)
+      end
+    end
+
+    test "leaves out the clause heads of a subsystem's manually ported functions when it doesn't ship",
+         %{
+           encode_plt: encode_plt,
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          encode_plt,
+          MapSet.new(),
+          [],
+          @empty_sync_constants_js,
+          js_dir: @js_dir,
+          subsystems: []
+        )
+
+      for module_name <- ~w(Hologram.Auth Hologram.DB Hologram.Entity Hologram.Job Hologram.Query) do
+        refute String.contains?(js, ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", /)
+      end
+
       assert String.contains?(
                js,
                ~s/Interpreter.defineFunctionClauseHeads("Task", "await", 2, "public"/

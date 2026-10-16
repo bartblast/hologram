@@ -80,12 +80,18 @@ defmodule Hologram.Compiler do
   ]
 
   # The hand-written runtime modules a build ships only when it needs them, each with its file under
-  # the js dir, its class and the handle the runtime reads it through: a public static of Hologram,
-  # null when the module is not shipped, which the runtime calls through `?.`. The bundler only
-  # follows imports, so a module no other runtime module imports is left out of a bundle whose entry
-  # file does not import it either.
+  # the js dir, its class, the handle the runtime reads it through and the Elixir modules whose
+  # manually ported functions it defines. The handle is a public static of Hologram, null when the
+  # module is not shipped, which the runtime calls through `?.`. The bundler only follows imports,
+  # so a module no other runtime module imports is left out of a bundle whose entry file does not
+  # import it either.
   @optional_runtime_subsystems [
-    data_layer: %{class: "DataLayer", file: "data_layer.mjs", handle: "dataLayer"}
+    data_layer: %{
+      class: "DataLayer",
+      file: "data_layer.mjs",
+      handle: "dataLayer",
+      ported_modules: [Hologram.Auth, Hologram.DB, Hologram.Entity, Hologram.Job, Hologram.Query]
+    }
   ]
 
   @typedoc """
@@ -398,11 +404,17 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the optional runtime subsystems: the hand-written runtime modules a build ships only when
-  it needs them, by key, each with its file under the js dir, its class and the name of the
-  `Hologram` static the runtime reads it through.
+  it needs them, by key, each with its file under the js dir, its class, the name of the
+  `Hologram` static the runtime reads it through and the Elixir modules whose manually ported
+  functions it defines.
   """
   @spec optional_runtime_subsystems() ::
-          keyword(%{class: String.t(), file: String.t(), handle: String.t()})
+          keyword(%{
+            class: String.t(),
+            file: String.t(),
+            handle: String.t(),
+            ported_modules: [module]
+          })
   def optional_runtime_subsystems, do: @optional_runtime_subsystems
 
   @doc """
@@ -894,9 +906,9 @@ defmodule Hologram.Compiler do
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
     * `:subsystems` - the keys of the optional runtime subsystems the build ships (see
-      `optional_runtime_subsystems/0`), each rendered as an import and a handle the runtime reads it
-      through (required). Raises `ArgumentError` for a key that is not an optional runtime
-      subsystem.
+      `optional_runtime_subsystems/0`), each rendered as an import, a handle the runtime reads it
+      through and the clause heads of the functions it ports (required). Raises `ArgumentError` for
+      a key that is not an optional runtime subsystem.
   """
   @spec build_runtime_js(
           list(mfa),
@@ -965,7 +977,7 @@ defmodule Hologram.Compiler do
 
     manually_ported_clause_heads =
       ir_plt
-      |> render_manually_ported_clause_heads()
+      |> render_manually_ported_clause_heads(subsystems)
       |> render_block()
 
     subsystem_handles =
@@ -4064,9 +4076,21 @@ defmodule Hologram.Compiler do
 
   # A manually ported function's clauses aren't encoded, so its raise sites have
   # no attempted clauses to report. Their heads are registered separately, from
-  # the IR of the Elixir function the port stands in for.
-  defp render_manually_ported_clause_heads(ir_plt) do
+  # the IR of the Elixir function the port stands in for. The heads of the ports
+  # an optional subsystem defines are registered only when it ships, since
+  # without it those ports are never defined.
+  defp render_manually_ported_clause_heads(ir_plt, subsystems) do
+    shipped_modules = Enum.flat_map(subsystems, & &1.ported_modules)
+
+    optional_modules =
+      Enum.flat_map(@optional_runtime_subsystems, fn {_key, subsystem} ->
+        subsystem.ported_modules
+      end)
+
     CallGraph.manually_ported_elixir_mfas()
+    |> Enum.reject(fn {module, _function, _arity} ->
+      module in optional_modules and module not in shipped_modules
+    end)
     |> Enum.map(fn {module, function, _arity} -> {module, function} end)
     |> Enum.uniq()
     |> Enum.sort()
