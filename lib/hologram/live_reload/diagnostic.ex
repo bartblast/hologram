@@ -47,6 +47,30 @@ defmodule Hologram.LiveReload.Diagnostic do
   @source_excerpt_regex ~r/^(\s*\d+\s*│\s?)(.*)$/u
 
   @doc """
+  Returns the exception, with the stacktrace it was raised through, as lines,
+  each a list of segments.
+
+  The banner naming the exception reads in `:banner`, on one line holding its
+  whole message, so a message running over several lines is set apart from the
+  frames once rather than broken up by the spacing that does it. Each stack
+  frame follows on a line of its own, in stack order: the app it came from in
+  `:chrome`, the file and line in `:meta` and what was running in `:body`. A
+  frame naming no app reads whole in `:chrome`.
+  """
+  @spec exception_to_lines(Exception.t(), Exception.stacktrace()) :: [[segment]]
+  def exception_to_lines(exception, stacktrace) do
+    banner = Exception.format_banner(:error, exception)
+
+    frame_lines =
+      stacktrace
+      |> Exception.format_stacktrace()
+      |> String.split("\n", trim: true)
+      |> Enum.map(&to_frame_segments/1)
+
+    [[segment(:banner, banner)] | frame_lines]
+  end
+
+  @doc """
   Returns the compiler's output as lines, each a list of segments.
 
   IMPORTANT!
