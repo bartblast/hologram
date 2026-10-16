@@ -94,6 +94,35 @@ defmodule Hologram.CompilerTest do
   @erlang_js_dir Path.join(@js_dir, "erlang")
 
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
+
+  # The hand-written runtime modules only the data layer reaches, by path under the js dir: the
+  # import closure of data_layer.mjs minus the closure of the modules the runtime entry always
+  # imports. A new data layer module belongs here.
+  @data_layer_js_files [
+    "batch.mjs",
+    "batches.mjs",
+    "calendar.mjs",
+    "clock.mjs",
+    "data_layer.mjs",
+    "deltas.mjs",
+    "durability.mjs",
+    "elixir/hologram/auth.mjs",
+    "elixir/hologram/db.mjs",
+    "elixir/hologram/entity.mjs",
+    "elixir/hologram/job.mjs",
+    "elixir/hologram/query.mjs",
+    "local_database.mjs",
+    "model.mjs",
+    "mutations.mjs",
+    "overlay.mjs",
+    "query_kernel.mjs",
+    "replica.mjs",
+    "sha1.mjs",
+    "sort_key.mjs",
+    "sync_stream.mjs",
+    "tabs.mjs"
+  ]
+
   @empty_sync_constants %{
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
@@ -104,6 +133,7 @@ defmodule Hologram.CompilerTest do
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
   @empty_sync_constants_js ~s/globalThis.Hologram.sync = {model: {}, modelHash: "", propParams: {}, protocolVersion: 1};/
+
   @tmp_dir Reflection.tmp_dir()
 
   # Bundles an entry file that runs the given JavaScript, in a tmp dir of the given name, with a
@@ -3975,6 +4005,48 @@ defmodule Hologram.CompilerTest do
         """)
 
       assert File.read!(static_source_map_path_2) == expected_source_map_js_2
+    end
+
+    # The bundler follows imports, so a runtime entry that imports no data layer leaves every data
+    # layer file out, unless a module the entry always imports reaches one. The source map lists
+    # every file bundled in.
+    test "bundles none of the data layer's files into a runtime entry without it", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      opts = bundling_opts("bundle_2_runtime_without_data_layer")
+
+      entry_file_path =
+        create_runtime_entry_file(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          @empty_sync_constants_js,
+          js_dir: @js_dir,
+          subsystems: [],
+          tmp_dir: opts[:tmp_dir]
+        )
+
+      assert [%{static_source_map_path: source_map_path}] =
+               bundle([{nil, entry_file_path, "runtime"}], opts)
+
+      source_map_dir = Path.dirname(source_map_path)
+
+      js_files =
+        source_map_path
+        |> File.read!()
+        |> Jason.decode!()
+        |> Map.fetch!("sources")
+        |> Enum.map(&Path.expand(&1, source_map_dir))
+        |> Enum.map(&Path.relative_to(&1, @js_dir))
+
+      # The runtime's own file is there, so neither an empty source map nor paths resolved against
+      # the wrong dir can pass.
+      assert "hologram.mjs" in js_files
+
+      assert Enum.filter(js_files, &(&1 in @data_layer_js_files)) == []
     end
 
     test "bundles the chunks among the other entries, and returns the bundles in the given order" do
