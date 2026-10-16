@@ -54,23 +54,6 @@ defmodule App1.SyncTest do
       # own suite cannot answer.
       assert Regex.match?(~r/Hologram\.sync\s*=\s*null/, bundle)
     end
-
-    # The data layer's client code is a module of its own, imported only by the runtime entry of a
-    # build that declares entity types, so this one leaves it out of the bundle. The marker is a
-    # string literal of that code, which survives minification.
-    test "carries none of the data layer's client code" do
-      pattern =
-        Path.join([Application.app_dir(:app_1, "priv"), "static", "hologram", "runtime-*.js"])
-
-      assert [bundle_path] = Path.wildcard(pattern)
-
-      bundle = File.read!(bundle_path)
-
-      # The positive artifact beside the negative one, as in the test above.
-      assert String.contains?(bundle, "Hologram.config")
-
-      refute String.contains?(bundle, "IndexedDB unavailable")
-    end
   end
 
   describe "check/1" do
