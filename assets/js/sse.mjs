@@ -168,10 +168,15 @@ export default class Sse {
         }
       });
 
-      // Live reload events carry plain JSON rather than encoded terms: the server builds
-      // them outside any page, from a compiler diagnostic and a list of page names.
+      // Live reload events carry plain JSON, when they carry anything, rather than encoded
+      // terms: the server builds them outside any page, from a compile error and a list of
+      // page names.
       $.eventSource.addEventListener("compilation_error", (event) => {
         LiveReload.showErrorOverlay(JSON.parse(event.data));
+      });
+
+      $.eventSource.addEventListener("compiled", () => {
+        LiveReload.hideErrorOverlay();
       });
 
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {

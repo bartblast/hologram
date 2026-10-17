@@ -4,6 +4,89 @@ defmodule Hologram.LiveReload.DiagnosticTest do
   import ExUnit.CaptureIO
   import Hologram.LiveReload.Diagnostic
 
+  alias Hologram.CompileError
+
+  describe "exception_to_lines/2" do
+    # The overlay spaces each banner line apart from the next, so a message
+    # split over several of them would read as several messages.
+    test "keeps a message running over several lines in one banner line" do
+      assert exception_to_lines(%CompileError{message: "line one\nline two"}, []) == [
+               [%{tone: :banner, text: "** (Hologram.CompileError) line one\nline two"}]
+             ]
+    end
+
+    # Elixir names no app for a module that belongs to none, so the frame has
+    # nothing to split it by and is shown as it was written.
+    test "reads a frame naming no app in the chrome tone" do
+      stacktrace = [
+        {Hologram.Test.Fixtures.LiveReload.Diagnostic.Module2, :fun, 0,
+         [file: ~c"test/x.exs", line: 3]}
+      ]
+
+      assert exception_to_lines(%CompileError{message: "boom"}, stacktrace) == [
+               [%{tone: :banner, text: "** (Hologram.CompileError) boom"}],
+               [
+                 %{
+                   tone: :chrome,
+                   text:
+                     "    test/x.exs:3: Hologram.Test.Fixtures.LiveReload.Diagnostic.Module2.fun/0"
+                 }
+               ]
+             ]
+    end
+
+    test "reads each frame on a line of its own, in stack order" do
+      stacktrace = [
+        {Hologram.Test.Fixtures.LiveReload.Diagnostic.Module2, :inner, 0,
+         [file: ~c"test/x.exs", line: 3]},
+        {Hologram.Test.Fixtures.LiveReload.Diagnostic.Module2, :outer, 0,
+         [file: ~c"test/x.exs", line: 7]}
+      ]
+
+      assert exception_to_lines(%CompileError{message: "boom"}, stacktrace) == [
+               [%{tone: :banner, text: "** (Hologram.CompileError) boom"}],
+               [
+                 %{
+                   tone: :chrome,
+                   text:
+                     "    test/x.exs:3: Hologram.Test.Fixtures.LiveReload.Diagnostic.Module2.inner/0"
+                 }
+               ],
+               [
+                 %{
+                   tone: :chrome,
+                   text:
+                     "    test/x.exs:7: Hologram.Test.Fixtures.LiveReload.Diagnostic.Module2.outer/0"
+                 }
+               ]
+             ]
+    end
+
+    test "reads the banner naming the exception and its message in the banner tone" do
+      assert exception_to_lines(%CompileError{message: "boom"}, []) == [
+               [%{tone: :banner, text: "** (Hologram.CompileError) boom"}]
+             ]
+    end
+
+    test "sets a frame's source location apart from what was running" do
+      stacktrace = [
+        {Hologram.Compiler, :validate_module_prop_usages, 2,
+         [file: ~c"lib/hologram/compiler.ex", line: 2991]}
+      ]
+
+      vsn = Application.spec(:hologram, :vsn)
+
+      assert exception_to_lines(%CompileError{message: "boom"}, stacktrace) == [
+               [%{tone: :banner, text: "** (Hologram.CompileError) boom"}],
+               [
+                 %{tone: :chrome, text: "    (hologram #{vsn}) "},
+                 %{tone: :meta, text: "lib/hologram/compiler.ex:2991: "},
+                 %{tone: :body, text: "Hologram.Compiler.validate_module_prop_usages/2"}
+               ]
+             ]
+    end
+  end
+
   describe "to_lines/1" do
     test "reads a compilation error banner in the banner tone" do
       assert to_lines("** (CompileError) lib/my_app.ex: cannot compile module MyApp") == [
