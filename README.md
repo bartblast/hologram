@@ -30,7 +30,7 @@ Website: https://hologram.page
 
 [Curiosum](https://www.curiosum.com/?utm_source=github.com&utm_medium=sponsor-logo&utm_campaign=sponsoring_hologram)
 
-### Milestones Sponsor
+### Milestone Sponsor
 
 <a href="https://erlef.org" target="_blank">
   <picture>
