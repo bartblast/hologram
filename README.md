@@ -54,17 +54,25 @@ Website: https://hologram.page
 
 [Evo Store](https://www.evostore.no/)
 
-### Innovation Partner Tier
+### Innovation Partner
 
-* Sheharyar Naseer, [@sheharyarn](https://github.com/sheharyarn)
+<a href="https://sruplex.com" target="_blank">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/sruplex_logo_white.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/sruplex_logo_black.svg">
+    <img src=".sponsors/sruplex_logo_black.svg" alt="Sruplex" height="40">
+  </picture>
+</a>
 
-### Framework Visionary Tier
+[Sruplex](https://sruplex.com)
+
+### Framework Visionary
 
 * [@absowoot](https://github.com/absowoot)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
 * Moss Piglet, [@moss-piglet](https://github.com/moss-piglet)
 
-### Early Adopter Tier
+### Early Adopter
 
 * Daniel Calancea, [@D4no0](https://github.com/D4no0)
 * [@pasila](https://github.com/pasila)
