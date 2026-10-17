@@ -12,6 +12,8 @@ defmodule HologramFeatureTests.LiveReloadTest do
   # How long a tab has to not reload before it counts as not reloading.
   @no_reload_wait_ms 1_000
 
+  @overlay css("#hologram-live-reload-error-overlay")
+
   @reload_timeout_ms 10_000
 
   defp broadcast_live_reload(message) do
@@ -118,7 +120,23 @@ defmodule HologramFeatureTests.LiveReloadTest do
 
       broadcast_live_reload({:compilation_error, [[%{text: "boom", tone: "banner"}]]})
 
-      assert_text(session, css("#hologram-live-reload-error-overlay"), "boom")
+      assert_text(session, @overlay, "boom")
+    end
+  end
+
+  describe "compiled event" do
+    feature "takes the compilation error down without reloading the tab", %{session: session} do
+      session = visit(session, Page1)
+      instance_id = current_instance_id(session)
+
+      broadcast_live_reload({:compilation_error, [[%{text: "boom", tone: "banner"}]]})
+      assert_has(session, @overlay)
+
+      broadcast_live_reload(:compiled)
+      refute_has(session, @overlay)
+      Process.sleep(@no_reload_wait_ms)
+
+      assert current_instance_id(session) == instance_id
     end
   end
 

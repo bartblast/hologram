@@ -275,6 +275,14 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "replay_outcome/1" do
+    test "does nothing when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.replay_outcome(self()) == :ok
+    end
+  end
+
   describe "start_link/1" do
     test "registers the process under its module name" do
       wait_for_process_cleanup(LiveReload)
@@ -393,6 +401,104 @@ defmodule Hologram.LiveReloadTest do
       assert Enum.sort(option_keys) == [:bundles_built, :next_batch]
 
       wait_until(fn -> :sys.get_state(pid).pass == nil end)
+    end
+
+    test "a pass that compiled reports it", %{pid: pid} do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts -> :ok end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive :compiled
+    end
+
+    test "a pass that a compile refused reports the error", %{pid: pid} do
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts -> {:error, lines} end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:compilation_error, ^lines}
+    end
+
+    test "a stream attaching after a pass reported is sent the outcome", %{pid: pid} do
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts -> {:error, lines} end)
+
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:compilation_error, ^lines}
+
+      LiveReload.replay_outcome(self())
+
+      assert_receive {:compilation_error, ^lines}
+    end
+
+    test "a stream attaching after a pass compiled past an error is sent that it compiled", %{
+      pid: pid
+    } do
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, _opts -> {:error, lines}
+        "second.ex", _endpoint, _opts -> :ok
+      end)
+
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:compilation_error, ^lines}
+
+      send(pid, {:debounced_reload, "second.ex"})
+      assert_receive :compiled
+
+      LiveReload.replay_outcome(self())
+
+      assert_receive :compiled
+      refute_received {:compilation_error, _lines}
+    end
+
+    test "a stream attaching before any pass reported is sent nothing", %{pid: pid} do
+      LiveReload.replay_outcome(self())
+
+      # Handled once the state can be read back, so anything sent is in the mailbox by then.
+      :sys.get_state(pid)
+
+      refute_received :compiled
+      refute_received {:compilation_error, _lines}
+    end
+
+    test "a stream attaching while a pass runs is sent nothing", %{pid: pid} do
+      test_pid = self()
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, _opts ->
+          {:error, lines}
+
+        "second.ex", _endpoint, _opts ->
+          send(test_pid, {:second_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          :ok
+      end)
+
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:compilation_error, ^lines}
+
+      send(pid, {:debounced_reload, "second.ex"})
+      assert_receive {:second_started, task_pid}
+
+      LiveReload.replay_outcome(self())
+
+      # Handled once the state can be read back, so anything sent is in the mailbox by then.
+      :sys.get_state(pid)
+
+      refute_received {:compilation_error, _lines}
+
+      send(task_pid, :continue)
+      assert_receive :compiled
     end
 
     test "asks for the pages open in tabs first", %{pid: pid} do
@@ -541,7 +647,49 @@ defmodule Hologram.LiveReloadTest do
       assert_receive :second_started
     end
 
-    test "a pass that fails is logged, and the next save runs a pass", %{pid: pid} do
+    test "a superseded pass reports nothing, the pass that follows does", %{pid: pid} do
+      test_pid = self()
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, opts ->
+          send(test_pid, {:first_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          next_batch = Keyword.fetch!(opts, :next_batch)
+          remaining = MapSet.new([Page1])
+          batch = next_batch.(remaining, %{})
+          send(test_pid, {:first_batch, batch})
+
+          {:error, lines}
+
+        "second.ex", _endpoint, _opts ->
+          :ok
+      end)
+
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:first_started, task_pid}
+
+      send(pid, {:debounced_reload, "second.ex"})
+
+      # Handled once the state can be read back, so the save is recorded before the pass goes on.
+      :sys.get_state(pid)
+      send(task_pid, :continue)
+
+      assert_receive {:first_batch, :stop}
+
+      # The first pass ends before the second starts, so its outcome, had it been broadcast, would
+      # be in the mailbox by the time the second one's arrives.
+      assert_receive :compiled
+      refute_received {:compilation_error, _lines}
+    end
+
+    test "a pass that crashes is logged, reports nothing, and the next save runs a pass", %{
+      pid: pid
+    } do
       test_pid = self()
 
       expect(LiveReloadMock, :reload, 2, fn
@@ -560,7 +708,11 @@ defmodule Hologram.LiveReloadTest do
           wait_until(fn -> :sys.get_state(pid).pass == nil end)
         end)
 
-      assert log =~ "Hologram: live reload pass failed"
+      assert log =~
+               ~r/Hologram: live reload pass failed: an exception was raised:\n\s+\*\* \(RuntimeError\) expected test error/
+
+      refute_received :compiled
+      refute_received {:compilation_error, _lines}
 
       send(pid, {:debounced_reload, "second.ex"})
 

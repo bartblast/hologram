@@ -767,6 +767,19 @@ describe("Sse", () => {
     });
   });
 
+  describe("compiled event", () => {
+    it("takes the compilation error overlay down", async () => {
+      stubHandshakeResponse();
+      const hideStub = sinon.stub(LiveReload, "hideErrorOverlay");
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.compiled({data: ""});
+
+      sinon.assert.calledOnceWithExactly(hideStub);
+    });
+  });
+
   describe("add_sub_receipts event", () => {
     it("inserts new entries and leaves non-matching entries intact", async () => {
       const adds = Type.list([receiptA]);
