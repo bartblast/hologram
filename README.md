@@ -22,9 +22,9 @@ Website: https://hologram.page
 
 <a href="https://www.curiosum.com/?utm_source=github.com&utm_medium=sponsor-logo&utm_campaign=sponsoring_hologram" target="_blank">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/curiosum_logo_horizontal_mono_white.png">
-    <source media="(prefers-color-scheme: light)" srcset=".sponsors/curiosum_logo_horizontal_mono_black.png">
-    <img src=".sponsors/curiosum_logo_horizontal_mono_black.png" alt="Curiosum" height="80">
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/curiosum_logo_white.png">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/curiosum_logo_black.png">
+    <img src=".sponsors/curiosum_logo_black.png" alt="Curiosum" height="80">
   </picture>
 </a>
 
@@ -34,9 +34,9 @@ Website: https://hologram.page
 
 <a href="https://erlef.org" target="_blank">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/eef_logo_vertical_white.png">
-    <source media="(prefers-color-scheme: light)" srcset=".sponsors/eef_logo_vertical_black.png">
-    <img src=".sponsors/eef_logo_vertical_black.png" alt="Erlang Ecosystem Foundation" height="80">
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/eef_logo_white.png">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/eef_logo_black.png">
+    <img src=".sponsors/eef_logo_black.png" alt="Erlang Ecosystem Foundation" height="80">
   </picture>
 </a>
 
@@ -46,9 +46,9 @@ Website: https://hologram.page
 
 <a href="https://www.evostore.no/" target="_blank">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/evo_store_logo_horizontal_white.svg">
-    <source media="(prefers-color-scheme: light)" srcset=".sponsors/evo_store_logo_horizontal_black.svg">
-    <img src=".sponsors/evo_store_logo_horizontal_black.svg" alt="Evo Store" height="52">
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/evo_store_logo_white.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/evo_store_logo_black.svg">
+    <img src=".sponsors/evo_store_logo_black.svg" alt="Evo Store" height="52">
   </picture>
 </a>
 
