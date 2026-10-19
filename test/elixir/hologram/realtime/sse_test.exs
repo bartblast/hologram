@@ -7,6 +7,7 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -298,6 +299,12 @@ defmodule Hologram.Realtime.SSETest do
       assert String.contains?(encoded_tuple, @server_only_token_js)
       refute String.contains?(encoded_tuple, "note_secret_v2")
       refute String.contains?(encoded_tuple, "tok_M6zY")
+    end
+  end
+
+  describe "encode_compiled_envelope/1" do
+    test "wraps the id in a compiled SSE event envelope with no data" do
+      assert encode_compiled_envelope(42) == "event: compiled\nid: 42\ndata:\n\n"
     end
   end
 
@@ -1036,6 +1043,17 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: compilation_error\nid: "
       assert updated_conn.resp_body =~ ~s|\ndata: [[{"text":"boom","tone":"banner"}]]\n\n|
+    end
+  end
+
+  describe "process_message/4 on :compiled" do
+    test "pushes a compiled SSE event" do
+      conn = prepared_test_conn()
+      send(self(), :compiled)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~r/\Aevent: compiled\nid: \d+\ndata:\n\n\z/
     end
   end
 
@@ -2002,6 +2020,18 @@ defmodule Hologram.Realtime.SSETest do
       wait_until(fn -> Registry.lookup(Hologram.PubSub, topic) != [] end)
 
       refute live_reload_subscriber?(pid)
+    end
+
+    test "asks live reload for the outcome of its last pass once listening" do
+      # Stands in for live reload, which does not run in the test env.
+      Process.register(self(), LiveReload)
+
+      conn = conn_with_instance_id()
+      pid = spawn(fn -> stream(conn) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
+
+      assert_receive {:"$gen_cast", {:replay_outcome, ^pid}}
+      assert live_reload_subscriber?(pid)
     end
   end
 

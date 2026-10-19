@@ -20,9 +20,11 @@ defmodule Hologram.LiveReload do
   @doc """
   Reloads the application after a change of the given file (nil when a request for a pending page
   starts the pass), using the given endpoint. The options go to the Hologram compile task:
-  `:next_batch` and `:bundles_built` (see `Mix.Tasks.Compile.Hologram`).
+  `:next_batch` and `:bundles_built` (see `Mix.Tasks.Compile.Hologram`). Returns `:ok` when the
+  code compiled, and the error as lines of toned segments (see `Hologram.LiveReload.Diagnostic`)
+  when the Elixir compile or the Hologram compile refused it.
   """
-  @callback reload(String.t() | nil, any, keyword) :: :ok
+  @callback reload(String.t() | nil, any, keyword) :: :ok | {:error, [[Diagnostic.segment()]]}
 
   # How long a request for a pending page waits for its bundle, in milliseconds. Past it the page is
   # served with the bundle it had, and the reload event heals the tab once the page is built.
@@ -172,6 +174,11 @@ defmodule Hologram.LiveReload do
     {:noreply, %{state | open_pages: open_pages}}
   end
 
+  def handle_cast({:replay_outcome, pid}, state) do
+    if state.outcome, do: send(pid, state.outcome)
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_info({:file_event, _pid, :stop}, state) do
     {:noreply, state}
@@ -208,14 +215,28 @@ defmodule Hologram.LiveReload do
   end
 
   @impl GenServer
-  def handle_info({ref, _result}, %{pass: %{ref: ref}} = state) do
+  def handle_info({ref, result}, %{pass: %{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
-    {:noreply, finish_pass(state)}
+
+    # A superseded pass reports nothing: the pass its save starts reports on the newer code, so the
+    # tabs never show the outcome of code a newer save has replaced.
+    new_state =
+      if state.superseded_by == nil do
+        outcome = to_outcome(result)
+        Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", outcome)
+        %{state | outcome: outcome}
+      else
+        state
+      end
+
+    {:noreply, finish_pass(new_state)}
   end
 
+  # A pass that crashed reports nothing to the tabs: what failed is live reload, not the code. A
+  # compile refusing the code is not a crash (see reload/3).
   @impl GenServer
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{pass: %{ref: ref}} = state) do
-    Logger.error("Hologram: live reload pass failed: #{inspect(reason)}")
+    Logger.error("Hologram: live reload pass failed: " <> Exception.format_exit(reason))
     {:noreply, finish_pass(state)}
   end
 
@@ -259,6 +280,8 @@ defmodule Hologram.LiveReload do
       # What each tab showed at its last render, by instance id, with when it was first seen without
       # an SSE connection (nil while it holds one).
       open_pages: %{},
+      # The outcome the last pass reported, as broadcast, nil before any did and while a pass runs.
+      outcome: nil,
       # The live reload pass running, if any.
       pass: nil,
       # The pages the running or the last pass has not built.
@@ -347,47 +370,51 @@ defmodule Hologram.LiveReload do
   Hologram compile with the given options, `:next_batch` and `:bundles_built`, through which the
   scheduler orders the pages and reloads the tabs batch by batch (see `handle_call/3`). The compile
   validates the data model and has the database schema reconciled with it (see
-  `Hologram.DB.reload/2`) before it builds anything, and a failure of either is shown in the open
-  tabs (see `report_data_model_failure/2`). The runtime registries are reloaded once more at the
-  end, for a compile that built no bundle.
+  `reload_database/2`) before it builds anything. The runtime registries are reloaded once more at
+  the end, for a compile that built no bundle. Clients only ever reload into a converged database,
+  since the schema is reconciled before the first batch is built and its tabs told to reload.
 
-  If code reloading fails, broadcasts a compilation error instead. Clients only ever reload into a
-  converged database, since the schema is reconciled before the first batch is built and its tabs
-  told to reload.
+  Returns `:ok` when the code compiled, and `{:error, lines}` when the Elixir compile or the
+  Hologram compile refused it, the lines being what the overlay shows (see
+  `Hologram.LiveReload.Diagnostic`). The Hologram compile's error is logged here, once: Phoenix
+  prints the Elixir compile's output itself.
   """
-  @spec reload(String.t() | nil, any, keyword) :: :ok
+  @spec reload(String.t() | nil, any, keyword) :: :ok | {:error, [[Diagnostic.segment()]]}
   def reload(_file_path, endpoint, opts) do
-    case reload_code(endpoint) do
-      :ok ->
-        # The query cache is not reloaded with the database: it reads the registered queries the
-        # Hologram compile dumps, so it reloads with the runtime registries, and a compile that
-        # refused a query builder fails before any registry is reloaded, leaving the previous dump
-        # in place.
-        data_model_opts = [
-          data_model_failed: &report_data_model_failure/2,
-          data_model_ready: &DB.reload/2
-        ]
-
-        recompile_hologram(data_model_opts ++ opts)
-        reload_runtime()
-        :ok
-
-      {:error, output} ->
-        broadcast_compilation_error(output)
+    # The query cache is not reloaded with the database: it reads the registered queries the
+    # Hologram compile dumps, so it reloads with the runtime registries, and a compile that refused
+    # a query builder fails before any registry is reloaded, leaving the previous dump in place.
+    with :ok <- reload_code(endpoint),
+         :ok <- recompile_hologram([data_model_ready: &reload_database/2] ++ opts) do
+      reload_runtime()
+      :ok
     end
   end
 
   @doc """
-  Logs a failure of the Hologram compile's data model step, an invalid data model or a failed
-  schema reconciliation, and broadcasts it to the open tabs as a compilation error. Takes the kind
-  and the reason as a `catch` binds them.
+  Re-derives the database mapping from the given entity type and global role modules and
+  reconciles the schema with it (see `Hologram.DB.reload/2`). An exit, as when the database is
+  gone, is raised as a `Hologram.CompileError` with the exit's stacktrace, so that the pass reports
+  it like any other failure of the Hologram compile (see `reload/3`).
   """
-  @spec report_data_model_failure(:error | :exit | :throw, any) :: :ok
-  def report_data_model_failure(kind, reason) do
-    message = data_model_failure_message(kind, reason)
-    Logger.error("Hologram: data model step failed: #{message}")
+  @spec reload_database(list(module), list(module)) :: :ok
+  def reload_database(entity_types, role_modules) do
+    DB.reload(entity_types, role_modules)
+  catch
+    :exit, reason ->
+      message = "database reload failed: " <> Exception.format_exit(reason)
+      reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
 
-    broadcast_compilation_error(message)
+  @doc """
+  Sends the given process the outcome the last live reload pass reported, the message it was
+  broadcast as. Sends nothing while a pass runs, before any pass reported, and when live reload is
+  not running. The outcome comes from the process that broadcasts the outcomes, so it arrives in
+  order with them.
+  """
+  @spec replay_outcome(pid) :: :ok
+  def replay_outcome(pid) do
+    GenServer.cast(__MODULE__, {:replay_outcome, pid})
   end
 
   @doc """
@@ -446,28 +473,10 @@ defmodule Hologram.LiveReload do
     end)
   end
 
-  defp broadcast_compilation_error(output) do
-    lines = Diagnostic.to_lines(output)
-
-    Phoenix.PubSub.broadcast(
-      Hologram.PubSub,
-      "hologram_live_reload",
-      {:compilation_error, lines}
-    )
-  end
-
   # The tabs' SSE streams forward it, and each tab reloads when its page is among the pages, or
   # when they are :all.
   defp broadcast_reload(pages) do
     Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", {:reload, pages})
-  end
-
-  defp data_model_failure_message(:error, reason) when is_exception(reason) do
-    Exception.message(reason)
-  end
-
-  defp data_model_failure_message(kind, reason) do
-    Exception.format_banner(kind, reason)
   end
 
   # A pass ended, whether it finished or failed: the pages requested during it are no longer
@@ -511,13 +520,32 @@ defmodule Hologram.LiveReload do
     end)
   end
 
+  # The Hologram compile refusing the code is an outcome of the pass, not a crash of it: rescued
+  # here, where the exception and its stacktrace are, logged once as the text a crash prints, and
+  # returned as the lines the overlay shows. Exceptions only: an exit, as when the scheduler is gone
+  # (see start_pass/2), is not an outcome to report.
   defp recompile_hologram(opts) do
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     Mix.Tasks.Compile.Hologram.run([force?: true] ++ opts)
+    :ok
+  rescue
+    error ->
+      # Trimmed, since the logger ends the entry with a newline of its own.
+      message =
+        :error
+        |> Exception.format(error, __STACKTRACE__)
+        |> String.trim_trailing()
+
+      Logger.error(message)
+
+      {:error, Diagnostic.exception_to_lines(error, __STACKTRACE__)}
   end
 
   defp reload_code(endpoint) do
-    Phoenix.CodeReloader.reload(endpoint)
+    case Phoenix.CodeReloader.reload(endpoint) do
+      :ok -> :ok
+      {:error, output} -> {:error, Diagnostic.to_lines(output)}
+    end
 
     # TODO: this will be used in Hologram standalone version
     # Code.put_compiler_option(:ignore_module_conflict, true)
@@ -590,6 +618,14 @@ defmodule Hologram.LiveReload do
         impl().reload(file_path, endpoint, opts)
       end)
 
-    %{state | pass: %{ref: task.ref, registries_reloaded?: false}}
+    # The outcome is forgotten while the pass runs: the code it was about has changed, and a tab
+    # reloaded or opened meanwhile must not be shown an error a newer save may have fixed. A stream
+    # attached by the time the pass ends gets its outcome broadcast.
+    %{state | outcome: nil, pass: %{ref: task.ref, registries_reloaded?: false}}
   end
+
+  # The message a pass's outcome is broadcast as. The tabs' SSE streams forward it: a tab takes its
+  # compilation error down once a pass compiled, and shows the error when a pass did not.
+  defp to_outcome(:ok), do: :compiled
+  defp to_outcome({:error, lines}), do: {:compilation_error, lines}
 end

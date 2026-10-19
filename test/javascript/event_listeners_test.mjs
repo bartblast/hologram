@@ -112,6 +112,7 @@ describe("EventListeners", () => {
     let detachers;
     let originalRaf;
     let originalCaf;
+    let originalGetComputedStyle;
     let originalResizeObserver;
     let originalScrollEdge;
     let rafCallbacks;
@@ -124,6 +125,8 @@ describe("EventListeners", () => {
       children: [],
       clientHeight: 0,
       clientWidth: 0,
+      // An empty style resolves to a top-left scroll origin.
+      computedStyle: {},
       scrollHeight: 0,
       scrollLeft: 0,
       scrollTop: 0,
@@ -144,8 +147,13 @@ describe("EventListeners", () => {
       resizeObservers = [];
       originalRaf = globalThis.requestAnimationFrame;
       originalCaf = globalThis.cancelAnimationFrame;
+      originalGetComputedStyle = globalThis.getComputedStyle;
       originalResizeObserver = globalThis.ResizeObserver;
       originalScrollEdge = EventListeners.scrollEdge;
+
+      // jsdom's getComputedStyle rejects the plain-object mock elements, so each mock carries its
+      // own style.
+      globalThis.getComputedStyle = (element) => element.computedStyle;
 
       // Track every attached listener's detach so afterEach can tear them all down, keeping the
       // shared recheck registry from leaking callbacks between tests.
@@ -191,6 +199,7 @@ describe("EventListeners", () => {
       EventListeners.scrollEdge = originalScrollEdge;
       globalThis.requestAnimationFrame = originalRaf;
       globalThis.cancelAnimationFrame = originalCaf;
+      globalThis.getComputedStyle = originalGetComputedStyle;
       globalThis.ResizeObserver = originalResizeObserver;
     });
 
@@ -404,6 +413,141 @@ describe("EventListeners", () => {
         flushFrames();
         sinon.assert.calledOnce(dispatcher);
       });
+    });
+
+    it("measures the distance to each edge from a bottom or right scroll origin", () => {
+      // The browser reports the position as 0 at a bottom or right origin and negative away from
+      // it. Each metrics set leaves the bound edge 50px away, inside the default 100% range.
+      const bottomOrigin = {display: "flex", flexDirection: "column-reverse"};
+      const rightOrigin = {direction: "rtl"};
+
+      const cases = [
+        [
+          "top",
+          {
+            clientHeight: 100,
+            computedStyle: bottomOrigin,
+            scrollHeight: 1000,
+            scrollTop: -850,
+          },
+        ],
+        [
+          "bottom",
+          {
+            clientHeight: 100,
+            computedStyle: bottomOrigin,
+            scrollHeight: 1000,
+            scrollTop: -50,
+          },
+        ],
+        [
+          "left",
+          {
+            clientWidth: 100,
+            computedStyle: rightOrigin,
+            scrollLeft: -850,
+            scrollWidth: 1000,
+          },
+        ],
+        [
+          "right",
+          {
+            clientWidth: 100,
+            computedStyle: rightOrigin,
+            scrollLeft: -50,
+            scrollWidth: 1000,
+          },
+        ],
+      ];
+
+      cases.forEach(([edge, metrics]) => {
+        const dispatcher = sinon.spy();
+        EventListeners.scrollEdge(mockElement(metrics), edge).attach(
+          dispatcher,
+        );
+        flushFrames();
+        sinon.assert.calledOnce(dispatcher);
+      });
+    });
+
+    it("does not fire the top edge on mount for a bottom-origin container at its origin", () => {
+      // A bottom-origin container opens at its visual bottom with the position reading 0, 900px
+      // from the top. Reading the position as a distance from the top would fire here.
+      const element = mockElement({
+        clientHeight: 100,
+        computedStyle: {display: "flex", flexDirection: "column-reverse"},
+        scrollHeight: 1000,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "top").attach(dispatcher);
+      flushFrames();
+
+      sinon.assert.notCalled(dispatcher);
+    });
+
+    it("does not fire the left edge on mount for a right-origin container at its origin", () => {
+      // A right-origin container opens at its right edge with the position reading 0, 900px from
+      // the left. Reading the position as a distance from the left would fire here.
+      const element = mockElement({
+        clientWidth: 100,
+        computedStyle: {direction: "rtl"},
+        scrollLeft: 0,
+        scrollWidth: 1000,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "left").attach(dispatcher);
+      flushFrames();
+
+      sinon.assert.notCalled(dispatcher);
+    });
+
+    it("fires the bottom edge on mount for a bottom-origin container at its origin", () => {
+      const element = mockElement({
+        clientHeight: 100,
+        computedStyle: {display: "flex", flexDirection: "column-reverse"},
+        scrollHeight: 1000,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      flushFrames();
+
+      sinon.assert.calledOnceWithExactly(dispatcher, {target: element});
+    });
+
+    it("re-fires the top edge each time a bottom-origin container scrolls back up to it", () => {
+      const element = mockElement({
+        clientHeight: 100,
+        computedStyle: {display: "flex", flexDirection: "column-reverse"},
+        scrollHeight: 1000,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "top").attach(dispatcher);
+      const onScroll = element.addEventListener.firstCall.args[1];
+
+      flushFrames();
+      sinon.assert.notCalled(dispatcher);
+
+      element.scrollTop = -900;
+      onScroll();
+      flushFrames();
+      sinon.assert.calledOnce(dispatcher);
+
+      element.scrollTop = 0;
+      onScroll();
+      flushFrames();
+      sinon.assert.calledOnce(dispatcher);
+
+      element.scrollTop = -900;
+      onScroll();
+      flushFrames();
+      sinon.assert.calledTwice(dispatcher);
     });
 
     it("treats a pixel within as the threshold, overriding the default", () => {
