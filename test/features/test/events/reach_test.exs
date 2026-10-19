@@ -217,5 +217,40 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> execute_script("document.getElementById('reversed_vertical').scrollTop = -1000;")
       |> assert_text(css("#reversed_top_result"), "2")
     end
+
+    feature "loads older items above a column-reverse list without moving the view", %{
+      session: session
+    } do
+      # The list holds 20 items of 50px, newest first, in a 100px box that opens at its visual
+      # bottom. Each load appends 10 older items to the end of the list, which is the visual top.
+      # The browser measures the scroll position from the bottom, so content added above leaves it
+      # unchanged. The diff patches the first 20 nodes in place and appends the new ones, so the
+      # oldest item loaded so far stays at the top of the view while the top edge ends up 500px
+      # away, ready to fire again.
+      message_31_offset = """
+      const container = document.getElementById('chat_vertical');
+      const message = Array.from(container.children)
+        .find((child) => child.textContent === 'Message 31');
+      return message.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      """
+
+      session
+      |> visit(ReachPage)
+      |> assert_script_result("return document.getElementById('chat_vertical').scrollTop;", 0)
+      |> execute_script("document.getElementById('chat_vertical').scrollTop = -1000;")
+      |> assert_text(css("#chat_loads_result"), "1")
+      |> assert_script_result(
+        "return document.getElementById('chat_vertical').scrollHeight;",
+        1500
+      )
+      |> assert_script_result("return document.getElementById('chat_vertical').scrollTop;", -900)
+      |> assert_script_result(message_31_offset, 0)
+      |> execute_script("document.getElementById('chat_vertical').scrollTop = -2000;")
+      |> assert_text(css("#chat_loads_result"), "2")
+      |> assert_script_result(
+        "return document.getElementById('chat_vertical').scrollHeight;",
+        2000
+      )
+    end
   end
 end

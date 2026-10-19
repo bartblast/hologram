@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.Events.ReachPage do
 
   def init(_params, component, _server) do
     put_state(component,
+      chat_loads: 0,
+      chat_messages: Enum.to_list(50..31//-1),
       filled_bottom: 0,
       filled_right: 0,
       hidden_child_bottom: 0,
@@ -95,6 +97,15 @@ defmodule HologramFeatureTests.Events.ReachPage do
       <div style="flex: 0 0 960px">Spacer</div>
       <div style="flex: 0 0 20px">Left</div>
     </div>
+    <div
+      $reach_top="chat_load_older"
+      id="chat_vertical"
+      style="display: flex; flex-direction: column-reverse; height: 100px; overflow: auto"
+    >
+      {%for message <- @chat_messages}
+        <div style="flex: 0 0 50px">Message {message}</div>
+      {/for}
+    </div>
     <p>
       Scroll top: <strong id="scroll_top_result"><code>{@scroll_top}</code></strong>
     </p>
@@ -134,8 +145,20 @@ defmodule HologramFeatureTests.Events.ReachPage do
     <p>
       RTL right: <strong id="rtl_right_result"><code>{@rtl_right}</code></strong>
     </p>
+    <p>
+      Chat loads: <strong id="chat_loads_result"><code>{@chat_loads}</code></strong>
+    </p>
     <ReachNested cid="reach_nested" />
     """
+  end
+
+  def action(:chat_load_older, _params, component) do
+    oldest = List.last(component.state.chat_messages)
+    older = Enum.to_list((oldest - 1)..(oldest - 10)//-1)
+
+    component
+    |> put_state(:chat_loads, component.state.chat_loads + 1)
+    |> put_state(:chat_messages, component.state.chat_messages ++ older)
   end
 
   def action(:filled_bottom, _params, component) do
