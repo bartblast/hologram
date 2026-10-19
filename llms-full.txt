@@ -1311,7 +1311,7 @@ It also fires on mount when the edge is already in view - for example, a short l
 
 Append `within(distance)` to set how far before the edge it fires - a length such as `200px` or a percentage of the container such as `50%`. The default is `100%` - the container's height for the top and bottom edges, its width for the left and right.
 
-Prepending content above the viewport (for `$reach_top` or `$reach_left`) does not yet preserve the scroll position - the view stays at the top, showing the newly loaded content. This will be addressed by keyed lists, which let the browser hold the scroll position as items are inserted above.
+The edges are the ones you see on screen, whichever way the container lays out its content. `$reach_top` fires at the visual top of a `flex-direction: column-reverse` container too, and `$reach_left` and `$reach_right` at the visual left and right of `row-reverse` and `direction: rtl` containers.
 
 Bind it to the scroll container - for example, a list that loads more as its bottom edge approaches:
 
