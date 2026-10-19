@@ -1,5 +1,7 @@
 "use strict";
 
+import ScrollOrigin from "./scroll_origin.mjs";
+
 // Factories for the {key, attach} half of an EventListenerRegistry binding. Each returns a key
 // that identifies the real listener among others on the same target, and an attach(dispatcher)
 // that installs the listener wired to dispatcher and returns a detach() teardown. The registry
@@ -55,16 +57,18 @@ export default class EventListeners {
   }
 
   // A scroll-offset listener for one edge of a scroll container, reading the container's own scroll
-  // metrics rather than observing a child. The key is per-edge, so a container's up-to-four reach
-  // bindings reconcile independently. Scroll events and the resize recompute are passive and
-  // coalesced to one check per frame. Firing is edge-triggered - a per-edge in/out flag dispatches
-  // on the transition into the within distance - and content-change-gated - it also dispatches while
-  // still within range when the scrollable size has grown since the last fire, which drives
-  // mount-fill and auto-fill. A ResizeObserver watches the container and its children, so a viewport
-  // change or an item resizing (a late-loading image) rechecks. recheckScrollEdges, run after each
-  // patch, re-syncs the watched children to the patched DOM and recomputes, catching content a
-  // render added. Every fire dispatches a {target} carrying the container, as a scroll event has no
-  // per-binding target of its own.
+  // metrics rather than observing a child. Distances are measured from the container's scroll
+  // origin, so a container that starts its content at the bottom or the right (column-reverse,
+  // row-reverse, direction: rtl) reaches its visual edges like any other. The key is per-edge, so a
+  // container's up-to-four reach bindings reconcile independently. Scroll events and the resize
+  // recompute are passive and coalesced to one check per frame. Firing is edge-triggered - a
+  // per-edge in/out flag dispatches on the transition into the within distance - and
+  // content-change-gated - it also dispatches while still within range when the scrollable size has
+  // grown since the last fire, which drives mount-fill and auto-fill. A ResizeObserver watches the
+  // container and its children, so a viewport change or an item resizing (a late-loading image)
+  // rechecks. recheckScrollEdges, run after each patch, re-syncs the watched children to the
+  // patched DOM and recomputes, catching content a render added. Every fire dispatches a {target}
+  // carrying the container, as a scroll event has no per-binding target of its own.
   //
   // TODO: $reach_top / $reach_left do not preserve scroll position when content is prepended above
   // the viewport (the "load older content" pattern) - the view jumps. Native overflow-anchor would
@@ -157,9 +161,28 @@ export default class EventListeners {
     };
   }
 
-  // Whether the container is scrolled within `within` of the given edge, measuring the distance to
-  // that edge directly from the scroll metrics. A percentage resolves against the container's client
-  // height (top/bottom) or width (left/right); a length is taken as pixels. Default is 100%.
+  // The distance from the viewport to the given edge of the scrollable content. The scroll position
+  // is measured from the origin side, so its magnitude is the distance to that side and the rest of
+  // the range is the distance to the opposite one. This holds whether the origin is top-left (the
+  // position runs 0..range) or bottom/right (it runs -range..0).
+  static #distanceToEdge(element, edge) {
+    const vertical = edge === "top" || edge === "bottom";
+    const origin = ScrollOrigin.of(element);
+    const originSide = vertical ? origin.vertical : origin.horizontal;
+    const position = vertical ? element.scrollTop : element.scrollLeft;
+
+    const range = vertical
+      ? element.scrollHeight - element.clientHeight
+      : element.scrollWidth - element.clientWidth;
+
+    const fromOrigin = Math.abs(position);
+
+    return edge === originSide ? fromOrigin : range - fromOrigin;
+  }
+
+  // Whether the container is scrolled within `within` of the given edge. A percentage resolves
+  // against the container's client height (top/bottom) or width (left/right); a length is taken as
+  // pixels. Default is 100%.
   static #isWithinEdge(element, edge, within = "100%") {
     const vertical = edge === "top" || edge === "bottom";
     const clientSize = vertical ? element.clientHeight : element.clientWidth;
@@ -168,14 +191,7 @@ export default class EventListeners {
       ? (parseFloat(within) / 100) * clientSize
       : parseFloat(within);
 
-    const distance = {
-      bottom: element.scrollHeight - element.scrollTop - element.clientHeight,
-      left: element.scrollLeft,
-      right: element.scrollWidth - element.scrollLeft - element.clientWidth,
-      top: element.scrollTop,
-    }[edge];
-
-    return distance <= threshold;
+    return $.#distanceToEdge(element, edge) <= threshold;
   }
 }
 
