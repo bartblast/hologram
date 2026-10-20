@@ -36,10 +36,11 @@ defmodule Hologram.LiveReload.ReloadDatabaseTest do
       monitor_ref = Process.monitor(dead_connection)
       assert_receive {:DOWN, ^monitor_ref, :process, _pid, _reason}
 
-      expected_msg = """
-      database reload failed: exited in: DBConnection.Holder.checkout(#{inspect(dead_connection)}, [timeout: :infinity])
-          ** (EXIT) no process: the process is not alive or there's no process currently associated with the given name, possibly because its application isn't started\
-      """
+      expected_msg =
+        normalize_newlines("""
+        database reload failed: exited in: DBConnection.Holder.checkout(#{inspect(dead_connection)}, [timeout: :infinity])
+            ** (EXIT) no process: the process is not alive or there's no process currently associated with the given name, possibly because its application isn't started\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Connection.with_connection(dead_connection, fn ->
