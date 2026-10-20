@@ -5,19 +5,19 @@ import {
   assertBoxedError,
   contextFixture,
   defineRuntimeGlobals,
-} from "../../support/helpers.mjs";
+} from "../../../support/helpers.mjs";
 
-import Elixir_Hologram_Query from "../../../../assets/js/elixir/hologram/query.mjs";
-import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
-import Model from "../../../../assets/js/model.mjs";
-import Type from "../../../../assets/js/type.mjs";
+import Elixir_Hologram_Query_Stage from "../../../../../assets/js/elixir/hologram/query/stage.mjs";
+import HologramBoxedError from "../../../../../assets/js/errors/boxed_error.mjs";
+import Model from "../../../../../assets/js/model.mjs";
+import Type from "../../../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
-// Mirrors the corresponding describes of test/elixir/hologram/query_test.exs, case for case and
-// with the same raise messages. What differs is the term: these stages build the plain term the
-// client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
-describe("Elixir_Hologram_Query", () => {
+// Mirrors the corresponding describes of test/elixir/hologram/query/stage_test.exs, case for case
+// and with the same raise messages. What differs is the term: these stages build the plain term
+// the client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
+describe("Elixir_Hologram_Query_Stage", () => {
   const ITEM = "MyApp.Item";
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
@@ -28,22 +28,23 @@ describe("Elixir_Hologram_Query", () => {
   const task = Type.alias(TASK);
   const user = Type.alias(USER);
 
-  const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
-  const authorize = Elixir_Hologram_Query["authorize/2"];
-  const count = Elixir_Hologram_Query["count/1"];
-  const deleteRelationship = Elixir_Hologram_Query["delete_relationship/3"];
-  const decrement = Elixir_Hologram_Query["decrement/3"];
-  const increment = Elixir_Hologram_Query["increment/3"];
-  const filter = Elixir_Hologram_Query["filter/2"];
-  const include = Elixir_Hologram_Query["include/3"];
-  const limit = Elixir_Hologram_Query["limit/2"];
-  const normalize = Elixir_Hologram_Query["normalize/1"];
-  const offset = Elixir_Hologram_Query["offset/2"];
-  const one = Elixir_Hologram_Query["one/1"];
-  const orderBy = Elixir_Hologram_Query["order_by/2"];
-  const trust = Elixir_Hologram_Query["trust/1"];
-  const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
-  const putAttributeValue = Elixir_Hologram_Query["put_attribute/3"];
+  const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
+  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
+  const count = Elixir_Hologram_Query_Stage["count/1"];
+  const deleteRelationship =
+    Elixir_Hologram_Query_Stage["delete_relationship/3"];
+  const decrement = Elixir_Hologram_Query_Stage["decrement/3"];
+  const increment = Elixir_Hologram_Query_Stage["increment/3"];
+  const filter = Elixir_Hologram_Query_Stage["filter/2"];
+  const include = Elixir_Hologram_Query_Stage["include/3"];
+  const limit = Elixir_Hologram_Query_Stage["limit/2"];
+  const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
+  const offset = Elixir_Hologram_Query_Stage["offset/2"];
+  const one = Elixir_Hologram_Query_Stage["one/1"];
+  const orderBy = Elixir_Hologram_Query_Stage["order_by/2"];
+  const trust = Elixir_Hologram_Query_Stage["trust/1"];
+  const putAttribute = Elixir_Hologram_Query_Stage["put_attribute/2"];
+  const putAttributeValue = Elixir_Hologram_Query_Stage["put_attribute/3"];
 
   const baseTerm = (entityType) => ({
     cardinality: "set",
@@ -998,7 +999,7 @@ describe("Elixir_Hologram_Query", () => {
   });
 
   // The server records a claim here and the client refuses one, so these have no twin in
-  // query_test.exs. Trust is the SERVER's authority on either half - a write claiming it is
+  // query/stage_test.exs. Trust is the SERVER's authority on either half - a write claiming it is
   // refused by the wire, and a read claiming it would ask this client's copy of the data to
   // answer past the policies that decided what it holds.
   describe("trust/1", () => {

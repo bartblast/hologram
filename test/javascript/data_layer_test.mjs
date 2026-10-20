@@ -17,7 +17,7 @@ import ManuallyPortedElixirHologramAuth from "../../assets/js/elixir/hologram/au
 import ManuallyPortedElixirHologramDB from "../../assets/js/elixir/hologram/db.mjs";
 import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
-import ManuallyPortedElixirHologramQuery from "../../assets/js/elixir/hologram/query.mjs";
+import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
 import Replica from "../../assets/js/replica.mjs";
@@ -35,8 +35,8 @@ describe("DataLayer", () => {
   describe("answerPropQuery()", () => {
     const TASK = "MyApp.Task";
 
-    const count = ManuallyPortedElixirHologramQuery["count/1"];
-    const filter = ManuallyPortedElixirHologramQuery["filter/2"];
+    const count = ManuallyPortedElixirHologramQueryStage["count/1"];
+    const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
 
     // A builder as transpiled app code: it pipes the ported query stages and returns the plain
     // term, and it arrives here boxed the way any capture does.
@@ -81,7 +81,7 @@ describe("DataLayer", () => {
         task.data[Type.encodeMapKey(Type.atom("title"))][1].text,
       ]);
 
-    const orderBy = ManuallyPortedElixirHologramQuery["order_by/2"];
+    const orderBy = ManuallyPortedElixirHologramQueryStage["order_by/2"];
 
     const allTasks = () => [
       [Type.alias(TASK), "Buy milk"],
@@ -597,7 +597,7 @@ describe("DataLayer", () => {
         Elixir_Hologram_DB: ManuallyPortedElixirHologramDB,
         Elixir_Hologram_Entity: ManuallyPortedElixirHologramEntity,
         Elixir_Hologram_Job: ManuallyPortedElixirHologramJob,
-        Elixir_Hologram_Query_Stage: ManuallyPortedElixirHologramQuery,
+        Elixir_Hologram_Query_Stage: ManuallyPortedElixirHologramQueryStage,
       };
 
       for (const [moduleName, port] of Object.entries(ports)) {

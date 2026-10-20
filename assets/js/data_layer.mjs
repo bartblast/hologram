@@ -10,7 +10,7 @@ import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
 import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
-import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
+import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
 import QueryKernel from "./query_kernel.mjs";
 import Replica from "./replica.mjs";
@@ -34,7 +34,7 @@ export default class DataLayer {
   // The result is boxed here and nowhere else: rows live plain, and this is the boundary where
   // one becomes something a template can read.
   static answerPropQuery(module, propName, args, capture) {
-    const term = ManuallyPortedElixirHologramQuery["normalize/1"](
+    const term = ManuallyPortedElixirHologramQueryStage["normalize/1"](
       Interpreter.callAnonymousFunction(capture, args),
     );
 
@@ -311,119 +311,119 @@ export default class DataLayer {
       "Hologram.Query.Stage",
       "add_relationship/3",
       "public",
-      ManuallyPortedElixirHologramQuery["add_relationship/3"],
+      ManuallyPortedElixirHologramQueryStage["add_relationship/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "authorize/2",
       "public",
-      ManuallyPortedElixirHologramQuery["authorize/2"],
+      ManuallyPortedElixirHologramQueryStage["authorize/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "count/1",
       "public",
-      ManuallyPortedElixirHologramQuery["count/1"],
+      ManuallyPortedElixirHologramQueryStage["count/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "decrement/3",
       "public",
-      ManuallyPortedElixirHologramQuery["decrement/3"],
+      ManuallyPortedElixirHologramQueryStage["decrement/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "delete_relationship/3",
       "public",
-      ManuallyPortedElixirHologramQuery["delete_relationship/3"],
+      ManuallyPortedElixirHologramQueryStage["delete_relationship/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "filter/2",
       "public",
-      ManuallyPortedElixirHologramQuery["filter/2"],
+      ManuallyPortedElixirHologramQueryStage["filter/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "include/2",
       "public",
-      ManuallyPortedElixirHologramQuery["include/2"],
+      ManuallyPortedElixirHologramQueryStage["include/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "include/3",
       "public",
-      ManuallyPortedElixirHologramQuery["include/3"],
+      ManuallyPortedElixirHologramQueryStage["include/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "increment/3",
       "public",
-      ManuallyPortedElixirHologramQuery["increment/3"],
+      ManuallyPortedElixirHologramQueryStage["increment/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "limit/2",
       "public",
-      ManuallyPortedElixirHologramQuery["limit/2"],
+      ManuallyPortedElixirHologramQueryStage["limit/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "normalize/1",
       "public",
-      ManuallyPortedElixirHologramQuery["normalize/1"],
+      ManuallyPortedElixirHologramQueryStage["normalize/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "offset/2",
       "public",
-      ManuallyPortedElixirHologramQuery["offset/2"],
+      ManuallyPortedElixirHologramQueryStage["offset/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "one/1",
       "public",
-      ManuallyPortedElixirHologramQuery["one/1"],
+      ManuallyPortedElixirHologramQueryStage["one/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "order_by/2",
       "public",
-      ManuallyPortedElixirHologramQuery["order_by/2"],
+      ManuallyPortedElixirHologramQueryStage["order_by/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "put_attribute/2",
       "public",
-      ManuallyPortedElixirHologramQuery["put_attribute/2"],
+      ManuallyPortedElixirHologramQueryStage["put_attribute/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "put_attribute/3",
       "public",
-      ManuallyPortedElixirHologramQuery["put_attribute/3"],
+      ManuallyPortedElixirHologramQueryStage["put_attribute/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
       "trust/1",
       "public",
-      ManuallyPortedElixirHologramQuery["trust/1"],
+      ManuallyPortedElixirHologramQueryStage["trust/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(

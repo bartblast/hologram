@@ -12,7 +12,7 @@ import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
-import Elixir_Hologram_Query from "../../../../assets/js/elixir/hologram/query.mjs";
+import Elixir_Hologram_Query_Stage from "../../../../assets/js/elixir/hologram/query/stage.mjs";
 import {deriveGrantId} from "../../../../assets/js/elixir/hologram/auth.mjs";
 import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
@@ -34,9 +34,9 @@ describe("Elixir_Hologram_DB", () => {
 
   const task = Type.alias(TASK);
 
-  const authorize = Elixir_Hologram_Query["authorize/2"];
-  const count = Elixir_Hologram_Query["count/1"];
-  const addRelationship = Elixir_Hologram_Query["add_relationship/3"];
+  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
+  const count = Elixir_Hologram_Query_Stage["count/1"];
+  const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
   const rollback = Elixir_Hologram_DB["rollback/1"];
   const transaction = Elixir_Hologram_DB["transaction/2"];
@@ -44,15 +44,15 @@ describe("Elixir_Hologram_DB", () => {
   const deleteBang = Elixir_Hologram_DB["delete!/2"];
   const updateBang = Elixir_Hologram_DB["update!/1"];
   const updateByIdBang = Elixir_Hologram_DB["update!/3"];
-  const decrement = Elixir_Hologram_Query["decrement/3"];
+  const decrement = Elixir_Hologram_Query_Stage["decrement/3"];
   const deleteEntity = Elixir_Hologram_DB["delete/1"];
   const deleteById = Elixir_Hologram_DB["delete/2"];
-  const increment = Elixir_Hologram_Query["increment/3"];
-  const putAttribute = Elixir_Hologram_Query["put_attribute/2"];
+  const increment = Elixir_Hologram_Query_Stage["increment/3"];
+  const putAttribute = Elixir_Hologram_Query_Stage["put_attribute/2"];
   const update = Elixir_Hologram_DB["update/1"];
   const updateById = Elixir_Hologram_DB["update/3"];
-  const filter = Elixir_Hologram_Query["filter/2"];
-  const one = Elixir_Hologram_Query["one/1"];
+  const filter = Elixir_Hologram_Query_Stage["filter/2"];
+  const one = Elixir_Hologram_Query_Stage["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
   const readById = Elixir_Hologram_DB["read/2"];
 

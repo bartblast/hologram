@@ -110,7 +110,7 @@ defmodule Hologram.CompilerTest do
     "elixir/hologram/db.mjs",
     "elixir/hologram/entity.mjs",
     "elixir/hologram/job.mjs",
-    "elixir/hologram/query.mjs",
+    "elixir/hologram/query/stage.mjs",
     "local_database.mjs",
     "model.mjs",
     "mutations.mjs",

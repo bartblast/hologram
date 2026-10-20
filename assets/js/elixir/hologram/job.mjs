@@ -7,7 +7,7 @@ import {
   writeRefusal,
 } from "./db.mjs";
 import Elixir_Hologram_Entity from "./entity.mjs";
-import Elixir_Hologram_Query from "./query.mjs";
+import Elixir_Hologram_Query_Stage from "./query/stage.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Model from "../../model.mjs";
 import Type from "../../type.mjs";
@@ -33,8 +33,8 @@ function applyClaim(job, claim) {
   // trust/1 raises on this tier: the server's authority is not a client's to claim. A job
   // enqueued from server code is where trust: true belongs.
   return claim === "trust"
-    ? Elixir_Hologram_Query["trust/1"](job)
-    : Elixir_Hologram_Query["authorize/2"](job, claim);
+    ? Elixir_Hologram_Query_Stage["trust/1"](job)
+    : Elixir_Hologram_Query_Stage["authorize/2"](job, claim);
 }
 
 // The job the enqueue writes: constructed the way any entity is, then carrying whatever authority

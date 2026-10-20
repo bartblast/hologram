@@ -1,8 +1,8 @@
 "use strict";
 
-import Interpreter from "../../interpreter.mjs";
-import Model from "../../model.mjs";
-import Type from "../../type.mjs";
+import Interpreter from "../../../interpreter.mjs";
+import Model from "../../../model.mjs";
+import Type from "../../../type.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
 //
@@ -191,7 +191,7 @@ function includeOne(query, name, subBuilder) {
 // A spec entry is a relationship name, a {name, sub-builder} pair, or a {name, nested spec} pair -
 // the last traversing deeper without writing a function for it.
 function includeSpecEntry(term, entry) {
-  const include = Elixir_Hologram_Query["include/3"];
+  const include = Elixir_Hologram_Query_Stage["include/3"];
 
   if (Type.isAtom(entry)) {
     return include(term, entry, Type.nil());
@@ -298,7 +298,7 @@ function nestedSubBuilder(spec) {
     params: (_context) => [Type.variablePattern("related_term")],
     guards: [],
     body: (context) =>
-      Elixir_Hologram_Query["include/2"](context.vars.related_term, spec),
+      Elixir_Hologram_Query_Stage["include/2"](context.vars.related_term, spec),
   };
 
   return Type.anonymousFunction(1, [clause], Interpreter.buildContext());
@@ -648,7 +648,7 @@ function putDelta(entity, name, amount, sign, stage) {
       );
     }
 
-    return Elixir_Hologram_Query["put_attribute/3"](
+    return Elixir_Hologram_Query_Stage["put_attribute/3"](
       entity,
       name,
       Type.integer(value.value + moved),
@@ -1078,7 +1078,7 @@ function validatePutName(name, entityType) {
   );
 }
 
-const Elixir_Hologram_Query = {
+const Elixir_Hologram_Query_Stage = {
   "add_relationship/3": (entity, relationshipName, targetId) =>
     putRelationshipOp(
       entity,
@@ -1139,7 +1139,7 @@ const Elixir_Hologram_Query = {
     return {...term, filter: [...term.filter, ...triples]};
   },
   "include/2": (query, spec) =>
-    Elixir_Hologram_Query["include/3"](query, spec, Type.nil()),
+    Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.nil()),
 
   "include/3": (query, spec, subBuilder) => {
     if (Type.isAtom(spec)) {
@@ -1204,7 +1204,7 @@ const Elixir_Hologram_Query = {
   },
 
   "put_attribute/3": (entity, name, value) =>
-    Elixir_Hologram_Query["put_attribute/2"](
+    Elixir_Hologram_Query_Stage["put_attribute/2"](
       entity,
       Type.list([Type.tuple([name, value])]),
     ),
@@ -1220,4 +1220,4 @@ const Elixir_Hologram_Query = {
   },
 };
 
-export default Elixir_Hologram_Query;
+export default Elixir_Hologram_Query_Stage;
