@@ -35,7 +35,7 @@ defmodule Hologram.Auth.RoleGrant do
   one of that type's `allow :read_roles` roles.
 
       RoleGrant
-      |> filter(entity_id: [trip_id, nil], entity_type: MyApp.Trip)
+      |> filter(entity_id in [^trip_id, nil] and entity_type == MyApp.Trip)
       |> include(:user)
       |> order_by(:created_at)
 

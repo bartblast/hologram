@@ -2,6 +2,7 @@ defmodule Hologram.Query do
   @moduledoc false
 
   alias Hologram.Entity
+  alias Hologram.Query.Expression
   alias Hologram.Query.Stage
 
   # A query term - what the stages build and the executors run. Each field is named for the stage
@@ -124,68 +125,74 @@ defmodule Hologram.Query do
   @doc """
   Appends predicates to the given query's filter list and returns the resulting query term.
 
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. Predicates are a keyword list of attribute names (declared or system) and
-  predicate values. A predicate value is a plain value (equality), an operator tuple -
-  `{:==, value}`, `{:!=, value}`, `{:in, list}`, `{:not_in, list}`, or an ordering
-  comparison `{:<, value}`, `{:<=, value}`, `{:>, value}`, `{:>=, value}` - a bare
-  list of plain values (membership shorthand for `{:in, list}`), or a list of operator
-  tuples applying all of them to the attribute (an AND conjunction, e.g.
-  `[{:>=, monday}, {:<, next_monday}]`). Lists mixing plain values and operator tuples
-  are invalid. Each predicate becomes one or more `{attribute, operator, value}`
-  triples, appended in the given order. A query term is a Hologram.Query struct - a
-  plain-data description of a query, so building it never executes anything.
+  The query is an entity type module (starting a fresh query term) or an already built query
+  term. The predicates are an Elixir expression in which a bare name is an attribute of the
+  queried entity - declared, system, or a to-one reference field (`<relationship name>_id`) - and
+  anything from the surrounding code is pinned with `^`. A literal - an atom (`nil`, `true` and
+  `false` included), a number, a string or a module name - needs no pin, and any other value is
+  pinned: a sigil, a list held in a variable, a struct, a call.
 
-  Ordering comparisons require an orderable attribute - every type but boolean and uuid -
-  and a non-nil operand - SQL comparisons with NULL never match, so a nil operand would
-  mean different things on the two execution tiers. A comparison on an enum attribute
-  reads the declared `values:` order, so `{:>=, :medium}` on `[:low, :medium, :high]`
-  means medium or high, and the operand must be one of the declared values. A comparison
-  on a string attribute reads the order `order_by` sorts it in - case and diacritics fold
-  the way they do in the list - and a bound names a position in that list, spelled the way
-  the list spells it: `{:>=, "M"}` reaches `M`, `m`, `Mango`, while `{:>=, "m"}` starts at
-  `m`.
+      Task
+      |> filter(project_id: ^project_id, status: :todo)
+      |> filter(priority >= 3 and created_at < ^cutoff)
+      |> filter(status in [:todo, :doing])
+      |> filter(archived_at == nil)
 
-  An integer Range value (`3..10`, bare or as `{:in, range}`) is shorthand for the
-  inclusive bounds - it expands into a `>=` triple and a `<=` triple. Ranges require
-  an integer attribute, step 1, and at least one element.
+  The predicates are one of:
 
-  Membership lists must be non-empty lists of plain values. Nil is a regular value:
-  a nil element means the membership matches missing values too (`[nil, :done]` reads
-  "done or unset"), and negated membership without nil matches missing values.
+    * a keyword list of equalities whose values are literals or pinned - `project_id: ^id` -
+      where a value is always an equality operand: a comparison, a membership or a range is
+      written as an expression, so `priority: {:>=, 3}` is refused in favour of `priority >= 3`
+    * a comparison of an attribute with a literal or a pinned value - `==`, `!=`, `<`, `<=`,
+      `>`, `>=`
+    * a membership - `status in [:todo, :doing]`, `priority in 3..5`, `status in ^statuses`,
+      `status not in [:done]`
+    * comparisons and memberships joined with `and`
+    * a pinned list of predicates for a filter built at runtime - `filter(^predicates)`, where
+      the list holds attribute names paired with values, operator tuples (`{:>=, 3}`,
+      `{:in, list}`, `{:not_in, list}`), membership lists, lists of operator tuples applying
+      all of them (`[{:>=, monday}, {:<, next_monday}]`) or integer ranges
 
-  A `Hologram.Query.Placeholder` struct in a value position - bare, as an operator-tuple
-  operand, or as a membership list element - stands for a runtime-bound value: the
-  triple stores a `{:placeholder, name}` leaf instead of a concrete value, and value
-  validation is skipped (the concrete value is validated when the placeholder binds at
-  execution). A membership-element placeholder binds a single value of the attribute's
-  type. Ordering comparisons still require an orderable attribute.
+  Each predicate becomes one or more `{attribute, operator, value}` triples, appended in the
+  given order. A query term is a Hologram.Query struct - a plain-data description of a query,
+  so building it never executes anything.
 
-  A placeholder also stands where an ordering key or its direction goes (`order_by(query, sort)`,
-  `order_by(query, name: dir)`), where a view bound goes (`limit(query, size)`,
-  `offset(query, start)`), and where a filtered attribute's name goes
-  (`filter(query, [{attribute, value}])`), storing a `{:placeholder, name}` leaf in place of the
-  attribute, the direction or the bound, and skipping the checks that would need a concrete
-  one. A placeholder-keyed predicate leaves its operand unchecked too - the attribute's type is
-  unknown, so nothing about the operand can be judged against it.
+  Nil is a regular value for `==`, `!=` and membership: `status != :done` also matches a row with
+  no status, `status in [nil, :done]` reads "done or unset", and a negated membership without nil
+  matches missing values.
 
-  A leaf names the ARGUMENT a value came from, not the value: a computed operand carries the name
-  of the argument it derives from, so `b: n * 2` stores `{:placeholder, :n}`. Nothing binds a leaf
-  back to a value - both execution tiers call the builder with real values and normalize THAT - so
-  the name serves reading a term, never evaluating one.
+  Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
+  non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
+  things on the two execution tiers. A comparison on an enum attribute reads the declared
+  `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high, and
+  the operand must be one of the declared values. A comparison on a string attribute reads the
+  order `order_by` sorts it in - case and diacritics fold the way they do in the list - and a
+  bound names a position in that list, spelled the way the list spells it: `name >= "M"` reaches
+  `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
 
-  To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
-  they carry the `:uuid` type, so they take equality, membership and placeholder values, while
-  ordering comparisons and ranges reject them like any other non-orderable type. To-many
-  relationships have no reference field, and neither relationship name itself is filterable.
+  An integer range (`priority in 3..10`) is shorthand for the inclusive bounds - it expands into
+  a `>=` triple and a `<=` triple. Ranges require an integer attribute, step 1, and at least one
+  element. Membership lists must not be empty.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query term,
-  when the predicates are not a keyword list, when a predicate names a relationship or
-  an unknown attribute, or when a predicate value is invalid (unknown operator, invalid
-  membership list, list or tuple operand for an equality operator).
+  To-one reference fields take equality and membership, while ordering
+  comparisons and ranges reject them like any other non-orderable type. To-many relationships
+  have no reference field, and neither relationship name itself is filterable.
+
+  Raises Hologram.CompileError, naming the location, when the predicates take any other form - a
+  bare name where a value goes is most likely a forgotten pin, and the error says so. Raises
+  ArgumentError when the query is neither an entity type module nor a query term, when pinned
+  predicates are not a keyword list, when a predicate names a relationship or an unknown
+  attribute, or when a value is invalid for its attribute or its operator - a pinned keyword
+  value holding a list, a tuple or a range is refused as an equality operand, since membership
+  and comparisons are written as expressions.
   """
-  @spec filter(module | t, keyword) :: t
-  defdelegate filter(query, predicates), to: Stage
+  defmacro filter(query, predicates) do
+    lowered = Expression.predicates(predicates, __CALLER__)
+
+    quote do
+      Stage.filter(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Adds relationship traversals to the given query's include map and returns the

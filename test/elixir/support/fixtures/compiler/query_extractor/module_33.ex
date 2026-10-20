@@ -14,6 +14,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module33 do
   end
 
   defp entities_query(n) do
-    filter(Entity2, b: Map.get(%{limit: n}, :limit))
+    filter(Entity2, b: ^Map.get(%{limit: n}, :limit))
   end
 end

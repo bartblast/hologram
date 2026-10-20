@@ -1413,7 +1413,7 @@ defmodule Hologram.CompilerTest do
 
       module_11_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       expected_entries = Registry.build([module_1_term, module_11_term])
@@ -5419,7 +5419,7 @@ defmodule Hologram.CompilerTest do
 
       module_11_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_component_queries(

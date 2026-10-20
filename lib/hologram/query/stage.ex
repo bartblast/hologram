@@ -65,6 +65,26 @@ defmodule Hologram.Query.Stage do
     put_relationship_op(entity, relationship_name, target_id, :delete, "delete_relationship")
   end
 
+  # The data form a filter lowers to, and what filter(^predicates) passes as is: a keyword list of
+  # attribute names and predicate values - a plain value (equality), an operator tuple, a bare
+  # membership list, a list of operator tuples applying all of them (a conjunction), or an
+  # integer range.
+  #
+  # A Hologram.Query.Placeholder struct in a value position - bare, as an operator-tuple operand,
+  # or as a membership list element - stands for a runtime-bound value: the triple stores a
+  # {:placeholder, name} leaf instead of a concrete value, and value validation is skipped (the
+  # concrete value is validated when the placeholder binds at execution). A membership-element
+  # placeholder binds a single value of the attribute's type, and an ordering comparison with a
+  # placeholder operand still requires an orderable attribute. A placeholder also
+  # stands where a filtered attribute's name goes ([{placeholder, value}]), an ordering key or
+  # direction goes, or a view bound goes, storing a leaf in its place and skipping the checks that
+  # would need a concrete one. A placeholder-keyed predicate leaves its operand unchecked too - the
+  # attribute's type is unknown, so nothing about the operand can be judged against it.
+  #
+  # A leaf names the ARGUMENT a value came from, not the value: a computed operand carries the
+  # name of the argument it derives from, so b: ^(n * 2) stores {:placeholder, :n}. Nothing binds a
+  # leaf back to a value - both execution tiers call the builder with real values and normalize
+  # THAT - so the name serves reading a term, never evaluating one.
   @doc false
   @spec filter(module | Query.t(), keyword) :: Query.t()
   def filter(query, predicates) do
@@ -556,7 +576,7 @@ defmodule Hologram.Query.Stage do
   #
   # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
   # itself, which is why `offset((page - 1) * size)` written out by hand yields this same leaf, and
-  # why `filter(b: n * 2)` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
+  # why `filter(b: ^(n * 2))` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
   # into a value: both tiers call the real builder with the component's real props, so the offset
   # that executes is the computed one.
   defp paginate_offset(%Placeholder{} = page, _size), do: page

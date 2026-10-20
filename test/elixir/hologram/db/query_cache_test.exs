@@ -55,7 +55,7 @@ defmodule Hologram.DB.QueryCacheTest do
 
     module_11_term =
       Entity2
-      |> filter(b: {:>=, %Placeholder{name: :min_b}})
+      |> filter(b >= ^%Placeholder{name: :min_b})
       |> Stage.normalize()
 
     Registry.build([module_1_term, module_11_term])

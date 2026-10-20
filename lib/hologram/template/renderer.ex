@@ -1,6 +1,8 @@
 defmodule Hologram.Template.Renderer do
   @moduledoc false
 
+  require Hologram.Query
+
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
@@ -1283,7 +1285,7 @@ defmodule Hologram.Template.Renderer do
     if Validator.attribute_value_valid?(user_id, :uuid) do
       term =
         user_entity
-        |> Query.filter(id: user_id)
+        |> Query.filter(id: ^user_id)
         |> Query.one()
         |> Stage.normalize()
 

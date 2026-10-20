@@ -15,6 +15,6 @@ defmodule Hologram.Benchmarks.Fixtures.Components.EntityPropComponent do
   end
 
   defp entities_query(entity) do
-    filter(entity.type, position: {:>=, 1})
+    filter(entity.type, position >= 1)
   end
 end

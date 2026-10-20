@@ -558,7 +558,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: {:!=, 3})
+        |> filter(b != 3)
         |> Stage.normalize()
 
       assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
@@ -570,7 +570,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(a: {:!=, false})
+        |> filter(a != false)
         |> Stage.normalize()
 
       assert %{params: [{:value, false}], sql: sql} = compile(term, mapping)
@@ -595,7 +595,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(c: ["x", "y"])
+        |> filter(c in ["x", "y"])
         |> Stage.normalize()
 
       assert %{params: [{:value, ["x", "y"]}], sql: sql} = compile(term, mapping)
@@ -607,7 +607,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: {:not_in, [1, 2]})
+        |> filter(b not in [1, 2])
         |> Stage.normalize()
 
       assert %{params: [{:value, [1, 2]}], sql: sql} = compile(term, mapping)
@@ -778,7 +778,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: {:!=, nil})
+        |> filter(b != nil)
         |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
@@ -790,7 +790,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: [{:>=, 3}, {:<, 10}])
+        |> filter(b >= 3 and b < 10)
         |> Stage.normalize()
 
       assert %{params: [{:value, 10}, {:value, 3}], sql: sql} = compile(term, mapping)
@@ -850,7 +850,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query -> filter(related_query, c: {:>=, "Zoe"}) end)
+        |> include(:a, fn related_query -> filter(related_query, c >= "Zoe") end)
         |> Stage.normalize()
 
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)

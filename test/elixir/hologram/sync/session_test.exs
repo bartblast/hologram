@@ -8,6 +8,8 @@ defmodule Hologram.Sync.SessionTest do
   import Hologram.Test.Stubs
   import Mox
 
+  require Hologram.Query
+
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT

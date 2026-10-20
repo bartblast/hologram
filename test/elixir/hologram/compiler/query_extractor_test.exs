@@ -47,6 +47,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module43
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module45
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module46
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -90,7 +91,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(c: %Placeholder{name: :"entity.b.c"})
+        |> filter(c: ^%Placeholder{name: :"entity.b.c"})
         |> Stage.normalize()
 
       assert extract_module_queries(Module28, entity_types, ir_plt) == [expected_term]
@@ -102,7 +103,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: %Placeholder{name: :"entity.b"})
+        |> filter(b: ^%Placeholder{name: :"entity.b"})
         |> Stage.normalize()
 
       assert extract_module_queries(Module27, entity_types, ir_plt) == [expected_term]
@@ -111,7 +112,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "extracts a field read on a concrete map", %{entity_types: entity_types, ir_plt: ir_plt} do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> limit(5)
         |> Stage.normalize()
 
@@ -185,7 +186,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module10, entity_types, ir_plt) == [expected_term]
@@ -197,7 +198,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: [%Placeholder{name: :min_b}, 1])
+        |> filter(b in [^%Placeholder{name: :min_b}, 1])
         |> Stage.normalize()
 
       assert extract_module_queries(Module26, entity_types, ir_plt) == [expected_term]
@@ -209,7 +210,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(c: %Placeholder{name: :search})
+        |> filter(c: ^%Placeholder{name: :search})
         |> Stage.normalize()
 
       assert extract_module_queries(Module13, entity_types, ir_plt) == [expected_term]
@@ -221,7 +222,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: %Placeholder{name: :n})
+        |> filter(b: ^%Placeholder{name: :n})
         |> Stage.normalize()
 
       assert extract_module_queries(Module32, entity_types, ir_plt) == [expected_term]
@@ -233,7 +234,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: %Placeholder{name: :n})
+        |> filter(b: ^%Placeholder{name: :n})
         |> Stage.normalize()
 
       assert extract_module_queries(Module33, entity_types, ir_plt) == [expected_term]
@@ -257,7 +258,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: {:>=, 100})
+        |> filter(b >= 100)
         |> Stage.normalize()
 
       assert extract_module_queries(Module12, entity_types, ir_plt) == [expected_term]
@@ -269,7 +270,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity3
-        |> include(:a, fn sub -> filter(sub, b: {:>=, %Placeholder{name: :min_b}}) end)
+        |> include(:a, fn sub -> filter(sub, b >= ^%Placeholder{name: :min_b}) end)
         |> Stage.normalize()
 
       assert extract_module_queries(Module20, entity_types, ir_plt) == [expected_term]
@@ -286,7 +287,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       bound_clause_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module9, entity_types, ir_plt) == [
@@ -314,7 +315,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module2, entity_types, ir_plt) == [expected_term]
@@ -326,7 +327,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}}, c: %Placeholder{name: :search})
+        |> filter(b >= ^%Placeholder{name: :min_b} and c == ^%Placeholder{name: :search})
         |> Stage.normalize()
 
       assert extract_module_queries(Module6, entity_types, ir_plt) == [expected_term]
@@ -338,7 +339,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module45, entity_types, ir_plt) == [expected_term]
@@ -350,7 +351,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module23, entity_types, ir_plt) == [expected_term]
@@ -367,7 +368,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       bound_clause_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module18, entity_types, ir_plt) == [
@@ -379,7 +380,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "extracts through a local helper", %{entity_types: entity_types, ir_plt: ir_plt} do
       expected_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module14, entity_types, ir_plt) == [expected_term]
@@ -392,7 +393,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_term =
         Entity2
         |> filter(a: true)
-        |> filter(b: {:>=, %Placeholder{name: :min_b}}, c: "ABC")
+        |> filter(b >= ^%Placeholder{name: :min_b} and c == "ABC")
         |> Stage.normalize()
 
       assert extract_module_queries(Module15, entity_types, ir_plt) == [expected_term]
@@ -406,7 +407,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       other_clause_term =
         Entity2
-        |> filter(c: %Placeholder{name: :status})
+        |> filter(c: ^%Placeholder{name: :status})
         |> Stage.normalize()
 
       assert extract_module_queries(Module17, entity_types, ir_plt) == [
@@ -418,7 +419,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "forks a cond into per-clause variants", %{entity_types: entity_types, ir_plt: ir_plt} do
       bound_clause_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       fallback_clause_term =
@@ -440,7 +441,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       then_branch_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module11, entity_types, ir_plt) == [
@@ -456,7 +457,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       expected_term =
         Entity2
-        |> filter(b: [%Placeholder{name: :min_b}, 1])
+        |> filter(b in [^%Placeholder{name: :min_b}, 1])
         |> Stage.normalize()
 
       assert extract_module_queries(Module2, entity_types, ir_plt) == [expected_term]
@@ -555,6 +556,18 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module35, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a capture no entity type admits, naming each filtered attribute once", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_46.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module46 builds no query that any entity type of the build admits - it filters on :no_entity_declares_this - a prop with no window would read rows nothing ever fills"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module46, entity_types, ir_plt)
       end
     end
 

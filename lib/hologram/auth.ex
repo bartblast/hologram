@@ -1,6 +1,8 @@
 defmodule Hologram.Auth do
   @moduledoc false
 
+  require Hologram.Query
+
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -136,7 +138,7 @@ defmodule Hologram.Auth do
   def grants_before(user_id, grant_effects) do
     current =
       RoleGrant
-      |> Query.filter(user_id: user_id)
+      |> Query.filter(user_id: ^user_id)
       |> Stage.normalize()
       |> QueryRunner.run(DB.mapping())
 
@@ -635,7 +637,7 @@ defmodule Hologram.Auth do
 
   defp grant_group_rows({{user_id, nil}, _scopes}, session_user_id) do
     RoleGrant
-    |> Query.filter(user_id: user_id, entity_type: nil, entity_id: nil)
+    |> Query.filter(user_id: ^user_id, entity_type: nil, entity_id: nil)
     |> run_carried_grants_query(session_user_id)
   end
 
@@ -647,9 +649,7 @@ defmodule Hologram.Auth do
 
     RoleGrant
     |> Query.filter(
-      user_id: user_id,
-      entity_type: entity_type,
-      entity_id: entity_ids
+      user_id == ^user_id and entity_type == ^entity_type and entity_id in ^entity_ids
     )
     |> run_carried_grants_query(session_user_id)
   end
@@ -881,7 +881,7 @@ defmodule Hologram.Auth do
   # itself or on its whole type, and the global roles held app-wide. Sorted, own names first.
   defp held_role_names(actor_user_id, entity_type, entity_id) do
     RoleGrant
-    |> Query.filter(user_id: actor_user_id)
+    |> Query.filter(user_id: ^actor_user_id)
     |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->

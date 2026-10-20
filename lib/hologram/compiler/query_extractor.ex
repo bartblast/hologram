@@ -817,7 +817,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp filtered_names(_variant), do: nil
 
   defp filter_stage_names({:filter, [predicates], line}) when is_list(predicates) do
-    case for {name, _value} <- predicates, is_atom(name), do: name do
+    case for({name, _value} <- predicates, is_atom(name), uniq: true, do: name) do
       [] -> nil
       names -> {names, line}
     end

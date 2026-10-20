@@ -121,7 +121,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
       term =
         Module2
-        |> filter(c: {:>=, "m"})
+        |> filter(c >= "m")
         |> order_by(:c)
         |> Stage.normalize()
 
@@ -133,7 +133,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
       term =
         Module2
-        |> filter(c: {:>, "Zebra"})
+        |> filter(c > "Zebra")
         |> order_by(:c)
         |> Stage.normalize()
 
@@ -147,7 +147,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
       term =
         Module2
-        |> filter(c: {:>=, %Placeholder{name: :min}})
+        |> filter(c >= ^%Placeholder{name: :min})
         |> order_by(:c)
         |> Stage.normalize()
 

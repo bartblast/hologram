@@ -13,6 +13,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13 do
   end
 
   defp entities_query(search) do
-    filter(Entity2, c: String.downcase(search))
+    filter(Entity2, c: ^String.downcase(search))
   end
 end

@@ -224,13 +224,13 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       private_term =
         PolicyModule1
-        |> filter(id: private_entity.id)
+        |> filter(id: ^private_entity.id)
         |> Query.one()
         |> Stage.normalize()
 
       public_term =
         PolicyModule1
-        |> filter(id: public_entity.id)
+        |> filter(id: ^public_entity.id)
         |> Query.one()
         |> Stage.normalize()
 
@@ -440,7 +440,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       direct_term =
         Module2
-        |> filter(id: target.id)
+        |> filter(id: ^target.id)
         |> one()
         |> Stage.normalize()
 
@@ -466,14 +466,14 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       embedding_term =
         Module23
-        |> filter(id: source.id)
+        |> filter(id: ^source.id)
         |> include(:a)
         |> one()
         |> Stage.normalize()
 
       direct_term =
         Module22
-        |> filter(id: target.id)
+        |> filter(id: ^target.id)
         |> one()
         |> Stage.normalize()
 
@@ -496,7 +496,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module23
-        |> filter(id: source.id)
+        |> filter(id: ^source.id)
         |> include(:a)
         |> one()
         |> Stage.normalize()
@@ -619,7 +619,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         Module9
         |> include(:a, fn related_query ->
           related_query
-          |> filter(source_id: {:>=, 2})
+          |> filter(source_id >= 2)
           |> order_by(:source_id)
         end)
         |> Stage.normalize()
@@ -641,7 +641,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> filter(c_id: matching.c_id)
+        |> filter(c_id: ^matching.c_id)
         |> Stage.normalize()
 
       assert [%Module3{id: id, c_id: c_id}] = run(term, @mapping)

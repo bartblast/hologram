@@ -156,7 +156,7 @@ defmodule Hologram.Query.InterpreterTest do
     # Nil is a value like any other here: an unset attribute is unequal to a set one, so a
     # negated equality names the rows that never had it either.
     test "matches what is unequal, missing values included" do
-      assert matched_names(agreed(filter(Module10, priority: {:!=, 3}))) == ["ada", "cleo"]
+      assert matched_names(agreed(filter(Module10, priority != 3))) == ["ada", "cleo"]
     end
 
     test "matches an unset attribute" do
@@ -164,29 +164,29 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches what is set" do
-      assert matched_names(agreed(filter(Module10, priority: {:!=, nil}))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, priority != nil))) == ["ada", "bob"]
     end
 
     test "matches membership in a list" do
-      assert matched_names(agreed(filter(Module10, priority: {:in, [1, 3]}))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, priority in [1, 3]))) == ["ada", "bob"]
     end
 
     test "matches membership in a list naming an unset value" do
-      assert matched_names(agreed(filter(Module10, priority: {:in, [nil, 3]}))) == ["bob", "cleo"]
+      assert matched_names(agreed(filter(Module10, priority in [nil, 3]))) == ["bob", "cleo"]
     end
 
     # A list without nil leaves the rows that have no value at all outside it, so excluding the
     # list keeps them.
     test "matches exclusion from a list, missing values included" do
-      assert matched_names(agreed(filter(Module10, priority: {:not_in, [1]}))) == ["bob", "cleo"]
+      assert matched_names(agreed(filter(Module10, priority not in [1]))) == ["bob", "cleo"]
     end
 
     test "matches exclusion from a list naming an unset value" do
-      assert matched_names(agreed(filter(Module10, priority: {:not_in, [nil, 1]}))) == ["bob"]
+      assert matched_names(agreed(filter(Module10, priority not in [nil, 1]))) == ["bob"]
     end
 
     test "matches every predicate of a filter and no fewer" do
-      query = filter(Module10, count: {:>=, 2}, priority: {:!=, nil})
+      query = filter(Module10, count >= 2 and priority != nil)
 
       assert names(agreed(query)) == ["bob"]
     end
@@ -216,46 +216,46 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches values above a bound" do
-      assert matched_names(agreed(filter(Module10, count: {:>, 1}))) == ["bob", "cleo"]
+      assert matched_names(agreed(filter(Module10, count > 1))) == ["bob", "cleo"]
     end
 
     test "matches values at or above a bound" do
-      assert matched_names(agreed(filter(Module10, count: {:>=, 5}))) == ["bob", "cleo"]
+      assert matched_names(agreed(filter(Module10, count >= 5))) == ["bob", "cleo"]
     end
 
     test "matches values below a bound" do
-      assert matched_names(agreed(filter(Module10, count: {:<, 5}))) == ["ada"]
+      assert matched_names(agreed(filter(Module10, count < 5))) == ["ada"]
     end
 
     test "matches values at or below a bound" do
-      assert matched_names(agreed(filter(Module10, count: {:<=, 5}))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, count <= 5))) == ["ada", "bob"]
     end
 
     test "compares floats" do
-      assert matched_names(agreed(filter(Module10, rating: {:>, 2.0}))) == ["bob"]
+      assert matched_names(agreed(filter(Module10, rating > 2.0))) == ["bob"]
     end
 
     test "compares dates" do
-      assert matched_names(agreed(filter(Module10, released_on: {:>=, ~D[2027-01-01]}))) == [
+      assert matched_names(agreed(filter(Module10, released_on >= ^~D[2027-01-01]))) == [
                "bob"
              ]
     end
 
     test "compares datetimes" do
-      query = filter(Module10, held_at: {:<, ~U[2027-01-01 00:00:00Z]})
+      query = filter(Module10, held_at < ^~U[2027-01-01 00:00:00Z])
 
       assert names(agreed(query)) == ["ada"]
     end
 
     test "matches a range as its two bounds" do
-      assert matched_names(agreed(filter(Module10, count: 1..5))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, count in 1..5))) == ["ada", "bob"]
     end
 
     # An ordering line has no place to put a value that is not there, so a comparison passes
     # over the rows that have none - unlike the equality family, which counts them.
     test "passes over an unset attribute, whichever way the comparison points" do
-      assert matched_names(agreed(filter(Module10, rating: {:>, 0.0}))) == ["ada", "bob"]
-      assert matched_names(agreed(filter(Module10, rating: {:<, 100.0}))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, rating > 0.0))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, rating < 100.0))) == ["ada", "bob"]
     end
   end
 
@@ -363,25 +363,25 @@ defmodule Hologram.Query.InterpreterTest do
     # Declared order, not label order: :high is the LAST declared value, so a label comparison
     # would drop it here and keep :low, which is what makes this discriminate.
     test "matches values at or after a declared value" do
-      query = filter(Module17, priority: {:>=, :medium})
+      query = filter(Module17, priority >= :medium)
 
       assert matched_module_17_labels(agreed(query)) == ["a", "b"]
     end
 
     test "matches values before a declared value" do
-      query = filter(Module17, priority: {:<, :medium})
+      query = filter(Module17, priority < :medium)
 
       assert matched_module_17_labels(agreed(query)) == ["c"]
     end
 
     test "passes over an unset enum" do
-      query = filter(Module17, priority: {:>=, :low})
+      query = filter(Module17, priority >= :low)
 
       assert matched_module_17_labels(agreed(query)) == ["a", "b", "c"]
     end
 
     test "compares a declared value bound to a placeholder" do
-      query = filter(Module17, priority: {:>=, %Placeholder{name: :min}})
+      query = filter(Module17, priority >= ^%Placeholder{name: :min})
 
       assert matched_module_17_labels(agreed(query, bindings: %{min: :medium})) == ["a", "b"]
     end
@@ -391,7 +391,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "refuses a placeholder bound to a value the enum does not declare, as the database does" do
       term =
         Module17
-        |> filter(priority: {:>=, %Placeholder{name: :min}})
+        |> filter(priority >= ^%Placeholder{name: :min})
         |> Stage.normalize()
 
       expected_msg =
@@ -417,7 +417,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches values at or after a bound by their key" do
-      assert matched_titles(agreed(filter(Module2, c: {:>=, "m"}))) == [
+      assert matched_titles(agreed(filter(Module2, c >= "m"))) == [
                "Mango",
                "Zebra",
                "Zürich",
@@ -426,17 +426,17 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches values before a bound by their key" do
-      assert matched_titles(agreed(filter(Module2, c: {:<, "m"}))) == ["apple", "Łódź"]
+      assert matched_titles(agreed(filter(Module2, c < "m"))) == ["apple", "Łódź"]
     end
 
     test "settles a bound that shares a key by the value itself" do
-      assert matched_titles(agreed(filter(Module2, c: {:>, "Zebra"}))) == ["Zürich", "zebra"]
+      assert matched_titles(agreed(filter(Module2, c > "Zebra"))) == ["Zürich", "zebra"]
     end
 
     test "passes over an unset string" do
       module_10(count: 1)
 
-      assert names(agreed(filter(Module10, username: {:>=, "a"}))) == []
+      assert names(agreed(filter(Module10, username >= "a"))) == []
     end
   end
 
@@ -508,7 +508,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "returns how many entities match" do
       query =
         Module10
-        |> filter(priority: {:!=, nil})
+        |> filter(priority != nil)
         |> count()
 
       assert agreed(query) == 2
@@ -535,13 +535,13 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches against the value bound to a placeholder" do
-      query = filter(Module10, priority: %Placeholder{name: :priority})
+      query = filter(Module10, priority: ^%Placeholder{name: :priority})
 
       assert matched_names(agreed(query, bindings: %{priority: 3})) == ["bob"]
     end
 
     test "matches against a list bound to a placeholder" do
-      query = filter(Module10, priority: {:in, %Placeholder{name: :priorities}})
+      query = filter(Module10, priority in ^%Placeholder{name: :priorities})
 
       assert matched_names(agreed(query, bindings: %{priorities: [1, 3]})) == ["ada", "bob"]
     end
@@ -553,7 +553,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "refuses a placeholder the bindings do not name, as the database does" do
       term =
         Module10
-        |> filter(priority: %Placeholder{name: :priority})
+        |> filter(priority: ^%Placeholder{name: :priority})
         |> Stage.normalize()
 
       expected_msg = "missing value for placeholder :priority"
@@ -570,7 +570,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "refuses a nil value bound to a placeholder, as the database does" do
       term =
         Module10
-        |> filter(priority: %Placeholder{name: :priority})
+        |> filter(priority: ^%Placeholder{name: :priority})
         |> Stage.normalize()
 
       expected_msg = "nil value for placeholder :priority - use an explicit nil predicate instead"
@@ -589,7 +589,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "refuses a nil element in a list bound to a placeholder, as the database does" do
       term =
         Module10
-        |> filter(priority: {:in, %Placeholder{name: :priorities}})
+        |> filter(priority in ^%Placeholder{name: :priorities})
         |> Stage.normalize()
 
       expected_msg =
@@ -614,13 +614,13 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches against who is asking", %{second: second} do
-      query = filter(Module2, id: {:actor})
+      query = filter(Module2, id == ^{:actor})
 
       assert titles(agreed(query, actor_user_id: second.id)) == ["second"]
     end
 
     test "matches everything but who is asking", %{first: first} do
-      query = filter(Module2, id: {:!=, {:actor}})
+      query = filter(Module2, id != ^{:actor})
 
       assert titles(agreed(query, actor_user_id: first.id)) == ["second"]
     end
@@ -628,7 +628,7 @@ defmodule Hologram.Query.InterpreterTest do
     # There is nobody to compare against, so nothing answers - the same silence the database
     # gives a statement asking about an actor that is not there.
     test "matches nothing for a visitor" do
-      query = filter(Module2, id: {:actor})
+      query = filter(Module2, id == ^{:actor})
 
       assert agreed(query, actor_user_id: nil) == []
     end
@@ -636,7 +636,7 @@ defmodule Hologram.Query.InterpreterTest do
     # The negated form is where that silence has to be deliberate: nobody is UNEQUAL to every
     # row, so a predicate left to compare against nothing would answer with everything.
     test "matches nothing for a visitor, whichever way the predicate points" do
-      query = filter(Module2, id: {:!=, {:actor}})
+      query = filter(Module2, id != ^{:actor})
 
       assert agreed(query, actor_user_id: nil) == []
     end

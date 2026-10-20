@@ -15,6 +15,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module15 do
   defp entities_query(min_b) do
     base = filter(Entity2, a: true)
 
-    filter(base, b: {:>=, min_b}, c: String.upcase("abc"))
+    filter(base, b >= ^min_b and c == ^String.upcase("abc"))
   end
 end

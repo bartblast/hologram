@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
 
       bound_clause_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
       assert extract_module_queries(Module18, Reflection.list_entities(), PLT.start()) == [

@@ -7,6 +7,78 @@ defmodule Hologram.QueryTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
+  describe "filter/2" do
+    test "appends to a query held in a variable" do
+      query = filter(Module2, a: true)
+
+      assert filter(query, b > 1).filter == [{:a, :==, true}, {:b, :>, 1}]
+    end
+
+    test "composes in a pipe" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> filter(b > 1)
+
+      assert query.filter == [{:a, :==, true}, {:b, :>, 1}]
+    end
+
+    test "lowers a comparison" do
+      assert filter(Module2, b >= 3) == %Query{entity: Module2, filter: [{:b, :>=, 3}]}
+    end
+
+    test "lowers a conjunction" do
+      assert filter(Module2, a == true and b < 10).filter == [{:a, :==, true}, {:b, :<, 10}]
+    end
+
+    test "lowers a membership in a pinned list" do
+      values = [1, 2]
+
+      assert filter(Module2, b in ^values).filter == [{:b, :in, [1, 2]}]
+    end
+
+    test "lowers a negated membership" do
+      assert filter(Module2, c not in ["x"]).filter == [{:c, :not_in, ["x"]}]
+    end
+
+    test "lowers a pinned operand" do
+      min = 3
+
+      assert filter(Module2, b >= ^min).filter == [{:b, :>=, 3}]
+    end
+
+    test "lowers a range membership into bound triples" do
+      assert filter(Module2, b in 3..5).filter == [{:b, :>=, 3}, {:b, :<=, 5}]
+    end
+
+    test "lowers an equality with nil" do
+      assert filter(Module2, b == nil).filter == [{:b, :==, nil}]
+    end
+
+    test "lowers keyword equality with a pin" do
+      search = "x"
+
+      assert filter(Module2, a: true, c: ^search).filter == [{:a, :==, true}, {:c, :==, "x"}]
+    end
+
+    test "takes a pinned predicates list" do
+      predicates = [b: {:>=, 3}, c: ["x", "y"]]
+
+      assert filter(Module2, ^predicates).filter == [{:b, :>=, 3}, {:c, :in, ["x", "y"]}]
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      filter(Hologram.Test.Fixtures.Entity.Module2, c == search)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: search reads as an attribute of the queried entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^search",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
   describe "inspect/2" do
     test "leaves out every field at its default" do
       assert inspect(%Query{entity: Module2}) ==
@@ -41,7 +113,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "shows the filter as its triples" do
-      assert inspect(filter(Module2, a: true, b: {:>, 1})) ==
+      assert inspect(filter(Module2, a == true and b > 1)) ==
                "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, filter: [{:a, :==, true}, {:b, :>, 1}]}"
     end
 

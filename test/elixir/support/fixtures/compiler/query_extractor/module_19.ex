@@ -9,6 +9,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19 do
   end
 
   def bounded_query(min_b) do
-    filter(Entity2, b: {:>=, min_b})
+    filter(Entity2, b >= ^min_b)
   end
 end

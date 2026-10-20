@@ -15,6 +15,6 @@ defmodule Hologram.Benchmarks.Fixtures.Components.QueryPropComponent do
   end
 
   defp entities_query(min_position) do
-    filter(Entity1, position: {:>=, min_position})
+    filter(Entity1, position >= ^min_position)
   end
 end

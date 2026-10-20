@@ -3,6 +3,8 @@ defmodule Hologram.DB do
 
   use Supervisor
 
+  require Hologram.Query
+
   alias Hologram.Auth.Context
   alias Hologram.DB.Clock
   alias Hologram.DB.Config
@@ -26,10 +28,11 @@ defmodule Hologram.DB do
   @pool_name Hologram.DB.Pool
 
   # The data surface, brought in by one line: the stages that build a query term or record a write
-  # on an entity struct as bare functions, and the modules the executors live on as aliases. Named
-  # after the database rather than after the query, because a module says this line to read or
-  # write data - a page that queries, a command that writes, a seed that only creates, a job that
-  # only enqueues - and the write stages are the database's vocabulary as much as the query's.
+  # on an entity struct as bare functions and macros, and the modules the executors live on as
+  # aliases. Named after the database rather than after the query, because a module says this
+  # line to read or write data - a page that queries, a command that writes, a seed that only
+  # creates, a job that only enqueues - and the write stages are the database's vocabulary as much
+  # as the query's.
   defmacro __using__(_opts) do
     quote do
       import Hologram.Query,
@@ -266,7 +269,7 @@ defmodule Hologram.DB do
     validate_entity_type!(entity_type)
 
     entity_type
-    |> Query.filter(id: id)
+    |> Query.filter(id: ^id)
     |> Query.one()
     |> read()
   end

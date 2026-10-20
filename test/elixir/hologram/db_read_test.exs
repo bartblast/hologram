@@ -115,7 +115,7 @@ defmodule Hologram.DBReadTest do
 
       found_entity =
         Module2
-        |> filter(id: created_entity.id)
+        |> filter(id: ^created_entity.id)
         |> one()
         |> DB.read()
 
@@ -123,7 +123,7 @@ defmodule Hologram.DBReadTest do
 
       missing_entity =
         Module2
-        |> filter(id: Entity.generate_id())
+        |> filter(id: ^Entity.generate_id())
         |> one()
         |> DB.read()
 
@@ -137,7 +137,7 @@ defmodule Hologram.DBReadTest do
       hidden_entity =
         as_user(user, fn ->
           PolicyModule2
-          |> filter(id: entity.id)
+          |> filter(id: ^entity.id)
           |> one()
           |> DB.read()
         end)
@@ -149,7 +149,7 @@ defmodule Hologram.DBReadTest do
       readable_entity =
         as_user(user, fn ->
           PolicyModule2
-          |> filter(id: entity.id)
+          |> filter(id: ^entity.id)
           |> one()
           |> DB.read()
         end)
@@ -205,7 +205,7 @@ defmodule Hologram.DBReadTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         Module2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> DB.read()
       end
     end
