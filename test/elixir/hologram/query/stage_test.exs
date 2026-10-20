@@ -861,6 +861,67 @@ defmodule Hologram.Query.StageTest do
       assert query.include == %{a: base_term(Module2), b: base_term(Module2)}
     end
 
+    test "merges a repeated include at the second level" do
+      query =
+        Module5
+        |> include(a: :a)
+        |> include(a: :a)
+
+      assert query.include == %{a: %{base_term(Module3) | include: %{a: base_term(Module2)}}}
+    end
+
+    test "merges a repeated include of a relationship" do
+      query =
+        Module3
+        |> include(:a)
+        |> include(:a)
+
+      assert query == %Query{entity: Module3, include: %{a: base_term(Module2)}}
+    end
+
+    test "merges a second include that narrows a nested relationship" do
+      query =
+        Module5
+        |> include(:a)
+        |> include(a: [a: &filter(&1, a: true)])
+
+      expected_nested = %{base_term(Module2) | filter: [{:a, :==, true}]}
+
+      assert query.include == %{a: %{base_term(Module3) | include: %{a: expected_nested}}}
+    end
+
+    test "merges includes repeated in one list spec" do
+      query = include(Module5, a: :a, a: :b)
+
+      assert query.include == %{
+               a: %{base_term(Module3) | include: %{a: base_term(Module2), b: base_term(Module2)}}
+             }
+    end
+
+    test "merges includes whose nested branches differ in clauses" do
+      query =
+        Module5
+        |> include(a: [a: &filter(&1, a: true)])
+        |> include(a: :b)
+
+      expected_nested = %{base_term(Module2) | filter: [{:a, :==, true}]}
+
+      assert query.include == %{
+               a: %{base_term(Module3) | include: %{a: expected_nested, b: base_term(Module2)}}
+             }
+    end
+
+    test "merges what two includes of a relationship include" do
+      query =
+        Module5
+        |> include(a: :a)
+        |> include(a: :b)
+
+      assert query.include == %{
+               a: %{base_term(Module3) | include: %{a: base_term(Module2), b: base_term(Module2)}}
+             }
+    end
+
     test "mixes flat and nested entries" do
       query = include(Module5, [:b, a: :a])
 
@@ -907,22 +968,42 @@ defmodule Hologram.Query.StageTest do
       assert query.include == %{a: expected_sub_term}
     end
 
-    test "raises on a duplicate include" do
-      expected_msg = "relationship :a is already included"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module3
-        |> include(:a)
-        |> include(:a)
-      end
-    end
-
     test "raises on a non-function sub-builder" do
       expected_msg =
         "include sub-builder for relationship :a must be a one-argument function, got: 5"
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module3, :a, wrap_term(5))
+      end
+    end
+
+    test "raises on a repeated include at the second level when one side has clauses" do
+      expected_msg = "relationship :a is already included"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module5
+        |> include(a: [a: &filter(&1, a: true)])
+        |> include(a: :a)
+      end
+    end
+
+    test "raises on a repeated include when the included one has clauses" do
+      expected_msg = "relationship :a is already included"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module3
+        |> include(:a, &filter(&1, a: true))
+        |> include(:a)
+      end
+    end
+
+    test "raises on a repeated include when the new one has clauses" do
+      expected_msg = "relationship :a is already included"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module3
+        |> include(:a)
+        |> include(:a, &filter(&1, a: true))
       end
     end
 

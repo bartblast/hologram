@@ -1471,6 +1471,135 @@ describe("Elixir_Hologram_Query_Stage", () => {
       });
     });
 
+    it("merges a repeated include at the second level", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
+      ]);
+
+      const query = include(include(user, spec, Type.nil()), spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        projects: {...baseTerm(PROJECT), include: {tasks: freshTerm}},
+      });
+    });
+
+    it("merges a repeated include of a relationship", () => {
+      const query = include(
+        include(project, Type.atom("tasks"), Type.nil()),
+        Type.atom("tasks"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query, {
+        ...baseTerm(PROJECT),
+        include: {tasks: freshTerm},
+      });
+    });
+
+    it("merges a second include that narrows a nested relationship", () => {
+      const narrowedSpec = Type.list([
+        Type.tuple([
+          Type.atom("projects"),
+          Type.list([
+            Type.tuple([
+              Type.atom("tasks"),
+              subBuilder((related) =>
+                filter(related, predicates([["done", Type.boolean(true)]])),
+              ),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const query = include(
+        include(user, Type.atom("projects"), Type.nil()),
+        narrowedSpec,
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        projects: {
+          ...baseTerm(PROJECT),
+          include: {tasks: {...freshTerm, filter: [["done", "==", true]]}},
+        },
+      });
+    });
+
+    it("merges includes repeated in one list spec", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
+        Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
+      ]);
+
+      const query = include(user, spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        projects: {
+          ...baseTerm(PROJECT),
+          include: {owner: baseTerm(USER), tasks: freshTerm},
+        },
+      });
+    });
+
+    it("merges includes whose nested branches differ in clauses", () => {
+      const narrowedSpec = Type.list([
+        Type.tuple([
+          Type.atom("projects"),
+          Type.list([
+            Type.tuple([
+              Type.atom("tasks"),
+              subBuilder((related) =>
+                filter(related, predicates([["done", Type.boolean(true)]])),
+              ),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const ownerSpec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
+      ]);
+
+      const query = include(
+        include(user, narrowedSpec, Type.nil()),
+        ownerSpec,
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        projects: {
+          ...baseTerm(PROJECT),
+          include: {
+            owner: baseTerm(USER),
+            tasks: {...freshTerm, filter: [["done", "==", true]]},
+          },
+        },
+      });
+    });
+
+    it("merges what two includes of a relationship include", () => {
+      const ownerSpec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
+      ]);
+
+      const tasksSpec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
+      ]);
+
+      const query = include(
+        include(user, ownerSpec, Type.nil()),
+        tasksSpec,
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        projects: {
+          ...baseTerm(PROJECT),
+          include: {owner: baseTerm(USER), tasks: freshTerm},
+        },
+      });
+    });
+
     it("mixes flat and nested entries", () => {
       const spec = Type.list([
         Type.atom("manager"),
@@ -1550,24 +1679,71 @@ describe("Elixir_Hologram_Query_Stage", () => {
       });
     });
 
-    it("raises on a duplicate include", () => {
-      assert.throw(
-        () =>
-          include(
-            include(project, Type.atom("tasks"), Type.nil()),
-            Type.atom("tasks"),
-            Type.nil(),
-          ),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
     it("raises on a non-function sub-builder", () => {
       assert.throw(
         () => include(project, Type.atom("tasks"), Type.integer(5)),
         HologramBoxedError,
         "include sub-builder for relationship :tasks must be a one-argument function, got: 5",
+      );
+    });
+
+    it("raises on a repeated include at the second level when one side has clauses", () => {
+      const narrowedSpec = Type.list([
+        Type.tuple([
+          Type.atom("projects"),
+          Type.list([
+            Type.tuple([
+              Type.atom("tasks"),
+              subBuilder((related) =>
+                filter(related, predicates([["done", Type.boolean(true)]])),
+              ),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const spec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
+      ]);
+
+      assert.throw(
+        () =>
+          include(include(user, narrowedSpec, Type.nil()), spec, Type.nil()),
+        HologramBoxedError,
+        "relationship :tasks is already included",
+      );
+    });
+
+    it("raises on a repeated include when the included one has clauses", () => {
+      const narrowed = include(
+        project,
+        Type.atom("tasks"),
+        subBuilder((related) =>
+          filter(related, predicates([["done", Type.boolean(true)]])),
+        ),
+      );
+
+      assert.throw(
+        () => include(narrowed, Type.atom("tasks"), Type.nil()),
+        HologramBoxedError,
+        "relationship :tasks is already included",
+      );
+    });
+
+    it("raises on a repeated include when the new one has clauses", () => {
+      const included = include(project, Type.atom("tasks"), Type.nil());
+
+      assert.throw(
+        () =>
+          include(
+            included,
+            Type.atom("tasks"),
+            subBuilder((related) =>
+              filter(related, predicates([["done", Type.boolean(true)]])),
+            ),
+          ),
+        HologramBoxedError,
+        "relationship :tasks is already included",
       );
     });
 

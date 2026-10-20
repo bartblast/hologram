@@ -7,9 +7,9 @@ defmodule Hologram.Query do
   # A query term - what the stages build and the executors run. Each field is named for the stage
   # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
   # both. A term records fields, not the order the stages were called in - filter appends,
-  # order_by replaces, include adds a key - so two pipes reaching the same fields are one query,
-  # which is what Hologram.Query.Registry.id/1 relies on. A term is always about one entity type,
-  # so a struct written without one is refused at the literal.
+  # order_by replaces, include adds a key or merges into one - so two pipes reaching the same
+  # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
+  # about one entity type, so a struct written without one is refused at the literal.
   @enforce_keys [:entity]
 
   defstruct cardinality: :set,
@@ -209,11 +209,17 @@ defmodule Hologram.Query do
   order, or slice) - nested includes are their only refinement. Traversal depth is
   limited to 2 levels.
 
+  Including a relationship that is already included merges the two when neither narrows
+  it with clauses: what each includes is included, by the same rule at every level, so
+  `query |> include(project: :owner) |> include(project: :tasks)` includes the project
+  with both.
+
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, when the spec is invalid or empty, when a name is not a declared relationship,
-  when a relationship is already included, when a sub-builder is not a one-argument
-  function or does not return a query term for the related entity type, when a to-one
-  include carries clauses, or when the include depth exceeds 2 levels.
+  when a relationship is included again and either include carries clauses, when a
+  sub-builder is not a one-argument function or does not return a query term for the
+  related entity type, when a to-one include carries clauses, or when the include depth
+  exceeds 2 levels.
   """
   @spec include(module | t, atom | list, (t -> t) | nil) :: t
   defdelegate include(query, spec, sub_builder \\ nil), to: Stage

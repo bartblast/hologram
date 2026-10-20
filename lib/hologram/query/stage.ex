@@ -93,17 +93,12 @@ defmodule Hologram.Query.Stage do
 
     {target, kind} = validate_relationship_name!(name, term.entity)
 
-    if Map.has_key?(term.include, name) do
-      raise ArgumentError,
-        message: "relationship #{inspect(name)} is already included"
-    end
-
     related_base_term = to_term(target)
     sub_term = sub_builder.(related_base_term)
 
     validate_sub_term!(sub_term, name, target, kind)
 
-    %{term | include: Map.put(term.include, name, sub_term)}
+    %{term | include: put_included!(term.include, name, sub_term)}
   end
 
   def include(query, spec, nil) when is_list(spec) do
@@ -441,6 +436,24 @@ defmodule Hologram.Query.Stage do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
+  # Two includes of one relationship are one include when neither narrows it: what each includes
+  # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
+  # than the other, so a relationship included twice with clauses on either side is refused.
+  # Merging cannot deepen a traversal, so the depth each side was validated for still holds.
+  defp merged_sub_term!(included, sub_term, name) do
+    if sub_term_has_clauses?(included) or sub_term_has_clauses?(sub_term) do
+      raise ArgumentError,
+        message: "relationship #{inspect(name)} is already included"
+    end
+
+    merged_include =
+      Enum.reduce(sub_term.include, included.include, fn {nested_name, nested_sub_term}, acc ->
+        put_included!(acc, nested_name, nested_sub_term)
+      end)
+
+    %{included | include: merged_include}
+  end
+
   defp normalized_includes(term) do
     Map.new(term.include, fn {name, sub_term} ->
       {name, normalized_sub_term(sub_term, relationship_kind(term.entity, name))}
@@ -717,6 +730,13 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "#{inspect(name)} in #{inspect(entity_type)} holds nil - a counter always holds a number, so there is nothing for #{stage} to move - read the row first, or give the attribute a default"
+    end
+  end
+
+  defp put_included!(include, name, sub_term) do
+    case Map.fetch(include, name) do
+      {:ok, included} -> Map.put(include, name, merged_sub_term!(included, sub_term, name))
+      :error -> Map.put(include, name, sub_term)
     end
   end
 

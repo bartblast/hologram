@@ -170,13 +170,6 @@ function includeDepth(term) {
 function includeOne(query, name, subBuilder) {
   const term = toTerm(query);
   const {kind, target} = validateRelationshipName(name, term.entity);
-
-  if (name.value in term.include) {
-    Interpreter.raiseArgumentError(
-      `relationship ${Interpreter.inspect(name)} is already included`,
-    );
-  }
-
   const relatedBaseTerm = toTerm(Type.alias(target));
 
   const subTerm = subBuilder
@@ -185,7 +178,7 @@ function includeOne(query, name, subBuilder) {
 
   validateSubTerm(subTerm, name, target, kind);
 
-  return {...term, include: {...term.include, [name.value]: subTerm}};
+  return {...term, include: putIncluded(term.include, name.value, subTerm)};
 }
 
 // A spec entry is a relationship name, a {name, sub-builder} pair, or a {name, nested spec} pair -
@@ -289,6 +282,26 @@ function membershipValues(values, name, entityType) {
       ? placeholderLeaf(value)
       : Model.unbox(value, attributeType(entityType, name)),
   );
+}
+
+// Two includes of one relationship are one include when neither narrows it: what each includes
+// merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
+// than the other, so a relationship included twice with clauses on either side is refused.
+// Merging cannot deepen a traversal, so the depth each side was validated for still holds.
+function mergedSubTerm(included, subTerm, name) {
+  if (subTermHasClauses(included) || subTermHasClauses(subTerm)) {
+    Interpreter.raiseArgumentError(
+      `relationship ${Interpreter.inspect(Type.atom(name))} is already included`,
+    );
+  }
+
+  const include = Object.entries(subTerm.include).reduce(
+    (acc, [nestedName, nestedSubTerm]) =>
+      putIncluded(acc, nestedName, nestedSubTerm),
+    included.include,
+  );
+
+  return {...included, include};
 }
 
 // The nested-spec shorthand is the sub-builder that includes through the nested spec, boxed the
@@ -679,6 +692,15 @@ function putDelta(entity, name, amount, sign, stage) {
     Type.atom("__meta__"),
     putField(metadata, Type.atom("attribute_ops"), updatedOps),
   );
+}
+
+function putIncluded(include, name, subTerm) {
+  return {
+    ...include,
+    [name]: Object.hasOwn(include, name)
+      ? mergedSubTerm(include[name], subTerm, name)
+      : subTerm,
+  };
 }
 
 // The two edge stages share everything but the operation they record. The relationship's own
