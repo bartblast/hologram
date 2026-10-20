@@ -1,8 +1,45 @@
 # Hologram
 
-Build rich, interactive UIs entirely in Elixir using Hologram's declarative component system. Your client-side code is intelligently compiled to JavaScript, providing modern frontend capabilities without relying on any JavaScript frameworks.
+Build full-stack web apps entirely in Elixir. Hologram rebuilds the Elixir runtime in the browser, so your client-side code runs as Elixir, with no JavaScript framework and no JavaScript to write.
 
 Website: https://hologram.page
+
+## What it looks like
+
+```elixir
+defmodule MyApp.CounterPage do
+  use Hologram.Page
+
+  route "/counter"
+
+  layout MyApp.MainLayout
+
+  def init(_params, component, _server) do
+    put_state(component, :count, 0)
+  end
+
+  def template do
+    ~HOLO"""
+    <p>Count: {@count}</p>
+    <button $click="increment">+1</button>
+    """
+  end
+
+  def action(:increment, _params, component) do
+    put_state(component, :count, component.state.count + 1)
+  end
+end
+```
+
+The action runs in the browser, so the count updates instantly with no server round-trip.
+
+## Get started
+
+- [Installation](https://hologram.page/docs/installation)
+- [Quick Start](https://hologram.page/docs/quick-start)
+- [Documentation](https://hologram.page/docs/architecture)
+
+If Hologram looks interesting, star the repo to follow along. It helps more Elixir developers find the project.
 
 ## Community
 
