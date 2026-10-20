@@ -33,8 +33,8 @@ defmodule HologramFeatureTests.Components.Policies.Component1 do
 
   defp documents_query do
     Document
-    |> include(:folder)
-    |> order_by(:title)
+    |> include(folder)
+    |> order_by(title)
   end
 
   defp folder_name(nil), do: "none"

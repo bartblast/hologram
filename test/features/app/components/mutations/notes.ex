@@ -20,6 +20,6 @@ defmodule HologramFeatureTests.Components.Mutations.Notes do
   end
 
   defp notes_query do
-    order_by(Note, :body)
+    order_by(Note, body)
   end
 end

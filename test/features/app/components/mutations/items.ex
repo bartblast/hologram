@@ -20,6 +20,6 @@ defmodule HologramFeatureTests.Components.Mutations.Items do
   end
 
   defp items_query do
-    order_by(Item, :name)
+    order_by(Item, name)
   end
 end

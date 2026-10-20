@@ -18,6 +18,6 @@ defmodule HologramFeatureTests.Components.Queries.Component1 do
   end
 
   defp products_query do
-    order_by(Product, :name)
+    order_by(Product, name)
   end
 end

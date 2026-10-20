@@ -21,6 +21,6 @@ defmodule HologramFeatureTests.Components.ActionWrites.Todos do
   end
 
   defp todos_query do
-    order_by(Todo, :title)
+    order_by(Todo, title)
   end
 end

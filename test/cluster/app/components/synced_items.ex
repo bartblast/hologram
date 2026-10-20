@@ -19,6 +19,6 @@ defmodule HologramClusterTests.Components.SyncedItems do
   end
 
   defp items_query do
-    order_by(Item, :slug)
+    order_by(Item, slug)
   end
 end

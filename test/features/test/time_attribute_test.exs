@@ -25,7 +25,7 @@ defmodule HologramFeatureTests.TimeAttributeTest do
     Enum.reduce_while(1..100, [], fn _attempt, _acc ->
       shops =
         Shop
-        |> order_by(:opens_at)
+        |> order_by(opens_at)
         |> DB.read()
 
       if length(shops) == expected_count do
