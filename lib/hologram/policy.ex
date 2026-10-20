@@ -59,7 +59,7 @@ defmodule Hologram.Policy do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
-  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
 
   @model_facts_key {__MODULE__, :model_facts}
@@ -227,7 +227,7 @@ defmodule Hologram.Policy do
     entity_type.__policies__()
     |> Enum.map(fn {operation, to, via, predicates} ->
       rule = %{
-        predicates: Query.predicate_triples!(entity_type, predicates),
+        predicates: Stage.predicate_triples!(entity_type, predicates),
         to: build_to(entity_type, to),
         via: via
       }

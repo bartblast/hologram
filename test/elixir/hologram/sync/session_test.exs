@@ -15,6 +15,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Entity
   alias Hologram.Policy.Edges
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -51,9 +52,9 @@ defmodule Hologram.Sync.SessionTest do
       entries: %{},
       prop_params: %{},
       windows: %{
-        @board_window => Query.normalize(Module2),
-        @other_window => Query.normalize(PolicyModule1),
-        @reach_window => Query.normalize(PolicyModule5)
+        @board_window => Stage.normalize(Module2),
+        @other_window => Stage.normalize(PolicyModule1),
+        @reach_window => Stage.normalize(PolicyModule5)
       }
     })
 
@@ -179,7 +180,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert_receive {:sync_synced, :page, _cursor}
-      assert Evaluators.live() == [{@board_window, Query.normalize(Module2)}]
+      assert Evaluators.live() == [{@board_window, Stage.normalize(Module2)}]
     end
 
     test "holds every window its page reaches" do
@@ -215,7 +216,7 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :page, _cursor}
       assert Process.alive?(session)
-      assert Evaluators.live() == [{@board_window, Query.normalize(Module2)}]
+      assert Evaluators.live() == [{@board_window, Stage.normalize(Module2)}]
     end
 
     test "joins the window a session already holds rather than starting a second evaluator" do
@@ -1145,7 +1146,7 @@ defmodule Hologram.Sync.SessionTest do
         entries: %{},
         prop_params: %{},
         windows: %{
-          @board_window => Query.normalize(Module2),
+          @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
         }
       })
@@ -1326,7 +1327,7 @@ defmodule Hologram.Sync.SessionTest do
         entries: %{},
         prop_params: %{},
         windows: %{
-          @board_window => Query.normalize(Module2),
+          @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
         }
       })
@@ -1380,7 +1381,7 @@ defmodule Hologram.Sync.SessionTest do
         entries: %{},
         prop_params: %{},
         windows: %{
-          @board_window => Query.normalize(Module2),
+          @board_window => Stage.normalize(Module2),
           @include_window => include_window_term()
         }
       })
@@ -1518,13 +1519,13 @@ defmodule Hologram.Sync.SessionTest do
   defp include_window_term do
     Module3
     |> Query.include(:a)
-    |> Query.normalize()
+    |> Stage.normalize()
   end
 
   defp other_window_term do
     Module2
     |> Query.filter(a: true)
-    |> Query.normalize()
+    |> Stage.normalize()
   end
 
   defp transactions(entity_id, names, mutation_ref \\ nil) do

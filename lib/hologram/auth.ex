@@ -16,6 +16,7 @@ defmodule Hologram.Auth do
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Sync.Carry
@@ -36,7 +37,7 @@ defmodule Hologram.Auth do
   @spec grants_window() :: Query.t()
   def grants_window do
     RoleGrant
-    |> Query.normalize()
+    |> Stage.normalize()
     |> Window.derive()
   end
 
@@ -136,7 +137,7 @@ defmodule Hologram.Auth do
     current =
       RoleGrant
       |> Query.filter(user_id: user_id)
-      |> Query.normalize()
+      |> Stage.normalize()
       |> QueryRunner.run(DB.mapping())
 
     grant_effects
@@ -694,7 +695,7 @@ defmodule Hologram.Auth do
 
   defp run_carried_grants_query(query, session_user_id) do
     query
-    |> Query.normalize()
+    |> Stage.normalize()
     |> QueryRunner.run_policied(DB.mapping(), session_user_id)
   end
 
@@ -881,7 +882,7 @@ defmodule Hologram.Auth do
   defp held_role_names(actor_user_id, entity_type, entity_id) do
     RoleGrant
     |> Query.filter(user_id: actor_user_id)
-    |> Query.normalize()
+    |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->
       (grant.entity_type == entity_type and grant.entity_id in [entity_id, nil]) or

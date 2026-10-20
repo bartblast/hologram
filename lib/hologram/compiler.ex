@@ -90,7 +90,13 @@ defmodule Hologram.Compiler do
       class: "DataLayer",
       file: "data_layer.mjs",
       handle: "dataLayer",
-      ported_modules: [Hologram.Auth, Hologram.DB, Hologram.Entity, Hologram.Job, Hologram.Query]
+      ported_modules: [
+        Hologram.Auth,
+        Hologram.DB,
+        Hologram.Entity,
+        Hologram.Job,
+        Hologram.Query.Stage
+      ]
     }
   ]
 
@@ -370,8 +376,8 @@ defmodule Hologram.Compiler do
   read it. An enqueue claiming the server's authority (`trust: true`) names no operation and is
   left out.
 
-  Takes the UNSPLIT call graph - every one of these functions is hand-ported, so the runtime graph
-  no longer holds the vertices whose callers this reads. The IR of a caller whose module the call
+  Takes the UNSPLIT call graph - `can?/3` and the two enqueues are hand-ported, so the runtime
+  graph no longer holds the vertices whose callers this reads. The IR of a caller whose module the call
   graph's module info PLT holds is built into the IR PLT when it is missing (the compile task
   builds IR as it is read, see `build_missing_ir!/2`); a caller the IR PLT does not hold after
   that is skipped, as `validate_prop_usages/2` skips one.

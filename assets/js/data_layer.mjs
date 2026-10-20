@@ -129,8 +129,8 @@ export default class DataLayer {
   }
 
   // Defines the hand-written client versions of the Hologram.Auth, Hologram.DB, Hologram.Entity,
-  // Hologram.Job and Hologram.Query functions as the functions of their modules. No bundle carries
-  // their Elixir originals.
+  // Hologram.Job and Hologram.Query.Stage functions as the functions of their modules. No bundle
+  // carries their Elixir originals.
   static defineManuallyPortedFunctions() {
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Auth",
@@ -308,119 +308,119 @@ export default class DataLayer {
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "add_relationship/3",
       "public",
       ManuallyPortedElixirHologramQuery["add_relationship/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "authorize/2",
       "public",
       ManuallyPortedElixirHologramQuery["authorize/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "count/1",
       "public",
       ManuallyPortedElixirHologramQuery["count/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "decrement/3",
       "public",
       ManuallyPortedElixirHologramQuery["decrement/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "delete_relationship/3",
       "public",
       ManuallyPortedElixirHologramQuery["delete_relationship/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "filter/2",
       "public",
       ManuallyPortedElixirHologramQuery["filter/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "include/2",
       "public",
       ManuallyPortedElixirHologramQuery["include/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "include/3",
       "public",
       ManuallyPortedElixirHologramQuery["include/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "increment/3",
       "public",
       ManuallyPortedElixirHologramQuery["increment/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "limit/2",
       "public",
       ManuallyPortedElixirHologramQuery["limit/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "normalize/1",
       "public",
       ManuallyPortedElixirHologramQuery["normalize/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "offset/2",
       "public",
       ManuallyPortedElixirHologramQuery["offset/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "one/1",
       "public",
       ManuallyPortedElixirHologramQuery["one/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "order_by/2",
       "public",
       ManuallyPortedElixirHologramQuery["order_by/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "put_attribute/2",
       "public",
       ManuallyPortedElixirHologramQuery["put_attribute/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "put_attribute/3",
       "public",
       ManuallyPortedElixirHologramQuery["put_attribute/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query",
+      "Hologram.Query.Stage",
       "trust/1",
       "public",
       ManuallyPortedElixirHologramQuery["trust/1"],

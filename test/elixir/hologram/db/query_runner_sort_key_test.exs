@@ -8,8 +8,8 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
-  alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -70,7 +70,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
       term =
         Module2
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert [%{c: "apple"}, %{c: "Łódź"}, %{c: "Zürich"}] = run(term, companion_mapping())
     end
@@ -93,7 +93,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
       term =
         Module3
         |> include(:a)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert [%Module3{a: [%Module2{c: "banana"}]}] = run(term, companion_mapping())
     end
@@ -107,7 +107,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
       term =
         Module2
         |> filter(c: "banana")
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert [%Module2{c: "banana"}] = run(term, companion_mapping())
     end
@@ -123,7 +123,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
         Module2
         |> filter(c: {:>=, "m"})
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert matched_values(term) == ["Mango", "Zürich"]
     end
@@ -135,7 +135,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
         Module2
         |> filter(c: {:>, "Zebra"})
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert matched_values(term) == ["zebra", "Zürich"]
     end
@@ -149,7 +149,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
         Module2
         |> filter(c: {:>=, %Placeholder{name: :min}})
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       values =
         term

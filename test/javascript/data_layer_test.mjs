@@ -482,7 +482,7 @@ describe("DataLayer", () => {
       "Elixir_Hologram_DB",
       "Elixir_Hologram_Entity",
       "Elixir_Hologram_Job",
-      "Elixir_Hologram_Query",
+      "Elixir_Hologram_Query_Stage",
     ];
 
     let originals;
@@ -505,7 +505,7 @@ describe("DataLayer", () => {
       });
     });
 
-    it("defines the hand-written Auth, DB, Entity, Job and Query functions as public functions of their modules", () => {
+    it("defines the hand-written Auth, DB, Entity, Job and Query.Stage functions as public functions of their modules", () => {
       DataLayer.defineManuallyPortedFunctions();
 
       assert.deepStrictEqual(
@@ -565,7 +565,7 @@ describe("DataLayer", () => {
       );
 
       assert.deepStrictEqual(
-        globalThis.Elixir_Hologram_Query.__exports__,
+        globalThis.Elixir_Hologram_Query_Stage.__exports__,
         new Set([
           "add_relationship/3",
           "authorize/2",
@@ -597,7 +597,7 @@ describe("DataLayer", () => {
         Elixir_Hologram_DB: ManuallyPortedElixirHologramDB,
         Elixir_Hologram_Entity: ManuallyPortedElixirHologramEntity,
         Elixir_Hologram_Job: ManuallyPortedElixirHologramJob,
-        Elixir_Hologram_Query: ManuallyPortedElixirHologramQuery,
+        Elixir_Hologram_Query_Stage: ManuallyPortedElixirHologramQuery,
       };
 
       for (const [moduleName, port] of Object.entries(ports)) {

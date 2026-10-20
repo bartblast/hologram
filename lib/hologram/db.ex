@@ -17,6 +17,7 @@ defmodule Hologram.DB do
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.WriteError
 
@@ -234,7 +235,7 @@ defmodule Hologram.DB do
   """
   @spec read(module | Query.t()) :: list(Entity.t()) | Entity.t() | integer | nil
   def read(query) do
-    term = Query.normalize(query)
+    term = Stage.normalize(query)
 
     assert_no_placeholders!(term)
 
@@ -586,7 +587,7 @@ defmodule Hologram.DB do
   end
 
   defp assert_no_placeholders!(term) do
-    case Query.placeholder_names(term) do
+    case Stage.placeholder_names(term) do
       [] ->
         :ok
 

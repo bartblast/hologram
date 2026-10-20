@@ -10,8 +10,8 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module17
@@ -27,7 +27,7 @@ defmodule Hologram.Query.InterpreterTest do
   # the interpreter, agreeing. Every test goes through here and then asserts what came back, so
   # that two empty results never pass for agreement.
   defp agreed(query, opts \\ []) do
-    term = Query.normalize(query)
+    term = Stage.normalize(query)
     bindings = Keyword.get(opts, :bindings, %{})
 
     expected =
@@ -51,7 +51,7 @@ defmodule Hologram.Query.InterpreterTest do
       Map.new(@entity_types, fn entity_type ->
         table =
           entity_type
-          |> Query.normalize()
+          |> Stage.normalize()
           |> QueryRunner.run(@mapping)
           |> Map.new(&{&1.id, &1})
 
@@ -392,7 +392,7 @@ defmodule Hologram.Query.InterpreterTest do
       term =
         Module17
         |> filter(priority: {:>=, %Placeholder{name: :min}})
-        |> Query.normalize()
+        |> Stage.normalize()
 
       expected_msg =
         "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]"
@@ -554,7 +554,7 @@ defmodule Hologram.Query.InterpreterTest do
       term =
         Module10
         |> filter(priority: %Placeholder{name: :priority})
-        |> Query.normalize()
+        |> Stage.normalize()
 
       expected_msg = "missing value for placeholder :priority"
 
@@ -571,7 +571,7 @@ defmodule Hologram.Query.InterpreterTest do
       term =
         Module10
         |> filter(priority: %Placeholder{name: :priority})
-        |> Query.normalize()
+        |> Stage.normalize()
 
       expected_msg = "nil value for placeholder :priority - use an explicit nil predicate instead"
 
@@ -590,7 +590,7 @@ defmodule Hologram.Query.InterpreterTest do
       term =
         Module10
         |> filter(priority: {:in, %Placeholder{name: :priorities}})
-        |> Query.normalize()
+        |> Stage.normalize()
 
       expected_msg =
         "nil element in the list for placeholder :priorities - use an explicit nil predicate instead"

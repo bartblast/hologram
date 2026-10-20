@@ -17,6 +17,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -1284,7 +1285,7 @@ defmodule Hologram.Template.Renderer do
         user_entity
         |> Query.filter(id: user_id)
         |> Query.one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       QueryRunner.run_policied(term, DB.mapping(), user_id)
     end
@@ -1405,7 +1406,7 @@ defmodule Hologram.Template.Renderer do
     term =
       capture
       |> apply(args)
-      |> Query.normalize()
+      |> Stage.normalize()
 
     result =
       term

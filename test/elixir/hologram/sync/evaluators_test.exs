@@ -9,7 +9,7 @@ defmodule Hologram.Sync.EvaluatorsTest do
   import Mox
 
   alias Hologram.DB
-  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.ResultStore
@@ -28,7 +28,7 @@ defmodule Hologram.Sync.EvaluatorsTest do
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
       prop_params: %{},
-      windows: %{@window_id => Query.normalize(Module2)}
+      windows: %{@window_id => Stage.normalize(Module2)}
     })
 
     wait_for_process_cleanup(ResultStore)
@@ -57,7 +57,7 @@ defmodule Hologram.Sync.EvaluatorsTest do
     test "returns a held window with the term it downloads" do
       subscribe(@window_id, self())
 
-      assert live() == [{@window_id, Query.normalize(Module2)}]
+      assert live() == [{@window_id, Stage.normalize(Module2)}]
     end
 
     # A live reload can drop a window while its evaluator is still running, and a window with no

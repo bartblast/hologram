@@ -15,9 +15,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Entity.Model
-  alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
+  alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
@@ -1109,7 +1109,7 @@ defmodule Hologram.CompilerTest do
       window_id =
         Entity2
         |> filter(a: true)
-        |> Query.normalize()
+        |> Stage.normalize()
         |> Window.derive()
         |> Registry.id()
 
@@ -1338,7 +1338,7 @@ defmodule Hologram.CompilerTest do
                  Hologram.DB,
                  Hologram.Entity,
                  Hologram.Job,
-                 Hologram.Query
+                 Hologram.Query.Stage
                ]
              }
            ]
@@ -1409,12 +1409,12 @@ defmodule Hologram.CompilerTest do
         Entity2
         |> filter(a: true)
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       module_11_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
-        |> Query.normalize()
+        |> Stage.normalize()
 
       expected_entries = Registry.build([module_1_term, module_11_term])
 
@@ -2803,7 +2803,8 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      for module_name <- ~w(Hologram.Auth Hologram.DB Hologram.Entity Hologram.Job Hologram.Query) do
+      for module_name <-
+            ~w(Hologram.Auth Hologram.DB Hologram.Entity Hologram.Job Hologram.Query.Stage) do
         assert String.contains?(js, ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", /)
       end
     end
@@ -2826,7 +2827,8 @@ defmodule Hologram.CompilerTest do
           subsystems: []
         )
 
-      for module_name <- ~w(Hologram.Auth Hologram.DB Hologram.Entity Hologram.Job Hologram.Query) do
+      for module_name <-
+            ~w(Hologram.Auth Hologram.DB Hologram.Entity Hologram.Job Hologram.Query.Stage) do
         refute String.contains?(js, ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", /)
       end
 
@@ -5413,12 +5415,12 @@ defmodule Hologram.CompilerTest do
         Entity2
         |> filter(a: true)
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       module_11_term =
         Entity2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert extract_component_queries(
                [QueryExtractorModule1, ComponentModule11],

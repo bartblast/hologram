@@ -7,16 +7,17 @@ defmodule Hologram.Query.WindowTest do
   alias Hologram.DB
   alias Hologram.DB.QueryRunner
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
   defp term(entity_type, filter) do
-    %{Query.normalize(entity_type) | filter: filter}
+    %{Stage.normalize(entity_type) | filter: filter}
   end
 
   describe "derive/1" do
     test "downloads the type the query reads" do
-      assert derive(Query.normalize(Module2)).entity == Module2
+      assert derive(Stage.normalize(Module2)).entity == Module2
     end
 
     test "keeps a predicate comparing to a literal" do
@@ -76,7 +77,7 @@ defmodule Hologram.Query.WindowTest do
         |> order_by(:c)
         |> limit(20)
         |> offset(40)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert derive(term) == %Query{entity: Module2, filter: [{:a, :==, true}]}
     end
@@ -89,7 +90,7 @@ defmodule Hologram.Query.WindowTest do
         Module2
         |> filter(a: true)
         |> order_by(:c)
-        |> Query.normalize()
+        |> Stage.normalize()
         |> derive()
 
       assert is_list(QueryRunner.run(window, DB.mapping()))
@@ -99,7 +100,7 @@ defmodule Hologram.Query.WindowTest do
       base_term =
         Module3
         |> include(:a)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       sub_term = %{
         base_term.include.a
