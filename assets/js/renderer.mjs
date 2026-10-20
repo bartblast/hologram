@@ -7,7 +7,6 @@ import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
 import Hologram from "./hologram.mjs";
-import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -1380,40 +1379,32 @@ export default class Renderer {
     let componentEmittedContext;
 
     if (componentState === null) {
-      if ("init/2" in moduleProxy) {
-        const initialComponentStruct = Type.componentStruct({props});
+      const initialComponentStruct = Type.componentStruct({props});
 
-        const componentStruct = moduleProxy["init/2"](
-          props,
-          initialComponentStruct,
-        );
+      const componentStruct = moduleProxy["init/2"](
+        props,
+        initialComponentStruct,
+      );
 
-        ComponentRegistry.putEntry(
-          cid,
-          Type.map([
-            [Type.atom("module"), moduleProxy.__exModule__],
-            [Type.atom("struct"), componentStruct],
-          ]),
-        );
+      ComponentRegistry.putEntry(
+        cid,
+        Type.map([
+          [Type.atom("module"), moduleProxy.__exModule__],
+          [Type.atom("struct"), componentStruct],
+        ]),
+      );
 
-        componentState = Erlang_Maps["get/2"](
-          Type.atom("state"),
-          componentStruct,
-        );
+      componentState = Erlang_Maps["get/2"](
+        Type.atom("state"),
+        componentStruct,
+      );
 
-        componentEmittedContext = Erlang_Maps["get/2"](
-          Type.atom("emitted_context"),
-          componentStruct,
-        );
+      componentEmittedContext = Erlang_Maps["get/2"](
+        Type.atom("emitted_context"),
+        componentStruct,
+      );
 
-        Renderer.#maybeQueueActionFromClientInit(componentStruct, cid);
-      } else {
-        const message = `component ${Interpreter.inspectModuleJsName(
-          moduleProxy.__jsName__,
-        )} is initialized on the client, but doesn't have init/2 implemented`;
-
-        throw new HologramInterpreterError(message);
-      }
+      Renderer.#maybeQueueActionFromClientInit(componentStruct, cid);
     } else {
       componentEmittedContext =
         ComponentRegistry.getComponentEmittedContext(cid);

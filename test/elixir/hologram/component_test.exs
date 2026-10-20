@@ -67,8 +67,11 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "init/2" do
-    test "no default implementation" do
-      refute Reflection.has_function?(Module1, :init, 2)
+    test "default implementation" do
+      assert Reflection.has_function?(Module1, :init, 2)
+
+      component = build_component_struct()
+      assert Module1.init(:props_dummy, component) == component
     end
 
     test "overridden implementation" do

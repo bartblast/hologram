@@ -66,7 +66,7 @@ defmodule Hologram.Component do
   """
   @callback template() :: (map -> list)
 
-  @optional_callbacks [action: 3, command: 3, init: 2]
+  @optional_callbacks [action: 3, command: 3]
 
   @prop_opt_keys [:default, :from_context, :required, :values]
 
@@ -126,9 +126,12 @@ defmodule Hologram.Component do
         def __is_hologram_component__, do: true
 
         @impl Component
+        def init(_props, component), do: component
+
+        @impl Component
         def init(_props, component, server), do: {component, server}
 
-        defoverridable init: 3
+        defoverridable init: 2, init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
       register_props_accumulator()
