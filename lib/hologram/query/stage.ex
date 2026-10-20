@@ -3,9 +3,10 @@ defmodule Hologram.Query.Stage do
 
   # What Hologram.Query's stages run: the query stages and the entity-struct stages, over the data
   # form - keyword lists of attribute names and predicate values, operator tuples, membership
-  # lists, ranges and placeholders. Hologram.Query delegates its stages here and documents them
-  # there. Normalization, placeholder listing and the predicate triples policies share are
-  # framework internals, called on this module directly.
+  # lists, ranges and placeholders. Hologram.Query delegates its stages here, or expands to them
+  # from the stages written in the query syntax, and documents them there. Normalization,
+  # placeholder listing and the predicate triples policies share are framework internals, called
+  # on this module directly.
 
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
@@ -575,7 +576,7 @@ defmodule Hologram.Query.Stage do
   # named for whichever option it varies with, page first.
   #
   # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
-  # itself, which is why `offset((page - 1) * size)` written out by hand yields this same leaf, and
+  # itself, which is why `offset(^((page - 1) * size))` written out by hand yields this same leaf, and
   # why `filter(b: ^(n * 2))` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
   # into a value: both tiers call the real builder with the component's real props, so the offset
   # that executes is the computed one.

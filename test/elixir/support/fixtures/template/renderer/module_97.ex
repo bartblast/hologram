@@ -17,6 +17,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module97 do
   defp entities_query do
     Entity2
     |> filter(a: true)
-    |> order_by(:c)
+    |> order_by(c)
   end
 end

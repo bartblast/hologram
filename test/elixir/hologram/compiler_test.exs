@@ -1408,7 +1408,7 @@ defmodule Hologram.CompilerTest do
       module_1_term =
         Entity2
         |> filter(a: true)
-        |> order_by(:c)
+        |> order_by(c)
         |> Stage.normalize()
 
       module_11_term =
@@ -5414,7 +5414,7 @@ defmodule Hologram.CompilerTest do
       module_1_term =
         Entity2
         |> filter(a: true)
-        |> order_by(:c)
+        |> order_by(c)
         |> Stage.normalize()
 
       module_11_term =

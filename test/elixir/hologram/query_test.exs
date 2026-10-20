@@ -120,7 +120,7 @@ defmodule Hologram.QueryTest do
     test "shows the ordering and the view bounds" do
       term =
         Module2
-        |> order_by(:c)
+        |> order_by(c)
         |> paginate(page: 2, size: 20)
 
       assert inspect(term) ==
@@ -130,6 +130,114 @@ defmodule Hologram.QueryTest do
     test "shows the trust mark" do
       assert inspect(trust(Module2)) ==
                "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, trust: true}"
+    end
+  end
+
+  describe "limit/2" do
+    test "lowers a literal" do
+      assert limit(Module2, 5).limit == 5
+    end
+
+    test "lowers a pinned bound" do
+      page_size = 20
+
+      assert limit(Module2, ^page_size).limit == 20
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      limit(Hologram.Test.Fixtures.Entity.Module2, page_size)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: limit takes an integer or a pinned expression, got: page_size - a value from the surrounding code is pinned: ^page_size",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "offset/2" do
+    test "lowers a literal" do
+      assert offset(Module2, 40).offset == 40
+    end
+
+    test "lowers a pinned bound" do
+      skip = 40
+
+      assert offset(Module2, ^skip).offset == 40
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      offset(Hologram.Test.Fixtures.Entity.Module2, skip)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: offset takes an integer or a pinned expression, got: skip - a value from the surrounding code is pinned: ^skip",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "order_by/2" do
+    test "lowers a bare name" do
+      assert order_by(Module2, c).order_by == [c: :asc]
+    end
+
+    test "lowers a keyword list with a pinned direction" do
+      direction = :desc
+
+      assert order_by(Module2, c: ^direction).order_by == [c: :desc]
+    end
+
+    test "lowers a list of bare names" do
+      assert order_by(Module2, [a, c]).order_by == [a: :asc, c: :asc]
+    end
+
+    test "takes a pinned spec" do
+      spec = [c: :desc]
+
+      assert order_by(Module2, ^spec).order_by == [c: :desc]
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      order_by(Hologram.Test.Fixtures.Entity.Module2, :c)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: order_by names an attribute with a bare name, got: :c - write c",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "paginate/2" do
+    test "lowers a pinned option" do
+      page = 2
+
+      query = paginate(Module2, page: ^page, size: 20)
+
+      assert {query.offset, query.limit} == {20, 20}
+    end
+
+    test "takes pinned options" do
+      opts = [page: 1, size: 10]
+
+      query = paginate(Module2, ^opts)
+
+      assert {query.offset, query.limit} == {0, 10}
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      paginate(Hologram.Test.Fixtures.Entity.Module2, page: page, size: 20)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: a paginate option takes an integer or a pinned expression, got: page - a value from the surrounding code is pinned: ^page",
+                   fn -> Code.eval_string(code) end
     end
   end
 end

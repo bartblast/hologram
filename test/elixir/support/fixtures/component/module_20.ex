@@ -15,6 +15,6 @@ defmodule Hologram.Test.Fixtures.Component.Module20 do
   defp entities_query do
     Entity15
     |> filter(label: "Report")
-    |> order_by(:label)
+    |> order_by(label)
   end
 end

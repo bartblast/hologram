@@ -17,6 +17,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module29 do
 
     Entity2
     |> filter(b >= ^min_b)
-    |> limit(bounds.limit)
+    |> limit(^bounds.limit)
   end
 end

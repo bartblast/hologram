@@ -13,6 +13,6 @@ defmodule Hologram.Test.Fixtures.Component.Module18 do
   end
 
   defp entities_query do
-    order_by(Entity15, :token)
+    order_by(Entity15, token)
   end
 end

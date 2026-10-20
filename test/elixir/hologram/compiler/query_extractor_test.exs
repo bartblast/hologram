@@ -303,7 +303,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_term =
         Entity2
         |> filter(a: true)
-        |> order_by(:c)
+        |> order_by(c)
         |> Stage.normalize()
 
       assert extract_module_queries(Module1, entity_types, ir_plt) == [expected_term]
@@ -780,7 +780,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       module_1_term =
         Entity2
         |> filter(a: true)
-        |> order_by(:c)
+        |> order_by(c)
         |> Stage.normalize()
 
       module_4_term =

@@ -268,28 +268,42 @@ defmodule Hologram.Query do
   to - and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
-  query term. The limit is a non-negative integer. It bounds what the query evaluates
-  to, not the underlying data. A later call replaces a limit an earlier one set.
+  query term. The limit is a non-negative integer, written as a literal or pinned when it
+  comes from the surrounding code - `limit(20)`, `limit(^page_size)`. It bounds what the query
+  evaluates to, not the underlying data. A later call replaces a limit an earlier one set.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
-  term, or when the limit is not a non-negative integer.
+  Raises Hologram.CompileError, naming the location, when the limit is neither an integer
+  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, or when the limit is not a non-negative integer.
   """
-  @spec limit(module | t, non_neg_integer) :: t
-  defdelegate limit(query, value), to: Stage
+  defmacro limit(query, value) do
+    lowered = Expression.bound(value, :limit, __CALLER__)
+
+    quote do
+      Stage.limit(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Sets the given query's offset - the number of results skipped before the query's
   results begin - and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
-  query term. The offset is a non-negative integer. It slices what the query evaluates
-  to, not the underlying data. A later call replaces an offset an earlier one set.
+  query term. The offset is a non-negative integer, written as a literal or pinned when it
+  comes from the surrounding code - `offset(40)`, `offset(^skip)`. It slices what the query
+  evaluates to, not the underlying data. A later call replaces an offset an earlier one set.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
-  term, or when the offset is not a non-negative integer.
+  Raises Hologram.CompileError, naming the location, when the offset is neither an integer
+  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, or when the offset is not a non-negative integer.
   """
-  @spec offset(module | t, non_neg_integer) :: t
-  defdelegate offset(query, value), to: Stage
+  defmacro offset(query, value) do
+    lowered = Expression.bound(value, :offset, __CALLER__)
+
+    quote do
+      Stage.offset(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Marks the given query as single-result and returns the resulting query term.
@@ -309,10 +323,16 @@ defmodule Hologram.Query do
   Sets the given query's ordering keys and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
-  query term. The spec is an attribute name (ascending), or a list whose entries are
-  attribute names (ascending) or `{attribute, :asc | :desc}` tuples - keyword syntax
-  reads naturally (`order_by(query, title: :desc)`). Each entry becomes an
-  `{attribute, direction}` pair, in the given order.
+  query term. The spec is an attribute named with a bare name (ascending), or a list of
+  attributes and `{attribute, :asc | :desc}` pairs - keyword syntax reads naturally:
+
+      Task |> order_by(priority)
+      Task |> order_by([priority, title])
+      Task |> order_by(priority: :desc, title: :asc)
+
+  An attribute chosen at runtime is pinned, as is a direction or a whole spec -
+  `order_by(^sort_field)`, `order_by(title: ^direction)`, `order_by(^[{sort_by, sort_dir}])`.
+  Each entry becomes an `{attribute, direction}` pair, in the given order.
 
   An ordering is atomic - a later call replaces the ordering an earlier one set rather
   than adding to it. Precedence is positional, so an ordering states itself in one place
@@ -321,12 +341,21 @@ defmodule Hologram.Query do
   An enum attribute orders by the position of its values in the declared `values:` list -
   `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the spec is neither an attribute name nor a list, when an entry names a
-  relationship or an unknown attribute, or when a direction is neither :asc nor :desc.
+  Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
+  (`order_by(:priority)` is refused in favour of `order_by(priority)`), when a direction is
+  neither an atom nor pinned, or when the spec or an entry is neither a bare name, a pair nor
+  pinned. Raises ArgumentError when the query is neither an entity type module nor a query term,
+  when the spec is neither an attribute name nor a list, when an entry names a relationship or an
+  unknown attribute - which is how a forgotten pin on a variable reads - or when a direction is
+  neither :asc nor :desc.
   """
-  @spec order_by(module | t, atom | list) :: t
-  defdelegate order_by(query, spec), to: Stage
+  defmacro order_by(query, spec) do
+    lowered = Expression.ordering(spec, __CALLER__)
+
+    quote do
+      Stage.order_by(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Sets the given query's view bounds to the requested page and returns the resulting
@@ -334,18 +363,25 @@ defmodule Hologram.Query do
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
-  integer, the number of results per page), both required. Pagination expands into the
-  offset and limit view bounds - `paginate(page: 2, size: 20)` sets offset 20 and
-  limit 20 - and slices what the query evaluates to, not the underlying data, replacing
-  view bounds already set. Either option may be a placeholder, which makes the bounds it feeds
-  placeholders too.
+  integer, the number of results per page), both required, each written as a literal or pinned
+  when it comes from the surrounding code - `paginate(page: ^page, size: 25)` - or the whole
+  options pinned. Pagination expands into the offset and limit view bounds -
+  `paginate(page: 2, size: 20)` sets offset 20 and limit 20 - and slices what the query
+  evaluates to, not the underlying data, replacing view bounds already set.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the options are not a keyword list holding exactly :page and :size, or when
-  either option is not a positive integer.
+  Raises Hologram.CompileError, naming the location, when an option value is neither an
+  integer literal nor pinned, or when the options are neither a keyword list nor pinned. Raises
+  ArgumentError when the query is neither an entity type module nor a query term, when the
+  options are not a keyword list holding exactly :page and :size, or when either option is not
+  a positive integer.
   """
-  @spec paginate(module | t, keyword) :: t
-  defdelegate paginate(query, opts), to: Stage
+  defmacro paginate(query, opts) do
+    lowered = Expression.pagination(opts, __CALLER__)
+
+    quote do
+      Stage.paginate(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Puts the given attribute values on the given entity struct and returns it, with the values

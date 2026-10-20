@@ -98,7 +98,7 @@ defmodule Hologram.DBReadTest do
 
       results =
         Module2
-        |> order_by(:c)
+        |> order_by(c)
         |> DB.read()
 
       assert [%Module2{c: "aaa"}, %Module2{c: "bbb"}] = results
@@ -216,7 +216,7 @@ defmodule Hologram.DBReadTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         Module2
-        |> order_by(%Placeholder{name: :sort})
+        |> order_by(^%Placeholder{name: :sort})
         |> DB.read()
       end
     end

@@ -272,11 +272,11 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "orders by an attribute" do
-      assert names(agreed(order_by(Module10, :count))) == ["cleo", "ada", "bob"]
+      assert names(agreed(order_by(Module10, count))) == ["cleo", "ada", "bob"]
     end
 
     test "orders by an attribute descending" do
-      assert names(agreed(order_by(Module10, [{:count, :desc}]))) == ["bob", "ada", "cleo"]
+      assert names(agreed(order_by(Module10, count: :desc))) == ["bob", "ada", "cleo"]
     end
 
     # The rows tie on the first key, so the second decides between them.
@@ -287,7 +287,7 @@ defmodule Hologram.Query.InterpreterTest do
       query =
         Module10
         |> filter(count: 7)
-        |> order_by([:count, :priority])
+        |> order_by([count, priority])
 
       assert names(agreed(query)) == ["dana", "eve"]
     end
@@ -295,15 +295,15 @@ defmodule Hologram.Query.InterpreterTest do
     # Ascending puts them last and descending puts them first, which is where the database puts
     # them - a page reading its own rows shows them where the server would have.
     test "places missing values last when ascending" do
-      assert names(agreed(order_by(Module10, :priority))) == ["ada", "bob", "cleo"]
+      assert names(agreed(order_by(Module10, priority))) == ["ada", "bob", "cleo"]
     end
 
     test "places missing values first when descending" do
-      assert names(agreed(order_by(Module10, [{:priority, :desc}]))) == ["cleo", "bob", "ada"]
+      assert names(agreed(order_by(Module10, priority: :desc))) == ["cleo", "bob", "ada"]
     end
 
     test "orders strings" do
-      assert names(agreed(order_by(Module10, :username))) == ["ada", "bob", "cleo"]
+      assert names(agreed(order_by(Module10, username))) == ["ada", "bob", "cleo"]
     end
   end
 
@@ -314,7 +314,7 @@ defmodule Hologram.Query.InterpreterTest do
       module_10(count: 3, username: "Ödön")
       module_10(count: 4, username: "bob")
 
-      assert names(agreed(order_by(Module10, :username))) == ["ada", "bob", "Ödön", "Zoe"]
+      assert names(agreed(order_by(Module10, username))) == ["ada", "bob", "Ödön", "Zoe"]
     end
   end
 
@@ -331,11 +331,11 @@ defmodule Hologram.Query.InterpreterTest do
     # Declared, alphabetical and reverse-alphabetical are three different sequences for these
     # values, so an order that matches the declared one matches it on purpose.
     test "orders by the declared position, not the label" do
-      assert module_17_labels(agreed(order_by(Module17, :priority))) == ["c", "a", "b", "d"]
+      assert module_17_labels(agreed(order_by(Module17, priority))) == ["c", "a", "b", "d"]
     end
 
     test "orders by the declared position descending" do
-      query = order_by(Module17, [{:priority, :desc}])
+      query = order_by(Module17, priority: :desc)
 
       assert module_17_labels(agreed(query)) == ["d", "b", "a", "c"]
     end
@@ -344,7 +344,7 @@ defmodule Hologram.Query.InterpreterTest do
       module_17(priority: :medium, label: "e")
       module_17(priority: :medium, label: "f")
 
-      query = order_by(Module17, [:priority, :label])
+      query = order_by(Module17, [priority, label])
 
       assert module_17_labels(agreed(query)) == ["c", "a", "e", "f", "b", "d"]
     end
@@ -452,7 +452,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "takes at most the limit" do
       query =
         Module10
-        |> order_by(:count)
+        |> order_by(count)
         |> limit(2)
 
       assert names(agreed(query)) == ["ada", "bob"]
@@ -461,7 +461,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "skips the offset" do
       query =
         Module10
-        |> order_by(:count)
+        |> order_by(count)
         |> offset(1)
 
       assert names(agreed(query)) == ["bob", "cleo"]
@@ -470,7 +470,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "skips before it takes" do
       query =
         Module10
-        |> order_by(:count)
+        |> order_by(count)
         |> offset(1)
         |> limit(1)
 
@@ -490,7 +490,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "returns the first entity of a single-result query" do
       query =
         Module10
-        |> order_by(:count)
+        |> order_by(count)
         |> one()
 
       assert agreed(query).username == "ada"
@@ -713,7 +713,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, mine.id)
       :ok = add_relationship(Module3, other_source.id, :a, theirs.id)
 
-      rows = agreed(order_by(include(Module3, :a), :id))
+      rows = agreed(order_by(include(Module3, :a), id))
       row = Enum.find(rows, &(&1.id == source.id))
 
       assert titles(row.a) == ["mine"]
@@ -742,7 +742,7 @@ defmodule Hologram.Query.InterpreterTest do
       query =
         include(Module3, :a, fn related ->
           related
-          |> order_by(:c)
+          |> order_by(c)
           |> limit(2)
         end)
 

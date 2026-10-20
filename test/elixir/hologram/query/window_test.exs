@@ -74,7 +74,7 @@ defmodule Hologram.Query.WindowTest do
       term =
         Module2
         |> filter(a: true)
-        |> order_by(:c)
+        |> order_by(c)
         |> limit(20)
         |> offset(40)
         |> Stage.normalize()
@@ -89,7 +89,7 @@ defmodule Hologram.Query.WindowTest do
       window =
         Module2
         |> filter(a: true)
-        |> order_by(:c)
+        |> order_by(c)
         |> Stage.normalize()
         |> derive()
 

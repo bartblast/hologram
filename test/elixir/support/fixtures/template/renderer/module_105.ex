@@ -18,6 +18,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module105 do
   defp entities_query(min_b) do
     Entity2
     |> filter(b >= ^min_b)
-    |> order_by(:c)
+    |> order_by(c)
   end
 end

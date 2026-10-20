@@ -58,7 +58,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         |> include(:a, fn related_query ->
           related_query
           |> filter(a: true)
-          |> order_by(:c)
+          |> order_by(c)
           |> limit(5)
         end)
         |> Stage.normalize()
@@ -81,7 +81,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query -> order_by(related_query, :c) end)
+        |> include(:a, fn related_query -> order_by(related_query, c) end)
         |> Stage.normalize()
 
       assert %{sql: sql} = compile(term, mapping)

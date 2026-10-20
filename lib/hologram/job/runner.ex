@@ -127,7 +127,7 @@ defmodule Hologram.Job.Runner do
   defp ran_count(job_type) do
     job_type
     |> filter(status: :queued)
-    |> order_by(:created_at)
+    |> order_by(created_at)
     |> DB.read()
     |> Enum.count(&(process(job_type, &1.id) != :taken))
   end
