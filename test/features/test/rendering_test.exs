@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.RenderingTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Components.Rendering.PropValidationComponent
+  alias HologramFeatureTests.Rendering.DefaultInitPage
   alias HologramFeatureTests.Rendering.Page1
   alias HologramFeatureTests.Rendering.Page2
   alias HologramFeatureTests.Rendering.Page3
@@ -77,6 +78,20 @@ defmodule HologramFeatureTests.RenderingTest do
       |> visit(PropsOnStructPage, n: 7)
       |> click(button("Read param"))
       |> assert_text(css("#page_result"), "7")
+    end
+  end
+
+  describe "default initialization" do
+    # Component 1 is initialized on the server and component 2 on the client, and the component
+    # defines neither init/3 nor init/2, so both go through the defaults.
+    feature "component without init callbacks renders on the server and on the client", %{
+      session: session
+    } do
+      session
+      |> visit(DefaultInitPage)
+      |> assert_text(css("#component_1"), "first")
+      |> click(button("Show component 2"))
+      |> assert_text(css("#component_2"), "second")
     end
   end
 
