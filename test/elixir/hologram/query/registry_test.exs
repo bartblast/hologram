@@ -58,7 +58,7 @@ defmodule Hologram.Query.RegistryTest do
     test "returns the types a term includes alongside its own" do
       term =
         Module3
-        |> include(:a)
+        |> include(a)
         |> Stage.normalize()
 
       assert entity_types(term) == MapSet.new([Module2, Module3])
@@ -67,7 +67,7 @@ defmodule Hologram.Query.RegistryTest do
     test "walks includes to any depth" do
       term =
         Module5
-        |> include(:a, &include(&1, :b))
+        |> include(a, &include(&1, b))
         |> Stage.normalize()
 
       assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
@@ -121,7 +121,7 @@ defmodule Hologram.Query.RegistryTest do
     test "collects placeholders from nested includes" do
       base_term =
         Module3
-        |> include(:a)
+        |> include(a)
         |> Stage.normalize()
 
       sub_term = %{base_term.include.a | filter: [{:c, :==, {:placeholder, :search}}]}

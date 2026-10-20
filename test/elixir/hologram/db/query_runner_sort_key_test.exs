@@ -92,7 +92,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
       term =
         Module3
-        |> include(:a)
+        |> include(a)
         |> Stage.normalize()
 
       assert [%Module3{a: [%Module2{c: "banana"}]}] = run(term, companion_mapping())

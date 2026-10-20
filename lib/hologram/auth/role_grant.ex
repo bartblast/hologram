@@ -36,7 +36,7 @@ defmodule Hologram.Auth.RoleGrant do
 
       RoleGrant
       |> filter(entity_id in [^trip_id, nil] and entity_type == MyApp.Trip)
-      |> include(:user)
+      |> include(user)
       |> order_by(created_at)
 
   The `nil` beside the id is load-bearing. A type-wide grant is held on every row of its type,

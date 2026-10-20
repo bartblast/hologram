@@ -6,6 +6,7 @@ defmodule Hologram.QueryTest do
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module5
 
   describe "filter/2" do
     test "appends to a query held in a variable" do
@@ -79,6 +80,114 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "include/2" do
+    test "lowers a bare name" do
+      assert include(Module3, a).include == %{a: %Query{entity: Module2}}
+    end
+
+    test "lowers a keyword entry with an in-place sub-builder" do
+      query = include(Module3, a: &filter(&1, a: true))
+
+      assert query.include == %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
+    end
+
+    test "lowers a list of paths" do
+      query = include(Module5, [a.a, a.b])
+
+      assert query.include == %{
+               a: %Query{
+                 entity: Module3,
+                 include: %{a: %Query{entity: Module2}, b: %Query{entity: Module2}}
+               }
+             }
+    end
+
+    test "lowers a path" do
+      query = include(Module5, a.a)
+
+      assert query.include == %{
+               a: %Query{entity: Module3, include: %{a: %Query{entity: Module2}}}
+             }
+    end
+
+    test "merges two calls through one relationship" do
+      query =
+        Module5
+        |> include(a.a)
+        |> include(a.b)
+
+      assert query.include == %{
+               a: %Query{
+                 entity: Module3,
+                 include: %{a: %Query{entity: Module2}, b: %Query{entity: Module2}}
+               }
+             }
+    end
+
+    test "takes a pinned name" do
+      relationship = :a
+
+      assert include(Module3, ^relationship).include == %{a: %Query{entity: Module2}}
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      include(Hologram.Test.Fixtures.Entity.Module3, :a)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: include names a relationship with a bare name, got: :a - write a",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "include/3" do
+    test "lowers a path with a sub-builder" do
+      query = include(Module5, a.a, &filter(&1, a: true))
+
+      assert query.include == %{
+               a: %Query{
+                 entity: Module3,
+                 include: %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
+               }
+             }
+    end
+
+    test "lowers an in-place fn" do
+      query = include(Module3, a, fn related -> filter(related, a: true) end)
+
+      assert query.include == %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
+    end
+
+    test "takes a pinned sub-builder" do
+      sub_builder = &filter(&1, a: true)
+
+      query = include(Module3, a, ^sub_builder)
+
+      assert query.include == %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
+    end
+
+    test "raises on a pinned sub-builder that is not a function, through a path" do
+      not_a_sub_builder = :a
+
+      assert_error ArgumentError,
+                   "include sub-builder for relationship :a must be a one-argument function, got: :a",
+                   fn -> include(Module5, a.a, ^not_a_sub_builder) end
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      include(Hologram.Test.Fixtures.Entity.Module3, a, sub_builder)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: include/3 takes a sub-builder written in place (fn or &) or a pinned expression, got: sub_builder - a value from the surrounding code is pinned: ^sub_builder",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
   describe "inspect/2" do
     test "leaves out every field at its default" do
       assert inspect(%Query{entity: Module2}) ==
@@ -89,7 +198,7 @@ defmodule Hologram.QueryTest do
       term =
         Module3
         |> filter(c_id: "x")
-        |> include(:a, &filter(&1, a: true))
+        |> include(a, &filter(&1, a: true))
         |> limit(5)
         |> one()
 
@@ -106,7 +215,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "shows an include as its nested struct" do
-      term = include(Module3, :a, &filter(&1, a: true))
+      term = include(Module3, a, &filter(&1, a: true))
 
       assert inspect(term) ==
                "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module3, include: %{a: %Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, filter: [{:a, :==, true}]}}}"

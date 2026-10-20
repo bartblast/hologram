@@ -203,14 +203,22 @@ defmodule Hologram.Query do
   related entity (to-one) or entity set (to-many) is embedded in results under the
   relationship's name.
 
-  The spec is a relationship name, or a shape list describing a traversal tree as
-  data: entries are relationship names, `{name, nested_spec}` pairs traversing deeper
-  (keyword syntax reads naturally - `include(query, project: :owner)`,
-  `include(query, [:assignee, project: :owner])`), or `{name, sub_builder}` pairs.
-  A sub-builder is a one-argument function receiving the related entity's base query
-  term and returning a refined query term for the same entity - to-many includes take
-  nested clauses this way. `include/3` passes a sub-builder for a single relationship
-  name directly.
+  A relationship is named with a bare name, and a nested one with a path through the
+  relationships it traverses. Several go in a list, where entries sharing a first relationship
+  merge, and a keyword entry pairs a relationship with a sub-builder:
+
+      Project |> include(owner)
+      Project |> include(tasks.owner)
+      Project |> include([owner, tasks.owner, tasks.project])
+      Project |> include([owner, tasks: &open_tasks/1])
+
+  A sub-builder is a one-argument function receiving the related entity's base query term
+  and returning a refined query term for the same entity - to-many includes take nested
+  clauses this way. It is written in place (`fn` or a capture) or pinned. `include/3` passes
+  one for a relationship or a path directly - `include(project.tasks, &open_tasks/1)`. A
+  relationship or a whole spec chosen at runtime is pinned - `include(^relationship)` - and a
+  pinned spec is the data form: names, `{name, nested_spec}` pairs and `{name, sub_builder}`
+  pairs.
 
   To-one includes take no clauses (a single embedded entity has nothing to filter,
   order, or slice) - nested includes are their only refinement. Traversal depth is
@@ -218,18 +226,38 @@ defmodule Hologram.Query do
 
   Including a relationship that is already included merges the two when neither narrows
   it with clauses: what each includes is included, by the same rule at every level, so
-  `query |> include(project: :owner) |> include(project: :tasks)` includes the project
-  with both.
+  `query |> include(project.owner) |> include(project.tasks)` includes the project with
+  both.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the spec is invalid or empty, when a name is not a declared relationship,
-  when a relationship is included again and either include carries clauses, when a
-  sub-builder is not a one-argument function or does not return a query term for the
-  related entity type, when a to-one include carries clauses, or when the include depth
-  exceeds 2 levels.
+  Raises Hologram.CompileError, naming the location, when a relationship is written as an atom
+  (`include(:owner)` is refused in favour of `include(owner)`), when a keyword entry nests a
+  relationship rather than a sub-builder (`include(tasks: owner)` is refused in favour of
+  `include(tasks.owner)`), or when a spec, an entry or a sub-builder is anything else. Raises
+  ArgumentError when the query is neither an entity type module nor a query term, when a
+  spec is invalid or empty, when a name is not a declared relationship - which is how a
+  forgotten pin on a variable reads - when a relationship is included again and either include
+  carries clauses, when a sub-builder is not a one-argument function or does not return a query
+  term for the related entity type, when a to-one include carries clauses, or when the include
+  depth exceeds 2 levels.
   """
-  @spec include(module | t, atom | list, (t -> t) | nil) :: t
-  defdelegate include(query, spec, sub_builder \\ nil), to: Stage
+  defmacro include(query, spec) do
+    lowered = Expression.inclusion(spec, __CALLER__)
+
+    quote do
+      Stage.include(unquote(query), unquote(lowered))
+    end
+  end
+
+  @doc """
+  Adds the traversal of the given relationship or path, refined by the given sub-builder at its
+  end, to the given query's include map and returns the resulting query term - see include/2.
+  """
+  defmacro include(query, relationship, sub_builder) do
+    hops = Expression.relationship(relationship, __CALLER__)
+    lowered_sub_builder = Expression.sub_builder(sub_builder, __CALLER__)
+
+    nested_include(query, hops, lowered_sub_builder)
+  end
 
   @doc """
   Records on the given entity struct that the given integer attribute is to move UP by the given
@@ -438,6 +466,25 @@ defmodule Hologram.Query do
   """
   @spec trust(Entity.t() | module | t) :: Entity.t() | t
   defdelegate trust(subject), to: Stage
+
+  # A path with a sub-builder includes each hop through a sub-builder that includes the next, the
+  # given one refining the last: project.tasks with a builder includes project with
+  # fn related -> include(related, :tasks, builder) end. Every hop goes through include/3, so a
+  # path refuses a sub-builder that is not a function in the words a single relationship does.
+  defp nested_include(query, [name], sub_builder) do
+    quote do
+      Stage.include(unquote(query), unquote(name), unquote(sub_builder))
+    end
+  end
+
+  defp nested_include(query, [name | rest], sub_builder) do
+    related = Macro.var(:related, __MODULE__)
+    inner = nested_include(related, rest, sub_builder)
+
+    quote do
+      Stage.include(unquote(query), unquote(name), fn unquote(related) -> unquote(inner) end)
+    end
+  end
 
   # Rendered as the struct with the fields at their default left out - a fresh term shows its
   # entity type alone, and an include shows as the nested struct it holds. Still the literal that

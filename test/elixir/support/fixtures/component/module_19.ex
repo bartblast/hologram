@@ -13,6 +13,6 @@ defmodule Hologram.Test.Fixtures.Component.Module19 do
   end
 
   defp entities_query do
-    include(Entity16, :secrets, &filter(&1, token: "tok_hidden"))
+    include(Entity16, secrets, &filter(&1, token: "tok_hidden"))
   end
 end

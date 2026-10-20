@@ -71,7 +71,7 @@ defmodule Hologram.DBReadTest do
       results =
         as_user(user, fn ->
           PolicyModule3
-          |> include(:children)
+          |> include(children)
           |> DB.read()
         end)
 

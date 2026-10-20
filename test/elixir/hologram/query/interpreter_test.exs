@@ -657,7 +657,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "fills a to-one relationship with the row its reference names", %{target: target} do
-      assert [row] = agreed(include(Module3, :b))
+      assert [row] = agreed(include(Module3, b))
       assert row.b.id == target.id
       assert row.b.c == "the to-one target"
     end
@@ -670,7 +670,7 @@ defmodule Hologram.Query.InterpreterTest do
         |> Module3.new()
         |> create()
 
-      rows = agreed(include(Module3, :b))
+      rows = agreed(include(Module3, b))
 
       assert Enum.count(rows, &is_nil(&1.b)) == 1
     end
@@ -678,7 +678,7 @@ defmodule Hologram.Query.InterpreterTest do
     # What was asked for is filled and what was not keeps the sentinel naming it, which says
     # something an empty value cannot: that nobody asked.
     test "leaves the relationships the query did not ask for alone" do
-      assert [row] = agreed(include(Module3, :b))
+      assert [row] = agreed(include(Module3, b))
       assert row.a == %NotIncluded{relationship: :a}
       assert row.c == %NotIncluded{relationship: :c}
     end
@@ -690,12 +690,12 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, first.id)
       :ok = add_relationship(Module3, source.id, :a, second.id)
 
-      assert [row] = agreed(include(Module3, :a))
+      assert [row] = agreed(include(Module3, a))
       assert matched_titles(row.a) == ["apple", "banana"]
     end
 
     test "fills a to-many relationship holding no pairs with an empty list" do
-      assert [row] = agreed(include(Module3, :a))
+      assert [row] = agreed(include(Module3, a))
       assert row.a == []
     end
 
@@ -713,7 +713,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, mine.id)
       :ok = add_relationship(Module3, other_source.id, :a, theirs.id)
 
-      rows = agreed(order_by(include(Module3, :a), id))
+      rows = agreed(order_by(include(Module3, a), id))
       row = Enum.find(rows, &(&1.id == source.id))
 
       assert titles(row.a) == ["mine"]
@@ -726,7 +726,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, kept.id)
       :ok = add_relationship(Module3, source.id, :a, dropped.id)
 
-      query = include(Module3, :a, &filter(&1, c: "kept"))
+      query = include(Module3, a, &filter(&1, c: "kept"))
 
       assert [row] = agreed(query)
       assert titles(row.a) == ["kept"]
@@ -740,7 +740,7 @@ defmodule Hologram.Query.InterpreterTest do
       end)
 
       query =
-        include(Module3, :a, fn related ->
+        include(Module3, a, fn related ->
           related
           |> order_by(c)
           |> limit(2)
@@ -756,7 +756,7 @@ defmodule Hologram.Query.InterpreterTest do
         |> Module5.new()
         |> create()
 
-      query = include(Module5, :a, &include(&1, :c))
+      query = include(Module5, a, &include(&1, c))
 
       assert [row] = agreed(query)
       assert row.a.c.id == required.id

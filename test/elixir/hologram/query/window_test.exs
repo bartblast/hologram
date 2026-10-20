@@ -99,7 +99,7 @@ defmodule Hologram.Query.WindowTest do
     test "derives the window of an included query too" do
       base_term =
         Module3
-        |> include(:a)
+        |> include(a)
         |> Stage.normalize()
 
       sub_term = %{

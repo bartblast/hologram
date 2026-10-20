@@ -19,6 +19,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module98 do
   end
 
   defp entities_query do
-    include(Module3, :a)
+    include(Module3, a)
   end
 end

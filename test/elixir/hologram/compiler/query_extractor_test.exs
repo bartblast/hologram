@@ -48,6 +48,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module45
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module46
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module47
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -65,6 +66,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
+  alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
 
   # A frame opens with the application it came from, which carries the framework's version - the
   # one part of an expected message that cannot be spelled out and stay true across a release.
@@ -270,10 +272,22 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_term =
         Entity3
-        |> include(:a, fn sub -> filter(sub, b >= ^%Placeholder{name: :min_b}) end)
+        |> include(a, fn sub -> filter(sub, b >= ^%Placeholder{name: :min_b}) end)
         |> Stage.normalize()
 
       assert extract_module_queries(Module20, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "extracts an include through a path with a sub-builder", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity5
+        |> include(a.a, &filter(&1, b >= ^%Placeholder{name: :min_b}))
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module47, entity_types, ir_plt) == [expected_term]
     end
 
     test "extracts each clause of a multi-clause capture as a variant", %{

@@ -135,7 +135,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp included_children(actor_user_id) do
       term =
         PolicyModule3
-        |> include(:children)
+        |> include(children)
         |> Stage.normalize()
 
       [row] = run_policied(term, @policy_mapping, actor_user_id)
@@ -146,7 +146,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp included_parent(actor_user_id) do
       term =
         PolicyModule1
-        |> include(:parent)
+        |> include(parent)
         |> Stage.normalize()
 
       [row] = run_policied(term, @policy_mapping, actor_user_id)
@@ -324,7 +324,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         PolicyModule3
-        |> include(:children, &include(&1, :parent))
+        |> include(children, &include(&1, parent))
         |> Stage.normalize()
 
       assert [%{children: [included_child]}] = run_policied(term, @policy_mapping, user.id)
@@ -404,7 +404,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query ->
+        |> include(a, fn related_query ->
           related_query
           |> filter(a: true)
           |> order_by(c)
@@ -435,7 +435,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       embedding_term =
         Module3
-        |> include(:a)
+        |> include(a)
         |> Stage.normalize()
 
       direct_term =
@@ -467,7 +467,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       embedding_term =
         Module23
         |> filter(id: ^source.id)
-        |> include(:a)
+        |> include(a)
         |> one()
         |> Stage.normalize()
 
@@ -497,7 +497,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       term =
         Module23
         |> filter(id: ^source.id)
-        |> include(:a)
+        |> include(a)
         |> one()
         |> Stage.normalize()
 
@@ -509,7 +509,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:c)
+        |> include(c)
         |> Stage.normalize()
 
       assert [%Module3{id: id, c: %Module1{} = embedded_entity}] = run(term, @mapping)
@@ -552,7 +552,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:b)
+        |> include(b)
         |> Stage.normalize()
 
       assert [%Module3{b: %Module2{} = embedded_entity}] = run(term, @mapping)
@@ -568,7 +568,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         PolicyModule1
-        |> include(:parent)
+        |> include(parent)
         |> Stage.normalize()
 
       assert [%{parent: included_parent}] = run(term, @policy_mapping)
@@ -580,7 +580,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:b)
+        |> include(b)
         |> Stage.normalize()
 
       assert [%{b: nil}] = run(term, @mapping)
@@ -617,7 +617,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module9
-        |> include(:a, fn related_query ->
+        |> include(a, fn related_query ->
           related_query
           |> filter(source_id >= 2)
           |> order_by(source_id)

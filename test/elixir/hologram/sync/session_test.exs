@@ -1520,7 +1520,7 @@ defmodule Hologram.Sync.SessionTest do
 
   defp include_window_term do
     Module3
-    |> Query.include(:a)
+    |> Query.include(a)
     |> Stage.normalize()
   end
 
