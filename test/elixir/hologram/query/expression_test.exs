@@ -9,14 +9,294 @@ defmodule Hologram.Query.ExpressionTest do
     %{__ENV__ | file: Path.join(File.cwd!(), "lib/my_app/queries.ex"), line: 7}
   end
 
-  defp lower_predicates(code, binding \\ []) do
+  # Parses the code, lowers it with the given lowering and evaluates what it lowered to, with the
+  # given binding standing for the caller's variables.
+  defp lower(lowering, code, binding \\ []) do
     {value, _binding} =
       code
       |> Code.string_to_quoted!(line: 12)
-      |> predicates(env())
+      |> lowering.()
       |> Code.eval_quoted(binding)
 
     value
+  end
+
+  defp lower_bound(code, binding \\ []), do: lower(&bound(&1, :limit, env()), code, binding)
+
+  defp lower_inclusion(code, binding \\ []), do: lower(&inclusion(&1, env()), code, binding)
+
+  defp lower_ordering(code, binding \\ []), do: lower(&ordering(&1, env()), code, binding)
+
+  defp lower_pagination(code, binding \\ []), do: lower(&pagination(&1, env()), code, binding)
+
+  defp lower_predicates(code, binding \\ []), do: lower(&predicates(&1, env()), code, binding)
+
+  defp lower_relationship(code, binding \\ []),
+    do: lower(&relationship(&1, env()), code, binding)
+
+  defp lower_sub_builder(code, binding \\ []), do: lower(&sub_builder(&1, env()), code, binding)
+
+  describe "bound/3" do
+    test "lowers a negative integer for the stage to judge" do
+      assert lower_bound("-1") == -1
+    end
+
+    test "lowers a pinned expression" do
+      assert lower_bound("^page_size", page_size: 20) == 20
+    end
+
+    test "lowers an integer" do
+      assert lower_bound("5") == 5
+    end
+
+    test "raises on a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: page_size - a value from the surrounding code is pinned: ^page_size",
+                   fn -> lower_bound("page_size") end
+    end
+
+    test "raises on a bare name for offset" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: offset takes an integer or a pinned expression, got: skip - a value from the surrounding code is pinned: ^skip",
+                   fn -> lower(&bound(&1, :offset, env()), "skip") end
+    end
+
+    test "raises on a dot chain" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: bounds.limit - a value from the surrounding code is pinned: ^bounds.limit",
+                   fn -> lower_bound("bounds.limit") end
+    end
+
+    test "raises on an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: limit takes an integer or a pinned expression, got: :all",
+                   fn -> lower_bound(":all") end
+    end
+
+    test "raises on an operator expression" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: n + 1 - a value from the surrounding code is pinned: ^(n + 1)",
+                   fn -> lower_bound("n + 1") end
+    end
+  end
+
+  describe "inclusion/2" do
+    test "absorbs a bare name after a path through it" do
+      assert lower_inclusion("[tasks.owner, tasks]") == [tasks: [:owner]]
+    end
+
+    test "absorbs a bare name into a path through it" do
+      assert lower_inclusion("[tasks, tasks.owner]") == [tasks: [:owner]]
+    end
+
+    test "collapses a repeated path" do
+      assert lower_inclusion("[tasks.owner, tasks.owner]") == [tasks: [:owner]]
+    end
+
+    test "keeps a pinned element in place" do
+      assert lower_inclusion("[owner, ^rel]", rel: :project) == [:owner, :project]
+    end
+
+    test "keeps a pinned element in place between paths through one relationship" do
+      assert lower_inclusion("[tasks.owner, ^rel, tasks.project]", rel: :owner) ==
+               [{:tasks, [:owner, :project]}, :owner]
+    end
+
+    test "lowers a bare name" do
+      assert lower_inclusion("owner") == :owner
+    end
+
+    test "lowers a keyword entry with a capture" do
+      assert lower_inclusion("[tasks: &Function.identity/1]") ==
+               [tasks: &Function.identity/1]
+    end
+
+    test "lowers a keyword entry with a pinned sub-builder" do
+      assert lower_inclusion("[tasks: ^builder]", builder: &Function.identity/1) ==
+               [tasks: &Function.identity/1]
+    end
+
+    test "lowers a keyword entry with an in-place fn" do
+      assert [tasks: sub_builder] = lower_inclusion("[tasks: fn query -> {:refined, query} end]")
+      assert sub_builder.(:query) == {:refined, :query}
+    end
+
+    test "lowers a list of names and paths" do
+      assert lower_inclusion("[owner, tasks.owner]") == [:owner, tasks: [:owner]]
+    end
+
+    test "lowers a path" do
+      assert lower_inclusion("tasks.owner") == [tasks: [:owner]]
+    end
+
+    test "lowers a three-hop path" do
+      assert lower_inclusion("a.b.c") == [a: [b: [:c]]]
+    end
+
+    test "merges paths sharing a first hop in the order it first appears" do
+      assert lower_inclusion("[tasks.owner, owner, tasks.project]") ==
+               [{:tasks, [:owner, :project]}, :owner]
+    end
+
+    test "merges paths sharing two hops" do
+      assert lower_inclusion("[a.b.c, a.b.d]") == [a: [b: [:c, :d]]]
+    end
+
+    test "passes a pinned spec through" do
+      assert lower_inclusion("^spec", spec: [project: [:owner]]) == [project: [:owner]]
+    end
+
+    test "raises on a call" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: Foo.bar() - a value from the surrounding code is pinned: ^Foo.bar()",
+                   fn -> lower_inclusion("Foo.bar()") end
+    end
+
+    test "raises on a keyword entry nesting a keyword list" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: include nests with a path, got: [tasks: [owner: project]] - write it as a path: tasks.owner.project",
+                   fn -> lower_inclusion("[tasks: [owner: project]]") end
+    end
+
+    test "raises on a keyword entry nesting a list of names" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: include nests with a path, got: [tasks: [owner, project]] - write each as a path: tasks.owner, tasks.project",
+                   fn -> lower_inclusion("[tasks: [owner, project]]") end
+    end
+
+    test "raises on a keyword entry nesting a name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include nests with a path, got: [tasks: owner] - write it as a path: tasks.owner",
+                   fn -> lower_inclusion("[tasks: owner]") end
+    end
+
+    test "raises on a keyword entry nesting an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: include nests with a path, got: [tasks: :owner] - write it as a path: tasks.owner",
+                   fn -> lower_inclusion("[tasks: :owner]") end
+    end
+
+    test "raises on a keyword entry with an unpinned sub-builder call" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a keyword entry in include pairs a relationship with a sub-builder written in place (fn or &) or a pinned expression, got: [tasks: Foo.builder()] - a value from the surrounding code is pinned: ^Foo.builder()",
+                   fn -> lower_inclusion("[tasks: Foo.builder()]") end
+    end
+
+    test "raises on a keyword entry with nil" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a keyword entry in include pairs a relationship with a sub-builder written in place (fn or &) or a pinned expression, got: [tasks: nil]",
+                   fn -> lower_inclusion("[tasks: nil]") end
+    end
+
+    test "raises on a path called with parentheses" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: tasks.owner() - a value from the surrounding code is pinned: ^tasks.owner()",
+                   fn -> lower_inclusion("tasks.owner()") end
+    end
+
+    test "raises on a remote call without parentheses" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: Foo.bar() - a value from the surrounding code is pinned: ^Foo.bar()",
+                   fn -> lower_inclusion("Foo.bar") end
+    end
+
+    test "raises on an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: include names a relationship with a bare name, got: :owner - write owner",
+                   fn -> lower_inclusion(":owner") end
+    end
+
+    test "raises on an atom in a list" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: include names a relationship with a bare name, got: :project - write project",
+                   fn -> lower_inclusion("[owner, :project]") end
+    end
+  end
+
+  describe "ordering/2" do
+    test "lowers a bare name" do
+      assert lower_ordering("priority") == :priority
+    end
+
+    test "lowers a keyword list" do
+      assert lower_ordering("[priority: :desc, title: :asc]") == [priority: :desc, title: :asc]
+    end
+
+    test "lowers a list mixing names and pairs" do
+      assert lower_ordering("[title, {priority, :desc}]") == [:title, {:priority, :desc}]
+    end
+
+    test "lowers a list of names" do
+      assert lower_ordering("[priority, created_at]") == [:priority, :created_at]
+    end
+
+    test "lowers a pinned direction" do
+      assert lower_ordering("[title: ^dir]", dir: :desc) == [title: :desc]
+    end
+
+    test "lowers a pinned name in a pair" do
+      assert lower_ordering("[{^key, :desc}]", key: :title) == [title: :desc]
+    end
+
+    test "passes a pinned spec through" do
+      assert lower_ordering("^spec", spec: [{:title, :asc}]) == [title: :asc]
+    end
+
+    test "raises on a bare direction" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a direction is :asc, :desc or a pinned expression, got: desc",
+                   fn -> lower_ordering("[priority: desc]") end
+    end
+
+    test "raises on a call" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: order_by names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: sort_key() - a value from the surrounding code is pinned: ^sort_key()",
+                   fn -> lower_ordering("sort_key()") end
+    end
+
+    test "raises on a dot path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: order_by names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: entity.field - a value from the surrounding code is pinned: ^entity.field",
+                   fn -> lower_ordering("entity.field") end
+    end
+
+    test "raises on an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: order_by names an attribute with a bare name, got: :priority - write priority",
+                   fn -> lower_ordering(":priority") end
+    end
+
+    test "raises on an atom in a list" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: order_by names an attribute with a bare name, got: :created_at - write created_at",
+                   fn -> lower_ordering("[priority, :created_at]") end
+    end
+  end
+
+  describe "pagination/2" do
+    test "lowers a pinned option" do
+      assert lower_pagination("[page: ^page, size: 25]", page: 2) == [page: 2, size: 25]
+    end
+
+    test "lowers integer options" do
+      assert lower_pagination("[page: 2, size: 25]") == [page: 2, size: 25]
+    end
+
+    test "passes pinned options through" do
+      assert lower_pagination("^opts", opts: [page: 1, size: 10]) == [page: 1, size: 10]
+    end
+
+    test "raises on a bare name as an option value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a paginate option takes an integer or a pinned expression, got: page - a value from the surrounding code is pinned: ^page",
+                   fn -> lower_pagination("[page: page, size: 25]") end
+    end
+
+    test "raises on a bare name as the options" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: paginate takes page: and size: options or a pinned expression, got: opts - a value from the surrounding code is pinned: ^opts",
+                   fn -> lower_pagination("opts") end
+    end
   end
 
   describe "predicates/2" do
@@ -268,6 +548,55 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a keyword predicate is attribute: value, got: a == 1 - join comparisons with and",
                    fn -> lower_predicates("[a == 1, b == 2]") end
+    end
+  end
+
+  describe "relationship/2" do
+    test "lowers a bare name" do
+      assert lower_relationship("owner") == [:owner]
+    end
+
+    test "lowers a path" do
+      assert lower_relationship("project.tasks") == [:project, :tasks]
+    end
+
+    test "lowers a pinned name" do
+      assert lower_relationship("^rel", rel: :owner) == [:owner]
+    end
+
+    test "raises on a call" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: relationship_for(x) - a value from the surrounding code is pinned: ^relationship_for(x)",
+                   fn -> lower_relationship("relationship_for(x)") end
+    end
+
+    test "raises on an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: include names a relationship with a bare name, got: :owner - write owner",
+                   fn -> lower_relationship(":owner") end
+    end
+  end
+
+  describe "sub_builder/2" do
+    test "lowers a pinned sub-builder" do
+      assert lower_sub_builder("^builder", builder: &Function.identity/1) ==
+               (&Function.identity/1)
+    end
+
+    test "passes a capture through" do
+      assert lower_sub_builder("&Function.identity/1") == (&Function.identity/1)
+    end
+
+    test "passes an in-place fn through" do
+      sub_builder = lower_sub_builder("fn query -> {:refined, query} end")
+
+      assert sub_builder.(:query) == {:refined, :query}
+    end
+
+    test "raises on a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include/3 takes a sub-builder written in place (fn or &) or a pinned expression, got: builder - a value from the surrounding code is pinned: ^builder",
+                   fn -> lower_sub_builder("builder") end
     end
   end
 end

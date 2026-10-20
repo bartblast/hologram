@@ -12,7 +12,97 @@ defmodule Hologram.Query.Expression do
 
   @comparison_operators [:!=, :<, :<=, :==, :>, :>=]
 
+  @inclusion_names %{stage: "include", names: "a relationship", spelled: "a bare name or a path"}
+
+  @ordering_names %{stage: "order_by", names: "an attribute", spelled: "a bare name"}
+
   @range_operators [:.., :..//]
+
+  @doc """
+  Lowers the bound argument of `limit/2` or `offset/2`, named by the given stage, to what the
+  stage function takes: an integer literal, or the pinned expression itself.
+
+  Raises Hologram.CompileError, located at the argument, on anything else.
+  """
+  @spec bound(Macro.t(), atom, Macro.Env.t()) :: Macro.t()
+  def bound({:^, _meta, [expr]}, _stage, _env), do: expr
+
+  def bound(ast, stage, env) do
+    if integer_literal?(ast) do
+      ast
+    else
+      compile_error!(
+        "#{stage} takes an integer or a pinned expression, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
+        ast,
+        env
+      )
+    end
+  end
+
+  @doc """
+  Lowers the spec argument of `include/2` to the AST of what `Hologram.Query.Stage.include/2`
+  takes: a relationship name, or a shape list of names, `{name, nested_spec}` pairs and
+  `{name, sub_builder}` pairs.
+
+  A relationship is a bare name (`owner`) and a nested one a path (`tasks.owner`), lowering to
+  `:owner` and `[tasks: [:owner]]`. A list holds names, paths, pinned elements and, last, keyword
+  entries pairing a relationship with a sub-builder written in place or pinned
+  (`[owner, tasks.owner, project: &open/1]`). Paths sharing a first hop merge in the order they
+  first appear, so `[tasks.owner, tasks.project]` lowers to `[tasks: [:owner, :project]]`, and a
+  bare name beside a path through it is absorbed by the path. A pinned spec passes through.
+
+  Raises Hologram.CompileError, located at the offending node, on an atom where a bare name goes
+  (naming the bare spelling), on a keyword entry nesting a name or a list (naming the path), and
+  on anything else.
+  """
+  @spec inclusion(Macro.t(), Macro.Env.t()) :: Macro.t()
+  def inclusion({:^, _meta, [expr]}, _env), do: expr
+
+  def inclusion(list, env) when is_list(list) do
+    list
+    |> Enum.map(&include_element!(&1, env))
+    |> merge_includes()
+  end
+
+  def inclusion(ast, env) do
+    case include_element!(ast, env) do
+      {:path, [name]} -> name
+      element -> merge_includes([element])
+    end
+  end
+
+  @doc """
+  Lowers the spec argument of `order_by/2` to the AST of what `Hologram.Query.Stage.order_by/2`
+  takes: an attribute name, or a list of names and `{name, direction}` pairs.
+
+  An attribute is a bare name (`priority`), lowering to `:priority`. A list holds names and pairs,
+  keyword syntax included (`[title, priority: :desc]`), a direction is an atom or pinned, and a
+  name or the whole spec may be pinned.
+
+  Raises Hologram.CompileError, located at the offending node, on an atom where a bare name goes
+  (naming the bare spelling), on a direction that is neither an atom nor pinned, and on anything
+  else in a name position.
+  """
+  @spec ordering(Macro.t(), Macro.Env.t()) :: Macro.t()
+  def ordering({:^, _meta, [expr]}, _env), do: expr
+
+  def ordering(list, env) when is_list(list), do: Enum.map(list, &ordering_entry!(&1, env))
+
+  def ordering(ast, env), do: name!(ast, @ordering_names, env)
+
+  @doc """
+  Lowers the options argument of `paginate/2` to what the stage function takes: a keyword list
+  whose values are integer literals or pinned, or the pinned expression itself. The option names
+  are the stage's to judge.
+
+  Raises Hologram.CompileError, located at the offending node, on anything else.
+  """
+  @spec pagination(Macro.t(), Macro.Env.t()) :: Macro.t()
+  def pagination({:^, _meta, [expr]}, _env), do: expr
+
+  def pagination(list, env) when is_list(list), do: Enum.map(list, &pagination_option!(&1, env))
+
+  def pagination(ast, env), do: pagination_error!(ast, env)
 
   @doc """
   Lowers the predicates argument of `filter/2` to the AST of what `Hologram.Query.Stage.filter/2`
@@ -32,6 +122,55 @@ defmodule Hologram.Query.Expression do
   def predicates(list, env) when is_list(list), do: Enum.map(list, &keyword_entry!(&1, env))
 
   def predicates(ast, env), do: predicate_list!(ast, env)
+
+  @doc """
+  Lowers the relationship argument of `include/3` to the list of its hops: `[:owner]` for a bare
+  name, `[:project, :tasks]` for a path, and the pinned expression alone in a list for a pinned
+  name.
+
+  Raises Hologram.CompileError, located at the argument, on an atom where a bare name goes and on
+  anything else that is neither a name nor a path.
+  """
+  @spec relationship(Macro.t(), Macro.Env.t()) :: list(Macro.t())
+  def relationship({:^, _meta, [expr]}, _env), do: [expr]
+
+  def relationship(ast, env), do: hops(ast) || name_error!(ast, @inclusion_names, env)
+
+  @doc """
+  Lowers the sub-builder argument of `include/3`: a function written in place (`fn` or a capture)
+  passes through, and a pinned expression lowers to the expression.
+
+  Raises Hologram.CompileError, located at the argument, on anything else.
+  """
+  @spec sub_builder(Macro.t(), Macro.Env.t()) :: Macro.t()
+  def sub_builder({:^, _meta, [expr]}, _env), do: expr
+
+  def sub_builder(ast, env) do
+    if in_place_function?(ast) do
+      ast
+    else
+      compile_error!(
+        "include/3 takes a sub-builder written in place (fn or &) or a pinned expression, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
+        ast,
+        env
+      )
+    end
+  end
+
+  # A path joins the slot of its first hop, or opens one where it first appears - so paths sharing
+  # a first hop merge, a bare name is a path with no tail, and elements that are not paths keep
+  # their place. The slots are held newest first, and merge_includes/1 reverses them.
+  defp add_include_path(slots, hop, tail) do
+    case Enum.find_index(slots, &match?({:path_group, ^hop, _tails}, &1)) do
+      nil ->
+        [{:path_group, hop, tails_of(tail)} | slots]
+
+      index ->
+        List.update_at(slots, index, fn {:path_group, ^hop, tails} ->
+          {:path_group, hop, tails ++ tails_of(tail)}
+        end)
+    end
+  end
 
   defp attribute!({name, _meta, context}, _env) when is_atom(name) and is_atom(context), do: name
 
@@ -71,6 +210,18 @@ defmodule Hologram.Query.Expression do
 
   defp data_form?(_value), do: false
 
+  defp direction!({:^, _meta, [expr]}, _env), do: expr
+
+  defp direction!(direction, _env) when is_atom(direction), do: direction
+
+  defp direction!(ast, env) do
+    compile_error!(
+      "a direction is :asc, :desc or a pinned expression, got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
+
   # The expression a data-form keyword value is spelled as - concrete where the shape says which
   # operator it is, generic where it does not.
   defp expression_hint(key, {operator, operand}) when operator in @comparison_operators do
@@ -107,6 +258,58 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  # The relationships a bare name or a path names, in order - nil for anything else. A path is a
+  # dot chain with no parentheses over a bare name, so a call (`tasks.owner()`, `Foo.bar`) is not
+  # one.
+  defp hops(ast) do
+    case reversed_hops(ast) do
+      nil -> nil
+      reversed -> Enum.reverse(reversed)
+    end
+  end
+
+  defp in_place_function?({:fn, _meta, _clauses}), do: true
+
+  defp in_place_function?({:&, _meta, _args}), do: true
+
+  defp in_place_function?(_ast), do: false
+
+  # A list element of an include spec: a pinned element keeps its place, a keyword entry pairs a
+  # relationship with a sub-builder, and a bare name or a path joins the merge.
+  defp include_element!({:^, _meta, [expr]}, _env), do: {:in_place, expr}
+
+  defp include_element!({key, {:^, _meta, [expr]}}, _env) when is_atom(key),
+    do: {:in_place, {key, expr}}
+
+  # A keyword entry pairs a relationship with a sub-builder. A value naming relationships is a
+  # nesting attempt, refused with the paths it means, and anything else a sub-builder missing its
+  # pin.
+  defp include_element!({key, value}, env) when is_atom(key) do
+    if in_place_function?(value) do
+      {:in_place, {key, value}}
+    else
+      case written_paths(key, value) do
+        nil -> keyword_sub_builder_error!(key, value, env)
+        paths -> nested_include_error!(key, value, paths, env)
+      end
+    end
+  end
+
+  defp include_element!(ast, env) do
+    case hops(ast) do
+      nil -> name_error!(ast, @inclusion_names, env)
+      hops -> {:path, hops}
+    end
+  end
+
+  # An integer, or one with a sign - a signed number is a call in the AST, but reads as a literal.
+  defp integer_literal?(value) when is_integer(value), do: true
+
+  defp integer_literal?({sign, _meta, [number]}) when sign in [:+, :-] and is_integer(number),
+    do: true
+
+  defp integer_literal?(_ast), do: false
+
   defp keyword_entry!({key, value}, env) when is_atom(key) do
     {key, {:==, keyword_value!(key, value, env)}}
   end
@@ -123,6 +326,15 @@ defmodule Hologram.Query.Expression do
     compile_error!(
       "a keyword predicate is attribute: value, got: #{Macro.to_string(entry)}#{listed_comparison_hint(entry)}",
       entry,
+      env
+    )
+  end
+
+  @spec keyword_sub_builder_error!(atom, Macro.t(), Macro.Env.t()) :: no_return
+  defp keyword_sub_builder_error!(key, value, env) do
+    compile_error!(
+      "a keyword entry in include pairs a relationship with a sub-builder written in place (fn or &) or a pinned expression, got: #{Macro.to_string([{key, value}])}#{pin_suffix(value)}",
+      value,
       env
     )
   end
@@ -191,6 +403,46 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  defp merge_includes(elements) do
+    elements
+    |> Enum.reduce([], fn
+      {:path, [hop | tail]}, slots -> add_include_path(slots, hop, tail)
+      {:in_place, ast}, slots -> [{:in_place, ast} | slots]
+    end)
+    |> Enum.reverse()
+    |> Enum.map(fn
+      {:in_place, ast} -> ast
+      {:path_group, hop, []} -> hop
+      {:path_group, hop, tails} -> {hop, merge_includes(Enum.map(tails, &{:path, &1}))}
+    end)
+  end
+
+  defp name!({:^, _meta, [expr]}, _names, _env), do: expr
+
+  defp name!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
+    do: name
+
+  defp name!(ast, names, env), do: name_error!(ast, names, env)
+
+  # An atom where a bare name goes is the old spelling, refused with the new one - other than nil,
+  # true and false, which name nothing.
+  @spec name_error!(Macro.t(), map, Macro.Env.t()) :: no_return
+  defp name_error!(atom, names, env) when is_atom(atom) and atom not in [nil, true, false] do
+    compile_error!(
+      "#{names.stage} names #{names.names} with a bare name, got: #{inspect(atom)} - write #{atom}",
+      atom,
+      env
+    )
+  end
+
+  defp name_error!(ast, names, env) do
+    compile_error!(
+      "#{names.stage} names #{names.names} with #{names.spelled}, or with a pinned expression when the name comes from the surrounding code, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
+      ast,
+      env
+    )
+  end
+
   # The data form has no negated range, so a range here could only fail when the query is built,
   # in words about an operator nobody wrote.
   defp negated_membership!({operator, _meta, _bounds} = ast, env)
@@ -204,6 +456,21 @@ defmodule Hologram.Query.Expression do
 
   defp negated_membership!(ast, env), do: membership!(ast, env)
 
+  @spec nested_include_error!(atom, Macro.t(), list(String.t()), Macro.Env.t()) :: no_return
+  defp nested_include_error!(key, value, paths, env) do
+    hint =
+      case paths do
+        [path] -> "write it as a path: #{path}"
+        paths -> "write each as a path: #{Enum.join(paths, ", ")}"
+      end
+
+    compile_error!(
+      "include nests with a path, got: #{Macro.to_string([{key, value}])} - #{hint}",
+      value,
+      env
+    )
+  end
+
   @spec operand_error!(String.t(), Macro.t(), Macro.Env.t()) :: no_return
   defp operand_error!(subject, ast, env) do
     compile_error!(
@@ -212,6 +479,46 @@ defmodule Hologram.Query.Expression do
       env
     )
   end
+
+  defp option_value!({:^, _meta, [expr]}, _env), do: expr
+
+  defp option_value!(ast, env) do
+    if integer_literal?(ast) do
+      ast
+    else
+      compile_error!(
+        "a paginate option takes an integer or a pinned expression, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
+        ast,
+        env
+      )
+    end
+  end
+
+  # An atom key is keyword syntax (`priority: :desc`), which cannot be told from a written-out
+  # `{:priority, :desc}`, so a pair's key is an atom or a name.
+  defp ordering_entry!({key, direction}, env) do
+    {ordering_key!(key, env), direction!(direction, env)}
+  end
+
+  defp ordering_entry!(ast, env), do: name!(ast, @ordering_names, env)
+
+  defp ordering_key!(key, _env) when is_atom(key), do: key
+
+  defp ordering_key!(ast, env), do: name!(ast, @ordering_names, env)
+
+  @spec pagination_error!(Macro.t(), Macro.Env.t()) :: no_return
+  defp pagination_error!(ast, env) do
+    compile_error!(
+      "paginate takes page: and size: options or a pinned expression, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
+      ast,
+      env
+    )
+  end
+
+  defp pagination_option!({key, value}, env) when is_atom(key),
+    do: {key, option_value!(value, env)}
+
+  defp pagination_option!(entry, env), do: pagination_error!(entry, env)
 
   # ^ binds looser than a call or a dot, and tighter than any other operator, so only an operator
   # expression needs parentheses to be pinned whole. A module attribute reads as a name: ^@max.
@@ -225,6 +532,14 @@ defmodule Hologram.Query.Expression do
   end
 
   defp pin_hint(ast), do: "^#{Macro.to_string(ast)}"
+
+  defp pin_suffix(ast) do
+    if literal?(ast) do
+      ""
+    else
+      " - a value from the surrounding code is pinned: #{pin_hint(ast)}"
+    end
+  end
 
   defp predicate_list!({:and, _meta, [left, right]}, env) do
     conjunct!(left, env) ++ conjunct!(right, env)
@@ -244,6 +559,23 @@ defmodule Hologram.Query.Expression do
   end
 
   defp predicate_list!(ast, env), do: unsupported!(ast, env)
+
+  defp reversed_hops({name, _meta, context}) when is_atom(name) and is_atom(context), do: [name]
+
+  defp reversed_hops({{:., _dot_meta, [left, field]}, meta, []}) when is_atom(field) do
+    with true <- Keyword.get(meta, :no_parens, false),
+         [_hop | _rest] = left_hops <- reversed_hops(left) do
+      [field | left_hops]
+    else
+      _not_a_path -> nil
+    end
+  end
+
+  defp reversed_hops(_ast), do: nil
+
+  defp tails_of([]), do: []
+
+  defp tails_of(tail), do: [tail]
 
   @spec unsupported!(Macro.t(), Macro.Env.t()) :: no_return
   defp unsupported!(ast, env) do
@@ -274,4 +606,25 @@ defmodule Hologram.Query.Expression do
   end
 
   defp written_as(expression), do: "write it as an expression: #{Macro.to_string(expression)}"
+
+  # The paths a keyword value naming relationships would be written as - nil when the value names
+  # anything else.
+  defp written_paths(prefix, atom) when is_atom(atom) and atom not in [nil, true, false],
+    do: ["#{prefix}.#{atom}"]
+
+  defp written_paths(prefix, [_element | _rest] = list) do
+    paths = Enum.map(list, &written_paths(prefix, &1))
+
+    if Enum.any?(paths, &is_nil/1), do: nil, else: List.flatten(paths)
+  end
+
+  defp written_paths(prefix, {key, value}) when is_atom(key),
+    do: written_paths("#{prefix}.#{key}", value)
+
+  defp written_paths(prefix, ast) do
+    case hops(ast) do
+      nil -> nil
+      hops -> [Enum.join([prefix | hops], ".")]
+    end
+  end
 end
