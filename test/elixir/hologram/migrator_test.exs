@@ -585,6 +585,51 @@ defmodule Hologram.MigratorTest do
 
       assert count == 0
     end
+
+    # The file's own add puts the column and its fill in place before the tail is checked,
+    # so the check has to read the schema the file produced: against the one the file
+    # started from, the column is absent and the check would answer zero.
+    test "refuses a file whose backfill repeats across a new unique column" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+      insert_task_rows(["'a'", "'b'"], "slug")
+
+      refused =
+        migration("20260813091523", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :key,
+            type: :string,
+            opts: [backfill: "taken", unique: true],
+            line: 3
+          }
+        ])
+
+      expected_msg =
+        ~s{found 1 duplicate key in "my_app_task" over ("key") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        apply_pending([refused], model, @context)
+      end
+
+      assert applied_versions() == MapSet.new(["20260813091522"])
+      refute "key" in table_columns("my_app_task")
+    end
   end
 
   describe "applied_versions/0" do

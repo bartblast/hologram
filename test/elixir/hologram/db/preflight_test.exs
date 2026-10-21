@@ -80,6 +80,27 @@ defmodule Hologram.DB.PreflightTest do
       assert run!(ops, %{tables: %{}}, mapping(nil)) == :ok
     end
 
+    # Asserted without a database on purpose: the table IS in the schema, so a check that
+    # ran would reach for a connection and raise.
+    test "skips the duplicate check for a unique index over a column this run adds" do
+      ops = [
+        %{
+          op: :create_index,
+          table: "task",
+          index: "task_slug_$uidx",
+          columns: ["slug"],
+          nulls_distinct: true,
+          unique: true
+        }
+      ]
+
+      actual = %{
+        tables: %{"task" => %{columns: %{"id" => %{type: "uuid", collation: nil, null: false}}}}
+      }
+
+      assert run!(ops, actual, mapping(nil)) == :ok
+    end
+
     test "skips the null-tightening check for a table this run creates" do
       ops = [
         %{
