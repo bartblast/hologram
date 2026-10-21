@@ -133,10 +133,8 @@ jobs:
       # compile task tests (lib_compile_task_tests), the database tests (lib_database_tests)
       # and the consistency tests (lib_checks). Excluding the database tests also tells the
       # suite's test helper not to boot the database, so this job needs no server.
-      # TODO: Remove the two --formatter flags with Hologram.Test.SlowestTestsFormatter, which
-      # prints the slowest tests without the trace mode --slowest turns on.
       - name: Run lib Elixir tests
-        run: mix test --warnings-as-errors --exclude consistency --exclude compile_task --exclude database --formatter ExUnit.CLIFormatter --formatter Hologram.Test.SlowestTestsFormatter
+        run: mix test --warnings-as-errors --exclude consistency --exclude compile_task --exclude database
 
       # Step: Execute lib JavaScript tests.
       - name: Run lib JavaScript tests
