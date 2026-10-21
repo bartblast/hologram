@@ -30,16 +30,6 @@ const GRANT_ID_NAMESPACE = Uint8Array.from([
   0xd9, 0xf6, 0x6c,
 ]);
 
-// A rule that references the acting user is skipped for a visitor rather than evaluated with
-// nobody - evaluating it would let a row whose reference is missing match everyone. A delegating
-// rule is still evaluated, because the type it delegates to skips its own actor rules in turn.
-function actorGated(rule) {
-  return (
-    rule.to !== null ||
-    rule.predicates.some(([_name, _operator, value]) => isActorValue(value))
-  );
-}
-
 // Every value compares as the wire spells it - dates and datetimes as their strings, whose
 // character order IS their instant order - so one comparison serves most types.
 //
@@ -73,7 +63,15 @@ function plainCompare(left, right) {
   return left < right ? "lt" : left > right ? "gt" : "eq";
 }
 
+// A missing value equals only another missing one. Left to the comparison, null compares as a
+// number: it reads as 0 against false, 0 or "", and against any other string, which reads as NaN,
+// it is neither less nor greater. Either way it would tie - with every id, string and enum label,
+// with false and with 0 - and a rule on a missing value would grant what the server refuses.
 function equal(left, right) {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
   return compare(left, right) === "eq";
 }
 
@@ -162,15 +160,37 @@ function enumRanks(entityType, name) {
   return new Map(entry.enumValues[name].map((label, index) => [label, index]));
 }
 
-function predicatesHold(entityType, entity, predicates, actorUserId) {
-  return predicates.every(([name, operator, value]) =>
-    holds(
-      entityValue(entityType, entity, name),
-      operator,
-      isActorValue(value) ? actorUserId : value,
-      enumRanks(entityType, name),
-      Model.entry(entityType).attributes[name] === "string",
-    ),
+// The actor of a visitor is nobody rather than null - null would equal a missing reference and
+// hand a visitor every row that has none - so a predicate asking about the actor answers false
+// for a visitor, whichever way it points.
+function predicateHolds(
+  entityType,
+  entity,
+  [name, operator, value],
+  actorUserId,
+) {
+  if (isActorValue(value) && actorUserId === null) {
+    return false;
+  }
+
+  return holds(
+    entityValue(entityType, entity, name),
+    operator,
+    isActorValue(value) ? actorUserId : value,
+    enumRanks(entityType, name),
+    Model.entry(entityType).attributes[name] === "string",
+  );
+}
+
+// A clause is a triple array, or a disjunction object holding alternatives that are clause lists
+// themselves - every clause has to hold, and a disjunction holds when one of its alternatives does.
+function predicatesHold(entityType, entity, clauses, actorUserId) {
+  return clauses.every((clause) =>
+    Array.isArray(clause)
+      ? predicateHolds(entityType, entity, clause, actorUserId)
+      : clause.or.some((alternative) =>
+          predicatesHold(entityType, entity, alternative, actorUserId),
+        ),
   );
 }
 
@@ -228,20 +248,21 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
   }
 }
 
+// A visitor's rules are evaluated rather than skipped, so a disjunction can still answer through
+// an alternative that names nobody. A role is held by somebody, so a visitor holds none, and the
+// grant rows are not read. A delegating rule is evaluated as any other, because the type it
+// delegates to answers its own actor-referencing rules the same way.
 function ruleMatches(rule, entityType, entity, actorUserId) {
-  if (actorUserId === null && actorGated(rule)) {
-    return false;
-  }
-
   if (!predicatesHold(entityType, entity, rule.predicates, actorUserId)) {
     return false;
   }
 
   if (
     rule.to !== null &&
-    !rule.to.some((reference) =>
-      referenceHolds(reference, entityType, entity, actorUserId),
-    )
+    (actorUserId === null ||
+      !rule.to.some((reference) =>
+        referenceHolds(reference, entityType, entity, actorUserId),
+      ))
   ) {
     return false;
   }

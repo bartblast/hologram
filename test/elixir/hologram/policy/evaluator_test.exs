@@ -5,6 +5,7 @@ defmodule Hologram.Policy.EvaluatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module17
+  alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Policy.Module1
 
   defp deny(_requirement, _entity, _actor_user_id), do: false
@@ -121,6 +122,41 @@ defmodule Hologram.Policy.EvaluatorTest do
                nil,
                &deny/3
              )
+    end
+
+    # A missing value is unequal to every value but another missing one, the acting user's id
+    # included - a rule on an unset reference never grants a signed-in user.
+    test "never equates a missing reference with the acting user" do
+      entity = %Module1{author_id: nil}
+
+      refute rule_matches?(
+               rule(predicates: [{:author_id, :==, {:actor}}]),
+               entity,
+               "user_id_1",
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:author_id, :!=, {:actor}}]),
+               entity,
+               "user_id_1",
+               &deny/3
+             )
+    end
+
+    test "never equates a missing string with a literal" do
+      entity = %Module2{c: nil}
+
+      refute rule_matches?(rule(predicates: [{:c, :==, "draft"}]), entity, nil, &deny/3)
+      assert rule_matches?(rule(predicates: [{:c, :!=, "draft"}]), entity, nil, &deny/3)
+      refute rule_matches?(rule(predicates: [{:c, :in, ["draft"]}]), entity, nil, &deny/3)
+    end
+
+    test "never equates a missing number with zero" do
+      entity = %Module1{priority: nil}
+
+      refute rule_matches?(rule(predicates: [{:priority, :==, 0}]), entity, nil, &deny/3)
+      assert rule_matches?(rule(predicates: [{:priority, :!=, 0}]), entity, nil, &deny/3)
     end
 
     test "evaluates inequality with nil as a regular value" do

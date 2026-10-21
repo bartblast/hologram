@@ -3885,20 +3885,33 @@ defmodule Hologram.Compiler do
   # reader spells both.
   defp render_policy_predicates(entity_type, predicates) do
     predicates
-    |> Enum.map_join(",", fn {name, operator, value} ->
-      name_js =
-        name
-        |> Atom.to_string()
-        |> Jason.encode!()
-
-      operator_js =
-        operator
-        |> Atom.to_string()
-        |> Jason.encode!()
-
-      ~s/[#{name_js},#{operator_js},#{render_policy_value(entity_type, name, value)}]/
-    end)
+    |> Enum.map_join(",", &render_policy_clause(entity_type, &1))
     |> then(&"[#{&1}]")
+  end
+
+  # A disjunction is an object beside the triple arrays, holding its alternatives - the shape the
+  # query kernel's filters take, so one reader tells the two apart by whether a clause is an array.
+  defp render_policy_clause(entity_type, {:or, alternatives}) do
+    alternatives_js =
+      alternatives
+      |> Enum.map_join(",", &render_policy_predicates(entity_type, &1))
+      |> then(&"[#{&1}]")
+
+    render_json_object([{"or", alternatives_js}])
+  end
+
+  defp render_policy_clause(entity_type, {name, operator, value}) do
+    name_js =
+      name
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    operator_js =
+      operator
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    ~s/[#{name_js},#{operator_js},#{render_policy_value(entity_type, name, value)}]/
   end
 
   # The acting user's own id, named rather than carried: the client binds it at evaluation the
