@@ -4415,6 +4415,16 @@ Connect with other Hologram developers, ask questions, share your projects, and 
 - **Bluesky** (https://bsky.app/profile/bartblast.com) - Release announcements and project updates
 - **LinkedIn** (https://www.linkedin.com/in/bartblast/) - Release announcements and project updates
 
+### Showcase
+
+Built an app with Hologram or a library for it? Submit it to the Showcase.
+
+Teams considering Hologram want to see who already uses it. Your entry gets your project a link from the Hologram website, a post on LinkedIn, X, Bluesky and the Elixir Forum, and a mention in the Hologram newsletter.
+
+Every submission gets a reply. Nothing is published without your approval.
+
+Submit your project at https://hologram.page/showcase/submit.
+
 ### Courses
 
 Get early access to comprehensive Hologram video courses.
