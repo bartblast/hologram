@@ -321,8 +321,24 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
+    # Unequal values as well as equal ones: an operand never read would compare as a tie.
     test "compares two attributes of the row" do
       entity = %Module10{count: 3, priority: 3}
+      below = %Module10{count: 3, priority: 5}
+
+      assert rule_matches?(
+               rule(predicates: [{:count, :<, {:attribute, :priority}}]),
+               below,
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:count, :>, {:attribute, :priority}}]),
+               below,
+               nil,
+               &deny/3
+             )
 
       assert rule_matches?(
                rule(predicates: [{:count, :>=, {:attribute, :priority}}]),
@@ -369,7 +385,8 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
-    # A number sorts before nil as a term, so these two would hold if nil were compared at all.
+    # A number sorts before nil as a term, and the browser reads a missing value as 0, so each tier
+    # would let one pair of these through if it compared the missing value at all.
     test "never matches an ordering comparison between attributes when either is missing" do
       refute rule_matches?(
                rule(predicates: [{:count, :<=, {:attribute, :priority}}]),
@@ -380,6 +397,20 @@ defmodule Hologram.Policy.EvaluatorTest do
 
       refute rule_matches?(
                rule(predicates: [{:priority, :>=, {:attribute, :count}}]),
+               %Module10{count: 3},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:count, :>=, {:attribute, :priority}}]),
+               %Module10{count: 3},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:priority, :<=, {:attribute, :count}}]),
                %Module10{count: 3},
                nil,
                &deny/3
@@ -423,6 +454,13 @@ defmodule Hologram.Policy.EvaluatorTest do
 
     test "compares an integer attribute with a float attribute" do
       entity = %Module10{count: 2, rating: 2.0}
+
+      assert rule_matches?(
+               rule(predicates: [{:count, :<, {:attribute, :rating}}]),
+               %Module10{count: 2, rating: 2.5},
+               nil,
+               &deny/3
+             )
 
       assert rule_matches?(
                rule(predicates: [{:count, :==, {:attribute, :rating}}]),

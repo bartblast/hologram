@@ -782,6 +782,227 @@ describe("QueryKernel", () => {
     });
   });
 
+  // Mirrors the interpreter's "run/3 - comparing attributes" describe case for case.
+  describe("matches() - comparing attributes", () => {
+    const BOOKING = "MyApp.Booking";
+
+    const accounts = {
+      ada: {count: 1, id: "a1", priority: 3, rating: 1.5, username: "ada"},
+      bob: {count: 5, id: "a2", priority: 5, rating: 4.5, username: "bob"},
+      cleo: {
+        count: 9,
+        id: "a3",
+        priority: null,
+        rating: null,
+        username: "cleo",
+      },
+      dan: {count: 2, id: "a4", priority: 1, rating: 2.0, username: "dan"},
+    };
+
+    const namesMatching = (filter, context) =>
+      Object.values(accounts)
+        .filter((row) => matches(row, filter, context))
+        .map((row) => row.username);
+
+    const idsMatching = (rows, filter, entityType = null) =>
+      rows
+        .filter((row) => matches(row, filter, {}, entityType))
+        .map((row) => row.id);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [BOOKING]: {
+            attributes: {id: "uuid", level: "enum", priority: "enum"},
+            enumValues: {
+              level: ["low", "medium", "high"],
+              priority: ["low", "medium", "high"],
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("matches rows whose attribute is below another", () => {
+      assert.deepEqual(
+        namesMatching([["count", "<", {attribute: "priority"}]]),
+        ["ada"],
+      );
+    });
+
+    it("matches rows whose attribute is at or above another", () => {
+      assert.deepEqual(
+        namesMatching([["count", ">=", {attribute: "priority"}]]),
+        ["bob", "dan"],
+      );
+    });
+
+    it("matches rows whose attributes are equal", () => {
+      assert.deepEqual(
+        namesMatching([["count", "==", {attribute: "priority"}]]),
+        ["bob"],
+      );
+    });
+
+    it("matches rows whose attributes differ, a missing one included", () => {
+      assert.deepEqual(
+        namesMatching([["count", "!=", {attribute: "priority"}]]),
+        ["ada", "cleo", "dan"],
+      );
+    });
+
+    // Cleo has no priority, so no spelling of the comparison reaches her. A missing value reads as
+    // 0 here and sorts after a number on the server, so each tier would let one pair of spellings
+    // through if it compared the missing value at all - the four keep the two suites alike.
+    it("passes over a row missing either side of an ordering comparison", () => {
+      assert.deepEqual(
+        namesMatching([["count", "<=", {attribute: "priority"}]]),
+        ["ada", "bob"],
+      );
+
+      assert.deepEqual(
+        namesMatching([["priority", ">=", {attribute: "count"}]]),
+        ["ada", "bob"],
+      );
+
+      assert.deepEqual(
+        namesMatching([["count", ">=", {attribute: "priority"}]]),
+        ["bob", "dan"],
+      );
+
+      assert.deepEqual(
+        namesMatching([["priority", "<=", {attribute: "count"}]]),
+        ["bob", "dan"],
+      );
+    });
+
+    it("matches two missing attributes as equal", () => {
+      const rows = [
+        {ends_on: null, id: "unset", starts_on: null},
+        {ends_on: null, id: "half_set", starts_on: "2026-03-01"},
+        {ends_on: "2026-03-01", id: "both_set", starts_on: "2026-03-01"},
+      ];
+
+      assert.deepEqual(
+        idsMatching(rows, [["starts_on", "==", {attribute: "ends_on"}]]),
+        ["unset", "both_set"],
+      );
+
+      assert.deepEqual(
+        idsMatching(rows, [["starts_on", "!=", {attribute: "ends_on"}]]),
+        ["half_set"],
+      );
+    });
+
+    it("compares two dates", () => {
+      const rows = [
+        {ends_on: "2026-03-01", id: "reversed", starts_on: "2026-03-05"},
+        {ends_on: "2026-03-05", id: "ordered", starts_on: "2026-03-01"},
+      ];
+
+      assert.deepEqual(
+        idsMatching(rows, [["ends_on", "<", {attribute: "starts_on"}]]),
+        ["reversed"],
+      );
+    });
+
+    it("compares an integer with a float", () => {
+      assert.deepEqual(namesMatching([["count", "<", {attribute: "rating"}]]), [
+        "ada",
+      ]);
+
+      assert.deepEqual(
+        namesMatching([["count", "==", {attribute: "rating"}]]),
+        ["dan"],
+      );
+    });
+
+    // Declared order, not label order: "high" is after "medium" in the declared list and before it
+    // as a string, so a label comparison would match nothing here.
+    it("compares two enums by their declared position", () => {
+      const rows = [
+        {id: "above", level: "high", priority: "medium"},
+        {id: "below", level: "low", priority: "medium"},
+        {id: "level", level: "medium", priority: "medium"},
+      ];
+
+      assert.deepEqual(
+        idsMatching(rows, [["level", ">", {attribute: "priority"}]], BOOKING),
+        ["above"],
+      );
+
+      assert.deepEqual(
+        idsMatching(rows, [["level", "<=", {attribute: "priority"}]], BOOKING),
+        ["below", "level"],
+      );
+    });
+
+    // Mango and mango share a key, so the values settle it - and Łódź folds to lodz, before m.
+    it("compares two strings by their keys, then by their values", () => {
+      const rows = [
+        {
+          bio: "mango",
+          bio_sort: "mango",
+          id: "Mango",
+          username: "Mango",
+          username_sort: "mango",
+        },
+        {
+          bio: "apple",
+          bio_sort: "apple",
+          id: "Zebra",
+          username: "Zebra",
+          username_sort: "zebra",
+        },
+        {
+          bio: "m",
+          bio_sort: "m",
+          id: "Łódź",
+          username: "Łódź",
+          username_sort: "lodz",
+        },
+      ];
+
+      assert.deepEqual(
+        idsMatching(rows, [["username", "<", {attribute: "bio"}]]),
+        ["Mango", "Łódź"],
+      );
+
+      assert.deepEqual(
+        idsMatching(rows, [["username", ">", {attribute: "bio"}]]),
+        ["Zebra"],
+      );
+    });
+
+    it("matches an attribute comparison inside an alternative", () => {
+      const filter = [
+        {
+          or: [
+            [["count", "<", {attribute: "priority"}]],
+            [["username", "==", "cleo"]],
+          ],
+        },
+      ];
+
+      assert.deepEqual(namesMatching(filter), ["ada", "cleo"]);
+    });
+
+    it("binds a placeholder beside an attribute comparison", () => {
+      const filter = [
+        ["count", ">=", {attribute: "priority"}],
+        ["username", "==", {placeholder: "name"}],
+      ];
+
+      assert.deepEqual(namesMatching(filter, {bindings: {name: "dan"}}), [
+        "dan",
+      ]);
+    });
+  });
+
   // Mirrors the interpreter's "run/3 - comparing enums" describe case for case. The rows hold
   // labels the way the wire spells them, and the type is named so the kernel reads the declared
   // list off the model - which is what makes :high come after :medium rather than before it.

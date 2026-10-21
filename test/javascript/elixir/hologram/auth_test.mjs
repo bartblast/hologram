@@ -55,13 +55,18 @@ describe("Elixir_Hologram_Auth", () => {
   const document = (overrides = {}) =>
     Model.box(DOCUMENT, {
       author_id: null,
+      count: null,
+      due_on: null,
       folder_id: null,
       held_at: null,
       id: DOC,
       priority: null,
       public: false,
+      rating: null,
       released_on: null,
+      stage: null,
       status: null,
+      summary: null,
       title: null,
       ...overrides,
     });
@@ -81,15 +86,23 @@ describe("Elixir_Hologram_Auth", () => {
         [DOCUMENT]: {
           attributes: {
             author_id: "uuid",
+            count: "integer",
+            due_on: "date",
             held_at: "datetime",
             id: "uuid",
             priority: "integer",
             public: "boolean",
+            rating: "float",
             released_on: "date",
+            stage: "enum",
             status: "enum",
+            summary: "string",
             title: "string",
           },
-          enumValues: {status: ["draft", "review", "published"]},
+          enumValues: {
+            stage: ["draft", "review", "published"],
+            status: ["draft", "review", "published"],
+          },
           operations: [
             "archive",
             "create",
@@ -569,6 +582,171 @@ describe("Elixir_Hologram_Auth", () => {
     it("never matches an enum comparison against an unset value", () => {
       assert.deepStrictEqual(
         reads([rule({predicates: [["status", ">=", "draft"]]})], document()),
+        Type.boolean(false),
+      );
+    });
+
+    // Unequal values as well as equal ones: an operand never read would compare as a tie.
+    it("compares two attributes of the row", () => {
+      const entity = document({count: 3, priority: 3});
+      const below = document({count: 3, priority: 5});
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<", {attribute: "priority"}]]})],
+          below,
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", ">", {attribute: "priority"}]]})],
+          below,
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", ">=", {attribute: "priority"}]]})],
+          entity,
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<=", {attribute: "priority"}]]})],
+          entity,
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", ">", {attribute: "priority"}]]})],
+          entity,
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<", {attribute: "priority"}]]})],
+          entity,
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("evaluates an attribute equality with nil as a regular value", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", "==", {attribute: "due_on"}]]})],
+          document(),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", "!=", {attribute: "due_on"}]]})],
+          document({released_on: "2026-03-01"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    // A missing value reads as 0 here and sorts after a number on the server, so each tier would
+    // let one pair of these through if it compared the missing value at all.
+    it("never matches an ordering comparison between attributes when either is missing", () => {
+      const entity = document({count: 3});
+
+      for (const predicate of [
+        ["count", "<=", {attribute: "priority"}],
+        ["priority", ">=", {attribute: "count"}],
+        ["count", ">=", {attribute: "priority"}],
+        ["priority", "<=", {attribute: "count"}],
+      ]) {
+        assert.deepStrictEqual(
+          reads([rule({predicates: [predicate]})], entity),
+          Type.boolean(false),
+        );
+      }
+    });
+
+    // Zebra sorts after apple by its key and before it by its bytes. Mango and mango share a key,
+    // so the values settle it.
+    it("compares two string attributes by their sort keys", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", ">", {attribute: "summary"}]]})],
+          document({summary: "apple", title: "Zebra"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "<", {attribute: "summary"}]]})],
+          document({summary: "mango", title: "Mango"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", ">", {attribute: "summary"}]]})],
+          document({summary: "mango", title: "Mango"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    // "published" is after "review" in the declared list and before it as a string.
+    it("compares two enum attributes by their declared position", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["status", ">", {attribute: "stage"}]]})],
+          document({stage: "review", status: "published"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("compares an integer attribute with a float attribute", () => {
+      const entity = document({count: 2, rating: 2.0});
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<", {attribute: "rating"}]]})],
+          document({count: 2, rating: 2.5}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "==", {attribute: "rating"}]]})],
+          entity,
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<=", {attribute: "rating"}]]})],
+          entity,
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<", {attribute: "rating"}]]})],
+          entity,
+        ),
         Type.boolean(false),
       );
     });

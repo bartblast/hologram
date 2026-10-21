@@ -457,11 +457,14 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     # An ordering line has no place for a value that is not there, on either side - cleo has no
-    # priority, so neither spelling of the comparison reaches her, although a number compared with
-    # nil as a term would.
+    # priority, so no spelling of the comparison reaches her. A number sorts before nil as a term,
+    # and the browser reads a missing value as 0, so each tier would let one pair of spellings
+    # through if it compared the missing value at all - the four keep the two suites alike.
     test "passes over a row missing either side of an ordering comparison" do
       assert matched_names(agreed(filter(Module10, count <= priority))) == ["ada", "bob"]
       assert matched_names(agreed(filter(Module10, priority >= count))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, count >= priority))) == ["bob", "dan"]
+      assert matched_names(agreed(filter(Module10, priority <= count))) == ["bob", "dan"]
     end
 
     test "matches two missing attributes as equal" do
