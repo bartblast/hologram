@@ -37,6 +37,10 @@ defmodule Hologram.DB.Preflight do
   cannot follow fail before any DDL runs, so PostgreSQL never arbitrates: an error
   surfacing from an apply is by definition a Hologram bug.
 
+  A check against a table the ops create, or a unique index over a column they add, answers
+  zero without a query: the table holds no rows yet, and the column no value a row could
+  repeat.
+
   An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
   follow the value to its new label rather than losing it.
   """
@@ -71,9 +75,15 @@ defmodule Hologram.DB.Preflight do
     check_null_tightening!(op, actual, mapping)
   end
 
+  # A column the run adds holds no key a row could repeat, so its index meets no duplicate.
+  # It is empty, or NULL in every row - a unique attribute declares no default, so nothing
+  # fills it before the index builds, and a required one meeting rows is refused by the
+  # required-column check first. NULL is never a duplicate key on a declared unique index,
+  # which keeps nulls distinct - the one index comparing nulls as values, the role grant
+  # store's, is born with its table.
   defp check_op!(%{op: :create_index, unique: true} = op, actual, _mapping) do
     statement = DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct)
-    count = count_existing(actual, op.table, statement)
+    count = count_existing(actual, op.table, op.columns, statement)
 
     if count > 0 do
       columns = Enum.map_join(op.columns, ", ", &~s("#{&1}"))
@@ -176,6 +186,20 @@ defmodule Hologram.DB.Preflight do
   # naming a table absent from the introspected schema reaches this at all.
   defp count_existing(actual, table, statement) do
     if Map.has_key?(actual.tables, table), do: count_result(statement), else: 0
+  end
+
+  # The same for a column the run adds to a table that stands: the query would raise
+  # undefined_column, and the column has no rows' values to count yet.
+  defp count_existing(actual, table, columns, statement) do
+    case Map.fetch(actual.tables, table) do
+      {:ok, %{columns: existing_columns}} ->
+        if Enum.all?(columns, &Map.has_key?(existing_columns, &1)),
+          do: count_result(statement),
+          else: 0
+
+      :error ->
+        0
+    end
   end
 
   defp count_result(statement) do

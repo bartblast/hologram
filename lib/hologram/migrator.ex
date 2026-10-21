@@ -400,10 +400,13 @@ defmodule Hologram.Migrator do
     # text in the same file still holds its old type when its companion lands.
     SchemaReconciler.backfill_sort_keys!(render.transactional, mapping)
 
-    # The tail's checks run here, against the columns the statements above just created
-    # and before anything commits: a file whose index cannot be built does not apply at
-    # all, rather than committing and failing afterwards.
-    Preflight.run!(render.tail, actual, mapping)
+    # The tail's checks run here, against the schema the statements above just produced and
+    # before anything commits: a file whose index cannot be built does not apply at all,
+    # rather than committing and failing afterwards. The schema is read again on purpose - a
+    # column this file adds and fills is absent from the one the file started from, and a
+    # check against an absent column answers zero, which a backfilled unique column must not
+    # get.
+    Preflight.run!(render.tail, Introspection.schema(), mapping)
 
     record_applied(version, context.timestamp, Model.hash(render.post_model))
 

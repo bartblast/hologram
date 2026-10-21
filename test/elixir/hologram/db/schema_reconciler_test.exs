@@ -103,6 +103,33 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     Map.put(@context, :mapping, Mapper.derive!(entity_types, Reflection.list_roles()))
   end
 
+  defp unique_column_context(null) do
+    new_column = %{
+      name: "z",
+      type: :string,
+      sql_type: "text",
+      collation: "C",
+      enum_values: nil,
+      default: nil,
+      null: null,
+      references: nil,
+      fk_constraint: nil,
+      index: nil,
+      source: {:attribute, :z}
+    }
+
+    [Module2]
+    |> reconcile_context()
+    |> update_in([:mapping, Module2, :columns], &[new_column | &1])
+    |> update_mapping_indexes(Module2, fn indexes ->
+      Map.put(indexes, "test_fixtures_entity_module2_z_$uidx", %{
+        columns: ["z"],
+        nulls_distinct: true,
+        unique: true
+      })
+    end)
+  end
+
   defp update_mapping_indexes(context, entity_type, fun) do
     update_in(context, [:mapping, entity_type, :indexes], fun)
   end
@@ -484,6 +511,33 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges a new required unique column on an empty table" do
+      reconcile(reconcile_context([Module2]))
+
+      context = unique_column_context(false)
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges a new optional unique column on a table with rows" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "def"])
+
+      context = unique_column_context(true)
+
+      reconcile(context)
+
+      select_statement =
+        ~s(SELECT "z" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "c")
+
+      {:ok, %{rows: rows}} = Connection.query(select_statement)
+
+      assert rows == [[nil], [nil]]
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
     end
 
