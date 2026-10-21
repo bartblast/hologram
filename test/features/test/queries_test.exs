@@ -14,8 +14,6 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page5
   alias HologramFeatureTests.Queries.Page6
 
-  @place_script "return globalThis.Hologram.durability.cursor();"
-
   # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
   # reaches the operations log they read, so they drain before the tables empty. The tables
   # truncate in one statement: the review table's foreign key to the product table makes Postgres
@@ -182,50 +180,6 @@ defmodule HologramFeatureTests.QueriesTest do
     |> await_local_fill()
     |> click(button("Read overbooked locally"))
     |> assert_text(css("#local_overbooked"), ~r/^bravo,charlie$/)
-  end
-
-  # The place the client greets a stream with is held once a fill has declared the local database
-  # complete, so polling for it is how a test waits for a whole fill to have landed. Raising rather
-  # than returning: the click it gates would otherwise read the rows the render carried.
-  defp await_local_fill(session, attempts_left \\ 100)
-
-  defp await_local_fill(session, 0) do
-    raise Wallaby.ExpectationNotMetError,
-          "Timed out waiting for the local database to fill, the client holds place " <>
-            inspect(script_result(session, @place_script))
-  end
-
-  defp await_local_fill(session, attempts_left) do
-    if script_result(session, @place_script) do
-      session
-    else
-      Process.sleep(50)
-      await_local_fill(session, attempts_left - 1)
-    end
-  end
-
-  # Each booking answers the two comparisons differently: alpha is neither reversed nor overbooked,
-  # bravo is both, charlie is at capacity on a same-day stay, delta is reversed with room to spare.
-  defp seed_bookings do
-    Enum.each(
-      [
-        {"alpha", ~D[2026-03-01], ~D[2026-03-05], 2, 4},
-        {"bravo", ~D[2026-03-10], ~D[2026-03-08], 5, 4},
-        {"charlie", ~D[2026-04-01], ~D[2026-04-01], 4, 4},
-        {"delta", ~D[2026-05-02], ~D[2026-05-01], 1, 2}
-      ],
-      fn {name, check_in, check_out, guests, capacity} ->
-        %{
-          capacity: capacity,
-          check_in: check_in,
-          check_out: check_out,
-          guests: guests,
-          name: name
-        }
-        |> Booking.new()
-        |> DB.create!()
-      end
-    )
   end
 
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split

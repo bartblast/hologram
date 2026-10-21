@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
+  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Todo
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
@@ -21,6 +22,8 @@ defmodule HologramFeatureTests.Helpers do
   alias Wallaby.StaleReferenceError
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
+  @place_script "return globalThis.Hologram.durability.cursor();"
 
   # What a GenServer records about the function that started it, which is how a sync session is
   # told apart from every other process the node is running.
@@ -208,6 +211,31 @@ defmodule HologramFeatureTests.Helpers do
 
         :timer.sleep(50)
         await_durable_writes(session, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until this browser's local database holds a whole fill, then returns the `session`.
+
+  The place the client greets a stream with is held once a fill has declared the local database
+  complete, so polling for it is how a test waits for a whole fill to have landed. Raising rather
+  than returning: an action it gates would otherwise read only the rows the render carried.
+  """
+  @spec await_local_fill(Wallaby.Session.t(), non_neg_integer) :: Wallaby.Session.t()
+  def await_local_fill(session, attempts_left \\ 100)
+
+  def await_local_fill(session, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for the local database to fill, the client holds place " <>
+            inspect(script_result(session, @place_script))
+  end
+
+  def await_local_fill(session, attempts_left) do
+    if script_result(session, @place_script) do
+      session
+    else
+      Process.sleep(50)
+      await_local_fill(session, attempts_left - 1)
     end
   end
 
@@ -584,6 +612,36 @@ defmodule HologramFeatureTests.Helpers do
   @spec sync_session_count(String.t()) :: non_neg_integer
   def sync_session_count(replica_id) do
     Enum.count(Process.list(), &(sync_session_replica_id(&1) == replica_id))
+  end
+
+  @doc """
+  Creates the four bookings the attribute comparison features read, and returns `:ok`.
+
+  Each answers the comparisons differently: alpha checks out after it checks in and has room,
+  bravo checks out before it checks in and is over capacity, charlie stays no night and is at
+  capacity, delta checks out before it checks in and has room to spare.
+  """
+  @spec seed_bookings() :: :ok
+  def seed_bookings do
+    Enum.each(
+      [
+        {"alpha", ~D[2026-03-01], ~D[2026-03-05], 2, 4},
+        {"bravo", ~D[2026-03-10], ~D[2026-03-08], 5, 4},
+        {"charlie", ~D[2026-04-01], ~D[2026-04-01], 4, 4},
+        {"delta", ~D[2026-05-02], ~D[2026-05-01], 1, 2}
+      ],
+      fn {name, check_in, check_out, guests, capacity} ->
+        %{
+          capacity: capacity,
+          check_in: check_in,
+          check_out: check_out,
+          guests: guests,
+          name: name
+        }
+        |> Booking.new()
+        |> DB.create!()
+      end
+    )
   end
 
   @doc """

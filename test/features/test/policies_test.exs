@@ -6,12 +6,14 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Policies.Page2
+  alias HologramFeatureTests.Policies.Page3
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
 
@@ -19,9 +21,13 @@ defmodule HologramFeatureTests.PoliciesTest do
   # user table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
-      Enum.map_join([Document, Folder, Memo, Note, RoleGrant, User], ", ", fn entity_type ->
-        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-      end)
+      Enum.map_join(
+        [Booking, Document, Folder, Memo, Note, RoleGrant, User],
+        ", ",
+        fn entity_type ->
+          ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+        end
+      )
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
@@ -235,5 +241,32 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#result"), "wrote_own_memo")
     |> assert_text(css("#memos"), ~r/^own_memo,shared_memo,shared_pinned_memo$/)
     |> assert_text(css("#pinnable_memos"), ~r/^own_memo,shared_memo$/)
+  end
+
+  # The bookings whose guests fit their capacity - charlie exactly. The browser checks the rule
+  # again over its own rows once they land, so the page the server sent is read as well: it
+  # carries the answer the server's evaluator gave.
+  feature "renders the rows a condition comparing two attributes grants", %{session: session} do
+    seed_bookings()
+
+    session
+    |> visit(Page3)
+    |> assert_text(css("#confirmable_bookings"), ~r/^alpha,charlie,delta$/)
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies/3")
+
+    assert html =~ ~r{<strong id="confirmable_bookings"><code>alpha,charlie,delta</code></strong>}
+  end
+
+  # Bravo alone has more guests than places. The check runs in the browser, over local rows, and
+  # answers the complement of the rendered list, which nothing rendered shows.
+  feature "checks a condition comparing two attributes in the browser", %{session: session} do
+    seed_bookings()
+
+    session
+    |> visit(Page3)
+    |> await_local_fill()
+    |> click(button("Check unconfirmable locally"))
+    |> assert_text(css("#local_unconfirmable"), ~r/^bravo$/)
   end
 end
