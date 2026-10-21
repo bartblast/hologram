@@ -3,6 +3,8 @@ defmodule Hologram.AuthTest do
 
   import Hologram.Auth
 
+  require Hologram.Query
+
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -12,6 +14,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -766,8 +769,8 @@ defmodule Hologram.AuthTest do
 
     defp stored_grant(user_id) do
       RoleGrant
-      |> Query.filter(user_id: user_id)
-      |> Query.normalize()
+      |> Query.filter(user_id: ^user_id)
+      |> Stage.normalize()
       |> QueryRunner.run(DB.mapping())
       |> hd()
     end

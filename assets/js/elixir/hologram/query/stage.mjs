@@ -1,8 +1,8 @@
 "use strict";
 
-import Interpreter from "../../interpreter.mjs";
-import Model from "../../model.mjs";
-import Type from "../../type.mjs";
+import Interpreter from "../../../interpreter.mjs";
+import Model from "../../../model.mjs";
+import Type from "../../../type.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
 //
@@ -170,13 +170,6 @@ function includeDepth(term) {
 function includeOne(query, name, subBuilder) {
   const term = toTerm(query);
   const {kind, target} = validateRelationshipName(name, term.entity);
-
-  if (name.value in term.include) {
-    Interpreter.raiseArgumentError(
-      `relationship ${Interpreter.inspect(name)} is already included`,
-    );
-  }
-
   const relatedBaseTerm = toTerm(Type.alias(target));
 
   const subTerm = subBuilder
@@ -185,13 +178,13 @@ function includeOne(query, name, subBuilder) {
 
   validateSubTerm(subTerm, name, target, kind);
 
-  return {...term, include: {...term.include, [name.value]: subTerm}};
+  return {...term, include: putIncluded(term.include, name.value, subTerm)};
 }
 
 // A spec entry is a relationship name, a {name, sub-builder} pair, or a {name, nested spec} pair -
 // the last traversing deeper without writing a function for it.
 function includeSpecEntry(term, entry) {
-  const include = Elixir_Hologram_Query["include/3"];
+  const include = Elixir_Hologram_Query_Stage["include/3"];
 
   if (Type.isAtom(entry)) {
     return include(term, entry, Type.nil());
@@ -291,6 +284,26 @@ function membershipValues(values, name, entityType) {
   );
 }
 
+// Two includes of one relationship are one include when neither narrows it: what each includes
+// merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
+// than the other, so a relationship included twice with clauses on either side is refused.
+// Merging cannot deepen a traversal, so the depth each side was validated for still holds.
+function mergedSubTerm(included, subTerm, name) {
+  if (subTermHasClauses(included) || subTermHasClauses(subTerm)) {
+    Interpreter.raiseArgumentError(
+      `relationship ${Interpreter.inspect(Type.atom(name))} is already included`,
+    );
+  }
+
+  const include = Object.entries(subTerm.include).reduce(
+    (acc, [nestedName, nestedSubTerm]) =>
+      putIncluded(acc, nestedName, nestedSubTerm),
+    included.include,
+  );
+
+  return {...included, include};
+}
+
 // The nested-spec shorthand is the sub-builder that includes through the nested spec, boxed the
 // way a builder's own function arrives - so one code path calls both.
 function nestedSubBuilder(spec) {
@@ -298,7 +311,7 @@ function nestedSubBuilder(spec) {
     params: (_context) => [Type.variablePattern("related_term")],
     guards: [],
     body: (context) =>
-      Elixir_Hologram_Query["include/2"](context.vars.related_term, spec),
+      Elixir_Hologram_Query_Stage["include/2"](context.vars.related_term, spec),
   };
 
   return Type.anonymousFunction(1, [clause], Interpreter.buildContext());
@@ -648,7 +661,7 @@ function putDelta(entity, name, amount, sign, stage) {
       );
     }
 
-    return Elixir_Hologram_Query["put_attribute/3"](
+    return Elixir_Hologram_Query_Stage["put_attribute/3"](
       entity,
       name,
       Type.integer(value.value + moved),
@@ -679,6 +692,15 @@ function putDelta(entity, name, amount, sign, stage) {
     Type.atom("__meta__"),
     putField(metadata, Type.atom("attribute_ops"), updatedOps),
   );
+}
+
+function putIncluded(include, name, subTerm) {
+  return {
+    ...include,
+    [name]: Object.hasOwn(include, name)
+      ? mergedSubTerm(include[name], subTerm, name)
+      : subTerm,
+  };
 }
 
 // The two edge stages share everything but the operation they record. The relationship's own
@@ -1078,7 +1100,7 @@ function validatePutName(name, entityType) {
   );
 }
 
-const Elixir_Hologram_Query = {
+const Elixir_Hologram_Query_Stage = {
   "add_relationship/3": (entity, relationshipName, targetId) =>
     putRelationshipOp(
       entity,
@@ -1139,7 +1161,7 @@ const Elixir_Hologram_Query = {
     return {...term, filter: [...term.filter, ...triples]};
   },
   "include/2": (query, spec) =>
-    Elixir_Hologram_Query["include/3"](query, spec, Type.nil()),
+    Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.nil()),
 
   "include/3": (query, spec, subBuilder) => {
     if (Type.isAtom(spec)) {
@@ -1204,7 +1226,7 @@ const Elixir_Hologram_Query = {
   },
 
   "put_attribute/3": (entity, name, value) =>
-    Elixir_Hologram_Query["put_attribute/2"](
+    Elixir_Hologram_Query_Stage["put_attribute/2"](
       entity,
       Type.list([Type.tuple([name, value])]),
     ),
@@ -1220,4 +1242,4 @@ const Elixir_Hologram_Query = {
   },
 };
 
-export default Elixir_Hologram_Query;
+export default Elixir_Hologram_Query_Stage;

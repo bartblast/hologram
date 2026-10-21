@@ -16,10 +16,10 @@ defmodule Hologram.Test.Fixtures.Component.Module27 do
   end
 
   defp first_query(min_b) do
-    filter(Entity2, b: {:>=, min_b})
+    filter(Entity2, b >= ^min_b)
   end
 
   defp second_query(entities) do
-    filter(Entity2, a: entities)
+    filter(Entity2, a: ^entities)
   end
 end

@@ -115,7 +115,7 @@ defmodule HologramFeatureTests.WriteQueuePage do
 
   defp find_user(email) do
     User
-    |> filter(email: email)
+    |> filter(email: ^email)
     |> one()
     |> trust()
     |> DB.read()

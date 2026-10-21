@@ -13,6 +13,6 @@ defmodule Hologram.Test.Fixtures.Component.Module29 do
   end
 
   defp entities_query do
-    include(Entity3, :a, &trust/1)
+    include(Entity3, a, &trust/1)
   end
 end

@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module23 do
 
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
-  prop :entities, [Entity2], from_query: fn min_b -> filter(Entity2, b: {:>=, min_b}) end
+  prop :entities, [Entity2], from_query: fn min_b -> filter(Entity2, b >= ^min_b) end
 
   @impl Component
   def template do

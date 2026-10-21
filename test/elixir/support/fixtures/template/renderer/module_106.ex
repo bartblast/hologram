@@ -15,6 +15,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module106 do
   end
 
   defp entities_query(missing_prop) do
-    filter(Entity2, b: {:>=, missing_prop})
+    filter(Entity2, b >= ^missing_prop)
   end
 end

@@ -10,7 +10,7 @@ defmodule Hologram.Sync.FanoutTest do
 
   alias Hologram.DB
   alias Hologram.Entity
-  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.ResultStore
@@ -33,8 +33,8 @@ defmodule Hologram.Sync.FanoutTest do
       entries: %{},
       prop_params: %{},
       windows: %{
-        @board_window => Query.normalize(Module2),
-        @other_window => Query.normalize(PolicyModule1)
+        @board_window => Stage.normalize(Module2),
+        @other_window => Stage.normalize(PolicyModule1)
       }
     })
 

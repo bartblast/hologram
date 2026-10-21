@@ -14,6 +14,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 do
   end
 
   defp entities_query(entity) do
-    filter(Entity2, entity.preds)
+    filter(Entity2, ^entity.preds)
   end
 end

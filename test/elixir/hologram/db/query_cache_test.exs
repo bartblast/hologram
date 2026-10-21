@@ -11,9 +11,9 @@ defmodule Hologram.DB.QueryCacheTest do
 
   alias Hologram.Auth
   alias Hologram.DB.Connection
-  alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -50,13 +50,13 @@ defmodule Hologram.DB.QueryCacheTest do
     module_1_term =
       Entity2
       |> filter(a: true)
-      |> order_by(:c)
-      |> Query.normalize()
+      |> order_by(c)
+      |> Stage.normalize()
 
     module_11_term =
       Entity2
-      |> filter(b: {:>=, %Placeholder{name: :min_b}})
-      |> Query.normalize()
+      |> filter(b >= ^%Placeholder{name: :min_b})
+      |> Stage.normalize()
 
     Registry.build([module_1_term, module_11_term])
   end

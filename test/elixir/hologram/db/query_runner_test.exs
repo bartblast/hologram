@@ -15,6 +15,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -87,7 +88,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       compiled =
         PolicyModule2
-        |> Query.normalize()
+        |> Stage.normalize()
         |> QueryCompiler.compile(@policy_mapping, policy)
 
       values =
@@ -134,8 +135,8 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp included_children(actor_user_id) do
       term =
         PolicyModule3
-        |> include(:children)
-        |> Query.normalize()
+        |> include(children)
+        |> Stage.normalize()
 
       [row] = run_policied(term, @policy_mapping, actor_user_id)
 
@@ -145,8 +146,8 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp included_parent(actor_user_id) do
       term =
         PolicyModule1
-        |> include(:parent)
-        |> Query.normalize()
+        |> include(parent)
+        |> Stage.normalize()
 
       [row] = run_policied(term, @policy_mapping, actor_user_id)
 
@@ -154,7 +155,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     defp policied_ids(actor_user_id) do
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       term
       |> run_policied(@policy_mapping, actor_user_id)
@@ -212,7 +213,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       term =
         PolicyModule1
         |> Query.count()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert run_policied(term, @policy_mapping, nil) == 1
     end
@@ -223,15 +224,15 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       private_term =
         PolicyModule1
-        |> filter(id: private_entity.id)
+        |> filter(id: ^private_entity.id)
         |> Query.one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       public_term =
         PolicyModule1
-        |> filter(id: public_entity.id)
+        |> filter(id: ^public_entity.id)
         |> Query.one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert run_policied(private_term, @policy_mapping, nil) == nil
       assert %{id: id} = run_policied(public_term, @policy_mapping, nil)
@@ -262,7 +263,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       Auth.grant_role(user, granted_match, :viewer)
 
       term = %{
-        Query.normalize(PolicyModule1)
+        Stage.normalize(PolicyModule1)
         | filter: [{:priority, :==, {:placeholder, :priority}}]
       }
 
@@ -323,8 +324,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         PolicyModule3
-        |> include(:children, &include(&1, :parent))
-        |> Query.normalize()
+        |> include(children, &include(&1, parent))
+        |> Stage.normalize()
 
       assert [%{children: [included_child]}] = run_policied(term, @policy_mapping, user.id)
 
@@ -338,7 +339,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       ids =
         PolicyModule1
-        |> Query.normalize()
+        |> Stage.normalize()
         |> run(@policy_mapping)
         |> Enum.map(& &1.id)
         |> Enum.sort()
@@ -351,7 +352,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "binds membership element placeholders" do
       {_first, _second, third} = create_module_2_entities()
 
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 3]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 3]}]}
 
       assert [%{id: id, b: 7}] = run(term, @mapping, %{bound: 7})
       assert id == third.id
@@ -367,7 +368,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> create()
 
       mapping = Mapper.derive!([Module10], [])
-      term = %{Query.normalize(Module10) | filter: [{:count, :==, {:placeholder, :count}}]}
+      term = %{Stage.normalize(Module10) | filter: [{:count, :==, {:placeholder, :count}}]}
 
       assert run(term, mapping, %{count: 999}) == []
     end
@@ -375,7 +376,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "binds placeholder values with the slot's type" do
       {first, _second, _third} = create_module_2_entities()
 
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
       result = run(term, @mapping, %{search: "banana"})
 
       assert [%{id: id, c: "banana"}] = result
@@ -389,7 +390,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         Module2
         |> filter(a: true)
         |> count()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert run(term, @mapping) == 2
     end
@@ -403,12 +404,12 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query ->
+        |> include(a, fn related_query ->
           related_query
           |> filter(a: true)
-          |> order_by(:c)
+          |> order_by(c)
         end)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert [%Module3{a: related_entities}] = run(term, @mapping)
       assert [%Module2{c: "banana"}, %Module2{b: 7, c: "cherry"}] = related_entities
@@ -434,14 +435,14 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       embedding_term =
         Module3
-        |> include(:a)
-        |> Query.normalize()
+        |> include(a)
+        |> Stage.normalize()
 
       direct_term =
         Module2
-        |> filter(id: target.id)
+        |> filter(id: ^target.id)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert [%Module3{a: [embedded]}] = run(embedding_term, @mapping)
 
@@ -465,16 +466,16 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       embedding_term =
         Module23
-        |> filter(id: source.id)
-        |> include(:a)
+        |> filter(id: ^source.id)
+        |> include(a)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       direct_term =
         Module22
-        |> filter(id: target.id)
+        |> filter(id: ^target.id)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %Module23{a: %Module22{} = embedded} = run(embedding_term, @time_mapping)
 
@@ -495,10 +496,10 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module23
-        |> filter(id: source.id)
-        |> include(:a)
+        |> filter(id: ^source.id)
+        |> include(a)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert run(term, @time_mapping).a.opens_at == ~T[11:00:00.100000]
     end
@@ -508,8 +509,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:c)
-        |> Query.normalize()
+        |> include(c)
+        |> Stage.normalize()
 
       assert [%Module3{id: id, c: %Module1{} = embedded_entity}] = run(term, @mapping)
       assert id == source.id
@@ -523,7 +524,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       set_revisions(Module2, first.id, %{"a" => 3, "c" => 2})
       set_revisions(Module2, second.id, %{"c" => 5})
 
-      term = Query.normalize(Module2)
+      term = Stage.normalize(Module2)
 
       revisions =
         term
@@ -551,8 +552,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:b)
-        |> Query.normalize()
+        |> include(b)
+        |> Stage.normalize()
 
       assert [%Module3{b: %Module2{} = embedded_entity}] = run(term, @mapping)
       assert embedded_entity.__meta__.revisions == %{a: 3, c: 2}
@@ -567,8 +568,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         PolicyModule1
-        |> include(:parent)
-        |> Query.normalize()
+        |> include(parent)
+        |> Stage.normalize()
 
       assert [%{parent: included_parent}] = run(term, @policy_mapping)
       assert included_parent.id == parent.id
@@ -579,8 +580,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(:b)
-        |> Query.normalize()
+        |> include(b)
+        |> Stage.normalize()
 
       assert [%{b: nil}] = run(term, @mapping)
     end
@@ -588,7 +589,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "defaults not-included relationships to the sentinel" do
       create_module_3_entity()
 
-      term = Query.normalize(Module3)
+      term = Stage.normalize(Module3)
 
       assert [%Module3{} = entity] = run(term, @mapping)
       assert entity.a == %NotIncluded{relationship: :a}
@@ -616,12 +617,12 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module9
-        |> include(:a, fn related_query ->
+        |> include(a, fn related_query ->
           related_query
-          |> filter(source_id: {:>=, 2})
-          |> order_by(:source_id)
+          |> filter(source_id >= 2)
+          |> order_by(source_id)
         end)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert [%Module9{a: [%Module8{source_id: 5}]}] = run(term, mapping)
     end
@@ -629,7 +630,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "matches nothing for an empty membership list binding" do
       create_module_2_entities()
 
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       assert run(term, @mapping, %{ids: []}) == []
     end
@@ -640,8 +641,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> filter(c_id: matching.c_id)
-        |> Query.normalize()
+        |> filter(c_id: ^matching.c_id)
+        |> Stage.normalize()
 
       assert [%Module3{id: id, c_id: c_id}] = run(term, @mapping)
       assert id == matching.id
@@ -652,7 +653,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       matching = create_module_3_entity()
       create_module_3_entity()
 
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
+      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
 
       assert [%Module3{id: id}] = run(term, @mapping, %{target: matching.c_id})
       assert id == matching.id
@@ -664,8 +665,8 @@ defmodule Hologram.DB.QueryRunnerTest do
       term =
         Module2
         |> filter(a: true)
-        |> order_by(:c)
-        |> Query.normalize()
+        |> order_by(c)
+        |> Stage.normalize()
 
       assert [
                %Module2{id: first_id, a: true, b: nil, c: "banana"},
@@ -681,7 +682,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         Module2
         |> filter(c: "missing")
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert run(term, @mapping) == nil
     end
@@ -691,16 +692,16 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module2
-        |> order_by(:c)
+        |> order_by(c)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{id: id, c: "apple"} = run(term, @mapping)
       assert id == second.id
     end
 
     test "raises on a malformed id placeholder value" do
-      term = %{Query.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
 
       expected_msg =
         ~s(invalid value "not-a-uuid" for placeholder :entity_id - expected a :uuid value)
@@ -711,7 +712,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a membership binding that is not a list" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       expected_msg =
         "non-list value 5 for placeholder :ids - the placeholder binds a membership list"
@@ -722,7 +723,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a membership element of the wrong type" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       expected_msg =
         ~s(invalid element "x" in the list for placeholder :ids - expected a :integer value)
@@ -733,7 +734,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a missing placeholder value" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       assert_error ArgumentError, "missing value for placeholder :search", fn ->
         run(term, @mapping)
@@ -741,7 +742,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a nil membership element" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       expected_msg =
         "nil element in the list for placeholder :ids - use an explicit nil predicate instead"
@@ -752,7 +753,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a nil placeholder value" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       expected_msg = "nil value for placeholder :search - use an explicit nil predicate instead"
 
@@ -763,7 +764,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
     test "raises on a placeholder binding with conflicting types" do
       term = %{
-        Query.normalize(Module2)
+        Stage.normalize(Module2)
         | filter: [{:b, :==, {:placeholder, :x}}, {:b, :in, {:placeholder, :x}}]
       }
 
@@ -776,7 +777,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a placeholder value of the wrong type" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
 
@@ -786,7 +787,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on an enum placeholder value outside the declared set" do
-      term = %{Query.normalize(Module4) | filter: [{:c, :==, {:placeholder, :choice}}]}
+      term = %{Stage.normalize(Module4) | filter: [{:c, :==, {:placeholder, :choice}}]}
 
       expected_msg = "invalid value :z for placeholder :choice - expected one of [:x, :y]"
 
@@ -796,7 +797,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on an unknown binding name" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       expected_msg =
         "unknown placeholder :serach in bindings - the query defines placeholders [:search]"

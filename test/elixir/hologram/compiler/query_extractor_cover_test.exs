@@ -7,8 +7,8 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
   import Hologram.Compiler.QueryExtractor
 
   alias Hologram.Commons.PLT
-  alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module18
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
@@ -28,12 +28,12 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
       nil_clause_term =
         Entity2
         |> filter(a: true)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       bound_clause_term =
         Entity2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
-        |> Query.normalize()
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> Stage.normalize()
 
       assert extract_module_queries(Module18, Reflection.list_entities(), PLT.start()) == [
                nil_clause_term,

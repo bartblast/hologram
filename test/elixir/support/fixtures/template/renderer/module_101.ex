@@ -17,7 +17,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module101 do
 
   defp total_query(a) do
     Module2
-    |> filter(a: a)
+    |> filter(a: ^a)
     |> count()
   end
 end

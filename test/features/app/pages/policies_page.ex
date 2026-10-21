@@ -62,7 +62,7 @@ defmodule HologramFeatureTests.PoliciesPage do
 
     visible_grants =
       RoleGrant
-      |> filter(entity_id: document.id, user_id: other_user.id)
+      |> filter(entity_id: ^document.id, user_id: ^other_user.id)
       |> DB.read()
 
     put_action(server, :show_result,
@@ -119,7 +119,7 @@ defmodule HologramFeatureTests.PoliciesPage do
   def command(:read_documents_as_server, _params, server) do
     titles =
       Document
-      |> order_by(:title)
+      |> order_by(title)
       |> trust()
       |> DB.read()
       |> Enum.map_join(",", & &1.title)
@@ -130,7 +130,7 @@ defmodule HologramFeatureTests.PoliciesPage do
   def command(:read_documents_as_user, _params, server) do
     titles =
       Document
-      |> order_by(:title)
+      |> order_by(title)
       |> DB.read()
       |> Enum.map_join(",", & &1.title)
 

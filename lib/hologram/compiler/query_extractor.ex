@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Compiler.IR
   alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
 
   # The applications shipped with Elixir itself - their modules are never
@@ -25,7 +26,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     # A query the build cannot execute yet, because a position the WINDOW is derived from - the
     # entity that says which table to download, an include name that says which relationship
     # travels with it - is an argument. Nothing is built while the capture is walked: each stage
-    # asked of it is recorded, and the record is replayed through Hologram.Query once the
+    # asked of it is recorded, and the record is replayed through Hologram.Query.Stage once the
     # candidates are known. So the developer's code runs once, and only the recorded stages -
     # a short list of data - are replayed per candidate.
     #
@@ -215,7 +216,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   # What narrows the set is the query itself: a candidate the builder refuses (an attribute that
   # type does not declare, an operand of the wrong type) is dropped at replay, so
   # `filter(entity.type, done: false)` keeps precisely the types declaring a boolean `done`. No
-  # separate narrowing rule exists, and none should - Hologram.Query's own validation is the
+  # separate narrowing rule exists, and none should - Hologram.Query.Stage's own validation is the
   # satisfiability check, and the replay ASKS it rather than reproducing it.
   #
   # A stage whose query is a placeholder starts a record rather than a query, and every stage
@@ -253,7 +254,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   # A stage call the developer wrote is theirs to read, so a refusal from it is reraised carrying
   # the prop it belongs to, which the ArgumentError cannot know.
   defp apply_authored_stage!(function, arg_values, context) do
-    apply(Query, function, arg_values)
+    apply(Stage, function, arg_values)
   rescue
     error in ArgumentError ->
       reraise Hologram.CompileError,
@@ -540,7 +541,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     {arg_values, state_after_args} = evaluate_enum!(args, state_after_module, context)
 
     cond do
-      target_module == Query ->
+      target_module in [Query, Stage] ->
         apply_query_stage!(function, arg_values, state_after_args, context)
 
       not contains_placeholder?(arg_values) ->
@@ -816,7 +817,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp filtered_names(_variant), do: nil
 
   defp filter_stage_names({:filter, [predicates], line}) when is_list(predicates) do
-    case for {name, _value} <- predicates, is_atom(name), do: name do
+    case for({name, _value} <- predicates, is_atom(name), uniq: true, do: name) do
       [] -> nil
       names -> {names, line}
     end
@@ -939,7 +940,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp prop_query!(_module, _prop_name, capture, _entity_types, _ir_plt)
        when is_function(capture, 0) do
-    [Query.normalize(capture.())]
+    [Stage.normalize(capture.())]
   end
 
   defp prop_query!(module, prop_name, capture, entity_types, ir_plt) when is_function(capture) do
@@ -969,7 +970,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     terms =
       variants
       |> Enum.flat_map(&resolve(&1, entity_types))
-      |> Enum.map(&Query.normalize/1)
+      |> Enum.map(&Stage.normalize/1)
       |> Enum.uniq()
 
     if terms == [] do
@@ -1007,7 +1008,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp replay_stage(rest_stages, query, function, args) do
-    replay(rest_stages, apply(Query, function, [query | args]))
+    replay(rest_stages, apply(Stage, function, [query | args]))
   rescue
     ArgumentError -> []
     Hologram.CompileError -> []

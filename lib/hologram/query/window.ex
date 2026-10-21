@@ -28,7 +28,7 @@ defmodule Hologram.Query.Window do
 
   KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a placeholder
   downloads everything the policy admits. A thirty-day message window written as
-  `created_at: {:>, ^cutoff}` downloads the channel's whole history, because a cutoff computed
+  `created_at > ^cutoff` downloads the channel's whole history, because a cutoff computed
   per render says nothing at compile time. Bounding it needs the thirty days written into the
   query itself - a relative bound the compiler can read and the server evaluates per run - which
   the filter surface does not offer yet.

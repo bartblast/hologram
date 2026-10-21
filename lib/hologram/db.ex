@@ -3,6 +3,8 @@ defmodule Hologram.DB do
 
   use Supervisor
 
+  require Hologram.Query
+
   alias Hologram.Auth.Context
   alias Hologram.DB.Clock
   alias Hologram.DB.Config
@@ -17,6 +19,7 @@ defmodule Hologram.DB do
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.WriteError
 
@@ -25,10 +28,11 @@ defmodule Hologram.DB do
   @pool_name Hologram.DB.Pool
 
   # The data surface, brought in by one line: the stages that build a query term or record a write
-  # on an entity struct as bare functions, and the modules the executors live on as aliases. Named
-  # after the database rather than after the query, because a module says this line to read or
-  # write data - a page that queries, a command that writes, a seed that only creates, a job that
-  # only enqueues - and the write stages are the database's vocabulary as much as the query's.
+  # on an entity struct as bare functions and macros, and the modules the executors live on as
+  # aliases. Named after the database rather than after the query, because a module says this
+  # line to read or write data - a page that queries, a command that writes, a seed that only
+  # creates, a job that only enqueues - and the write stages are the database's vocabulary as much
+  # as the query's.
   defmacro __using__(_opts) do
     quote do
       import Hologram.Query,
@@ -234,7 +238,7 @@ defmodule Hologram.DB do
   """
   @spec read(module | Query.t()) :: list(Entity.t()) | Entity.t() | integer | nil
   def read(query) do
-    term = Query.normalize(query)
+    term = Stage.normalize(query)
 
     assert_no_placeholders!(term)
 
@@ -265,7 +269,7 @@ defmodule Hologram.DB do
     validate_entity_type!(entity_type)
 
     entity_type
-    |> Query.filter(id: id)
+    |> Query.filter(id: ^id)
     |> Query.one()
     |> read()
   end
@@ -586,7 +590,7 @@ defmodule Hologram.DB do
   end
 
   defp assert_no_placeholders!(term) do
-    case Query.placeholder_names(term) do
+    case Stage.placeholder_names(term) do
       [] ->
         :ok
 

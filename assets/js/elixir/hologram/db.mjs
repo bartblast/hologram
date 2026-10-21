@@ -5,7 +5,7 @@ import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
 import Elixir_Hologram_Entity from "./entity.mjs";
 import Erlang from "../../erlang/erlang.mjs";
-import Elixir_Hologram_Query from "./query.mjs";
+import Elixir_Hologram_Query_Stage from "./query/stage.mjs";
 // A cycle - auth.mjs takes currentBatch from here - and a safe one: neither module calls the
 // other while it is being evaluated, so both bindings are in place by the time a verb runs.
 import {grantEntry, grantId} from "./auth.mjs";
@@ -683,7 +683,7 @@ const Elixir_Hologram_DB = {
   // It arrives as the batch's rejection instead, so there is no error branch to write.
 
   "read/1": (query) => {
-    const term = Elixir_Hologram_Query["normalize/1"](query);
+    const term = Elixir_Hologram_Query_Stage["normalize/1"](query);
 
     assertNoPlaceholders(term);
 
@@ -698,8 +698,8 @@ const Elixir_Hologram_DB = {
     validateId(id);
     validateEntityType(entityType);
 
-    const query = Elixir_Hologram_Query["one/1"](
-      Elixir_Hologram_Query["filter/2"](
+    const query = Elixir_Hologram_Query_Stage["one/1"](
+      Elixir_Hologram_Query_Stage["filter/2"](
         entityType,
         Type.list([Type.tuple([Type.atom("id"), id])]),
       ),
@@ -884,7 +884,7 @@ const Elixir_Hologram_DB = {
       validateChangeNames(type, names);
     }
 
-    const entity = Elixir_Hologram_Query["put_attribute/2"](
+    const entity = Elixir_Hologram_Query_Stage["put_attribute/2"](
       Model.box(type, held),
       changes,
     );

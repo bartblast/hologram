@@ -16,7 +16,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12 do
     min_b = 100
 
     if Enum.member?([50, 100], min_b) do
-      filter(Entity2, b: {:>=, min_b})
+      filter(Entity2, b >= ^min_b)
     else
       filter(Entity2, a: true)
     end

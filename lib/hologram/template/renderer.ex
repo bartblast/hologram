@@ -1,6 +1,8 @@
 defmodule Hologram.Template.Renderer do
   @moduledoc false
 
+  require Hologram.Query
+
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
@@ -17,6 +19,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -1282,9 +1285,9 @@ defmodule Hologram.Template.Renderer do
     if Validator.attribute_value_valid?(user_id, :uuid) do
       term =
         user_entity
-        |> Query.filter(id: user_id)
+        |> Query.filter(id: ^user_id)
         |> Query.one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       QueryRunner.run_policied(term, DB.mapping(), user_id)
     end
@@ -1405,7 +1408,7 @@ defmodule Hologram.Template.Renderer do
     term =
       capture
       |> apply(args)
-      |> Query.normalize()
+      |> Stage.normalize()
 
     result =
       term

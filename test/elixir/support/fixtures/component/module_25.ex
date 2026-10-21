@@ -16,10 +16,10 @@ defmodule Hologram.Test.Fixtures.Component.Module25 do
 
   # The clauses name one argument position differently, so which prop feeds it has no answer.
   defp entities_query(min_b) when is_integer(min_b) do
-    filter(Entity2, b: {:>=, min_b})
+    filter(Entity2, b >= ^min_b)
   end
 
   defp entities_query(max_b) do
-    filter(Entity2, b: {:<=, max_b})
+    filter(Entity2, b <= ^max_b)
   end
 end

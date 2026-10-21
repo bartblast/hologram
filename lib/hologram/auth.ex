@@ -1,6 +1,8 @@
 defmodule Hologram.Auth do
   @moduledoc false
 
+  require Hologram.Query
+
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -16,6 +18,7 @@ defmodule Hologram.Auth do
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Sync.Carry
@@ -36,7 +39,7 @@ defmodule Hologram.Auth do
   @spec grants_window() :: Query.t()
   def grants_window do
     RoleGrant
-    |> Query.normalize()
+    |> Stage.normalize()
     |> Window.derive()
   end
 
@@ -135,8 +138,8 @@ defmodule Hologram.Auth do
   def grants_before(user_id, grant_effects) do
     current =
       RoleGrant
-      |> Query.filter(user_id: user_id)
-      |> Query.normalize()
+      |> Query.filter(user_id: ^user_id)
+      |> Stage.normalize()
       |> QueryRunner.run(DB.mapping())
 
     grant_effects
@@ -634,7 +637,7 @@ defmodule Hologram.Auth do
 
   defp grant_group_rows({{user_id, nil}, _scopes}, session_user_id) do
     RoleGrant
-    |> Query.filter(user_id: user_id, entity_type: nil, entity_id: nil)
+    |> Query.filter(user_id: ^user_id, entity_type: nil, entity_id: nil)
     |> run_carried_grants_query(session_user_id)
   end
 
@@ -646,9 +649,7 @@ defmodule Hologram.Auth do
 
     RoleGrant
     |> Query.filter(
-      user_id: user_id,
-      entity_type: entity_type,
-      entity_id: entity_ids
+      user_id == ^user_id and entity_type == ^entity_type and entity_id in ^entity_ids
     )
     |> run_carried_grants_query(session_user_id)
   end
@@ -694,7 +695,7 @@ defmodule Hologram.Auth do
 
   defp run_carried_grants_query(query, session_user_id) do
     query
-    |> Query.normalize()
+    |> Stage.normalize()
     |> QueryRunner.run_policied(DB.mapping(), session_user_id)
   end
 
@@ -880,8 +881,8 @@ defmodule Hologram.Auth do
   # itself or on its whole type, and the global roles held app-wide. Sorted, own names first.
   defp held_role_names(actor_user_id, entity_type, entity_id) do
     RoleGrant
-    |> Query.filter(user_id: actor_user_id)
-    |> Query.normalize()
+    |> Query.filter(user_id: ^actor_user_id)
+    |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->
       (grant.entity_type == entity_type and grant.entity_id in [entity_id, nil]) or

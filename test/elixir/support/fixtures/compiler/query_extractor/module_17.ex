@@ -15,7 +15,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module17 do
   defp entities_query(status) do
     case status do
       :any -> Entity2
-      _other -> filter(Entity2, c: status)
+      _other -> filter(Entity2, c: ^status)
     end
   end
 end

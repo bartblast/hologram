@@ -22,12 +22,12 @@ defmodule HologramFeatureTests.Components.Queries.Component7 do
   end
 
   defp tickets_query do
-    order_by(Ticket, :priority)
+    order_by(Ticket, priority)
   end
 
   defp urgent_tickets_query do
     Ticket
-    |> filter(priority: {:>=, :medium})
-    |> order_by(:title)
+    |> filter(priority >= :medium)
+    |> order_by(title)
   end
 end

@@ -16,6 +16,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module39 do
   defp entities_query(entity) do
     entity.type
     |> filter(title: "x")
-    |> include(entity.rel)
+    |> include(^entity.rel)
   end
 end

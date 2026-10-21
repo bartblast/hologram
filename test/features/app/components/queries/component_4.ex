@@ -19,7 +19,7 @@ defmodule HologramFeatureTests.Components.Queries.Component4 do
   # Reads a field off the argument rather than taking a second, like-named prop for it.
   defp reviews_query(product) do
     Review
-    |> filter(product_id: product.id)
-    |> order_by(:rating)
+    |> filter(product_id: ^product.id)
+    |> order_by(rating)
   end
 end

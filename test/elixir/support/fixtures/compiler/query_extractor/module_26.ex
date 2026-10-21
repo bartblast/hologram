@@ -13,6 +13,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module26 do
   end
 
   defp entities_query(min_b) do
-    filter(Entity2, b: [min_b, 1])
+    filter(Entity2, b in [^min_b, 1])
   end
 end

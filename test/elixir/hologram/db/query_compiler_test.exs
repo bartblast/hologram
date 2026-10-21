@@ -8,6 +8,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.DB.Mapper
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -22,7 +23,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   describe "compile/2" do
     test "assigns placeholders to placeholder slots" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       assert %{
                params: [{:placeholder, :search, :string}],
@@ -38,7 +39,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> filter(a: true, b: 123)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 123}],
@@ -54,13 +55,13 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query ->
+        |> include(a, fn related_query ->
           related_query
           |> filter(a: true)
-          |> order_by(:c)
+          |> order_by(c)
           |> limit(5)
         end)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
 
@@ -80,8 +81,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query -> order_by(related_query, :c) end)
-        |> Query.normalize()
+        |> include(a, fn related_query -> order_by(related_query, c) end)
+        |> Stage.normalize()
 
       assert %{sql: sql} = compile(term, mapping)
 
@@ -93,7 +94,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "binds membership element placeholders as scalar slots in an array constructor" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
 
       assert %{params: placeholders, sql: sql} = compile(term, mapping)
       assert placeholders == [{:placeholder, :bound, :integer}, {:value, 1}]
@@ -102,7 +103,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "binds membership element placeholders under the nil-inclusive branch" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, {:placeholder, :bound}]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [nil, {:placeholder, :bound}]}]}
 
       assert %{params: [{:placeholder, :bound, :integer}], sql: sql} =
                compile(term, mapping)
@@ -112,7 +113,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "binds membership placeholders with list types" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:c, :in, {:placeholder, :names}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :in, {:placeholder, :names}}]}
 
       assert %{
                params: [{:placeholder, :names, {:list, :string}}],
@@ -128,7 +129,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module3
         |> filter(c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert compile(term, mapping) == %{
                params: [
@@ -144,7 +145,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "binds a to-one reference field placeholder as a uuid slot" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :owner}}]}
+      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :owner}}]}
 
       assert %{
                params: [{:placeholder, :owner, :uuid}],
@@ -160,7 +161,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> filter(a: true)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       rules = [%{predicates: [{:c, :==, "text_1"}], to: nil, via: nil}]
 
@@ -175,7 +176,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes several policy rules as an OR group" do
       mapping = Mapper.derive!([Module2], [])
-      term = Query.normalize(Module2)
+      term = Stage.normalize(Module2)
 
       rules = [
         %{predicates: [{:a, :==, true}], to: nil, via: nil},
@@ -193,7 +194,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> filter(a: true)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       rules = [%{predicates: [], to: nil, via: nil}]
 
@@ -208,7 +209,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> filter(a: true)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       conditional_rule = %{predicates: [{:b, :>=, 3}], to: nil, via: nil}
       unconditional_rule = %{predicates: [], to: nil, via: nil}
@@ -230,8 +231,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         PolicyModule1
-        |> include(:parent)
-        |> Query.normalize()
+        |> include(parent)
+        |> Stage.normalize()
 
       rules = [%{predicates: [], to: nil, via: nil}]
 
@@ -254,8 +255,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         PolicyModule1
-        |> include(:parent)
-        |> Query.normalize()
+        |> include(parent)
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
 
@@ -267,7 +268,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "denies everything for a policy with no rules" do
       mapping = Mapper.derive!([Module2], [])
-      term = Query.normalize(Module2)
+      term = Stage.normalize(Module2)
 
       assert %{params: [], sql: sql} =
                compile(term, mapping, %{operation: :read, rules: []})
@@ -277,7 +278,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "binds one reserved slot for every actor reference" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])
-      term = Query.normalize(Module3)
+      term = Stage.normalize(Module3)
 
       rules = [
         %{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil},
@@ -293,7 +294,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     test "allocates the actor slot after the authored placeholders" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
+      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
 
       rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
 
@@ -309,7 +310,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> Query.count()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       rules = [%{predicates: [{:a, :==, true}], to: nil, via: nil}]
 
@@ -323,7 +324,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes an own-roles grant reference as an EXISTS over the grant store" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}]
 
@@ -349,7 +350,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes a global grant reference as an uncorrelated grant-store lookup" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule2)
+      term = Stage.normalize(PolicyModule2)
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1, Role.Module2]}], via: nil}]
 
@@ -372,7 +373,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "elides a global grant reference for an anonymous session" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule2)
+      term = Stage.normalize(PolicyModule2)
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1]}], via: nil}]
 
@@ -385,7 +386,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes a namespaced grant reference as a type-wide lookup" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: [{:type, PolicyModule2, [:admin]}], via: nil}]
 
@@ -407,7 +408,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes a relationship grant reference against the reference column" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
 
@@ -428,7 +429,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes grant references and predicates as one conjunction" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor]}], via: nil}]
 
@@ -439,7 +440,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes several grant references of one rule as an OR group" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [
         %{predicates: [], to: [{:own, [:viewer]}, {:type, PolicyModule2, [:admin]}], via: nil}
@@ -453,7 +454,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes a delegation as an EXISTS over the related entity's policy" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: nil, via: :parent}]
 
@@ -472,7 +473,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "denies a delegation to an operation the related entity type does not grant" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [], to: nil, via: :parent}]
 
@@ -486,7 +487,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes a delegation alongside the rule's own predicates" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: :parent}]
 
@@ -499,7 +500,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes the delegated policy's grant references with the shared actor slot" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(PolicyModule1)
+      term = Stage.normalize(PolicyModule1)
 
       rules = [
         %{predicates: [], to: [{:own, [:owner]}], via: nil},
@@ -522,7 +523,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "composes the grant store's own visibility policy" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Query.normalize(RoleGrant)
+      term = Stage.normalize(RoleGrant)
       policy = %{operation: :read, rules: Policy.build(RoleGrant)[:read]}
 
       assert %{params: placeholders, sql: sql} = compile(term, mapping, policy)
@@ -557,8 +558,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: {:!=, 3})
-        |> Query.normalize()
+        |> filter(b != 3)
+        |> Stage.normalize()
 
       assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s| WHERE ("b" != $1 OR "b" IS NULL)|)
@@ -569,8 +570,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(a: {:!=, false})
-        |> Query.normalize()
+        |> filter(a != false)
+        |> Stage.normalize()
 
       assert %{params: [{:value, false}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "a" != $1))
@@ -583,7 +584,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         Module2
         |> limit(50)
         |> offset(20)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "id" ASC LIMIT 50 OFFSET 20))
@@ -594,8 +595,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(c: ["x", "y"])
-        |> Query.normalize()
+        |> filter(c in ["x", "y"])
+        |> Stage.normalize()
 
       assert %{params: [{:value, ["x", "y"]}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s| WHERE "c" = ANY($1)|)
@@ -606,8 +607,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: {:not_in, [1, 2]})
-        |> Query.normalize()
+        |> filter(b not in [1, 2])
+        |> Stage.normalize()
 
       assert %{params: [{:value, [1, 2]}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s| WHERE ("b" != ALL($1) OR "b" IS NULL)|)
@@ -615,7 +616,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "compiles nil-holding membership into the IS NULL branch" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, 1]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [nil, 1]}]}
 
       assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s| WHERE ("b" = ANY($1) OR "b" IS NULL)|)
@@ -623,7 +624,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "compiles nil-holding negated membership into the value-requiring branch" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil, 1]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :not_in, [nil, 1]}]}
 
       assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s| WHERE ("b" != ALL($1) AND "b" IS NOT NULL)|)
@@ -631,7 +632,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "compiles nil-only membership as IS NULL without a bind slot" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [nil]}]}
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "b" IS NULL))
@@ -639,7 +640,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "compiles nil-only negated membership as IS NOT NULL without a bind slot" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil]}]}
+      term = %{Stage.normalize(Module2) | filter: [{:b, :not_in, [nil]}]}
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "b" IS NOT NULL))
@@ -650,9 +651,9 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:b)
-        |> include(:c)
-        |> Query.normalize()
+        |> include(b)
+        |> include(c)
+        |> Stage.normalize()
 
       assert %{sql: sql} = compile(term, mapping)
 
@@ -674,7 +675,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         Module2
         |> filter(a: true)
         |> count()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert compile(term, mapping) == %{
                params: [{:value, true}],
@@ -690,7 +691,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         Module2
         |> limit(50)
         |> count()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert compile(term, mapping) == %{
                params: [],
@@ -704,8 +705,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:a)
-        |> Query.normalize()
+        |> include(a)
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
 
@@ -730,8 +731,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:c)
-        |> Query.normalize()
+        |> include(c)
+        |> Stage.normalize()
 
       assert compile(term, mapping) == %{
                params: [],
@@ -749,8 +750,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module5
-        |> include(:b)
-        |> Query.normalize()
+        |> include(b)
+        |> Stage.normalize()
 
       assert %{sql: sql} = compile(term, mapping)
 
@@ -766,7 +767,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> filter(b: nil)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "b" IS NULL))
@@ -777,8 +778,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: {:!=, nil})
-        |> Query.normalize()
+        |> filter(b != nil)
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "b" IS NOT NULL))
@@ -789,8 +790,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> filter(b: [{:>=, 3}, {:<, 10}])
-        |> Query.normalize()
+        |> filter(b >= 3 and b < 10)
+        |> Stage.normalize()
 
       assert %{params: [{:value, 10}, {:value, 3}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "b" < $1 AND "b" >= $2))
@@ -803,7 +804,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         Module2
         |> filter(a: true)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( WHERE "a" = $1 ORDER BY "id" ASC LIMIT 1))
@@ -815,7 +816,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> order_by(b: :desc, c: :asc)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c_$sort" ASC, "c" ASC, "id" ASC))
@@ -825,7 +826,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     # ORDER BY sorts by - the key carries the order, the value settles what the key cannot.
     test "compiles a string comparison through the sort-key companion" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:c, :>=, "Zoe"}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :>=, "Zoe"}]}
 
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
 
@@ -834,7 +835,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "binds a placeholder compared against a string as a key slot and a value slot" do
       mapping = Mapper.derive!([Module2], [])
-      term = %{Query.normalize(Module2) | filter: [{:c, :>=, {:placeholder, :min}}]}
+      term = %{Stage.normalize(Module2) | filter: [{:c, :>=, {:placeholder, :min}}]}
 
       assert %{
                params: [{:placeholder, :min, :sort_key}, {:placeholder, :min, :string}],
@@ -849,8 +850,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:a, fn related_query -> filter(related_query, c: {:>=, "Zoe"}) end)
-        |> Query.normalize()
+        |> include(a, fn related_query -> filter(related_query, c >= "Zoe") end)
+        |> Stage.normalize()
 
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
 
@@ -863,7 +864,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module2
         |> order_by(c: :desc)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "c_$sort" DESC, "c" DESC, "id" ASC))
@@ -876,7 +877,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         Module2
         |> limit(0)
         |> one()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "id" ASC LIMIT 0))
@@ -888,7 +889,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term =
         Module4
         |> filter(c: :x)
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert %{params: [{:value, "x"}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s( WHERE "c" = $1))
@@ -898,7 +899,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module2], [])
 
       term = %{
-        Query.normalize(Module2)
+        Stage.normalize(Module2)
         | filter: [{:a, :==, true}, {:c, :==, {:placeholder, :search}}]
       }
 
@@ -915,8 +916,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module5
-        |> include(a: :b)
-        |> Query.normalize()
+        |> include(a.b)
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
 
@@ -936,8 +937,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module6
-        |> include(a: :b)
-        |> Query.normalize()
+        |> include(a.b)
+        |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
 
@@ -959,9 +960,9 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(:c)
+        |> include(c)
         |> count()
-        |> Query.normalize()
+        |> Stage.normalize()
 
       assert compile(term, mapping) == %{
                params: [],
@@ -971,7 +972,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "selects the mapped columns in physical order" do
       mapping = Mapper.derive!([Module2], [])
-      term = Query.normalize(Module2)
+      term = Stage.normalize(Module2)
 
       assert compile(term, mapping) == %{
                params: [],
@@ -982,7 +983,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     test "selects reference columns for to-one relationships" do
       mapping = Mapper.derive!([Module2, Module3], [])
-      term = Query.normalize(Module3)
+      term = Stage.normalize(Module3)
 
       assert compile(term, mapping) == %{
                params: [],
@@ -996,8 +997,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       base_term =
         Module3
-        |> include(:a, &filter(&1, a: true))
-        |> Query.normalize()
+        |> include(a, &filter(&1, a: true))
+        |> Stage.normalize()
 
       term = %{base_term | filter: [{:id, :==, {:placeholder, :root_id}}]}
 

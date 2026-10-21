@@ -14,6 +14,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40 do
   end
 
   defp entities_query(entity) do
-    include(Entity4, entity.rel)
+    include(Entity4, ^entity.rel)
   end
 end

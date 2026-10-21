@@ -15,7 +15,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module16 do
 
   defp entities_query(min_b) do
     cond do
-      min_b -> filter(Entity2, b: {:>=, min_b})
+      min_b -> filter(Entity2, b >= ^min_b)
       true -> filter(Entity2, a: true)
     end
   end

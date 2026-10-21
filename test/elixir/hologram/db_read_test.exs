@@ -71,7 +71,7 @@ defmodule Hologram.DBReadTest do
       results =
         as_user(user, fn ->
           PolicyModule3
-          |> include(:children)
+          |> include(children)
           |> DB.read()
         end)
 
@@ -98,7 +98,7 @@ defmodule Hologram.DBReadTest do
 
       results =
         Module2
-        |> order_by(:c)
+        |> order_by(c)
         |> DB.read()
 
       assert [%Module2{c: "aaa"}, %Module2{c: "bbb"}] = results
@@ -115,7 +115,7 @@ defmodule Hologram.DBReadTest do
 
       found_entity =
         Module2
-        |> filter(id: created_entity.id)
+        |> filter(id: ^created_entity.id)
         |> one()
         |> DB.read()
 
@@ -123,7 +123,7 @@ defmodule Hologram.DBReadTest do
 
       missing_entity =
         Module2
-        |> filter(id: Entity.generate_id())
+        |> filter(id: ^Entity.generate_id())
         |> one()
         |> DB.read()
 
@@ -137,7 +137,7 @@ defmodule Hologram.DBReadTest do
       hidden_entity =
         as_user(user, fn ->
           PolicyModule2
-          |> filter(id: entity.id)
+          |> filter(id: ^entity.id)
           |> one()
           |> DB.read()
         end)
@@ -149,7 +149,7 @@ defmodule Hologram.DBReadTest do
       readable_entity =
         as_user(user, fn ->
           PolicyModule2
-          |> filter(id: entity.id)
+          |> filter(id: ^entity.id)
           |> one()
           |> DB.read()
         end)
@@ -205,7 +205,7 @@ defmodule Hologram.DBReadTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         Module2
-        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter(b >= ^%Placeholder{name: :min_b})
         |> DB.read()
       end
     end
@@ -216,7 +216,7 @@ defmodule Hologram.DBReadTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         Module2
-        |> order_by(%Placeholder{name: :sort})
+        |> order_by(^%Placeholder{name: :sort})
         |> DB.read()
       end
     end

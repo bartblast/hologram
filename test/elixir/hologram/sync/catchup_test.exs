@@ -3,6 +3,8 @@ defmodule Hologram.Sync.CatchupTest do
 
   import Hologram.Sync.Catchup
 
+  require Hologram.Query
+
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -11,6 +13,7 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity.Model
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.WireData
@@ -95,8 +98,8 @@ defmodule Hologram.Sync.CatchupTest do
 
   defp stored_grant(user_id) do
     RoleGrant
-    |> Query.filter(user_id: user_id)
-    |> Query.normalize()
+    |> Query.filter(user_id: ^user_id)
+    |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> hd()
   end

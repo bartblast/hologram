@@ -12,7 +12,7 @@ import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
-import ManuallyPortedElixirHologramQuery from "../../assets/js/elixir/hologram/query.mjs";
+import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -31,10 +31,10 @@ describe("Renderer from_query props", () => {
   const parentTagName = "div";
   const slots = Type.keywordList();
 
-  const filter = ManuallyPortedElixirHologramQuery["filter/2"];
-  const include = ManuallyPortedElixirHologramQuery["include/3"];
-  const one = ManuallyPortedElixirHologramQuery["one/1"];
-  const orderBy = ManuallyPortedElixirHologramQuery["order_by/2"];
+  const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
+  const include = ManuallyPortedElixirHologramQueryStage["include/3"];
+  const one = ManuallyPortedElixirHologramQueryStage["one/1"];
+  const orderBy = ManuallyPortedElixirHologramQueryStage["order_by/2"];
 
   // What the template was rendered with - the props the pipeline resolved, which is what this
   // stage produces.
@@ -292,7 +292,7 @@ describe("Renderer from_query props", () => {
 
   it("injects a counting from_query prop as an integer", () => {
     const capture = builder(0, () =>
-      ManuallyPortedElixirHologramQuery["count/1"](Type.alias(TASK)),
+      ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
     );
 
     defineComponent("MyApp.Counting", [queryProp("count", capture)]);
@@ -307,7 +307,7 @@ describe("Renderer from_query props", () => {
   describe("a count the page carried", () => {
     const countCapture = () =>
       builder(1, (done) =>
-        ManuallyPortedElixirHologramQuery["count/1"](
+        ManuallyPortedElixirHologramQueryStage["count/1"](
           filter(
             Type.alias(TASK),
             Type.list([Type.tuple([Type.atom("done"), done])]),
@@ -412,7 +412,7 @@ describe("Renderer from_query props", () => {
     // 12 and 3 wrote.
     it("separates the arguments a multi-argument builder was called with", () => {
       const capture = builder(2, (_from, _to) =>
-        ManuallyPortedElixirHologramQuery["count/1"](Type.alias(TASK)),
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
       );
 
       defineComponent("MyApp.TwoArgs", [

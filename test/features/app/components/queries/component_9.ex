@@ -21,7 +21,7 @@ defmodule HologramFeatureTests.Components.Queries.Component9 do
   # the same way - which is what the derived sort key is for.
   defp products_query do
     Product
-    |> filter(name: {:>=, "m"})
-    |> order_by(:name)
+    |> filter(name >= "m")
+    |> order_by(name)
   end
 end

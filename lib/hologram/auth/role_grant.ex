@@ -35,9 +35,9 @@ defmodule Hologram.Auth.RoleGrant do
   one of that type's `allow :read_roles` roles.
 
       RoleGrant
-      |> filter(entity_id: [trip_id, nil], entity_type: MyApp.Trip)
-      |> include(:user)
-      |> order_by(:created_at)
+      |> filter(entity_id in [^trip_id, nil] and entity_type == MyApp.Trip)
+      |> include(user)
+      |> order_by(created_at)
 
   The `nil` beside the id is load-bearing. A type-wide grant is held on every row of its type,
   so `Hologram.Auth.can?/3` answers true for it on this trip while its own `entity_id` is nil -

@@ -6,7 +6,7 @@ defmodule Hologram.Sync.EvaluatorTest do
   import Hologram.Sync.Evaluator
 
   alias Hologram.DB
-  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.ResultStore
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -36,7 +36,7 @@ defmodule Hologram.Sync.EvaluatorTest do
     opts =
       opts
       |> Keyword.put_new(:window_id, @window_id)
-      |> Keyword.put_new(:term, Query.normalize(Module2))
+      |> Keyword.put_new(:term, Stage.normalize(Module2))
       |> Keyword.put_new(:subscribers, [self()])
 
     pid = start_supervised!({Evaluator, opts})

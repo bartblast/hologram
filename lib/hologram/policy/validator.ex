@@ -2,7 +2,7 @@ defmodule Hologram.Policy.Validator do
   @moduledoc false
 
   alias Hologram.Entity
-  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
 
   # The operations gating the grant lifecycle. Their checks run without the row in hand -
@@ -204,7 +204,7 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
-    triples = Query.predicate_triples!(entity_type, predicates)
+    triples = Stage.predicate_triples!(entity_type, predicates)
     validate_server_only_predicates!(entity_type, operation, triples, location)
 
     :ok
