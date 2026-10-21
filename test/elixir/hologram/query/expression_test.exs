@@ -23,6 +23,8 @@ defmodule Hologram.Query.ExpressionTest do
 
   defp lower_bound(code, binding \\ []), do: lower(&bound(&1, :limit, env()), code, binding)
 
+  defp lower_condition(code, binding \\ []), do: lower(&condition(&1, env()), code, binding)
+
   defp lower_inclusion(code, binding \\ []), do: lower(&inclusion(&1, env()), code, binding)
 
   defp lower_ordering(code, binding \\ []), do: lower(&ordering(&1, env()), code, binding)
@@ -77,6 +79,130 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: n + 1 - a value from the surrounding code is pinned: ^(n + 1)",
                    fn -> lower_bound("n + 1") end
+    end
+  end
+
+  describe "condition/2" do
+    test "lowers a comparison" do
+      assert lower_condition("priority < 3") == [priority: {:<, 3}]
+    end
+
+    test "lowers a comparison with user_id()" do
+      assert lower_condition("owner_id == user_id()") == [owner_id: {:==, {:actor}}]
+    end
+
+    test "lowers a conjunction with user_id()" do
+      assert lower_condition("author_id == user_id() and archived == false") ==
+               [author_id: {:==, {:actor}}, archived: {:==, false}]
+    end
+
+    test "lowers a membership in a range" do
+      assert lower_condition("count in 1..10") == [count: {:in, 1..10}]
+    end
+
+    test "lowers a negated membership" do
+      assert lower_condition("status not in [:done]") == [status: {:not_in, [:done]}]
+    end
+
+    test "lowers a pinned value" do
+      assert lower_condition("priority < ^max", max: 3) == [priority: {:<, 3}]
+    end
+
+    test "lowers an inequality with user_id()" do
+      assert lower_condition("owner_id != user_id()") == [owner_id: {:!=, {:actor}}]
+    end
+
+    test "lowers an ordering comparison with user_id()" do
+      assert lower_condition("priority < user_id()") == [priority: {:<, {:actor}}]
+    end
+
+    test "passes a pinned predicates list through" do
+      assert lower_condition("^predicates", predicates: [priority: {:>=, 3}]) ==
+               [priority: {:>=, 3}]
+    end
+
+    test "raises on a bare name alone" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+                   fn -> lower_condition("done") end
+    end
+
+    test "raises on a bare name as a comparison operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id reads as an attribute of the entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^owner_id",
+                   fn -> lower_condition("owner_id == owner_id") end
+    end
+
+    test "raises on a call as a comparison operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, user_id() or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
+                   fn -> lower_condition("created_at > Date.utc_today()") end
+    end
+
+    test "raises on a keyword list" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [shared: true] - write it as an expression: shared == true",
+                   fn -> lower_condition("[shared: true]") end
+    end
+
+    test "raises on a keyword list as a side of and" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [a: 1] - write it as an expression: a == 1",
+                   fn -> lower_condition("[a: 1] and b == 2") end
+    end
+
+    test "raises on a keyword list holding a non-equality value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [priority: {:>=, 3}]",
+                   fn -> lower_condition("[priority: {:>=, 3}]") end
+    end
+
+    test "raises on a keyword list of several entries" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [shared: true, status: :published] - write it as an expression: shared == true and status == :published",
+                   fn -> lower_condition("[shared: true, status: :published]") end
+    end
+
+    test "raises on a keyword list with a pinned value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [owner_id: ^owner_id] - write it as an expression: owner_id == ^owner_id",
+                   fn -> lower_condition("[owner_id: ^owner_id]") end
+    end
+
+    test "raises on a keyword list with user_id()" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [owner_id: user_id()] - write it as an expression: owner_id == user_id()",
+                   fn -> lower_condition("[owner_id: user_id()]") end
+    end
+
+    test "raises on a pinned list as a side of and" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a pinned list of predicates is a whole condition, not one side of and, got: ^base - put the other comparisons in the list",
+                   fn -> lower_condition("^base and b == 2") end
+    end
+
+    test "raises on nil" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+                   fn -> lower_condition("nil") end
+    end
+
+    test "raises on paren-less user_id" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: paren-less user_id - did you mean user_id()?",
+                   fn -> lower_condition("owner_id == user_id") end
+    end
+
+    test "raises on true" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+                   fn -> lower_condition("true") end
+    end
+
+    test "raises on user_id() as the left side" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the entity, got: user_id()",
+                   fn -> lower_condition("user_id() == owner_id") end
     end
   end
 
@@ -548,6 +674,12 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a keyword predicate is attribute: value, got: a == 1 - join comparisons with and",
                    fn -> lower_predicates("[a == 1, b == 2]") end
+    end
+
+    test "raises on user_id() as a comparison operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal or a pinned expression, got: user_id() - a value from the surrounding code is pinned: ^user_id()",
+                   fn -> lower_predicates("owner_id == user_id()") end
     end
   end
 

@@ -12,6 +12,27 @@ defmodule Hologram.Query.Expression do
 
   @comparison_operators [:!=, :<, :<=, :==, :>, :>=]
 
+  # What a predicate lowering says, for a policy condition and for a filter. A condition judges one
+  # row and may name the acting user, a filter queries rows and takes keyword equalities - the rest
+  # of the vocabulary is shared, so the two lowerings are one, told apart by these.
+  @condition_names %{
+    kind: :condition,
+    operand: "a literal, user_id() or a pinned expression",
+    row: "the entity",
+    shapes:
+      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+    subject: "a condition"
+  }
+
+  @filter_names %{
+    kind: :filter,
+    operand: "a literal or a pinned expression",
+    row: "the queried entity",
+    shapes:
+      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
+    subject: "a filter"
+  }
+
   @inclusion_names %{stage: "include", names: "a relationship", spelled: "a bare name or a path"}
 
   @ordering_names %{stage: "order_by", names: "an attribute", spelled: "a bare name"}
@@ -36,6 +57,47 @@ defmodule Hologram.Query.Expression do
         ast,
         env
       )
+    end
+  end
+
+  @doc false
+  @spec compile_error!(String.t(), Macro.t(), Macro.Env.t()) :: no_return
+  def compile_error!(message, ast, env) do
+    raise Hologram.CompileError, message: message, file: env.file, line: line(ast, env)
+  end
+
+  @doc """
+  Lowers the `when:` condition of an `allow` line to the AST of what
+  `Hologram.Query.Stage.predicate_triples!/2` takes: a keyword list of attribute names and operator
+  tuples, or the pinned expression itself.
+
+  Accepts a pinned expression (`^predicates`), a comparison of a bare attribute name with a
+  literal, `user_id()` or a pinned value (`==`, `!=`, `<`, `<=`, `>`, `>=`), membership in a list
+  literal, a range literal or a pinned expression (`in`), negated membership in a list literal or a
+  pinned expression (`not in`), and comparisons and memberships joined with `and`. `user_id()`
+  lowers to the actor sentinel, `{:actor}`.
+
+  Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
+  expression to write when it holds equalities only) and on anything else.
+  """
+  @spec condition(Macro.t(), Macro.Env.t()) :: Macro.t()
+  def condition({:^, _meta, [expr]}, _env), do: expr
+
+  def condition(list, env) when is_list(list), do: keyword_list_error!(list, env)
+
+  def condition(ast, env), do: predicate_list!(ast, @condition_names, env)
+
+  @doc """
+  Returns the relationships a bare name or a path names, in order - nil for anything else.
+
+  A path is a dot chain with no parentheses over a bare name, so a call (`tasks.owner()`,
+  `Foo.bar`) is not one.
+  """
+  @spec hops(Macro.t()) :: list(atom) | nil
+  def hops(ast) do
+    case reversed_hops(ast) do
+      nil -> nil
+      reversed -> Enum.reverse(reversed)
     end
   end
 
@@ -70,6 +132,22 @@ defmodule Hologram.Query.Expression do
       element -> merge_includes([element])
     end
   end
+
+  @doc """
+  Lowers an argument naming entity vocabulary to the name: a bare name lowers to its atom and a
+  pinned expression to the expression. The given map holds the stage, what it names and how a name
+  is spelled there, for the messages.
+
+  Raises Hologram.CompileError, located at the argument, on an atom where a bare name goes (naming
+  the bare spelling) and on anything else.
+  """
+  @spec name!(Macro.t(), map, Macro.Env.t()) :: Macro.t()
+  def name!({:^, _meta, [expr]}, _names, _env), do: expr
+
+  def name!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
+    do: name
+
+  def name!(ast, names, env), do: name_error!(ast, names, env)
 
   @doc """
   Lowers the spec argument of `order_by/2` to the AST of what `Hologram.Query.Stage.order_by/2`
@@ -121,7 +199,7 @@ defmodule Hologram.Query.Expression do
 
   def predicates(list, env) when is_list(list), do: Enum.map(list, &keyword_entry!(&1, env))
 
-  def predicates(ast, env), do: predicate_list!(ast, env)
+  def predicates(ast, env), do: predicate_list!(ast, @filter_names, env)
 
   @doc """
   Lowers the relationship argument of `include/3` to the list of its hops: `[:owner]` for a bare
@@ -172,11 +250,12 @@ defmodule Hologram.Query.Expression do
     end
   end
 
-  defp attribute!({name, _meta, context}, _env) when is_atom(name) and is_atom(context), do: name
+  defp attribute!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
+    do: name
 
-  defp attribute!(ast, env) do
+  defp attribute!(ast, names, env) do
     compile_error!(
-      "the left side of a comparison names an attribute of the queried entity, got: #{Macro.to_string(ast)}",
+      "the left side of a comparison names an attribute of #{names.row}, got: #{Macro.to_string(ast)}",
       ast,
       env
     )
@@ -186,18 +265,32 @@ defmodule Hologram.Query.Expression do
 
   defp bare_name?(_ast), do: false
 
-  @spec compile_error!(String.t(), Macro.t(), Macro.Env.t()) :: no_return
-  defp compile_error!(message, ast, env) do
-    raise Hologram.CompileError, message: message, file: env.file, line: line(ast, env)
+  # The acting user is a value only a policy condition can name - a filter has no acting user to
+  # scope by. A paren-less user_id can only be the call missing its parens there, since a policy
+  # has no variables in scope, so it is refused as that rather than as a forgotten pin.
+  defp comparison_operand!({:user_id, _meta, []}, %{kind: :condition}, _env),
+    do: Macro.escape({:actor})
+
+  defp comparison_operand!({:user_id, _meta, context} = ast, %{kind: :condition}, env)
+       when is_atom(context) do
+    compile_error!("paren-less user_id - did you mean user_id()?", ast, env)
+  end
+
+  defp comparison_operand!(ast, names, env) do
+    value!(ast, "a comparison operand is #{names.operand}", names, env)
   end
 
   # A keyword list and a pinned list are each a whole filter, so neither is one side of an and -
-  # the stage it would be joined to is a second filter call.
-  defp conjunct!(ast, env) when is_list(ast), do: whole_filter_conjunct!(ast, env)
+  # the stage it would be joined to is a second filter call. A condition takes no keyword list at
+  # all, so there one is refused as the old spelling.
+  defp conjunct!(ast, %{kind: :condition}, env) when is_list(ast),
+    do: keyword_list_error!(ast, env)
 
-  defp conjunct!({:^, _meta, [_expr]} = ast, env), do: whole_filter_conjunct!(ast, env)
+  defp conjunct!(ast, names, env) when is_list(ast), do: whole_conjunct!(ast, names, env)
 
-  defp conjunct!(ast, env), do: predicate_list!(ast, env)
+  defp conjunct!({:^, _meta, [_expr]} = ast, names, env), do: whole_conjunct!(ast, names, env)
+
+  defp conjunct!(ast, names, env), do: predicate_list!(ast, names, env)
 
   # The shapes a keyword value took in the data form: an operator tuple, a membership list, a range.
   defp data_form?({operator, _operand}) when is_atom(operator), do: true
@@ -221,6 +314,14 @@ defmodule Hologram.Query.Expression do
       env
     )
   end
+
+  # A value a keyword entry can be read as an equality with - anything else (an operator tuple, a
+  # list) meant another operator, and an equality hint would mislead.
+  defp equality_hint_operand?({:^, _meta, [_expr]}), do: true
+
+  defp equality_hint_operand?({:user_id, _meta, []}), do: true
+
+  defp equality_hint_operand?(value), do: literal?(value)
 
   # The expression a data-form keyword value is spelled as - concrete where the shape says which
   # operator it is, generic where it does not.
@@ -249,23 +350,13 @@ defmodule Hologram.Query.Expression do
     "a comparison, a membership or a range is written as an expression"
   end
 
-  @spec forgotten_pin!(Macro.t(), Macro.Env.t()) :: no_return
-  defp forgotten_pin!({name, _meta, _context} = ast, env) do
+  @spec forgotten_pin!(Macro.t(), map, Macro.Env.t()) :: no_return
+  defp forgotten_pin!({name, _meta, _context} = ast, names, env) do
     compile_error!(
-      "#{name} reads as an attribute of the queried entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^#{name}",
+      "#{name} reads as an attribute of #{names.row}, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^#{name}",
       ast,
       env
     )
-  end
-
-  # The relationships a bare name or a path names, in order - nil for anything else. A path is a
-  # dot chain with no parentheses over a bare name, so a call (`tasks.owner()`, `Foo.bar`) is not
-  # one.
-  defp hops(ast) do
-    case reversed_hops(ast) do
-      nil -> nil
-      reversed -> Enum.reverse(reversed)
-    end
   end
 
   defp in_place_function?({:fn, _meta, _clauses}), do: true
@@ -330,6 +421,37 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  # A condition is an expression, so a keyword list is the old spelling - refused with the
+  # expression it means when every entry is an equality, which is the only thing an entry can say
+  # unambiguously.
+  @spec keyword_list_error!(list, Macro.Env.t()) :: no_return
+  defp keyword_list_error!(list, env) do
+    equalities? =
+      list != [] and
+        Enum.all?(list, fn
+          {key, value} when is_atom(key) -> equality_hint_operand?(value)
+          _entry -> false
+        end)
+
+    hint =
+      if equalities? do
+        expression =
+          Enum.map_join(list, " and ", fn {key, value} ->
+            Macro.to_string({:==, [], [{key, [], nil}, value]})
+          end)
+
+        " - write it as an expression: #{expression}"
+      else
+        ""
+      end
+
+    compile_error!(
+      "a condition is an expression, got: #{Macro.to_string(list)}#{hint}",
+      list,
+      env
+    )
+  end
+
   @spec keyword_sub_builder_error!(atom, Macro.t(), Macro.Env.t()) :: no_return
   defp keyword_sub_builder_error!(key, value, env) do
     compile_error!(
@@ -350,7 +472,7 @@ defmodule Hologram.Query.Expression do
         value
 
       bare_name?(value) ->
-        forgotten_pin!(value, env)
+        forgotten_pin!(value, @filter_names, env)
 
       data_form?(value) ->
         compile_error!(
@@ -360,7 +482,11 @@ defmodule Hologram.Query.Expression do
         )
 
       true ->
-        operand_error!("a keyword predicate value", value, env)
+        operand_error!(
+          "a keyword predicate value is a literal or a pinned expression",
+          value,
+          env
+        )
     end
   end
 
@@ -385,17 +511,26 @@ defmodule Hologram.Query.Expression do
 
   defp literal?(_value), do: false
 
-  defp membership!({:^, _meta, [expr]}, _env), do: expr
+  defp membership!({:^, _meta, [expr]}, _names, _env), do: expr
 
-  defp membership!(list, env) when is_list(list) do
-    Enum.map(list, &value!(&1, "a membership element", env))
+  defp membership!(list, names, env) when is_list(list) do
+    Enum.map(
+      list,
+      &value!(&1, "a membership element is a literal or a pinned expression", names, env)
+    )
   end
 
-  defp membership!({operator, meta, bounds}, env) when operator in @range_operators do
-    {operator, meta, Enum.map(bounds, &value!(&1, "a range bound", env))}
+  defp membership!({operator, meta, bounds}, names, env) when operator in @range_operators do
+    lowered_bounds =
+      Enum.map(
+        bounds,
+        &value!(&1, "a range bound is a literal or a pinned expression", names, env)
+      )
+
+    {operator, meta, lowered_bounds}
   end
 
-  defp membership!(ast, env) do
+  defp membership!(ast, _names, env) do
     compile_error!(
       "a membership operand is a list, a range or a pinned expression, got: #{Macro.to_string(ast)} - a value from the surrounding code is pinned: #{pin_hint(ast)}",
       ast,
@@ -416,13 +551,6 @@ defmodule Hologram.Query.Expression do
       {:path_group, hop, tails} -> {hop, merge_includes(Enum.map(tails, &{:path, &1}))}
     end)
   end
-
-  defp name!({:^, _meta, [expr]}, _names, _env), do: expr
-
-  defp name!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
-    do: name
-
-  defp name!(ast, names, env), do: name_error!(ast, names, env)
 
   # An atom where a bare name goes is the old spelling, refused with the new one - other than nil,
   # true and false, which name nothing.
@@ -445,7 +573,7 @@ defmodule Hologram.Query.Expression do
 
   # The data form has no negated range, so a range here could only fail when the query is built,
   # in words about an operator nobody wrote.
-  defp negated_membership!({operator, _meta, _bounds} = ast, env)
+  defp negated_membership!({operator, _meta, _bounds} = ast, _names, env)
        when operator in @range_operators do
     compile_error!(
       "a negated membership takes a list or a pinned expression, got: #{Macro.to_string(ast)}",
@@ -454,7 +582,7 @@ defmodule Hologram.Query.Expression do
     )
   end
 
-  defp negated_membership!(ast, env), do: membership!(ast, env)
+  defp negated_membership!(ast, names, env), do: membership!(ast, names, env)
 
   @spec nested_include_error!(atom, Macro.t(), list(String.t()), Macro.Env.t()) :: no_return
   defp nested_include_error!(key, value, paths, env) do
@@ -472,9 +600,9 @@ defmodule Hologram.Query.Expression do
   end
 
   @spec operand_error!(String.t(), Macro.t(), Macro.Env.t()) :: no_return
-  defp operand_error!(subject, ast, env) do
+  defp operand_error!(description, ast, env) do
     compile_error!(
-      "#{subject} is a literal or a pinned expression, got: #{Macro.to_string(ast)} - a value from the surrounding code is pinned: #{pin_hint(ast)}",
+      "#{description}, got: #{Macro.to_string(ast)} - a value from the surrounding code is pinned: #{pin_hint(ast)}",
       ast,
       env
     )
@@ -541,24 +669,24 @@ defmodule Hologram.Query.Expression do
     end
   end
 
-  defp predicate_list!({:and, _meta, [left, right]}, env) do
-    conjunct!(left, env) ++ conjunct!(right, env)
+  defp predicate_list!({:and, _meta, [left, right]}, names, env) do
+    conjunct!(left, names, env) ++ conjunct!(right, names, env)
   end
 
-  defp predicate_list!({:not, _meta, [{:in, _in_meta, [left, right]}]}, env) do
-    [{attribute!(left, env), {:not_in, negated_membership!(right, env)}}]
+  defp predicate_list!({:not, _meta, [{:in, _in_meta, [left, right]}]}, names, env) do
+    [{attribute!(left, names, env), {:not_in, negated_membership!(right, names, env)}}]
   end
 
-  defp predicate_list!({:in, _meta, [left, right]}, env) do
-    [{attribute!(left, env), {:in, membership!(right, env)}}]
+  defp predicate_list!({:in, _meta, [left, right]}, names, env) do
+    [{attribute!(left, names, env), {:in, membership!(right, names, env)}}]
   end
 
-  defp predicate_list!({operator, _meta, [left, right]}, env)
+  defp predicate_list!({operator, _meta, [left, right]}, names, env)
        when operator in @comparison_operators do
-    [{attribute!(left, env), {operator, value!(right, "a comparison operand", env)}}]
+    [{attribute!(left, names, env), {operator, comparison_operand!(right, names, env)}}]
   end
 
-  defp predicate_list!(ast, env), do: unsupported!(ast, env)
+  defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
 
   defp reversed_hops({name, _meta, context}) when is_atom(name) and is_atom(context), do: [name]
 
@@ -577,27 +705,35 @@ defmodule Hologram.Query.Expression do
 
   defp tails_of(tail), do: [tail]
 
-  @spec unsupported!(Macro.t(), Macro.Env.t()) :: no_return
-  defp unsupported!(ast, env) do
+  @spec unsupported!(Macro.t(), map, Macro.Env.t()) :: no_return
+  defp unsupported!(ast, names, env) do
     compile_error!(
-      "unsupported expression in a filter: #{Macro.to_string(ast)} - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
+      "unsupported expression in #{names.subject}: #{Macro.to_string(ast)} - #{names.subject} is #{names.shapes}",
       ast,
       env
     )
   end
 
-  defp value!({:^, _meta, [expr]}, _subject, _env), do: expr
+  defp value!({:^, _meta, [expr]}, _description, _names, _env), do: expr
 
-  defp value!(ast, subject, env) do
+  defp value!(ast, description, names, env) do
     cond do
       literal?(ast) -> ast
-      bare_name?(ast) -> forgotten_pin!(ast, env)
-      true -> operand_error!(subject, ast, env)
+      bare_name?(ast) -> forgotten_pin!(ast, names, env)
+      true -> operand_error!(description, ast, env)
     end
   end
 
-  @spec whole_filter_conjunct!(Macro.t(), Macro.Env.t()) :: no_return
-  defp whole_filter_conjunct!(ast, env) do
+  @spec whole_conjunct!(Macro.t(), map, Macro.Env.t()) :: no_return
+  defp whole_conjunct!(ast, %{kind: :condition}, env) do
+    compile_error!(
+      "a pinned list of predicates is a whole condition, not one side of and, got: #{Macro.to_string(ast)} - put the other comparisons in the list",
+      ast,
+      env
+    )
+  end
+
+  defp whole_conjunct!(ast, %{kind: :filter}, env) do
     compile_error!(
       "a keyword list or a pinned list of predicates is a whole filter, not one side of and, got: #{Macro.to_string(ast)} - pass it to a filter call of its own",
       ast,
