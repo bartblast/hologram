@@ -69,7 +69,8 @@ defmodule Hologram.Query.Stage do
   # The data form a filter lowers to, and what filter(^predicates) passes as is: a keyword list of
   # attribute names and predicate values - a plain value (equality), an operator tuple, a bare
   # membership list, a list of operator tuples applying all of them (a conjunction), or an
-  # integer range.
+  # integer range. An or: entry holding a list of at least two predicate lists is a disjunction,
+  # which becomes one {:or, alternatives} clause, each alternative the clauses of its list.
   #
   # A Hologram.Query.Placeholder struct in a value position - bare, as an operator-tuple operand,
   # or as a membership list element - stands for a runtime-bound value: the triple stores a
@@ -162,8 +163,8 @@ defmodule Hologram.Query.Stage do
   end
 
   # Returns the canonical form of the given query - the form executors run literally
-  # and the registry hashes. Normalization: sorts filter predicates into canonical
-  # order (conjunction is commutative), gives every set-returning shape a total
+  # and the registry hashes. Normalization: sorts filter clauses into canonical order,
+  # disjunctions all the way down, gives every set-returning shape a total
   # deterministic order by appending an ascending id tiebreaker (or the id ordering
   # itself when no ordering is set) unless id is already among the ordering keys,
   # drops the ordering from counting queries (counts are order-invariant, view bounds
@@ -175,6 +176,18 @@ defmodule Hologram.Query.Stage do
     query
     |> to_term()
     |> normalized_term()
+  end
+
+  # Returns the canonical order of the given filter clauses: every alternative of a disjunction
+  # sorted, the alternatives sorted, and the clauses sorted - conjunction and disjunction are both
+  # commutative, so two spellings of one query are one term only if the order goes all the way
+  # down.
+  @doc false
+  @spec normalized_filter(list(Query.clause())) :: list(Query.clause())
+  def normalized_filter(clauses) do
+    clauses
+    |> Enum.map(&normalized_clause/1)
+    |> Enum.sort()
   end
 
   @doc false
@@ -238,7 +251,9 @@ defmodule Hologram.Query.Stage do
   @spec placeholder_names(Query.t()) :: list(atom)
   def placeholder_names(term) do
     filter_names =
-      Enum.flat_map(term.filter, fn {name, _operator, value} ->
+      term.filter
+      |> triples()
+      |> Enum.flat_map(fn {name, _operator, value} ->
         value_placeholder_names(name) ++ value_placeholder_names(value)
       end)
 
@@ -258,15 +273,24 @@ defmodule Hologram.Query.Stage do
   end
 
   @doc false
-  @spec predicate_triples!(module, keyword) :: list({atom, atom, any})
+  @spec predicate_triples!(module, keyword) :: list(Query.clause())
   def predicate_triples!(entity_type, predicates) do
     Enum.flat_map(predicates, fn
       {%Placeholder{name: placeholder_name}, value} ->
         [placeholder_key_triple(placeholder_name, value)]
 
-      {name, value} ->
-        validate_filtered_name!(name, entity_type)
-        predicate_triples!(name, value, entity_type)
+      # The shape decides rather than the name, so or is no reserved attribute name: a list of lists
+      # is no value any attribute takes - a membership list holds plain values and a list of
+      # operator tuples holds tuples - and an attribute named or keeps every other spelling.
+      {:or, alternatives} = entry when is_list(alternatives) ->
+        if Enum.all?(alternatives, &is_list/1) do
+          [disjunction!(entity_type, alternatives)]
+        else
+          attribute_triples!(entity_type, entry)
+        end
+
+      entry ->
+        attribute_triples!(entity_type, entry)
     end)
   end
 
@@ -311,6 +335,17 @@ defmodule Hologram.Query.Stage do
     put_attribute(entity, [{name, value}])
   end
 
+  # Returns every predicate triple of the given filter clauses, in order, the ones inside a
+  # disjunction's alternatives included.
+  @doc false
+  @spec triples(list(Query.clause())) :: list(Query.predicate())
+  def triples(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &triples/1)
+      triple -> [triple]
+    end)
+  end
+
   @doc false
   @spec trust(Entity.t() | module | Query.t()) :: Entity.t() | Query.t()
   # A query term is a struct too, so the entity-struct clause has to say which struct it means -
@@ -339,6 +374,12 @@ defmodule Hologram.Query.Stage do
     Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
   end
 
+  defp attribute_triples!(entity_type, {name, value}) do
+    validate_filtered_name!(name, entity_type)
+
+    predicate_triples!(name, value, entity_type)
+  end
+
   # Names reach type lookups already validated, so a name matching no attribute definition
   # is a to-one reference field - every reference column carries the entity id type.
   defp attribute_type(entity_type, name) do
@@ -358,6 +399,27 @@ defmodule Hologram.Query.Stage do
     entity_type.__attributes__()
     |> Enum.reject(fn {_name, _type, opts} -> Keyword.get(opts, :optional) == true end)
     |> integer_names()
+  end
+
+  # One alternative says what its predicates say alone, and an empty one says nothing at all - it
+  # would make the disjunction hold for every row - so neither is a disjunction, and every executor
+  # is spared both shapes. The lowering never produces either.
+  defp disjunction!(entity_type, alternatives) do
+    if length(alternatives) < 2 do
+      raise ArgumentError,
+        message:
+          "a disjunction takes a list of at least two predicate lists, got: #{inspect(alternatives)}"
+    end
+
+    Enum.each(alternatives, fn alternative ->
+      if alternative == [] or not filterable_predicates?(alternative) do
+        raise ArgumentError,
+          message:
+            "an alternative of a disjunction is a non-empty keyword list of predicates, got: #{inspect(alternative)}"
+      end
+    end)
+
+    {:or, Enum.map(alternatives, &predicate_triples!(entity_type, &1))}
   end
 
   # Keyword.keyword?/1 with placeholder keys admitted - a placeholder names an attribute nobody knows yet.
@@ -475,6 +537,17 @@ defmodule Hologram.Query.Stage do
     %{included | include: merged_include}
   end
 
+  defp normalized_clause({:or, alternatives}) do
+    sorted_alternatives =
+      alternatives
+      |> Enum.map(&normalized_filter/1)
+      |> Enum.sort()
+
+    {:or, sorted_alternatives}
+  end
+
+  defp normalized_clause(triple), do: triple
+
   defp normalized_includes(term) do
     Map.new(term.include, fn {name, sub_term} ->
       {name, normalized_sub_term(sub_term, relationship_kind(term.entity, name))}
@@ -500,7 +573,7 @@ defmodule Hologram.Query.Stage do
   defp normalized_term(term) do
     %{
       term
-      | filter: Enum.sort(term.filter),
+      | filter: normalized_filter(term.filter),
         include: normalized_includes(term),
         order_by: normalized_order(term)
     }

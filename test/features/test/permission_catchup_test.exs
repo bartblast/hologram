@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.PermissionCatchupTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Policies.Page1
@@ -25,7 +26,7 @@ defmodule HologramFeatureTests.PermissionCatchupTest do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Document, Note, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Document, Memo, Note, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 

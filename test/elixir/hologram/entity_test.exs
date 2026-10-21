@@ -224,6 +224,22 @@ defmodule Hologram.EntityTest do
                    fn -> Code.eval_string(code) end
     end
 
+    test "stores a disjunction in the lowered form" do
+      defmodule InlineEntityFixture4 do
+        use Hologram.Entity
+
+        attribute :shared, :boolean
+
+        relationship :author, Module14, optional: true
+
+        allow :read, when: author_id == user_id() or shared == true
+      end
+
+      assert InlineEntityFixture4.__policies__() == [
+               {:read, nil, nil, [or: [[author_id: {:==, {:actor}}], [shared: {:==, true}]]]}
+             ]
+    end
+
     test "stores a when condition as the line's predicates" do
       defmodule InlineEntityFixture1 do
         use Hologram.Entity

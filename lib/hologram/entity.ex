@@ -165,11 +165,13 @@ defmodule Hologram.Entity do
       (`{:moderator, MyApp.Post}`), or a list of them, any one of which suffices.
     * `via:` - a to-one relationship, written as a bare name (`via: project`): the operation is
       granted when the same operation is granted on the related row.
-    * `when:` - a condition on the row: `when: priority < 3 and archived == false`. A bare name is
-      an attribute of the row, `^` marks a value from the surrounding code (`^@max_priority`),
-      literals need nothing, and `user_id()` is the acting user's entity id. The operators are `==`,
-      `!=`, `<`, `<=`, `>`, `>=`, `in`, `not in` and `and`. A condition built from data goes in pinned,
-      as a keyword list of predicates: `when: ^predicates`.
+    * `when:` - a condition on the row: `when: priority < 3 and archived == false`,
+      `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
+      `^` marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
+      `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
+      `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
+      condition built from data goes in pinned, `when: ^predicates`, as a keyword list of
+      predicates, where an `or:` entry holding two or more predicate lists is a disjunction.
 
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.

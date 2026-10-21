@@ -33,14 +33,17 @@ defmodule Hologram.Policy.Evaluator do
   @doc """
   Returns true when the given compiled rule grants its operation for the given entity struct, or false otherwise.
 
-  Every predicate must hold, one grant reference must be held, and the delegation must grant
-  the same operation on the related entity. Predicate values compare as they do in the database:
-  nil is a regular value for equality and membership, while ordering comparisons never match it.
+  Every predicate clause must hold - a disjunction when any of its alternatives does - one grant
+  reference must be held, and the delegation must grant the same operation on the related entity.
+  Predicate values compare as they do in the database: nil is a regular value for equality and
+  membership, while ordering comparisons never match it.
 
-  A rule referencing the actor - through a user_id() predicate or any grant reference - is
-  skipped for an anonymous session instead of being evaluated with a nil actor, which would
-  make rows with a missing reference match everyone. A delegating rule is still evaluated,
-  because the entity type it delegates to skips its own actor-referencing rules in turn.
+  For an anonymous session a user_id() predicate is false, whichever way it points, and a grant
+  reference is held by nobody - the actor is nobody rather than nil, since a nil actor would make
+  rows with a missing reference match everyone. So a conjunction naming the actor fails, and a
+  disjunction answers through its other alternatives: `author_id == user_id() or shared == true`
+  still grants a visitor the shared rows. A delegating rule is evaluated as any other, because the
+  entity type it delegates to answers its own actor-referencing rules the same way.
 
   Grant references and delegations are resolved by the given checker function, called as
   checker.(requirement, entity, actor user id) with the rule's grant reference or a
@@ -48,18 +51,17 @@ defmodule Hologram.Policy.Evaluator do
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
-    if is_nil(actor_user_id) and actor_gated?(rule) do
-      false
-    else
-      predicates_hold?(rule.predicates, entity, actor_user_id) and
-        to_holds?(rule.to, entity, actor_user_id, checker) and
-        via_holds?(rule.via, entity, actor_user_id, checker)
-    end
+    predicates_hold?(rule.predicates, entity, actor_user_id) and
+      to_holds?(rule.to, entity, actor_user_id, checker) and
+      via_holds?(rule.via, entity, actor_user_id, checker)
   end
 
-  defp actor_gated?(rule) do
-    rule.to != nil or
-      Enum.any?(rule.predicates, fn {_name, _operator, value} -> value == {:actor} end)
+  defp clause_holds?({:or, alternatives}, entity, actor_user_id) do
+    Enum.any?(alternatives, &predicates_hold?(&1, entity, actor_user_id))
+  end
+
+  defp clause_holds?(triple, entity, actor_user_id) do
+    predicate_holds?(triple, entity, actor_user_id)
   end
 
   defp compare(%Date{} = left, %Date{} = right), do: Date.compare(left, right)
@@ -141,6 +143,10 @@ defmodule Hologram.Policy.Evaluator do
 
   defp holds?(field_value, :>=, value, ranks), do: compare(field_value, value, ranks) != :lt
 
+  # Nobody is equal to no attribute and unequal to none - asking about the actor of an anonymous
+  # session is asking about nobody, which no row answers.
+  defp predicate_holds?({_name, _operator, {:actor}}, _entity, nil), do: false
+
   defp predicate_holds?({name, operator, value}, entity, actor_user_id) do
     ranks = enum_ranks(entity.__struct__, name)
 
@@ -149,8 +155,8 @@ defmodule Hologram.Policy.Evaluator do
     |> holds?(operator, resolve_value(value, actor_user_id), ranks)
   end
 
-  defp predicates_hold?(predicates, entity, actor_user_id) do
-    Enum.all?(predicates, &predicate_holds?(&1, entity, actor_user_id))
+  defp predicates_hold?(clauses, entity, actor_user_id) do
+    Enum.all?(clauses, &clause_holds?(&1, entity, actor_user_id))
   end
 
   defp resolve_value({:actor}, actor_user_id), do: actor_user_id
@@ -158,6 +164,9 @@ defmodule Hologram.Policy.Evaluator do
   defp resolve_value(value, _actor_user_id), do: value
 
   defp to_holds?(nil, _entity, _actor_user_id, _checker), do: true
+
+  # A role is held by somebody, so an anonymous session holds none - the grant store is not asked.
+  defp to_holds?(_references, _entity, nil, _checker), do: false
 
   defp to_holds?(references, entity, actor_user_id, checker) do
     Enum.any?(references, &checker.(&1, entity, actor_user_id))

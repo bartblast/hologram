@@ -96,6 +96,11 @@ defmodule Hologram.Query.ExpressionTest do
                [author_id: {:==, {:actor}}, archived: {:==, false}]
     end
 
+    test "lowers a disjunction with user_id()" do
+      assert lower_condition("author_id == user_id() or shared == true") ==
+               [or: [[author_id: {:==, {:actor}}], [shared: {:==, true}]]]
+    end
+
     test "lowers a membership in a range" do
       assert lower_condition("count in 1..10") == [count: {:in, 1..10}]
     end
@@ -123,7 +128,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a bare name alone" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn -> lower_condition("done") end
     end
 
@@ -149,6 +154,12 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: a condition is an expression, got: [a: 1] - write it as an expression: a == 1",
                    fn -> lower_condition("[a: 1] and b == 2") end
+    end
+
+    test "raises on a keyword list as a side of or" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a condition is an expression, got: [a: 1] - write it as an expression: a == 1",
+                   fn -> lower_condition("[a: 1] or b == 2") end
     end
 
     test "raises on a keyword list holding a non-equality value" do
@@ -181,9 +192,15 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("^base and b == 2") end
     end
 
+    test "raises on a pinned list as a side of or" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a pinned list of predicates is a whole condition, not one side of or, got: ^base - put the whole disjunction in the list: [or: [predicates, predicates]]",
+                   fn -> lower_condition("^base or b == 2") end
+    end
+
     test "raises on nil" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn -> lower_condition("nil") end
     end
 
@@ -195,7 +212,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on true" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn -> lower_condition("true") end
     end
 
@@ -426,6 +443,16 @@ defmodule Hologram.Query.ExpressionTest do
   end
 
   describe "predicates/2" do
+    test "flattens a chain of disjunctions" do
+      assert lower_predicates("a == 1 or b == 2 or c == 3") ==
+               [or: [[a: {:==, 1}], [b: {:==, 2}], [c: {:==, 3}]]]
+    end
+
+    test "flattens a grouped disjunction inside a disjunction" do
+      assert lower_predicates("a == 1 or (b == 2 or c == 3)") ==
+               [or: [[a: {:==, 1}], [b: {:==, 2}], [c: {:==, 3}]]]
+    end
+
     test "keeps a pinned keyword value an equality operand" do
       assert lower_predicates("[status: ^statuses]", statuses: [:todo]) ==
                [status: {:==, [:todo]}]
@@ -448,6 +475,25 @@ defmodule Hologram.Query.ExpressionTest do
                [a: {:==, true}, b: {:>, 1}, c: {:!=, "x"}]
     end
 
+    test "lowers a disjunction" do
+      assert lower_predicates("a == 1 or b == 2") == [or: [[a: {:==, 1}], [b: {:==, 2}]]]
+    end
+
+    test "lowers a disjunction nested inside an alternative" do
+      assert lower_predicates("a == 1 or (b == 2 and (c == 3 or d == 4))") ==
+               [or: [[a: {:==, 1}], [b: {:==, 2}, or: [[c: {:==, 3}], [d: {:==, 4}]]]]]
+    end
+
+    test "lowers a disjunction of conjunctions, and binding tighter" do
+      assert lower_predicates("a == 1 and b == 2 or c == 3") ==
+               [or: [[a: {:==, 1}, b: {:==, 2}], [c: {:==, 3}]]]
+    end
+
+    test "lowers a grouped disjunction inside a conjunction" do
+      assert lower_predicates("a == 1 and (b == 2 or c == 3)") ==
+               [a: {:==, 1}, or: [[b: {:==, 2}], [c: {:==, 3}]]]
+    end
+
     test "lowers a keyword list of literals" do
       assert lower_predicates(~s([project_id: "p", status: :todo])) ==
                [project_id: {:==, "p"}, status: {:==, :todo}]
@@ -458,6 +504,11 @@ defmodule Hologram.Query.ExpressionTest do
                project_id: "p",
                user: %{id: "u"}
              ) == [project_id: {:==, "p"}, owner_id: {:==, "u"}]
+    end
+
+    test "lowers a membership and a pinned value as alternatives" do
+      assert lower_predicates("status in [:todo, :doing] or owner_id == ^owner_id", owner_id: "u") ==
+               [or: [[status: {:in, [:todo, :doing]}], [owner_id: {:==, "u"}]]]
     end
 
     test "lowers a membership in a list literal" do
@@ -516,7 +567,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a bare name alone" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("done") end
     end
 
@@ -564,7 +615,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a call as the whole argument" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: open_predicates() - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: open_predicates() - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("open_predicates()") end
     end
 
@@ -572,6 +623,12 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: a keyword list or a pinned list of predicates is a whole filter, not one side of and, got: [a: 1] - pass it to a filter call of its own",
                    fn -> lower_predicates("[a: 1] and b == 2") end
+    end
+
+    test "raises on a keyword list as a side of or" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a keyword list or a pinned list of predicates is a whole filter, not one side of or, got: [a: 1] - write the alternative as an expression, or put the whole disjunction in a pinned list: [or: [predicates, predicates]]",
+                   fn -> lower_predicates("[a: 1] or b == 2") end
     end
 
     test "raises on a list as a keyword value" do
@@ -592,6 +649,12 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("priority < @max") end
     end
 
+    test "raises on a negated disjunction" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not (a == 1 or b == 2) - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
+                   fn -> lower_predicates("not (a == 1 or b == 2)") end
+    end
+
     test "raises on a negated membership tuple as a keyword value" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [status: {:not_in, [:done]}] - write it as an expression: status not in [:done]",
@@ -600,7 +663,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a negation that is not a membership" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("not done") end
     end
 
@@ -620,6 +683,12 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a keyword list or a pinned list of predicates is a whole filter, not one side of and, got: ^predicates - pass it to a filter call of its own",
                    fn -> lower_predicates("^predicates and b == 2") end
+    end
+
+    test "raises on a pinned list as a side of or" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a keyword list or a pinned list of predicates is a whole filter, not one side of or, got: ^base - write the alternative as an expression, or put the whole disjunction in a pinned list: [or: [predicates, predicates]]",
+                   fn -> lower_predicates("^base or b == 2") end
     end
 
     test "raises on a range as a keyword value" do
@@ -662,12 +731,6 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [priority: {:>=, 3}] - write it as an expression: priority >= 3",
                    fn -> lower_predicates("[priority: {:>=, 3}]") end
-    end
-
-    test "raises on an or" do
-      assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: a == 1 or b == 2 - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
-                   fn -> lower_predicates("a == 1 or b == 2") end
     end
 
     test "raises on comparisons listed instead of joined" do

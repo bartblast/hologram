@@ -8,15 +8,16 @@ defmodule HologramFeatureTests.GrantQueryTest do
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.GrantQueryPage
 
-  # All the tables truncate in one statement: the role grant table's foreign keys to the user
-  # table make Postgres reject truncating the referenced table alone.
+  # All the tables truncate in one statement: the memo, note and role grant tables' foreign keys to
+  # the user table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
-      Enum.map_join([Document, Folder, Note, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Document, Folder, Memo, Note, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 

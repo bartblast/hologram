@@ -35,6 +35,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Component.Module28, as: ComponentModule28
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
+  alias Hologram.Test.Fixtures.Component.Module30, as: ComponentModule30
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -52,6 +53,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -1530,6 +1532,24 @@ defmodule Hologram.CompilerTest do
 
       component_queries =
         extract_component_queries([ComponentModule18], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute inside a disjunction",
+         %{
+           entity_types: entity_types
+         } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module30 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      component_queries =
+        extract_component_queries([ComponentModule30], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -3501,6 +3521,38 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"archive":[{"predicates":[["author_id","==",{"actor":true}]]/
+             )
+    end
+
+    # A disjunction rides beside the triples as an object holding its alternatives, which is how
+    # the evaluator tells it from a triple.
+    test "bakes a condition holding a disjunction as an or clause", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([DisjunctionPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"or":[[["author_id","==",{"actor":true}]],[["shared","==",true]]]}],"to":null,"via":null}]/
              )
     end
 

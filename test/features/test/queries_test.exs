@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page1
   alias HologramFeatureTests.Queries.Page3
   alias HologramFeatureTests.Queries.Page4
+  alias HologramFeatureTests.Queries.Page5
 
   @place_script "return globalThis.Hologram.durability.cursor();"
 
@@ -131,6 +132,27 @@ defmodule HologramFeatureTests.QueriesTest do
     |> await_local_fill()
     |> click(button("Read locally"))
     |> assert_text(css("#runtime_filter"), ~r/^bravo,charlie,echo,zz$/)
+  end
+
+  # The high tickets but delta, skipped by its pinned title, and the low one, by title.
+  feature "renders a filter with alternatives", %{session: session} do
+    seed_tickets()
+
+    session
+    |> visit(Page5)
+    |> assert_text(css("#alternatives_filter"), ~r/^alpha,charlie,zz$/)
+  end
+
+  # Alpha by the first alternative, and the high tickets but zz by the second - delta among them,
+  # which the rendered list skips, so the answer can only have come from the local rows.
+  feature "runs a filter with alternatives over local data", %{session: session} do
+    seed_tickets()
+
+    session
+    |> visit(Page5)
+    |> await_local_fill()
+    |> click(button("Read alternatives locally"))
+    |> assert_text(css("#local_alternatives"), ~r/^alpha,charlie,delta$/)
   end
 
   # The place the client greets a stream with is held once a fill has declared the local database

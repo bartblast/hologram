@@ -5,6 +5,7 @@ defmodule Hologram.Policy.EvaluatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module17
+  alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Policy.Module1
 
   defp deny(_requirement, _entity, _actor_user_id), do: false
@@ -87,6 +88,31 @@ defmodule Hologram.Policy.EvaluatorTest do
       assert rule_matches?(rule([]), %Module1{}, nil, &deny/3)
     end
 
+    test "evaluates either alternative of a disjunction" do
+      rule = rule(predicates: [{:or, [[{:public, :==, true}], [{:priority, :>=, 3}]]}])
+
+      assert rule_matches?(rule, %Module1{public: true, priority: 1}, nil, &deny/3)
+      assert rule_matches?(rule, %Module1{public: false, priority: 3}, nil, &deny/3)
+      refute rule_matches?(rule, %Module1{public: false, priority: 1}, nil, &deny/3)
+    end
+
+    test "evaluates a nested disjunction" do
+      rule =
+        rule(
+          predicates: [
+            {:or,
+             [
+               [{:public, :==, true}, {:or, [[{:priority, :==, 1}], [{:priority, :==, 2}]]}],
+               [{:priority, :>=, 5}]
+             ]}
+          ]
+        )
+
+      assert rule_matches?(rule, %Module1{public: true, priority: 2}, nil, &deny/3)
+      assert rule_matches?(rule, %Module1{public: false, priority: 5}, nil, &deny/3)
+      refute rule_matches?(rule, %Module1{public: true, priority: 3}, nil, &deny/3)
+    end
+
     test "evaluates equality with nil as a regular value" do
       assert rule_matches?(rule(predicates: [{:priority, :==, nil}]), %Module1{}, nil, &deny/3)
 
@@ -96,6 +122,41 @@ defmodule Hologram.Policy.EvaluatorTest do
                nil,
                &deny/3
              )
+    end
+
+    # A missing value is unequal to every value but another missing one, the acting user's id
+    # included - a rule on an unset reference never grants a signed-in user.
+    test "never equates a missing reference with the acting user" do
+      entity = %Module1{author_id: nil}
+
+      refute rule_matches?(
+               rule(predicates: [{:author_id, :==, {:actor}}]),
+               entity,
+               "user_id_1",
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:author_id, :!=, {:actor}}]),
+               entity,
+               "user_id_1",
+               &deny/3
+             )
+    end
+
+    test "never equates a missing string with a literal" do
+      entity = %Module2{c: nil}
+
+      refute rule_matches?(rule(predicates: [{:c, :==, "draft"}]), entity, nil, &deny/3)
+      assert rule_matches?(rule(predicates: [{:c, :!=, "draft"}]), entity, nil, &deny/3)
+      refute rule_matches?(rule(predicates: [{:c, :in, ["draft"]}]), entity, nil, &deny/3)
+    end
+
+    test "never equates a missing number with zero" do
+      entity = %Module1{priority: nil}
+
+      refute rule_matches?(rule(predicates: [{:priority, :==, 0}]), entity, nil, &deny/3)
+      assert rule_matches?(rule(predicates: [{:priority, :!=, 0}]), entity, nil, &deny/3)
     end
 
     test "evaluates inequality with nil as a regular value" do
@@ -267,16 +328,47 @@ defmodule Hologram.Policy.EvaluatorTest do
       refute rule_matches?(rule, entity, "user_id_2", &deny/3)
     end
 
-    test "skips a rule referencing the actor for an anonymous session" do
+    test "denies a rule referencing the actor to an anonymous session" do
       rule = rule(predicates: [{:author_id, :==, {:actor}}])
 
       refute rule_matches?(rule, %Module1{author_id: nil}, nil, &deny/3)
     end
 
-    test "skips a rule with grant references for an anonymous session" do
+    test "denies a rule with grant references to an anonymous session" do
       rule = rule(to: [{:own, [:owner]}])
 
       refute rule_matches?(rule, %Module1{}, nil, &grant/3)
+    end
+
+    # The actor of an anonymous session is nobody, never nil - nil would equal the missing author
+    # and hand the visitor every authorless row through the first alternative.
+    test "passes a visitor to the alternative that names nobody" do
+      rule = rule(predicates: [{:or, [[{:author_id, :==, {:actor}}], [{:public, :==, true}]]}])
+
+      assert rule_matches?(rule, %Module1{author_id: nil, public: true}, nil, &deny/3)
+      refute rule_matches?(rule, %Module1{author_id: nil, public: false}, nil, &deny/3)
+    end
+
+    test "denies a visitor every alternative naming them" do
+      rule =
+        rule(predicates: [{:or, [[{:author_id, :==, {:actor}}], [{:author_id, :!=, {:actor}}]]}])
+
+      refute rule_matches?(rule, %Module1{author_id: nil}, nil, &deny/3)
+    end
+
+    test "denies a visitor a conjunction naming them beside a disjunction" do
+      rule =
+        rule(
+          predicates: [
+            {:author_id, :!=, {:actor}},
+            {:or, [[{:public, :==, true}], [{:priority, :>=, 3}]]}
+          ]
+        )
+
+      entity = %Module1{author_id: nil, public: true}
+
+      assert rule_matches?(rule, entity, "user_id_1", &deny/3)
+      refute rule_matches?(rule, entity, nil, &deny/3)
     end
 
     test "grants when the checker holds one of the rule's grant references" do

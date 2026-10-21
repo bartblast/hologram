@@ -2,7 +2,8 @@ defmodule Hologram.Query.Interpreter do
   @moduledoc false
 
   # The reference implementation of the query kernel: the locked operator set evaluated over
-  # plain Elixir data rather than compiled to SQL.
+  # plain Elixir data rather than compiled to SQL - comparisons and memberships, joined by `and`
+  # (every clause holds) and by `or` (a disjunction holds when one of its alternatives does).
   #
   # It exists to be proven identical to the database executor in ExUnit, over the same rows -
   # which is what lets the client's hand-written JavaScript kernel be proven identical in turn,
@@ -14,6 +15,7 @@ defmodule Hologram.Query.Interpreter do
 
   alias Hologram.DB.SortKey
   alias Hologram.Query
+  alias Hologram.Query.Stage
 
   @doc """
   Runs the given normalized query term over the given rows and returns what the database would
@@ -205,8 +207,17 @@ defmodule Hologram.Query.Interpreter do
   defp flip(:lt), do: :gt
 
   defp matches?(row, filter, opts, ranks) do
-    Enum.all?(filter, &matches_predicate?(row, &1, opts, ranks))
+    Enum.all?(filter, &matches_clause?(row, &1, opts, ranks))
   end
+
+  # A visitor has no acting user, and each predicate naming one answers false on its own - so a
+  # disjunction needs no case for it: the alternative asking about nobody fails, and the others
+  # still answer.
+  defp matches_clause?(row, {:or, alternatives}, opts, ranks) do
+    Enum.any?(alternatives, &matches?(row, &1, opts, ranks))
+  end
+
+  defp matches_clause?(row, triple, opts, ranks), do: matches_predicate?(row, triple, opts, ranks)
 
   defp matches_predicate?(row, {name, operator, operand}, opts, ranks) do
     ranks_for_key = Map.get(ranks, name)
@@ -220,9 +231,13 @@ defmodule Hologram.Query.Interpreter do
     end
   end
 
-  # The ranks a term's own predicates compare by, keyed by the attribute each names.
+  # The ranks a term's own predicates compare by, keyed by the attribute each names - the ones
+  # inside a disjunction's alternatives included.
   defp predicate_ranks(term) do
-    names = Enum.map(term.filter, fn {name, _operator, _operand} -> name end)
+    names =
+      term.filter
+      |> Stage.triples()
+      |> Enum.map(fn {name, _operator, _operand} -> name end)
 
     enum_ranks(term.entity, names)
   end

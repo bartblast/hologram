@@ -106,10 +106,12 @@ function assertNoPlaceholders(term) {
 }
 
 function placeholderNames(term) {
-  const fromFilter = term.filter.flatMap(([name, _operator, value]) => [
-    ...valuePlaceholderNames(name),
-    ...valuePlaceholderNames(value),
-  ]);
+  const fromFilter = QueryKernel.triples(term.filter).flatMap(
+    ([name, _operator, value]) => [
+      ...valuePlaceholderNames(name),
+      ...valuePlaceholderNames(value),
+    ],
+  );
 
   const fromBounds = [term.limit, term.offset].flatMap(valuePlaceholderNames);
 

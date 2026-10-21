@@ -115,6 +115,26 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
+    # A disjunction reads the row's own attributes, so its alternatives' attributes join the rule's
+    # one attribute edge rather than adding a kind of edge.
+    test "derives one attribute edge for a condition holding a disjunction" do
+      defmodule DisjunctionFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module14
+
+        attribute :shared, :boolean, default: false
+
+        relationship :author, Module14, optional: true
+
+        allow :read, when: author_id == user_id() or shared == true
+      end
+
+      assert derive([DisjunctionFixture]) == %{
+               {DisjunctionFixture, :read} => [{:attributes, [:author_id, :shared]}]
+             }
+    end
+
     test "derives no pairs for an entity type without policy declarations" do
       assert derive([Module1]) == %{}
     end

@@ -414,6 +414,12 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{:c, :>=, {:placeholder, :min}}]
     end
 
+    test "accepts a placeholder sentinel inside an alternative" do
+      query = filter(Module2, or: [[b: %Placeholder{name: :min}], [a: true]])
+
+      assert query.filter == [{:or, [[{:b, :==, {:placeholder, :min}}], [{:a, :==, true}]]}]
+    end
+
     test "accepts an explicit equality operator tuple" do
       query = filter(Module2, a: {:==, true})
 
@@ -463,6 +469,15 @@ defmodule Hologram.Query.StageTest do
         |> filter(b: {:<, 10})
 
       assert query.filter == [{:b, :>=, 3}, {:b, :<, 10}]
+    end
+
+    test "appends a disjunction after prior predicates" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> filter(or: [[b: 1], [c: "x"]])
+
+      assert query.filter == [{:a, :==, true}, {:or, [[{:b, :==, 1}], [{:c, :==, "x"}]]}]
     end
 
     test "appends to an already built query term" do
@@ -556,6 +571,12 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{:b, :>=, 3}, {:b, :<, 10}]
     end
 
+    test "expands a range inside an alternative into its two bounds" do
+      query = filter(Module2, or: [[b: 1..3], [a: true]])
+
+      assert query.filter == [{:or, [[{:b, :>=, 1}, {:b, :<=, 3}], [{:a, :==, true}]]}]
+    end
+
     test "expands a range passed to the membership operator" do
       query = filter(Module2, b: {:in, 3..10})
 
@@ -572,6 +593,24 @@ defmodule Hologram.Query.StageTest do
       query = filter(Module2, c: "abc", a: false)
 
       assert query.filter == [{:c, :==, "abc"}, {:a, :==, false}]
+    end
+
+    test "nests a disjunction inside an alternative" do
+      query = filter(Module2, or: [[a: true, or: [[b: 1], [b: 2]]], [c: "x"]])
+
+      assert query.filter == [
+               {:or,
+                [
+                  [{:a, :==, true}, {:or, [[{:b, :==, 1}], [{:b, :==, 2}]]}],
+                  [{:c, :==, "x"}]
+                ]}
+             ]
+    end
+
+    test "reads an or entry as a disjunction of its alternatives" do
+      query = filter(Module2, or: [[a: true], [b: {:>=, 3}, c: "x"]])
+
+      assert query.filter == [{:or, [[{:a, :==, true}], [{:b, :>=, 3}, {:c, :==, "x"}]]}]
     end
 
     test "starts a query term from an entity type module" do
@@ -599,6 +638,23 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: 10..3//-1)
+      end
+    end
+
+    test "raises on a disjunction with no alternatives" do
+      expected_msg = "a disjunction takes a list of at least two predicate lists, got: []"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, or: [])
+      end
+    end
+
+    test "raises on a disjunction with one alternative" do
+      expected_msg =
+        "a disjunction takes a list of at least two predicate lists, got: [[a: true]]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, or: [[a: true]])
       end
     end
 
@@ -761,6 +817,24 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on an alternative that is not a keyword list" do
+      expected_msg =
+        "an alternative of a disjunction is a non-empty keyword list of predicates, got: [1]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, or: [[a: true], [1]])
+      end
+    end
+
+    test "raises on an empty alternative" do
+      expected_msg =
+        "an alternative of a disjunction is a non-empty keyword list of predicates, got: []"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, or: [[a: true], []])
+      end
+    end
+
     test "raises on an empty filter list" do
       expected_msg = "filter list for attribute :b must not be empty"
 
@@ -793,12 +867,32 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    # The shape decides, not the name, so an or entry holding anything but predicate lists is read
+    # as an attribute named or - which this entity type does not declare.
+    test "raises on an or entry whose value is not a list of lists as an unknown attribute" do
+      expected_msg =
+        "unknown attribute :or in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, or: true)
+      end
+    end
+
     test "raises on an ordering comparison on the id attribute" do
       expected_msg =
         "operator :< requires an orderable attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, id: {:<, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
+      end
+    end
+
+    test "raises on an unknown attribute inside an alternative" do
+      expected_msg =
+        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, or: [[x: 1], [a: true]])
       end
     end
 
@@ -1383,6 +1477,12 @@ defmodule Hologram.Query.StageTest do
       normalized =
         Module3
         |> filter(id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> filter(
+          or: [
+            [c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e1f"],
+            [b_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e2f"]
+          ]
+        )
         |> include(:a)
         |> order_by(:created_at)
         |> normalize()
@@ -1439,6 +1539,16 @@ defmodule Hologram.Query.StageTest do
       assert query.include.c.order_by == []
     end
 
+    test "sorts a disjunction before the predicates beside it" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> filter(or: [[c: "x"], [b: 1]])
+        |> normalize()
+
+      assert query.filter == [{:or, [[{:b, :==, 1}], [{:c, :==, "x"}]]}, {:a, :==, true}]
+    end
+
     test "sorts filter predicates canonically" do
       query =
         Module2
@@ -1446,6 +1556,35 @@ defmodule Hologram.Query.StageTest do
         |> normalize()
 
       assert query.filter == [{:a, :==, true}, {:c, :==, "x"}]
+    end
+
+    test "sorts the alternatives of a disjunction and the predicates inside them" do
+      query =
+        Module2
+        |> filter(or: [[c: "x"], [b: 1, a: true]])
+        |> normalize()
+
+      assert query.filter == [{:or, [[{:a, :==, true}, {:b, :==, 1}], [{:c, :==, "x"}]]}]
+    end
+  end
+
+  describe "normalized_filter/1" do
+    test "leaves a sorted filter as it is" do
+      filter = [{:or, [[{:a, :==, true}], [{:b, :==, 1}]]}, {:c, :==, "x"}]
+
+      assert normalized_filter(filter) == filter
+    end
+
+    test "sorts nested disjunctions recursively" do
+      filter = [
+        {:c, :==, 1},
+        {:or, [[{:b, :==, 2}, {:or, [[{:z, :==, 1}], [{:y, :==, 1}]]}], [{:a, :==, 3}]]}
+      ]
+
+      assert normalized_filter(filter) == [
+               {:or, [[{:or, [[{:y, :==, 1}], [{:z, :==, 1}]]}, {:b, :==, 2}], [{:a, :==, 3}]]},
+               {:c, :==, 1}
+             ]
     end
   end
 
@@ -1748,6 +1887,15 @@ defmodule Hologram.Query.StageTest do
       assert placeholder_names(query) == [:owner]
     end
 
+    test "collects placeholders inside a disjunction" do
+      query =
+        filter(Module2,
+          or: [[b: %Placeholder{name: :min}], [c: %Placeholder{name: :search}]]
+        )
+
+      assert placeholder_names(query) == [:min, :search]
+    end
+
     test "yields an empty list for a concrete term" do
       assert placeholder_names(filter(Module2, a: true)) == []
     end
@@ -1900,6 +2048,28 @@ defmodule Hologram.Query.StageTest do
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
       end
+    end
+  end
+
+  describe "triples/1" do
+    test "returns the predicates of a flat filter unchanged" do
+      filter = [{:a, :==, true}, {:b, :>=, 3}]
+
+      assert triples(filter) == filter
+    end
+
+    test "walks nested disjunctions" do
+      filter = [
+        {:or, [[{:a, :==, true}, {:or, [[{:b, :==, 1}], [{:b, :==, 2}]]}], [{:c, :==, "x"}]]}
+      ]
+
+      assert triples(filter) == [{:a, :==, true}, {:b, :==, 1}, {:b, :==, 2}, {:c, :==, "x"}]
+    end
+
+    test "walks the alternatives of a disjunction in order" do
+      filter = [{:or, [[{:a, :==, true}], [{:b, :>=, 3}, {:c, :==, "x"}]]}, {:d, :==, 1}]
+
+      assert triples(filter) == [{:a, :==, true}, {:b, :>=, 3}, {:c, :==, "x"}, {:d, :==, 1}]
     end
   end
 

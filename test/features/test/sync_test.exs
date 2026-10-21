@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
@@ -26,7 +27,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     tables =
       Enum.map_join(
-        [Document, Folder, Note, Review, Product, RoleGrant, User],
+        [Document, Folder, Memo, Note, Review, Product, RoleGrant, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")

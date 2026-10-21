@@ -20,7 +20,7 @@ defmodule Hologram.Query.Expression do
     operand: "a literal, user_id() or a pinned expression",
     row: "the entity",
     shapes:
-      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, or a pinned list of predicates",
+      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
     subject: "a condition"
   }
 
@@ -29,7 +29,7 @@ defmodule Hologram.Query.Expression do
     operand: "a literal or a pinned expression",
     row: "the queried entity",
     shapes:
-      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, a keyword list of equalities, or a pinned list of predicates",
+      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
     subject: "a filter"
   }
 
@@ -74,11 +74,14 @@ defmodule Hologram.Query.Expression do
   Accepts a pinned expression (`^predicates`), a comparison of a bare attribute name with a
   literal, `user_id()` or a pinned value (`==`, `!=`, `<`, `<=`, `>`, `>=`), membership in a list
   literal, a range literal or a pinned expression (`in`), negated membership in a list literal or a
-  pinned expression (`not in`), and comparisons and memberships joined with `and`. `user_id()`
+  pinned expression (`not in`), comparisons and memberships joined with `and`, and alternatives
+  joined with `or`, `and` binding tighter and parentheses grouping. A chain of `or`s lowers to one
+  `{:or, alternatives}` entry, each alternative the keyword list its side lowers to. `user_id()`
   lowers to the actor sentinel, `{:actor}`.
 
   Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
-  expression to write when it holds equalities only) and on anything else.
+  expression to write when it holds equalities only), on a pinned list as one side of `and` or
+  `or`, and on anything else.
   """
   @spec condition(Macro.t(), Macro.Env.t()) :: Macro.t()
   def condition({:^, _meta, [expr]}, _env), do: expr
@@ -190,9 +193,12 @@ defmodule Hologram.Query.Expression do
   literals or pinned (`project_id: ^project_id, status: :todo`), a comparison of a bare attribute
   name with a literal or a pinned value (`==`, `!=`, `<`, `<=`, `>`, `>=`), membership in a list
   literal, a range literal or a pinned expression (`in`), negated membership in a list literal or
-  a pinned expression (`not in`), and comparisons and memberships joined with `and`.
+  a pinned expression (`not in`), comparisons and memberships joined with `and`, and alternatives
+  joined with `or`, `and` binding tighter and parentheses grouping. A chain of `or`s lowers to one
+  `{:or, alternatives}` entry, each alternative the keyword list its side lowers to.
 
-  Raises Hologram.CompileError, located at the offending node, on anything else.
+  Raises Hologram.CompileError, located at the offending node, on a keyword list or a pinned list as
+  one side of `and` or `or`, and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
   def predicates({:^, _meta, [expr]}, _env), do: expr
@@ -250,6 +256,15 @@ defmodule Hologram.Query.Expression do
     end
   end
 
+  # A chain of ors is one disjunction, grouped or not - Elixir reads a or b or c as (a or b) or c,
+  # and a or (b or c) says the same thing - so an or on either side contributes its alternatives
+  # rather than a disjunction of its own.
+  defp alternatives!({:or, _meta, [left, right]}, names, env) do
+    alternatives!(left, names, env) ++ alternatives!(right, names, env)
+  end
+
+  defp alternatives!(ast, names, env), do: [side!(ast, :or, names, env)]
+
   defp attribute!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
     do: name
 
@@ -279,18 +294,6 @@ defmodule Hologram.Query.Expression do
   defp comparison_operand!(ast, names, env) do
     value!(ast, "a comparison operand is #{names.operand}", names, env)
   end
-
-  # A keyword list and a pinned list are each a whole filter, so neither is one side of an and -
-  # the stage it would be joined to is a second filter call. A condition takes no keyword list at
-  # all, so there one is refused as the old spelling.
-  defp conjunct!(ast, %{kind: :condition}, env) when is_list(ast),
-    do: keyword_list_error!(ast, env)
-
-  defp conjunct!(ast, names, env) when is_list(ast), do: whole_conjunct!(ast, names, env)
-
-  defp conjunct!({:^, _meta, [_expr]} = ast, names, env), do: whole_conjunct!(ast, names, env)
-
-  defp conjunct!(ast, names, env), do: predicate_list!(ast, names, env)
 
   # The shapes a keyword value took in the data form: an operator tuple, a membership list, a range.
   defp data_form?({operator, _operand}) when is_atom(operator), do: true
@@ -670,7 +673,11 @@ defmodule Hologram.Query.Expression do
   end
 
   defp predicate_list!({:and, _meta, [left, right]}, names, env) do
-    conjunct!(left, names, env) ++ conjunct!(right, names, env)
+    side!(left, :and, names, env) ++ side!(right, :and, names, env)
+  end
+
+  defp predicate_list!({:or, _meta, [_left, _right]} = ast, names, env) do
+    [{:or, alternatives!(ast, names, env)}]
   end
 
   defp predicate_list!({:not, _meta, [{:in, _in_meta, [left, right]}]}, names, env) do
@@ -701,6 +708,21 @@ defmodule Hologram.Query.Expression do
 
   defp reversed_hops(_ast), do: nil
 
+  # A keyword list and a pinned list are each a whole filter, so neither is one side of an and or
+  # an or - the stage it would be joined to is a second filter call, and a disjunction holding one
+  # is written in the data form whole. A condition takes no keyword list at all, so there one is
+  # refused as the old spelling.
+  defp side!(ast, _operator, %{kind: :condition}, env) when is_list(ast),
+    do: keyword_list_error!(ast, env)
+
+  defp side!(ast, operator, names, env) when is_list(ast),
+    do: whole_side!(ast, operator, names, env)
+
+  defp side!({:^, _meta, [_expr]} = ast, operator, names, env),
+    do: whole_side!(ast, operator, names, env)
+
+  defp side!(ast, _operator, names, env), do: predicate_list!(ast, names, env)
+
   defp tails_of([]), do: []
 
   defp tails_of(tail), do: [tail]
@@ -724,8 +746,8 @@ defmodule Hologram.Query.Expression do
     end
   end
 
-  @spec whole_conjunct!(Macro.t(), map, Macro.Env.t()) :: no_return
-  defp whole_conjunct!(ast, %{kind: :condition}, env) do
+  @spec whole_side!(Macro.t(), :and | :or, map, Macro.Env.t()) :: no_return
+  defp whole_side!(ast, :and, %{kind: :condition}, env) do
     compile_error!(
       "a pinned list of predicates is a whole condition, not one side of and, got: #{Macro.to_string(ast)} - put the other comparisons in the list",
       ast,
@@ -733,9 +755,25 @@ defmodule Hologram.Query.Expression do
     )
   end
 
-  defp whole_conjunct!(ast, %{kind: :filter}, env) do
+  defp whole_side!(ast, :and, %{kind: :filter}, env) do
     compile_error!(
       "a keyword list or a pinned list of predicates is a whole filter, not one side of and, got: #{Macro.to_string(ast)} - pass it to a filter call of its own",
+      ast,
+      env
+    )
+  end
+
+  defp whole_side!(ast, :or, %{kind: :condition}, env) do
+    compile_error!(
+      "a pinned list of predicates is a whole condition, not one side of or, got: #{Macro.to_string(ast)} - put the whole disjunction in the list: [or: [predicates, predicates]]",
+      ast,
+      env
+    )
+  end
+
+  defp whole_side!(ast, :or, %{kind: :filter}, env) do
+    compile_error!(
+      "a keyword list or a pinned list of predicates is a whole filter, not one side of or, got: #{Macro.to_string(ast)} - write the alternative as an expression, or put the whole disjunction in a pinned list: [or: [predicates, predicates]]",
       ast,
       env
     )

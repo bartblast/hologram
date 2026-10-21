@@ -255,6 +255,64 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(reads([rule()], document()), Type.boolean(true));
     });
 
+    it("evaluates either alternative of a disjunction", () => {
+      const rules = [
+        rule({
+          predicates: [
+            {or: [[["public", "==", true]], [["priority", ">=", 3]]]},
+          ],
+        }),
+      ];
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 1, public: true})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 3, public: false})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 1, public: false})),
+        Type.boolean(false),
+      );
+    });
+
+    it("evaluates a nested disjunction", () => {
+      const rules = [
+        rule({
+          predicates: [
+            {
+              or: [
+                [
+                  ["public", "==", true],
+                  {or: [[["priority", "==", 1]], [["priority", "==", 2]]]},
+                ],
+                [["priority", ">=", 5]],
+              ],
+            },
+          ],
+        }),
+      ];
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 2, public: true})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 5, public: false})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 3, public: true})),
+        Type.boolean(false),
+      );
+    });
+
     it("evaluates equality with nil as a regular value", () => {
       const rules = [rule({predicates: [["priority", "==", null]]})];
 
@@ -263,6 +321,61 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(
         reads(rules, document({priority: 1})),
         Type.boolean(false),
+      );
+    });
+
+    // A missing value is unequal to every value but another missing one, the acting user's id
+    // included - a rule on an unset reference never grants a signed-in user.
+    it("never equates a missing reference with the acting user", () => {
+      const entity = document({author_id: null});
+      const equalRules = [
+        rule({predicates: [["author_id", "==", {actor: true}]]}),
+      ];
+      const unequalRules = [
+        rule({predicates: [["author_id", "!=", {actor: true}]]}),
+      ];
+
+      assert.deepStrictEqual(
+        reads(equalRules, entity, Type.bitstring(ALICE)),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(unequalRules, entity, Type.bitstring(ALICE)),
+        Type.boolean(true),
+      );
+    });
+
+    it("never equates a missing string with a literal", () => {
+      const entity = document({title: null});
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["title", "==", "draft"]]})], entity),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["title", "!=", "draft"]]})], entity),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["title", "in", ["draft"]]]})], entity),
+        Type.boolean(false),
+      );
+    });
+
+    it("never equates a missing number with zero", () => {
+      const entity = document({priority: null});
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["priority", "==", 0]]})], entity),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["priority", "!=", 0]]})], entity),
+        Type.boolean(true),
       );
     });
 
@@ -475,9 +588,9 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
-    // A rule referencing the acting user is skipped for a visitor rather than evaluated with
-    // nobody - evaluating it would let a row whose reference is missing match everyone.
-    it("skips a rule referencing the actor for an anonymous session", () => {
+    // The actor of a visitor is nobody rather than null - null would let a row whose reference is
+    // missing match everyone.
+    it("denies a rule referencing the actor to an anonymous session", () => {
       assert.deepStrictEqual(
         reads(
           [rule({predicates: [["author_id", "==", {actor: true}]]})],
@@ -487,7 +600,7 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
-    it("skips a rule with grant references for an anonymous session", () => {
+    it("denies a rule with grant references to an anonymous session", () => {
       LocalDatabase.putRow(
         GRANT,
         grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "owner"}),
@@ -497,6 +610,73 @@ describe("Elixir_Hologram_Auth", () => {
         reads([rule({to: [["own", ["owner"]]]})], document()),
         Type.boolean(false),
       );
+    });
+
+    // The actor of a visitor is nobody, never null - null would equal the missing author and hand
+    // the visitor every authorless row through the first alternative.
+    it("passes a visitor to the alternative that names nobody", () => {
+      const rules = [
+        rule({
+          predicates: [
+            {
+              or: [
+                [["author_id", "==", {actor: true}]],
+                [["public", "==", true]],
+              ],
+            },
+          ],
+        }),
+      ];
+
+      assert.deepStrictEqual(
+        reads(rules, document({author_id: null, public: true})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({author_id: null, public: false})),
+        Type.boolean(false),
+      );
+    });
+
+    it("denies a visitor every alternative naming them", () => {
+      const rules = [
+        rule({
+          predicates: [
+            {
+              or: [
+                [["author_id", "==", {actor: true}]],
+                [["author_id", "!=", {actor: true}]],
+              ],
+            },
+          ],
+        }),
+      ];
+
+      assert.deepStrictEqual(
+        reads(rules, document({author_id: null})),
+        Type.boolean(false),
+      );
+    });
+
+    it("denies a visitor a conjunction naming them beside a disjunction", () => {
+      const rules = [
+        rule({
+          predicates: [
+            ["author_id", "!=", {actor: true}],
+            {or: [[["public", "==", true]], [["priority", ">=", 3]]]},
+          ],
+        }),
+      ];
+
+      const entity = document({author_id: null, public: true});
+
+      assert.deepStrictEqual(
+        reads(rules, entity, Type.bitstring(ALICE)),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
     });
 
     it("grants when one of the rule's grant references is held", () => {

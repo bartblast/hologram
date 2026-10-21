@@ -130,6 +130,17 @@ defmodule Hologram.Query.RegistryTest do
       assert placeholder_shape(term) == %{search: :string}
     end
 
+    test "collects placeholders inside a disjunction" do
+      term = %{
+        Stage.normalize(Module2)
+        | filter: [
+            {:or, [[{:b, :>=, {:placeholder, :min}}], [{:c, :==, {:placeholder, :search}}]]}
+          ]
+      }
+
+      assert placeholder_shape(term) == %{min: :integer, search: :string}
+    end
+
     test "dedups a placeholder met several times with one type" do
       term = %{
         Stage.normalize(Module2)

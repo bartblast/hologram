@@ -3,6 +3,7 @@ defmodule Hologram.Query.Registry do
 
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Query.Window
 
   @id_bytes 16
@@ -61,11 +62,11 @@ defmodule Hologram.Query.Registry do
   Derives the placeholder shape of the given normalized query term - a map from placeholder name
   to the logical type the placeholder binds as.
 
-  The term's filter predicates are walked recursively through its includes. A placeholder
-  bound as a whole membership operand binds as a list of the attribute's logical
-  type - `{:list, type}` - a placeholder as a membership list element or under any other
-  operator binds the attribute's type directly. A placeholder met several times with one
-  type appears once.
+  The term's filter predicates are walked recursively through its includes, the ones inside a
+  disjunction's alternatives included. A placeholder bound as a whole membership operand binds as
+  a list of the attribute's logical type - `{:list, type}` - a placeholder as a membership list
+  element or under any other operator binds the attribute's type directly. A placeholder met
+  several times with one type appears once.
 
   Raises Hologram.CompileError when one placeholder name meets conflicting types.
   """
@@ -136,7 +137,9 @@ defmodule Hologram.Query.Registry do
 
   defp collect_params(term, acc) do
     filter_acc =
-      Enum.reduce(term.filter, acc, fn triple, inner_acc ->
+      term.filter
+      |> Stage.triples()
+      |> Enum.reduce(acc, fn triple, inner_acc ->
         collect_placeholder(triple, term.entity, inner_acc)
       end)
 
