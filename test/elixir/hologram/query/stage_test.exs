@@ -12,6 +12,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
+  alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -396,6 +397,14 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{{:placeholder, :field}, :==, {:placeholder, :value}}]
     end
 
+    # The attribute is unknown, so nothing can say whether the other one compares with it - the
+    # triple records what was written, as for any placeholder-keyed predicate.
+    test "accepts a placeholder sentinel as an attribute name with an attribute operand" do
+      query = filter(Module2, [{%Placeholder{name: :field}, {:<, {:attribute, :b}}}])
+
+      assert query.filter == [{{:placeholder, :field}, :<, {:attribute, :b}}]
+    end
+
     test "accepts a placeholder sentinel in an inequality operator tuple" do
       query = filter(Module2, c: {:!=, %Placeholder{name: :search}})
 
@@ -505,6 +514,62 @@ defmodule Hologram.Query.StageTest do
       query = filter(Module2, b: {:not_in, [1, 2]})
 
       assert query.filter == [{:b, :not_in, [1, 2]}]
+    end
+
+    test "builds an attribute equality triple from a bare attribute operand" do
+      query = filter(Module10, count: {:attribute, :priority})
+
+      assert query.filter == [{:count, :==, {:attribute, :priority}}]
+    end
+
+    test "builds an attribute triple for a date pair" do
+      query = filter(Module24, ends_on: {:<, {:attribute, :starts_on}})
+
+      assert query.filter == [{:ends_on, :<, {:attribute, :starts_on}}]
+    end
+
+    test "builds an attribute triple for a float compared with an integer" do
+      query = filter(Module10, rating: {:>, {:attribute, :count}})
+
+      assert query.filter == [{:rating, :>, {:attribute, :count}}]
+    end
+
+    test "builds an attribute triple for a string pair" do
+      query = filter(Module10, username: {:<, {:attribute, :bio}})
+
+      assert query.filter == [{:username, :<, {:attribute, :bio}}]
+    end
+
+    test "builds an attribute triple for a system attribute operand" do
+      query = filter(Module2, updated_at: {:>, {:attribute, :created_at}})
+
+      assert query.filter == [{:updated_at, :>, {:attribute, :created_at}}]
+    end
+
+    test "builds an attribute triple for an enum pair" do
+      query = filter(Module24, level: {:<, {:attribute, :priority}})
+
+      assert query.filter == [{:level, :<, {:attribute, :priority}}]
+    end
+
+    test "builds an attribute triple for an integer compared with a float" do
+      query = filter(Module10, count: {:<, {:attribute, :rating}})
+
+      assert query.filter == [{:count, :<, {:attribute, :rating}}]
+    end
+
+    test "builds an attribute triple for two reference fields" do
+      query = filter(Module5, a_id: {:==, {:attribute, :b_id}})
+
+      assert query.filter == [{:a_id, :==, {:attribute, :b_id}}]
+    end
+
+    test "builds an attribute triple under each comparison operator" do
+      for operator <- [:!=, :<, :<=, :==, :>, :>=] do
+        query = filter(Module10, count: {operator, {:attribute, :priority}})
+
+        assert query.filter == [{:count, operator, {:attribute, :priority}}]
+      end
     end
 
     test "builds an inequality triple" do
@@ -808,6 +873,15 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on a relationship as an attribute operand" do
+      expected_msg =
+        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :c_id"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, b_id: {:==, {:attribute, :c}})
+      end
+    end
+
     test "raises on a stepped range" do
       expected_msg =
         "stepped range 3..10//2 for attribute :b is not supported - membership ranges use step 1"
@@ -823,6 +897,33 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, or: [[a: true], [1]])
+      end
+    end
+
+    test "raises on an attribute compared with itself" do
+      expected_msg =
+        "operator :< compares attribute :count in Hologram.Test.Fixtures.Entity.Module10 with itself"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module10, count: {:<, {:attribute, :count}})
+      end
+    end
+
+    test "raises on an attribute operand for a membership operator" do
+      expected_msg =
+        "operator :in on attribute :count requires a list operand, got: {:attribute, :priority}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module10, count: {:in, {:attribute, :priority}})
+      end
+    end
+
+    test "raises on an attribute pair of different types" do
+      expected_msg =
+        "operator :< compares attribute :released_on with attribute :held_at in Hologram.Test.Fixtures.Entity.Module10, which have different types (:date and :datetime) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module10, released_on: {:<, {:attribute, :held_at}})
       end
     end
 
@@ -859,6 +960,15 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on an enum pair declaring different values" do
+      expected_msg =
+        "operator :== compares attribute :level with attribute :tier in Hologram.Test.Fixtures.Entity.Module24, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module24, level: {:==, {:attribute, :tier}})
+      end
+    end
+
     test "raises on an invalid tuple filter value" do
       expected_msg = "invalid filter value {1, 2, 3} for attribute :b"
 
@@ -878,6 +988,15 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on an ordering comparison between reference fields" do
+      expected_msg =
+        "operator :< requires an orderable attribute - attribute :a_id in Hologram.Test.Fixtures.Entity.Module5 has type :uuid, and boolean and uuid attributes have no order to compare by"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module5, a_id: {:<, {:attribute, :b_id}})
+      end
+    end
+
     test "raises on an ordering comparison on the id attribute" do
       expected_msg =
         "operator :< requires an orderable attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid, and boolean and uuid attributes have no order to compare by"
@@ -893,6 +1012,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, or: [[x: 1], [a: true]])
+      end
+    end
+
+    test "raises on an unknown attribute operand" do
+      expected_msg =
+        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:==, {:attribute, :x}})
       end
     end
 

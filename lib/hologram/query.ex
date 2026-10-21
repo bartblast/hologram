@@ -22,6 +22,9 @@ defmodule Hologram.Query do
             order_by: [],
             trust: false
 
+  # Another attribute of the same row, compared with the predicate's attribute.
+  @type attribute_operand :: {:attribute, atom}
+
   @type bound :: non_neg_integer | placeholder | nil
 
   @type cardinality :: :count | :one | :set
@@ -38,6 +41,7 @@ defmodule Hologram.Query do
 
   @type placeholder :: {:placeholder, atom}
 
+  # The operand is a literal, a placeholder, the acting user ({:actor}) or an attribute_operand.
   @type predicate :: {atom | placeholder, operator, any}
 
   @type t :: %__MODULE__{
@@ -144,14 +148,15 @@ defmodule Hologram.Query do
       |> filter(status in [:todo, :doing])
       |> filter(archived_at == nil)
       |> filter(owner_id == ^owner_id or shared == true)
+      |> filter(due_on < starts_on)
 
   The predicates are one of:
 
     * a keyword list of equalities whose values are literals or pinned - `project_id: ^id` -
       where a value is always an equality operand: a comparison, a membership or a range is
       written as an expression, so `priority: {:>=, 3}` is refused in favour of `priority >= 3`
-    * a comparison of an attribute with a literal or a pinned value - `==`, `!=`, `<`, `<=`,
-      `>`, `>=`
+    * a comparison of an attribute with a literal, a pinned value or another attribute of the
+      same row - `==`, `!=`, `<`, `<=`, `>`, `>=` - `due_on < starts_on`
     * a membership - `status in [:todo, :doing]`, `priority in 3..5`, `status in ^statuses`,
       `status not in [:done]`
     * comparisons and memberships joined with `and`
@@ -161,7 +166,9 @@ defmodule Hologram.Query do
     * a pinned list of predicates for a filter built at runtime - `filter(^predicates)`, where
       the list holds attribute names paired with values, operator tuples (`{:>=, 3}`,
       `{:in, list}`, `{:not_in, list}`), membership lists, lists of operator tuples applying
-      all of them (`[{:>=, monday}, {:<, next_monday}]`) or integer ranges, and where an
+      all of them (`[{:>=, monday}, {:<, next_monday}]`), integer ranges or
+      `{:attribute, name}` tuples naming another attribute of the row, bare or as the operand of
+      a comparison operator (`[due_on: {:<, {:attribute, :starts_on}}]`), and where an
       `or:` entry holding two or more predicate lists is a disjunction, any one of which has to
       hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`)
 
@@ -174,6 +181,13 @@ defmodule Hologram.Query do
   matches missing values. Nil keeps its meaning inside a disjunction:
   `priority > 3 or shared == true` matches a shared row with no priority, since the comparison
   passes over nil and the other alternative holds.
+
+  Two attributes compare when they have the same type, or when one widens to the other - an
+  integer to a float, compared as floats. Two enums compare when they declare the same values in
+  the same order, and an attribute never compares with itself. Nil keeps its meaning:
+  `owner_id == assignee_id` matches a row with neither set, `owner_id != assignee_id` one with only
+  one of them set, and an ordering comparison matches no row with either side missing. Two strings
+  compare through their sort keys, as a string does against a literal, and `==` stays exact.
 
   Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
@@ -192,15 +206,17 @@ defmodule Hologram.Query do
   comparisons and ranges reject them like any other non-orderable type. To-many relationships
   have no reference field, and neither relationship name itself is filterable.
 
-  Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands
-  as one side of `and` or `or`, or when the predicates take any other form - a bare name where a
-  value goes is most likely a forgotten pin, and the error says so. Raises ArgumentError when the
-  query is neither an entity type module nor a query term, when pinned predicates are not a
-  keyword list, when a predicate names a relationship or an unknown attribute, when a disjunction
-  holds fewer than two predicate lists or one of them is empty or not a keyword list, or when a
-  value is invalid for its attribute or its operator - a pinned keyword value holding a list, a
-  tuple or a range is refused as an equality operand, since membership and comparisons are
-  written as expressions.
+  Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands as
+  one side of `and` or `or`, or when the predicates take any other form - a bare name where only a
+  value goes (a keyword value, a membership element, a range bound) is most likely a forgotten pin,
+  and the error says so. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, when pinned predicates are not a keyword list, when a predicate names a relationship
+  or an unknown attribute - on the right side of a comparison, which is how a forgotten pin on a
+  variable reads - when a disjunction holds fewer than two predicate lists or one of them is empty
+  or not a keyword list, when a comparison names an attribute with itself or two attributes that do
+  not compare, or when a value is invalid for its attribute or its operator - a pinned keyword value
+  holding a list, a tuple or a range is refused as an equality operand, since membership and
+  comparisons are written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)

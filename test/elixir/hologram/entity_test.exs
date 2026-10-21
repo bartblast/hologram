@@ -224,6 +224,21 @@ defmodule Hologram.EntityTest do
                    fn -> Code.eval_string(code) end
     end
 
+    test "stores a condition comparing two attributes in the lowered form" do
+      defmodule InlineEntityFixture5 do
+        use Hologram.Entity
+
+        attribute :capacity, :integer
+        attribute :guests, :integer
+
+        allow :update, when: guests <= capacity
+      end
+
+      assert InlineEntityFixture5.__policies__() == [
+               {:update, nil, nil, [guests: {:<=, {:attribute, :capacity}}]}
+             ]
+    end
+
     test "stores a disjunction in the lowered form" do
       defmodule InlineEntityFixture4 do
         use Hologram.Entity
