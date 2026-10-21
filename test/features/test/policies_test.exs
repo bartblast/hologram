@@ -8,16 +8,18 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Policies.Page2
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
 
-  # All four tables truncate in one statement: the role grant table's foreign keys to the
+  # The tables truncate in one statement: the memo, note and role grant tables' foreign keys to the
   # user table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
-      Enum.map_join([Document, Folder, Note, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Document, Folder, Memo, Note, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -183,5 +185,55 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#result"), "logged_in")
     |> click(button("Revoke editor"))
     |> assert_text(css("#result"), "revoke_editor_false")
+  end
+
+  # A visitor reads only through the alternative naming nobody, and may pin only through the
+  # unpinned one - the pinned memo has no author, and a visitor never equals a missing author.
+  feature "renders the rows a visitor reaches through the alternative naming nobody", %{
+    session: session
+  } do
+    %{body: "shared_memo", shared: true}
+    |> Memo.new()
+    |> DB.create!()
+
+    %{body: "shared_pinned_memo", pinned: true, shared: true}
+    |> Memo.new()
+    |> DB.create!()
+
+    %{body: "private_memo"}
+    |> Memo.new()
+    |> DB.create!()
+
+    session
+    |> visit(Page2)
+    |> assert_text(css("#memos"), ~r/^shared_memo,shared_pinned_memo$/)
+    |> assert_text(css("#pinnable_memos"), ~r/^shared_memo$/)
+  end
+
+  # The session user reads their own memo through the alternative naming them, and may pin it
+  # although it is pinned, while the authorless pinned memo stays out of reach. The reload renders
+  # the page for the session user, and the memo then arrives on the stream, so both lists are
+  # rendered in the browser - the memo list from the rows the server's read rule let through, the
+  # pinnable list from the browser's own pin rule.
+  feature "renders the rows the session user reaches through the alternative naming them", %{
+    session: session
+  } do
+    %{body: "shared_memo", shared: true}
+    |> Memo.new()
+    |> DB.create!()
+
+    %{body: "shared_pinned_memo", pinned: true, shared: true}
+    |> Memo.new()
+    |> DB.create!()
+
+    session
+    |> visit(Page2)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+    |> reload()
+    |> click(button("Write own memo"))
+    |> assert_text(css("#result"), "wrote_own_memo")
+    |> assert_text(css("#memos"), ~r/^own_memo,shared_memo,shared_pinned_memo$/)
+    |> assert_text(css("#pinnable_memos"), ~r/^own_memo,shared_memo$/)
   end
 end
