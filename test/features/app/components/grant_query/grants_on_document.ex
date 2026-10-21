@@ -13,9 +13,10 @@ defmodule HologramFeatureTests.Components.GrantQuery.GrantsOnDocument do
   # The prop the query binds is matched by NAME: grants_query/1's argument is document_id, so it
   # takes the value of the prop called that.
   #
-  # No include(user): the app's User is readable only by itself (allow :read, id: user_id()),
-  # so a grant held by somebody else carries a nil user and there is no name to render. The row
-  # names its holder by id, which is what the grant list on the optimistic page renders too.
+  # No include(user): the app's User is readable only by itself
+  # (allow :read, when: id == user_id()), so a grant held by somebody else carries a nil user
+  # and there is no name to render. The row names its holder by id, which is what the grant list
+  # on the optimistic page renders too.
   prop :document_id, :string
   prop :grants, [RoleGrant], from_query: &grants_query/1
 

@@ -12,9 +12,9 @@ defmodule HologramFeatureTests.Entities.Note do
   role :owner, extends: :editor, granted_to: :creator
 
   allow :read, to: :editor
-  allow :create, author_id: user_id()
+  allow :create, when: author_id == user_id()
   allow :delete, to: :owner
   allow :grant_role, to: :owner
   allow :revoke_role, to: :owner
-  allow :pin, to: :editor, pinned: false
+  allow :pin, to: :editor, when: pinned == false
 end
