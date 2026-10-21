@@ -42,11 +42,18 @@ defmodule Hologram.DB.QueryCompiler do
 
   A compiled policy composes into the statement when one is given: its rules render as an
   OR group ANDed after the authored filter, so a row must satisfy the query and at least one
-  rule. Rules are conjunctions of the same predicate triples the authored filter uses, and an
-  unconditional rule (no conditions) satisfies the group on its own, which drops the group
-  from the statement. An empty rule list denies everything (`FALSE`) - default deny. The
-  actor leaf binds ONE reserved slot allocated after the authored and include params and
-  reused by every actor reference in the policy, so the caller binds the session's user once.
+  rule. Rules hold the same clauses the authored filter does, a disjunction among them nesting
+  one level deeper, and an unconditional rule (no conditions) satisfies the group on its own,
+  which drops the group from the statement. An empty rule list denies everything (`FALSE`) -
+  default deny. The actor leaf binds ONE reserved slot allocated after the authored and include
+  params and reused by every actor reference in the policy, so the caller binds the session's
+  user once.
+
+  An anonymous statement binds no actor at all. A predicate naming the actor is false for nobody,
+  whichever way it points, and a grant reference is held by nobody, so those are folded away
+  before rendering: a rule with grant references is dropped, a conjunction naming the actor is
+  dropped, and a disjunction keeps its alternatives that name nobody - so
+  `author_id == user_id() or shared == true` still admits a visitor to the shared rows.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
   type's :read policy - fixed at :read, since an include embeds rows regardless of the
@@ -102,19 +109,59 @@ defmodule Hologram.DB.QueryCompiler do
     " ORDER BY " <> rendered_entries
   end
 
-  # Bind slots inside an ARRAY constructor carry no type context of their own -
-  # without the cast Postgres resolves them to text.
-  defp actor_gated?(rule) do
-    rule.to != nil or
-      Enum.any?(rule.predicates, fn {_name, _operator, value} -> value == {:actor} end)
+  # Binding nil for the actor would answer it as a value, and author_id != user_id() renders
+  # null-inclusively, matching every row with no author - so an anonymous statement folds what
+  # nobody satisfies away instead: the same answer the interpreter and the policy evaluator give,
+  # a predicate naming the actor false for nobody. A clause folds to :never, or to the clauses that
+  # remain of it - a disjunction keeping one alternative leaves that alternative's clauses in its
+  # place.
+  defp anonymous_clause({:or, alternatives}) do
+    kept =
+      Enum.flat_map(alternatives, fn alternative ->
+        case anonymous_clauses(alternative) do
+          :never -> []
+          {:ok, clauses} -> [clauses]
+        end
+      end)
+
+    case kept do
+      [] -> :never
+      [clauses] -> {:ok, clauses}
+      several -> {:ok, [{:or, several}]}
+    end
   end
 
-  # A rule referencing the actor cannot match without one, so an anonymous statement drops it
-  # rather than binding a nil placeholder - at every nesting level, delegated policies included.
-  defp applicable_rules(rules, %{anonymous?: true}), do: Enum.reject(rules, &actor_gated?/1)
+  defp anonymous_clause({_name, _operator, {:actor}}), do: :never
+
+  defp anonymous_clause(triple), do: {:ok, [triple]}
+
+  defp anonymous_clauses(clauses) do
+    Enum.reduce_while(clauses, {:ok, []}, fn clause, {:ok, kept} ->
+      case anonymous_clause(clause) do
+        :never -> {:halt, :never}
+        {:ok, folded} -> {:cont, {:ok, kept ++ folded}}
+      end
+    end)
+  end
+
+  # A role is held by somebody, so a rule naming one never admits nobody.
+  defp anonymous_rule(%{to: to}) when to != nil, do: []
+
+  defp anonymous_rule(rule) do
+    case anonymous_clauses(rule.predicates) do
+      :never -> []
+      {:ok, clauses} -> [%{rule | predicates: clauses}]
+    end
+  end
+
+  # An anonymous statement keeps what nobody can satisfy out of the statement rather than binding
+  # a nil placeholder - at every nesting level, delegated policies included.
+  defp applicable_rules(rules, %{anonymous?: true}), do: Enum.flat_map(rules, &anonymous_rule/1)
 
   defp applicable_rules(rules, _context), do: rules
 
+  # Bind slots inside an ARRAY constructor carry no type context of their own -
+  # without the cast Postgres resolves them to text.
   defp array_type(%{type: :enum, sql_type: sql_type}) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}[]"
   end
@@ -168,6 +215,20 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp column_list(entity_mapping) do
     Enum.map_join(entity_mapping.columns, ", ", &Mapper.quote_identifier(&1.name))
+  end
+
+  # A disjunction renders the way a policy's rules do, as an OR group of its alternatives, each a
+  # conjunction - so a rule whose condition holds one nests one level deeper.
+  defp condition({:or, alternatives}, entity_mapping, reversed_params) do
+    {rendered, new_params} =
+      Enum.map_reduce(alternatives, reversed_params, fn alternative, acc_params ->
+        {alternative_conditions, next_params} =
+          conditions(alternative, entity_mapping, acc_params)
+
+        {Enum.join(alternative_conditions, " AND "), next_params}
+      end)
+
+    {group_condition(rendered), new_params}
   end
 
   defp condition({name, :==, nil}, entity_mapping, reversed_params) do

@@ -29,6 +29,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Role
 
   @mapping Mapper.derive!([Module1, Module2, Module3], [])
@@ -39,6 +40,7 @@ defmodule Hologram.DB.QueryRunnerTest do
                       PolicyModule1,
                       PolicyModule2,
                       PolicyModule3,
+                      PolicyModule6,
                       RoleGrant
                     ],
                     [Role.Module1, Role.Module2]
@@ -132,6 +134,14 @@ defmodule Hologram.DB.QueryRunnerTest do
       |> DB.create!()
     end
 
+    defp disjunction_readable_ids(actor_user_id) do
+      PolicyModule6
+      |> Stage.normalize()
+      |> run_policied(@policy_mapping, actor_user_id)
+      |> Enum.map(& &1.id)
+      |> Enum.sort()
+    end
+
     defp included_children(actor_user_id) do
       term =
         PolicyModule3
@@ -192,6 +202,46 @@ defmodule Hologram.DB.QueryRunnerTest do
       Auth.grant_role(user, :viewer, private_entity)
 
       assert policied_ids(nil) == [public_entity.id]
+    end
+
+    test "returns the rows an alternative of a rule's disjunction admits" do
+      user = create_policy_user("runner_20@example.com")
+      other_user = create_policy_user("runner_21@example.com")
+
+      own_entity =
+        %{author_id: user.id}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      shared_entity =
+        %{shared: true}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      %{author_id: other_user.id}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      assert disjunction_readable_ids(user.id) == Enum.sort([own_entity.id, shared_entity.id])
+    end
+
+    # A visitor holds no row through the alternative naming the acting user, the authorless row
+    # included - only the alternative naming nobody admits anything.
+    test "answers a visitor through the alternative naming nobody" do
+      user = create_policy_user("runner_22@example.com")
+
+      %{author_id: user.id}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      DB.create!(PolicyModule6.new())
+
+      shared_entity =
+        %{shared: true}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      assert disjunction_readable_ids(nil) == [shared_entity.id]
     end
 
     test "returns rows granted through a global role module" do
@@ -349,6 +399,23 @@ defmodule Hologram.DB.QueryRunnerTest do
   end
 
   describe "run/3" do
+    test "binds a placeholder inside a disjunction" do
+      {_first, second, third} = create_module_2_entities()
+
+      term = %{
+        Stage.normalize(Module2)
+        | filter: [{:or, [[{:a, :==, false}], [{:b, :==, {:placeholder, :value}}]]}]
+      }
+
+      ids =
+        term
+        |> run(@mapping, %{value: 7})
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert ids == Enum.sort([second.id, third.id])
+    end
+
     test "binds membership element placeholders" do
       {_first, _second, third} = create_module_2_entities()
 
@@ -773,6 +840,20 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{x: 5})
+      end
+    end
+
+    # A placeholder inside an alternative is validated like any other, before the statement runs.
+    test "raises on a wrongly typed placeholder inside a disjunction" do
+      term = %{
+        Stage.normalize(Module2)
+        | filter: [{:or, [[{:a, :==, true}], [{:b, :==, {:placeholder, :value}}]]}]
+      }
+
+      expected_msg = ~s(invalid value "x" for placeholder :value - expected a :integer value)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{value: "x"})
       end
     end
 

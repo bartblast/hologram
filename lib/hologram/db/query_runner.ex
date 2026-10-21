@@ -9,6 +9,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.Entity.Validator
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Stage
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded
@@ -104,7 +105,9 @@ defmodule Hologram.DB.QueryRunner do
   # type.
   defp collect_param_definitions(term, acc) do
     acc_with_filters =
-      Enum.reduce(term.filter, acc, fn
+      term.filter
+      |> Stage.triples()
+      |> Enum.reduce(acc, fn
         {attribute_name, operator, {:placeholder, placeholder_name}}, inner_acc ->
           {type, opts} = attribute_definition(term.entity, attribute_name)
           kind = if operator in [:in, :not_in], do: :list, else: :scalar

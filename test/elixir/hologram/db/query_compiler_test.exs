@@ -188,6 +188,99 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3))|)
     end
 
+    test "composes a rule whose condition holds a disjunction one level deeper" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+
+      rules = [
+        %{predicates: [{:or, [[{:a, :==, true}], [{:b, :>=, 3}]]}], to: nil, via: nil},
+        %{predicates: [{:c, :==, "x"}], to: nil, via: nil}
+      ]
+
+      assert %{params: params, sql: sql} =
+               compile(term, mapping, %{operation: :read, rules: rules})
+
+      assert params == [{:value, true}, {:value, 3}, {:value, "x"}]
+      assert String.contains?(sql, ~s|WHERE (((("a" = $1) OR ("b" >= $2))) OR ("c" = $3))|)
+    end
+
+    # Nobody is the actor, so the alternative asking about the actor is false and the other
+    # alternative stands alone - with no actor slot to bind.
+    test "keeps the alternative of an anonymous rule's disjunction that names no actor" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+
+      rules = [
+        %{predicates: [{:or, [[{:id, :==, {:actor}}], [{:a, :==, true}]]}], to: nil, via: nil}
+      ]
+
+      assert %{params: [{:value, true}], sql: sql} =
+               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
+    end
+
+    # The kept alternative holds a nested disjunction that folds to its one actor-free alternative,
+    # and the clauses left splice into the rule.
+    test "folds a nested disjunction of an anonymous rule into the clauses that remain" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+
+      predicates = [
+        {:or,
+         [
+           [{:id, :==, {:actor}}],
+           [{:or, [[{:id, :!=, {:actor}}], [{:a, :==, true}]]}, {:b, :>=, 3}]
+         ]}
+      ]
+
+      rules = [%{predicates: predicates, to: nil, via: nil}]
+
+      assert %{params: [{:value, true}, {:value, 3}], sql: sql} =
+               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE "a" = $1 AND "b" >= $2 ORDER BY|)
+    end
+
+    test "keeps several actor-free alternatives of an anonymous rule's disjunction" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+
+      predicates = [{:or, [[{:id, :==, {:actor}}], [{:a, :==, true}], [{:b, :>=, 3}]]}]
+      rules = [%{predicates: predicates, to: nil, via: nil}]
+
+      assert %{params: [{:value, true}, {:value, 3}], sql: sql} =
+               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2)) ORDER BY|)
+    end
+
+    test "drops an anonymous rule whose every alternative names the actor" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+
+      predicates = [{:or, [[{:id, :==, {:actor}}], [{:id, :!=, {:actor}}]]}]
+      rules = [%{predicates: predicates, to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE FALSE ORDER BY|)
+    end
+
+    test "drops an anonymous rule whose conjunction names the actor beside a disjunction" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+
+      predicates = [{:or, [[{:a, :==, true}], [{:b, :>=, 3}]]}, {:id, :==, {:actor}}]
+      rules = [%{predicates: predicates, to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE FALSE ORDER BY|)
+    end
+
     test "drops the policy group for an unconditional rule" do
       mapping = Mapper.derive!([Module2], [])
 
@@ -551,6 +644,85 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|$4::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
                  ~s|AND "rg"."entity_id" = "hologram_role_grant"."entity_id"))|
              )
+    end
+
+    test "binds the placeholders of a disjunction in reading order" do
+      mapping = Mapper.derive!([Module2], [])
+
+      term = %{
+        Stage.normalize(Module2)
+        | filter: [{:or, [[{:a, :==, {:placeholder, :x}}], [{:b, :==, {:placeholder, :y}}]]}]
+      }
+
+      assert %{params: params, sql: sql} = compile(term, mapping)
+
+      assert params == [{:placeholder, :x, :boolean}, {:placeholder, :y, :integer}]
+      assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" = $2)) ORDER BY|)
+    end
+
+    test "compiles a disjunction as an OR group of its alternatives" do
+      mapping = Mapper.derive!([Module2], [])
+
+      term =
+        Module2
+        |> filter(a == true or (b >= 3 and c == "x"))
+        |> Stage.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [{:value, true}, {:value, 3}, {:value, "x"}],
+               sql:
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                   ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
+                   ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3)) ORDER BY "id" ASC|
+             }
+    end
+
+    test "compiles a disjunction before the conjuncts beside it" do
+      mapping = Mapper.derive!([Module2], [])
+
+      term =
+        Module2
+        |> filter(a: true)
+        |> filter(b == 1 or c == "x")
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 1}, {:value, "x"}, {:value, true}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(sql, ~s|WHERE (("b" = $1) OR ("c" = $2)) AND "a" = $3 ORDER BY|)
+    end
+
+    # The grouped alternative holds a disjunction, a two-element tuple that sorts ahead of every
+    # predicate, so it renders first, and its alternative renders ahead of a == true.
+    test "compiles a nested disjunction inside an alternative" do
+      mapping = Mapper.derive!([Module2], [])
+
+      term =
+        Module2
+        |> filter(a == true or (b >= 3 and (c == "x" or c == "y")))
+        |> Stage.normalize()
+
+      assert %{params: params, sql: sql} = compile(term, mapping)
+
+      assert params == [{:value, "x"}, {:value, "y"}, {:value, 3}, {:value, true}]
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE (((("c" = $1) OR ("c" = $2)) AND "b" >= $3) OR ("a" = $4)) ORDER BY|
+             )
+    end
+
+    test "keeps a disjunction inside a to-many include's filter" do
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
+
+      term =
+        Module3
+        |> include(a, &filter(&1, a == true or c == "x"))
+        |> Stage.normalize()
+
+      assert %{params: [{:value, true}, {:value, "x"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s| AND (("a" = $1) OR ("c" = $2)) ORDER BY "id" ASC|)
     end
 
     test "compiles inequality null-inclusively on optional attributes" do
