@@ -115,7 +115,7 @@ defmodule HologramFeatureTests.PoliciesTest do
       |> Document.new()
       |> DB.create!()
 
-    Auth.grant_role(session_user(), document, :editor)
+    Auth.grant_role(session_user(), :editor, document)
 
     session
     |> click(button("Grant owner as editor"))

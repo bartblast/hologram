@@ -70,7 +70,7 @@ defmodule HologramFeatureTests.PermissionCatchupTest do
     instance_id = current_instance_id(session)
     :ok = simulate_sse_disconnect(instance_id)
 
-    Auth.grant_role(session_user(), document, :owner)
+    Auth.grant_role(session_user(), :owner, document)
 
     # Wallaby's own retry rides out the reconnect backoff, which starts at 250 ms.
     session
@@ -87,7 +87,7 @@ defmodule HologramFeatureTests.PermissionCatchupTest do
     |> assert_text(css("#result"), "logged_in")
 
     user = session_user()
-    Auth.grant_role(user, document, :owner)
+    Auth.grant_role(user, :owner, document)
 
     session
     |> reload()
@@ -97,7 +97,7 @@ defmodule HologramFeatureTests.PermissionCatchupTest do
     instance_id = current_instance_id(session)
     :ok = simulate_sse_disconnect(instance_id)
 
-    Auth.revoke_role(user, document, :owner)
+    Auth.revoke_role(user, :owner, document)
 
     session
     |> assert_text(css("#managed_documents"), ~r/^$/)

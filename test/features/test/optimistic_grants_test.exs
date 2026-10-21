@@ -65,7 +65,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
   defp sign_in_as(session, document, role) do
     sign_in(session)
 
-    Auth.grant_role(session_user(), document, role)
+    Auth.grant_role(session_user(), role, document)
 
     session
     |> reload()
@@ -187,7 +187,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     document: document,
     other_user: other_user
   } do
-    Auth.grant_role(other_user, document, :editor)
+    Auth.grant_role(other_user, :editor, document)
 
     session = sign_in_as(session, document, :owner)
 
@@ -219,7 +219,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     document: document,
     other_user: other_user
   } do
-    Auth.grant_role(other_user, document, :owner)
+    Auth.grant_role(other_user, :owner, document)
 
     session = sign_in_as(session, document, :editor)
 
@@ -243,7 +243,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     document: document,
     other_user: other_user
   } do
-    Auth.grant_role(other_user, document, :editor)
+    Auth.grant_role(other_user, :editor, document)
 
     session
     |> sign_in_as(document, :owner)

@@ -52,7 +52,7 @@ defmodule HologramFeatureTests.GrantQueryPage do
   def action(:share, _params, component) do
     result =
       try do
-        Auth.grant_role(component.state.third_user_id, component.state.document, :editor)
+        Auth.grant_role(component.state.third_user_id, :editor, component.state.document)
         "share_ok"
       rescue
         Hologram.AccessDeniedError -> "share_refused"

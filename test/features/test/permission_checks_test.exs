@@ -62,7 +62,7 @@ defmodule HologramFeatureTests.PermissionChecksTest do
     |> assert_text(css("#managed_documents"), ~r/^$/)
     |> mark_this_page_load()
 
-    Auth.grant_role(session_user(), document, :owner)
+    Auth.grant_role(session_user(), :owner, document)
 
     session
     |> assert_text(css("#managed_documents"), ~r/^almanac$/)
@@ -78,14 +78,14 @@ defmodule HologramFeatureTests.PermissionChecksTest do
     |> assert_text(css("#result"), "logged_in")
 
     user = session_user()
-    Auth.grant_role(user, document, :owner)
+    Auth.grant_role(user, :owner, document)
 
     session
     |> reload()
     |> assert_text(css("#managed_documents"), ~r/^bestiary$/)
     |> mark_this_page_load()
 
-    Auth.revoke_role(user, document, :owner)
+    Auth.revoke_role(user, :owner, document)
 
     session
     |> assert_text(css("#managed_documents"), ~r/^$/)
@@ -105,7 +105,7 @@ defmodule HologramFeatureTests.PermissionChecksTest do
     |> reload()
     |> mark_this_page_load()
 
-    Auth.grant_role(session_user(), dossier, :owner)
+    Auth.grant_role(session_user(), :owner, dossier)
 
     session
     |> assert_text(css("#managed_documents"), ~r/^dossier$/)

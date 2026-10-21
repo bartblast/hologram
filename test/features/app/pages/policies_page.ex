@@ -54,7 +54,7 @@ defmodule HologramFeatureTests.PoliciesPage do
 
     outcome =
       try do
-        Auth.grant_role(other_user, document, :editor)
+        Auth.grant_role(other_user, :editor, document)
         "granted"
       rescue
         Hologram.AccessDeniedError -> "refused"
@@ -83,7 +83,7 @@ defmodule HologramFeatureTests.PoliciesPage do
     document = create_document("granted_document")
     other_user = create_user("granted@example.com")
 
-    Auth.grant_role(other_user, document, :editor)
+    Auth.grant_role(other_user, :editor, document)
 
     put_action(server, :show_result, result: "grant_editor_#{can?(other_user, :read, document)}")
   end
@@ -101,7 +101,7 @@ defmodule HologramFeatureTests.PoliciesPage do
 
     result =
       try do
-        Auth.grant_role(other_user, document, :owner)
+        Auth.grant_role(other_user, :owner, document)
         "grant_owner_as_editor_granted"
       rescue
         Hologram.AccessDeniedError -> "grant_owner_as_editor_refused"
@@ -141,8 +141,8 @@ defmodule HologramFeatureTests.PoliciesPage do
     document = create_document("revoked_document")
     other_user = create_user("revoked@example.com")
 
-    Auth.grant_role(other_user, document, :editor)
-    Auth.revoke_role(other_user, document, :editor)
+    Auth.grant_role(other_user, :editor, document)
+    Auth.revoke_role(other_user, :editor, document)
 
     put_action(server, :show_result, result: "revoke_editor_#{can?(other_user, :read, document)}")
   end
