@@ -192,6 +192,70 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  describe "run/3 - disjunctions" do
+    setup do
+      %{
+        first: module_10(count: 1, priority: 1, username: "ada"),
+        second: module_10(count: 2, priority: 3, username: "bob"),
+        third: module_10(count: 3, username: "cleo")
+      }
+    end
+
+    test "matches either alternative" do
+      assert matched_names(agreed(filter(Module10, priority == 1 or count == 2))) == [
+               "ada",
+               "bob"
+             ]
+    end
+
+    test "matches a conjunction inside an alternative" do
+      query = filter(Module10, (count >= 2 and priority == 3) or username == "ada")
+
+      assert matched_names(agreed(query)) == ["ada", "bob"]
+    end
+
+    test "matches a grouped disjunction inside a conjunction" do
+      query = filter(Module10, count >= 2 and (priority == 1 or username == "cleo"))
+
+      assert matched_names(agreed(query)) == ["cleo"]
+    end
+
+    test "matches a nested disjunction" do
+      query =
+        filter(Module10, count == 1 or (count >= 2 and (priority == 3 or username == "cleo")))
+
+      assert matched_names(agreed(query)) == ["ada", "bob", "cleo"]
+    end
+
+    # An ordering comparison passes over a missing value, and the other alternative still holds -
+    # nil means inside a disjunction what it means outside one.
+    test "passes an unset value to the other alternative" do
+      assert matched_names(agreed(filter(Module10, priority > 1 or count == 3))) == [
+               "bob",
+               "cleo"
+             ]
+    end
+
+    test "matches an unset value through equality in an alternative" do
+      query = filter(Module10, priority == nil or count == 1)
+
+      assert matched_names(agreed(query)) == ["ada", "cleo"]
+    end
+
+    test "matches a disjunction beside the conjuncts around it" do
+      query =
+        Module10
+        |> filter(count >= 2)
+        |> filter(priority == 3 or username == "cleo")
+
+      assert matched_names(agreed(query)) == ["bob", "cleo"]
+    end
+
+    test "matches nothing when no alternative holds" do
+      assert agreed(filter(Module10, priority == 5 or count == 9)) == []
+    end
+  end
+
   describe "run/3 - ordering comparisons" do
     setup do
       %{
@@ -374,6 +438,14 @@ defmodule Hologram.Query.InterpreterTest do
       assert matched_module_17_labels(agreed(query)) == ["c"]
     end
 
+    # Compared as atoms, :high sorts before :medium and would drop out - so only the ranks the
+    # alternative's predicate is collected for keep it.
+    test "compares an enum inside an alternative by its declared position" do
+      query = filter(Module17, priority >= :medium or label == "d")
+
+      assert matched_module_17_labels(agreed(query)) == ["a", "b", "d"]
+    end
+
     test "passes over an unset enum" do
       query = filter(Module17, priority >= :low)
 
@@ -540,6 +612,12 @@ defmodule Hologram.Query.InterpreterTest do
       assert matched_names(agreed(query, bindings: %{priority: 3})) == ["bob"]
     end
 
+    test "matches against a placeholder inside an alternative" do
+      query = filter(Module10, priority == ^%Placeholder{name: :priority} or count == 2)
+
+      assert matched_names(agreed(query, bindings: %{priority: 1})) == ["ada", "bob"]
+    end
+
     test "matches against a list bound to a placeholder" do
       query = filter(Module10, priority in ^%Placeholder{name: :priorities})
 
@@ -623,6 +701,25 @@ defmodule Hologram.Query.InterpreterTest do
       query = filter(Module2, id != ^{:actor})
 
       assert titles(agreed(query, actor_user_id: first.id)) == ["second"]
+    end
+
+    test "matches an alternative naming who is asking", %{first: first} do
+      query = filter(Module2, id == ^{:actor} or c == "second")
+
+      assert matched_titles(agreed(query, actor_user_id: first.id)) == ["first", "second"]
+    end
+
+    # The alternative asking about the visitor answers nothing, and the other one still answers.
+    test "passes a visitor to the alternative that names nobody" do
+      query = filter(Module2, id == ^{:actor} or c == "second")
+
+      assert titles(agreed(query, actor_user_id: nil)) == ["second"]
+    end
+
+    test "matches nothing for a visitor when every alternative names them" do
+      query = filter(Module2, id == ^{:actor} or id != ^{:actor})
+
+      assert agreed(query, actor_user_id: nil) == []
     end
 
     # There is nobody to compare against, so nothing answers - the same silence the database
@@ -730,6 +827,21 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert [row] = agreed(query)
       assert titles(row.a) == ["kept"]
+    end
+
+    test "matches a disjunction in a to-many include's own filter", %{source: source} do
+      apple = module_2("apple")
+      banana = module_2("banana")
+      cherry = module_2("cherry")
+
+      :ok = add_relationship(Module3, source.id, :a, apple.id)
+      :ok = add_relationship(Module3, source.id, :a, banana.id)
+      :ok = add_relationship(Module3, source.id, :a, cherry.id)
+
+      query = include(Module3, a, &filter(&1, c == "apple" or c == "cherry"))
+
+      assert [row] = agreed(query)
+      assert matched_titles(row.a) == ["apple", "cherry"]
     end
 
     test "orders and bounds a to-many include by its own clauses", %{source: source} do
