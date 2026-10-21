@@ -24,6 +24,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Registry
+  alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
@@ -4468,7 +4469,12 @@ defmodule Hologram.Compiler do
   # walking include sub-terms so a reference nested under an include is reached too.
   defp server_only_references(term) do
     server_only_names = Entity.server_only_attribute_names(term.entity)
-    filter_names = Enum.map(term.filter, fn {name, _operator, _value} -> name end)
+
+    filter_names =
+      term.filter
+      |> Stage.triples()
+      |> Enum.map(fn {name, _operator, _value} -> name end)
+
     order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
 
     referenced_names =

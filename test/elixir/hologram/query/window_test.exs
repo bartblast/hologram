@@ -70,6 +70,79 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == []
     end
 
+    test "keeps a disjunction whose alternatives compare to literals" do
+      filter = [{:or, [[{:a, :==, true}], [{:b, :==, 1}]]}]
+
+      assert derive(term(Module2, filter)).filter == filter
+    end
+
+    test "narrows an alternative to its literal predicates" do
+      filter = [{:or, [[{:a, :==, true}, {:c, :==, {:placeholder, :search}}], [{:b, :==, 1}]]}]
+
+      assert derive(term(Module2, filter)).filter == [{:or, [[{:a, :==, true}], [{:b, :==, 1}]]}]
+    end
+
+    # Dropping the placeholder side alone would download only the todo rows, while the query also
+    # answers for whichever rows the placeholder picks - so the alternative admits every row, and
+    # the disjunction bounds nothing.
+    test "drops a disjunction when an alternative loses every predicate" do
+      filter = [{:or, [[{:c, :==, "todo"}], [{:b, :==, {:placeholder, :owner}}]]}]
+
+      assert derive(term(Module2, filter)).filter == []
+    end
+
+    test "keeps the predicates beside a dropped disjunction" do
+      filter = [
+        {:or, [[{:c, :==, "todo"}], [{:b, :==, {:placeholder, :owner}}]]},
+        {:a, :==, true}
+      ]
+
+      assert derive(term(Module2, filter)).filter == [{:a, :==, true}]
+    end
+
+    test "drops a nested disjunction the same way" do
+      filter = [
+        {:or,
+         [
+           [{:a, :==, true}, {:or, [[{:b, :==, 1}], [{:c, :==, {:placeholder, :search}}]]}],
+           [{:b, :==, 2}]
+         ]}
+      ]
+
+      assert derive(term(Module2, filter)).filter == [{:or, [[{:a, :==, true}], [{:b, :==, 2}]]}]
+    end
+
+    test "drops an outer disjunction when a nested one empties its alternative" do
+      filter = [
+        {:or,
+         [[{:or, [[{:b, :==, 1}], [{:c, :==, {:placeholder, :search}}]]}], [{:a, :==, true}]]}
+      ]
+
+      assert derive(term(Module2, filter)).filter == []
+    end
+
+    # Narrowing the second alternative leaves it shorter than the first, which moves it ahead.
+    test "keeps the narrowed alternatives in canonical order" do
+      filter = [
+        {:or,
+         [
+           [{:a, :==, true}, {:b, :==, 7}],
+           [{:a, :==, true}, {:b, :>=, {:placeholder, :min}}]
+         ]}
+      ]
+
+      assert derive(term(Module2, filter)).filter == [
+               {:or, [[{:a, :==, true}], [{:a, :==, true}, {:b, :==, 7}]]}
+             ]
+    end
+
+    test "gives two queries differing only in a pinned predicate of an alternative one window" do
+      bounded = [{:or, [[{:c, :==, "x"}, {:b, :>=, {:placeholder, :min}}], [{:a, :==, true}]]}]
+      chosen = [{:or, [[{:c, :==, "x"}, {:b, :==, {:placeholder, :one}}], [{:a, :==, true}]]}]
+
+      assert derive(term(Module2, bounded)) == derive(term(Module2, chosen))
+    end
+
     test "leaves out what a query answers rather than downloads" do
       term =
         Module2

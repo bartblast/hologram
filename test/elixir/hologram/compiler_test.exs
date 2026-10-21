@@ -35,6 +35,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Component.Module28, as: ComponentModule28
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
+  alias Hologram.Test.Fixtures.Component.Module30, as: ComponentModule30
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -1530,6 +1531,24 @@ defmodule Hologram.CompilerTest do
 
       component_queries =
         extract_component_queries([ComponentModule18], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute inside a disjunction",
+         %{
+           entity_types: entity_types
+         } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module30 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      component_queries =
+        extract_component_queries([ComponentModule30], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
