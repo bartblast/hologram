@@ -6,6 +6,7 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Policy.Module1
 
   defp deny(_requirement, _entity, _actor_user_id), do: false
@@ -315,6 +316,131 @@ defmodule Hologram.Policy.EvaluatorTest do
       refute rule_matches?(
                rule(predicates: [{:priority, :>=, :low}]),
                %Module17{},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "compares two attributes of the row" do
+      entity = %Module10{count: 3, priority: 3}
+
+      assert rule_matches?(
+               rule(predicates: [{:count, :>=, {:attribute, :priority}}]),
+               entity,
+               nil,
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:count, :<=, {:attribute, :priority}}]),
+               entity,
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:count, :>, {:attribute, :priority}}]),
+               entity,
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:count, :<, {:attribute, :priority}}]),
+               entity,
+               nil,
+               &deny/3
+             )
+    end
+
+    test "evaluates an attribute equality with nil as a regular value" do
+      assert rule_matches?(
+               rule(predicates: [{:starts_on, :==, {:attribute, :ends_on}}]),
+               %Module24{},
+               nil,
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:starts_on, :!=, {:attribute, :ends_on}}]),
+               %Module24{starts_on: ~D[2026-03-01]},
+               nil,
+               &deny/3
+             )
+    end
+
+    # A number sorts before nil as a term, so these two would hold if nil were compared at all.
+    test "never matches an ordering comparison between attributes when either is missing" do
+      refute rule_matches?(
+               rule(predicates: [{:count, :<=, {:attribute, :priority}}]),
+               %Module10{count: 3},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:priority, :>=, {:attribute, :count}}]),
+               %Module10{count: 3},
+               nil,
+               &deny/3
+             )
+    end
+
+    # Zebra sorts after apple by its key and before it by its bytes. Mango and mango share a key,
+    # so the values settle it.
+    test "compares two string attributes by their sort keys" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :>, {:attribute, :bio}}]),
+               %Module10{bio: "apple", count: 1, username: "Zebra"},
+               nil,
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:username, :<, {:attribute, :bio}}]),
+               %Module10{bio: "mango", count: 1, username: "Mango"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :>, {:attribute, :bio}}]),
+               %Module10{bio: "mango", count: 1, username: "Mango"},
+               nil,
+               &deny/3
+             )
+    end
+
+    # :high is after :medium in the declared list and before it as an atom.
+    test "compares two enum attributes by their declared position" do
+      assert rule_matches?(
+               rule(predicates: [{:level, :>, {:attribute, :priority}}]),
+               %Module24{level: :high, priority: :medium},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "compares an integer attribute with a float attribute" do
+      entity = %Module10{count: 2, rating: 2.0}
+
+      assert rule_matches?(
+               rule(predicates: [{:count, :==, {:attribute, :rating}}]),
+               entity,
+               nil,
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:count, :<=, {:attribute, :rating}}]),
+               entity,
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:count, :<, {:attribute, :rating}}]),
+               entity,
                nil,
                &deny/3
              )

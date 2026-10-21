@@ -16,10 +16,11 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
 
-  @entity_types [Module1, Module10, Module17, Module2, Module3, Module5]
+  @entity_types [Module1, Module10, Module17, Module2, Module24, Module3, Module5]
 
   @mapping Mapper.derive!(@entity_types, [])
 
@@ -113,6 +114,15 @@ defmodule Hologram.Query.InterpreterTest do
     |> Enum.sort()
   end
 
+  defp module_24(attributes) do
+    {:ok, entity} =
+      attributes
+      |> Module24.new()
+      |> create()
+
+    entity
+  end
+
   defp module_2(title) do
     {:ok, entity} =
       %{a: true, c: title}
@@ -120,6 +130,12 @@ defmodule Hologram.Query.InterpreterTest do
       |> create()
 
     entity
+  end
+
+  defp matched_ids(rows) do
+    rows
+    |> Enum.map(& &1.id)
+    |> Enum.sort()
   end
 
   defp matched_titles(rows) do
@@ -411,6 +427,100 @@ defmodule Hologram.Query.InterpreterTest do
       query = order_by(Module17, [priority, label])
 
       assert module_17_labels(agreed(query)) == ["c", "a", "e", "f", "b", "d"]
+    end
+  end
+
+  describe "run/3 - comparing attributes" do
+    setup do
+      %{
+        first: module_10(count: 1, priority: 3, rating: 1.5, username: "ada"),
+        second: module_10(count: 5, priority: 5, rating: 4.5, username: "bob"),
+        third: module_10(count: 9, username: "cleo"),
+        fourth: module_10(count: 2, priority: 1, rating: 2.0, username: "dan")
+      }
+    end
+
+    test "matches rows whose attribute is below another" do
+      assert matched_names(agreed(filter(Module10, count < priority))) == ["ada"]
+    end
+
+    test "matches rows whose attribute is at or above another" do
+      assert matched_names(agreed(filter(Module10, count >= priority))) == ["bob", "dan"]
+    end
+
+    test "matches rows whose attributes are equal" do
+      assert matched_names(agreed(filter(Module10, count == priority))) == ["bob"]
+    end
+
+    test "matches rows whose attributes differ, a missing one included" do
+      assert matched_names(agreed(filter(Module10, count != priority))) == ["ada", "cleo", "dan"]
+    end
+
+    # An ordering line has no place for a value that is not there, on either side - cleo has no
+    # priority, so neither spelling of the comparison reaches her, although a number compared with
+    # nil as a term would.
+    test "passes over a row missing either side of an ordering comparison" do
+      assert matched_names(agreed(filter(Module10, count <= priority))) == ["ada", "bob"]
+      assert matched_names(agreed(filter(Module10, priority >= count))) == ["ada", "bob"]
+    end
+
+    test "matches two missing attributes as equal" do
+      unset = module_24(%{})
+      half_set = module_24(starts_on: ~D[2026-03-01])
+      both_set = module_24(ends_on: ~D[2026-03-01], starts_on: ~D[2026-03-01])
+
+      assert matched_ids(agreed(filter(Module24, starts_on == ends_on))) ==
+               Enum.sort([both_set.id, unset.id])
+
+      assert matched_ids(agreed(filter(Module24, starts_on != ends_on))) == [half_set.id]
+    end
+
+    test "compares two dates" do
+      reversed = module_24(ends_on: ~D[2026-03-01], starts_on: ~D[2026-03-05])
+      module_24(ends_on: ~D[2026-03-05], starts_on: ~D[2026-03-01])
+
+      assert matched_ids(agreed(filter(Module24, ends_on < starts_on))) == [reversed.id]
+    end
+
+    # Dan's 2 equals 2.0, so the two types compare as numbers on both tiers.
+    test "compares an integer with a float" do
+      assert matched_names(agreed(filter(Module10, count < rating))) == ["ada"]
+      assert matched_names(agreed(filter(Module10, count == rating))) == ["dan"]
+    end
+
+    # Declared order, not label order: :high is after :medium in the declared list and before it as
+    # an atom, so a label comparison would match nothing here.
+    test "compares two enums by their declared position" do
+      above = module_24(level: :high, priority: :medium)
+      below = module_24(level: :low, priority: :medium)
+      level = module_24(level: :medium, priority: :medium)
+
+      assert matched_ids(agreed(filter(Module24, level > priority))) == [above.id]
+
+      assert matched_ids(agreed(filter(Module24, level <= priority))) ==
+               Enum.sort([below.id, level.id])
+    end
+
+    # Mango and mango share a key, so the values settle it - and Łódź folds to lodz, before m.
+    test "compares two strings by their keys, then by their values" do
+      module_10(bio: "mango", count: 1, username: "Mango")
+      module_10(bio: "apple", count: 1, username: "Zebra")
+      module_10(bio: "m", count: 1, username: "Łódź")
+
+      assert matched_names(agreed(filter(Module10, username < bio))) == ["Mango", "Łódź"]
+      assert matched_names(agreed(filter(Module10, username > bio))) == ["Zebra"]
+    end
+
+    test "matches an attribute comparison inside an alternative" do
+      query = filter(Module10, count < priority or username == "cleo")
+
+      assert matched_names(agreed(query)) == ["ada", "cleo"]
+    end
+
+    test "binds a placeholder beside an attribute comparison" do
+      query = filter(Module10, count >= priority and username == ^%Placeholder{name: :name})
+
+      assert matched_names(agreed(query, bindings: %{name: "dan"})) == ["dan"]
     end
   end
 

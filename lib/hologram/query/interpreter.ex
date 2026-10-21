@@ -219,6 +219,12 @@ defmodule Hologram.Query.Interpreter do
 
   defp matches_clause?(row, triple, opts, ranks), do: matches_predicate?(row, triple, opts, ranks)
 
+  # Another attribute of the same row is read off the row, and compared by the predicate's
+  # attribute's ranks - two enums compare only when they declare the same list, so one serves both.
+  defp matches_predicate?(row, {name, operator, {:attribute, other}}, _opts, ranks) do
+    satisfies?(operator, Map.fetch!(row, name), Map.fetch!(row, other), Map.get(ranks, name))
+  end
+
   defp matches_predicate?(row, {name, operator, operand}, opts, ranks) do
     ranks_for_key = Map.get(ranks, name)
 
@@ -280,6 +286,10 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp satisfies?(_operator, nil, _operand, _ranks), do: false
+
+  # Only an attribute operand can be missing here - a literal nil ordering operand is refused when
+  # the query is built, and a placeholder never binds nil.
+  defp satisfies?(_operator, _value, nil, _ranks), do: false
 
   defp satisfies?(:<, value, operand, ranks) do
     compare_ordering_values(value, operand, ranks) == :lt
