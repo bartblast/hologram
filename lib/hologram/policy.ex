@@ -202,8 +202,9 @@ defmodule Hologram.Policy do
   the grants they hold, and sees others' grants on an entity when they hold one of that entity
   type's read-grants roles.
 
-  A rule holds the predicate triples of its allow line, its grant references, and its delegation.
-  Predicates carry the actor sentinel in value position where the declaration called user_id().
+  A rule holds the predicate clauses of its allow line - triples, and a `{:or, alternatives}` clause
+  for a condition written with `or` - its grant references, and its delegation. Predicates carry
+  the actor sentinel in value position where the declaration called user_id().
   Grant references are extends-expanded, so a reference to a role also names every role carrying it:
   own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
   a related instance's roles as {:rel, relationship name, role names}, and global role modules as

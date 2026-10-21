@@ -145,6 +145,19 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # The attribute a gate line's condition names first, read off the data form - a disjunction names
+  # what its first alternative does, since or names no attribute. The condition was validated
+  # before the gate is judged, so an or: entry holding a list is a disjunction here.
+  defp first_predicate_name([]), do: nil
+
+  defp first_predicate_name([
+         {:or, [first_alternative | _later_alternatives]} | _later_predicates
+       ])
+       when is_list(first_alternative),
+       do: first_predicate_name(first_alternative)
+
+  defp first_predicate_name([{name, _value} | _later_predicates]), do: name
+
   # Closes a cycle when the target is already on the path, descends into the target otherwise.
   defp follow_role_edge(role_module, target_module, path, {cycles, visited}) do
     new_path = [role_module | path]
@@ -204,8 +217,8 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
-    triples = Stage.predicate_triples!(entity_type, predicates)
-    validate_server_only_predicates!(entity_type, operation, triples, location)
+    clauses = Stage.predicate_triples!(entity_type, predicates)
+    validate_server_only_predicates!(entity_type, operation, clauses, location)
 
     :ok
   rescue
@@ -301,12 +314,14 @@ defmodule Hologram.Policy.Validator do
   # the row's presence already proves the predicate held - the client never evaluates it.
   # Every other operation is decided locally (can?), which needs the value, so there the
   # reference is rejected.
-  defp validate_server_only_predicates!(_entity_type, :read, _triples, _location), do: :ok
+  defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
 
-  defp validate_server_only_predicates!(entity_type, operation, triples, location) do
+  defp validate_server_only_predicates!(entity_type, operation, clauses, location) do
     server_only_names = Entity.server_only_attribute_names(entity_type)
 
-    Enum.each(triples, fn {name, _operator, _value} ->
+    clauses
+    |> Stage.triples()
+    |> Enum.each(fn {name, _operator, _value} ->
       if name in server_only_names do
         raise Hologram.CompileError,
           message:
@@ -407,11 +422,11 @@ defmodule Hologram.Policy.Validator do
           "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
     end
 
-    case predicates do
-      [] ->
+    case first_predicate_name(predicates) do
+      nil ->
         :ok
 
-      [{name, _value} | _later_predicates] ->
+      name ->
         raise Hologram.CompileError,
           message:
             "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"

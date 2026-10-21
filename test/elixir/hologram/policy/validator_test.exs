@@ -435,6 +435,23 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a disjunction with one alternative in a pinned condition" do
+      defmodule InlinePolicyFixture35 do
+        use Hologram.Entity
+
+        attribute :public, :boolean
+
+        allow :read, when: ^[or: [[public: true]]]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture35 - a disjunction takes a list of at least two predicate lists, got: [[public: true]]"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture35], [])
+      end
+    end
+
     test "rejects an ordering comparison on a to-one reference field" do
       defmodule InlinePolicyFixture6 do
         use Hologram.Entity
@@ -476,6 +493,20 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture31], []) == :ok
     end
 
+    # Not a read line, so the server-only check walks the disjunction rather than skipping it.
+    test "accepts a disjunction in a pinned condition" do
+      defmodule InlinePolicyFixture34 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+        attribute :public, :boolean
+
+        allow :update, when: ^[or: [[public: true], [priority: {:>=, 3}]]]
+      end
+
+      assert validate_model!([InlinePolicyFixture34], []) == :ok
+    end
+
     test "rejects a non-read predicate over a server-only attribute" do
       defmodule InlinePolicyFixture33 do
         use Hologram.Entity
@@ -490,6 +521,24 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture33], [])
+      end
+    end
+
+    test "rejects a non-read predicate over a server-only attribute inside a disjunction" do
+      defmodule InlinePolicyFixture36 do
+        use Hologram.Entity
+
+        attribute :label, :string
+        attribute :token, :string, server_only: true
+
+        allow :publish, when: token == "tok_hidden" or label == "shown"
+      end
+
+      expected_msg =
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture36 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture36], [])
       end
     end
 
@@ -1048,6 +1097,27 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, PredicateGateFixture], [])
+      end
+    end
+
+    # The line's condition names two attributes and or names none, so the refusal names the first.
+    test "rejects a predicate inside a disjunction the gate cannot honor" do
+      defmodule DisjunctionGateFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+        attribute :pinned, :boolean, default: false
+
+        role :owner
+
+        allow :grant_role, to: :owner, when: archived == false or pinned == true
+      end
+
+      expected_msg =
+        "invalid predicate :archived for allow :grant_role in Hologram.Policy.ValidatorTest.DisjunctionGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, DisjunctionGateFixture], [])
       end
     end
 
