@@ -17,9 +17,9 @@ describe("QueryKernel", () => {
   const matches = QueryKernel.matches;
 
   const rows = {
-    ada: {id: "r1", priority: 1, username: "ada"},
-    bob: {id: "r2", priority: 3, username: "bob"},
-    cleo: {id: "r3", priority: null, username: "cleo"},
+    ada: {count: 1, id: "r1", priority: 1, username: "ada"},
+    bob: {count: 2, id: "r2", priority: 3, username: "bob"},
+    cleo: {count: 3, id: "r3", priority: null, username: "cleo"},
   };
 
   const matching = (filter, context) =>
@@ -81,6 +81,84 @@ describe("QueryKernel", () => {
 
     it("matches every row for a filter holding nothing", () => {
       assert.deepEqual(matching([]), ["ada", "bob", "cleo"]);
+    });
+  });
+
+  describe("matches() - disjunctions", () => {
+    it("matches either alternative", () => {
+      const filter = [{or: [[["priority", "==", 1]], [["count", "==", 2]]]}];
+
+      assert.deepEqual(matching(filter), ["ada", "bob"]);
+    });
+
+    it("matches a conjunction inside an alternative", () => {
+      const filter = [
+        {
+          or: [
+            [
+              ["count", ">=", 2],
+              ["priority", "==", 3],
+            ],
+            [["username", "==", "ada"]],
+          ],
+        },
+      ];
+
+      assert.deepEqual(matching(filter), ["ada", "bob"]);
+    });
+
+    it("matches a grouped disjunction inside a conjunction", () => {
+      const filter = [
+        ["count", ">=", 2],
+        {or: [[["priority", "==", 1]], [["username", "==", "cleo"]]]},
+      ];
+
+      assert.deepEqual(matching(filter), ["cleo"]);
+    });
+
+    it("matches a nested disjunction", () => {
+      const filter = [
+        {
+          or: [
+            [["count", "==", 1]],
+            [
+              ["count", ">=", 2],
+              {or: [[["priority", "==", 3]], [["username", "==", "cleo"]]]},
+            ],
+          ],
+        },
+      ];
+
+      assert.deepEqual(matching(filter), ["ada", "bob", "cleo"]);
+    });
+
+    // An ordering comparison passes over a missing value, and the other alternative still holds -
+    // null means inside a disjunction what it means outside one.
+    it("passes an unset value to the other alternative", () => {
+      const filter = [{or: [[["priority", ">", 1]], [["count", "==", 3]]]}];
+
+      assert.deepEqual(matching(filter), ["bob", "cleo"]);
+    });
+
+    it("matches an unset value through equality in an alternative", () => {
+      const filter = [{or: [[["priority", "==", null]], [["count", "==", 1]]]}];
+
+      assert.deepEqual(matching(filter), ["ada", "cleo"]);
+    });
+
+    it("matches a disjunction beside the conjuncts around it", () => {
+      const filter = [
+        ["count", ">=", 2],
+        {or: [[["priority", "==", 3]], [["username", "==", "cleo"]]]},
+      ];
+
+      assert.deepEqual(matching(filter), ["bob", "cleo"]);
+    });
+
+    it("matches nothing when no alternative holds", () => {
+      const filter = [{or: [[["priority", "==", 5]], [["count", "==", 9]]]}];
+
+      assert.deepEqual(matching(filter), []);
     });
   });
 
@@ -155,6 +233,21 @@ describe("QueryKernel", () => {
       const context = {bindings: {priority: 3}};
 
       assert.deepEqual(matching(filter, context), ["bob"]);
+    });
+
+    it("matches against a placeholder inside an alternative", () => {
+      const filter = [
+        {
+          or: [
+            [["priority", "==", {placeholder: "priority"}]],
+            [["count", "==", 2]],
+          ],
+        },
+      ];
+
+      const context = {bindings: {priority: 1}};
+
+      assert.deepEqual(matching(filter, context), ["ada", "bob"]);
     });
 
     it("matches against a list bound to a placeholder", () => {
@@ -623,6 +716,23 @@ describe("QueryKernel", () => {
         assert.deepEqual(titles(node.includes.tasks), ["kept"]);
       });
 
+      it("matches a disjunction in a to-many include's own filter", () => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "apple"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "banana"});
+        LocalDatabase.putRow(TASK, {id: "t3", position: 3, title: "cherry"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t2", "t3"]);
+
+        const filter = [
+          {or: [[["title", "==", "apple"]], [["title", "==", "cherry"]]]},
+        ];
+
+        const include = {tasks: subTerm({filter: filter})};
+
+        const [node] = QueryKernel.run(projectTerm(include));
+
+        assert.deepEqual(titles(node.includes.tasks), ["apple", "cherry"]);
+      });
+
       it("orders and bounds a to-many include by its own clauses", () => {
         LocalDatabase.putRow(TASK, {id: "t1", position: 3, title: "cherry"});
         LocalDatabase.putRow(TASK, {id: "t2", position: 1, title: "apple"});
@@ -714,6 +824,16 @@ describe("QueryKernel", () => {
 
     it("matches values before a declared value", () => {
       assert.deepEqual(titlesMatching([["priority", "<", "medium"]]), ["c"]);
+    });
+
+    // Compared as labels, "high" sorts before "medium" and would drop out - so only the ranks the
+    // alternative's predicate is collected for keep it.
+    it("compares an enum inside an alternative by its declared position", () => {
+      const filter = [
+        {or: [[["priority", ">=", "medium"]], [["title", "==", "d"]]]},
+      ];
+
+      assert.deepEqual(titlesMatching(filter), ["a", "b", "d"]);
     });
 
     it("passes over an unset enum", () => {
@@ -814,6 +934,31 @@ describe("QueryKernel", () => {
       assert.deepEqual(matching(filter, {actorUserId: "r2"}), ["ada", "cleo"]);
     });
 
+    it("matches an alternative naming who is asking", () => {
+      const filter = [
+        {or: [[["id", "==", {actor: true}]], [["username", "==", "bob"]]]},
+      ];
+
+      assert.deepEqual(matching(filter, {actorUserId: "r1"}), ["ada", "bob"]);
+    });
+
+    // The alternative asking about the visitor answers nothing, and the other one still answers.
+    it("passes a visitor to the alternative that names nobody", () => {
+      const filter = [
+        {or: [[["id", "==", {actor: true}]], [["username", "==", "bob"]]]},
+      ];
+
+      assert.deepEqual(matching(filter, {actorUserId: null}), ["bob"]);
+    });
+
+    it("matches nothing for a visitor when every alternative names them", () => {
+      const filter = [
+        {or: [[["id", "==", {actor: true}]], [["id", "!=", {actor: true}]]]},
+      ];
+
+      assert.deepEqual(matching(filter, {actorUserId: null}), []);
+    });
+
     // There is nobody to compare against, so nothing answers - the same silence the database
     // gives a statement asking about an actor that is not there, and an unset attribute is no
     // more a match for nobody than a set one is.
@@ -835,6 +980,58 @@ describe("QueryKernel", () => {
       const filter = [["priority", "==", {actor: true}]];
 
       assert.deepEqual(matching(filter, {}), []);
+    });
+  });
+
+  // Mirrors "triples/1" in test/elixir/hologram/query/stage_test.exs.
+  describe("triples()", () => {
+    it("returns the predicates of a flat filter unchanged", () => {
+      const filter = [
+        ["a", "==", true],
+        ["b", ">=", 3],
+      ];
+
+      assert.deepEqual(QueryKernel.triples(filter), filter);
+    });
+
+    it("walks nested disjunctions", () => {
+      const filter = [
+        {
+          or: [
+            [["a", "==", true], {or: [[["b", "==", 1]], [["b", "==", 2]]]}],
+            [["c", "==", "x"]],
+          ],
+        },
+      ];
+
+      assert.deepEqual(QueryKernel.triples(filter), [
+        ["a", "==", true],
+        ["b", "==", 1],
+        ["b", "==", 2],
+        ["c", "==", "x"],
+      ]);
+    });
+
+    it("walks the alternatives of a disjunction in order", () => {
+      const filter = [
+        {
+          or: [
+            [["a", "==", true]],
+            [
+              ["b", ">=", 3],
+              ["c", "==", "x"],
+            ],
+          ],
+        },
+        ["d", "==", 1],
+      ];
+
+      assert.deepEqual(QueryKernel.triples(filter), [
+        ["a", "==", true],
+        ["b", ">=", 3],
+        ["c", "==", "x"],
+        ["d", "==", 1],
+      ]);
     });
   });
 });

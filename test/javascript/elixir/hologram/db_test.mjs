@@ -1504,6 +1504,23 @@ describe("Elixir_Hologram_DB", () => {
         "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
       );
     });
+
+    it("raises for a query term carrying a placeholder inside an alternative", () => {
+      const placeholder = Type.struct("Hologram.Query.Placeholder", [
+        [Type.atom("name"), Type.atom("wanted")],
+      ]);
+
+      const alternatives = Type.list([
+        predicates([["title", placeholder]]),
+        predicates([["done", Type.boolean(true)]]),
+      ]);
+
+      assert.throw(
+        () => read(filter(task, predicates([["or", alternatives]]))),
+        HologramBoxedError,
+        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
+      );
+    });
   });
 
   describe("read/2", () => {

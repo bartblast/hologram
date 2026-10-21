@@ -58,6 +58,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
   const freshTerm = baseTerm(TASK);
 
+  // An or: entry's value - a list of predicate lists, each given as the pairs predicates/1 takes.
+  const disjunction = (...alternatives) =>
+    Type.list(alternatives.map(predicates));
+
   // An entity struct as a stage meets one: what a query read, boxed the way every result is.
   const entity = (entityType, row = {}) =>
     Model.box(entityType, {id: "t1", ...row});
@@ -1260,6 +1264,59 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [["id", "!=", {actor: true}]]);
     });
 
+    it("reads an or entry as a disjunction of its alternatives", () => {
+      const value = disjunction(
+        [["done", Type.boolean(true)]],
+        [
+          ["position", Type.tuple([Type.atom(">="), Type.integer(3)])],
+          ["title", Type.bitstring("x")],
+        ],
+      );
+
+      const query = filter(task, predicates([["or", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          or: [
+            [["done", "==", true]],
+            [
+              ["position", ">=", 3],
+              ["title", "==", "x"],
+            ],
+          ],
+        },
+      ]);
+    });
+
+    it("nests a disjunction inside an alternative", () => {
+      const inner = disjunction(
+        [["position", Type.integer(1)]],
+        [["position", Type.integer(2)]],
+      );
+
+      const value = disjunction(
+        [
+          ["done", Type.boolean(true)],
+          ["or", inner],
+        ],
+        [["title", Type.bitstring("x")]],
+      );
+
+      const query = filter(task, predicates([["or", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          or: [
+            [
+              ["done", "==", true],
+              {or: [[["position", "==", 1]], [["position", "==", 2]]]},
+            ],
+            [["title", "==", "x"]],
+          ],
+        },
+      ]);
+    });
+
     it("raises on predicates that are not a keyword list", () => {
       assert.throw(
         () => filter(task, Type.integer(123)),
@@ -1412,6 +1469,70 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => filter(task, predicates([["title", value]])),
         HologramBoxedError,
         "user_id() requires a uuid attribute - attribute :title in MyApp.Task has type :string",
+      );
+    });
+
+    it("raises on a disjunction with no alternatives", () => {
+      assert.throw(
+        () => filter(task, predicates([["or", Type.list([])]])),
+        HologramBoxedError,
+        "a disjunction takes a list of at least two predicate lists, got: []",
+      );
+    });
+
+    it("raises on a disjunction with one alternative", () => {
+      const value = disjunction([["done", Type.boolean(true)]]);
+
+      assert.throw(
+        () => filter(task, predicates([["or", value]])),
+        HologramBoxedError,
+        "a disjunction takes a list of at least two predicate lists, got: [[done: true]]",
+      );
+    });
+
+    it("raises on an alternative that is not a keyword list", () => {
+      const value = Type.list([
+        predicates([["done", Type.boolean(true)]]),
+        Type.list([Type.integer(1)]),
+      ]);
+
+      assert.throw(
+        () => filter(task, predicates([["or", value]])),
+        HologramBoxedError,
+        "an alternative of a disjunction is a non-empty keyword list of predicates, got: [1]",
+      );
+    });
+
+    it("raises on an empty alternative", () => {
+      const value = disjunction([["done", Type.boolean(true)]], []);
+
+      assert.throw(
+        () => filter(task, predicates([["or", value]])),
+        HologramBoxedError,
+        "an alternative of a disjunction is a non-empty keyword list of predicates, got: []",
+      );
+    });
+
+    // The shape decides, not the name, so an or entry holding anything but predicate lists is read
+    // as an attribute named or - which this entity type does not declare.
+    it("raises on an or entry whose value is not a list of lists as an unknown attribute", () => {
+      assert.throw(
+        () => filter(task, predicates([["or", Type.boolean(true)]])),
+        HologramBoxedError,
+        "unknown attribute :or in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("raises on an unknown attribute inside an alternative", () => {
+      const value = disjunction(
+        [["x", Type.integer(1)]],
+        [["done", Type.boolean(true)]],
+      );
+
+      assert.throw(
+        () => filter(task, predicates([["or", value]])),
+        HologramBoxedError,
+        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
   });
@@ -1948,7 +2069,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
       const normalized = normalize(
         orderBy(
           include(
-            filter(project, predicates([["name", Type.bitstring("Board")]])),
+            filter(
+              project,
+              predicates([
+                ["name", Type.bitstring("Board")],
+                [
+                  "or",
+                  disjunction(
+                    [["name", Type.bitstring("Site")]],
+                    [["id", Type.bitstring("p1")]],
+                  ),
+                ],
+              ]),
+            ),
             Type.atom("tasks"),
             Type.nil(),
           ),
@@ -1966,6 +2099,68 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(normalize(orderBy(task, spec)).orderBy, [
         ["id", "desc"],
+      ]);
+    });
+
+    it("sorts the alternatives of a disjunction and the predicates inside them", () => {
+      const value = disjunction(
+        [["title", Type.bitstring("x")]],
+        [
+          ["position", Type.integer(1)],
+          ["done", Type.boolean(true)],
+        ],
+      );
+
+      const query = normalize(filter(task, predicates([["or", value]])));
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          or: [
+            [
+              ["done", "==", true],
+              ["position", "==", 1],
+            ],
+            [["title", "==", "x"]],
+          ],
+        },
+      ]);
+    });
+
+    it("sorts nested disjunctions recursively", () => {
+      const inner = disjunction(
+        [["status", Type.atom("open")]],
+        [["status", Type.atom("done")]],
+      );
+
+      const value = disjunction(
+        [
+          ["position", Type.integer(1)],
+          ["or", inner],
+        ],
+        [["done", Type.boolean(true)]],
+      );
+
+      const query = normalize(
+        filter(
+          task,
+          predicates([
+            ["title", Type.bitstring("x")],
+            ["or", value],
+          ]),
+        ),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          or: [
+            [["done", "==", true]],
+            [
+              {or: [[["status", "==", "done"]], [["status", "==", "open"]]]},
+              ["position", "==", 1],
+            ],
+          ],
+        },
+        ["title", "==", "x"],
       ]);
     });
 

@@ -9,6 +9,10 @@ import SortKey from "./sort_key.mjs";
 // the rows as the wire spells them - plain values, dates and datetimes and times and enums and
 // uuids as strings.
 //
+// A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
+// operand] - or a disjunction, {or: alternatives}, holding when one of its alternatives does, each
+// alternative a clause list of its own.
+//
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
 // and neither writing is trusted on its own.
@@ -62,6 +66,14 @@ export default class QueryKernel {
     const ranks = QueryKernel.#ranksFor(entityType, filter);
 
     return QueryKernel.#matches(row, filter, context, ranks);
+  }
+
+  // Every predicate triple of the filter, in order, the ones inside a disjunction's alternatives
+  // included - Hologram.Query.Stage.triples/1 is its twin.
+  static triples(filter) {
+    return filter.flatMap((clause) =>
+      Array.isArray(clause) ? [clause] : clause.or.flatMap(QueryKernel.triples),
+    );
   }
 
   static #arrange(rows, term) {
@@ -213,26 +225,37 @@ export default class QueryKernel {
     return label[0] >= "A" && label[0] <= "Z" ? label : `:${label}`;
   }
 
+  // A visitor has no acting user, and each triple naming one answers false on its own - so a
+  // disjunction needs no case for it: the alternative asking about nobody fails, and the others
+  // still answer.
   static #matches(row, filter, context, ranks) {
-    return filter.every(([name, operator, operand]) => {
-      const ranksForKey = ranks[name];
-      const value = QueryKernel.#resolve(operand, context, ranksForKey);
-      const sortName = `${name}_sort`;
+    return filter.every((clause) =>
+      Array.isArray(clause)
+        ? QueryKernel.#matchesTriple(row, clause, context, ranks)
+        : clause.or.some((alternative) =>
+            QueryKernel.#matches(row, alternative, context, ranks),
+          ),
+    );
+  }
 
-      // A row filed by ingest carries the key beside every string attribute, so the presence of
-      // the field is what says "this is a string" - no model lookup.
-      const pair = sortName in row ? [row[sortName], row[name] ?? null] : null;
+  static #matchesTriple(row, [name, operator, operand], context, ranks) {
+    const ranksForKey = ranks[name];
+    const value = QueryKernel.#resolve(operand, context, ranksForKey);
+    const sortName = `${name}_sort`;
 
-      return value === QueryKernel.#NO_ACTOR
-        ? false
-        : QueryKernel.#satisfies(
-            operator,
-            row[name] ?? null,
-            value,
-            ranksForKey,
-            pair,
-          );
-    });
+    // A row filed by ingest carries the key beside every string attribute, so the presence of
+    // the field is what says "this is a string" - no model lookup.
+    const pair = sortName in row ? [row[sortName], row[name] ?? null] : null;
+
+    return value === QueryKernel.#NO_ACTOR
+      ? false
+      : QueryKernel.#satisfies(
+          operator,
+          row[name] ?? null,
+          value,
+          ranksForKey,
+          pair,
+        );
   }
 
   static #node(row, term, context) {
@@ -251,8 +274,9 @@ export default class QueryKernel {
     return {includes: includes, row: row};
   }
 
-  // The ranks a filter's own predicates compare by, keyed by the attribute each names. A caller
-  // that names no type ranks nothing, which is what the raw comparison already was.
+  // The ranks a filter's own predicates compare by, keyed by the attribute each names - the ones
+  // inside a disjunction's alternatives included. A caller that names no type ranks nothing, which
+  // is what the raw comparison already was.
   static #ranksFor(entityType, filter) {
     if (entityType === null || entityType === undefined) {
       return {};
@@ -260,7 +284,7 @@ export default class QueryKernel {
 
     return QueryKernel.#enumRanks(
       entityType,
-      filter.map(([name]) => name),
+      QueryKernel.triples(filter).map(([name]) => name),
     );
   }
 

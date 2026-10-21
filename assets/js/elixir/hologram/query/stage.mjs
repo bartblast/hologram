@@ -43,6 +43,24 @@ function attributeType(entityType, name) {
   return Model.entry(entityType).attributes[name] ?? "uuid";
 }
 
+function byKey(keyOf) {
+  return (left, right) => {
+    const [leftKey, rightKey] = [keyOf(left), keyOf(right)];
+
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  };
+}
+
+function clauseKey(clause) {
+  if (Array.isArray(clause)) {
+    const [name, operator, operand] = clause;
+
+    return [name, operator, JSON.stringify(operand ?? null)].join("\u0000");
+  }
+
+  return ["or", JSON.stringify(clause.or)].join("\u0000");
+}
+
 // A counter is an integer attribute that always holds a number: an optional one can be nil, and
 // there is nothing to add to nil.
 function counterAttributeNames(entityType) {
@@ -51,6 +69,30 @@ function counterAttributeNames(entityType) {
   return integerNames(entityType).filter(
     (name) => constraints[name]?.optional !== true,
   );
+}
+
+// One alternative says what its predicates say alone, and an empty one says nothing at all - it
+// would make the disjunction hold for every row - so neither is a disjunction, as on the server.
+function disjunctionClause(alternatives, entityType) {
+  if (alternatives.data.length < 2) {
+    Interpreter.raiseArgumentError(
+      `a disjunction takes a list of at least two predicate lists, got: ${Interpreter.inspect(alternatives)}`,
+    );
+  }
+
+  for (const alternative of alternatives.data) {
+    if (!Type.isKeywordList(alternative) || alternative.data.length === 0) {
+      Interpreter.raiseArgumentError(
+        `an alternative of a disjunction is a non-empty keyword list of predicates, got: ${Interpreter.inspect(alternative)}`,
+      );
+    }
+  }
+
+  return {
+    or: alternatives.data.map((alternative) =>
+      alternative.data.flatMap((pair) => entryClauses(pair, entityType)),
+    ),
+  };
 }
 
 // The entity type of a struct a stage was handed, or a raise in the server's words. What the
@@ -65,6 +107,25 @@ function entityTypeOf(entity, stage) {
   Interpreter.raiseArgumentError(
     `${stage} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
   );
+}
+
+// The shape decides rather than the name, so or is no reserved attribute name: a list of lists is
+// no value any attribute takes, and an attribute named or keeps every other spelling.
+function entryClauses(pair, entityType) {
+  const [name, value] = pair.data;
+
+  if (
+    Type.isAtom(name) &&
+    name.value === "or" &&
+    Type.isList(value) &&
+    value.data.every(Type.isList)
+  ) {
+    return [disjunctionClause(value, entityType)];
+  }
+
+  validateFilteredName(name, entityType);
+
+  return predicateTriples(name, value, entityType);
 }
 
 function integerNames(entityType) {
@@ -546,12 +607,24 @@ function setViewBound(query, field, value) {
   return {...term, [field]: Number(value.value)};
 }
 
-// Conjunction is commutative, so the order predicates were written in carries nothing - one
-// canonical order is what makes two spellings of the same query the same term. What that is FOR
-// is the server's: it hashes the normalized term into the query's content id, and two spellings
-// hashing apart would register, cache and scope one query twice. The kernel here evaluates the
-// filter as a conjunction, so this side is indifferent to the order - it is sorted because
-// normalize is one function, mirrored.
+function sortedClause(clause) {
+  if (Array.isArray(clause)) {
+    return clause;
+  }
+
+  return {
+    or: clause.or
+      .map(sortedFilter)
+      .sort(byKey((alternative) => JSON.stringify(alternative))),
+  };
+}
+
+// Conjunction and disjunction are commutative, so the order predicates and alternatives were
+// written in carries nothing - one canonical order, all the way down, is what makes two spellings
+// of the same query the same term. What that is FOR is the server's: it hashes the normalized term
+// into the query's content id, and two spellings hashing apart would register, cache and scope one
+// query twice. The kernel here evaluates the clauses in any order, so this side is indifferent to
+// it - it is sorted because normalize is one function, mirrored.
 //
 // The order itself is this tier's own, and cannot be the server's: the operands are already the
 // wire spellings here ("2026-08-18") where the server holds Elixir values (~D[2026-08-18]), so
@@ -559,13 +632,7 @@ function setViewBound(query, field, value) {
 // a hash taken of a term on this side is NOT the server's content id for that query. If one is
 // ever needed here, it comes from the server.
 function sortedFilter(filter) {
-  return [...filter].sort((left, right) => {
-    const [leftKey, rightKey] = [left, right].map(([name, operator, operand]) =>
-      [name, operator, JSON.stringify(operand ?? null)].join("\u0000"),
-    );
-
-    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
-  });
+  return filter.map(sortedClause).sort(byKey(clauseKey));
 }
 
 // A stage takes either the module a query starts from or the term a previous stage returned. A
@@ -1150,15 +1217,11 @@ const Elixir_Hologram_Query_Stage = {
       );
     }
 
-    const triples = predicates.data.flatMap((pair) => {
-      const [name, value] = pair.data;
+    const clauses = predicates.data.flatMap((pair) =>
+      entryClauses(pair, term.entity),
+    );
 
-      validateFilteredName(name, term.entity);
-
-      return predicateTriples(name, value, term.entity);
-    });
-
-    return {...term, filter: [...term.filter, ...triples]};
+    return {...term, filter: [...term.filter, ...clauses]};
   },
   "include/2": (query, spec) =>
     Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.nil()),
