@@ -27,7 +27,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
-  # A row whose author is the given user, which `allow :archive, author_id: user_id()` grants that
+  # A row whose author is the given user, which `allow :archive, when: author_id == user_id()` grants that
   # user - the fixtures' one write rule that needs no role grant and holds on a multi-column type.
   defp create_archivable(user, values) do
     values

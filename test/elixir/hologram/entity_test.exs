@@ -57,11 +57,11 @@ defmodule Hologram.EntityTest do
 
     test "returns policy definitions in declaration order, splitting grant references off the predicates" do
       assert Module13.__policies__() == [
-               {:read, nil, nil, [public: true]},
+               {:read, nil, nil, [public: {:==, true}]},
                {:read, [:editor, :owner], nil, []},
                {:publish, nil, :parent, []},
                {:triage, nil, nil, [priority: {:>=, 3}]},
-               {:unlink, nil, nil, [parent_id: nil]}
+               {:unlink, nil, nil, [parent_id: {:==, nil}]}
              ]
     end
   end
@@ -210,37 +210,46 @@ defmodule Hologram.EntityTest do
   end
 
   describe "allow/2" do
-    test "replaces a user_id() call with the actor sentinel" do
+    test "raises the lowering's compile error" do
+      code = """
+      defmodule Hologram.EntityTest.InlineEntityFixture3 do
+        use Hologram.Entity
+
+        allow :read, when: id == user_id
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:4: paren-less user_id - did you mean user_id()?",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "stores a when condition as the line's predicates" do
       defmodule InlineEntityFixture1 do
         use Hologram.Entity
 
-        allow :read, id: user_id()
+        allow :read, when: id == user_id()
       end
 
-      assert InlineEntityFixture1.__policies__() == [{:read, nil, nil, [id: {:actor}]}]
+      assert InlineEntityFixture1.__policies__() == [{:read, nil, nil, [id: {:==, {:actor}}]}]
     end
 
-    test "replaces a user_id() call inside an operator tuple" do
+    test "stores every option of one line" do
       defmodule InlineEntityFixture2 do
         use Hologram.Entity
 
-        allow :update, id: {:!=, user_id()}
+        attribute :archived, :boolean
+
+        relationship :parent, Module1
+
+        role :editor
+
+        allow :update, to: :editor, via: parent, when: archived == false
       end
 
-      assert InlineEntityFixture2.__policies__() == [{:update, nil, nil, [id: {:!=, {:actor}}]}]
-    end
-
-    test "rejects paren-less user_id" do
-      expected_msg =
-        "paren-less user_id in a policy in Hologram.EntityTest.InlineEntityFixture3 - did you mean user_id()?"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture3 do
-          use Hologram.Entity
-
-          allow :read, id: user_id
-        end
-      end
+      assert InlineEntityFixture2.__policies__() == [
+               {:update, :editor, :parent, [archived: {:==, false}]}
+             ]
     end
   end
 

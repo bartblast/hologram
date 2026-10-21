@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module2 do
 
   allow :read, to: :member
   allow :archive, to: Role1
-  allow :publish, public: true
+  allow :publish, when: public == true
   allow :update, to: :admin
   allow :grant_role, to: [:admin, :member, Role1]
   allow :read_roles, to: :member

@@ -16,12 +16,12 @@ defmodule Hologram.Test.Fixtures.Policy.Module1 do
   role :owner, extends: :editor, granted_to: :creator
   role :viewer
 
-  allow :read, public: true
-  allow :read, to: [:viewer, {Module2, :admin}]
-  allow :update, to: :editor, priority: {:>=, 3}
-  allow :delete, to: {:parent, :admin}
-  allow :publish, via: :parent
+  allow :read, when: public == true
+  allow :read, to: [:viewer, {:admin, Module2}]
+  allow :update, to: :editor, when: priority >= 3
+  allow :delete, to: {:admin, parent}
+  allow :publish, via: parent
   allow :grant_role, to: :owner
   allow :revoke_role, to: :owner
-  allow :archive, author_id: user_id()
+  allow :archive, when: author_id == user_id()
 end

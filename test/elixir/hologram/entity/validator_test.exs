@@ -576,18 +576,6 @@ defmodule Hologram.Entity.ValidatorTest do
              ]
     end
 
-    test "accepts an unknown option as a predicate" do
-      defmodule InlineEntityFixture72 do
-        use Hologram.Entity
-
-        attribute :title, :string
-
-        allow :read, title: "text_1"
-      end
-
-      assert InlineEntityFixture72.__policies__() == [{:read, nil, nil, [title: "text_1"]}]
-    end
-
     test "rejects non-atom operation" do
       expected_msg =
         "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
@@ -674,7 +662,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option that is neither a role reference nor a list of them" do
       expected_msg =
-        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToOptionFixture do
@@ -682,33 +670,46 @@ defmodule Hologram.Entity.ValidatorTest do
 
           role :owner
 
-          allow :update, to: "owner"
+          allow :update, to: ^"owner"
         end
       end
     end
 
     test "rejects a to option list holding a malformed reference" do
       expected_msg =
-        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToListFixture do
           use Hologram.Entity
 
-          allow :read, to: [{:a, :b, :c}]
+          allow :read, to: ^[{:a, :b, :c}]
         end
       end
     end
 
     test "rejects an empty to option list" do
       expected_msg =
-        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule EmptyToListFixture do
           use Hologram.Entity
 
           allow :read, to: []
+        end
+      end
+    end
+
+    test "rejects a pinned when option that is not a keyword list" do
+      expected_msg =
+        "invalid when option \"x\" for allow :read in Hologram.Entity.ValidatorTest.MalformedWhenOptionFixture - a pinned condition must be a keyword list of predicates"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule MalformedWhenOptionFixture do
+          use Hologram.Entity
+
+          allow :read, when: ^"x"
         end
       end
     end
@@ -1285,30 +1286,20 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture75.__attributes__() == [{:user_id, :string, []}]
     end
 
-    test "rejects attribute named to" do
-      expected_msg =
-        "reserved name :to used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture76 - :to and :via are allow line options and can't be attribute names"
+    test "accepts attributes named after allow options" do
+      defmodule InlineEntityFixture102 do
+        use Hologram.Entity
 
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture76 do
-          use Hologram.Entity
-
-          attribute :to, :string
-        end
+        attribute :to, :string
+        attribute :via, :string
+        attribute :when, :string
       end
-    end
 
-    test "rejects attribute named via" do
-      expected_msg =
-        "reserved name :via used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture77 - :to and :via are allow line options and can't be attribute names"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture77 do
-          use Hologram.Entity
-
-          attribute :via, :string
-        end
-      end
+      assert InlineEntityFixture102.__attributes__() == [
+               {:to, :string, []},
+               {:via, :string, []},
+               {:when, :string, []}
+             ]
     end
 
     test "rejects enum attribute without values option" do

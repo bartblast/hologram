@@ -26,11 +26,11 @@ defmodule Hologram.Policy.ValidatorTest do
         attribute :status, :enum, values: [:done, :todo]
         attribute :title, :string
 
-        allow :read, status: :done
-        allow :publish, count: {:>=, 3}
-        allow :triage, status: [:done, :todo]
-        allow :archive, count: 1..10
-        allow :unlink, title: {:!=, nil}
+        allow :read, when: status == :done
+        allow :publish, when: count >= 3
+        allow :triage, when: status in [:done, :todo]
+        allow :archive, when: count in 1..10
+        allow :unlink, when: title != nil
       end
 
       assert validate_model!([InlinePolicyFixture1], []) == :ok
@@ -50,7 +50,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         allow :read
         allow :update, to: :owner
-        allow :publish, via: :parent
+        allow :publish, via: parent
       end
 
       assert validate_model!([Module14, InlinePolicyFixture2], []) == :ok
@@ -85,7 +85,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture13 do
         use Hologram.Entity
 
-        allow :update, to: {Module13, :editor}
+        allow :update, to: {:editor, Module13}
       end
 
       assert validate_model!([Module14, InlinePolicyFixture13], []) == :ok
@@ -97,7 +97,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         role :owner
 
-        allow :update, to: [:owner, {Module13, :editor}]
+        allow :update, to: [:owner, {:editor, Module13}]
       end
 
       assert validate_model!([Module14, InlinePolicyFixture14], []) == :ok
@@ -109,7 +109,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :update, to: {:parent, :editor}
+        allow :update, to: {:editor, parent}
       end
 
       assert validate_model!([Module14, InlinePolicyFixture17], []) == :ok
@@ -123,7 +123,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :read, via: :parent, public: true
+        allow :read, via: parent, when: public == true
       end
 
       assert validate_model!([InlinePolicyFixture21], []) == :ok
@@ -135,8 +135,8 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module1
 
-        allow :read, id: user_id()
-        allow :update, parent_id: {:!=, user_id()}
+        allow :read, when: id == user_id()
+        allow :update, when: parent_id != user_id()
       end
 
       assert validate_model!([InlinePolicyFixture7], []) == :ok
@@ -178,7 +178,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture30 do
         use Hologram.Entity
 
-        allow :update, to: {Module13, :editor}
+        allow :update, to: {:editor, Module13}
       end
 
       expected_msg =
@@ -195,7 +195,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :title, :string
 
-        allow :read, title: user_id()
+        allow :read, when: title == user_id()
       end
 
       expected_msg =
@@ -228,11 +228,11 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture15 do
         use Hologram.Entity
 
-        allow :update, to: {Hologram.Reflection, :editor}
+        allow :update, to: {:editor, Hologram.Reflection}
       end
 
       expected_msg =
-        "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
+        "invalid to option {:editor, Hologram.Reflection} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture15], [])
@@ -243,7 +243,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture16 do
         use Hologram.Entity
 
-        allow :update, to: {Module13, :publisher}
+        allow :update, to: {:publisher, Module13}
       end
 
       expected_msg =
@@ -260,7 +260,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :update, to: {:project, :editor}
+        allow :update, to: {:editor, project}
       end
 
       expected_msg =
@@ -277,11 +277,11 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :children, [Module13]
 
-        allow :update, to: {:children, :editor}
+        allow :update, to: {:editor, children}
       end
 
       expected_msg =
-        "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture19 - relationship :children is to-many, but a role reference requires a to-one relationship"
+        "invalid to option {:editor, :children} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture19 - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture19], [])
@@ -294,7 +294,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :update, to: {:parent, :publisher}
+        allow :update, to: {:publisher, parent}
       end
 
       expected_msg =
@@ -311,7 +311,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :read, via: :project
+        allow :read, via: project
       end
 
       expected_msg =
@@ -328,7 +328,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :children, [Module13]
 
-        allow :read, via: :children
+        allow :read, via: children
       end
 
       expected_msg =
@@ -345,7 +345,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :read, via: "parent"
+        allow :read, via: ^"parent"
       end
 
       expected_msg =
@@ -362,7 +362,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture26, optional: true
 
-        allow :read, via: :peer
+        allow :read, via: peer
       end
 
       defmodule InlinePolicyFixture26 do
@@ -370,7 +370,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture25, optional: true
 
-        allow :read, via: :peer
+        allow :read, via: peer
       end
 
       expected_msg =
@@ -390,7 +390,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :title, :string
 
-        allow :read, published: true
+        allow :read, when: published == true
       end
 
       expected_msg =
@@ -407,7 +407,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module1
 
-        allow :read, parent: nil
+        allow :read, when: parent == nil
       end
 
       expected_msg =
@@ -424,7 +424,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :title, :string
 
-        allow :read, title: {:like, "text_1"}
+        allow :read, when: ^[title: {:like, "text_1"}]
       end
 
       expected_msg =
@@ -441,7 +441,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module1
 
-        allow :read, parent_id: {:>=, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"}
+        allow :read, when: parent_id >= "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
       end
 
       expected_msg =
@@ -458,7 +458,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :token, :string, server_only: true
 
-        allow :read, token: "tok_hidden"
+        allow :read, when: token == "tok_hidden"
       end
 
       assert validate_model!([InlinePolicyFixture32], []) == :ok
@@ -470,7 +470,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :token, :string
 
-        allow :publish, token: "tok_public"
+        allow :publish, when: token == "tok_public"
       end
 
       assert validate_model!([InlinePolicyFixture31], []) == :ok
@@ -482,7 +482,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :token, :string, server_only: true
 
-        allow :publish, token: "tok_hidden"
+        allow :publish, when: token == "tok_hidden"
       end
 
       expected_msg =
@@ -537,7 +537,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenTypeReferencePolicy do
         use Hologram.Policy
 
-        allow :update, to: {Hologram.Reflection, :editor}
+        allow :update, to: {:editor, Hologram.Reflection}
       end
 
       defmodule TakenTypeReferenceEntity do
@@ -547,7 +547,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenTypeReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenTypeReferencePolicy - Hologram.Reflection is not an entity type module"
+        "invalid to option {:editor, Hologram.Reflection} for allow :update in Hologram.Policy.ValidatorTest.TakenTypeReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenTypeReferencePolicy - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenTypeReferenceEntity], [])
@@ -558,7 +558,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenTargetRolePolicy do
         use Hologram.Policy
 
-        allow :update, to: {Hologram.Test.Fixtures.Entity.Module13, :publisher}
+        allow :update, to: {:publisher, Hologram.Test.Fixtures.Entity.Module13}
       end
 
       defmodule TakenTargetRoleEntity do
@@ -579,7 +579,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenUnknownRelationshipPolicy do
         use Hologram.Policy
 
-        allow :update, to: {:project, :editor}
+        allow :update, to: {:editor, project}
       end
 
       defmodule TakenUnknownRelationshipEntity do
@@ -602,7 +602,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenToManyPolicy do
         use Hologram.Policy
 
-        allow :update, to: {:children, :editor}
+        allow :update, to: {:editor, children}
       end
 
       defmodule TakenToManyEntity do
@@ -614,7 +614,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenToManyEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyPolicy - relationship :children is to-many, but a role reference requires a to-one relationship"
+        "invalid to option {:editor, :children} for allow :update in Hologram.Policy.ValidatorTest.TakenToManyEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyPolicy - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenToManyEntity], [])
@@ -675,7 +675,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenUnknownViaPolicy do
         use Hologram.Policy
 
-        allow :read, via: :project
+        allow :read, via: project
       end
 
       defmodule TakenUnknownViaEntity do
@@ -698,7 +698,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenToManyViaPolicy do
         use Hologram.Policy
 
-        allow :read, via: :children
+        allow :read, via: children
       end
 
       defmodule TakenToManyViaEntity do
@@ -721,7 +721,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenNonAtomViaPolicy do
         use Hologram.Policy
 
-        allow :read, via: "parent"
+        allow :read, via: ^"parent"
       end
 
       defmodule TakenNonAtomViaEntity do
@@ -744,7 +744,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenUnknownPredicatePolicy do
         use Hologram.Policy
 
-        allow :read, published: true
+        allow :read, when: published == true
       end
 
       defmodule TakenUnknownPredicateEntity do
@@ -767,7 +767,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenServerOnlyPolicy do
         use Hologram.Policy
 
-        allow :publish, token: "tok_hidden"
+        allow :publish, when: token == "tok_hidden"
       end
 
       defmodule TakenServerOnlyEntity do
@@ -790,7 +790,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenRelationshipGatePolicy do
         use Hologram.Policy
 
-        allow :grant_role, to: {:parent, :admin}
+        allow :grant_role, to: {:admin, parent}
       end
 
       defmodule TakenRelationshipGateEntity do
@@ -802,7 +802,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.TakenRelationshipGateEntity, taken from Hologram.Policy.ValidatorTest.TakenRelationshipGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+        "invalid to option {:admin, :parent} for allow :grant_role in Hologram.Policy.ValidatorTest.TakenRelationshipGateEntity, taken from Hologram.Policy.ValidatorTest.TakenRelationshipGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenRelationshipGateEntity], [])
@@ -813,7 +813,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenPredicateGatePolicy do
         use Hologram.Policy
 
-        allow :grant_role, to: :owner, archived: false
+        allow :grant_role, to: :owner, when: archived == false
       end
 
       defmodule TakenPredicateGateEntity do
@@ -838,7 +838,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenDelegatedGatePolicy do
         use Hologram.Policy
 
-        allow :read_roles, via: :parent
+        allow :read_roles, via: parent
       end
 
       defmodule TakenDelegatedGateEntity do
@@ -861,7 +861,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenViaCyclePolicy do
         use Hologram.Policy
 
-        allow :read, via: :peer
+        allow :read, via: peer
       end
 
       defmodule TakenViaCycleEntityA do
@@ -895,7 +895,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule MixedViaCyclePolicy do
         use Hologram.Policy
 
-        allow :publish, via: :peer
+        allow :publish, via: peer
       end
 
       defmodule MixedViaCycleEntityA do
@@ -911,7 +911,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :peer, Hologram.Policy.ValidatorTest.MixedViaCycleEntityA, optional: true
 
-        allow :publish, via: :peer
+        allow :publish, via: peer
       end
 
       expected_msg =
@@ -1021,11 +1021,11 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
 
-        allow :grant_role, to: {:parent, :admin}
+        allow :grant_role, to: {:admin, parent}
       end
 
       expected_msg =
-        "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.RelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+        "invalid to option {:admin, :parent} for allow :grant_role in Hologram.Policy.ValidatorTest.RelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, RelationshipGateFixture], [])
@@ -1040,7 +1040,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         role :owner
 
-        allow :revoke_role, to: :owner, archived: false
+        allow :revoke_role, to: :owner, when: archived == false
       end
 
       expected_msg =
@@ -1074,7 +1074,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
 
-        allow :read_roles, via: :parent
+        allow :read_roles, via: parent
       end
 
       expected_msg =
@@ -1112,7 +1112,7 @@ defmodule Hologram.Policy.ValidatorTest do
         role :editor
         role :viewer
 
-        allow {:grant_role, :viewer}, to: :editor, archived: false
+        allow {:grant_role, :viewer}, to: :editor, when: archived == false
       end
 
       expected_msg =

@@ -229,7 +229,7 @@ defmodule Hologram.Policy.Validator do
       {_name, [_target], _opts} ->
         raise Hologram.CompileError,
           message:
-            "invalid to option #{inspect({relationship_name, role_name})} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
+            "invalid to option #{inspect({role_name, relationship_name})} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
 
       {_name, target, _opts} ->
         validate_target_role!(operation, target, role_name, location)
@@ -335,7 +335,7 @@ defmodule Hologram.Policy.Validator do
     |> Enum.each(&validate_to_reference!(entity_type, operation, &1, location))
   end
 
-  defp validate_to_reference!(entity_type, operation, {reference, role_name}, location) do
+  defp validate_to_reference!(entity_type, operation, {role_name, reference}, location) do
     if Reflection.alias?(reference) do
       validate_type_reference!(operation, reference, role_name, location)
     else
@@ -453,7 +453,7 @@ defmodule Hologram.Policy.Validator do
     if not Reflection.entity?(target_type) do
       raise Hologram.CompileError,
         message:
-          "invalid to option #{inspect({target_type, role_name})} for allow #{inspect(operation)} in #{location} - #{inspect(target_type)} is not an entity type module"
+          "invalid to option #{inspect({role_name, target_type})} for allow #{inspect(operation)} in #{location} - #{inspect(target_type)} is not an entity type module"
     end
 
     validate_target_role!(operation, target_type, role_name, location)

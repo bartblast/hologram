@@ -1,5 +1,9 @@
 defmodule Mix.Tasks.Holo.Compiler.ExRuntimeMfasTest do
-  use Hologram.Test.BasicCase, async: true
+  # async: false - the task builds the call graph of the whole project, which takes a few
+  # seconds alone. Run concurrently with the other compiler task tests and the async suite, the
+  # builds contend for the runner's cores - on Windows CI they took up to 56 s, and sometimes ran
+  # past the 60 s timeout.
+  use Hologram.Test.BasicCase, async: false
   import ExUnit.CaptureIO
   alias Mix.Tasks.Holo.Compiler.ExRuntimeMfas, as: Task
 

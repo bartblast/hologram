@@ -17,8 +17,8 @@ defmodule Hologram.Job do
 
         relationship :project, Project
 
-        allow :create, via: :project
-        allow :read, actor_id: user_id()
+        allow :create, via: project
+        allow :read, when: actor_id == user_id()
 
         @impl Hologram.Job
         def run(%{project_id: project_id, reason: reason}) do

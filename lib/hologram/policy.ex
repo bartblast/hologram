@@ -59,6 +59,7 @@ defmodule Hologram.Policy do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy.Expression
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -141,7 +142,7 @@ defmodule Hologram.Policy do
   """
   @spec allow(atom, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
-    spec = Entity.replace_actor_leaves!(spec, __CALLER__.module)
+    spec = Expression.spec(operation, spec, __CALLER__)
 
     quote do
       operation = unquote(operation)
@@ -458,7 +459,7 @@ defmodule Hologram.Policy do
     own_reference ++ typed ++ global_reference
   end
 
-  defp build_typed_reference(entity_type, {reference, role_name}) do
+  defp build_typed_reference(entity_type, {role_name, reference}) do
     if Reflection.alias?(reference) do
       {:type, reference, Entity.expand_role(reference, role_name)}
     else

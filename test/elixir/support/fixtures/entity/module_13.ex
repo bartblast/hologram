@@ -13,9 +13,9 @@ defmodule Hologram.Test.Fixtures.Entity.Module13 do
   role :editor
   role :owner, extends: :editor, granted_to: :creator
 
-  allow :read, public: true
+  allow :read, when: public == true
   allow :read, to: [:editor, :owner]
-  allow :publish, via: :parent
-  allow :triage, priority: {:>=, 3}
-  allow :unlink, parent_id: nil
+  allow :publish, via: parent
+  allow :triage, when: priority >= 3
+  allow :unlink, when: parent_id == nil
 end

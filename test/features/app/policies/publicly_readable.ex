@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Policies.PubliclyReadable do
   use Hologram.Policy
 
-  allow :read, public: true
+  allow :read, when: public == true
 end

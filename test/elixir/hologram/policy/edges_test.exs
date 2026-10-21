@@ -86,7 +86,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         role :moderator
 
-        allow :publish, to: :moderator, approved: true
+        allow :publish, to: :moderator, when: approved == true
       end
 
       defmodule ChainFixture2 do
@@ -94,7 +94,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         relationship :c, ChainFixture3
 
-        allow :publish, via: :c
+        allow :publish, via: c
       end
 
       defmodule ChainFixture1 do
@@ -102,7 +102,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         relationship :b, ChainFixture2
 
-        allow :publish, via: :b
+        allow :publish, via: b
       end
 
       assert derive([ChainFixture1]) == %{

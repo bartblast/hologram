@@ -12,5 +12,5 @@ defmodule HologramClusterTests.Entities.User do
 
   # No relationship to Item in either direction: a reference would pull both tables into
   # sync_test.exs's truncate, which names one table today.
-  allow :read, id: user_id()
+  allow :read, when: id == user_id()
 end

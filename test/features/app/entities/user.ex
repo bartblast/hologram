@@ -3,5 +3,5 @@ defmodule HologramFeatureTests.Entities.User do
 
   attribute :email, :string
 
-  allow :read, id: user_id()
+  allow :read, when: id == user_id()
 end
