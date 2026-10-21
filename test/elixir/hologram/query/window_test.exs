@@ -26,6 +26,14 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == [{:a, :==, true}]
     end
 
+    # A comparison between two attributes says something about the row whatever value anything
+    # takes, so it bounds the download the way a literal comparison does.
+    test "keeps a predicate comparing two attributes" do
+      window = derive(term(Module2, [{:updated_at, :>, {:attribute, :created_at}}]))
+
+      assert window.filter == [{:updated_at, :>, {:attribute, :created_at}}]
+    end
+
     test "drops a predicate comparing to a placeholder" do
       window = derive(term(Module2, [{:c, :==, {:placeholder, :search}}]))
 

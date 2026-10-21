@@ -3920,6 +3920,17 @@ defmodule Hologram.Compiler do
     render_json_object([{"actor", "true"}])
   end
 
+  # Another attribute of the row, named rather than carried: the client reads it off the row at
+  # evaluation, the way the query kernel reads an attribute operand.
+  defp render_policy_value(_entity_type, _name, {:attribute, other}) do
+    other_js =
+      other
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    render_json_object([{"attribute", other_js}])
+  end
+
   defp render_policy_value(entity_type, name, values) when is_list(values) do
     values
     |> Enum.map_join(",", &render_policy_value(entity_type, name, &1))
@@ -4483,10 +4494,7 @@ defmodule Hologram.Compiler do
   defp server_only_references(term) do
     server_only_names = Entity.server_only_attribute_names(term.entity)
 
-    filter_names =
-      term.filter
-      |> Stage.triples()
-      |> Enum.map(fn {name, _operator, _value} -> name end)
+    filter_names = Stage.predicate_names(term.filter)
 
     order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
 

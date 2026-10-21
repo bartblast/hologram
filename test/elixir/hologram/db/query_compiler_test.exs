@@ -10,8 +10,10 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -1028,6 +1030,125 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
 
       assert String.contains?(sql, ~s|AND ("c_$sort", "c") >= ($1, $2)|)
+    end
+
+    # Nil is a value to equality, so the DISTINCT form - = would be unknown over a NULL.
+    test "compiles an attribute equality as IS NOT DISTINCT FROM" do
+      mapping = Mapper.derive!([Module10], [])
+
+      term =
+        Module10
+        |> filter(count == priority)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE "count" IS NOT DISTINCT FROM "priority" ))
+    end
+
+    test "compiles an attribute inequality as IS DISTINCT FROM" do
+      mapping = Mapper.derive!([Module10], [])
+
+      term =
+        Module10
+        |> filter(count != priority)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE "count" IS DISTINCT FROM "priority" ))
+    end
+
+    test "compiles an ordering comparison between attributes as a column comparison" do
+      mapping = Mapper.derive!([Module10], [])
+
+      term =
+        Module10
+        |> filter(count > priority)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE "count" > "priority" ))
+    end
+
+    test "compiles an integer compared with a float as a column comparison" do
+      mapping = Mapper.derive!([Module10], [])
+
+      term =
+        Module10
+        |> filter(count < rating)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE "count" < "rating" ))
+    end
+
+    test "compiles a string pair through both sort-key companions" do
+      mapping = Mapper.derive!([Module10], [])
+
+      term =
+        Module10
+        |> filter(username < bio)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE ("username_$sort", "username") < ("bio_$sort", "bio")|
+             )
+    end
+
+    # Each enum attribute is its own type, and Postgres compares no two of them.
+    test "casts an enum operand to the compared attribute's type" do
+      mapping = Mapper.derive!([Module24], [])
+
+      term =
+        Module24
+        |> filter(level < priority)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "level" < "priority"::text::"hologram_data"."test_fixtures_entity_module24_level_$enum"|
+             )
+    end
+
+    test "casts an enum operand under equality" do
+      mapping = Mapper.derive!([Module24], [])
+
+      term =
+        Module24
+        |> filter(level == priority)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "level" IS NOT DISTINCT FROM "priority"::text::"hologram_data"."test_fixtures_entity_module24_level_$enum"|
+             )
+    end
+
+    test "binds no slot for an attribute operand beside a placeholder" do
+      mapping = Mapper.derive!([Module10], [])
+
+      term = %{
+        Stage.normalize(Module10)
+        | filter: [{:count, :<, {:attribute, :priority}}, {:username, :==, {:placeholder, :name}}]
+      }
+
+      assert %{params: [{:placeholder, :name, :string}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE "count" < "priority" AND "username" = $1 ))
+    end
+
+    test "composes a policy rule comparing two attributes" do
+      mapping = Mapper.derive!([Module10], [])
+      term = Stage.normalize(Module10)
+      rules = [%{predicates: [{:count, :<=, {:attribute, :priority}}], to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert String.contains?(sql, ~s( WHERE "count" <= "priority" ))
     end
 
     test "compiles string ordering through the sort-key companion" do

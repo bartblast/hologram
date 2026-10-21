@@ -167,7 +167,8 @@ defmodule Hologram.Entity do
       granted when the same operation is granted on the related row.
     * `when:` - a condition on the row: `when: priority < 3 and archived == false`,
       `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
-      `^` marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
+      on either side of a comparison, so `when: guests <= capacity` compares two attributes, `^`
+      marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
       `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
       `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
       condition built from data goes in pinned, `when: ^predicates`, as a keyword list of

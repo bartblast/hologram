@@ -828,7 +828,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp filter_stage_names(_stage), do: nil
 
   # The attributes a data-form filter names, a disjunction's alternatives walked - an or: entry
-  # holding predicate lists names what they name, the way the stage reads it.
+  # holding predicate lists names what they name, the way the stage reads it - and the attribute an
+  # attribute operand names beside the one it is compared with.
   defp predicate_names(predicates) do
     Enum.flat_map(predicates, fn
       {:or, alternatives} when is_list(alternatives) ->
@@ -837,6 +838,12 @@ defmodule Hologram.Compiler.QueryExtractor do
         else
           [:or]
         end
+
+      {name, {:attribute, other}} when is_atom(name) and is_atom(other) ->
+        [name, other]
+
+      {name, {_operator, {:attribute, other}}} when is_atom(name) and is_atom(other) ->
+        [name, other]
 
       {name, _value} when is_atom(name) ->
         [name]

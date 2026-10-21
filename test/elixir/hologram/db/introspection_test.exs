@@ -34,6 +34,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module21",
                "test_fixtures_entity_module22",
                "test_fixtures_entity_module23",
+               "test_fixtures_entity_module24",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
                "test_fixtures_entity_module4",
@@ -53,7 +54,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_module3_children_$join",
                "test_fixtures_policy_module4",
                "test_fixtures_policy_module5",
-               "test_fixtures_policy_module6"
+               "test_fixtures_policy_module6",
+               "test_fixtures_policy_module7"
              ]
     end
 
@@ -283,6 +285,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Entity.Module21",
                  "Hologram.Test.Fixtures.Entity.Module22",
                  "Hologram.Test.Fixtures.Entity.Module23",
+                 "Hologram.Test.Fixtures.Entity.Module24",
                  "Hologram.Test.Fixtures.Entity.Module3",
                  "Hologram.Test.Fixtures.Entity.Module4",
                  "Hologram.Test.Fixtures.Entity.Module5",
@@ -298,7 +301,8 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Policy.Module3",
                  "Hologram.Test.Fixtures.Policy.Module4",
                  "Hologram.Test.Fixtures.Policy.Module5",
-                 "Hologram.Test.Fixtures.Policy.Module6"
+                 "Hologram.Test.Fixtures.Policy.Module6",
+                 "Hologram.Test.Fixtures.Policy.Module7"
                ],
                "hologram_role_grant_role_$enum" => [
                  "Hologram.Test.Fixtures.Role.Module1",
@@ -311,6 +315,9 @@ defmodule Hologram.DB.IntrospectionTest do
                  "viewer"
                ],
                "test_fixtures_entity_module17_priority_$enum" => ["low", "medium", "high"],
+               "test_fixtures_entity_module24_level_$enum" => ["low", "medium", "high"],
+               "test_fixtures_entity_module24_priority_$enum" => ["low", "medium", "high"],
+               "test_fixtures_entity_module24_tier_$enum" => ["low", "high"],
                "test_fixtures_job_module1_status_$enum" => [
                  "queued",
                  "running",

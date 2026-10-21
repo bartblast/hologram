@@ -30,11 +30,32 @@ const ORDERABLE_TYPES = [
 ];
 const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
 
+// The type pairs whose attributes compare though their types differ, compared on the wider type -
+// Hologram.Query.Stage's @widenings, and the two must agree.
+const WIDENINGS = [
+  ["float", "integer"],
+  ["integer", "float"],
+];
+
 // The names an attribute may be ordered or read by - declared and system alike, sorted, the way
 // the model bakes them. Reference fields are deliberately absent, as they are on the server: a
 // relationship is followed, not ordered by.
 function attributeNames(entityType) {
   return Object.keys(Model.entry(entityType).attributes);
+}
+
+// Another attribute of the same row as a predicate's operand, checked the way the server checks it -
+// an ordering comparison needs an orderable attribute, the other one has to be filterable, and the
+// two have to compare.
+function attributeTriple(name, operator, other, entityType) {
+  if (ORDERING_OPERATORS.includes(operator)) {
+    validateOrderableAttribute(name, entityType, operator);
+  }
+
+  validateFilteredName(other, entityType);
+  validateComparableAttributes(name, other, operator, entityType);
+
+  return [name.value, operator, {attribute: other.value}];
 }
 
 // A name matching no attribute definition is a to-one reference field, and every one of those
@@ -279,6 +300,17 @@ function isActor(value) {
   return Type.isAtom(value) && value.value === "actor";
 }
 
+// The {:attribute, name} tuple a bare name on the right side of a comparison lowers to.
+function isAttributeOperand(value) {
+  return (
+    Type.isTuple(value) &&
+    value.data.length === 2 &&
+    Type.isAtom(value.data[0]) &&
+    value.data[0].value === "attribute" &&
+    Type.isAtom(value.data[1])
+  );
+}
+
 // A two-element tuple led by an atom - what an operator predicate looks like, and what tells a
 // list of them from a list of plain values.
 function isConstraintTuple(value) {
@@ -436,6 +468,14 @@ function operatorTriples(name, tuple, entityType) {
     return [[name.value, operator, placeholderLeaf(operand)]];
   }
 
+  if (
+    isAttributeOperand(operand) &&
+    (EQUALITY_OPERATORS.includes(operator) ||
+      ORDERING_OPERATORS.includes(operator))
+  ) {
+    return [attributeTriple(name, operator, operand.data[1], entityType)];
+  }
+
   if (EQUALITY_OPERATORS.includes(operator) && isActor(operand)) {
     validateActorAttribute(name, entityType);
 
@@ -507,6 +547,10 @@ function predicateTriples(name, value, entityType) {
     validateActorAttribute(name, entityType);
 
     return [[name.value, "==", {actor: true}]];
+  }
+
+  if (isAttributeOperand(value)) {
+    return [attributeTriple(name, "==", value.data[1], entityType)];
   }
 
   if (isConstraintTuple(value)) {
@@ -873,6 +917,48 @@ function validateAttributeName(name, entityType, usage) {
   Interpreter.raiseArgumentError(
     `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
   );
+}
+
+// Two attributes compare on one order and one notion of equality, so their types have to agree -
+// the same type, or a widening - and two enums have to declare the same values in the same order,
+// since a comparison reads positions. An attribute compared with itself says nothing anyone means.
+function validateComparableAttributes(name, other, operator, entityType) {
+  if (name.value === other.value) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} compares attribute ${Interpreter.inspect(name)} in ${entityType} with itself`,
+    );
+  }
+
+  const type = attributeType(entityType, name.value);
+  const otherType = attributeType(entityType, other.value);
+
+  const widens = WIDENINGS.some(
+    ([from, to]) => from === type && to === otherType,
+  );
+
+  if (type !== otherType && !widens) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} compares attribute ${Interpreter.inspect(name)} with attribute ${Interpreter.inspect(other)} in ${entityType}, which have different types (:${type} and :${otherType}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)`,
+    );
+  }
+
+  if (type !== "enum") {
+    return;
+  }
+
+  const {enumValues} = Model.entry(entityType);
+  const values = enumValues[name.value];
+  const otherValues = enumValues[other.value];
+
+  const sameValues =
+    values.length === otherValues.length &&
+    values.every((value, index) => value === otherValues[index]);
+
+  if (!sameValues) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} compares attribute ${Interpreter.inspect(name)} with attribute ${Interpreter.inspect(other)} in ${entityType}, which declare different values (${inspectEnumValues(values)} and ${inspectEnumValues(otherValues)}) - two enum attributes compare only when they declare the same values in the same order`,
+    );
+  }
 }
 
 function validateFilteredName(name, entityType) {

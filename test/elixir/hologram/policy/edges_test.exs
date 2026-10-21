@@ -135,6 +135,23 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
+    # A comparison between two attributes reads both off the row, so both join the rule's one
+    # attribute edge rather than adding a kind of edge.
+    test "derives one attribute edge naming both sides of an attribute comparison" do
+      defmodule AttributeComparisonFixture do
+        use Hologram.Entity
+
+        attribute :capacity, :integer
+        attribute :guests, :integer
+
+        allow :update, when: guests <= capacity
+      end
+
+      assert derive([AttributeComparisonFixture]) == %{
+               {AttributeComparisonFixture, :update} => [{:attributes, [:capacity, :guests]}]
+             }
+    end
+
     test "derives no pairs for an entity type without policy declarations" do
       assert derive([Module1]) == %{}
     end

@@ -18,12 +18,14 @@ defineRuntimeGlobals();
 // and with the same raise messages. What differs is the term: these stages build the plain term
 // the client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query_Stage", () => {
+  const BOOKING = "MyApp.Booking";
   const ITEM = "MyApp.Item";
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
   const VAULT = "MyApp.Vault";
 
+  const booking = Type.alias(BOOKING);
   const project = Type.alias(PROJECT);
   const task = Type.alias(TASK);
   const user = Type.alias(USER);
@@ -97,6 +99,36 @@ describe("Elixir_Hologram_Query_Stage", () => {
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
+        // The pairs an attribute comparison is checked over, a type of its own rather than more
+        // attributes on TASK, whose known-name lists four assertions already pin.
+        [BOOKING]: {
+          attributes: {
+            capacity: "integer",
+            check_in: "date",
+            check_out: "date",
+            created_at: "datetime",
+            guests: "integer",
+            held_at: "datetime",
+            id: "uuid",
+            level: "enum",
+            name: "string",
+            note: "string",
+            priority: "enum",
+            rating: "float",
+            tier: "enum",
+            updated_at: "datetime",
+          },
+          enumValues: {
+            level: ["low", "medium", "high"],
+            priority: ["low", "medium", "high"],
+            tier: ["low", "high"],
+          },
+          relationships: {
+            assignee: {toMany: false, type: USER},
+            owner: {toMany: false, type: USER},
+          },
+          serverOnly: [],
+        },
         // A counter type of its own rather than another attribute on TASK, whose known-name lists
         // four assertions already pin: count is a counter, priority is an optional integer and so
         // is not, and bio is there to be refused for its type.
@@ -1068,6 +1100,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("name"), Type.atom(name)],
       ]);
 
+    // Another attribute of the row, as a bare name on the right side of a comparison lowers to.
+    const attribute = (name) =>
+      Type.tuple([Type.atom("attribute"), Type.atom(name)]);
+
     it("reads a bare value as equality", () => {
       const query = filter(
         task,
@@ -1264,6 +1300,88 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [["id", "!=", {actor: true}]]);
     });
 
+    it("reads a bare attribute operand as equality", () => {
+      const query = filter(
+        booking,
+        predicates([["guests", attribute("capacity")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["guests", "==", {attribute: "capacity"}],
+      ]);
+    });
+
+    it("reads an attribute operand under each comparison operator", () => {
+      for (const operator of ["!=", "<", "<=", "==", ">", ">="]) {
+        const value = Type.tuple([Type.atom(operator), attribute("capacity")]);
+        const query = filter(booking, predicates([["guests", value]]));
+
+        assert.deepStrictEqual(query.filter, [
+          ["guests", operator, {attribute: "capacity"}],
+        ]);
+      }
+    });
+
+    it("reads an attribute operand over a date pair", () => {
+      const value = Type.tuple([Type.atom("<"), attribute("check_in")]);
+      const query = filter(booking, predicates([["check_out", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["check_out", "<", {attribute: "check_in"}],
+      ]);
+    });
+
+    it("reads an attribute operand over a string pair", () => {
+      const value = Type.tuple([Type.atom("<"), attribute("note")]);
+      const query = filter(booking, predicates([["name", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["name", "<", {attribute: "note"}],
+      ]);
+    });
+
+    it("reads an attribute operand over an enum pair", () => {
+      const value = Type.tuple([Type.atom("<"), attribute("priority")]);
+      const query = filter(booking, predicates([["level", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["level", "<", {attribute: "priority"}],
+      ]);
+    });
+
+    it("reads an attribute operand over two reference fields", () => {
+      const value = Type.tuple([Type.atom("=="), attribute("owner_id")]);
+      const query = filter(booking, predicates([["assignee_id", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["assignee_id", "==", {attribute: "owner_id"}],
+      ]);
+    });
+
+    it("reads a system attribute operand", () => {
+      const value = Type.tuple([Type.atom(">"), attribute("created_at")]);
+      const query = filter(booking, predicates([["updated_at", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["updated_at", ">", {attribute: "created_at"}],
+      ]);
+    });
+
+    it("reads an integer compared with a float", () => {
+      const integerFirst = Type.tuple([Type.atom("<"), attribute("rating")]);
+      const floatFirst = Type.tuple([Type.atom(">"), attribute("guests")]);
+
+      assert.deepStrictEqual(
+        filter(booking, predicates([["guests", integerFirst]])).filter,
+        [["guests", "<", {attribute: "rating"}]],
+      );
+
+      assert.deepStrictEqual(
+        filter(booking, predicates([["rating", floatFirst]])).filter,
+        [["rating", ">", {attribute: "guests"}]],
+      );
+    });
+
     it("reads an or entry as a disjunction of its alternatives", () => {
       const value = disjunction(
         [["done", Type.boolean(true)]],
@@ -1370,6 +1488,76 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => filter(task, predicates([["id", value]])),
         HologramBoxedError,
         "operator :< requires an orderable attribute - attribute :id in MyApp.Task has type :uuid, and boolean and uuid attributes have no order to compare by",
+      );
+    });
+
+    it("raises on an attribute compared with itself", () => {
+      const value = Type.tuple([Type.atom("<"), attribute("guests")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["guests", value]])),
+        HologramBoxedError,
+        "operator :< compares attribute :guests in MyApp.Booking with itself",
+      );
+    });
+
+    it("raises on an attribute operand for a membership operator", () => {
+      const value = Type.tuple([Type.atom("in"), attribute("capacity")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["guests", value]])),
+        HologramBoxedError,
+        "operator :in on attribute :guests requires a list operand, got: {:attribute, :capacity}",
+      );
+    });
+
+    it("raises on an attribute pair of different types", () => {
+      const value = Type.tuple([Type.atom("<"), attribute("held_at")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["check_in", value]])),
+        HologramBoxedError,
+        "operator :< compares attribute :check_in with attribute :held_at in MyApp.Booking, which have different types (:date and :datetime) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
+      );
+    });
+
+    it("raises on an enum pair declaring different values", () => {
+      const value = Type.tuple([Type.atom("=="), attribute("tier")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["level", value]])),
+        HologramBoxedError,
+        "operator :== compares attribute :level with attribute :tier in MyApp.Booking, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order",
+      );
+    });
+
+    it("raises on an ordering comparison between reference fields", () => {
+      const value = Type.tuple([Type.atom("<"), attribute("owner_id")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["assignee_id", value]])),
+        HologramBoxedError,
+        "operator :< requires an orderable attribute - attribute :assignee_id in MyApp.Booking has type :uuid, and boolean and uuid attributes have no order to compare by",
+      );
+    });
+
+    it("raises on an unknown attribute operand", () => {
+      const value = Type.tuple([Type.atom("=="), attribute("x")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["guests", value]])),
+        HologramBoxedError,
+        "unknown attribute :x in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+      );
+    });
+
+    it("raises on a relationship as an attribute operand", () => {
+      const value = Type.tuple([Type.atom("=="), attribute("owner")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["assignee_id", value]])),
+        HologramBoxedError,
+        ":owner is a relationship in MyApp.Booking - only attributes can be filtered - filter its reference via :owner_id",
       );
     });
 

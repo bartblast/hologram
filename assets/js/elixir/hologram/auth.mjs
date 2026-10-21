@@ -138,6 +138,16 @@ function isActorValue(value) {
   );
 }
 
+// Another attribute of the same row, which the rule names rather than carries.
+function isAttributeValue(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof value.attribute === "string"
+  );
+}
+
 // The value a rule compares against, read off the boxed entity in the spelling the rules were
 // baked in - the rules travel wire-spelled, so what they are compared with must be too.
 function entityValue(entityType, entity, name) {
@@ -176,10 +186,25 @@ function predicateHolds(
   return holds(
     entityValue(entityType, entity, name),
     operator,
-    isActorValue(value) ? actorUserId : value,
+    operandValue(entityType, entity, value, actorUserId),
     enumRanks(entityType, name),
     Model.entry(entityType).attributes[name] === "string",
   );
+}
+
+// What a rule's operand stands for on this row: the acting user, another attribute of the row read
+// off it, or the value itself. An attribute operand compares by the predicate's attribute's ranks,
+// since two enums compare only when they declare the same list.
+function operandValue(entityType, entity, value, actorUserId) {
+  if (isActorValue(value)) {
+    return actorUserId;
+  }
+
+  if (isAttributeValue(value)) {
+    return entityValue(entityType, entity, value.attribute);
+  }
+
+  return value;
 }
 
 // A clause is a triple array, or a disjunction object holding alternatives that are clause lists

@@ -87,6 +87,11 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_condition("priority < 3") == [priority: {:<, 3}]
     end
 
+    test "lowers a comparison with an attribute" do
+      assert lower_condition("owner_id == assignee_id") ==
+               [owner_id: {:==, {:attribute, :assignee_id}}]
+    end
+
     test "lowers a comparison with user_id()" do
       assert lower_condition("owner_id == user_id()") == [owner_id: {:==, {:actor}}]
     end
@@ -121,6 +126,15 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_condition("priority < user_id()") == [priority: {:<, {:actor}}]
     end
 
+    test "lowers each comparison operator with an attribute" do
+      assert lower_condition("guests == capacity") == [guests: {:==, {:attribute, :capacity}}]
+      assert lower_condition("guests != capacity") == [guests: {:!=, {:attribute, :capacity}}]
+      assert lower_condition("guests < capacity") == [guests: {:<, {:attribute, :capacity}}]
+      assert lower_condition("guests <= capacity") == [guests: {:<=, {:attribute, :capacity}}]
+      assert lower_condition("guests > capacity") == [guests: {:>, {:attribute, :capacity}}]
+      assert lower_condition("guests >= capacity") == [guests: {:>=, {:attribute, :capacity}}]
+    end
+
     test "passes a pinned predicates list through" do
       assert lower_condition("^predicates", predicates: [priority: {:>=, 3}]) ==
                [priority: {:>=, 3}]
@@ -132,15 +146,9 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("done") end
     end
 
-    test "raises on a bare name as a comparison operand" do
-      assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: owner_id reads as an attribute of the entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^owner_id",
-                   fn -> lower_condition("owner_id == owner_id") end
-    end
-
     test "raises on a call as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal, user_id() or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, user_id() or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
                    fn -> lower_condition("created_at > Date.utc_today()") end
     end
 
@@ -466,6 +474,11 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_predicates("priority > -7") == [priority: {:>, -7}]
     end
 
+    test "lowers a comparison with an attribute" do
+      assert lower_predicates("end_date < start_date") ==
+               [end_date: {:<, {:attribute, :start_date}}]
+    end
+
     test "lowers a comparison with nil" do
       assert lower_predicates("archived_at == nil") == [archived_at: {:==, nil}]
     end
@@ -551,6 +564,11 @@ defmodule Hologram.Query.ExpressionTest do
                [author_id: {:==, "u"}]
     end
 
+    test "lowers an attribute comparison inside a disjunction" do
+      assert lower_predicates("end_date < start_date or shared == true") ==
+               [or: [[end_date: {:<, {:attribute, :start_date}}], [shared: {:==, true}]]]
+    end
+
     test "lowers each comparison operator" do
       assert lower_predicates("b == 1") == [b: {:==, 1}]
       assert lower_predicates("b != 1") == [b: {:!=, 1}]
@@ -560,9 +578,30 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_predicates("b >= 1") == [b: {:>=, 1}]
     end
 
+    test "lowers each comparison operator with an attribute" do
+      assert lower_predicates("b == c") == [b: {:==, {:attribute, :c}}]
+      assert lower_predicates("b != c") == [b: {:!=, {:attribute, :c}}]
+      assert lower_predicates("b < c") == [b: {:<, {:attribute, :c}}]
+      assert lower_predicates("b <= c") == [b: {:<=, {:attribute, :c}}]
+      assert lower_predicates("b > c") == [b: {:>, {:attribute, :c}}]
+      assert lower_predicates("b >= c") == [b: {:>=, {:attribute, :c}}]
+    end
+
     test "passes a pinned predicates list through" do
       assert lower_predicates("^predicates", predicates: [priority: {:>=, 3}]) ==
                [priority: {:>=, 3}]
+    end
+
+    test "raises on __DIR__ as a comparison operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: __DIR__ - a value from the surrounding code is pinned: ^__DIR__",
+                   fn -> lower_predicates("path == __DIR__") end
+    end
+
+    test "raises on __MODULE__ as a comparison operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: __MODULE__ - a value from the surrounding code is pinned: ^__MODULE__",
+                   fn -> lower_predicates("entity_type == __MODULE__") end
     end
 
     test "raises on a bare name alone" do
@@ -571,16 +610,22 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("done") end
     end
 
-    test "raises on a bare name as a comparison operand" do
-      assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: owner_id reads as an attribute of the queried entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^owner_id",
-                   fn -> lower_predicates("owner_id == owner_id") end
-    end
-
     test "raises on a bare name as a keyword value" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: project_id reads as an attribute of the queried entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^project_id",
+                   "lib/my_app/queries.ex:12: assignee_id reads as an attribute of the queried entity, and a keyword predicate value is a literal or a pinned expression - a value from the surrounding code is pinned: ^assignee_id, and a comparison with an attribute is written as an expression: owner_id == assignee_id",
+                   fn -> lower_predicates("[owner_id: assignee_id]") end
+    end
+
+    test "raises on a bare name as a keyword value named after its key" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project_id reads as an attribute of the queried entity, and a keyword predicate value is a literal or a pinned expression - a value from the surrounding code is pinned: ^project_id",
                    fn -> lower_predicates("[project_id: project_id]") end
+    end
+
+    test "raises on a bare name as a membership element" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: other reads as an attribute of the queried entity, and a membership element is a literal or a pinned expression - a value from the surrounding code is pinned: ^other",
+                   fn -> lower_predicates("status in [other]") end
     end
 
     test "raises on a bare name as a membership operand" do
@@ -589,9 +634,15 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("status in statuses") end
     end
 
+    test "raises on a bare name as a range bound" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: high reads as an attribute of the queried entity, and a range bound is a literal or a pinned expression - a value from the surrounding code is pinned: ^high",
+                   fn -> lower_predicates("n in 1..high") end
+    end
+
     test "raises on a call as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
                    fn -> lower_predicates("created_at > Date.utc_today()") end
     end
 
@@ -645,7 +696,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a module attribute as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal or a pinned expression, got: @max - a value from the surrounding code is pinned: ^@max",
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: @max - a value from the surrounding code is pinned: ^@max",
                    fn -> lower_predicates("priority < @max") end
     end
 
@@ -705,7 +756,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a sigil as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal or a pinned expression, got: ~D[2026-01-01] - a value from the surrounding code is pinned: ^~D[2026-01-01]",
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: ~D[2026-01-01] - a value from the surrounding code is pinned: ^~D[2026-01-01]",
                    fn -> lower_predicates("created_at > ~D[2026-01-01]") end
     end
 
@@ -723,7 +774,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on an operator expression as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal or a pinned expression, got: n * 2 - a value from the surrounding code is pinned: ^(n * 2)",
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: n * 2 - a value from the surrounding code is pinned: ^(n * 2)",
                    fn -> lower_predicates("b > n * 2") end
     end
 
@@ -741,7 +792,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on user_id() as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal or a pinned expression, got: user_id() - a value from the surrounding code is pinned: ^user_id()",
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute or a pinned expression, got: user_id() - a value from the surrounding code is pinned: ^user_id()",
                    fn -> lower_predicates("owner_id == user_id()") end
     end
   end

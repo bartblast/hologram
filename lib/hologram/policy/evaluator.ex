@@ -36,7 +36,8 @@ defmodule Hologram.Policy.Evaluator do
   Every predicate clause must hold - a disjunction when any of its alternatives does - one grant
   reference must be held, and the delegation must grant the same operation on the related entity.
   Predicate values compare as they do in the database: nil is a regular value for equality and
-  membership, while ordering comparisons never match it.
+  membership, while ordering comparisons never match it. An attribute operand reads the row's other
+  attribute, compared the way a literal is.
 
   For an anonymous session a user_id() predicate is false, whichever way it points, and a grant
   reference is held by nobody - the actor is nobody rather than nil, since a nil actor would make
@@ -146,6 +147,16 @@ defmodule Hologram.Policy.Evaluator do
   # Nobody is equal to no attribute and unequal to none - asking about the actor of an anonymous
   # session is asking about nobody, which no row answers.
   defp predicate_holds?({_name, _operator, {:actor}}, _entity, nil), do: false
+
+  # Another attribute of the row, compared the way a literal is - by the predicate's attribute's
+  # ranks, since two enums compare only when they declare the same list.
+  defp predicate_holds?({name, operator, {:attribute, other}}, entity, _actor_user_id) do
+    ranks = enum_ranks(entity.__struct__, name)
+
+    entity
+    |> Map.fetch!(name)
+    |> holds?(operator, Map.fetch!(entity, other), ranks)
+  end
 
   defp predicate_holds?({name, operator, value}, entity, actor_user_id) do
     ranks = enum_ranks(entity.__struct__, name)

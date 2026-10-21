@@ -21,6 +21,12 @@ defmodule Hologram.Query.Stage do
   @orderable_types [:date, :datetime, :enum, :float, :integer, :string, :time]
   @ordering_operators [:<, :<=, :>, :>=]
 
+  # The type pairs whose attributes compare though their types differ, compared on the wider type -
+  # a widening keeps the value's meaning. An integer is the same number as a float. A date is not a
+  # datetime: it becomes one instant only once a time zone is picked, and a comparison against it
+  # means the day an instant falls on, which no widening says.
+  @widenings [{:float, :integer}, {:integer, :float}]
+
   @doc false
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   def add_relationship(entity, relationship_name, target_id) do
@@ -71,6 +77,11 @@ defmodule Hologram.Query.Stage do
   # membership list, a list of operator tuples applying all of them (a conjunction), or an
   # integer range. An or: entry holding a list of at least two predicate lists is a disjunction,
   # which becomes one {:or, alternatives} clause, each alternative the clauses of its list.
+  #
+  # An {:attribute, name} tuple in a value position - bare (equality) or as the operand of a
+  # comparison operator - names another attribute of the same row, which the triple stores as is.
+  # The two attributes have to compare: the same type, or one widening to the other, two enums
+  # declaring the same values in the same order, and never one attribute with itself.
   #
   # A Hologram.Query.Placeholder struct in a value position - bare, as an operator-tuple operand,
   # or as a membership list element - stands for a runtime-bound value: the triple stores a
@@ -272,6 +283,20 @@ defmodule Hologram.Query.Stage do
     filter_names ++ bound_names ++ order_names ++ include_names
   end
 
+  # Returns every attribute name the given filter clauses read, in order: the compared attribute of
+  # every triple, and the attribute an attribute operand names beside it - the alternatives of a
+  # disjunction included. For readers that need what a filter reads rather than how it compares.
+  @doc false
+  @spec predicate_names(list(Query.clause())) :: list(atom | Query.placeholder())
+  def predicate_names(clauses) do
+    clauses
+    |> triples()
+    |> Enum.flat_map(fn
+      {name, _operator, {:attribute, other}} -> [name, other]
+      {name, _operator, _value} -> [name]
+    end)
+  end
+
   @doc false
   @spec predicate_triples!(module, keyword) :: list(Query.clause())
   def predicate_triples!(entity_type, predicates) do
@@ -374,6 +399,17 @@ defmodule Hologram.Query.Stage do
     Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
   end
 
+  defp attribute_triple!(name, operator, other, entity_type) do
+    if operator in @ordering_operators do
+      validate_orderable_attribute!(name, entity_type, operator)
+    end
+
+    validate_filtered_name!(other, entity_type)
+    validate_comparable_attributes!(name, other, operator, entity_type)
+
+    {name, operator, {:attribute, other}}
+  end
+
   defp attribute_triples!(entity_type, {name, value}) do
     validate_filtered_name!(name, entity_type)
 
@@ -464,6 +500,12 @@ defmodule Hologram.Query.Stage do
 
   defp entity_type!(subject, stage) do
     raise ArgumentError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
+  end
+
+  defp enum_values(entity_type, name) do
+    {_name, :enum, opts} = attribute_definition(entity_type, name)
+
+    Keyword.fetch!(opts, :values)
   end
 
   defp filterable_names(entity_type) do
@@ -700,6 +742,16 @@ defmodule Hologram.Query.Stage do
       true ->
         raise_unknown_operator!(operator, name)
     end
+  end
+
+  defp predicate_triples!(name, {:attribute, other}, entity_type) when is_atom(other) do
+    [attribute_triple!(name, :==, other, entity_type)]
+  end
+
+  defp predicate_triples!(name, {operator, {:attribute, other}}, entity_type)
+       when (operator in @equality_operators or operator in @ordering_operators) and
+              is_atom(other) do
+    [attribute_triple!(name, operator, other, entity_type)]
   end
 
   defp predicate_triples!(name, {:actor}, entity_type) do
@@ -981,6 +1033,35 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
+    end
+  end
+
+  # Two attributes compare on one order and one notion of equality, so their types have to agree -
+  # the same type, or a widening - and two enums have to declare the same values in the same order,
+  # since a comparison reads positions. An attribute compared with itself says nothing anyone means.
+  defp validate_comparable_attributes!(name, name, operator, entity_type) do
+    raise ArgumentError,
+      message:
+        "operator #{inspect(operator)} compares attribute #{inspect(name)} in #{inspect(entity_type)} with itself"
+  end
+
+  defp validate_comparable_attributes!(name, other, operator, entity_type) do
+    type = attribute_type(entity_type, name)
+    other_type = attribute_type(entity_type, other)
+
+    cond do
+      type != other_type and {type, other_type} not in @widenings ->
+        raise ArgumentError,
+          message:
+            "operator #{inspect(operator)} compares attribute #{inspect(name)} with attribute #{inspect(other)} in #{inspect(entity_type)}, which have different types (#{inspect(type)} and #{inspect(other_type)}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      type == :enum and enum_values(entity_type, name) != enum_values(entity_type, other) ->
+        raise ArgumentError,
+          message:
+            "operator #{inspect(operator)} compares attribute #{inspect(name)} with attribute #{inspect(other)} in #{inspect(entity_type)}, which declare different values (#{inspect(enum_values(entity_type, name))} and #{inspect(enum_values(entity_type, other))}) - two enum attributes compare only when they declare the same values in the same order"
+
+      true ->
+        :ok
     end
   end
 

@@ -11,7 +11,8 @@ import SortKey from "./sort_key.mjs";
 //
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
 // operand] - or a disjunction, {or: alternatives}, holding when one of its alternatives does, each
-// alternative a clause list of its own.
+// alternative a clause list of its own. An operand is a value, the acting user ({actor: true}), a
+// placeholder ({placeholder: name}) or another attribute of the same row ({attribute: name}).
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
@@ -225,6 +226,15 @@ export default class QueryKernel {
     return label[0] >= "A" && label[0] <= "Z" ? label : `:${label}`;
   }
 
+  static #isAttribute(operand) {
+    return (
+      operand !== null &&
+      typeof operand === "object" &&
+      !Array.isArray(operand) &&
+      "attribute" in operand
+    );
+  }
+
   // A visitor has no acting user, and each triple naming one answers false on its own - so a
   // disjunction needs no case for it: the alternative asking about nobody fails, and the others
   // still answer.
@@ -238,9 +248,14 @@ export default class QueryKernel {
     );
   }
 
+  // Another attribute of the same row is read off the row, and compared by the predicate's
+  // attribute's ranks - two enums compare only when they declare the same list, so one serves both.
   static #matchesTriple(row, [name, operator, operand], context, ranks) {
     const ranksForKey = ranks[name];
-    const value = QueryKernel.#resolve(operand, context, ranksForKey);
+
+    const value = QueryKernel.#isAttribute(operand)
+      ? (row[operand.attribute] ?? null)
+      : QueryKernel.#resolve(operand, context, ranksForKey);
     const sortName = `${name}_sort`;
 
     // A row filed by ingest carries the key beside every string attribute, so the presence of
@@ -370,7 +385,9 @@ export default class QueryKernel {
         return !operand.includes(value);
     }
 
-    if (value === null) {
+    // Only an attribute operand can be missing here - a literal null ordering operand is refused
+    // when the query is built, and a placeholder never binds one.
+    if (value === null || operand === null) {
       return false;
     }
 

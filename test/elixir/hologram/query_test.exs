@@ -5,6 +5,7 @@ defmodule Hologram.QueryTest do
 
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
 
@@ -26,6 +27,12 @@ defmodule Hologram.QueryTest do
 
     test "lowers a comparison" do
       assert filter(Module2, b >= 3) == %Query{entity: Module2, filter: [{:b, :>=, 3}]}
+    end
+
+    test "lowers a comparison with an attribute" do
+      assert filter(Module24, ends_on < starts_on).filter == [
+               {:ends_on, :<, {:attribute, :starts_on}}
+             ]
     end
 
     test "lowers a conjunction" do
@@ -71,11 +78,11 @@ defmodule Hologram.QueryTest do
     test "raises the lowering's compile error" do
       code = """
       import Hologram.Query
-      filter(Hologram.Test.Fixtures.Entity.Module2, c == search)
+      filter(Hologram.Test.Fixtures.Entity.Module2, c: search)
       """
 
       assert_error Hologram.CompileError,
-                   "nofile:2: search reads as an attribute of the queried entity, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^search",
+                   "nofile:2: search reads as an attribute of the queried entity, and a keyword predicate value is a literal or a pinned expression - a value from the surrounding code is pinned: ^search, and a comparison with an attribute is written as an expression: c == search",
                    fn -> Code.eval_string(code) end
     end
   end

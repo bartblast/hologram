@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ticket
@@ -11,8 +12,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page3
   alias HologramFeatureTests.Queries.Page4
   alias HologramFeatureTests.Queries.Page5
-
-  @place_script "return globalThis.Hologram.durability.cursor();"
+  alias HologramFeatureTests.Queries.Page6
 
   # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
   # reaches the operations log they read, so they drain before the tables empty. The tables
@@ -22,7 +22,7 @@ defmodule HologramFeatureTests.QueriesTest do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Product, Review, Ticket], ", ", fn entity_type ->
+      Enum.map_join([Booking, Product, Review, Ticket], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -155,24 +155,31 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#local_alternatives"), ~r/^alpha,charlie,delta$/)
   end
 
-  # The place the client greets a stream with is held once a fill has declared the local database
-  # complete, so polling for it is how a test waits for a whole fill to have landed. Raising rather
-  # than returning: the click it gates would otherwise read the rows the render carried.
-  defp await_local_fill(session, attempts_left \\ 100)
+  # The bookings checking out before they check in - bravo and delta. The browser renders the
+  # list again from its own rows once they land, so the page the server sent is read as well: it
+  # carries the answer the database gave.
+  feature "renders a filter comparing two attributes", %{session: session} do
+    seed_bookings()
 
-  defp await_local_fill(session, 0) do
-    raise Wallaby.ExpectationNotMetError,
-          "Timed out waiting for the local database to fill, the client holds place " <>
-            inspect(script_result(session, @place_script))
+    session
+    |> visit(Page6)
+    |> assert_text(css("#reversed_bookings"), ~r/^bravo,delta$/)
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/6")
+
+    assert html =~ ~r{<strong id="reversed_bookings"><code>bravo,delta</code></strong>}
   end
 
-  defp await_local_fill(session, attempts_left) do
-    if script_result(session, @place_script) do
-      session
-    else
-      Process.sleep(50)
-      await_local_fill(session, attempts_left - 1)
-    end
+  # The bookings with as many guests as places or more - bravo over, charlie at capacity. The
+  # comparison is one no rendered list makes, so the answer can only have come from the local rows.
+  feature "runs a filter comparing two attributes over local data", %{session: session} do
+    seed_bookings()
+
+    session
+    |> visit(Page6)
+    |> await_local_fill()
+    |> click(button("Read overbooked locally"))
+    |> assert_text(css("#local_overbooked"), ~r/^bravo,charlie$/)
   end
 
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split

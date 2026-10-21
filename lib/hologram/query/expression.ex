@@ -17,7 +17,7 @@ defmodule Hologram.Query.Expression do
   # of the vocabulary is shared, so the two lowerings are one, told apart by these.
   @condition_names %{
     kind: :condition,
-    operand: "a literal, user_id() or a pinned expression",
+    operand: "a literal, an attribute, user_id() or a pinned expression",
     row: "the entity",
     shapes:
       "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
@@ -26,7 +26,7 @@ defmodule Hologram.Query.Expression do
 
   @filter_names %{
     kind: :filter,
-    operand: "a literal or a pinned expression",
+    operand: "a literal, an attribute or a pinned expression",
     row: "the queried entity",
     shapes:
       "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
@@ -34,6 +34,8 @@ defmodule Hologram.Query.Expression do
   }
 
   @inclusion_names %{stage: "include", names: "a relationship", spelled: "a bare name or a path"}
+
+  @keyword_value_description "a keyword predicate value is a literal or a pinned expression"
 
   @ordering_names %{stage: "order_by", names: "an attribute", spelled: "a bare name"}
 
@@ -71,13 +73,14 @@ defmodule Hologram.Query.Expression do
   `Hologram.Query.Stage.predicate_triples!/2` takes: a keyword list of attribute names and operator
   tuples, or the pinned expression itself.
 
-  Accepts a pinned expression (`^predicates`), a comparison of a bare attribute name with a
-  literal, `user_id()` or a pinned value (`==`, `!=`, `<`, `<=`, `>`, `>=`), membership in a list
-  literal, a range literal or a pinned expression (`in`), negated membership in a list literal or a
-  pinned expression (`not in`), comparisons and memberships joined with `and`, and alternatives
-  joined with `or`, `and` binding tighter and parentheses grouping. A chain of `or`s lowers to one
-  `{:or, alternatives}` entry, each alternative the keyword list its side lowers to. `user_id()`
-  lowers to the actor sentinel, `{:actor}`.
+  Accepts a pinned expression (`^predicates`), a comparison of a bare attribute name with a literal,
+  another bare attribute name, `user_id()` or a pinned value (`==`, `!=`, `<`, `<=`, `>`, `>=`),
+  membership in a list literal, a range literal or a pinned expression (`in`), negated membership in
+  a list literal or a pinned expression (`not in`), comparisons and memberships joined with `and`,
+  and alternatives joined with `or`, `and` binding tighter and parentheses grouping. A chain of
+  `or`s lowers to one `{:or, alternatives}` entry, each alternative the keyword list its side lowers
+  to. `user_id()` lowers to the actor sentinel, `{:actor}`, and a bare name on the right side of a
+  comparison to an attribute operand, `{:attribute, name}` - another attribute of the same row.
 
   Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
@@ -191,11 +194,13 @@ defmodule Hologram.Query.Expression do
 
   Accepts a pinned expression (`^predicates`), a keyword list of equalities whose values are
   literals or pinned (`project_id: ^project_id, status: :todo`), a comparison of a bare attribute
-  name with a literal or a pinned value (`==`, `!=`, `<`, `<=`, `>`, `>=`), membership in a list
-  literal, a range literal or a pinned expression (`in`), negated membership in a list literal or
-  a pinned expression (`not in`), comparisons and memberships joined with `and`, and alternatives
-  joined with `or`, `and` binding tighter and parentheses grouping. A chain of `or`s lowers to one
-  `{:or, alternatives}` entry, each alternative the keyword list its side lowers to.
+  name with a literal, another bare attribute name or a pinned value (`==`, `!=`, `<`, `<=`, `>`,
+  `>=`), membership in a list literal, a range literal or a pinned expression (`in`), negated
+  membership in a list literal or a pinned expression (`not in`), comparisons and memberships joined
+  with `and`, and alternatives joined with `or`, `and` binding tighter and parentheses grouping. A
+  chain of `or`s lowers to one `{:or, alternatives}` entry, each alternative the keyword list its
+  side lowers to. A bare name on the right side of a comparison lowers to an attribute operand,
+  `{:attribute, name}` - another attribute of the same row.
 
   Raises Hologram.CompileError, located at the offending node, on a keyword list or a pinned list as
   one side of `and` or `or`, and on anything else.
@@ -276,7 +281,22 @@ defmodule Hologram.Query.Expression do
     )
   end
 
-  defp bare_name?({name, _meta, context}) when is_atom(name) and is_atom(context), do: true
+  # A bare name as a keyword value is a forgotten pin or a comparison with another attribute, which
+  # is an expression - the hint names the expression, unless the name is the key's own, where only
+  # the pin can be meant.
+  defp attribute_comparison_hint(key, {key, _meta, _context}), do: ""
+
+  defp attribute_comparison_hint(key, value) do
+    ", and a comparison with an attribute is written as an expression: #{Macro.to_string({:==, [], [{key, [], nil}, value]})}"
+  end
+
+  # __MODULE__, __DIR__ and the other special forms have the shape of a bare name, but they name
+  # the surrounding code rather than the entity, so they are values to pin.
+  defp bare_name?({name, _meta, context}) when is_atom(name) and is_atom(context) do
+    name_string = Atom.to_string(name)
+
+    not (String.starts_with?(name_string, "__") and String.ends_with?(name_string, "__"))
+  end
 
   defp bare_name?(_ast), do: false
 
@@ -289,6 +309,17 @@ defmodule Hologram.Query.Expression do
   defp comparison_operand!({:user_id, _meta, context} = ast, %{kind: :condition}, env)
        when is_atom(context) do
     compile_error!("paren-less user_id - did you mean user_id()?", ast, env)
+  end
+
+  # Inside a query a bare name is something the entity declares, so on the right side of a
+  # comparison it is another attribute of the same row. Whether the entity declares it, and whether
+  # the two compare, is the stage's to judge.
+  defp comparison_operand!({name, _meta, _context} = ast, names, env) do
+    if bare_name?(ast) do
+      {:attribute, name}
+    else
+      value!(ast, "a comparison operand is #{names.operand}", names, env)
+    end
   end
 
   defp comparison_operand!(ast, names, env) do
@@ -353,10 +384,13 @@ defmodule Hologram.Query.Expression do
     "a comparison, a membership or a range is written as an expression"
   end
 
-  @spec forgotten_pin!(Macro.t(), map, Macro.Env.t()) :: no_return
-  defp forgotten_pin!({name, _meta, _context} = ast, names, env) do
+  # A bare name where only a value goes - a membership element, a range bound, a keyword value - is
+  # most likely a variable missing its pin. The given fix, when there is one, names what the bare
+  # name can mean there instead.
+  @spec forgotten_pin!(Macro.t(), String.t(), map, Macro.Env.t(), String.t()) :: no_return
+  defp forgotten_pin!({name, _meta, _context} = ast, description, names, env, fix) do
     compile_error!(
-      "#{name} reads as an attribute of #{names.row}, and an attribute is compared only with a value - a value from the surrounding code is pinned: ^#{name}",
+      "#{name} reads as an attribute of #{names.row}, and #{description} - a value from the surrounding code is pinned: ^#{name}#{fix}",
       ast,
       env
     )
@@ -475,7 +509,13 @@ defmodule Hologram.Query.Expression do
         value
 
       bare_name?(value) ->
-        forgotten_pin!(value, @filter_names, env)
+        forgotten_pin!(
+          value,
+          @keyword_value_description,
+          @filter_names,
+          env,
+          attribute_comparison_hint(key, value)
+        )
 
       data_form?(value) ->
         compile_error!(
@@ -485,11 +525,7 @@ defmodule Hologram.Query.Expression do
         )
 
       true ->
-        operand_error!(
-          "a keyword predicate value is a literal or a pinned expression",
-          value,
-          env
-        )
+        operand_error!(@keyword_value_description, value, env)
     end
   end
 
@@ -741,7 +777,7 @@ defmodule Hologram.Query.Expression do
   defp value!(ast, description, names, env) do
     cond do
       literal?(ast) -> ast
-      bare_name?(ast) -> forgotten_pin!(ast, names, env)
+      bare_name?(ast) -> forgotten_pin!(ast, description, names, env, "")
       true -> operand_error!(description, ast, env)
     end
   end

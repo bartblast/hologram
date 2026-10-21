@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.DurabilityPage
   alias HologramFeatureTests.Entities.Account
+  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Item
@@ -49,6 +50,7 @@ defmodule HologramFeatureTests.DurabilityTest do
       Enum.map_join(
         [
           Account,
+          Booking,
           Document,
           Folder,
           Item,

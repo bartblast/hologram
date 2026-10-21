@@ -69,6 +69,13 @@ defmodule Hologram.DB.QueryCompiler do
   missing values. Ordering comparisons match actual values only. Param slots never
   bind nil at runtime - a sometimes-nil variable branches into an explicit nil
   predicate in code.
+
+  A comparison between two attributes of the row binds no slot. Equality compiles to
+  `IS NOT DISTINCT FROM` and inequality to `IS DISTINCT FROM`, so nil keeps its meaning,
+  and an ordering comparison compiles to a plain column comparison, matching no row with
+  either side missing. Two strings compare their sort-key pairs, `("a_$sort", "a") <
+  ("b_$sort", "b")`, and an enum operand is cast to the compared attribute's enum type by
+  label.
   """
   @spec compile(Query.t(), %{module => %{atom => any}}, %{atom => any} | nil) ::
           %{atom => any}
@@ -168,6 +175,20 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
 
+  # Every enum attribute is a type of its own, and Postgres compares no two of them - so the other
+  # column is cast to the compared column's type, by label, and the two compare in the declared
+  # order they share.
+  defp attribute_operand_sql(entity_mapping, name, other) do
+    column = fetch_column!(entity_mapping, name)
+    quoted_other = quoted_column_name(entity_mapping, other)
+
+    if column.type == :enum do
+      "#{quoted_other}::text::#{enum_type(column)}"
+    else
+      quoted_other
+    end
+  end
+
   # The actor leaf binds one reserved slot for the whole statement - every reference to it
   # reuses that placeholder, so the caller binds the session's user exactly once.
   defp bind_slot({:actor}, _column, reversed_params) do
@@ -229,6 +250,45 @@ defmodule Hologram.DB.QueryCompiler do
       end)
 
     {group_condition(rendered), new_params}
+  end
+
+  # Two columns of one row. SQL's = and != are unknown when either side is NULL, so the equality
+  # family uses the DISTINCT forms, which read nil as a value - the meaning a literal comparison
+  # has. An ordering comparison is unknown over a NULL on its own, which is the meaning it has too.
+  defp condition({name, :==, {:attribute, other}}, entity_mapping, reversed_params) do
+    condition_sql =
+      "#{quoted_column_name(entity_mapping, name)} IS NOT DISTINCT FROM " <>
+        attribute_operand_sql(entity_mapping, name, other)
+
+    {condition_sql, reversed_params}
+  end
+
+  defp condition({name, :!=, {:attribute, other}}, entity_mapping, reversed_params) do
+    condition_sql =
+      "#{quoted_column_name(entity_mapping, name)} IS DISTINCT FROM " <>
+        attribute_operand_sql(entity_mapping, name, other)
+
+    {condition_sql, reversed_params}
+  end
+
+  # Two strings compare by the pairs their ordering sorts by, each side its own key and value, so
+  # the comparison agrees with ORDER BY on both columns.
+  defp condition({name, operator, {:attribute, other}}, entity_mapping, reversed_params) do
+    condition_sql =
+      case companion_column(entity_mapping, name) do
+        nil ->
+          "#{quoted_column_name(entity_mapping, name)} #{operator} " <>
+            attribute_operand_sql(entity_mapping, name, other)
+
+        companion ->
+          other_companion = companion_column(entity_mapping, other)
+
+          "(#{Mapper.quote_identifier(companion.name)}, #{quoted_column_name(entity_mapping, name)}) " <>
+            "#{operator} " <>
+            "(#{Mapper.quote_identifier(other_companion.name)}, #{quoted_column_name(entity_mapping, other)})"
+      end
+
+    {condition_sql, reversed_params}
   end
 
   defp condition({name, :==, nil}, entity_mapping, reversed_params) do

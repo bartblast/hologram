@@ -20,7 +20,8 @@ defmodule Hologram.Query.Window do
   applied to the download in any case.
 
   A predicate comparing to a LITERAL stays: an app whose only query asks for todo projects is
-  saying the others are never needed.
+  saying the others are never needed. So does one comparing two ATTRIBUTES of the row
+  (`end_date < start_date`) - it says something about the row whatever value anything takes.
 
   A DISJUNCTION cannot drop a predicate the same way. Dropping a conjunct widens what arrives,
   which is safe - dropping an alternative narrows it, and `status == :todo or owner_id == ^user_id`
