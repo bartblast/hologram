@@ -5,5 +5,5 @@ defmodule Hologram.Test.Fixtures.Entity.Module14 do
   attribute :email, :string
   attribute :password_hash, :string, optional: true, server_only: true
 
-  allow :read, id: user_id()
+  allow :read, when: id == user_id()
 end

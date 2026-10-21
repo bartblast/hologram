@@ -59,6 +59,7 @@ defmodule Hologram.Policy do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy.Expression
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -141,7 +142,7 @@ defmodule Hologram.Policy do
   """
   @spec allow(atom, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
-    spec = Entity.replace_actor_leaves!(spec, __CALLER__.module)
+    spec = Expression.spec(operation, spec, __CALLER__)
 
     quote do
       operation = unquote(operation)

@@ -139,7 +139,7 @@ defmodule Hologram.PolicyTest do
       defmodule ActorPolicyFixture do
         use Hologram.Policy
 
-        allow :archive, id: user_id()
+        allow :archive, when: id == user_id()
       end
 
       defmodule ActorEntityFixture do
@@ -623,7 +623,7 @@ defmodule Hologram.PolicyTest do
       defmodule TakenOperationPolicyFixture do
         use Hologram.Policy
 
-        allow :publish, public: true
+        allow :publish, when: public == true
       end
 
       defmodule TakenOperationEntityFixture do

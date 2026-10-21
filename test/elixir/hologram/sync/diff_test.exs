@@ -575,7 +575,7 @@ defmodule Hologram.Sync.DiffTest do
     end
   end
 
-  # Module5's :read is `via: :parent` at Policy.Module1, whose own :read reads `public` - so its
+  # Module5's :read is `via: parent` at Policy.Module1, whose own :read reads `public` - so its
   # only relationship_attributes edge is {[:parent], PolicyModule1, [:public]}, a ONE-hop chain.
   # No two-hop test lives here: no fixture delegates :read twice, `Auth.chain_target_id/2` is
   # tested to two hops in auth_test.exs, and reach/4 hands the chain through untouched. No scrub

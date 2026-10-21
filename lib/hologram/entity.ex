@@ -6,6 +6,7 @@ defmodule Hologram.Entity do
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
   alias Hologram.Job
+  alias Hologram.Policy.Expression, as: PolicyExpression
   alias Hologram.Reflection
 
   @system_attributes [
@@ -155,12 +156,28 @@ defmodule Hologram.Entity do
 
   @doc """
   Accumulates the given policy definition in __policies__ module attribute.
-  A policy line grants the given operation when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the operation unconditionally.
-  A `user_id()` call in a predicate value position stands for the acting user's entity id and is stored as the actor sentinel.
+
+  An allow line grants the given operation, and every key on it is an option:
+
+    * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
+      role held on the row a to-one relationship points at as `{role, relationship}`
+      (`{:editor, project}`), a role held on a whole entity type as `{role, entity type}`
+      (`{:moderator, MyApp.Post}`), or a list of them, any one of which suffices.
+    * `via:` - a to-one relationship, written as a bare name (`via: project`): the operation is
+      granted when the same operation is granted on the related row.
+    * `when:` - a condition on the row: `when: priority < 3 and archived == false`. A bare name is
+      an attribute of the row, `^` marks a value from the surrounding code (`^@max_priority`),
+      literals need nothing, and `user_id()` is the acting user's entity id. The operators are `==`,
+      `!=`, `<`, `<=`, `>`, `>=`, `in`, `not in` and `and`. A condition built from data goes in pinned,
+      as a keyword list of predicates: `when: ^predicates`.
+
+  The options on one line must all hold at once, and several lines for one operation are
+  alternatives.
+  A line with no options grants the operation unconditionally.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
-    spec = replace_actor_leaves!(spec, __CALLER__.module)
+    spec = PolicyExpression.spec(operation, spec, __CALLER__)
 
     quote do
       Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec), __MODULE__)
@@ -265,8 +282,7 @@ defmodule Hologram.Entity do
     Validator.validate_allow!(module, operation, spec)
 
     policy =
-      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via),
-       Keyword.drop(spec, [:to, :via])}
+      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, [])}
 
     Module.put_attribute(module, :__policies__, policy)
     Module.put_attribute(module, :__policy_sources__, source)
@@ -393,26 +409,6 @@ defmodule Hologram.Entity do
 
       [{name, kept_opts} | declarations]
     end
-  end
-
-  # The replacement happens on the AST, before the spec is evaluated in the module body -
-  # a real user_id() call would be an undefined function there. Policies have no variable
-  # scope, so a paren-less user_id can only be the call written without its parens.
-  @doc false
-  @spec replace_actor_leaves!(Macro.t(), module) :: Macro.t()
-  def replace_actor_leaves!(spec, module) do
-    Macro.prewalk(spec, fn
-      {:user_id, _meta, []} ->
-        Macro.escape({:actor})
-
-      {:user_id, _meta, context} when is_atom(context) ->
-        raise Hologram.CompileError,
-          message:
-            "paren-less user_id in a policy in #{inspect(module)} - did you mean user_id()?"
-
-      node ->
-        node
-    end)
   end
 
   @doc false

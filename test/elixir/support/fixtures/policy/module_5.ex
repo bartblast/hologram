@@ -6,5 +6,5 @@ defmodule Hologram.Test.Fixtures.Policy.Module5 do
 
   relationship :parent, Module1, optional: true
 
-  allow :read, via: :parent
+  allow :read, via: parent
 end

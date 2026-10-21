@@ -15,6 +15,8 @@ defmodule Hologram.Entity.Validator do
   @max_integer 9_223_372_036_854_775_807
   @min_integer -9_223_372_036_854_775_808
 
+  # The allow options whose nil value reaches the declaration, to be refused there - a when: nil is
+  # refused where it is written, as no condition.
   @policy_option_names [:to, :via]
 
   @reserved_names [:created_at, :id, :updated_at]
@@ -210,8 +212,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given policy declaration at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (operation, spec shape).
-  Predicates and the to and via options are validated separately, at the whole-model point - they reference attributes, roles and relationships of entity types that may not be compiled yet.
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (operation, spec shape, the pinned when value's shape).
+  The condition and the to and via options are validated separately, at the whole-model point - they reference attributes, roles and relationships of entity types that may not be compiled yet.
   """
   @spec validate_allow!(module, Entity.operation(), T.opts()) :: :ok
   def validate_allow!(module, operation, spec) do
@@ -220,6 +222,7 @@ defmodule Hologram.Entity.Validator do
 
     Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
     validate_to_opt_shape!(module, operation, spec)
+    validate_when_opt_shape!(module, operation, spec)
 
     :ok
   end
@@ -819,7 +822,6 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_attribute_name!(module, name) do
     validate_declaration_name!(module, "attribute", name)
-    validate_policy_option_name!(module, name)
   end
 
   defp validate_attribute_opts!(module, name, opts) do
@@ -1214,18 +1216,6 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  # On an allow line every key that is not an option is a predicate naming an attribute, so an
-  # attribute named after an option could never be reached in predicate position.
-  defp validate_policy_option_name!(module, name) do
-    if name in @policy_option_names do
-      policy_option_names = Enum.map_join(@policy_option_names, " and ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "reserved name #{inspect(name)} used for attribute in #{inspect(module)} - #{policy_option_names} are allow line options and can't be attribute names"
-    end
-  end
-
   # An option written as nil is indistinguishable from an absent one once the declaration is
   # stored, and both compile to a rule granting through no reference at all - which is what a
   # bare allow line means, so the mistake would silently widen the rule.
@@ -1405,6 +1395,22 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # A written-out condition is lowered to a keyword list where it is written, so only a pinned one
+  # reaches here in another shape - and the rule builders take it apart as one.
+  defp validate_when_opt_shape!(module, operation, spec) do
+    case Keyword.fetch(spec, :when) do
+      {:ok, condition} ->
+        if not when_value_valid?(condition) do
+          raise Hologram.CompileError,
+            message:
+              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a keyword list of predicates"
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
   defp value_errors(name, value, :enum, opts) do
     values = Keyword.fetch!(opts, :values)
 
@@ -1447,4 +1453,13 @@ defmodule Hologram.Entity.Validator do
         "  * attribute #{inspect(name)} #{requirement_description(reason)}"
     end
   end
+
+  defp when_value_valid?(condition) when is_list(condition) do
+    Enum.all?(condition, fn
+      {name, _value} when is_atom(name) -> true
+      _entry -> false
+    end)
+  end
+
+  defp when_value_valid?(_condition), do: false
 end

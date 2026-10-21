@@ -180,6 +180,24 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec("[to: {:editor, :project}]") end
     end
 
+    test "raises on a repeated condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: allow :update takes the when option once - join the conditions with and",
+                   fn -> lower_spec("[when: a == 1, when: b == 2]") end
+    end
+
+    test "raises on a repeated delegation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: allow :update takes the via option once",
+                   fn -> lower_spec("[via: project, via: folder]") end
+    end
+
+    test "raises on a repeated grant reference option" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: allow :update takes the to option once - list the role references in one to option",
+                   fn -> lower_spec("[to: :editor, to: :owner]") end
+    end
+
     test "raises on a role written as a bare name" do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: to names a role with an atom, got: editor - write :editor",

@@ -15,6 +15,8 @@ defmodule Hologram.Policy.Expression do
 
   @delegation_names %{stage: "via", names: "a relationship", spelled: "a bare name"}
 
+  @option_names [:to, :via, :when]
+
   @doc """
   Lowers the options argument of an `allow` line, written for the given operation, to the AST of
   the keyword list `Hologram.Entity.__put_policy__/4` takes.
@@ -28,13 +30,21 @@ defmodule Hologram.Policy.Expression do
   element that is not a keyword entry pass through for the declaration to refuse.
 
   Raises Hologram.CompileError, located at the offending node, on options not written in place, on
+  an option written twice (only one would be read, so the line would grant more than it says), on
   an unknown option (naming the condition it can mean when its value is an equality operand), on a
   grant reference with the scope first or a relationship written as an atom, on a role written as
   a bare name, on a delegation written as an atom or as a path, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
-    Enum.map(spec, &option!(&1, operation, env))
+    {options, _seen_keys} =
+      Enum.map_reduce(spec, MapSet.new(), fn element, seen_keys ->
+        seen_keys = track_option!(element, seen_keys, operation, env)
+
+        {option!(element, operation, env), seen_keys}
+      end)
+
+    options
   end
 
   def spec(operation, spec, env) do
@@ -198,6 +208,22 @@ defmodule Hologram.Policy.Expression do
     end
   end
 
+  @spec repeated_option!(atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
+  defp repeated_option!(key, value, operation, env) do
+    fix =
+      case key do
+        :to -> " - list the role references in one to option"
+        :via -> ""
+        :when -> " - join the conditions with and"
+      end
+
+    QueryExpression.compile_error!(
+      "allow #{Macro.to_string(operation)} takes the #{key} option once#{fix}",
+      value,
+      env
+    )
+  end
+
   defp role?({:^, _meta, [_expr]}), do: true
 
   defp role?(role), do: name_atom?(role)
@@ -211,6 +237,18 @@ defmodule Hologram.Policy.Expression do
   defp scope_first?({first, second}) do
     (bare_name?(first) or module?(first)) and name_atom?(second)
   end
+
+  # Only the first of a repeated option would be read, so the line would grant more than it says -
+  # a second condition dropped is a wider rule. An unknown key is refused on its first occurrence.
+  defp track_option!({key, value}, seen_keys, operation, env) when key in @option_names do
+    if MapSet.member?(seen_keys, key) do
+      repeated_option!(key, value, operation, env)
+    else
+      MapSet.put(seen_keys, key)
+    end
+  end
+
+  defp track_option!(_element, seen_keys, _operation, _env), do: seen_keys
 
   @spec unknown_option!(atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
   defp unknown_option!(key, value, operation, env) do
