@@ -176,7 +176,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Module14.new()
         |> DB.create!()
 
-      Auth.grant_role(user, private_entity, :viewer)
+      Auth.grant_role(user, :viewer, private_entity)
 
       html = render_page_html(Module107, %Server{user_id: user.id})
 
@@ -421,7 +421,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> PolicyEntity.new()
         |> create()
 
-      Auth.grant_role(user, entity, :viewer)
+      Auth.grant_role(user, :viewer, entity)
 
       html = render_grants_page_html(entity.id, %Server{user_id: user.id})
 

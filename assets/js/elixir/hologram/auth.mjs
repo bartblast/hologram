@@ -348,7 +348,7 @@ const Elixir_Hologram_Auth = {
   // that id answers :ok and writes nothing, which is the server's idempotency mirrored where the
   // client can see it. The server replays every check when the batch lands and a refusal rolls
   // the row back.
-  "grant_role/3": (userOrId, entity, role) => {
+  "grant_role/3": (userOrId, role, entity) => {
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "granted");
     const roleName = validateDeclaredRole(entityType, role);
@@ -406,7 +406,7 @@ const Elixir_Hologram_Auth = {
   // A row the client does not hold answers :ok and writes nothing, as the server's own no-op does:
   // whoever may revoke a grant may read it, and everyone reads their own, so "not held" is "not
   // there" for anyone the gate lets through. The server replays the gate when the batch lands.
-  "revoke_role/3": (userOrId, entity, role) => {
+  "revoke_role/3": (userOrId, role, entity) => {
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "revoked");
     const roleName = validateDeclaredRole(entityType, role);

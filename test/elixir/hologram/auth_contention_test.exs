@@ -88,7 +88,7 @@ defmodule Hologram.AuthContentionTest do
   # the gated write's gate rests on.
   defp start_revoker(scratch_opts, actor, resource) do
     Task.async(fn ->
-      on_own_session(scratch_opts, fn -> revoke_role(actor, resource, :owner) end)
+      on_own_session(scratch_opts, fn -> revoke_role(actor, :owner, resource) end)
     end)
   end
 
@@ -119,7 +119,7 @@ defmodule Hologram.AuthContentionTest do
     bob = create_user(scratch, "bob@example.com")
     resource = route(scratch, fn -> DB.create!(Module1.new()) end)
 
-    route(scratch, fn -> grant_role(alice, resource, :owner) end)
+    route(scratch, fn -> grant_role(alice, :owner, resource) end)
 
     [alice: alice, bob: bob, resource: resource]
   end
@@ -133,7 +133,7 @@ defmodule Hologram.AuthContentionTest do
   } do
     # The holder's uncommitted row is the one the gated grant derives the same id for, so the
     # gated insert waits on it - parked past its gate, before its write.
-    grant = fn -> grant_role(bob, resource, :owner) end
+    grant = fn -> grant_role(bob, :owner, resource) end
     holder = start_holder(scratch_opts, grant, self())
     assert_receive :holding, 5_000
 
@@ -159,11 +159,11 @@ defmodule Hologram.AuthContentionTest do
     scratch: scratch,
     scratch_opts: scratch_opts
   } do
-    route(scratch, fn -> grant_role(bob, resource, :owner) end)
+    route(scratch, fn -> grant_role(bob, :owner, resource) end)
 
     # The holder's uncommitted deletion is of the row the gated revocation locks next, so the
     # gated revocation waits on it - parked past its gate, before its write.
-    revoke = fn -> revoke_role(bob, resource, :owner) end
+    revoke = fn -> revoke_role(bob, :owner, resource) end
     holder = start_holder(scratch_opts, revoke, self())
     assert_receive :holding, 5_000
 

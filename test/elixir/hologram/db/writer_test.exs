@@ -83,7 +83,7 @@ defmodule Hologram.DB.WriterTest do
 
     test "evaluates a type-wide role's rule for the acting user" do
       user = create_user("admin@example.com")
-      Auth.grant_role(user, Module2, :admin)
+      Auth.grant_role(user, :admin, Module2)
 
       entity = authorize(Module2.new(), :update)
 
@@ -240,7 +240,7 @@ defmodule Hologram.DB.WriterTest do
       assert DB.read(Module1, entity.id) != nil
 
       # allow :delete, to: {:admin, parent} - the grant is on the PARENT, not the row.
-      Auth.grant_role(user, parent, :admin)
+      Auth.grant_role(user, :admin, parent)
 
       assert as_user(user, fn -> delete(entity) end) == :ok
       assert DB.read(Module1, entity.id) == nil
@@ -260,7 +260,7 @@ defmodule Hologram.DB.WriterTest do
 
       # allow :delete, to: {:admin, parent} - the role is granted on the parent the STRUCT
       # names, while the row has since been moved to a parent the user has no role on.
-      Auth.grant_role(user, granting_parent, :admin)
+      Auth.grant_role(user, :admin, granting_parent)
       EntityOperations.update(Module1, entity.id, parent_id: other_parent.id)
 
       expected_msg =
@@ -347,7 +347,7 @@ defmodule Hologram.DB.WriterTest do
 
       assert DB.read(Module1, entity.id) != nil
 
-      Auth.grant_role(user, parent, :admin)
+      Auth.grant_role(user, :admin, parent)
 
       assert as_user(user, fn -> delete(Module1, entity.id) end) == :ok
       assert DB.read(Module1, entity.id) == nil
@@ -450,7 +450,7 @@ defmodule Hologram.DB.WriterTest do
         |> Module1.new()
         |> DB.create!()
 
-      Auth.grant_role(user, entity, :editor)
+      Auth.grant_role(user, :editor, entity)
 
       assert as_user(user, fn ->
                entity
@@ -693,7 +693,7 @@ defmodule Hologram.DB.WriterTest do
 
       assert DB.read(Module1, entity.id).public == false
 
-      Auth.grant_role(user, entity, :editor)
+      Auth.grant_role(user, :editor, entity)
 
       assert as_user(user, fn -> update(Module1, entity.id, public: true) end) == :ok
       assert DB.read(Module1, entity.id).public == true

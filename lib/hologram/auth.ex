@@ -168,11 +168,11 @@ defmodule Hologram.Auth do
   end
 
   @doc """
-  Grants the given role on the given entity to the given user and returns :ok.
+  Grants the given role to the given user on the given entity and returns :ok.
 
-  Takes the user entity or a bare user id. An entity struct grants the role on that row, an
-  entity type module grants it on every row of the type. The role must be declared on the
-  entity's own type. Granting a role the user already holds on the same entity keeps the
+  Takes the user entity or a bare user id, the role name as the entity's own type declares it,
+  and the entity: an entity struct grants the role on that row, an entity type module grants it
+  on every row of the type. Granting a role the user already holds on the same entity keeps the
   original grant, metadata included.
 
   An acting user must be allowed to grant the role by the entity type's allow :grant_role rules,
@@ -182,8 +182,8 @@ defmodule Hologram.Auth do
   trusted-only. The gate's answer holds until the grant lands: a revocation of the role it rests
   on waits for the grant to commit rather than slipping in between the two.
   """
-  @spec grant_role(struct | String.t(), struct | module, atom) :: :ok
-  def grant_role(user_or_id, entity, role) do
+  @spec grant_role(struct | String.t(), atom, struct | module) :: :ok
+  def grant_role(user_or_id, role, entity) do
     user_id = validate_user_id!(user_or_id)
     {entity_type, entity_id} = entity_reference(entity)
 
@@ -267,10 +267,10 @@ defmodule Hologram.Auth do
   end
 
   @doc """
-  Revokes the given role on the given entity from the given user and returns :ok.
+  Revokes the given role from the given user on the given entity and returns :ok.
 
-  Takes the user entity or a bare user id, and an entity struct or entity type module for
-  the entity. Revoking a role the user does not hold is a no-op.
+  Takes the user entity or a bare user id, the role name, and an entity struct or entity type
+  module for the entity. Revoking a role the user does not hold is a no-op.
 
   Under an acting user: revoking one's own role is always allowed, which is how a member leaves
   an entity - revoking someone else's requires being allowed to revoke that role by the entity
@@ -282,8 +282,8 @@ defmodule Hologram.Auth do
   until the revocation lands: a revocation of the role it rests on waits for this one to commit
   rather than slipping in between the two.
   """
-  @spec revoke_role(struct | String.t(), struct | module, atom) :: :ok
-  def revoke_role(user_or_id, entity, role) do
+  @spec revoke_role(struct | String.t(), atom, struct | module) :: :ok
+  def revoke_role(user_or_id, role, entity) do
     user_id = validate_user_id!(user_or_id)
     {entity_type, entity_id} = entity_reference(entity)
 
