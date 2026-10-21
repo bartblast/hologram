@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ticket
@@ -11,6 +12,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page3
   alias HologramFeatureTests.Queries.Page4
   alias HologramFeatureTests.Queries.Page5
+  alias HologramFeatureTests.Queries.Page6
 
   @place_script "return globalThis.Hologram.durability.cursor();"
 
@@ -22,7 +24,7 @@ defmodule HologramFeatureTests.QueriesTest do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Product, Review, Ticket], ", ", fn entity_type ->
+      Enum.map_join([Booking, Product, Review, Ticket], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -155,6 +157,33 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#local_alternatives"), ~r/^alpha,charlie,delta$/)
   end
 
+  # The bookings checking out before they check in - bravo and delta. The browser renders the
+  # list again from its own rows once they land, so the page the server sent is read as well: it
+  # carries the answer the database gave.
+  feature "renders a filter comparing two attributes", %{session: session} do
+    seed_bookings()
+
+    session
+    |> visit(Page6)
+    |> assert_text(css("#reversed_bookings"), ~r/^bravo,delta$/)
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/6")
+
+    assert html =~ ~r{<strong id="reversed_bookings"><code>bravo,delta</code></strong>}
+  end
+
+  # The bookings with as many guests as places or more - bravo over, charlie at capacity. The
+  # comparison is one no rendered list makes, so the answer can only have come from the local rows.
+  feature "runs a filter comparing two attributes over local data", %{session: session} do
+    seed_bookings()
+
+    session
+    |> visit(Page6)
+    |> await_local_fill()
+    |> click(button("Read overbooked locally"))
+    |> assert_text(css("#local_overbooked"), ~r/^bravo,charlie$/)
+  end
+
   # The place the client greets a stream with is held once a fill has declared the local database
   # complete, so polling for it is how a test waits for a whole fill to have landed. Raising rather
   # than returning: the click it gates would otherwise read the rows the render carried.
@@ -173,6 +202,30 @@ defmodule HologramFeatureTests.QueriesTest do
       Process.sleep(50)
       await_local_fill(session, attempts_left - 1)
     end
+  end
+
+  # Each booking answers the two comparisons differently: alpha is neither reversed nor overbooked,
+  # bravo is both, charlie is at capacity on a same-day stay, delta is reversed with room to spare.
+  defp seed_bookings do
+    Enum.each(
+      [
+        {"alpha", ~D[2026-03-01], ~D[2026-03-05], 2, 4},
+        {"bravo", ~D[2026-03-10], ~D[2026-03-08], 5, 4},
+        {"charlie", ~D[2026-04-01], ~D[2026-04-01], 4, 4},
+        {"delta", ~D[2026-05-02], ~D[2026-05-01], 1, 2}
+      ],
+      fn {name, check_in, check_out, guests, capacity} ->
+        %{
+          capacity: capacity,
+          check_in: check_in,
+          check_out: check_out,
+          guests: guests,
+          name: name
+        }
+        |> Booking.new()
+        |> DB.create!()
+      end
+    )
   end
 
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
