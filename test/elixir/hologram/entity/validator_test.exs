@@ -674,7 +674,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option that is neither a role reference nor a list of them" do
       expected_msg =
-        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToOptionFixture do
@@ -689,7 +689,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option list holding a malformed reference" do
       expected_msg =
-        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToListFixture do
@@ -702,7 +702,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects an empty to option list" do
       expected_msg =
-        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule EmptyToListFixture do

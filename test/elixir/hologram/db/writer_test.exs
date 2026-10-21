@@ -239,7 +239,7 @@ defmodule Hologram.DB.WriterTest do
 
       assert DB.read(Module1, entity.id) != nil
 
-      # allow :delete, to: {:parent, :admin} - the grant is on the PARENT, not the row.
+      # allow :delete, to: {:admin, :parent} - the grant is on the PARENT, not the row.
       Auth.grant_role(user, parent, :admin)
 
       assert as_user(user, fn -> delete(entity) end) == :ok
@@ -258,7 +258,7 @@ defmodule Hologram.DB.WriterTest do
         |> Module1.new()
         |> DB.create!()
 
-      # allow :delete, to: {:parent, :admin} - the role is granted on the parent the STRUCT
+      # allow :delete, to: {:admin, :parent} - the role is granted on the parent the STRUCT
       # names, while the row has since been moved to a parent the user has no role on.
       Auth.grant_role(user, granting_parent, :admin)
       EntityOperations.update(Module1, entity.id, parent_id: other_parent.id)

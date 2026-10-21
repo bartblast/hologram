@@ -17,9 +17,9 @@ defmodule Hologram.Test.Fixtures.Policy.Module1 do
   role :viewer
 
   allow :read, public: true
-  allow :read, to: [:viewer, {Module2, :admin}]
+  allow :read, to: [:viewer, {:admin, Module2}]
   allow :update, to: :editor, priority: {:>=, 3}
-  allow :delete, to: {:parent, :admin}
+  allow :delete, to: {:admin, :parent}
   allow :publish, via: :parent
   allow :grant_role, to: :owner
   allow :revoke_role, to: :owner

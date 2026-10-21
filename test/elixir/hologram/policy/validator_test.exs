@@ -85,7 +85,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture13 do
         use Hologram.Entity
 
-        allow :update, to: {Module13, :editor}
+        allow :update, to: {:editor, Module13}
       end
 
       assert validate_model!([Module14, InlinePolicyFixture13], []) == :ok
@@ -97,7 +97,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         role :owner
 
-        allow :update, to: [:owner, {Module13, :editor}]
+        allow :update, to: [:owner, {:editor, Module13}]
       end
 
       assert validate_model!([Module14, InlinePolicyFixture14], []) == :ok
@@ -109,7 +109,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :update, to: {:parent, :editor}
+        allow :update, to: {:editor, :parent}
       end
 
       assert validate_model!([Module14, InlinePolicyFixture17], []) == :ok
@@ -178,7 +178,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture30 do
         use Hologram.Entity
 
-        allow :update, to: {Module13, :editor}
+        allow :update, to: {:editor, Module13}
       end
 
       expected_msg =
@@ -228,11 +228,11 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture15 do
         use Hologram.Entity
 
-        allow :update, to: {Hologram.Reflection, :editor}
+        allow :update, to: {:editor, Hologram.Reflection}
       end
 
       expected_msg =
-        "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
+        "invalid to option {:editor, Hologram.Reflection} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture15], [])
@@ -243,7 +243,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture16 do
         use Hologram.Entity
 
-        allow :update, to: {Module13, :publisher}
+        allow :update, to: {:publisher, Module13}
       end
 
       expected_msg =
@@ -260,7 +260,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :update, to: {:project, :editor}
+        allow :update, to: {:editor, :project}
       end
 
       expected_msg =
@@ -277,11 +277,11 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :children, [Module13]
 
-        allow :update, to: {:children, :editor}
+        allow :update, to: {:editor, :children}
       end
 
       expected_msg =
-        "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture19 - relationship :children is to-many, but a role reference requires a to-one relationship"
+        "invalid to option {:editor, :children} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture19 - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture19], [])
@@ -294,7 +294,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module13
 
-        allow :update, to: {:parent, :publisher}
+        allow :update, to: {:publisher, :parent}
       end
 
       expected_msg =
@@ -537,7 +537,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenTypeReferencePolicy do
         use Hologram.Policy
 
-        allow :update, to: {Hologram.Reflection, :editor}
+        allow :update, to: {:editor, Hologram.Reflection}
       end
 
       defmodule TakenTypeReferenceEntity do
@@ -547,7 +547,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenTypeReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenTypeReferencePolicy - Hologram.Reflection is not an entity type module"
+        "invalid to option {:editor, Hologram.Reflection} for allow :update in Hologram.Policy.ValidatorTest.TakenTypeReferenceEntity, taken from Hologram.Policy.ValidatorTest.TakenTypeReferencePolicy - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenTypeReferenceEntity], [])
@@ -558,7 +558,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenTargetRolePolicy do
         use Hologram.Policy
 
-        allow :update, to: {Hologram.Test.Fixtures.Entity.Module13, :publisher}
+        allow :update, to: {:publisher, Hologram.Test.Fixtures.Entity.Module13}
       end
 
       defmodule TakenTargetRoleEntity do
@@ -579,7 +579,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenUnknownRelationshipPolicy do
         use Hologram.Policy
 
-        allow :update, to: {:project, :editor}
+        allow :update, to: {:editor, :project}
       end
 
       defmodule TakenUnknownRelationshipEntity do
@@ -602,7 +602,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenToManyPolicy do
         use Hologram.Policy
 
-        allow :update, to: {:children, :editor}
+        allow :update, to: {:editor, :children}
       end
 
       defmodule TakenToManyEntity do
@@ -614,7 +614,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid to option {:children, :editor} for allow :update in Hologram.Policy.ValidatorTest.TakenToManyEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyPolicy - relationship :children is to-many, but a role reference requires a to-one relationship"
+        "invalid to option {:editor, :children} for allow :update in Hologram.Policy.ValidatorTest.TakenToManyEntity, taken from Hologram.Policy.ValidatorTest.TakenToManyPolicy - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenToManyEntity], [])
@@ -790,7 +790,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenRelationshipGatePolicy do
         use Hologram.Policy
 
-        allow :grant_role, to: {:parent, :admin}
+        allow :grant_role, to: {:admin, :parent}
       end
 
       defmodule TakenRelationshipGateEntity do
@@ -802,7 +802,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.TakenRelationshipGateEntity, taken from Hologram.Policy.ValidatorTest.TakenRelationshipGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+        "invalid to option {:admin, :parent} for allow :grant_role in Hologram.Policy.ValidatorTest.TakenRelationshipGateEntity, taken from Hologram.Policy.ValidatorTest.TakenRelationshipGatePolicy - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenRelationshipGateEntity], [])
@@ -1021,11 +1021,11 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
 
-        allow :grant_role, to: {:parent, :admin}
+        allow :grant_role, to: {:admin, :parent}
       end
 
       expected_msg =
-        "invalid to option {:parent, :admin} for allow :grant_role in Hologram.Policy.ValidatorTest.RelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+        "invalid to option {:admin, :parent} for allow :grant_role in Hologram.Policy.ValidatorTest.RelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, RelationshipGateFixture], [])

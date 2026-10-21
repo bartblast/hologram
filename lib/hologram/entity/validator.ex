@@ -1247,7 +1247,7 @@ defmodule Hologram.Entity.Validator do
         if not to_value_valid?(to) do
           raise Hologram.CompileError,
             message:
-              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
         end
 
       :error ->
@@ -1266,7 +1266,7 @@ defmodule Hologram.Entity.Validator do
 
   defp to_reference_valid?(value) when is_atom(value), do: true
 
-  defp to_reference_valid?({reference, role_name}) when is_atom(reference) and is_atom(role_name),
+  defp to_reference_valid?({role_name, reference}) when is_atom(role_name) and is_atom(reference),
     do: true
 
   defp to_reference_valid?(_value), do: false

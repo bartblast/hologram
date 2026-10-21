@@ -458,7 +458,7 @@ defmodule Hologram.Policy do
     own_reference ++ typed ++ global_reference
   end
 
-  defp build_typed_reference(entity_type, {reference, role_name}) do
+  defp build_typed_reference(entity_type, {role_name, reference}) do
     if Reflection.alias?(reference) do
       {:type, reference, Entity.expand_role(reference, role_name)}
     else
