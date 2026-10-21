@@ -1496,7 +1496,10 @@ export default class Hologram {
       }
     } else {
       $.#historyId = Utils.uuidv7();
-      history.replaceState($.#historyId, null, window.location.pathname);
+
+      // Only tags the entry with its id. Given no URL, the browser keeps the one the user opened,
+      // query string and fragment included.
+      history.replaceState($.#historyId, null);
     }
 
     await $.#restoreEts();

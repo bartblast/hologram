@@ -168,6 +168,20 @@ defmodule HologramFeatureTests.NavigationTest do
     end
   end
 
+  describe "first load" do
+    # The runtime tags the document's history entry with its id on boot. The tag must leave the
+    # entry's URL as opened, so the query string and fragment stay in the address bar.
+    feature "keeps the query string and fragment of the opened URL", %{session: session} do
+      session
+      |> visit("/navigation/1?view=grid#row-42")
+      |> assert_page(Page1)
+      |> assert_script_result(
+        "return window.location.search + window.location.hash;",
+        "?view=grid#row-42"
+      )
+    end
+  end
+
   feature "put page in action", %{session: session} do
     session
     |> visit(Page1)
