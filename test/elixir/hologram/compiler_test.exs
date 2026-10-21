@@ -36,6 +36,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module28, as: ComponentModule28
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
   alias Hologram.Test.Fixtures.Component.Module30, as: ComponentModule30
+  alias Hologram.Test.Fixtures.Component.Module31, as: ComponentModule31
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -54,6 +55,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -1550,6 +1552,23 @@ defmodule Hologram.CompilerTest do
 
       component_queries =
         extract_component_queries([ComponentModule30], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
+    test "raises for a registered query comparing with a server-only attribute", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module31 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      component_queries =
+        extract_component_queries([ComponentModule31], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -3553,6 +3572,38 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[{"or":[[["author_id","==",{"actor":true}]],[["shared","==",true]]]}],"to":null,"via":null}]/
+             )
+    end
+
+    # The other attribute is named rather than carried, which is how the evaluator tells it from a
+    # value - the client reads it off the row.
+    test "bakes a condition comparing two attributes as an attribute operand", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([AttributeComparisonPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[["guests","<=",{"attribute":"capacity"}]],"to":null,"via":null}]/
              )
     end
 

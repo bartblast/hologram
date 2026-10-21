@@ -283,6 +283,20 @@ defmodule Hologram.Query.Stage do
     filter_names ++ bound_names ++ order_names ++ include_names
   end
 
+  # Returns every attribute name the given filter clauses read, in order: the compared attribute of
+  # every triple, and the attribute an attribute operand names beside it - the alternatives of a
+  # disjunction included. For readers that need what a filter reads rather than how it compares.
+  @doc false
+  @spec predicate_names(list(Query.clause())) :: list(atom | Query.placeholder())
+  def predicate_names(clauses) do
+    clauses
+    |> triples()
+    |> Enum.flat_map(fn
+      {name, _operator, {:attribute, other}} -> [name, other]
+      {name, _operator, _value} -> [name]
+    end)
+  end
+
   @doc false
   @spec predicate_triples!(module, keyword) :: list(Query.clause())
   def predicate_triples!(entity_type, predicates) do

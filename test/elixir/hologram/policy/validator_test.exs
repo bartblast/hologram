@@ -142,6 +142,19 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture7], []) == :ok
     end
 
+    test "returns :ok for a condition comparing two attributes" do
+      defmodule InlinePolicyFixture37 do
+        use Hologram.Entity
+
+        attribute :capacity, :integer
+        attribute :guests, :integer
+
+        allow :update, when: guests <= capacity
+      end
+
+      assert validate_model!([InlinePolicyFixture37], []) == :ok
+    end
+
     test "rejects multiple user entity designations" do
       defmodule InlinePolicyFixture27 do
         use Hologram.Entity, user: true
@@ -469,6 +482,24 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a condition comparing attributes of different types" do
+      defmodule InlinePolicyFixture38 do
+        use Hologram.Entity
+
+        attribute :ends_at, :datetime
+        attribute :starts_on, :date
+
+        allow :update, when: ends_at < starts_on
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture38 - operator :< compares attribute :ends_at with attribute :starts_on in Hologram.Policy.ValidatorTest.InlinePolicyFixture38, which have different types (:datetime and :date) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture38], [])
+      end
+    end
+
     test "accepts a read predicate over a server-only attribute" do
       defmodule InlinePolicyFixture32 do
         use Hologram.Entity
@@ -539,6 +570,25 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture36], [])
+      end
+    end
+
+    # The operand is read off the row too, so a server-only one is a value the client never holds.
+    test "rejects a non-read predicate comparing with a server-only attribute" do
+      defmodule InlinePolicyFixture39 do
+        use Hologram.Entity
+
+        attribute :label, :string
+        attribute :token, :string, server_only: true
+
+        allow :publish, when: label == token
+      end
+
+      expected_msg =
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture39 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture39], [])
       end
     end
 

@@ -184,10 +184,10 @@ defmodule Hologram.Query do
 
   Two attributes compare when they have the same type, or when one widens to the other - an
   integer to a float, compared as floats. Two enums compare when they declare the same values in
-  the same order, and an attribute never compares with itself. Nil keeps its meaning:
-  `owner_id == assignee_id` matches a row with neither set, `owner_id != assignee_id` one with only
-  one of them set, and an ordering comparison matches no row with either side missing. Two strings
-  compare through their sort keys, as a string does against a literal, and `==` stays exact.
+  the same order, and an attribute never compares with itself. Nil keeps its meaning: `owner_id ==
+  assignee_id` matches a row with neither set, `owner_id != assignee_id` one with only one of them
+  set, and an ordering comparison matches no row with either side missing. Two strings compare
+  through their sort keys, as a string does against a literal, and `==` stays exact.
 
   Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
@@ -206,17 +206,17 @@ defmodule Hologram.Query do
   comparisons and ranges reject them like any other non-orderable type. To-many relationships
   have no reference field, and neither relationship name itself is filterable.
 
-  Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands as
-  one side of `and` or `or`, or when the predicates take any other form - a bare name where only a
-  value goes (a keyword value, a membership element, a range bound) is most likely a forgotten pin,
-  and the error says so. Raises ArgumentError when the query is neither an entity type module nor a
-  query term, when pinned predicates are not a keyword list, when a predicate names a relationship
-  or an unknown attribute - on the right side of a comparison, which is how a forgotten pin on a
-  variable reads - when a disjunction holds fewer than two predicate lists or one of them is empty
-  or not a keyword list, when a comparison names an attribute with itself or two attributes that do
-  not compare, or when a value is invalid for its attribute or its operator - a pinned keyword value
-  holding a list, a tuple or a range is refused as an equality operand, since membership and
-  comparisons are written as expressions.
+  Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands
+  as one side of `and` or `or`, or when the predicates take any other form - a bare name where
+  only a value goes (a keyword value, a membership element, a range bound) is most likely a
+  forgotten pin, and the error says so. Raises ArgumentError when the query is neither an entity
+  type module nor a query term, when pinned predicates are not a keyword list, when a predicate
+  names a relationship or an unknown attribute - on the right side of a comparison, which is how a
+  forgotten pin on a variable reads - when a disjunction holds fewer than two predicate lists or
+  one of them is empty or not a keyword list, when a comparison names an attribute with itself or
+  two attributes that do not compare, or when a value is invalid for its attribute or its
+  operator - a pinned keyword value holding a list, a tuple or a range is refused as an equality
+  operand, since membership and comparisons are written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)

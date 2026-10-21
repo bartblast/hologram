@@ -2029,6 +2029,22 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "predicate_names/1" do
+    test "returns the compared attribute of every triple" do
+      assert predicate_names([{:a, :==, true}, {:b, :>=, 3}]) == [:a, :b]
+    end
+
+    test "adds the attribute an operand names" do
+      assert predicate_names([{:b, :<, {:attribute, :c}}, {:a, :==, true}]) == [:b, :c, :a]
+    end
+
+    test "walks the alternatives of a disjunction" do
+      filter = [{:or, [[{:a, :==, true}], [{:b, :>=, {:attribute, :c}}]]}]
+
+      assert predicate_names(filter) == [:a, :b, :c]
+    end
+  end
+
   describe "put_attribute/2" do
     test "accepts a map of values" do
       entity = Module2.new(c: "x")

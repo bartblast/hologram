@@ -320,8 +320,8 @@ defmodule Hologram.Policy.Validator do
     server_only_names = Entity.server_only_attribute_names(entity_type)
 
     clauses
-    |> Stage.triples()
-    |> Enum.each(fn {name, _operator, _value} ->
+    |> Stage.predicate_names()
+    |> Enum.each(fn name ->
       if name in server_only_names do
         raise Hologram.CompileError,
           message:

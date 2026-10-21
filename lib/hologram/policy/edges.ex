@@ -110,13 +110,10 @@ defmodule Hologram.Policy.Edges do
     |> merge_edges()
   end
 
-  # A disjunction reads the row's own attributes like any other condition, so it adds no edge kind -
-  # its alternatives' attributes join the rule's.
+  # A disjunction reads the row's own attributes like any other condition, and so does a comparison
+  # between two of them, so neither adds an edge kind - their attributes join the rule's.
   defp predicate_edges(predicates) do
-    names =
-      predicates
-      |> Stage.triples()
-      |> Enum.map(fn {name, _operator, _value} -> name end)
+    names = Stage.predicate_names(predicates)
 
     if names == [], do: [], else: [{:attributes, names}]
   end
