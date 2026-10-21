@@ -143,6 +143,7 @@ defmodule Hologram.Query do
       |> filter(priority >= 3 and created_at < ^cutoff)
       |> filter(status in [:todo, :doing])
       |> filter(archived_at == nil)
+      |> filter(owner_id == ^owner_id or shared == true)
 
   The predicates are one of:
 
@@ -154,6 +155,9 @@ defmodule Hologram.Query do
     * a membership - `status in [:todo, :doing]`, `priority in 3..5`, `status in ^statuses`,
       `status not in [:done]`
     * comparisons and memberships joined with `and`
+    * alternatives joined with `or` - `owner_id == ^owner_id or shared == true` - where `and`
+      binds tighter than `or` and parentheses group, as Elixir reads them: `a and b or c` is
+      `(a and b) or c`
     * a pinned list of predicates for a filter built at runtime - `filter(^predicates)`, where
       the list holds attribute names paired with values, operator tuples (`{:>=, 3}`,
       `{:in, list}`, `{:not_in, list}`), membership lists, lists of operator tuples applying
@@ -162,12 +166,14 @@ defmodule Hologram.Query do
       hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`)
 
   Each predicate becomes one or more `{attribute, operator, value}` triples, and a disjunction
-  one `{:or, alternatives}` clause, appended in the given order. A query term is a Hologram.Query struct - a plain-data description of a query,
-  so building it never executes anything.
+  one `{:or, alternatives}` clause, appended in the given order. A query term is a Hologram.Query
+  struct - a plain-data description of a query, so building it never executes anything.
 
   Nil is a regular value for `==`, `!=` and membership: `status != :done` also matches a row with
   no status, `status in [nil, :done]` reads "done or unset", and a negated membership without nil
-  matches missing values.
+  matches missing values. Nil keeps its meaning inside a disjunction:
+  `priority > 3 or shared == true` matches a shared row with no priority, since the comparison
+  passes over nil and the other alternative holds.
 
   Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
@@ -186,14 +192,15 @@ defmodule Hologram.Query do
   comparisons and ranges reject them like any other non-orderable type. To-many relationships
   have no reference field, and neither relationship name itself is filterable.
 
-  Raises Hologram.CompileError, naming the location, when the predicates take any other form - a
-  bare name where a value goes is most likely a forgotten pin, and the error says so. Raises
-  ArgumentError when the query is neither an entity type module nor a query term, when pinned
-  predicates are not a keyword list, when a predicate names a relationship or an unknown
-  attribute, when a disjunction holds fewer than two predicate lists or one of them is empty or
-  not a keyword list, or when a value is invalid for its attribute or its operator - a pinned
-  keyword value holding a list, a tuple or a range is refused as an equality operand, since
-  membership and comparisons are written as expressions.
+  Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands
+  as one side of `and` or `or`, or when the predicates take any other form - a bare name where a
+  value goes is most likely a forgotten pin, and the error says so. Raises ArgumentError when the
+  query is neither an entity type module nor a query term, when pinned predicates are not a
+  keyword list, when a predicate names a relationship or an unknown attribute, when a disjunction
+  holds fewer than two predicate lists or one of them is empty or not a keyword list, or when a
+  value is invalid for its attribute or its operator - a pinned keyword value holding a list, a
+  tuple or a range is refused as an equality operand, since membership and comparisons are
+  written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
