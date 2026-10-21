@@ -245,9 +245,9 @@ defmodule Hologram.Sync.CatchupTest do
       actor = user("catchup_1@example.com")
       resource = DB.create!(PolicyModule1.new())
 
-      Auth.grant_role(actor, resource, :viewer)
+      Auth.grant_role(actor, :viewer, resource)
       revoked = stored_grant(actor.id)
-      Auth.revoke_role(actor, resource, :viewer)
+      Auth.revoke_role(actor, :viewer, resource)
 
       clear_log()
 
@@ -268,7 +268,7 @@ defmodule Hologram.Sync.CatchupTest do
       other = user("catchup_3@example.com")
       resource = DB.create!(PolicyModule1.new())
 
-      Auth.grant_role(other, resource, :viewer)
+      Auth.grant_role(other, :viewer, resource)
       other_grant = stored_grant(other.id)
 
       clear_log()
@@ -286,7 +286,7 @@ defmodule Hologram.Sync.CatchupTest do
       actor = user("catchup_4@example.com")
       resource = DB.create!(PolicyModule1.new())
 
-      Auth.grant_role(actor, resource, :viewer)
+      Auth.grant_role(actor, :viewer, resource)
       grant = stored_grant(actor.id)
 
       clear_log()
@@ -319,7 +319,7 @@ defmodule Hologram.Sync.CatchupTest do
       actor = user("catchup_6@example.com")
       resource = DB.create!(PolicyModule1.new())
 
-      Auth.grant_role(actor, resource, :viewer)
+      Auth.grant_role(actor, :viewer, resource)
       grant = stored_grant(actor.id)
 
       clear_log()

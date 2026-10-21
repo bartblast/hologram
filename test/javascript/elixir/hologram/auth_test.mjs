@@ -1384,8 +1384,8 @@ describe("grant_role/3", () => {
   it("appends a create of the grant row with the acting user as its granter", () => {
     const result = grant(
       Type.bitstring(GATED_BOB),
-      document(),
       Type.atom("viewer"),
+      document(),
     );
 
     assert.deepStrictEqual(result, Type.atom("ok"));
@@ -1413,7 +1413,7 @@ describe("grant_role/3", () => {
       [Type.atom("id"), Type.bitstring(GATED_BOB)],
     ]);
 
-    grant(user, document(), Type.atom("viewer"));
+    grant(user, Type.atom("viewer"), document());
 
     assert.equal(Batches.current().writes[0].data.user_id, GATED_BOB);
   });
@@ -1431,7 +1431,7 @@ describe("grant_role/3", () => {
       Type.boolean(false),
     );
 
-    grant(Type.bitstring(GATED_BOB), document(), Type.atom("viewer"));
+    grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document());
 
     assert.deepStrictEqual(
       can(Type.bitstring(GATED_BOB), Type.atom("read"), document()),
@@ -1450,8 +1450,8 @@ describe("grant_role/3", () => {
 
     const result = grant(
       Type.bitstring(GATED_BOB),
-      document(),
       Type.atom("viewer"),
+      document(),
     );
 
     assert.deepStrictEqual(result, Type.atom("ok"));
@@ -1461,7 +1461,7 @@ describe("grant_role/3", () => {
   it("raises on a role the resource type does not declare", () => {
     assertBoxedError(
       () =>
-        grant(Type.bitstring(GATED_BOB), document(), Type.atom("publisher")),
+        grant(Type.bitstring(GATED_BOB), Type.atom("publisher"), document()),
       "ArgumentError",
       "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
     );
@@ -1469,7 +1469,7 @@ describe("grant_role/3", () => {
 
   it("raises the teaching message for a role the acting user may not grant", () => {
     assertBoxedError(
-      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("owner"), document()),
       "Hologram.AccessDeniedError",
       `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
         "which may grant :viewer but not :owner. " +
@@ -1489,7 +1489,7 @@ describe("grant_role/3", () => {
     });
 
     assertBoxedError(
-      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("owner"), document()),
       "Hologram.AccessDeniedError",
       `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
         "which may grant :viewer but not :owner. " +
@@ -1502,8 +1502,8 @@ describe("grant_role/3", () => {
       () =>
         grant(
           Type.bitstring(GATED_BOB),
-          Type.alias(GATED_DOCUMENT),
           Type.atom("viewer"),
+          Type.alias(GATED_DOCUMENT),
         ),
       "Hologram.AccessDeniedError",
       "type-wide roles are granted only by trusted code running without an acting user",
@@ -1514,7 +1514,7 @@ describe("grant_role/3", () => {
     LocalDatabase.actorUserId = null;
 
     assertBoxedError(
-      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
       "Hologram.AccessDeniedError",
       "a role is granted only by a signed-in user - nobody is signed in",
     );
@@ -1522,7 +1522,7 @@ describe("grant_role/3", () => {
 
   it("raises on a user id that is not an entity id", () => {
     assertBoxedError(
-      () => grant(Type.bitstring("nope"), document(), Type.atom("viewer")),
+      () => grant(Type.bitstring("nope"), Type.atom("viewer"), document()),
       "ArgumentError",
       'invalid user id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
     );
@@ -1532,7 +1532,7 @@ describe("grant_role/3", () => {
     Batches.reset();
 
     assertBoxedError(
-      () => grant(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
       "ArgumentError",
       "grant_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
@@ -1604,8 +1604,8 @@ describe("revoke_role/3", () => {
   it("appends a delete of the held row carrying its revisions and its grant", () => {
     const result = revoke(
       Type.bitstring(GATED_BOB),
-      document(),
       Type.atom("viewer"),
+      document(),
     );
 
     assert.deepStrictEqual(result, Type.atom("ok"));
@@ -1634,7 +1634,7 @@ describe("revoke_role/3", () => {
       Type.boolean(true),
     );
 
-    revoke(Type.bitstring(GATED_BOB), document(), Type.atom("viewer"));
+    revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document());
 
     assert.deepStrictEqual(
       can(Type.bitstring(GATED_BOB), Type.atom("read"), document()),
@@ -1648,8 +1648,8 @@ describe("revoke_role/3", () => {
 
     const result = revoke(
       Type.bitstring(CAROL),
-      document(),
       Type.atom("viewer"),
+      document(),
     );
 
     assert.deepStrictEqual(result, Type.atom("ok"));
@@ -1659,7 +1659,7 @@ describe("revoke_role/3", () => {
   // No rule lets an editor revoke editor - the row is the acting user's own, which is how a
   // member leaves.
   it("revokes the acting user's own row without asking the gate", () => {
-    revoke(Type.bitstring(GATED_ALICE), document(), Type.atom("editor"));
+    revoke(Type.bitstring(GATED_ALICE), Type.atom("editor"), document());
 
     assert.equal(Batches.current().writes.length, 1);
     assert.equal(
@@ -1672,7 +1672,7 @@ describe("revoke_role/3", () => {
     LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_BOB, "owner"));
 
     assertBoxedError(
-      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("owner"), document()),
       "Hologram.AccessDeniedError",
       `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
         "which may revoke :viewer but not :owner. " +
@@ -1684,7 +1684,7 @@ describe("revoke_role/3", () => {
   // refused to an actor who may not revoke it - never a silent :ok.
   it("asks the gate before it looks for the row", () => {
     assertBoxedError(
-      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("owner")),
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("owner"), document()),
       "Hologram.AccessDeniedError",
       `the acting user holds :editor on MyApp.Document "${GATED_DOC}", ` +
         "which may revoke :viewer but not :owner. " +
@@ -1697,8 +1697,8 @@ describe("revoke_role/3", () => {
       () =>
         revoke(
           Type.bitstring(GATED_BOB),
-          Type.alias(GATED_DOCUMENT),
           Type.atom("viewer"),
+          Type.alias(GATED_DOCUMENT),
         ),
       "Hologram.AccessDeniedError",
       "type-wide roles are revoked only by trusted code running without an acting user",
@@ -1709,7 +1709,7 @@ describe("revoke_role/3", () => {
     LocalDatabase.actorUserId = null;
 
     assertBoxedError(
-      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
       "Hologram.AccessDeniedError",
       "a role is revoked only by a signed-in user - nobody is signed in",
     );
@@ -1719,7 +1719,7 @@ describe("revoke_role/3", () => {
     Batches.reset();
 
     assertBoxedError(
-      () => revoke(Type.bitstring(GATED_BOB), document(), Type.atom("viewer")),
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
       "ArgumentError",
       "revoke_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );

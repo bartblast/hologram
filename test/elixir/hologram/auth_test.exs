@@ -111,7 +111,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_80@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
 
       scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
 
@@ -127,8 +127,8 @@ defmodule Hologram.AuthTest do
       resource_1 = create_resource()
       resource_2 = create_resource()
 
-      grant_role(user, resource_1, :editor)
-      grant_role(user, resource_2, :owner)
+      grant_role(user, :editor, resource_1)
+      grant_role(user, :owner, resource_2)
 
       scopes =
         MapSet.new([
@@ -147,7 +147,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_82@example.com")
       resource = create_resource()
 
-      grant_role(user, Module1, :editor)
+      grant_role(user, :editor, Module1)
 
       scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
 
@@ -189,7 +189,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_86@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
 
       scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
 
@@ -204,7 +204,7 @@ defmodule Hologram.AuthTest do
       other_user = create_user("user_88@example.com")
       resource = create_resource()
 
-      grant_role(other_user, resource, :editor)
+      grant_role(other_user, :editor, resource)
 
       scopes = MapSet.new([{other_user.id, {:own, Module1, resource.id}}])
 
@@ -216,8 +216,8 @@ defmodule Hologram.AuthTest do
       other_user = create_user("user_90@example.com")
       resource = create_parent()
 
-      grant_role(user, resource, :member)
-      grant_role(other_user, resource, :member)
+      grant_role(user, :member, resource)
+      grant_role(other_user, :member, resource)
 
       scopes = MapSet.new([{other_user.id, {:own, Module2, resource.id}}])
 
@@ -267,7 +267,7 @@ defmodule Hologram.AuthTest do
 
       refute can?(user, :update, entity)
 
-      grant_role(user, %Module1{id: entity.id}, :editor)
+      grant_role(user, :editor, %Module1{id: entity.id})
 
       assert can?(user, :update, entity)
     end
@@ -276,7 +276,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_42@example.com")
       entity = %Module1{id: Entity.generate_id(), priority: 5}
 
-      grant_role(user, Module1, :editor)
+      grant_role(user, :editor, Module1)
 
       assert can?(user, :update, entity)
     end
@@ -285,7 +285,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_44@example.com")
       entity = %Module1{id: Entity.generate_id(), priority: 5}
 
-      grant_role(user, %Module1{id: entity.id}, :owner)
+      grant_role(user, :owner, %Module1{id: entity.id})
 
       assert can?(user, :update, entity)
     end
@@ -329,7 +329,7 @@ defmodule Hologram.AuthTest do
 
       refute can?(user, :read, entity)
 
-      grant_role(user, Module2, :admin)
+      grant_role(user, :admin, Module2)
 
       assert can?(user, :read, entity)
     end
@@ -341,7 +341,7 @@ defmodule Hologram.AuthTest do
 
       refute can?(user, :delete, entity)
 
-      grant_role(user, parent, :admin)
+      grant_role(user, :admin, parent)
 
       assert can?(user, :delete, entity)
     end
@@ -349,7 +349,7 @@ defmodule Hologram.AuthTest do
     test "denies a related-instance grant reference on an entity without the reference" do
       user = create_user("user_47@example.com")
 
-      grant_role(user, Module2, :admin)
+      grant_role(user, :admin, Module2)
 
       refute can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil})
     end
@@ -371,8 +371,8 @@ defmodule Hologram.AuthTest do
       editor = create_user("user_59@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(editor, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(editor, :editor, resource)
 
       assert can?(owner, {:grant_role, :editor}, resource)
       refute can?(editor, {:grant_role, :editor}, resource)
@@ -383,8 +383,8 @@ defmodule Hologram.AuthTest do
       editor = create_user("user_61@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(editor, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(editor, :editor, resource)
 
       assert can?(owner, :grant_role, resource)
       refute can?(editor, :grant_role, resource)
@@ -485,7 +485,7 @@ defmodule Hologram.AuthTest do
       other_user = create_user("user_54@example.com")
       resource = create_parent()
 
-      grant_role(user, resource, :member)
+      grant_role(user, :member, resource)
 
       grant = %RoleGrant{
         user_id: other_user.id,
@@ -501,7 +501,7 @@ defmodule Hologram.AuthTest do
       other_user = create_user("user_64@example.com")
       resource = create_parent()
 
-      grant_role(admin, resource, :admin)
+      grant_role(admin, :admin, resource)
 
       grant = %RoleGrant{
         user_id: other_user.id,
@@ -534,8 +534,8 @@ defmodule Hologram.AuthTest do
       other_user = create_user("user_57@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(editor, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(editor, :editor, resource)
 
       grant = %RoleGrant{
         user_id: other_user.id,
@@ -568,7 +568,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_61@example.com")
       entity = create_resource()
 
-      grant_role(user, entity, :viewer)
+      grant_role(user, :viewer, entity)
 
       assert can?(user, :read, entity)
       refute can?(user, :read, entity, [])
@@ -779,7 +779,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_90@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
 
       assert [grant] = grants_before(user.id, [])
       assert grant.id == stored_grant(user.id).id
@@ -789,7 +789,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_91@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
       grant = held_grant(user.id)
 
       assert grants_before(user.id, [grant_effect(:put_entity, grant)]) == []
@@ -799,9 +799,9 @@ defmodule Hologram.AuthTest do
       user = create_user("user_92@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
       revoked = stored_grant(user.id)
-      revoke_role(user, resource, :editor)
+      revoke_role(user, :editor, resource)
 
       assert [grant] = grants_before(user.id, [grant_effect(:del_entity, revoked)])
       assert grant.id == revoked.id
@@ -817,9 +817,9 @@ defmodule Hologram.AuthTest do
       user = create_user("user_93@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
       grant = held_grant(user.id)
-      revoke_role(user, resource, :editor)
+      revoke_role(user, :editor, resource)
 
       effects = [grant_effect(:put_entity, grant), grant_effect(:del_entity, grant)]
 
@@ -830,10 +830,10 @@ defmodule Hologram.AuthTest do
       user = create_user("user_94@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
       revoked = stored_grant(user.id)
-      revoke_role(user, resource, :editor)
-      grant_role(user, resource, :owner)
+      revoke_role(user, :editor, resource)
+      grant_role(user, :owner, resource)
       current = stored_grant(user.id)
 
       effects = [grant_effect(:del_entity, revoked), grant_effect(:put_entity, current)]
@@ -933,7 +933,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_116@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :editor)
+      grant_role(user, :editor, resource)
 
       entity_type = Module1
 
@@ -946,7 +946,7 @@ defmodule Hologram.AuthTest do
 
       resource = create_resource()
 
-      assert grant_role(user, resource, :owner) == :ok
+      assert grant_role(user, :owner, resource) == :ok
 
       assert [%{entity_type: "Hologram.Test.Fixtures.Policy.Module1", role: "owner"} = grant] =
                grant_rows(user.id)
@@ -957,7 +957,7 @@ defmodule Hologram.AuthTest do
     test "writes a type-wide grant with no entity id" do
       user = create_user("user_8@example.com")
 
-      assert grant_role(user, Module1, :owner) == :ok
+      assert grant_role(user, :owner, Module1) == :ok
 
       assert [
                %{
@@ -974,9 +974,9 @@ defmodule Hologram.AuthTest do
 
       resource = create_resource()
 
-      grant_role(granter, resource, :owner)
+      grant_role(granter, :owner, resource)
 
-      Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end)
+      Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end)
 
       assert [%{granted_by_id: granted_by_id}] = grant_rows(user.id)
       assert granted_by_id == granter.id
@@ -985,7 +985,7 @@ defmodule Hologram.AuthTest do
     test "leaves the granter unset outside an actor context" do
       user = create_user("user_11@example.com")
 
-      grant_role(user, Module1, :owner)
+      grant_role(user, :owner, Module1)
 
       assert [%{granted_by_id: nil}] = grant_rows(user.id)
     end
@@ -996,12 +996,12 @@ defmodule Hologram.AuthTest do
 
       resource = create_resource()
 
-      grant_role(granter, resource, :owner)
+      grant_role(granter, :owner, resource)
 
-      Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end)
+      Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end)
       [original_grant] = grant_rows(user.id)
 
-      assert grant_role(user, resource, :editor) == :ok
+      assert grant_role(user, :editor, resource) == :ok
 
       assert grant_rows(user.id) == [original_grant]
     end
@@ -1012,9 +1012,9 @@ defmodule Hologram.AuthTest do
 
       resource = create_resource()
 
-      grant_role(granter, resource, :owner)
+      grant_role(granter, :owner, resource)
 
-      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end) == :ok
+      assert Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end) == :ok
 
       assert [%{role: "editor"}] = grant_rows(user.id)
     end
@@ -1025,9 +1025,9 @@ defmodule Hologram.AuthTest do
 
       resource = create_parent()
 
-      grant_role(granter, resource, :member)
+      grant_role(granter, :member, resource)
 
-      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :member) end) == :ok
+      assert Context.with_actor(granter.id, fn -> grant_role(user, :member, resource) end) == :ok
 
       assert [%{role: "member"}] = grant_rows(user.id)
     end
@@ -1040,7 +1040,7 @@ defmodule Hologram.AuthTest do
 
       grant_role(granter, Role.Module1)
 
-      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :admin) end) == :ok
+      assert Context.with_actor(granter.id, fn -> grant_role(user, :admin, resource) end) == :ok
 
       assert [%{role: "admin"}] = grant_rows(user.id)
     end
@@ -1053,7 +1053,7 @@ defmodule Hologram.AuthTest do
 
       grant_role(granter, Role.Module2)
 
-      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :member) end) ==
+      assert Context.with_actor(granter.id, fn -> grant_role(user, :member, resource) end) ==
                :ok
 
       assert [%{role: "member"}] = grant_rows(user.id)
@@ -1065,9 +1065,9 @@ defmodule Hologram.AuthTest do
 
       resource = create_resource()
 
-      grant_role(granter, Module1, :owner)
+      grant_role(granter, :owner, Module1)
 
-      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end) == :ok
+      assert Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end) == :ok
 
       assert [%{role: "editor"}] = grant_rows(user.id)
     end
@@ -1082,7 +1082,7 @@ defmodule Hologram.AuthTest do
         "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may grant :editor"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end)
+        Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end)
       end
     end
 
@@ -1092,7 +1092,7 @@ defmodule Hologram.AuthTest do
 
       resource = create_resource()
 
-      grant_role(granter, resource, :editor)
+      grant_role(granter, :editor, resource)
 
       expected_msg =
         "the acting user holds :editor on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}, " <>
@@ -1100,7 +1100,7 @@ defmodule Hologram.AuthTest do
           "Declare `allow {:grant_role, :owner}, to: :editor` on Hologram.Test.Fixtures.Policy.Module1 if that is intended."
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> grant_role(user, resource, :owner) end)
+        Context.with_actor(granter.id, fn -> grant_role(user, :owner, resource) end)
       end
     end
 
@@ -1110,7 +1110,7 @@ defmodule Hologram.AuthTest do
 
       resource = create_parent()
 
-      grant_role(granter, resource, :member)
+      grant_role(granter, :member, resource)
 
       expected_msg =
         "the acting user holds :member on Hologram.Test.Fixtures.Policy.Module2 #{inspect(resource.id)}, " <>
@@ -1118,7 +1118,7 @@ defmodule Hologram.AuthTest do
           "Declare `allow {:grant_role, :admin}, to: :member` on Hologram.Test.Fixtures.Policy.Module2 if that is intended."
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> grant_role(user, resource, :admin) end)
+        Context.with_actor(granter.id, fn -> grant_role(user, :admin, resource) end)
       end
     end
 
@@ -1130,7 +1130,7 @@ defmodule Hologram.AuthTest do
         "type-wide roles are granted only by trusted code running without an acting user"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> grant_role(user, Module1, :owner) end)
+        Context.with_actor(granter.id, fn -> grant_role(user, :owner, Module1) end)
       end
     end
 
@@ -1140,7 +1140,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role(user, Module1, :publisher) end
+      assert_error ArgumentError, expected_msg, fn -> grant_role(user, :publisher, Module1) end
     end
 
     test "raises on an entity id that is not a canonical entity id" do
@@ -1150,7 +1150,7 @@ defmodule Hologram.AuthTest do
         "invalid entity id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
       assert_error ArgumentError, expected_msg, fn ->
-        grant_role(user, %Module1{id: "nope"}, :owner)
+        grant_role(user, :owner, %Module1{id: "nope"})
       end
     end
   end
@@ -1161,7 +1161,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_96@example.com")
       resource = create_resource()
 
-      grant_role(granter, resource, :owner)
+      grant_role(granter, :owner, resource)
 
       grant =
         grant_struct(
@@ -1185,8 +1185,8 @@ defmodule Hologram.AuthTest do
       user = create_user("user_98@example.com")
       resource = create_resource()
 
-      grant_role(granter, resource, :owner)
-      grant_role(user, resource, :editor)
+      grant_role(granter, :owner, resource)
+      grant_role(user, :editor, resource)
 
       grant =
         grant_struct(
@@ -1283,7 +1283,7 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_118@example.com")
       resource = create_resource()
 
-      grant_role(granter, resource, :owner)
+      grant_role(granter, :owner, resource)
 
       grant =
         grant_struct(
@@ -1303,7 +1303,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_105@example.com")
       resource = create_parent()
 
-      grant_role(granter, resource, :member)
+      grant_role(granter, :member, resource)
 
       grant =
         grant_struct(
@@ -1457,9 +1457,9 @@ defmodule Hologram.AuthTest do
       user = create_user("user_28@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :owner)
+      grant_role(user, :owner, resource)
 
-      assert revoke_role(user, resource, :owner) == :ok
+      assert revoke_role(user, :owner, resource) == :ok
       assert grant_rows(user.id) == []
     end
 
@@ -1467,10 +1467,10 @@ defmodule Hologram.AuthTest do
       user = create_user("user_52@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :owner)
+      grant_role(user, :owner, resource)
       revoked_id = grant_id(user.id)
 
-      revoke_role(user, resource, :owner)
+      revoke_role(user, :owner, resource)
 
       assert revocation_effects() == [{"Hologram.Auth.RoleGrant", revoked_id}]
     end
@@ -1480,10 +1480,10 @@ defmodule Hologram.AuthTest do
       member = create_user("user_30@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(member, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(member, :editor, resource)
 
-      assert Context.with_actor(member.id, fn -> revoke_role(member, resource, :editor) end) ==
+      assert Context.with_actor(member.id, fn -> revoke_role(member, :editor, resource) end) ==
                :ok
 
       assert grant_rows(member.id) == []
@@ -1494,10 +1494,10 @@ defmodule Hologram.AuthTest do
       member = create_user("user_32@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(member, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(member, :editor, resource)
 
-      assert Context.with_actor(owner.id, fn -> revoke_role(member, resource, :editor) end) == :ok
+      assert Context.with_actor(owner.id, fn -> revoke_role(member, :editor, resource) end) == :ok
 
       assert grant_rows(member.id) == []
     end
@@ -1507,11 +1507,11 @@ defmodule Hologram.AuthTest do
       other_member = create_user("user_72@example.com")
       resource = create_parent()
 
-      grant_role(member, resource, :member)
-      grant_role(other_member, resource, :member)
+      grant_role(member, :member, resource)
+      grant_role(other_member, :member, resource)
 
       assert Context.with_actor(member.id, fn ->
-               revoke_role(other_member, resource, :member)
+               revoke_role(other_member, :member, resource)
              end) == :ok
 
       assert grant_rows(other_member.id) == []
@@ -1523,12 +1523,12 @@ defmodule Hologram.AuthTest do
       global_holder = create_user("user_85@example.com")
       resource = create_parent()
 
-      grant_role(admin, resource, :admin)
-      grant_role(member, resource, :member)
+      grant_role(admin, :admin, resource)
+      grant_role(member, :member, resource)
       grant_role(global_holder, Role.Module1)
 
       assert Context.with_actor(global_holder.id, fn ->
-               revoke_role(member, resource, :member)
+               revoke_role(member, :member, resource)
              end) == :ok
 
       assert grant_rows(member.id) == []
@@ -1539,13 +1539,13 @@ defmodule Hologram.AuthTest do
       other_user = create_user("user_74@example.com")
       resource = create_resource()
 
-      grant_role(member, resource, :editor)
+      grant_role(member, :editor, resource)
 
       expected_msg =
         "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :editor"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(other_user.id, fn -> revoke_role(member, resource, :editor) end)
+        Context.with_actor(other_user.id, fn -> revoke_role(member, :editor, resource) end)
       end
     end
 
@@ -1554,8 +1554,8 @@ defmodule Hologram.AuthTest do
       other_member = create_user("user_34@example.com")
       resource = create_resource()
 
-      grant_role(member, resource, :editor)
-      grant_role(other_member, resource, :editor)
+      grant_role(member, :editor, resource)
+      grant_role(other_member, :editor, resource)
 
       expected_msg =
         "the acting user holds :editor on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}, " <>
@@ -1563,7 +1563,7 @@ defmodule Hologram.AuthTest do
           "Declare `allow {:revoke_role, :editor}, to: :editor` on Hologram.Test.Fixtures.Policy.Module1 if that is intended."
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(other_member.id, fn -> revoke_role(member, resource, :editor) end)
+        Context.with_actor(other_member.id, fn -> revoke_role(member, :editor, resource) end)
       end
     end
 
@@ -1572,8 +1572,8 @@ defmodule Hologram.AuthTest do
       editor = create_user("user_76@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(editor, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(editor, :editor, resource)
 
       expected_msg =
         "the acting user holds :editor on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}, " <>
@@ -1581,7 +1581,7 @@ defmodule Hologram.AuthTest do
           "Declare `allow {:revoke_role, :owner}, to: :editor` on Hologram.Test.Fixtures.Policy.Module1 if that is intended."
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(editor.id, fn -> revoke_role(owner, resource, :owner) end)
+        Context.with_actor(editor.id, fn -> revoke_role(owner, :owner, resource) end)
       end
     end
 
@@ -1593,7 +1593,7 @@ defmodule Hologram.AuthTest do
         "type-wide roles are revoked only by trusted code running without an acting user"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> revoke_role(user, Module1, :owner) end)
+        Context.with_actor(granter.id, fn -> revoke_role(user, :owner, Module1) end)
       end
     end
   end
@@ -1606,8 +1606,8 @@ defmodule Hologram.AuthTest do
       editor = create_user("user_107@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(editor, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(editor, :editor, resource)
 
       grant = held_grant(editor.id)
 
@@ -1620,8 +1620,8 @@ defmodule Hologram.AuthTest do
       editor = create_user("user_109@example.com")
       resource = create_resource()
 
-      grant_role(owner, resource, :owner)
-      grant_role(editor, resource, :editor)
+      grant_role(owner, :owner, resource)
+      grant_role(editor, :editor, resource)
 
       grant = held_grant(editor.id)
 
@@ -1634,8 +1634,8 @@ defmodule Hologram.AuthTest do
       second_editor = create_user("user_111@example.com")
       resource = create_resource()
 
-      grant_role(first_editor, resource, :editor)
-      grant_role(second_editor, resource, :editor)
+      grant_role(first_editor, :editor, resource)
+      grant_role(second_editor, :editor, resource)
 
       grant = held_grant(second_editor.id)
 
@@ -1653,7 +1653,7 @@ defmodule Hologram.AuthTest do
       actor = create_user("user_113@example.com")
       user = create_user("user_114@example.com")
 
-      grant_role(user, Module1, :owner)
+      grant_role(user, :owner, Module1)
 
       grant = held_grant(user.id)
 
@@ -1669,7 +1669,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_115@example.com")
       resource = create_resource()
 
-      grant_role(user, resource, :owner)
+      grant_role(user, :owner, resource)
 
       grant = held_grant(user.id)
 

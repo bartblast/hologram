@@ -120,7 +120,7 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   defp grant(component, name, user_id, role, resource) do
     result =
       try do
-        Auth.grant_role(user_id, resource, role)
+        Auth.grant_role(user_id, role, resource)
         "#{name}_ok"
       rescue
         Hologram.AccessDeniedError -> "#{name}_refused"
@@ -132,7 +132,7 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   defp revoke(component, name, user_id, role) do
     result =
       try do
-        Auth.revoke_role(user_id, component.state.document, role)
+        Auth.revoke_role(user_id, role, component.state.document)
         "#{name}_ok"
       rescue
         Hologram.AccessDeniedError -> "#{name}_refused"

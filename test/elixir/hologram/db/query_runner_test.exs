@@ -168,7 +168,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       public_entity = create_policy_entity(true)
       private_entity = create_policy_entity(false)
 
-      Auth.grant_role(user, private_entity, :viewer)
+      Auth.grant_role(user, :viewer, private_entity)
 
       assert policied_ids(user.id) == Enum.sort([public_entity.id, private_entity.id])
     end
@@ -179,7 +179,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       public_entity = create_policy_entity(true)
       private_entity = create_policy_entity(false)
 
-      Auth.grant_role(other_user, private_entity, :viewer)
+      Auth.grant_role(other_user, :viewer, private_entity)
 
       assert policied_ids(user.id) == [public_entity.id]
     end
@@ -189,7 +189,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       public_entity = create_policy_entity(true)
       private_entity = create_policy_entity(false)
 
-      Auth.grant_role(user, private_entity, :viewer)
+      Auth.grant_role(user, :viewer, private_entity)
 
       assert policied_ids(nil) == [public_entity.id]
     end
@@ -260,7 +260,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       |> PolicyModule1.new()
       |> DB.create!()
 
-      Auth.grant_role(user, granted_match, :viewer)
+      Auth.grant_role(user, :viewer, granted_match)
 
       term = %{
         Stage.normalize(PolicyModule1)
@@ -289,7 +289,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       parent = create_policy_parent()
       create_policy_child(parent, true)
 
-      Auth.grant_role(user, parent, :member)
+      Auth.grant_role(user, :member, parent)
 
       assert included_parent(user.id).id == parent.id
     end

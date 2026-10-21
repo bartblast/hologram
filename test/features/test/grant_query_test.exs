@@ -72,7 +72,7 @@ defmodule HologramFeatureTests.GrantQueryTest do
   defp sign_in_as_owner(session, document) do
     sign_in(session)
 
-    Auth.grant_role(session_user(), document, :owner)
+    Auth.grant_role(session_user(), :owner, document)
 
     session
     |> reload()
@@ -87,12 +87,12 @@ defmodule HologramFeatureTests.GrantQueryTest do
     editor = create_user("editor@example.com")
     owner = create_user("owner@example.com")
 
-    Auth.grant_role(editor, document, :editor)
-    Auth.grant_role(owner, document, :owner)
+    Auth.grant_role(editor, :editor, document)
+    Auth.grant_role(owner, :owner, document)
 
     session = sign_in(session)
 
-    Auth.grant_role(session_user(), document, :owner)
+    Auth.grant_role(session_user(), :owner, document)
 
     # Asserted per row rather than as one string: two grants written a moment apart can carry the
     # same created_at on a coarse clock, so the order between them is undefined and only their

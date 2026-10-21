@@ -440,7 +440,7 @@ defmodule Hologram.Sync.DiffTest do
 
       gated_child = DB.create!(PolicyModule1.new())
 
-      Auth.grant_role(user, gated_child, :viewer)
+      Auth.grant_role(user, :viewer, gated_child)
 
       parent = DB.create!(PolicyModule3.new())
 
@@ -489,7 +489,7 @@ defmodule Hologram.Sync.DiffTest do
 
       # What makes the two clients differ: `allow :read, to: [:viewer, ...]` opens the non-public
       # row to whoever holds the role on it, and nothing opens it to whoever holds none.
-      Auth.grant_role(user, granted_row, :viewer)
+      Auth.grant_role(user, :viewer, granted_row)
 
       round = result([public_row, granted_row])
 
@@ -535,7 +535,7 @@ defmodule Hologram.Sync.DiffTest do
     test "lists a row the current grants admit and the old ones did not", %{user: user} do
       granted = DB.create!(PolicyModule1.new())
 
-      Auth.grant_role(user, granted, :viewer)
+      Auth.grant_role(user, :viewer, granted)
 
       shift = shift(result([granted]), user.id, [])
 
@@ -564,7 +564,7 @@ defmodule Hologram.Sync.DiffTest do
       gated_child = DB.create!(PolicyModule1.new())
       parent = DB.create!(PolicyModule3.new())
 
-      Auth.grant_role(user, gated_child, :viewer)
+      Auth.grant_role(user, :viewer, gated_child)
 
       round = result([%{parent | children: [gated_child]}])
 

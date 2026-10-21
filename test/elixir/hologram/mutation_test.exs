@@ -656,7 +656,7 @@ defmodule Hologram.MutationTest do
       resource = create_shared()
       replica_id = Entity.generate_id()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       write = grant_write(user.id, resource, :member)
 
@@ -725,11 +725,11 @@ defmodule Hologram.MutationTest do
       user = create_user("held-user@example.com")
       resource = create_shared()
 
-      Auth.grant_role(first_member, resource, :member)
-      Auth.grant_role(second_member, resource, :member)
+      Auth.grant_role(first_member, :member, resource)
+      Auth.grant_role(second_member, :member, resource)
 
       Context.with_actor(first_member.id, fn ->
-        Auth.grant_role(user, resource, :member)
+        Auth.grant_role(user, :member, resource)
       end)
 
       write = grant_write(user.id, resource, :member)
@@ -755,7 +755,7 @@ defmodule Hologram.MutationTest do
       resource = create_shared()
       landing_id = Entity.generate_id()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       writes = [publish_write(landing_id), grant_write(user.id, resource, :admin)]
 
@@ -770,7 +770,7 @@ defmodule Hologram.MutationTest do
       user = create_user("escalation-user@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       write = grant_write(user.id, resource, :admin)
 
@@ -791,7 +791,7 @@ defmodule Hologram.MutationTest do
       user = create_user("legacy-user@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       EntityOperations.create_if_absent(%RoleGrant{
         id: Entity.generate_id(),
@@ -816,7 +816,7 @@ defmodule Hologram.MutationTest do
       member = create_user("granting-to-nobody@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       write = grant_write(Entity.generate_id(), resource, :member)
 
@@ -862,8 +862,8 @@ defmodule Hologram.MutationTest do
       target = create_user("revoked-member@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
-      Auth.grant_role(target, resource, :member)
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(target, :member, resource)
 
       row = EntityOperations.get(RoleGrant, grant_id(target.id, resource, :member))
 
@@ -884,8 +884,8 @@ defmodule Hologram.MutationTest do
       leaver = create_user("leaving-member@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
-      Auth.grant_role(leaver, resource, :member)
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(leaver, :member, resource)
 
       row = EntityOperations.get(RoleGrant, grant_id(leaver.id, resource, :member))
 
@@ -910,14 +910,14 @@ defmodule Hologram.MutationTest do
       user = create_user("regranted-user@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
-      Auth.grant_role(user, resource, :member)
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(user, :member, resource)
 
       first_row = EntityOperations.get(RoleGrant, grant_id(user.id, resource, :member))
       first_stamp = first_row.__meta__.revisions.role
 
-      Auth.revoke_role(user, resource, :member)
-      Auth.grant_role(user, resource, :member)
+      Auth.revoke_role(user, :member, resource)
+      Auth.grant_role(user, :member, resource)
 
       write =
         revocation_write(user.id, resource, :member,
@@ -947,7 +947,7 @@ defmodule Hologram.MutationTest do
       member = create_user("probed-member@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       write = revocation_write(member.id, resource, :member, stamp: 1)
 
@@ -962,7 +962,7 @@ defmodule Hologram.MutationTest do
       stranger = create_user("stranger@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       write = revocation_write(member.id, resource, :member, stamp: 1)
 
@@ -990,7 +990,7 @@ defmodule Hologram.MutationTest do
       user = create_user("never-granted-user@example.com")
       resource = create_shared()
 
-      Auth.grant_role(member, resource, :member)
+      Auth.grant_role(member, :member, resource)
 
       write = revocation_write(user.id, resource, :member)
 

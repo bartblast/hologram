@@ -36,7 +36,7 @@ defmodule Hologram.DBReadTest do
       granted_entity = create_policy_module_2_entity()
       create_policy_module_2_entity()
 
-      Auth.grant_role(user, granted_entity, :member)
+      Auth.grant_role(user, :member, granted_entity)
 
       count =
         as_user(user, fn ->
@@ -84,7 +84,7 @@ defmodule Hologram.DBReadTest do
       granted_entity = create_policy_module_2_entity()
       create_policy_module_2_entity()
 
-      Auth.grant_role(user, granted_entity, :member)
+      Auth.grant_role(user, :member, granted_entity)
 
       results = as_user(user, fn -> DB.read(PolicyModule2) end)
 
@@ -144,7 +144,7 @@ defmodule Hologram.DBReadTest do
 
       assert hidden_entity == nil
 
-      Auth.grant_role(user, entity, :member)
+      Auth.grant_role(user, :member, entity)
 
       readable_entity =
         as_user(user, fn ->
@@ -252,7 +252,7 @@ defmodule Hologram.DBReadTest do
       user = create_user("db_read_by_id_readable@example.com")
       entity = create_policy_module_2_entity()
 
-      Auth.grant_role(user, entity, :member)
+      Auth.grant_role(user, :member, entity)
 
       assert as_user(user, fn -> DB.read(PolicyModule2, entity.id) end) == entity
     end

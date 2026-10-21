@@ -418,7 +418,7 @@ defmodule Hologram.Sync.SessionTest do
       windows(%{@page => [@other_window]})
       hold_windows([@other_window])
 
-      Auth.grant_role(user, granted, :viewer)
+      Auth.grant_role(user, :viewer, granted)
 
       start_session!(
         actor_user_id: user.id,
