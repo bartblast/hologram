@@ -11,18 +11,20 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.Entity.Model
   alias Hologram.Runtime.ReplicaIdentity
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
 
-  # Every table truncates in one statement: the role grant table's foreign keys to the user table
-  # and the job's to the item table make Postgres reject truncating a referenced table alone.
+  # Every table truncates in one statement: the memo, note and role grant tables' foreign keys to
+  # the user table and the job's to the item table make Postgres reject truncating a referenced
+  # table alone.
   setup do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Item, Note, RestockItem, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Item, Memo, Note, RestockItem, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
