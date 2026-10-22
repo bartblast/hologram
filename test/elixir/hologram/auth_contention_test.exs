@@ -34,6 +34,7 @@ defmodule Hologram.AuthContentionTest do
   import Hologram.Query, only: [authorize: 2, put_attribute: 3]
 
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -86,6 +87,14 @@ defmodule Hologram.AuthContentionTest do
     |> Enum.sort()
   end
 
+  # The refusal a gated write raises, returned as a value - a task that raised would take the test
+  # down with it.
+  defp refusal_or_result(fun) do
+    fun.()
+  rescue
+    error in Hologram.AccessDeniedError -> error
+  end
+
   # Trusted code changing a related row a delegation read - no gate of its own, straight to the row
   # the gated write's evaluation rests on.
   defp start_changer(scratch_opts, entity, attribute, value) do
@@ -105,6 +114,15 @@ defmodule Hologram.AuthContentionTest do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> Context.with_actor(actor.id, write) end)
     end)
+  end
+
+  # A third session holding grant rows FOR SHARE: a gate's own share lock passes it and a
+  # revocation's FOR UPDATE parks on it, so a gated revocation parks past its gate, before its
+  # write - and two of them have both run their gates when the holder lets go.
+  defp start_grant_share_holder(scratch_opts, grant_ids, test_pid) do
+    lock = fn -> Enum.each(grant_ids, &EntityOperations.get(RoleGrant, &1, lock: :share)) end
+
+    start_holder(scratch_opts, lock, test_pid)
   end
 
   # Trusted code holding a transaction of its own open until the test lets it commit, on a row the
@@ -225,6 +243,46 @@ defmodule Hologram.AuthContentionTest do
     assert Task.await(revoker) == :ok
 
     assert owner_ids(scratch, resource) == []
+  end
+
+  test "two users revoking each other's role at the same moment land one revocation and refuse the other",
+       %{
+         alice: alice,
+         bob: bob,
+         resource: resource,
+         scratch: scratch,
+         scratch_opts: scratch_opts
+       } do
+    route(scratch, fn -> grant_role(bob, :owner, resource) end)
+
+    grant_ids =
+      Enum.map([alice, bob], &RoleGrant.derive_id(&1.id, Module1, resource.id, :owner))
+
+    holder = start_grant_share_holder(scratch_opts, grant_ids, self())
+    assert_receive :holding, 5_000
+
+    revoke = fn user -> refusal_or_result(fn -> revoke_role(user, :owner, resource) end) end
+
+    by_alice = start_gated_write(scratch_opts, alice, fn -> revoke.(bob) end)
+    by_bob = start_gated_write(scratch_opts, bob, fn -> revoke.(alice) end)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    # When the holder lets go, each revocation's FOR UPDATE waits on the other's gate. PostgreSQL
+    # finds the cycle after its deadlock_timeout, a second by default, and aborts one of the two -
+    # rerun, that one finds its actor's role gone.
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    refused = %Hologram.AccessDeniedError{
+      message:
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :owner"
+    }
+
+    results = {Task.await(by_alice), Task.await(by_bob)}
+    assert results in [{:ok, refused}, {refused, :ok}]
+
+    winner = if results == {:ok, refused}, do: alice, else: bob
+    assert owner_ids(scratch, resource) == [winner.id]
   end
 
   test "a create holds the grant rows its evaluation read until its row lands", %{
