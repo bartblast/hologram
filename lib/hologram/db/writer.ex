@@ -3,8 +3,10 @@ defmodule Hologram.DB.Writer do
 
   # The executors behind the DB verbs' struct forms: resolve a struct's claim, evaluate it
   # inside the transaction against the row as it stands, and apply the pending write through
-  # EntityOperations. EntityOperations itself stays claim-blind, so the framework's own writes
-  # (a grant under an acting user) reach it as they always have.
+  # EntityOperations. The evaluation holds the grant rows its answer rests on until the
+  # transaction ends, so the authority a write was judged on is still there when it commits.
+  # EntityOperations itself stays claim-blind, so the framework's own writes (a grant under an
+  # acting user) reach it as they always have.
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
@@ -18,13 +20,19 @@ defmodule Hologram.DB.Writer do
   def create(entity) do
     stamped = stamp_actor(entity)
 
-    # The row being inserted is the struct in hand - nothing a transaction could change - so the
-    # claim is evaluated against it before the write's own transaction opens.
-    evaluate!(stamped, :create, stamped)
+    {:ok, result} =
+      Connection.transaction(fn ->
+        # The row being inserted is the struct in hand, so the claim is evaluated against it -
+        # inside the transaction the insert runs in, which is what holds the grants the answer
+        # rests on until the row lands.
+        evaluate!(stamped, :create, stamped)
 
-    stamped
-    |> clean()
-    |> EntityOperations.create()
+        stamped
+        |> clean()
+        |> EntityOperations.create()
+      end)
+
+    result
   end
 
   @doc false
@@ -177,8 +185,10 @@ defmodule Hologram.DB.Writer do
     end
   end
 
+  # Asked with :held, so the grant rows the answer rests on stay as read until the write's
+  # transaction ends - every caller of this runs inside one.
   defp evaluate_operation!(operation, row) do
-    if Auth.can?(Context.actor_user_id(), operation, row) do
+    if Auth.can?(Context.actor_user_id(), operation, row, :held) do
       :ok
     else
       raise Hologram.AccessDeniedError,

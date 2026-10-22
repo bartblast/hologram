@@ -13,19 +13,29 @@ defmodule Hologram.AuthContentionTest do
   # has not got there yet look the same to a task that has not returned, so the wait is asserted
   # where it is visible: Postgres itself.
   #
+  # Every other write under an acting user reads the grants its policy rests on through the same
+  # hold, wherever the policy reads them - a role on the row, on its whole type, or on a related
+  # row - and a create evaluates inside the transaction its insert runs in. Such a write is parked
+  # on the parent row it names: a third session holds that row FOR UPDATE, and the write's foreign
+  # key check, which share-locks the row it references, waits there - past the evaluation, before
+  # the write.
+  #
   # async: false - the tier's modules run one at a time, since each opens raw sessions beside its
   # scratch connection.
   use Hologram.Test.ScratchDatabaseCase, async: false
 
   import Hologram.Auth
+  import Hologram.Query, only: [authorize: 2, put_attribute: 3]
 
   alias Hologram.Auth.Context
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.EntityOperations
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Policy.Module2
 
   defp create_user(scratch, email) do
     route(scratch, fn ->
@@ -69,26 +79,34 @@ defmodule Hologram.AuthContentionTest do
   end
 
   # The gated write under the acting user, on a session of its own and with no transaction but the
-  # verb's - what is under test is the verb holding its gate's rows until its write lands.
+  # verb's - what is under test is the verb holding the grant rows it read until its write lands.
   defp start_gated_write(scratch_opts, actor, write) do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> Context.with_actor(actor.id, write) end)
     end)
   end
 
-  # Trusted code holding a write of its own open until the test lets it commit: the same row the
-  # gated write reaches for, so that the gated write parks between its gate and its write.
+  # Trusted code holding a transaction of its own open until the test lets it commit, on a row the
+  # gated write reaches for - so that the gated write parks past its evaluation, before its write.
   defp start_holder(scratch_opts, write, test_pid) do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> Connection.transaction(hold_write(write, test_pid)) end)
     end)
   end
 
-  # Trusted code taking the acting user's :owner away - no gate of its own, straight to the row
-  # the gated write's gate rests on.
-  defp start_revoker(scratch_opts, actor, resource) do
+  # A third session holding the parent row FOR UPDATE, so that a write naming it parks on its
+  # foreign key check - after its evaluation, before its row lands.
+  defp start_parent_holder(scratch_opts, parent, test_pid) do
+    lock = fn -> EntityOperations.get(Module2, parent.id, lock: true) end
+
+    start_holder(scratch_opts, lock, test_pid)
+  end
+
+  # Trusted code taking a role of the acting user's away - no gate of its own, straight to the row
+  # the gated write's evaluation rests on.
+  defp start_revoker(scratch_opts, actor, role, entity) do
     Task.async(fn ->
-      on_own_session(scratch_opts, fn -> revoke_role(actor, :owner, resource) end)
+      on_own_session(scratch_opts, fn -> revoke_role(actor, role, entity) end)
     end)
   end
 
@@ -117,7 +135,13 @@ defmodule Hologram.AuthContentionTest do
 
     alice = create_user(scratch, "alice@example.com")
     bob = create_user(scratch, "bob@example.com")
-    resource = route(scratch, fn -> DB.create!(Module1.new()) end)
+    # Priority 5 is what lets alice's :owner, which extends :editor, update it.
+    resource =
+      route(scratch, fn ->
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+      end)
 
     route(scratch, fn -> grant_role(alice, :owner, resource) end)
 
@@ -141,7 +165,7 @@ defmodule Hologram.AuthContentionTest do
     wait_for_blocked_sessions(scratch_opts, 1)
 
     # The revocation of alice's :owner queues behind the gate's hold on that row.
-    revoker = start_revoker(scratch_opts, alice, resource)
+    revoker = start_revoker(scratch_opts, alice, :owner, resource)
     wait_for_blocked_sessions(scratch_opts, 2)
 
     send(holder.pid, :release)
@@ -171,7 +195,7 @@ defmodule Hologram.AuthContentionTest do
     wait_for_blocked_sessions(scratch_opts, 1)
 
     # The revocation of alice's :owner queues behind the gate's hold on that row.
-    revoker = start_revoker(scratch_opts, alice, resource)
+    revoker = start_revoker(scratch_opts, alice, :owner, resource)
     wait_for_blocked_sessions(scratch_opts, 2)
 
     send(holder.pid, :release)
@@ -180,5 +204,106 @@ defmodule Hologram.AuthContentionTest do
     assert Task.await(revoker) == :ok
 
     assert owner_ids(scratch, resource) == []
+  end
+
+  test "a create holds the grant rows its evaluation read until its row lands", %{
+    alice: alice,
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    route(scratch, fn -> grant_role(alice, :editor, Module1) end)
+    parent = route(scratch, fn -> DB.create!(Module2.new()) end)
+
+    entity =
+      %{parent_id: parent.id, priority: 5}
+      |> Module1.new()
+      |> authorize(:update)
+
+    holder = start_parent_holder(scratch_opts, parent, self())
+    assert_receive :holding, 5_000
+
+    gated = start_gated_write(scratch_opts, alice, fn -> DB.create(entity) end)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    # The revocation of alice's type-wide :editor queues behind the evaluation's hold on that row.
+    revoker = start_revoker(scratch_opts, alice, :editor, Module1)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    entity_id = entity.id
+    assert {:ok, %Module1{id: ^entity_id}} = Task.await(gated)
+    assert Task.await(revoker) == :ok
+
+    assert route(scratch, fn -> DB.read(Module1, entity.id) end).parent_id == parent.id
+    refute route(scratch, fn -> has_role?(alice, :editor, Module1) end)
+  end
+
+  test "an update holds the grant rows its evaluation read until its write lands", %{
+    alice: alice,
+    resource: resource,
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    parent = route(scratch, fn -> DB.create!(Module2.new()) end)
+
+    holder = start_parent_holder(scratch_opts, parent, self())
+    assert_receive :holding, 5_000
+
+    update = fn ->
+      resource
+      |> put_attribute(:parent_id, parent.id)
+      |> DB.update()
+    end
+
+    gated = start_gated_write(scratch_opts, alice, update)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    # The revocation of alice's :owner queues behind the evaluation's hold on that row.
+    revoker = start_revoker(scratch_opts, alice, :owner, resource)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    assert Task.await(gated) == :ok
+    assert Task.await(revoker) == :ok
+
+    assert route(scratch, fn -> DB.read(Module1, resource.id) end).parent_id == parent.id
+    assert owner_ids(scratch, resource) == []
+  end
+
+  test "a write holds the grant rows it read on a related row", %{
+    alice: alice,
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    parent = route(scratch, fn -> DB.create!(Module2.new()) end)
+    route(scratch, fn -> grant_role(alice, :admin, parent) end)
+
+    # Module1's :delete is granted by :admin on the PARENT row - a grant on another resource,
+    # which no gate reads.
+    entity =
+      %{parent_id: parent.id, priority: 5}
+      |> Module1.new()
+      |> authorize(:delete)
+
+    holder = start_parent_holder(scratch_opts, parent, self())
+    assert_receive :holding, 5_000
+
+    gated = start_gated_write(scratch_opts, alice, fn -> DB.create(entity) end)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    # The revocation of alice's :admin on the parent queues behind the evaluation's hold on it.
+    revoker = start_revoker(scratch_opts, alice, :admin, parent)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    entity_id = entity.id
+    assert {:ok, %Module1{id: ^entity_id}} = Task.await(gated)
+    assert Task.await(revoker) == :ok
+
+    assert route(scratch, fn -> DB.read(Module1, entity.id) end).parent_id == parent.id
+    refute route(scratch, fn -> has_role?(alice, :admin, parent) end)
   end
 end

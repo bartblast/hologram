@@ -1327,7 +1327,7 @@ defmodule Hologram.CompilerTest do
       assert Enum.any?(
                asks,
                &match?(
-                 %{mfa: {Hologram.DB.Writer, :evaluate_operation!, 2}, operation: :dynamic},
+                 %{mfa: {Hologram.Job, :apply_claim, 2}, operation: :dynamic},
                  &1
                )
              )

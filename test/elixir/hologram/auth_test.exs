@@ -717,6 +717,89 @@ defmodule Hologram.AuthTest do
                  {user.id, {:type, Module2}}
                ])
     end
+
+    # What :held holds is only visible across sessions - the scratch tier pins that. Here, that it
+    # answers what the store answers, for every rule kind.
+    test "with :held answers from the store" do
+      user = create_user("user_146@example.com")
+      other_user = create_user("user_147@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      grant_role(user, :editor, %Module1{id: entity.id})
+
+      assert can?(user, :update, entity, :held)
+      refute can?(other_user, :update, entity, :held)
+    end
+
+    test "with :held matches a type-wide grant" do
+      user = create_user("user_148@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      grant_role(user, :editor, Module1)
+
+      assert can?(user, :update, entity, :held)
+    end
+
+    test "with :held matches a type-wide grant on another entity type" do
+      user = create_user("user_152@example.com")
+
+      grant_role(user, :admin, Module2)
+
+      assert can?(user, :read, %Module1{id: Entity.generate_id()}, :held)
+    end
+
+    test "with :held matches a global role module grant" do
+      user = create_user("user_149@example.com")
+      entity = %Module2{id: Entity.generate_id()}
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert can?(user, :archive, entity, :held)
+    end
+
+    test "with :held matches a grant on a related row" do
+      user = create_user("user_150@example.com")
+      parent = create_parent()
+
+      grant_role(user, :admin, parent)
+
+      assert can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: parent.id}, :held)
+      refute can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil}, :held)
+    end
+
+    test "with :held follows a delegation" do
+      user = create_user("user_151@example.com")
+      parent = create_parent()
+      entity = %Module4{id: Entity.generate_id(), parent_id: parent.id}
+
+      refute can?(user, :archive, entity, :held)
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert can?(user, :archive, entity, :held)
+    end
+
+    test "with :held matches a grant for the grant store's own rows" do
+      user = create_user("user_153@example.com")
+      other_user = create_user("user_154@example.com")
+      resource = create_parent()
+
+      row = %RoleGrant{
+        user_id: other_user.id,
+        entity_type: Module2,
+        entity_id: resource.id
+      }
+
+      refute can?(user, :read, row, :held)
+
+      grant_role(user, :member, resource)
+
+      assert can?(user, :read, row, :held)
+    end
+
+    test "with :held answers false for an anonymous session" do
+      refute can?(nil, :update, %Module1{id: Entity.generate_id(), priority: 5}, :held)
+    end
   end
 
   describe "chain_target_id/2" do
