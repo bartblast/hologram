@@ -6,6 +6,9 @@ defmodule Hologram.DB.Writer do
   # EntityOperations. The evaluation holds the grant rows its answer rests on, and the related
   # rows its delegations read, until the transaction ends, so the authority a write was judged on
   # is still there when it commits.
+  # A transaction the verb opens and PostgreSQL aborts as a deadlock victim is run again, so the
+  # verb answers the way it would have a moment later. Inside a caller's transaction the error
+  # propagates to it instead.
   # EntityOperations itself stays claim-blind, so the framework's own writes (a grant under an
   # acting user) reach it as they always have.
 
@@ -22,7 +25,7 @@ defmodule Hologram.DB.Writer do
     stamped = stamp_actor(entity)
 
     {:ok, result} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         # The row being inserted is the struct in hand, so the claim is evaluated against it -
         # inside the transaction the insert runs in, which is what holds the grants the answer
         # rests on, and the related rows its delegations read, until the row lands.
@@ -42,7 +45,7 @@ defmodule Hologram.DB.Writer do
     entity_type = entity.__struct__
 
     {:ok, applied} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         # No row is nothing to authorize against, and deleting an id that names none is a no-op
         # through the type-indexed verb too.
         case EntityOperations.get(entity_type, entity.id, lock: :update) do
@@ -91,7 +94,7 @@ defmodule Hologram.DB.Writer do
     {attribute_changes, attribute_deltas} = split_attribute_ops(attribute_ops)
 
     {:ok, applied} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         row = lock_row!(entity_type, entity.id, "update")
 
         evaluate!(entity, :update, row)
@@ -117,7 +120,7 @@ defmodule Hologram.DB.Writer do
   def update(entity_type, id, changes) do
     if Context.actor_user_id() do
       {:ok, applied} =
-        Connection.transaction(fn ->
+        Connection.retry_on_deadlock(fn ->
           row = lock_row!(entity_type, id, "update")
 
           evaluate_operation!(:update, row)

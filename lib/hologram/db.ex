@@ -89,6 +89,11 @@ defmodule Hologram.DB do
   evaluated with the anonymous semantics. The returned entity carries no claim and no recorded
   changes.
 
+  A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
+  locks - is run again and answers the way it would have a moment later, a refusal included.
+  Inside a caller's transaction the deadlock error propagates instead, and the caller's
+  transaction is the one to retry.
+
   Misuse raises rather than returning - a role grant, which is written only through
   grant_role/revoke_role, and a job, which is created through Job.create/2 - as does a
   constraint violation the mapping does not explain.
@@ -166,6 +171,11 @@ defmodule Hologram.DB do
   lands after the delete. An entity claiming the server's own authority through trust/1 is deleted
   without evaluation, and without an acting user an unclaimed delete is raw. A struct whose id
   names no row is not evaluated at all: there is nothing to authorize against.
+
+  A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
+  locks - is run again and answers the way it would have a moment later, a refusal included.
+  Inside a caller's transaction the deadlock error propagates instead, and the caller's
+  transaction is the one to retry.
   """
   @spec delete(Entity.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity) when is_struct(entity) do
@@ -299,7 +309,9 @@ defmodule Hologram.DB do
   and nothing more, and the enclosing transaction continues. The write verbs answer the
   same way inside a transaction as outside it - a refused write returns {:error,
   violations} or raises through its bang, and the transaction stays usable. An exception
-  rolls the transaction back and re-raises.
+  rolls the transaction back and re-raises. A write verb called inside it is not run again when
+  PostgreSQL aborts the transaction as a deadlock victim - the error propagates, and this
+  transaction is the one to retry.
 
   A nested call costs two statements (SAVEPOINT and RELEASE, three when it rolls back),
   and PostgreSQL caches 64 subtransactions per session - a transaction opening more than that, such as a loop of
@@ -370,6 +382,11 @@ defmodule Hologram.DB do
   the same way, so a change to it lands after the write. An entity claiming the server's own
   authority through trust/1 is written without evaluation, and without an acting user an unclaimed
   write is raw.
+
+  An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
+  locks - is run again and answers the way it would have a moment later, a refusal included.
+  Inside a caller's transaction the deadlock error propagates instead, and the caller's
+  transaction is the one to retry.
 
   Returns {:error, violations} for a refused value exactly as update/3 does. A moved attribute is
   judged on the value the write leaves, so a move that would cross a declared bound is reported

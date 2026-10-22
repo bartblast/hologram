@@ -26,6 +26,12 @@ defmodule Hologram.AuthContentionTest do
   # second parent a third session holds, so the evaluation ran against the row as it stood, with
   # the parent it read and holds.
   #
+  # Two such holds can cross another transaction's locks, and PostgreSQL then aborts one of the two
+  # as a deadlock victim. A third session parks both sides so that, when it lets go, each holds what
+  # the other waits for. PostgreSQL aborts the session whose deadlock check finds the cycle first, so
+  # the session under test is elected the victim through a shorter deadlock_timeout - and its verb,
+  # run again, answers the way it would have a moment later.
+  #
   # async: false - the tier's modules run one at a time, since each opens raw sessions beside its
   # scratch connection.
   use Hologram.Test.ScratchDatabaseCase, async: false
@@ -51,12 +57,71 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
 
+  # A browser's batch carrying the given writes, as the wire carries it.
+  defp batch(writes) do
+    %{
+      "instance_id" => "i1",
+      "model_hash" => Model.hash(),
+      "replica_id" => Entity.generate_id(),
+      "seq" => 1,
+      "writes" => writes
+    }
+  end
+
   defp create_user(scratch, email) do
     route(scratch, fn ->
       %{email: email}
       |> Module14.new()
       |> DB.create!()
     end)
+  end
+
+  # A gated write crossing a batch that revokes its actor's role. The gated write under alice parks
+  # on its FOR UPDATE of the resource, which a holder shares. Bob's batch revokes alice's :owner,
+  # locking her grant row, and parks on the resource behind the gated write - PostgreSQL hands the
+  # row to the first in its queue, so the gated write has to park first, or the batch would simply
+  # land before it. When the holder lets go, the gated write takes the resource and asks for its
+  # grant row, and the batch wakes and asks for the resource: each holds what the other waits for.
+  # The gated write's session is the elected victim, and run again it finds alice's role gone.
+  # Returns the gated write's answer and the batch's.
+  defp cross_with_revoking_batch(context, write) do
+    %{alice: alice, bob: bob, resource: resource, scratch: scratch, scratch_opts: scratch_opts} =
+      context
+
+    route(scratch, fn -> grant_role(bob, :owner, resource) end)
+
+    alice_grant_id = RoleGrant.derive_id(alice.id, Module1, resource.id, :owner)
+    alice_grant = route(scratch, fn -> EntityOperations.get(RoleGrant, alice_grant_id) end)
+
+    holder = start_share_holder(scratch_opts, resource, self())
+    assert_receive :holding, 5_000
+
+    gated = start_victim(scratch_opts, alice, fn -> refusal_or_result(write) end)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    writes = [
+      revocation_write(alice.id, :owner, resource, alice_grant),
+      update_write(resource, %{"priority" => 9})
+    ]
+
+    by_bob = start_batch(scratch_opts, bob, batch(writes))
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    {Task.await(gated), Task.await(by_bob)}
+  end
+
+  # Makes the calling process's session the one PostgreSQL aborts should it end up in a deadlock.
+  # PostgreSQL aborts the process whose deadlock check finds the cycle, and a process checks once,
+  # deadlock_timeout after it starts waiting - so the session with the shortest timeout is the
+  # victim whenever the other side is waiting by then, which in every staging here it is within a
+  # millisecond. A superuser's setting, which the test user is.
+  defp elect_victim do
+    {:ok, _result} = Connection.query("SET deadlock_timeout = '100ms'")
+
+    :ok
   end
 
   defp hold_write(write, test_pid) do
@@ -100,43 +165,35 @@ defmodule Hologram.AuthContentionTest do
     error in Hologram.AccessDeniedError -> error
   end
 
-  # A browser's revocation of the given user's :owner on the resource, as the wire carries it: one
-  # write, based on the grant row as it stands, stamped above every revision it holds - the applier
-  # refuses a stamp that is not above the revisions its write was based on, and a row written this
-  # millisecond can already carry one above the raw wall clock.
-  defp revocation_batch(user_id, resource, row) do
-    revisions =
-      Map.new(row.__meta__.revisions, fn {name, revision} ->
-        {Atom.to_string(name), revision}
-      end)
+  # A browser's revocation of the given user's role on the resource, as the wire carries it: based
+  # on the grant row as it stands.
+  defp revocation_write(user_id, role, resource, row) do
+    %{
+      "based_on" => stringify_keys(row.__meta__.revisions),
+      "claim" => nil,
+      "data" => %{
+        "entity_id" => resource.id,
+        "entity_type" => Codec.encode_enum_value(resource.__struct__),
+        "role" => Atom.to_string(role),
+        "user_id" => user_id
+      },
+      "id" => row.id,
+      "op" => "delete",
+      "stamp" => stamp_above(row),
+      "type" => inspect(RoleGrant)
+    }
+  end
 
+  # A stamp above every revision the row holds - the applier refuses a stamp that is not above the
+  # revisions its write was based on, and a row written this millisecond can already carry one above
+  # the raw wall clock.
+  defp stamp_above(row) do
     highest_revision =
       row.__meta__.revisions
       |> Map.values()
       |> Enum.max()
 
-    write = %{
-      "based_on" => revisions,
-      "claim" => nil,
-      "data" => %{
-        "entity_id" => resource.id,
-        "entity_type" => Codec.encode_enum_value(resource.__struct__),
-        "role" => "owner",
-        "user_id" => user_id
-      },
-      "id" => row.id,
-      "op" => "delete",
-      "stamp" => max(System.os_time(:millisecond) * 1024, highest_revision + 1),
-      "type" => inspect(RoleGrant)
-    }
-
-    %{
-      "instance_id" => "i1",
-      "model_hash" => Model.hash(),
-      "replica_id" => Entity.generate_id(),
-      "seq" => 1,
-      "writes" => [write]
-    }
+    max(System.os_time(:millisecond) * 1024, highest_revision + 1)
   end
 
   # A batch applied on a session of its own under the given user, as a request applies it.
@@ -198,6 +255,52 @@ defmodule Hologram.AuthContentionTest do
     lock = fn -> EntityOperations.get(row.__struct__, row.id, lock: :update) end
 
     start_holder(scratch_opts, lock, test_pid)
+  end
+
+  # A third session holding a row FOR SHARE: a write's FOR UPDATE of it parks there, while the
+  # rows around it stay free for whoever comes next.
+  defp start_share_holder(scratch_opts, row, test_pid) do
+    lock = fn -> EntityOperations.get(row.__struct__, row.id, lock: :share) end
+
+    start_holder(scratch_opts, lock, test_pid)
+  end
+
+  # The write under test, under the given actor, on a session of its own elected as the deadlock
+  # victim.
+  defp start_victim(scratch_opts, actor, write) do
+    Task.async(fn ->
+      on_own_session(scratch_opts, fn ->
+        elect_victim()
+
+        Context.with_actor(actor.id, write)
+      end)
+    end)
+  end
+
+  defp stringify_keys(map), do: Map.new(map, fn {key, value} -> {Atom.to_string(key), value} end)
+
+  # A browser's update of the given row, as the wire carries it: based on the stored revision of
+  # each field it writes.
+  defp update_write(row, values) do
+    names =
+      values
+      |> Map.keys()
+      |> Enum.map(&String.to_existing_atom/1)
+
+    based_on =
+      row.__meta__.revisions
+      |> Map.take(names)
+      |> stringify_keys()
+
+    %{
+      "based_on" => based_on,
+      "claim" => nil,
+      "data" => values,
+      "id" => row.id,
+      "op" => "update",
+      "stamp" => stamp_above(row),
+      "type" => inspect(row.__struct__)
+    }
   end
 
   # Scoped to this database and excluding the observer, because pg_stat_activity is the whole
@@ -356,8 +459,20 @@ defmodule Hologram.AuthContentionTest do
     holder = start_grant_share_holder(scratch_opts, [alice_row.id, bob_row.id], self())
     assert_receive :holding, 5_000
 
-    by_alice = start_batch(scratch_opts, alice, revocation_batch(bob.id, resource, bob_row))
-    by_bob = start_batch(scratch_opts, bob, revocation_batch(alice.id, resource, alice_row))
+    by_alice =
+      start_batch(
+        scratch_opts,
+        alice,
+        batch([revocation_write(bob.id, :owner, resource, bob_row)])
+      )
+
+    by_bob =
+      start_batch(
+        scratch_opts,
+        bob,
+        batch([revocation_write(alice.id, :owner, resource, alice_row)])
+      )
+
     wait_for_blocked_sessions(scratch_opts, 2)
 
     # The verbs' cycle, in the batches: each one's FOR UPDATE on the row it revokes waits on the
@@ -589,5 +704,121 @@ defmodule Hologram.AuthContentionTest do
 
     assert route(scratch, fn -> DB.read(Module8, entity.id) end).parent_id == new_middle.id
     assert route(scratch, fn -> DB.read(Module1, chain_end.id) end).public == false
+  end
+
+  test "an update aborted as a deadlock victim is run again and refused once its actor's role is gone",
+       %{resource: resource, scratch: scratch} = context do
+    update = fn ->
+      resource
+      |> put_attribute(:priority, 7)
+      |> DB.update()
+    end
+
+    assert cross_with_revoking_batch(context, update) == {
+             %Hologram.AccessDeniedError{
+               message:
+                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+             },
+             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+           }
+
+    assert route(scratch, fn -> DB.read(Module1, resource.id) end).priority == 9
+    assert owner_ids(scratch, resource) == [context.bob.id]
+  end
+
+  test "a type-indexed update aborted as a deadlock victim is run again and refused once its actor's role is gone",
+       %{resource: resource, scratch: scratch} = context do
+    update = fn -> DB.update(Module1, resource.id, priority: 7) end
+
+    assert cross_with_revoking_batch(context, update) == {
+             %Hologram.AccessDeniedError{
+               message:
+                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+             },
+             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+           }
+
+    assert route(scratch, fn -> DB.read(Module1, resource.id) end).priority == 9
+    assert owner_ids(scratch, resource) == [context.bob.id]
+  end
+
+  test "a delete aborted as a deadlock victim is run again and refused once its actor's role is gone",
+       %{resource: resource, scratch: scratch} = context do
+    # The delete claims the :update rule, which alice's :owner grants on the row itself - Module1's
+    # own :delete rests on a role on its parent, which this cycle has no use for.
+    delete = fn ->
+      resource
+      |> authorize(:update)
+      |> DB.delete()
+    end
+
+    assert cross_with_revoking_batch(context, delete) == {
+             %Hologram.AccessDeniedError{
+               message:
+                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+             },
+             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+           }
+
+    assert route(scratch, fn -> DB.read(Module1, resource.id) end).priority == 9
+    assert owner_ids(scratch, resource) == [context.bob.id]
+  end
+
+  test "a create aborted as a deadlock victim is run again and refused once its actor's role is gone",
+       %{
+         alice: alice,
+         bob: bob,
+         scratch: scratch,
+         scratch_opts: scratch_opts
+       } do
+    parent = route(scratch, fn -> DB.create!(Module2.new()) end)
+    route(scratch, fn -> grant_role(alice, :admin, parent) end)
+    route(scratch, fn -> grant_role(bob, :admin, parent) end)
+
+    alice_grant_id = RoleGrant.derive_id(alice.id, Module2, parent.id, :admin)
+    alice_grant = route(scratch, fn -> EntityOperations.get(RoleGrant, alice_grant_id) end)
+
+    # Module1's :delete is granted by :admin on the parent row, a grant a batch can revoke.
+    entity =
+      %{parent_id: parent.id, priority: 5}
+      |> Module1.new()
+      |> authorize(:delete)
+
+    # A create's first lock is its evaluation's share lock on alice's grant row, and its second the
+    # foreign key check's on the parent. The batch takes them the other way round: it updates the
+    # parent, then revokes alice's :admin on it. With the holder on the grant row, the create parks
+    # on its evaluation first and the batch's revocation queues behind it, its parent already
+    # locked. When the holder lets go the create evaluates, inserts and waits on the parent, and the
+    # batch waits on the create's share lock.
+    holder = start_row_holder(scratch_opts, alice_grant, self())
+    assert_receive :holding, 5_000
+
+    gated =
+      start_victim(scratch_opts, alice, fn -> refusal_or_result(fn -> DB.create(entity) end) end)
+
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    writes = [
+      update_write(parent, %{"public" => true}),
+      revocation_write(alice.id, :admin, parent, alice_grant)
+    ]
+
+    by_bob = start_batch(scratch_opts, bob, batch(writes))
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    assert Task.await(gated) == %Hologram.AccessDeniedError{
+             message:
+               "not allowed to delete Hologram.Test.Fixtures.Policy.Module1 #{inspect(entity.id)}"
+           }
+
+    assert Task.await(by_bob) ==
+             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+    assert route(scratch, fn -> DB.read(Module1, entity.id) end) == nil
+    assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
+    refute route(scratch, fn -> has_role?(alice, :admin, parent) end)
   end
 end
