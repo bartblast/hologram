@@ -265,14 +265,16 @@ defmodule Hologram.AuthContentionTest do
     start_holder(scratch_opts, lock, test_pid)
   end
 
-  # The write under test, under the given actor, on a session of its own elected as the deadlock
-  # victim.
+  # The write under test, on a session of its own elected as the deadlock victim - under the given
+  # actor, or trusted code with nil.
   defp start_victim(scratch_opts, actor, write) do
+    actor_id = actor && actor.id
+
     Task.async(fn ->
       on_own_session(scratch_opts, fn ->
         elect_victim()
 
-        Context.with_actor(actor.id, write)
+        Context.with_actor(actor_id, write)
       end)
     end)
   end
@@ -820,5 +822,103 @@ defmodule Hologram.AuthContentionTest do
     assert route(scratch, fn -> DB.read(Module1, entity.id) end) == nil
     assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
     refute route(scratch, fn -> has_role?(alice, :admin, parent) end)
+  end
+
+  test "a trusted delete aborted as a deadlock victim is run again and answers the reference that restricts it",
+       %{
+         alice: alice,
+         scratch: scratch,
+         scratch_opts: scratch_opts
+       } do
+    parent =
+      route(scratch, fn ->
+        %{public: true}
+        |> Module2.new()
+        |> DB.create!()
+      end)
+
+    entity =
+      route(scratch, fn ->
+        %{parent_id: parent.id}
+        |> Module1.new()
+        |> DB.create!()
+      end)
+
+    # Module1's :publish is `via: parent`, and Module2's :publish holds while the parent is public -
+    # so alice may publish the row with no role of her own, reading the parent FOR SHARE.
+    update = fn ->
+      entity
+      |> put_attribute(:priority, 7)
+      |> authorize(:publish)
+      |> DB.update()
+    end
+
+    # The delegated update locks the row, then reads the parent. The delete takes the parent, then
+    # its foreign key check asks for the row referencing it. With the holder on the row, the update
+    # parks on it first and the delete's foreign key check queues behind it, the parent already
+    # taken. When the holder lets go the update takes the row and waits on the parent, and the
+    # delete waits on the row.
+    holder = start_row_holder(scratch_opts, entity, self())
+    assert_receive :holding, 5_000
+
+    gated = start_gated_write(scratch_opts, alice, update)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    trusted = start_victim(scratch_opts, nil, fn -> DB.delete(Module2, parent.id) end)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    assert Task.await(gated) == :ok
+    assert Task.await(trusted) == {:error, %{referenced_by: Module1, relationship: :parent}}
+
+    assert route(scratch, fn -> DB.read(Module1, entity.id) end).priority == 7
+    assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
+  end
+
+  test "a trusted type-indexed update aborted as a deadlock victim is run again and lands", %{
+    alice: alice,
+    resource: resource,
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    parent = route(scratch, fn -> DB.create!(Module2.new()) end)
+    route(scratch, fn -> grant_role(alice, :admin, parent) end)
+
+    # The trusted update locks the row, then its foreign key check asks for the parent it moves the
+    # row to. Alice's batch takes them the other way round: it updates the parent, then the row.
+    # With the holder on the row, the trusted update parks on it first and the batch queues behind
+    # it, the parent already locked. When the holder lets go the trusted update takes the row and
+    # waits on the parent, and the batch waits on the row.
+    holder = start_row_holder(scratch_opts, resource, self())
+    assert_receive :holding, 5_000
+
+    trusted =
+      start_victim(scratch_opts, nil, fn ->
+        DB.update(Module1, resource.id, parent_id: parent.id)
+      end)
+
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    writes = [
+      update_write(parent, %{"public" => true}),
+      update_write(resource, %{"priority" => 9})
+    ]
+
+    by_alice = start_batch(scratch_opts, alice, batch(writes))
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    assert Task.await(trusted) == :ok
+
+    assert Task.await(by_alice) ==
+             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+    stored = route(scratch, fn -> DB.read(Module1, resource.id) end)
+    assert {stored.parent_id, stored.priority} == {parent.id, 9}
+    assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
   end
 end

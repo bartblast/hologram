@@ -146,6 +146,11 @@ defmodule Hologram.DB do
   after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
   later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
   lands after the delete. Without an acting user the delete is raw.
+
+  A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
+  locks - is run again and answers the way it would have a moment later, a refusal included.
+  Inside a caller's transaction the deadlock error propagates instead, and the caller's
+  transaction is the one to retry.
   """
   @spec delete(module, Entity.id()) ::
           :ok | {:error, %{referenced_by: module, relationship: atom}}
@@ -351,6 +356,11 @@ defmodule Hologram.DB do
   after the update, and a grant made meanwhile is not seen - the update is refused where a moment
   later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
   lands after the update. Without an acting user the update is raw.
+
+  An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
+  locks - is run again and answers the way it would have a moment later, a refusal included.
+  Inside a caller's transaction the deadlock error propagates instead, and the caller's
+  transaction is the one to retry.
   """
   @spec update(module, Entity.id(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
