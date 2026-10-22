@@ -163,8 +163,12 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # A batch PostgreSQL aborts as a deadlock victim - its revocation and another session's taking
+  # each other's authority away, or its row writes crossing another batch's - is applied again
+  # from its claim. A write whose authority is gone by then is refused, the answer it would have
+  # got a moment later, and the client hears a refusal rather than a failed request.
   defp apply_in_transaction(envelope, server_struct) do
-    Connection.transaction(fn ->
+    Connection.retry_on_deadlock(fn ->
       Record.claim!(
         envelope.replica_id,
         envelope.seq,
