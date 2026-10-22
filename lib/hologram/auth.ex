@@ -344,6 +344,10 @@ defmodule Hologram.Auth do
   roles are set up and torn down. A type-wide revocation is trusted-only. The gate's answer holds
   until the revocation lands: a revocation of the role it rests on waits for this one to commit
   rather than slipping in between the two.
+
+  Two revocations taking each other's authority away at the same moment land one and refuse the
+  other, as they would a moment apart. Inside a caller's transaction, PostgreSQL's deadlock error
+  propagates instead, and the caller's transaction is the one to retry.
   """
   @spec revoke_role(struct | String.t(), atom, struct | module) :: :ok
   def revoke_role(user_or_id, role, entity) do
@@ -354,8 +358,11 @@ defmodule Hologram.Auth do
 
     # Gate and write in one transaction, so the authority the gate read is still there when the
     # write lands - the gate holds the grant rows its answer rests on until the transaction ends.
+    # Two gated revocations taking each other's authority away each hold the row the other
+    # wants, and PostgreSQL aborts one as a deadlock victim: rerun, its gate finds the role gone
+    # and refuses, the answer it would have given a moment later.
     {:ok, :ok} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         authorize_revoke!(entity_type, entity_id, user_id, role)
         delete_grant(user_id, entity_type, entity_id, role)
       end)
@@ -616,6 +623,9 @@ defmodule Hologram.Auth do
   # other row is. A client watching its own grants is told a row is gone by the round the effect
   # wakes, so a revocation nothing records is a revocation no client hears about until it renders
   # afresh. Revoking a role the user does not hold finds no rows and records nothing.
+  #
+  # The statement raises its own error rather than failing a match, since a deadlock victim is
+  # told apart by that error.
   # sobelow_skip ["SQL.Query"]
   defp delete_grant(user_id, entity_type, entity_id, role) do
     statement = """
@@ -636,7 +646,11 @@ defmodule Hologram.Auth do
 
     {:ok, :ok} =
       Connection.transaction(fn ->
-        {:ok, %{rows: rows}} = Connection.query(statement, params)
+        rows =
+          case Connection.query(statement, params) do
+            {:ok, %Postgrex.Result{rows: rows}} -> rows
+            {:error, error} -> raise error
+          end
 
         Enum.each(rows, fn [id] ->
           :ok = EntityOperations.delete(RoleGrant, Codec.decode(id, :uuid))
@@ -802,6 +816,9 @@ defmodule Hologram.Auth do
   # The :held statement share-locks the rows it matches, so a revocation's FOR UPDATE on any of
   # them waits for this transaction - and only those rows, the ones the answer rests on. :stored
   # keeps the EXISTS, which stops at the first matching row: a sync round asks it many times over.
+  #
+  # The statement raises its own error rather than failing a match: a held read waits on a
+  # revocation's row lock, and a deadlock victim is told apart by that error.
   # sobelow_skip ["SQL.Query"]
   defp query_grant_exists?(actor_user_id, scope, role_names, source) do
     {scope_condition, scope_params} = scope_condition(scope)
@@ -817,10 +834,13 @@ defmodule Hologram.Auth do
     role_values = Enum.map(role_names, &Codec.encode(&1, :enum))
     params = Enum.concat([[Codec.encode(actor_user_id, :uuid)], scope_params, [role_values]])
 
-    {:ok, %{rows: rows}} =
-      selection
-      |> grant_statement(source)
-      |> Connection.query(params)
+    statement = grant_statement(selection, source)
+
+    rows =
+      case Connection.query(statement, params) do
+        {:ok, %Postgrex.Result{rows: rows}} -> rows
+        {:error, error} -> raise error
+      end
 
     grant_answer(rows, source)
   end

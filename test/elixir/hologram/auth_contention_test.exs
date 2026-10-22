@@ -34,11 +34,17 @@ defmodule Hologram.AuthContentionTest do
   import Hologram.Query, only: [authorize: 2, put_attribute: 3]
 
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.Compiler.Encoder
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Entity
+  alias Hologram.Entity.Model
+  alias Hologram.Mutation
+  alias Hologram.Server
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
@@ -86,6 +92,60 @@ defmodule Hologram.AuthContentionTest do
     |> Enum.sort()
   end
 
+  # The refusal a gated write raises, returned as a value - a task that raised would take the test
+  # down with it.
+  defp refusal_or_result(fun) do
+    fun.()
+  rescue
+    error in Hologram.AccessDeniedError -> error
+  end
+
+  # A browser's revocation of the given user's :owner on the resource, as the wire carries it: one
+  # write, based on the grant row as it stands, stamped above every revision it holds - the applier
+  # refuses a stamp that is not above the revisions its write was based on, and a row written this
+  # millisecond can already carry one above the raw wall clock.
+  defp revocation_batch(user_id, resource, row) do
+    revisions =
+      Map.new(row.__meta__.revisions, fn {name, revision} ->
+        {Atom.to_string(name), revision}
+      end)
+
+    highest_revision =
+      row.__meta__.revisions
+      |> Map.values()
+      |> Enum.max()
+
+    write = %{
+      "based_on" => revisions,
+      "claim" => nil,
+      "data" => %{
+        "entity_id" => resource.id,
+        "entity_type" => Codec.encode_enum_value(resource.__struct__),
+        "role" => "owner",
+        "user_id" => user_id
+      },
+      "id" => row.id,
+      "op" => "delete",
+      "stamp" => max(System.os_time(:millisecond) * 1024, highest_revision + 1),
+      "type" => inspect(RoleGrant)
+    }
+
+    %{
+      "instance_id" => "i1",
+      "model_hash" => Model.hash(),
+      "replica_id" => Entity.generate_id(),
+      "seq" => 1,
+      "writes" => [write]
+    }
+  end
+
+  # A batch applied on a session of its own under the given user, as a request applies it.
+  defp start_batch(scratch_opts, actor, batch) do
+    Task.async(fn ->
+      on_own_session(scratch_opts, fn -> Mutation.run(batch, %Server{user_id: actor.id}) end)
+    end)
+  end
+
   # Trusted code changing a related row a delegation read - no gate of its own, straight to the row
   # the gated write's evaluation rests on.
   defp start_changer(scratch_opts, entity, attribute, value) do
@@ -105,6 +165,15 @@ defmodule Hologram.AuthContentionTest do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> Context.with_actor(actor.id, write) end)
     end)
+  end
+
+  # A third session holding grant rows FOR SHARE: a gate's own share lock passes it and a
+  # revocation's FOR UPDATE parks on it, so a gated revocation parks past its gate, before its
+  # write - and two of them have both run their gates when the holder lets go.
+  defp start_grant_share_holder(scratch_opts, grant_ids, test_pid) do
+    lock = fn -> Enum.each(grant_ids, &EntityOperations.get(RoleGrant, &1, lock: :share)) end
+
+    start_holder(scratch_opts, lock, test_pid)
   end
 
   # Trusted code holding a transaction of its own open until the test lets it commit, on a row the
@@ -225,6 +294,95 @@ defmodule Hologram.AuthContentionTest do
     assert Task.await(revoker) == :ok
 
     assert owner_ids(scratch, resource) == []
+  end
+
+  test "two users revoking each other's role at the same moment land one revocation and refuse the other",
+       %{
+         alice: alice,
+         bob: bob,
+         resource: resource,
+         scratch: scratch,
+         scratch_opts: scratch_opts
+       } do
+    route(scratch, fn -> grant_role(bob, :owner, resource) end)
+
+    grant_ids =
+      Enum.map([alice, bob], &RoleGrant.derive_id(&1.id, Module1, resource.id, :owner))
+
+    holder = start_grant_share_holder(scratch_opts, grant_ids, self())
+    assert_receive :holding, 5_000
+
+    revoke = fn user -> refusal_or_result(fn -> revoke_role(user, :owner, resource) end) end
+
+    by_alice = start_gated_write(scratch_opts, alice, fn -> revoke.(bob) end)
+    by_bob = start_gated_write(scratch_opts, bob, fn -> revoke.(alice) end)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    # When the holder lets go, each revocation's FOR UPDATE waits on the other's gate. PostgreSQL
+    # finds the cycle after its deadlock_timeout, a second by default, and aborts one of the two -
+    # rerun, that one finds its actor's role gone.
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    refused = %Hologram.AccessDeniedError{
+      message:
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :owner"
+    }
+
+    results = {Task.await(by_alice), Task.await(by_bob)}
+    assert results in [{:ok, refused}, {refused, :ok}]
+
+    winner = if results == {:ok, refused}, do: alice, else: bob
+    assert owner_ids(scratch, resource) == [winner.id]
+  end
+
+  test "two batches revoking each other's role at the same moment land one revocation and refuse the other",
+       %{
+         alice: alice,
+         bob: bob,
+         resource: resource,
+         scratch: scratch,
+         scratch_opts: scratch_opts
+       } do
+    route(scratch, fn -> grant_role(bob, :owner, resource) end)
+
+    [alice_row, bob_row] =
+      Enum.map([alice, bob], fn user ->
+        grant_id = RoleGrant.derive_id(user.id, Module1, resource.id, :owner)
+
+        route(scratch, fn -> EntityOperations.get(RoleGrant, grant_id) end)
+      end)
+
+    holder = start_grant_share_holder(scratch_opts, [alice_row.id, bob_row.id], self())
+    assert_receive :holding, 5_000
+
+    by_alice = start_batch(scratch_opts, alice, revocation_batch(bob.id, resource, bob_row))
+    by_bob = start_batch(scratch_opts, bob, revocation_batch(alice.id, resource, alice_row))
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    # The verbs' cycle, in the batches: each one's FOR UPDATE on the row it revokes waits on the
+    # other's gate once the holder lets go, and the one PostgreSQL aborts is applied again.
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+
+    confirmed = {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+    message =
+      "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :owner"
+
+    rejected =
+      {:ok,
+       %{
+         "reason" => Encoder.encode_client_term!(%Hologram.AccessDeniedError{message: message}),
+         "status" => "rejected",
+         "write" => 0
+       }}
+
+    results = {Task.await(by_alice), Task.await(by_bob)}
+    assert results in [{confirmed, rejected}, {rejected, confirmed}]
+
+    winner = if results == {confirmed, rejected}, do: alice, else: bob
+    assert owner_ids(scratch, resource) == [winner.id]
   end
 
   test "a create holds the grant rows its evaluation read until its row lands", %{

@@ -9,9 +9,29 @@ defmodule Hologram.DB.ConnectionTest do
   # routes through, so it is tested on a real connection.
   @moduletag :database
 
+  # Stand-ins for the errors PostgreSQL raises, carrying the fields Postgrex.Error renders - a real
+  # deadlock needs two sessions crossing, which the scratch tier stages.
+  @deadlock_error %Postgrex.Error{
+    postgres: %{
+      code: :deadlock_detected,
+      message: "deadlock detected",
+      pg_code: "40P01",
+      severity: "ERROR"
+    }
+  }
+
   @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at", "$revisions") VALUES ($1, now(), now(), '{}')|
 
   @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at", "$revisions") VALUES (gen_random_uuid(), now(), now(), '{}') RETURNING "id"|
+
+  @unique_violation_error %Postgrex.Error{
+    postgres: %{
+      code: :unique_violation,
+      message: "duplicate key value violates unique constraint",
+      pg_code: "23505",
+      severity: "ERROR"
+    }
+  }
 
   defp count_by_id(id) do
     count_sql =
@@ -19,6 +39,11 @@ defmodule Hologram.DB.ConnectionTest do
 
     {:ok, %Postgrex.Result{rows: [[count]]}} = query(count_sql, [id])
     count
+  end
+
+  # Counts a run of the function under test and returns which run this is.
+  defp count_run(runs) do
+    Agent.get_and_update(runs, &{&1 + 1, &1 + 1})
   end
 
   defp delete_by_id(id) do
@@ -35,6 +60,87 @@ defmodule Hologram.DB.ConnectionTest do
 
     test "returns errors as tagged tuples" do
       assert {:error, %Postgrex.Error{}} = query("SELECT * FROM nonexistent_table")
+    end
+  end
+
+  describe "retry_on_deadlock/1" do
+    test "reruns the transaction it opened when PostgreSQL aborts it as a deadlock victim" do
+      {:ok, runs} = Agent.start_link(fn -> 0 end)
+
+      result =
+        retry_on_deadlock(fn ->
+          case count_run(runs) do
+            1 -> raise @deadlock_error
+            _run -> :landed
+          end
+        end)
+
+      assert result == {:ok, :landed}
+      assert Agent.get(runs, & &1) == 2
+    end
+
+    test "commits what the rerun wrote and nothing of the aborted run" do
+      {:ok, runs} = Agent.start_link(fn -> 0 end)
+      {:ok, inserted_ids} = Agent.start_link(fn -> [] end)
+
+      result =
+        retry_on_deadlock(fn ->
+          {:ok, %Postgrex.Result{rows: [[id]]}} = query(@insert_returning_id_sql)
+          Agent.update(inserted_ids, &[id | &1])
+
+          if count_run(runs) == 1 do
+            raise @deadlock_error
+          end
+
+          :landed
+        end)
+
+      [rerun_id, aborted_id] = Agent.get(inserted_ids, & &1)
+
+      assert result == {:ok, :landed}
+      assert count_by_id(aborted_id) == 0
+      assert count_by_id(rerun_id) == 1
+
+      delete_by_id(rerun_id)
+    end
+
+    test "answers a rollback the way transaction/2 does" do
+      assert retry_on_deadlock(fn -> rollback(:some_reason) end) == {:error, :some_reason}
+    end
+
+    test "does not rerun inside an enclosing transaction" do
+      {:ok, runs} = Agent.start_link(fn -> 0 end)
+
+      assert_error Postgrex.Error, "ERROR 40P01 (deadlock_detected) deadlock detected", fn ->
+        transaction(fn ->
+          retry_on_deadlock(fn ->
+            case count_run(runs) do
+              1 -> raise @deadlock_error
+              _run -> :landed
+            end
+          end)
+        end)
+      end
+
+      assert Agent.get(runs, & &1) == 1
+    end
+
+    test "reraises any other database error" do
+      {:ok, runs} = Agent.start_link(fn -> 0 end)
+
+      expected_msg =
+        "ERROR 23505 (unique_violation) duplicate key value violates unique constraint"
+
+      assert_error Postgrex.Error, expected_msg, fn ->
+        retry_on_deadlock(fn ->
+          case count_run(runs) do
+            1 -> raise @unique_violation_error
+            _run -> :landed
+          end
+        end)
+      end
+
+      assert Agent.get(runs, & &1) == 1
     end
   end
 

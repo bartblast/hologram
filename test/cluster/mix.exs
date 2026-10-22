@@ -25,7 +25,7 @@ defmodule HologramClusterTests.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "5bb7196817e8c2e7bbb12fe746ab5a22a232ea64"},
+       ref: "ef7c7cd1e188bc3a7b1b779722b45a0b3dfb6af0"},
       {:jason, "~> 1.0"},
       {:mint, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
