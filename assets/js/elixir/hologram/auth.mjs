@@ -441,6 +441,42 @@ const Elixir_Hologram_Auth = {
     return Type.atom("ok");
   },
 
+  // Hologram.Auth.has_role?/2 as a browser runs it: the same refusal for a module that is no global
+  // role, then the global grant rows this client holds - a user's own always travel to it. The
+  // modules carrying the role come baked with the build, expanded there as the rules are.
+  "has_role?/2": (userOrId, role) => {
+    const roles = expandedGlobalRoles(role);
+    const userId = unboxActorUserId(userOrId);
+
+    if (userId === null) {
+      return Type.boolean(false);
+    }
+
+    return Type.boolean(grantExists(grantRows(), userId, roles, null, [null]));
+  },
+
+  // Hologram.Auth.has_role?/3 as a browser runs it: the role is validated against the type's baked
+  // roles with the server's sentence, expanded through the baked expansion, and looked for among
+  // the grant rows this client holds - on the row and type-wide for a struct, type-wide alone for
+  // an entity type module. The rows are read through the overlay, so a grant or revocation an
+  // action made answers here before it is sent.
+  "has_role?/3": (userOrId, role, entity) => {
+    const entityType = roleScopeType(entity);
+    const roleName = validateDeclaredRole(entityType, role);
+    const entityIds = roleScopeIds(entityType, entity);
+    const roles =
+      globalThis.Hologram.sync.model[entityType].expandedRoles[roleName];
+    const userId = unboxActorUserId(userOrId);
+
+    if (userId === null) {
+      return Type.boolean(false);
+    }
+
+    return Type.boolean(
+      grantExists(grantRows(), userId, roles, entityType, entityIds),
+    );
+  },
+
   "revoke_role/2": (_userOrId, _role) => {
     raiseAccessDenied(trustedWriteMessage("global", "revoked"));
   },
@@ -699,6 +735,59 @@ function entityReference(entity, verb) {
   const entityId = validateId(idEntry ? idEntry[1] : Type.nil(), "entity");
 
   return {entityType, entityId};
+}
+
+// IMPORTANT!
+// The two refusals below are hand ports of Hologram.Auth's unknown global role sentences. The one
+// listing the defined roles is pinned string for string by the has_role?/2 tests on both tiers.
+// The one for a build defining no global role is pinned here only, because the server's test
+// model always defines some. Always update both tiers together.
+//
+// The modules carrying the given global role, from the baked map whose keys are the defined global
+// roles - so a module that is none is refused here, with the server's sentence. The keys are module
+// names without their "Elixir." prefix, which sorts them the way the server sorts the modules.
+function expandedGlobalRoles(role) {
+  const expanded = globalThis.Hologram.sync?.expandedRoles ?? {};
+  const label = Type.isAlias(role) ? Interpreter.moduleExName(role) : null;
+
+  if (label !== null && expanded[label]) {
+    return expanded[label];
+  }
+
+  const defined = Object.keys(expanded).sort();
+
+  if (defined.length === 0) {
+    Interpreter.raiseArgumentError(
+      `unknown global role ${Interpreter.inspect(role)} - no module is defined with use Hologram.Role`,
+    );
+  }
+
+  Interpreter.raiseArgumentError(
+    `unknown global role ${Interpreter.inspect(role)} - defined global roles are: ${defined.join(", ")}`,
+  );
+}
+
+// The entity ids a role check matches grant rows by: a struct's own row and the type-wide grant
+// beside it - the scope a rule naming the type's own role reads, so a struct with no id matches the
+// type-wide grant alone - or the type-wide grant alone for an entity type module. Read only after
+// the role is validated, which is what guarantees the type's entry is baked.
+function roleScopeIds(entityType, entity) {
+  if (Type.isAlias(entity)) {
+    return [null];
+  }
+
+  return [entityValue(entityType, entity, "id"), null];
+}
+
+// The entity type a role check asks about: the struct's own, or the entity type module itself.
+function roleScopeType(entity) {
+  if (Type.isAlias(entity)) {
+    return Interpreter.moduleExName(entity);
+  }
+
+  return Interpreter.moduleExName(
+    entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+  );
 }
 
 function validateDeclaredRole(entityType, role) {

@@ -47,13 +47,15 @@ defmodule Hologram.Compiler do
 
   # The MFAs whose presence in a page's client code makes the page a permission checker - one
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
-  # locally before it writes.
+  # locally before it writes, and the role checks because they read the grant rows themselves.
   #
   # What being a checker buys a page: the grants window in the page's own list (first-render
-  # completeness) and, build-wide, that policy rules are baked at all.
+  # completeness) and, build-wide, that policy rules and roles are baked at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :has_role?, 2},
+    {Hologram.Auth, :has_role?, 3},
     {Hologram.Auth, :revoke_role, 3}
   ]
 
@@ -427,9 +429,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches one of `permission_mfas/0`: `Hologram.Auth.can?/3`, or the grant verbs `grant_role/3`
-  and `revoke_role/3`, each of which asks the same gate locally before it writes - from what each
-  page's client code reaches, as `list_reach_by_page/2` lists it.
+  reaches one of `permission_mfas/0`: a permission check or a role check, each of which reads grant
+  rows, or a grant verb, which asks the same gate locally before it writes - from what each page's
+  client code reaches, as `list_reach_by_page/2` lists it.
 
   Takes the pages' reach on the call graph BEFORE manually ported MFAs are removed: every one of
   those MFAs is ported, so the graph the bundles are derived from no longer holds the vertex to ask

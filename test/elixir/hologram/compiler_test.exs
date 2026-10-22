@@ -1386,6 +1386,24 @@ defmodule Hologram.CompilerTest do
       assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
 
+    # A role check reads grant rows without going through the permission check, so nothing is
+    # taken out of the clone.
+    test "names a page whose client code asks about a global role", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :has_role?, 2})
+
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
+    test "names a page whose client code asks about a role on an entity", %{
+      call_graph: call_graph
+    } do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :has_role?, 3})
+
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
     test "names a page whose client code revokes a role", %{call_graph: call_graph} do
       graph = CallGraph.clone(call_graph)
       CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})

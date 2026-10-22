@@ -1621,6 +1621,17 @@ defmodule Hologram.AuthTest do
       end
     end
 
+    test "raises on a role for an entity type declaring none" do
+      user = create_user("user_145@example.com")
+
+      expected_msg =
+        "unknown role :editor for Hologram.Test.Fixtures.Entity.Module4 - declared roles are: "
+
+      assert_error ArgumentError, expected_msg, fn ->
+        has_role?(user, :editor, %Hologram.Test.Fixtures.Entity.Module4{})
+      end
+    end
+
     # The role is checked before the user, so a mistyped one fails for every session alike.
     test "raises on a role the entity type does not declare for an anonymous session" do
       resource = create_resource()

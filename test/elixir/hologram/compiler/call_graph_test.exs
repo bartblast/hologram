@@ -3826,6 +3826,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert {Kernel, :inspect, 1} in result
     assert {String, :upcase, 1} in result
 
+    assert {Hologram.Auth, :has_role?, 2} in result
+    assert {Hologram.Auth, :has_role?, 3} in result
+
     assert {Hologram.Entity, :new, 1} in result
     assert {Hologram.Entity, :new, 2} in result
     assert {Hologram.Entity, :validate, 1} in result
