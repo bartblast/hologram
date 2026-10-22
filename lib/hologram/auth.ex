@@ -86,14 +86,23 @@ defmodule Hologram.Auth do
     evaluate(user_or_id, operation, entity, :stored)
   end
 
-  # The same evaluation against grants the caller supplies rather than the ones the store holds,
-  # for asking what a user COULD have seen under a set of grants that is not the current one.
-  # Every rule kind is answered from the list, delegations included - a rule that fell back to
-  # the store would judge half the policy under grants the caller did not ask about.
+  # The same evaluation with the grants taken from the given source rather than read plainly from
+  # the store.
+  #
+  # A list the caller supplies is for asking what a user COULD have seen under a set of grants that
+  # is not the current one. Every rule kind is answered from the list, delegations included - a
+  # rule that fell back to the store would judge half the policy under grants the caller did not
+  # ask about.
+  #
+  # :held reads the store and share-locks the grant rows the answer rests on until the enclosing
+  # transaction ends. It is what a write under an acting user asks: a revocation of the authority
+  # the write rests on then lands after the write, never between its evaluation and its commit.
+  # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
-  @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct)) :: boolean
-  def can?(user_or_id, operation, entity, grants) do
-    evaluate(user_or_id, operation, entity, grants)
+  @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
+          boolean
+  def can?(user_or_id, operation, entity, source) do
+    evaluate(user_or_id, operation, entity, source)
   end
 
   # The id of the row a chain of to-one relationships ends at, or nil when any hop along the way
@@ -671,6 +680,10 @@ defmodule Hologram.Auth do
     Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
   end
 
+  defp grant_answer(rows, :held), do: rows != []
+
+  defp grant_answer([[exists?]], :stored), do: exists?
+
   defp grant_group_key({user_id, {:own, entity_type, _entity_id}}), do: {user_id, entity_type}
 
   defp grant_group_key({user_id, {:instance, entity_type, _entity_id}}),
@@ -726,12 +739,12 @@ defmodule Hologram.Auth do
   end
 
   # Every rule kind funnels through here, so this is the one place a render's questions can be
-  # caught - and questions are all there is to catch: what runs below is an EXISTS, which answers
-  # with a boolean and materializes no row.
-  defp grant_held?(actor_user_id, scope, role_names, :stored) do
+  # caught - and questions are all there is to catch: what runs below answers with a boolean, or
+  # with a bare 1 per matching row, and materializes no entity row either way.
+  defp grant_held?(actor_user_id, scope, role_names, source) when source in [:held, :stored] do
     Carry.record_grant_scope(actor_user_id, scope)
 
-    query_grant_exists?(actor_user_id, scope, role_names)
+    query_grant_exists?(actor_user_id, scope, role_names, source)
   end
 
   # A check against a list the caller supplied is nobody's question: the rows are already in
@@ -745,6 +758,10 @@ defmodule Hologram.Auth do
   defp grant_matches?(grant, actor_user_id, scope, role_names) do
     grant.user_id == actor_user_id and grant.role in role_names and scope_matches?(grant, scope)
   end
+
+  defp grant_statement(selection, :held), do: selection <> "FOR SHARE"
+
+  defp grant_statement(selection, :stored), do: "SELECT EXISTS (#{selection})"
 
   defp run_carried_grants_query(query, session_user_id) do
     query
@@ -773,26 +790,30 @@ defmodule Hologram.Auth do
     ~s("hologram_data".#{Mapper.quote_identifier(enum_type)})
   end
 
+  # The :held statement share-locks the rows it matches, so a revocation's FOR UPDATE on any of
+  # them waits for this transaction - and only those rows, the ones the answer rests on. :stored
+  # keeps the EXISTS, which stops at the first matching row: a sync round asks it many times over.
   # sobelow_skip ["SQL.Query"]
-  defp query_grant_exists?(actor_user_id, scope, role_names) do
+  defp query_grant_exists?(actor_user_id, scope, role_names, source) do
     {scope_condition, scope_params} = scope_condition(scope)
     role_placeholder = "$#{length(scope_params) + 2}"
 
-    statement = """
-    SELECT EXISTS (
-      SELECT 1 FROM "hologram_data"."hologram_role_grant"
-      WHERE "user_id" = $1
-        AND #{scope_condition}
-        AND "role" = ANY(#{role_placeholder}::#{qualified_enum_type("role")}[])
-    )
+    selection = """
+    SELECT 1 FROM "hologram_data"."hologram_role_grant"
+    WHERE "user_id" = $1
+      AND #{scope_condition}
+      AND "role" = ANY(#{role_placeholder}::#{qualified_enum_type("role")}[])
     """
 
     role_values = Enum.map(role_names, &Codec.encode(&1, :enum))
     params = Enum.concat([[Codec.encode(actor_user_id, :uuid)], scope_params, [role_values]])
 
-    {:ok, %{rows: [[grant_exists?]]}} = Connection.query(statement, params)
+    {:ok, %{rows: rows}} =
+      selection
+      |> grant_statement(source)
+      |> Connection.query(params)
 
-    grant_exists?
+    grant_answer(rows, source)
   end
 
   defp related_id(entity, relationship_name) do
@@ -956,8 +977,8 @@ defmodule Hologram.Auth do
 
   # Share-locks the acting user's grant rows a gate reads - the rows on the entity, on its whole
   # type and the global ones, the same set the own-scope and global conditions match - for the
-  # rest of the transaction. Not the read itself: can?/3 reads through query_grant_exists?/3,
-  # which sync shares, and a lock there would make every sync round a lock holder.
+  # rest of the transaction. Not the read itself: can?/3 reads through query_grant_exists?/4
+  # with :stored, which sync shares, and a lock there would make every sync round a lock holder.
   # sobelow_skip ["SQL.Query"]
   defp hold_actor_grants(actor_user_id, entity_type, entity_id) do
     statement = """
