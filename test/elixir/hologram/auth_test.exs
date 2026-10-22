@@ -1399,6 +1399,241 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "has_role?/2" do
+    test "holds a global role" do
+      user = create_user("user_124@example.com")
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert has_role?(user.id, Role.Module1)
+    end
+
+    test "holds the global role an extending module reaches" do
+      user = create_user("user_125@example.com")
+
+      insert_global_grant(user.id, Role.Module2)
+
+      assert has_role?(user.id, Role.Module1)
+    end
+
+    test "does not hold a global role that extends the held one" do
+      user = create_user("user_126@example.com")
+
+      insert_global_grant(user.id, Role.Module1)
+
+      refute has_role?(user.id, Role.Module2)
+    end
+
+    test "does not hold a global role granted to another user" do
+      user = create_user("user_127@example.com")
+      other_user = create_user("user_128@example.com")
+
+      insert_global_grant(other_user.id, Role.Module1)
+
+      refute has_role?(user.id, Role.Module1)
+    end
+
+    test "does not hold a global role from a role held on an entity type" do
+      user = create_user("user_129@example.com")
+
+      grant_role(user, :admin, Module2)
+
+      refute has_role?(user.id, Role.Module1)
+    end
+
+    test "takes the user entity" do
+      user = create_user("user_130@example.com")
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert has_role?(user, Role.Module1)
+    end
+
+    test "answers false for an anonymous session" do
+      refute has_role?(nil, Role.Module1)
+    end
+
+    test "answers false for an id the framework never generated" do
+      refute has_role?("not-an-id", Role.Module1)
+    end
+
+    # A check inside a render is recorded, so the rows answering it travel with the page.
+    test "records the question for the render that asked it" do
+      user = create_user("user_131@example.com")
+
+      Carry.start()
+      refute has_role?(user.id, Role.Module1)
+
+      assert Carry.take_grant_scopes() == MapSet.new([{user.id, :global}])
+    end
+
+    test "raises on a module that is not a global role" do
+      user = create_user("user_132@example.com")
+
+      expected_msg =
+        "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        has_role?(user, Hologram.Test.Fixtures.Entity.Module1)
+      end
+    end
+
+    # The role is checked before the user, so a mistyped one fails for every session alike.
+    test "raises on a module that is not a global role for an anonymous session" do
+      expected_msg =
+        "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        has_role?(nil, Hologram.Test.Fixtures.Entity.Module1)
+      end
+    end
+  end
+
+  describe "has_role?/3" do
+    test "holds a role granted on the row" do
+      user = create_user("user_133@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      assert has_role?(user.id, :editor, resource)
+    end
+
+    test "holds a role granted on the whole entity type" do
+      user = create_user("user_134@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, Module1)
+
+      assert has_role?(user.id, :editor, resource)
+    end
+
+    test "holds the role an extending role reaches" do
+      user = create_user("user_135@example.com")
+      resource = create_resource()
+
+      grant_role(user, :owner, resource)
+
+      assert has_role?(user.id, :editor, resource)
+    end
+
+    test "does not hold a role that extends the held one" do
+      user = create_user("user_136@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      refute has_role?(user.id, :owner, resource)
+    end
+
+    test "does not hold a role granted on another row" do
+      user = create_user("user_137@example.com")
+      resource_1 = create_resource()
+      resource_2 = create_resource()
+
+      grant_role(user, :editor, resource_1)
+
+      refute has_role?(user.id, :editor, resource_2)
+    end
+
+    test "does not hold a role granted to another user" do
+      user = create_user("user_138@example.com")
+      other_user = create_user("user_139@example.com")
+      resource = create_resource()
+
+      grant_role(other_user, :editor, resource)
+
+      refute has_role?(user.id, :editor, resource)
+    end
+
+    test "takes the user entity" do
+      user = create_user("user_140@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      assert has_role?(user, :editor, resource)
+    end
+
+    test "answers false for an anonymous session" do
+      resource = create_resource()
+
+      refute has_role?(nil, :editor, resource)
+    end
+
+    test "answers false for an id the framework never generated" do
+      resource = create_resource()
+
+      refute has_role?("not-an-id", :editor, resource)
+    end
+
+    test "matches the type-wide grant alone on a struct with no id" do
+      user = create_user("user_141@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      refute has_role?(user.id, :editor, %Module1{})
+
+      grant_role(user, :viewer, Module1)
+
+      assert has_role?(user.id, :viewer, %Module1{})
+    end
+
+    test "asks about the type-wide grant alone when given the entity type" do
+      user = create_user("user_142@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      refute has_role?(user.id, :editor, Module1)
+
+      grant_role(user, :editor, Module1)
+
+      assert has_role?(user.id, :editor, Module1)
+    end
+
+    # A check inside a render is recorded, so the rows answering it travel with the page.
+    test "records the question for the render that asked it" do
+      user = create_user("user_143@example.com")
+      resource = create_resource()
+
+      Carry.start()
+      refute has_role?(user.id, :editor, resource)
+      refute has_role?(user.id, :editor, Module1)
+
+      assert Carry.take_grant_scopes() ==
+               MapSet.new([
+                 {user.id, {:own, Module1, resource.id}},
+                 {user.id, {:type, Module1}}
+               ])
+    end
+
+    test "raises on a role the entity type does not declare" do
+      user = create_user("user_144@example.com")
+      resource = create_resource()
+
+      expected_msg =
+        "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        has_role?(user, :publisher, resource)
+      end
+    end
+
+    # The role is checked before the user, so a mistyped one fails for every session alike.
+    test "raises on a role the entity type does not declare for an anonymous session" do
+      resource = create_resource()
+
+      expected_msg =
+        "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        has_role?(nil, :publisher, resource)
+      end
+    end
+  end
+
   describe "revoke_role/2" do
     test "removes a global grant" do
       user = create_user("user_24@example.com")

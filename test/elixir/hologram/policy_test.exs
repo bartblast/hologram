@@ -5,6 +5,8 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
+      expand_global_role: 1,
+      expand_global_role: 2,
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
@@ -549,6 +551,33 @@ defmodule Hologram.PolicyTest do
 
     test "never returns the grant store" do
       assert dead_entity_types([RoleGrant]) == []
+    end
+  end
+
+  describe "expand_global_role/1" do
+    test "returns the module alone for a role no other module extends" do
+      assert expand_global_role(Role.Module2) == [Role.Module2]
+    end
+
+    test "adds every module whose extends chain reaches the role, sorted" do
+      assert expand_global_role(Role.Module1) == [Role.Module1, Role.Module2]
+    end
+  end
+
+  describe "expand_global_role/2" do
+    test "returns the module alone for a role no given module extends" do
+      assert expand_global_role(Role.Module2, [Role.Module1, Role.Module2]) == [Role.Module2]
+    end
+
+    test "adds every given module whose extends chain reaches the role, sorted" do
+      assert expand_global_role(Role.Module1, [Role.Module1, Role.Module2]) == [
+               Role.Module1,
+               Role.Module2
+             ]
+    end
+
+    test "leaves out a module extending the role that is not among the given ones" do
+      assert expand_global_role(Role.Module1, [Role.Module1]) == [Role.Module1]
     end
   end
 
