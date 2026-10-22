@@ -199,7 +199,7 @@ defmodule Hologram.Auth do
     validate_declared_role!(entity_type, role)
 
     # Gate and write in one transaction, so the authority the gate read is still there when the
-    # write lands - the gate holds the acting user's grant rows until the transaction ends.
+    # write lands - the gate holds the grant rows its answer rests on until the transaction ends.
     {:ok, :ok} =
       Connection.transaction(fn ->
         authorize_grant!(entity_type, entity_id, role)
@@ -352,7 +352,7 @@ defmodule Hologram.Auth do
     validate_declared_role!(entity_type, role)
 
     # Gate and write in one transaction, so the authority the gate read is still there when the
-    # write lands - the gate holds the acting user's grant rows until the transaction ends.
+    # write lands - the gate holds the grant rows its answer rests on until the transaction ends.
     {:ok, :ok} =
       Connection.transaction(fn ->
         authorize_revoke!(entity_type, entity_id, user_id, role)
@@ -458,14 +458,12 @@ defmodule Hologram.Auth do
   end
 
   # The per-role question both gates ask, with the answer held until the transaction ends: the
-  # acting user's grant rows that reach the entity are share-locked BEFORE they are read, so a
-  # revocation of one of them - a row lock of its own - waits for this transaction to commit
-  # rather than landing between the read and the write it authorizes. A gate line reads nothing
-  # of the row but its id, so an id-only struct is the whole entity it needs.
+  # grant rows it rests on are share-locked as they are read, so a revocation of one of them - a
+  # row lock of its own - waits for this transaction to commit rather than landing between the
+  # read and the write it authorizes. A gate line reads nothing of the row but its id, so an
+  # id-only struct is the whole entity it needs.
   defp check_authority!(entity, operation, role, actor_user_id) do
-    hold_actor_grants(actor_user_id, entity.__struct__, entity.id)
-
-    if not can?(actor_user_id, {operation, role}, entity) do
+    if not can?(actor_user_id, {operation, role}, entity, :held) do
       raise Hologram.AccessDeniedError,
             unqualified_role_message(
               entity.__struct__,
@@ -973,32 +971,6 @@ defmodule Hologram.Auth do
     end)
     |> Enum.map(& &1.role)
     |> Enum.sort_by(&{Reflection.alias?(&1), &1})
-  end
-
-  # Share-locks the acting user's grant rows a gate reads - the rows on the entity, on its whole
-  # type and the global ones, the same set the own-scope and global conditions match - for the
-  # rest of the transaction. Not the read itself: can?/3 reads through query_grant_exists?/4
-  # with :stored, which sync shares, and a lock there would make every sync round a lock holder.
-  # sobelow_skip ["SQL.Query"]
-  defp hold_actor_grants(actor_user_id, entity_type, entity_id) do
-    statement = """
-    SELECT 1 FROM "hologram_data"."hologram_role_grant"
-    WHERE "user_id" = $1
-      AND (("entity_type" = $2::#{qualified_enum_type("entity_type")}
-            AND ("entity_id" = $3 OR "entity_id" IS NULL))
-        OR ("entity_type" IS NULL AND "entity_id" IS NULL))
-    FOR SHARE
-    """
-
-    params = [
-      Codec.encode(actor_user_id, :uuid),
-      entity_type_value(entity_type),
-      Codec.encode(entity_id, :uuid)
-    ]
-
-    {:ok, _result} = Connection.query(statement, params)
-
-    :ok
   end
 
   defp join_role_names(role_names), do: Enum.map_join(role_names, " and ", &inspect/1)
