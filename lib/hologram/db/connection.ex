@@ -43,6 +43,23 @@ defmodule Hologram.DB.Connection do
     Postgrex.query(current_connection(), statement, params, with_timeout_opt(opts))
   end
 
+  # A transaction PostgreSQL aborted as the victim of a deadlock is one to run again: the other
+  # transaction in the cycle holds everything it waited for once this one lets go, so it commits,
+  # and the rerun answers the way it would have a moment later. Only a transaction this call
+  # opens is rerun. Inside an enclosing transaction the rollback reaches the savepoint alone, the
+  # enclosing transaction keeps every lock it took before, and a cycle through one of those would
+  # be found again on every rerun - so there the error propagates, and the enclosing transaction
+  # is what gets retried, by whoever opened it. The test sandbox's transaction is an enclosing one
+  # too: it holds whatever the test locked before the call.
+  @doc false
+  @spec retry_on_deadlock((-> any)) :: {:ok, any} | {:error, any}
+  def retry_on_deadlock(fun) do
+    case Process.get(@transaction_key) do
+      nil -> rerun_own_transaction(fun)
+      _enclosing -> transaction(fun)
+    end
+  end
+
   @doc false
   @spec rollback(any) :: no_return
   def rollback(reason) do
@@ -135,6 +152,16 @@ defmodule Hologram.DB.Connection do
       {:sandbox_transaction, pool_name, _depth} -> pool_name
       {:transaction, connection, _depth} -> connection
     end
+  end
+
+  defp rerun_own_transaction(fun) do
+    transaction(fun)
+  rescue
+    error in Postgrex.Error ->
+      case error do
+        %Postgrex.Error{postgres: %{code: :deadlock_detected}} -> rerun_own_transaction(fun)
+        _other -> reraise error, __STACKTRACE__
+      end
   end
 
   defp restore_key(key, nil), do: Process.delete(key)
