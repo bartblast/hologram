@@ -8,7 +8,6 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -59,19 +58,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   # The system clock can be coarser than a microsecond (Windows timer granularity reaches
   # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
   # advanced, so that a subsequent write provably stamps a later timestamp.
-  # The lock modes this session holds on the entity type's table - a FOR UPDATE read holds
-  # RowShareLock on the relation, a plain read only AccessShareLock.
-  defp relation_lock_modes(entity_type) do
-    statement =
-      "SELECT mode FROM pg_locks WHERE relation = $1::text::regclass AND pid = pg_backend_pid()"
-
-    relation = ~s|"hologram_data"."#{Mapper.table_name(entity_type)}"|
-
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [relation])
-
-    Enum.map(rows, fn [mode] -> mode end)
-  end
-
+  #
   # Both timestamp columns are written from a stamp, which holds milliseconds - so waiting for the
   # wall clock to pass a microsecond of the same millisecond proves nothing: the next write would
   # land on the very same value. What has to move is the millisecond.
@@ -1001,10 +988,17 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "get/3" do
-    test "locks the row with lock: true" do
+    test "locks the row for share with lock: :share" do
       {:ok, created_entity} = create(Module1.new())
 
-      assert get(Module1, created_entity.id, lock: true) == created_entity
+      assert get(Module1, created_entity.id, lock: :share) == created_entity
+      assert "RowShareLock" in relation_lock_modes(Module1)
+    end
+
+    test "locks the row for update with lock: :update" do
+      {:ok, created_entity} = create(Module1.new())
+
+      assert get(Module1, created_entity.id, lock: :update) == created_entity
       assert "RowShareLock" in relation_lock_modes(Module1)
     end
 

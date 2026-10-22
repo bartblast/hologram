@@ -194,9 +194,11 @@ defmodule Hologram.DB.EntityOperations do
     :ok
   end
 
-  # With lock: true the row is read FOR UPDATE, so it stays as read until the enclosing
+  # With lock: :update the row is read FOR UPDATE, so it stays as read until the enclosing
   # transaction ends - what a write evaluated against the row as it stands needs, since nothing
-  # can change the row between the evaluation and the write.
+  # can change the row between the evaluation and the write. With lock: :share it is read FOR
+  # SHARE: other readers may share it, and a change to it waits for the transaction - what a
+  # write's evaluation needs of a row it only reads.
   @doc false
   @spec get(module, String.t(), keyword) :: struct | nil
   # sobelow_skip ["SQL.Query"]
@@ -210,7 +212,7 @@ defmodule Hologram.DB.EntityOperations do
       |> persisted_columns()
       |> Enum.map_join(", ", &Mapper.quote_identifier(&1.name))
 
-    lock_clause = if opts[:lock] == true, do: " FOR UPDATE", else: ""
+    lock_clause = lock_clause(opts[:lock])
 
     statement =
       ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1#{lock_clause}|
@@ -692,6 +694,14 @@ defmodule Hologram.DB.EntityOperations do
       :present
     end
   end
+
+  # One clause per mode and none for anything else, so a misspelled mode fails to match rather
+  # than reading the row without a lock.
+  defp lock_clause(nil), do: ""
+
+  defp lock_clause(:share), do: " FOR SHARE"
+
+  defp lock_clause(:update), do: " FOR UPDATE"
 
   # A delete says what the row WAS, the way a put says what it became - so a row that is gone
   # stays readable for as long as the log keeps its entry. No revisions: the stamps went with

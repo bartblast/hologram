@@ -20,6 +20,12 @@ defmodule Hologram.AuthContentionTest do
   # key check, which share-locks the row it references, waits there - past the evaluation, before
   # the write.
   #
+  # A delegated write reads the related row its `via:` rule hands the question to, and holds that
+  # row the same way, every hop of a chain - a trusted change to it waits for the write to commit.
+  # Such a write is parked the same way, on a foreign key check: its update moves the row to a
+  # second parent a third session holds, so the evaluation ran against the row as it stood, with
+  # the parent it read and holds.
+  #
   # async: false - the tier's modules run one at a time, since each opens raw sessions beside its
   # scratch connection.
   use Hologram.Test.ScratchDatabaseCase, async: false
@@ -36,6 +42,8 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module5
+  alias Hologram.Test.Fixtures.Policy.Module8
 
   defp create_user(scratch, email) do
     route(scratch, fn ->
@@ -78,8 +86,21 @@ defmodule Hologram.AuthContentionTest do
     |> Enum.sort()
   end
 
+  # Trusted code changing a related row a delegation read - no gate of its own, straight to the row
+  # the gated write's evaluation rests on.
+  defp start_changer(scratch_opts, entity, attribute, value) do
+    Task.async(fn ->
+      on_own_session(scratch_opts, fn ->
+        entity
+        |> put_attribute(attribute, value)
+        |> DB.update()
+      end)
+    end)
+  end
+
   # The gated write under the acting user, on a session of its own and with no transaction but the
-  # verb's - what is under test is the verb holding the grant rows it read until its write lands.
+  # verb's - what is under test is the verb holding what its evaluation read, the grant rows and
+  # the related rows its delegations read, until its write lands.
   defp start_gated_write(scratch_opts, actor, write) do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> Context.with_actor(actor.id, write) end)
@@ -94,20 +115,20 @@ defmodule Hologram.AuthContentionTest do
     end)
   end
 
-  # A third session holding the parent row FOR UPDATE, so that a write naming it parks on its
-  # foreign key check - after its evaluation, before its row lands.
-  defp start_parent_holder(scratch_opts, parent, test_pid) do
-    lock = fn -> EntityOperations.get(Module2, parent.id, lock: true) end
-
-    start_holder(scratch_opts, lock, test_pid)
-  end
-
   # Trusted code taking a role of the acting user's away - no gate of its own, straight to the row
   # the gated write's evaluation rests on.
   defp start_revoker(scratch_opts, actor, role, entity) do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> revoke_role(actor, role, entity) end)
     end)
+  end
+
+  # A third session holding a row FOR UPDATE, so that a write naming it parks on its foreign key
+  # check - after its evaluation, before its row lands.
+  defp start_row_holder(scratch_opts, row, test_pid) do
+    lock = fn -> EntityOperations.get(row.__struct__, row.id, lock: :update) end
+
+    start_holder(scratch_opts, lock, test_pid)
   end
 
   # Scoped to this database and excluding the observer, because pg_stat_activity is the whole
@@ -219,7 +240,7 @@ defmodule Hologram.AuthContentionTest do
       |> Module1.new()
       |> authorize(:update)
 
-    holder = start_parent_holder(scratch_opts, parent, self())
+    holder = start_row_holder(scratch_opts, parent, self())
     assert_receive :holding, 5_000
 
     gated = start_gated_write(scratch_opts, alice, fn -> DB.create(entity) end)
@@ -247,7 +268,7 @@ defmodule Hologram.AuthContentionTest do
   } do
     parent = route(scratch, fn -> DB.create!(Module2.new()) end)
 
-    holder = start_parent_holder(scratch_opts, parent, self())
+    holder = start_row_holder(scratch_opts, parent, self())
     assert_receive :holding, 5_000
 
     update = fn ->
@@ -287,7 +308,7 @@ defmodule Hologram.AuthContentionTest do
       |> Module1.new()
       |> authorize(:delete)
 
-    holder = start_parent_holder(scratch_opts, parent, self())
+    holder = start_row_holder(scratch_opts, parent, self())
     assert_receive :holding, 5_000
 
     gated = start_gated_write(scratch_opts, alice, fn -> DB.create(entity) end)
@@ -305,5 +326,110 @@ defmodule Hologram.AuthContentionTest do
 
     assert route(scratch, fn -> DB.read(Module1, entity.id) end).parent_id == parent.id
     refute route(scratch, fn -> has_role?(alice, :admin, parent) end)
+  end
+
+  test "an update holds the related row its delegation read until its write lands", %{
+    alice: alice,
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    old_parent =
+      route(scratch, fn ->
+        %{public: true}
+        |> Module2.new()
+        |> DB.create!()
+      end)
+
+    new_parent = route(scratch, fn -> DB.create!(Module2.new()) end)
+
+    # Module1's :publish is `via: parent`, and Module2's :publish holds while the parent is public -
+    # so alice may publish the row while its old parent stays public, with no role of her own.
+    entity =
+      route(scratch, fn ->
+        %{parent_id: old_parent.id}
+        |> Module1.new()
+        |> DB.create!()
+      end)
+
+    holder = start_row_holder(scratch_opts, new_parent, self())
+    assert_receive :holding, 5_000
+
+    update = fn ->
+      entity
+      |> put_attribute(:parent_id, new_parent.id)
+      |> authorize(:publish)
+      |> DB.update()
+    end
+
+    gated = start_gated_write(scratch_opts, alice, update)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    # The change to the old parent queues behind the evaluation's hold on it.
+    changer = start_changer(scratch_opts, old_parent, :public, false)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    assert Task.await(gated) == :ok
+    assert Task.await(changer) == :ok
+
+    assert route(scratch, fn -> DB.read(Module1, entity.id) end).parent_id == new_parent.id
+    assert route(scratch, fn -> DB.read(Module2, old_parent.id) end).public == false
+  end
+
+  test "an update holds the far row of a delegation chain until its write lands", %{
+    alice: alice,
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    # Module8's :read is `via: parent` at Module5, whose :read is `via: parent` at Module1, whose
+    # :read holds while the row is public - so alice may read the row through both hops.
+    chain_end =
+      route(scratch, fn ->
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+      end)
+
+    old_middle =
+      route(scratch, fn ->
+        %{parent_id: chain_end.id}
+        |> Module5.new()
+        |> DB.create!()
+      end)
+
+    new_middle = route(scratch, fn -> DB.create!(Module5.new()) end)
+
+    entity =
+      route(scratch, fn ->
+        %{parent_id: old_middle.id}
+        |> Module8.new()
+        |> DB.create!()
+      end)
+
+    holder = start_row_holder(scratch_opts, new_middle, self())
+    assert_receive :holding, 5_000
+
+    update = fn ->
+      entity
+      |> put_attribute(:parent_id, new_middle.id)
+      |> authorize(:read)
+      |> DB.update()
+    end
+
+    gated = start_gated_write(scratch_opts, alice, update)
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    # The change to the row at the END of the chain queues behind the evaluation's hold on it.
+    changer = start_changer(scratch_opts, chain_end, :public, false)
+    wait_for_blocked_sessions(scratch_opts, 2)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    assert Task.await(gated) == :ok
+    assert Task.await(changer) == :ok
+
+    assert route(scratch, fn -> DB.read(Module8, entity.id) end).parent_id == new_middle.id
+    assert route(scratch, fn -> DB.read(Module1, chain_end.id) end).public == false
   end
 end

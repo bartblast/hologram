@@ -148,7 +148,7 @@ defmodule Hologram.Mutation do
         Connection.rollback({:rejected, index, violations})
 
       :present ->
-        case EntityOperations.get(RoleGrant, write.id, lock: true) do
+        case EntityOperations.get(RoleGrant, write.id, lock: :update) do
           nil when retries_left > 0 ->
             apply_grant(write, index, created_rows, retries_left - 1)
 
@@ -255,14 +255,14 @@ defmodule Hologram.Mutation do
     grant = Write.to_entity(write)
     Auth.authorize_revocation_write!(grant, Context.actor_user_id())
 
-    case EntityOperations.get(RoleGrant, write.id, lock: true) do
+    case EntityOperations.get(RoleGrant, write.id, lock: :update) do
       nil -> {%{}, nil}
       row -> apply_revocation(write, row)
     end
   end
 
   defp apply_write(%Write{op: :delete} = write, index, _created_rows) do
-    case EntityOperations.get(write.entity_type, write.id, lock: true) do
+    case EntityOperations.get(write.entity_type, write.id, lock: :update) do
       # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
       nil -> {%{}, nil}
       row -> apply_delete(write, row, index)
@@ -403,7 +403,7 @@ defmodule Hologram.Mutation do
   end
 
   defp lock_row(write, index) do
-    case EntityOperations.get(write.entity_type, write.id, lock: true) do
+    case EntityOperations.get(write.entity_type, write.id, lock: :update) do
       nil -> Connection.rollback({:rejected, index, :not_found})
       row -> row
     end

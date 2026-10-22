@@ -21,6 +21,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module2
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
+  alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Role
 
   defp create_user(email) do
@@ -366,6 +367,16 @@ defmodule Hologram.AuthTest do
       refute can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: nil})
     end
 
+    # A render's question takes no lock - a lock held from a render would make every page load a
+    # lock holder.
+    test "reads the related row a delegation reads without a lock" do
+      parent = create_parent(true)
+
+      assert can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: parent.id})
+
+      refute "RowShareLock" in relation_lock_modes(Module2)
+    end
+
     test "answers a grant lifecycle operation for one role" do
       owner = create_user("user_58@example.com")
       editor = create_user("user_59@example.com")
@@ -653,6 +664,18 @@ defmodule Hologram.AuthTest do
       assert can?(user, :archive, entity, [grant])
     end
 
+    test "reads the related row a delegation reads without a lock" do
+      user = create_user("user_157@example.com")
+      parent = create_parent()
+      grant = %RoleGrant{user_id: user.id, role: Role.Module1}
+
+      assert can?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, [
+               grant
+             ])
+
+      refute "RowShareLock" in relation_lock_modes(Module2)
+    end
+
     test "matches a grant for the grant store's own rows" do
       user = create_user("user_67@example.com")
       other_user = create_user("user_68@example.com")
@@ -777,6 +800,40 @@ defmodule Hologram.AuthTest do
       insert_global_grant(user.id, Role.Module1)
 
       assert can?(user, :archive, entity, :held)
+    end
+
+    # A locking read shows in pg_locks as RowShareLock on the relation, even uncontended - the row
+    # lock itself, and which mode it is, only the scratch tier sees. Each test is its own sandbox
+    # transaction, so a lock one takes is not there in the next.
+    test "with :held holds the related row a delegation reads" do
+      user = create_user("user_155@example.com")
+      parent = create_parent()
+
+      # The answer is false - Module2's :archive wants a global role the user does not hold - and
+      # beside the point: the parent row is read before any grant is asked.
+      can?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module2)
+    end
+
+    # The chain's end row is not asserted: the middle row's insert ran its foreign key check, which
+    # already holds RowShareLock on the end row's table. The scratch tier proves the far hop.
+    test "with :held holds the first related row of a delegation chain" do
+      user = create_user("user_156@example.com")
+
+      resource =
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      middle =
+        %{parent_id: resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      assert can?(user, :read, %Module8{id: Entity.generate_id(), parent_id: middle.id}, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module5)
     end
 
     test "with :held matches a grant for the grant store's own rows" do
