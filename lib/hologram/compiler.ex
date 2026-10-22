@@ -47,13 +47,15 @@ defmodule Hologram.Compiler do
 
   # The MFAs whose presence in a page's client code makes the page a permission checker - one
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
-  # locally before it writes.
+  # locally before it writes, and the role checks because they read the grant rows themselves.
   #
   # What being a checker buys a page: the grants window in the page's own list (first-render
-  # completeness) and, build-wide, that policy rules are baked at all.
+  # completeness) and, build-wide, that policy rules and roles are baked at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :has_role?, 2},
+    {Hologram.Auth, :has_role?, 3},
     {Hologram.Auth, :revoke_role, 3}
   ]
 
@@ -138,7 +140,8 @@ defmodule Hologram.Compiler do
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           permission_checking?: boolean,
-          prop_params: %{module => keyword(list(atom))}
+          prop_params: %{module => keyword(list(atom))},
+          role_modules: list(module)
         }
 
   @type js_input_fingerprint ::
@@ -426,9 +429,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches one of `permission_mfas/0`: `Hologram.Auth.can?/3`, or the grant verbs `grant_role/3`
-  and `revoke_role/3`, each of which asks the same gate locally before it writes - from what each
-  page's client code reaches, as `list_reach_by_page/2` lists it.
+  reaches one of `permission_mfas/0`: a permission check or a role check, each of which reads grant
+  rows, or a grant verb, which asks the same gate locally before it writes - from what each page's
+  client code reaches, as `list_reach_by_page/2` lists it.
 
   Takes the pages' reach on the call graph BEFORE manually ported MFAs are removed: every one of
   those MFAs is ported, so the graph the bundles are derived from no longer holds the vertex to ask
@@ -2074,12 +2077,17 @@ defmodule Hologram.Compiler do
   names that type - the grants window is registered rather than extracted - so it is added here
   rather than derived.
 
-  Every entity type declaring a policy joins them too: a check's argument is whatever a template
-  passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})` being
-  the ordinary spelling of a create check - so which types get checked is not derivable from the
-  queries. Shipping every policied type's rules is what lets the client answer every check the
-  way the server would. What is left out is exactly the types declaring no policy, which is what
-  lets the client read an ABSENT entry as the server's own default deny.
+  Every entity type declaring a policy or a role joins them too: a check's argument is whatever a
+  template passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})`
+  being the ordinary spelling of a create check - so which types get checked is not derivable from
+  the queries. Shipping every such type's rules and roles is what lets the client answer every
+  check the way the server would - a role check validates and expands the role from the type's
+  own declarations, rules or none. What is left out is exactly the types declaring neither, which
+  is what lets the client read an ABSENT entry as the server's own default deny.
+
+  `:role_modules` are the project's global role modules when the clients check permissions, and
+  none otherwise: a client asking whether a user holds a global role needs every one of them to
+  refuse an unknown one and to expand the one asked about.
 
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
@@ -2100,16 +2108,16 @@ defmodule Hologram.Compiler do
       |> Enum.uniq()
       |> Enum.sort()
 
-    # One listing, from the module info PLT, for the mentions, the policied set and the model hash.
+    # One listing, from the module info PLT, for the mentions, the checked set and the model hash.
     all_entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
 
     # A data model with no user entity type has no grant store, so no page checks permissions
     # against anything then.
-    # Policy rules are baked only when some page checks permissions, and then for every policied
-    # type, reached or not. Trimming them to the reached types would save at most about 0.5 KB
-    # gzipped on the feature test app, and a type that reaches the client as data the compiler
-    # cannot see would be denied there while the server allows it.
+    # Rules and roles are baked only when some page checks permissions, and then for every type
+    # declaring a rule or a role, reached or not. Trimming them to the reached types would save at
+    # most about 0.5 KB gzipped on the feature test app, and a type that reaches the client as data
+    # the compiler cannot see would be denied there while the server allows it.
     permission_checking? =
       Reflection.user_entity(module_info_plt) != nil and
         Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
@@ -2144,7 +2152,7 @@ defmodule Hologram.Compiler do
       if permission_checking? do
         reached_entity_types
         |> MapSet.put(RoleGrant)
-        |> MapSet.union(policied_entity_types(all_entity_types))
+        |> MapSet.union(checked_entity_types(all_entity_types))
       else
         reached_entity_types
       end
@@ -2156,15 +2164,17 @@ defmodule Hologram.Compiler do
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
-      prop_params: prop_params(component_modules, component_queries)
+      prop_params: prop_params(component_modules, component_queries),
+      role_modules: if(permission_checking?, do: role_modules, else: [])
     }
   end
 
   @doc """
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
-  model of the entity types the client holds, the hash of the project's data model, the argument
-  names of the parameterized query captures, and the sync protocol version.
+  global roles with the role modules carrying each, the model of the entity types the client
+  holds, the hash of the project's data model, the argument names of the parameterized query
+  captures, and the sync protocol version.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2199,8 +2209,9 @@ defmodule Hologram.Compiler do
         render_entity_model(sync_constants.entity_types, sync_constants.permission_checking?)
 
       params = render_prop_params(sync_constants.prop_params)
+      expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
-      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{sync_constants.model_hash}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -3488,11 +3499,13 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
-  # RoleGrant's policy is framework-supplied rather than declared, so its empty __policies__ does
-  # not exclude it - it joins by name beside this set.
-  defp policied_entity_types(all_entity_types) do
+  # The types a client checking permissions can be asked about: those declaring a rule, and those
+  # declaring a role, since a role check validates and expands the role from the type's own
+  # declarations. RoleGrant's policy is framework-supplied rather than declared, so its empty
+  # __policies__ does not exclude it - it joins by name beside this set.
+  defp checked_entity_types(all_entity_types) do
     all_entity_types
-    |> Enum.filter(&(&1.__policies__() != []))
+    |> Enum.filter(&(&1.__policies__() != [] or &1.__roles__() != []))
     |> MapSet.new()
   end
 
@@ -3736,6 +3749,7 @@ defmodule Hologram.Compiler do
       {"creatorRoles", render_creator_roles(entity_type)},
       {"defaults", render_defaults(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
+      {"expandedRoles", render_expanded_roles(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
       {"operations", render_operations(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
@@ -3762,6 +3776,23 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
+  # What carries each of the type's roles - the role itself and every role whose extends chain
+  # reaches it, which is the set a role check reads grant rows for. Expanded here rather than in
+  # the browser, the way the baked rules are, so the two tiers expand from one definition.
+  defp render_expanded_roles(entity_type) do
+    entity_type.__roles__()
+    |> Enum.map(fn {name, _opts} ->
+      expanded =
+        entity_type
+        |> Entity.expand_role(name)
+        |> Enum.map(&Atom.to_string/1)
+        |> Jason.encode!()
+
+      {Atom.to_string(name), expanded}
+    end)
+    |> render_json_object()
+  end
+
   # The attributes of a job that the framework owns and nobody else writes - the ones construction
   # refuses by name, so that a client refuses them for the same reason and in the same words.
   #
@@ -3775,6 +3806,23 @@ defmodule Hologram.Compiler do
     names
     |> Enum.map(&Atom.to_string/1)
     |> Jason.encode!()
+  end
+
+  # The global roles the client can be asked about, each with the role modules carrying it,
+  # spelled the way the grant store spells a role module. The keys are the defined global roles,
+  # which is what a refusal of an unknown one lists.
+  defp render_global_expanded_roles(role_modules) do
+    role_modules
+    |> Enum.map(fn role_module ->
+      expanded =
+        role_module
+        |> Policy.expand_global_role(role_modules)
+        |> Enum.map(&Codec.encode_enum_value/1)
+        |> Jason.encode!()
+
+      {Codec.encode_enum_value(role_module), expanded}
+    end)
+    |> render_json_object()
   end
 
   # The operations a type can be asked about, framework ones included - the client's copy of

@@ -31,11 +31,14 @@ defineRuntimeGlobals();
 // absent here.
 //
 // The cases this side alone has (unboxing, the store's own spelling of a type, rows the client
-// does not hold) follow the mirrored ones, in their own group.
+// does not hold) follow the mirrored ones, in their own group. The role checks close the block and
+// mirror test/elixir/hologram/auth_test.exs instead, sharing this block's model and rows.
 describe("Elixir_Hologram_Auth", () => {
+  const ADMIN = "MyApp.Roles.Admin";
   const DOCUMENT = "MyApp.Document";
   const FOLDER = "MyApp.Folder";
   const GRANT = "Hologram.Auth.RoleGrant";
+  const SUPPORT = "MyApp.Roles.Support";
   const USER = "MyApp.User";
 
   const ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
@@ -80,8 +83,9 @@ describe("Elixir_Hologram_Auth", () => {
     ...overrides,
   });
 
-  const defineModel = (policy = {}, folderPolicy = {}) => {
+  const defineModel = (policy = {}, folderPolicy = {}, globalRoles = {}) => {
     globalThis.Hologram.sync = {
+      expandedRoles: globalRoles,
       model: {
         [DOCUMENT]: {
           attributes: {
@@ -103,6 +107,11 @@ describe("Elixir_Hologram_Auth", () => {
             stage: ["draft", "review", "published"],
             status: ["draft", "review", "published"],
           },
+          expandedRoles: {
+            editor: ["editor", "owner"],
+            owner: ["owner"],
+            viewer: ["viewer"],
+          },
           operations: [
             "archive",
             "create",
@@ -120,6 +129,7 @@ describe("Elixir_Hologram_Auth", () => {
         },
         [FOLDER]: {
           attributes: {id: "uuid", archived: "boolean"},
+          expandedRoles: {},
           policy: folderPolicy,
           relationships: {},
           roles: [],
@@ -136,6 +146,7 @@ describe("Elixir_Hologram_Auth", () => {
             entity_type: "enum",
             role: "enum",
           },
+          expandedRoles: {},
           policy: {},
           relationships: {user: {toMany: false, type: USER}},
           roles: [],
@@ -1367,6 +1378,380 @@ describe("Elixir_Hologram_Auth", () => {
           Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
         ),
         Type.boolean(false),
+      );
+    });
+  });
+
+  // Mirrors describe "has_role?/2" in test/elixir/hologram/auth_test.exs case for case where the
+  // browser can, the refusal sentences string for string. Always update both together.
+  describe("has_role?/2", () => {
+    const hasRole = Elixir_Hologram_Auth["has_role?/2"];
+
+    beforeEach(() => {
+      defineModel({}, {}, {[ADMIN]: [ADMIN], [SUPPORT]: [ADMIN, SUPPORT]});
+    });
+
+    it("holds a global role", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.alias(ADMIN)),
+        Type.boolean(true),
+      );
+    });
+
+    it("holds the global role an extending module reaches", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.alias(SUPPORT)),
+        Type.boolean(true),
+      );
+    });
+
+    it("does not hold a global role that extends the held one", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: SUPPORT}));
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.alias(ADMIN)),
+        Type.boolean(false),
+      );
+    });
+
+    it("does not hold a global role granted to another user", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN, user_id: BOB}));
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.alias(ADMIN)),
+        Type.boolean(false),
+      );
+    });
+
+    it("does not hold a global role from a role held on an entity type", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_type: DOCUMENT, role: ADMIN}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.alias(ADMIN)),
+        Type.boolean(false),
+      );
+    });
+
+    it("takes the user entity", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assert.deepStrictEqual(
+        hasRole(
+          Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
+          Type.alias(ADMIN),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("answers false for an anonymous session", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assert.deepStrictEqual(
+        hasRole(Type.nil(), Type.alias(ADMIN)),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers false for an id the framework never generated", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring("not-an-id"), Type.alias(ADMIN)),
+        Type.boolean(false),
+      );
+    });
+
+    it("raises on a module that is not a global role", () => {
+      assertBoxedError(
+        () => hasRole(Type.bitstring(ALICE), Type.alias("MyApp.Roles.Nobody")),
+        "ArgumentError",
+        "unknown global role MyApp.Roles.Nobody - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support",
+      );
+    });
+
+    // The role is checked before the user, so a mistyped one fails for every session alike.
+    it("raises on a module that is not a global role for an anonymous session", () => {
+      assertBoxedError(
+        () => hasRole(Type.nil(), Type.alias("MyApp.Roles.Nobody")),
+        "ArgumentError",
+        "unknown global role MyApp.Roles.Nobody - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support",
+      );
+    });
+
+    it("raises naming no global role when the build defines none", () => {
+      defineModel();
+
+      assertBoxedError(
+        () => hasRole(Type.bitstring(ALICE), Type.alias("MyApp.Roles.Nobody")),
+        "ArgumentError",
+        "unknown global role MyApp.Roles.Nobody - no module is defined with use Hologram.Role",
+      );
+    });
+  });
+
+  // Mirrors describe "has_role?/3" in test/elixir/hologram/auth_test.exs case for case where the
+  // browser can, the refusal sentence string for string, and adds what only this side has: a
+  // grant revoked in an action is gone from the answer before anything is sent. Always update
+  // both together.
+  describe("has_role?/3", () => {
+    const hasRole = Elixir_Hologram_Auth["has_role?/3"];
+
+    it("holds a role granted on the row", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+        Type.boolean(true),
+      );
+    });
+
+    it("holds a role granted on the whole entity type", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: null, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+        Type.boolean(true),
+      );
+    });
+
+    it("holds the role an extending role reaches", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "owner"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+        Type.boolean(true),
+      );
+    });
+
+    it("does not hold a role that extends the held one", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.atom("owner"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("does not hold a role granted on another row", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({
+          entity_id: FOLDER_ID,
+          entity_type: DOCUMENT,
+          role: "editor",
+        }),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("does not hold a role granted to another user", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({
+          entity_id: DOC,
+          entity_type: DOCUMENT,
+          role: "editor",
+          user_id: BOB,
+        }),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("takes the user entity", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(
+          Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
+          Type.atom("editor"),
+          document(),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("answers false for an anonymous session", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.nil(), Type.atom("editor"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers false for an id the framework never generated", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(Type.bitstring("not-an-id"), Type.atom("editor"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("matches the type-wide grant alone on a struct with no id", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(
+          Type.bitstring(ALICE),
+          Type.atom("editor"),
+          document({id: null}),
+        ),
+        Type.boolean(false),
+      );
+
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: null, entity_type: DOCUMENT, role: "viewer"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(
+          Type.bitstring(ALICE),
+          Type.atom("viewer"),
+          document({id: null}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("asks about the type-wide grant alone when given the entity type", () => {
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(
+          Type.bitstring(ALICE),
+          Type.atom("editor"),
+          Type.alias(DOCUMENT),
+        ),
+        Type.boolean(false),
+      );
+
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: null, entity_type: DOCUMENT, role: "editor"}),
+      );
+
+      assert.deepStrictEqual(
+        hasRole(
+          Type.bitstring(ALICE),
+          Type.atom("editor"),
+          Type.alias(DOCUMENT),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    // Alice leaves: her own row needs no permission to revoke, and the overlay hides it at once.
+    it("answers from the overlay, so a revocation an action made counts before it is sent", () => {
+      LocalDatabase.putRow(GRANT, {
+        $revisions: {},
+        entity_id: DOC,
+        entity_type: DOCUMENT,
+        id: deriveGrantId(ALICE, DOCUMENT, DOC, "editor"),
+        role: "editor",
+        user_id: ALICE,
+      });
+
+      LocalDatabase.actorUserId = ALICE;
+      Batches.reset();
+      Batches.open("leave");
+
+      try {
+        assert.deepStrictEqual(
+          hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+          Type.boolean(true),
+        );
+
+        Elixir_Hologram_Auth["revoke_role/3"](
+          Type.bitstring(ALICE),
+          Type.atom("editor"),
+          document(),
+        );
+
+        assert.deepStrictEqual(
+          hasRole(Type.bitstring(ALICE), Type.atom("editor"), document()),
+          Type.boolean(false),
+        );
+      } finally {
+        Batches.reset();
+        LocalDatabase.actorUserId = null;
+      }
+    });
+
+    it("raises on a role the entity type does not declare", () => {
+      assertBoxedError(
+        () =>
+          hasRole(Type.bitstring(ALICE), Type.atom("publisher"), document()),
+        "ArgumentError",
+        "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
+      );
+    });
+
+    // A type declaring no role ships no entry unless a page reaches it, and the refusal is the
+    // server's all the same - the role is checked before anything is read off the struct.
+    it("raises on a role for an entity type declaring none", () => {
+      assertBoxedError(
+        () =>
+          hasRole(
+            Type.bitstring(ALICE),
+            Type.atom("editor"),
+            Type.struct("MyApp.Note", [[Type.atom("id"), Type.bitstring(DOC)]]),
+          ),
+        "ArgumentError",
+        "unknown role :editor for MyApp.Note - declared roles are: ",
+      );
+    });
+
+    // The role is checked before the user, so a mistyped one fails for every session alike.
+    it("raises on a role the entity type does not declare for an anonymous session", () => {
+      assertBoxedError(
+        () => hasRole(Type.nil(), Type.atom("publisher"), document()),
+        "ArgumentError",
+        "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
       );
     });
   });

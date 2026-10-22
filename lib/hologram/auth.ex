@@ -249,6 +249,59 @@ defmodule Hologram.Auth do
   end
 
   @doc """
+  Returns true when the given user holds the given global role, or false otherwise.
+
+  Takes the user entity or a bare user id, and nil for an anonymous session, which holds no role.
+  The role is a module defined with use Hologram.Role. A module whose extends chain reaches the
+  role counts as holding it, the way a rule referencing the role is satisfied by it.
+
+  has_role? answers who someone is: a badge, an admin-only menu entry. It implies no permission
+  and consults no policy. Anything that gates an action asks can?/3 - a rule can later admit other
+  roles, and a role check would then be wrong with no error anywhere.
+
+  Reads the grant store. Inside a render the question is recorded, so the rows answering it travel
+  with the page and the browser answers the same from its own rows.
+  """
+  @spec has_role?(struct | String.t() | nil, module) :: boolean
+  def has_role?(user_or_id, role) do
+    validate_global_role!(role)
+
+    user_or_id
+    |> actor_user_id()
+    |> grant_exists?(:global, Policy.expand_global_role(role), :stored)
+  end
+
+  @doc """
+  Returns true when the given user holds the given role on the given entity, or false otherwise.
+
+  Takes the user entity or a bare user id, and nil for an anonymous session, which holds no role.
+  The role is a name the entity's own type declares - an undeclared one raises ArgumentError. A
+  role whose extends chain reaches the given role counts as holding it: with
+  `role :owner, extends: :member`, an owner has :member.
+
+  The entity is a struct, asking about that row - a role held on the whole entity type counts
+  there too - or an entity type module, asking about the role held on the whole type alone.
+
+  has_role? answers who someone is on an entity: a badge, a join state, a leave button, a promote
+  menu. It implies no permission and consults no policy. Anything that gates an action asks
+  can?/3 - a rule can later admit other roles, and a role check would then be wrong with no error
+  anywhere.
+
+  Reads the grant store. Inside a render the question is recorded, so the rows answering it travel
+  with the page and the browser answers the same from its own rows.
+  """
+  @spec has_role?(struct | String.t() | nil, atom, struct | module) :: boolean
+  def has_role?(user_or_id, role, entity) do
+    {entity_type, scope} = role_scope(entity)
+
+    validate_declared_role!(entity_type, role)
+
+    user_or_id
+    |> actor_user_id()
+    |> grant_exists?(scope, Entity.expand_role(entity_type, role), :stored)
+  end
+
+  @doc """
   Revokes the given global role from the given user and returns :ok.
 
   Takes the user entity or a bare user id. The role is a module defined with use Hologram.Role.
@@ -754,6 +807,15 @@ defmodule Hologram.Auth do
 
     target_type
   end
+
+  # What a role check reads. A struct asks about its row and the type-wide grant beside it - the
+  # scope a rule naming the type's own role reads, so the two agree on every id, a nil id matching
+  # the type-wide grant alone. An entity type module asks about the type-wide grant.
+  defp role_scope(entity) when is_struct(entity) do
+    {entity.__struct__, {:own, entity.__struct__, entity.id}}
+  end
+
+  defp role_scope(entity_type), do: {entity_type, {:type, entity_type}}
 
   defp scope_matches?(grant, :global) do
     grant.entity_type == nil and grant.entity_id == nil

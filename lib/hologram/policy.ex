@@ -256,6 +256,33 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the given global role module together with every global role module of the project's
+  data model whose extends chain reaches it, sorted.
+
+  A reference to a role module is satisfied by every module in the returned list. The sweep is
+  model-wide: role modules resolve globally, so a reference means the same thing in every entity
+  type.
+  """
+  @spec expand_global_role(module) :: list(module)
+  def expand_global_role(role_module) do
+    expand_global_role_modules(MapSet.new([role_module]), model_facts().extends_by_role_module)
+  end
+
+  @doc """
+  Returns the given global role module together with every one of the given role modules whose
+  extends chain reaches it, sorted.
+
+  Only the given modules are swept, so a module extending the role that is not among them is left
+  out.
+  """
+  @spec expand_global_role(module, list(module)) :: list(module)
+  def expand_global_role(role_module, role_modules) do
+    extends_by_module = Map.new(role_modules, &{&1, &1.__extends__()})
+
+    expand_global_role_modules(MapSet.new([role_module]), extends_by_module)
+  end
+
+  @doc """
   Returns the operations the framework itself asks about, sorted: the four verbs' own (create, delete, read, update) and the three grant lifecycle gates (grant_role, read_roles, revoke_role).
 
   Every entity type can be asked about each of them, declared or not - an undeclared one is denied by default rather than refused as unknown.
@@ -505,13 +532,6 @@ defmodule Hologram.Policy do
   end
 
   defp expand_role_operation(_entity_type, {operation, rule}), do: [{operation, rule}]
-
-  # A reference to a role module is satisfied by every role carrying it - the module itself and
-  # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
-  # globally, so a reference means the same thing in every entity type.
-  defp expand_global_role(role_module) do
-    expand_global_role_modules(MapSet.new([role_module]), model_facts().extends_by_role_module)
-  end
 
   defp expand_global_role_modules(modules, extends_by_module) do
     expanded =
