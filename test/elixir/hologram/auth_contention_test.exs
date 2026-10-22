@@ -97,7 +97,7 @@ defmodule Hologram.AuthContentionTest do
   # A third session holding the parent row FOR UPDATE, so that a write naming it parks on its
   # foreign key check - after its evaluation, before its row lands.
   defp start_parent_holder(scratch_opts, parent, test_pid) do
-    lock = fn -> EntityOperations.get(Module2, parent.id, lock: true) end
+    lock = fn -> EntityOperations.get(Module2, parent.id, lock: :update) end
 
     start_holder(scratch_opts, lock, test_pid)
   end

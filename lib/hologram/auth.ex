@@ -94,9 +94,10 @@ defmodule Hologram.Auth do
   # rule that fell back to the store would judge half the policy under grants the caller did not
   # ask about.
   #
-  # :held reads the store and share-locks the grant rows the answer rests on until the enclosing
-  # transaction ends. It is what a write under an acting user asks: a revocation of the authority
-  # the write rests on then lands after the write, never between its evaluation and its commit.
+  # :held reads the store and share-locks the grant rows the answer rests on, and the related rows
+  # `via:` delegations read, until the enclosing transaction ends. It is what a write under an
+  # acting user asks: a revocation of the authority the write rests on, or a change to a row a
+  # delegation read, then lands after the write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
   @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
@@ -106,9 +107,9 @@ defmodule Hologram.Auth do
   end
 
   # The id of the row a chain of to-one relationships ends at, or nil when any hop along the way
-  # is empty. The intermediate rows are read raw, the way `check_requirement({:via, _}, ...)`
-  # reads a delegation target: what is being asked is where the chain LEADS, and a read that
-  # applied the intermediate row's own rules would answer nil for a chain the policy follows.
+  # is empty. The intermediate rows are read raw, the way a render's delegation reads its target:
+  # what is being asked is where the chain LEADS, and a read that applied the intermediate row's
+  # own rules would answer nil for a chain the policy follows.
   #
   # A hop naming a row that is gone answers nil the same way an empty reference does - a chain
   # that leads nowhere leads nowhere, however it got there.
@@ -541,6 +542,8 @@ defmodule Hologram.Auth do
 
   # Delegation asks the related entity's policy for the same operation. The related row is read
   # raw, because a policy that could not see its own delegation target would deny everything.
+  # Under :held it is also share-locked until the transaction ends, so the delegation is judged
+  # against the row as it stands when the write commits.
   defp check_requirement({:via, relationship_name}, entity, actor_user_id, operation, source) do
     case related_id(entity, relationship_name) do
       nil ->
@@ -549,7 +552,7 @@ defmodule Hologram.Auth do
       target_id ->
         entity.__struct__
         |> relationship_target(relationship_name)
-        |> EntityOperations.get(target_id)
+        |> EntityOperations.get(target_id, delegation_read_opts(source))
         |> delegates?(actor_user_id, operation, source)
     end
   end
@@ -594,6 +597,14 @@ defmodule Hologram.Auth do
   defp delegates?(target, actor_user_id, operation, source) do
     evaluate(actor_user_id, operation, target, source)
   end
+
+  # A write holds the delegation target it read until it commits, the way it holds the grant rows -
+  # share-locked, so a change to the row waits for the write rather than landing between its
+  # evaluation and its commit. A render, the sync and a check against a supplied grants list read
+  # it plainly: nothing is being written on their answer.
+  defp delegation_read_opts(:held), do: [lock: :share]
+
+  defp delegation_read_opts(_source), do: []
 
   # Nils encode the type-wide and global grant shapes, so the lookup matches them as values -
   # the same comparison the store's unique index makes, which is what identifies ONE grant and

@@ -82,11 +82,12 @@ defmodule Hologram.DB do
   for the operation the entity claims through authorize/2 - against the row being inserted, and
   raises Hologram.AccessDeniedError when no rule grants it. The grant rows the answer rests on
   are held until the write commits, so a revocation of one of them lands after the write, and a
-  grant made meanwhile is not seen - the write is refused where a moment later it would pass. An
-  entity claiming the server's own authority through trust/1 is written without evaluation.
-  Without an acting user an unclaimed write is raw - the trusted tier - and a claimed operation
-  is evaluated with the anonymous semantics. The returned entity carries no claim and no
-  recorded changes.
+  grant made meanwhile is not seen - the write is refused where a moment later it would pass. A
+  related row a `via:` rule reads is held the same way, so a change to it lands after the write.
+  An entity claiming the server's own authority through trust/1 is written without evaluation.
+  Without an acting user an unclaimed write is raw - the trusted tier - and a claimed operation is
+  evaluated with the anonymous semantics. The returned entity carries no claim and no recorded
+  changes.
 
   Misuse raises rather than returning - a role grant, which is written only through
   grant_role/revoke_role, and a job, which is created through Job.create/2 - as does a
@@ -137,8 +138,9 @@ defmodule Hologram.DB do
   against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
   claim, so delete/1 is the spelling for one on another operation's authority. The grant rows
   the answer rests on are held until the delete commits, so a revocation of one of them lands
-  after the delete, and a grant made meanwhile is not seen - the delete is refused where a
-  moment later it would pass. Without an acting user the delete is raw.
+  after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
+  later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
+  lands after the delete. Without an acting user the delete is raw.
   """
   @spec delete(module, Entity.id()) ::
           :ok | {:error, %{referenced_by: module, relationship: atom}}
@@ -159,10 +161,11 @@ defmodule Hologram.DB do
   or for the operation the entity claims through authorize/2 - against the row as it stands,
   read FOR UPDATE, and raises Hologram.AccessDeniedError when no rule grants it. The grant rows
   the answer rests on are held until the delete commits, so a revocation of one of them lands
-  after the delete, and a grant made meanwhile is not seen - the delete is refused where a
-  moment later it would pass. An entity claiming the server's own authority through trust/1 is
-  deleted without evaluation, and without an acting user an unclaimed delete is raw. A struct
-  whose id names no row is not evaluated at all: there is nothing to authorize against.
+  after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
+  later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
+  lands after the delete. An entity claiming the server's own authority through trust/1 is deleted
+  without evaluation, and without an acting user an unclaimed delete is raw. A struct whose id
+  names no row is not evaluated at all: there is nothing to authorize against.
   """
   @spec delete(Entity.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity) when is_struct(entity) do
@@ -333,8 +336,9 @@ defmodule Hologram.DB do
   against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
   claim, so update/1 is the spelling for one on another operation's authority. The grant rows
   the answer rests on are held until the update commits, so a revocation of one of them lands
-  after the update, and a grant made meanwhile is not seen - the update is refused where a
-  moment later it would pass. Without an acting user the update is raw.
+  after the update, and a grant made meanwhile is not seen - the update is refused where a moment
+  later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
+  lands after the update. Without an acting user the update is raw.
   """
   @spec update(module, Entity.id(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
@@ -362,9 +366,10 @@ defmodule Hologram.DB do
   the way it reads in a template. Nothing can change the row between the evaluation and the
   write, and the grant rows the answer rests on are held until the write commits, so a
   revocation of one of them lands after the write, and a grant made meanwhile is not seen - the
-  write is refused where a moment later it would pass. An entity claiming the server's own
-  authority through trust/1 is written without evaluation, and without an acting user an
-  unclaimed write is raw.
+  write is refused where a moment later it would pass. A related row a `via:` rule reads is held
+  the same way, so a change to it lands after the write. An entity claiming the server's own
+  authority through trust/1 is written without evaluation, and without an acting user an unclaimed
+  write is raw.
 
   Returns {:error, violations} for a refused value exactly as update/3 does. A moved attribute is
   judged on the value the write leaves, so a move that would cross a declared bound is reported

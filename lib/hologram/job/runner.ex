@@ -29,7 +29,7 @@ defmodule Hologram.Job.Runner do
       Connection.transaction(fn ->
         # Locked, so a second worker asking at the same moment waits here until this transaction
         # ends, then reads the row as it was committed - running - and answers that it is taken.
-        case EntityOperations.get(job_type, id, lock: true) do
+        case EntityOperations.get(job_type, id, lock: :update) do
           %{status: :queued} = job ->
             :ok = EntityOperations.update(job_type, id, %{status: :running})
 

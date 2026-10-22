@@ -3,8 +3,9 @@ defmodule Hologram.DB.Writer do
 
   # The executors behind the DB verbs' struct forms: resolve a struct's claim, evaluate it
   # inside the transaction against the row as it stands, and apply the pending write through
-  # EntityOperations. The evaluation holds the grant rows its answer rests on until the
-  # transaction ends, so the authority a write was judged on is still there when it commits.
+  # EntityOperations. The evaluation holds the grant rows its answer rests on, and the related
+  # rows its delegations read, until the transaction ends, so the authority a write was judged on
+  # is still there when it commits.
   # EntityOperations itself stays claim-blind, so the framework's own writes (a grant under an
   # acting user) reach it as they always have.
 
@@ -24,7 +25,7 @@ defmodule Hologram.DB.Writer do
       Connection.transaction(fn ->
         # The row being inserted is the struct in hand, so the claim is evaluated against it -
         # inside the transaction the insert runs in, which is what holds the grants the answer
-        # rests on until the row lands.
+        # rests on, and the related rows its delegations read, until the row lands.
         evaluate!(stamped, :create, stamped)
 
         stamped
@@ -44,7 +45,7 @@ defmodule Hologram.DB.Writer do
       Connection.transaction(fn ->
         # No row is nothing to authorize against, and deleting an id that names none is a no-op
         # through the type-indexed verb too.
-        case EntityOperations.get(entity_type, entity.id, lock: true) do
+        case EntityOperations.get(entity_type, entity.id, lock: :update) do
           nil ->
             :ok
 
@@ -185,8 +186,8 @@ defmodule Hologram.DB.Writer do
     end
   end
 
-  # Asked with :held, so the grant rows the answer rests on stay as read until the write's
-  # transaction ends - every caller of this runs inside one.
+  # Asked with :held, so the grant rows the answer rests on, and the related rows its delegations
+  # read, stay as read until the write's transaction ends - every caller of this runs inside one.
   defp evaluate_operation!(operation, row) do
     if Auth.can?(Context.actor_user_id(), operation, row, :held) do
       :ok
@@ -199,7 +200,7 @@ defmodule Hologram.DB.Writer do
   # Read as the transaction will commit it: nothing can change the row between the claim's
   # evaluation and the write, because the row is locked from here to the commit.
   defp lock_row!(entity_type, id, verb) do
-    case EntityOperations.get(entity_type, id, lock: true) do
+    case EntityOperations.get(entity_type, id, lock: :update) do
       nil ->
         raise ArgumentError,
           message: "cannot #{verb} #{inspect(entity_type)} - no entity with id #{inspect(id)}"
