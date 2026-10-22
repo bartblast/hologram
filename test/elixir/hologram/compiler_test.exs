@@ -56,6 +56,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
+  alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
+  alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -131,12 +133,13 @@ defmodule Hologram.CompilerTest do
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
     permission_checking?: false,
-    prop_params: %{}
+    prop_params: %{},
+    role_modules: []
   }
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {model: {}, modelHash: "", propParams: {}, protocolVersion: 1};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "", propParams: {}, protocolVersion: 1};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -1710,8 +1713,8 @@ defmodule Hologram.CompilerTest do
 
     # A check's argument is whatever a template passes - a constructed struct as often as a
     # queried row - so which types get checked is not derivable from the queries, and every
-    # policied type's rules ship. What stays out is exactly the types declaring no policy,
-    # which is what lets the client read an ABSENT entry as the server's own default deny.
+    # policied type's rules ship. What stays out is exactly the types declaring neither a rule nor
+    # a role, which is what lets the client read an ABSENT entry as the server's own default deny.
     test "names every policied type when a page checks permissions on the client", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
@@ -1740,6 +1743,42 @@ defmodule Hologram.CompilerTest do
       assert sync_constants.permission_checking?
     end
 
+    # A role check validates and expands the role from the type's own declarations, so a type
+    # declaring roles ships to a checking client even when it declares no rule.
+    test "names a type declaring roles and no rule when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, Entity12)
+    end
+
+    test "leaves an unqueried type declaring roles out when no page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
+
+      refute MapSet.member?(sync_constants.entity_types, Entity12)
+    end
+
+    test "names the global roles when a page checks permissions on the client", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert sync_constants.role_modules == [RoleModule1, RoleModule2]
+    end
+
+    test "leaves the global roles out when no page checks permissions on the client", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
+
+      assert sync_constants.role_modules == []
+    end
+
     # No user entity type, no grant store: a page checking permissions has nothing to check them
     # against, so neither the grant type nor the policies ship.
     test "leaves the grant type out when a page checks permissions and the data model designates no user entity type",
@@ -1759,7 +1798,8 @@ defmodule Hologram.CompilerTest do
                entity_types: MapSet.new(),
                model_hash: nil,
                permission_checking?: false,
-               prop_params: %{}
+               prop_params: %{},
+               role_modules: []
              }
     end
 
@@ -1780,7 +1820,16 @@ defmodule Hologram.CompilerTest do
   describe "build_sync_constants_js/1" do
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+    end
+
+    # A client asked whether a user holds a global role refuses an unknown one by these keys and
+    # looks for every module carrying the one asked about.
+    test "renders the global roles with the modules carrying each" do
+      sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
+
+      assert build_sync_constants_js(sync_constants) ==
+               ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A build declaring no entity type says null, so no client of it asks to sync.
@@ -3050,7 +3099,7 @@ defmodule Hologram.CompilerTest do
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},/ <>
-                 ~s/"enumValues":{"c":["x","y"]},"frameworkAttributes":[],/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],/ <>
                  ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
                  ~s/"revoke_role","update"],"policy":{},/ <>
                  ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
@@ -3074,6 +3123,33 @@ defmodule Hologram.CompilerTest do
         )
 
       assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
+    end
+
+    # A role check looks for every role carrying the one asked about, from this map - owner
+    # extends editor, so an owner holds editor and not the other way round.
+    test "names the roles carrying each declared role, sorted", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"expandedRoles":{"editor":["editor","owner"],"maintainer":["maintainer"],/ <>
+                 ~s/"owner":["owner"],"viewer":["viewer"]},/
+             )
     end
 
     # The client refuses an operation nothing declares with the server's own sentence, from this
