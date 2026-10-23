@@ -34,8 +34,7 @@ defmodule Hologram.Assets.PathRegistry do
   def init(nil) do
     ets_table_name = impl().ets_table_name()
     ETS.create_named_table(ets_table_name)
-
-    populate(ets_table_name)
+    ETS.put(ets_table_name, find_assets(impl().static_dir()))
 
     {:ok, nil}
   end
@@ -101,17 +100,7 @@ defmodule Hologram.Assets.PathRegistry do
   """
   @spec reload :: :ok
   def reload do
-    ets_table_name = impl().ets_table_name()
-    assets = find_assets()
-
-    populate(ets_table_name, assets)
-
-    ets_table_name
-    |> ETS.get_all()
-    |> Map.keys()
-    |> Enum.reject(&Map.has_key?(assets, &1))
-    |> Enum.each(&ETS.delete(ets_table_name, &1))
-
+    ETS.replace_all(impl().ets_table_name(), find_assets(impl().static_dir()))
     :ok
   end
 
@@ -137,12 +126,6 @@ defmodule Hologram.Assets.PathRegistry do
     ]
   end
 
-  defp find_assets do
-    impl().static_dir()
-    |> find_assets()
-    |> Map.new()
-  end
-
   defp find_assets(static_dir) do
     static_files = FileUtils.list_files_recursively(static_dir)
 
@@ -155,7 +138,12 @@ defmodule Hologram.Assets.PathRegistry do
       |> find_assets_without_digest_suffix(static_files)
       |> Enum.reject(fn {key, _path} -> key in already_used_registry_keys end)
 
-    assets_with_digest_suffix ++ assets_without_digest_suffix
+    # Two digested copies of one asset share a key. A single insert of a list leaves undefined which
+    # duplicate the table keeps, so the copy that sorts last is picked here, to keep the choice
+    # deterministic.
+    (assets_with_digest_suffix ++ assets_without_digest_suffix)
+    |> Map.new()
+    |> Map.to_list()
   end
 
   defp find_assets_with_digest_suffix(static_dir, static_files) do
@@ -188,14 +176,6 @@ defmodule Hologram.Assets.PathRegistry do
 
   defp match_digest_suffix(regexes, file_path) do
     Enum.find_value(regexes, &Regex.run(&1, file_path))
-  end
-
-  defp populate(ets_table_name) do
-    populate(ets_table_name, find_assets())
-  end
-
-  defp populate(ets_table_name, assets) do
-    Enum.each(assets, fn {key, value} -> ETS.put(ets_table_name, key, value) end)
   end
 
   defp stream_build_asset_entries(file_infos) do

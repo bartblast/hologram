@@ -108,8 +108,7 @@ defmodule Hologram.Assets.ChunkRegistry do
   def reload do
     impl().ets_table_name()
     |> plt()
-    |> PLT.reset()
-    |> populate()
+    |> PLT.reload(impl().dump_path())
   end
 
   defp collect_named_modules(term, acc) when is_atom(term) do
