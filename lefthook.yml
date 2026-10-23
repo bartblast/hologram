@@ -2,10 +2,10 @@ pre-commit:
   parallel: true
   commands:
     check_lib_elixir_code_formatted:
-      run: mix format --check-formatted
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram/.mix/cached_dot_formatter && mix format --check-formatted
     check_lib_javascript_and_json_code_formatted:
       run: mix format.js.check
     check_app_elixir_code_formatted:
-      run: cd test/features && mix format --check-formatted
+      run: cd test/features && (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_feature_tests/.mix/cached_dot_formatter && mix format --check-formatted
     check_app_javascript_code_formatted:
       run: cd test/features && mix format.js.check
