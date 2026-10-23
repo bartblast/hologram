@@ -2016,6 +2016,28 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture59.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
     end
 
+    test "accepts the same extends target from several declarations" do
+      defmodule SharedExtendsTargetPolicy do
+        use Hologram.Policy
+
+        role :editor
+        role :owner, extends: :editor
+      end
+
+      defmodule SharedExtendsTargetEntity do
+        use Hologram.Entity
+
+        policy SharedExtendsTargetPolicy
+
+        role :owner, extends: :editor
+      end
+
+      assert SharedExtendsTargetEntity.__roles__() == [
+               {:editor, []},
+               {:owner, [extends: [:editor]]}
+             ]
+    end
+
     test "rejects extends option with a non-atom target in the list" do
       expected_msg =
         "invalid extends option [:viewer, \"editor\"] for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture60 - the extends option must be a role name or a non-empty list of role names"
@@ -2052,6 +2074,34 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role :owner, extends: nil
+        end
+      end
+    end
+
+    test "rejects extends option naming a role twice" do
+      expected_msg =
+        "repeated role :editor in the extends option of role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture103 - name each role once"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture103 do
+          use Hologram.Entity
+
+          role :editor
+          role :viewer
+          role :owner, extends: [:editor, :viewer, :editor]
+        end
+      end
+    end
+
+    test "rejects a repeated undeclared extends target as a repeat" do
+      expected_msg =
+        "repeated role :editor in the extends option of role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture104 - name each role once"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture104 do
+          use Hologram.Entity
+
+          role :owner, extends: [:editor, :editor]
         end
       end
     end
@@ -2100,6 +2150,26 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role :owner, extends: :owner
+        end
+      end
+    end
+
+    test "names the policy a role naming an extends target twice was declared in" do
+      defmodule RepeatedExtendsPolicy do
+        use Hologram.Policy
+
+        role :editor
+        role :owner, extends: [:editor, :editor]
+      end
+
+      expected_msg =
+        "repeated role :editor in the extends option of role :owner in Hologram.Entity.ValidatorTest.RepeatedExtendsEntity, taken from Hologram.Entity.ValidatorTest.RepeatedExtendsPolicy - name each role once"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule RepeatedExtendsEntity do
+          use Hologram.Entity
+
+          policy RepeatedExtendsPolicy
         end
       end
     end

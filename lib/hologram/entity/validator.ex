@@ -339,7 +339,7 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the role declarations of the given module as a whole, after its body has executed.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (extends option shape, extends targets, extension cycles).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (extends option shape, repeated extends targets, extends targets, extension cycles).
   Role extension is checked here rather than per declaration, so that a role can extend one declared further down the module body.
   """
   @spec validate_roles!(module) :: :ok
@@ -604,6 +604,25 @@ defmodule Hologram.Entity.Validator do
         end)
 
       {cycles, MapSet.put(visited, name)}
+    end
+  end
+
+  # The first target that appears earlier in the list, nil when every target appears once.
+  defp first_repeated_target(targets) do
+    scan =
+      targets
+      |> List.wrap()
+      |> Enum.reduce_while(MapSet.new(), fn target, seen ->
+        if MapSet.member?(seen, target) do
+          {:halt, {:repeated, target}}
+        else
+          {:cont, MapSet.put(seen, target)}
+        end
+      end)
+
+    case scan do
+      {:repeated, target} -> target
+      _seen -> nil
     end
   end
 
@@ -1023,12 +1042,29 @@ defmodule Hologram.Entity.Validator do
               "invalid extends option #{inspect(value)} for role #{inspect(name)} in #{location} - the extends option must be a role name or a non-empty list of role names"
         end
 
+        validate_extends_repeats!(name, value, location)
+
         value
         |> List.wrap()
         |> Enum.each(&validate_extends_target!(name, &1, declared_names, location))
 
       :error ->
         :ok
+    end
+  end
+
+  # A repeat inside one written list has no reading the developer meant - a name left over from
+  # an edit, or another role intended. The same target reached from several declarations is
+  # legal: those merge.
+  defp validate_extends_repeats!(name, targets, location) do
+    case first_repeated_target(targets) do
+      nil ->
+        :ok
+
+      target ->
+        raise Hologram.CompileError,
+          message:
+            "repeated role #{inspect(target)} in the extends option of role #{inspect(name)} in #{location} - name each role once"
     end
   end
 
