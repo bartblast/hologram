@@ -133,7 +133,12 @@ defmodule Hologram.Assets.PathRegistry do
       |> find_assets_without_digest_suffix(static_files)
       |> Enum.reject(fn {key, _path} -> key in already_used_registry_keys end)
 
-    assets_with_digest_suffix ++ assets_without_digest_suffix
+    # Two digested copies of one asset share a key. A single insert of a list leaves undefined which
+    # duplicate the table keeps, so the copy that sorts last is picked here, to keep the choice
+    # deterministic.
+    (assets_with_digest_suffix ++ assets_without_digest_suffix)
+    |> Map.new()
+    |> Map.to_list()
   end
 
   defp find_assets_with_digest_suffix(static_dir, static_files) do

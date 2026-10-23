@@ -93,6 +93,17 @@ defmodule Hologram.Assets.PathRegistryTest do
       :ok
     end
 
+    test "picks the digested copy that sorts last when an asset has two" do
+      dir = AssetPathRegistryStub.static_dir() <> "/test_dir_3"
+      File.write!(dir <> "/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css", "")
+      File.write!(dir <> "/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css", "")
+
+      reload()
+
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css"}
+    end
+
     test "replaces a stale value", %{mapping: mapping} do
       ets_table_name = AssetPathRegistryStub.ets_table_name()
       ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/stale")
