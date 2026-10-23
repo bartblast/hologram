@@ -334,6 +334,14 @@ defmodule Hologram.DB do
   timeout - is {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and
   the server's message.
 
+  A uuid column or uuid array comes back as canonical id strings, the spelling every entity
+  carries, and an id string given for a uuid parameter or uuid array parameter is encoded for the
+  driver - a 16-byte binary passes through either way. The conversion goes by the types PostgreSQL
+  reports for the statement, so a text column holding a uuid-shaped string stays as it is. Other
+  types arrive as the driver decodes them: `int8` as an integer, `float8` as a float, `text` as a
+  string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
+  its label string and `jsonb` as a map.
+
   Inside transaction/2 the statement runs on the transaction's connection and sees its
   uncommitted rows, and the transaction stays writable afterwards.
 
@@ -342,9 +350,16 @@ defmodule Hologram.DB do
   entity, so nothing strips server-only attribute values from it - a selected `password_hash` put
   in state reaches the client. Select what the client may see.
 
-  The opts go to the driver. `timeout:` bounds the statement, and the driver's default is fifteen
-  seconds. The read is not run again when PostgreSQL resolves a deadlock, since it takes no row
-  locks.
+  The one option is `timeout:`, the milliseconds the statement may run as a positive integer, or
+  `:infinity` - fifteen seconds by default. PostgreSQL enforces it: past it the statement is
+  cancelled and answered as {:error, %Hologram.SQLError{code: :query_canceled}}, and the
+  connection and any enclosing transaction carry on. Inside transaction/2 the transaction's own
+  bound applies as well. The read is not run again when PostgreSQL resolves a deadlock, since it
+  takes no row locks.
+
+  Raises ArgumentError for an option other than `timeout:`, an invalid timeout, a number of params
+  that differs from the statement's placeholders, and a param that does not fit its placeholder's
+  type - none of which reaches the server.
   """
   @spec sql(String.t(), list, keyword) :: {:ok, sql_result} | {:error, SQLError.t()}
   def sql(statement, params \\ [], opts \\ []) do

@@ -484,6 +484,15 @@ defmodule Hologram.DBTest do
       assert {:ok, %Module1{}} = create(Module1.new())
     end
 
+    test "reads an entity id as the string the entity carries" do
+      {:ok, entity} = create(Module1.new())
+
+      statement =
+        ~s|SELECT "id" FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1|
+
+      assert sql(statement, [entity.id]) == {:ok, %{columns: ["id"], rows: [[entity.id]]}}
+    end
+
     test "refuses a delete" do
       assert {:error, %SQLError{code: :read_only_sql_transaction}} =
                sql(~s|DELETE FROM "hologram_data"."test_fixtures_entity_module1"|)
@@ -504,6 +513,14 @@ defmodule Hologram.DBTest do
       assert_error SQLError, expected_msg, fn ->
         sql!(~s|DELETE FROM "hologram_data"."test_fixtures_entity_module1"|)
       end
+    end
+
+    test "raises on a param that does not fit its placeholder" do
+      assert_error ArgumentError,
+                   "DB.sql/3 got 0 params for a statement with 1 placeholder",
+                   fn ->
+                     sql!(~s|SELECT $1::uuid AS "id"|)
+                   end
     end
   end
 
