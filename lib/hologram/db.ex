@@ -13,6 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.SQLQuery
   alias Hologram.DB.Writer
   alias Hologram.Entity
   alias Hologram.Entity.Model
@@ -21,11 +22,18 @@ defmodule Hologram.DB do
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Reflection
+  alias Hologram.SQLError
   alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
 
   @pool_name Hologram.DB.Pool
+
+  @typedoc """
+  What an SQL read answers: the column names as strings, in the order the select list named them,
+  and the rows as lists of values in that same order.
+  """
+  @type sql_result :: %{columns: [String.t()], rows: [list]}
 
   # The data surface, brought in by one line: the stages that build a query term or record a write
   # on an entity struct as bare functions and macros, and the modules the executors live on as
@@ -232,14 +240,6 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Executes the given SQL statement with the given placeholders and returns {:ok, result} or
-  {:error, exception}. Inside transaction/2 the statement runs on the transaction's
-  connection, otherwise on the pool.
-  """
-  @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
-  defdelegate query(statement, placeholders \\ [], opts \\ []), to: Connection
-
-  @doc """
   Reads the given query from the database and returns its result - a list of entity
   structs for set queries, an entity struct or nil for single-result queries, and an
   integer for counting queries.
@@ -305,6 +305,63 @@ defmodule Hologram.DB do
   """
   @spec rollback(any) :: no_return
   defdelegate rollback(reason), to: Connection
+
+  @doc """
+  Runs one SQL statement on the server against the data layer's tables and returns
+  {:ok, result} or {:error, error}. The statement is prepared, with its `$1`-style placeholders
+  bound from params - a param is never spliced into the text - and the result is a map:
+  :columns, the names as strings in the order the select list named them, and :rows, one list of
+  values per row in that same order. Two columns of one name both stay, at their positions.
+
+  This is the read the query stages cannot say: full-text search, aggregates and grouping, window
+  functions, CTEs, a report joining several entity types, a search over data that is not synced.
+  Physical names come from schema_name/0, table_name/1 and join_table_name/2, quoted in the
+  SQL - a join table's name carries `$`, and an attribute may be named by a reserved word
+  (`"user"` unquoted is the database role). An attribute's column has the attribute's name, a
+  to-one relationship's column is `<name>_id`, every table has `id`, `created_at` and
+  `updated_at`, and a join table has `source_id` and `target_id`.
+
+  Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
+  user may see in the SQL itself.
+
+  The statement runs in a read-only transaction, so a write of any kind - an insert, update,
+  delete or truncate, DDL, a row lock, `nextval()`, a writing CTE, a function that writes - is
+  refused by PostgreSQL and answered as {:error, %Hologram.SQLError{code:
+  :read_only_sql_transaction}} with a message saying so. A write that skipped the data layer would
+  never reach the sync, and clients would drift from the server with nothing failing. The one
+  thing a statement may write is a temporary table, which PostgreSQL exempts and which holds no
+  data of the layer. Any other failure - a syntax error, a missing table, a type mismatch, a
+  timeout - is {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and
+  the server's message.
+
+  Inside transaction/2 the statement runs on the transaction's connection and sees its
+  uncommitted rows, and the transaction stays writable afterwards.
+
+  Runs only on the server: a page whose client code reaches it fails the build. Call it from a
+  command, a job, a seed or a script, and hand an action what the client needs. A row is not an
+  entity, so nothing strips server-only attribute values from it - a selected `password_hash` put
+  in state reaches the client. Select what the client may see.
+
+  The opts go to the driver. `timeout:` bounds the statement, and the driver's default is fifteen
+  seconds. The read is not run again when PostgreSQL resolves a deadlock, since it takes no row
+  locks.
+  """
+  @spec sql(String.t(), list, keyword) :: {:ok, sql_result} | {:error, SQLError.t()}
+  def sql(statement, params \\ [], opts \\ []) do
+    SQLQuery.run(statement, params, opts)
+  end
+
+  @doc """
+  Like sql/3, returning the result directly and raising the Hologram.SQLError instead of
+  returning {:error, ...}.
+  """
+  @spec sql!(String.t(), list, keyword) :: sql_result
+  def sql!(statement, params \\ [], opts \\ []) do
+    case sql(statement, params, opts) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
+    end
+  end
 
   @doc """
   Runs the given zero-arity function inside a database transaction and returns

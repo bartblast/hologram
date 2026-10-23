@@ -16,6 +16,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Entity.Model
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.SQLError
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -463,6 +464,45 @@ defmodule Hologram.DBTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         reload([Hologram.Blog.Post, Hologram.BlogPost], [])
+      end
+    end
+  end
+
+  describe "sql/3" do
+    test "reads rows the sandbox transaction wrote" do
+      {:ok, _entity} = create(Module1.new())
+
+      assert sql(
+               ~s|SELECT count(*) AS "count" FROM "hologram_data"."test_fixtures_entity_module1"|
+             ) ==
+               {:ok, %{columns: ["count"], rows: [[1]]}}
+    end
+
+    test "leaves the sandbox transaction writable" do
+      {:ok, _result} = sql(~s|SELECT 1 AS "one"|)
+
+      assert {:ok, %Module1{}} = create(Module1.new())
+    end
+
+    test "refuses a delete" do
+      assert {:error, %SQLError{code: :read_only_sql_transaction}} =
+               sql(~s|DELETE FROM "hologram_data"."test_fixtures_entity_module1"|)
+    end
+  end
+
+  describe "sql!/3" do
+    test "returns the result" do
+      assert sql!(~s|SELECT 1 AS "one"|) == %{columns: ["one"], rows: [[1]]}
+    end
+
+    test "raises on a refused delete" do
+      expected_msg =
+        "DB.sql/3 can only read data, and this statement writes it (PostgreSQL: cannot execute " <>
+          "DELETE in a read-only transaction). Use DB.create/1, DB.update/3 or DB.delete/2 to " <>
+          "write, so that the change reaches the sync and the clients."
+
+      assert_error SQLError, expected_msg, fn ->
+        sql!(~s|DELETE FROM "hologram_data"."test_fixtures_entity_module1"|)
       end
     end
   end

@@ -38,6 +38,20 @@ defmodule Hologram.DB.Connection do
   end
 
   @doc false
+  @spec execute(Postgrex.Query.t(), list, keyword) ::
+          {:ok, Postgrex.Query.t(), Postgrex.Result.t()} | {:error, Exception.t()}
+  def execute(query, params, opts \\ []) do
+    Postgrex.execute(current_connection(), query, params, with_timeout_opt(opts))
+  end
+
+  # The unnamed statement needs no close: the next parse on the connection replaces it.
+  @doc false
+  @spec prepare(String.t(), keyword) :: {:ok, Postgrex.Query.t()} | {:error, Exception.t()}
+  def prepare(statement, opts \\ []) do
+    Postgrex.prepare(current_connection(), "", statement, with_timeout_opt(opts))
+  end
+
+  @doc false
   @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
   def query(statement, params \\ [], opts \\ []) do
     Postgrex.query(current_connection(), statement, params, with_timeout_opt(opts))
