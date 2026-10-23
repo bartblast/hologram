@@ -47,19 +47,37 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
     end
   end
 
-  test "reload/0" do
-    PageDigestRegistry.start_link([])
+  describe "reload/0" do
+    setup do
+      PageDigestRegistry.start_link([])
+      :ok
+    end
 
-    ets_table_name = PageDigestRegistryStub.ets_table_name()
-    ETS.put(ets_table_name, :dummy_key, :dummy_value)
+    test "replaces a stale value" do
+      ets_table_name = PageDigestRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, :module_a, :stale_digest)
 
-    reload()
+      reload()
 
-    assert ETS.get_all(ets_table_name) == %{
-             module_a: :module_a_digest,
-             module_b: :module_b_digest,
-             module_c: :module_c_digest
-           }
+      assert ETS.get_all(ets_table_name) == %{
+               module_a: :module_a_digest,
+               module_b: :module_b_digest,
+               module_c: :module_c_digest
+             }
+    end
+
+    test "removes a key the data no longer holds" do
+      ets_table_name = PageDigestRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, :dummy_key, :dummy_value)
+
+      reload()
+
+      assert ETS.get_all(ets_table_name) == %{
+               module_a: :module_a_digest,
+               module_b: :module_b_digest,
+               module_c: :module_c_digest
+             }
+    end
   end
 
   test "start_link/1" do

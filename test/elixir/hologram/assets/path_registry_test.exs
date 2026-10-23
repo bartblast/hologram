@@ -87,15 +87,40 @@ defmodule Hologram.Assets.PathRegistryTest do
     assert lookup("my_static_path") == {:ok, "/my_asset_path"}
   end
 
-  test "reload/0", %{mapping: mapping} do
-    AssetPathRegistry.start_link([])
+  describe "reload/0" do
+    setup do
+      AssetPathRegistry.start_link([])
+      :ok
+    end
 
-    ets_table_name = AssetPathRegistryStub.ets_table_name()
-    ETS.put(ets_table_name, :dummy_key, :dummy_value)
+    test "picks the digested copy that sorts last when an asset has two" do
+      dir = AssetPathRegistryStub.static_dir() <> "/test_dir_3"
+      File.write!(dir <> "/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css", "")
+      File.write!(dir <> "/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css", "")
 
-    reload()
+      reload()
 
-    assert ETS.get_all(ets_table_name) == mapping
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css"}
+    end
+
+    test "replaces a stale value", %{mapping: mapping} do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/stale")
+
+      reload()
+
+      assert ETS.get_all(ets_table_name) == mapping
+    end
+
+    test "removes a key the data no longer holds", %{mapping: mapping} do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, :dummy_key, :dummy_value)
+
+      reload()
+
+      assert ETS.get_all(ets_table_name) == mapping
+    end
   end
 
   test "start_link/1" do

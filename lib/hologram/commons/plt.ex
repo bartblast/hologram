@@ -135,13 +135,7 @@ defmodule Hologram.Commons.PLT do
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()
   def load(plt, dump_path) do
-    items =
-      dump_path
-      |> File.read!()
-      |> SerializationUtils.deserialize(true)
-      |> Map.to_list()
-
-    put(plt, items)
+    put(plt, read_dump(dump_path))
   end
 
   @doc """
@@ -179,6 +173,16 @@ defmodule Hologram.Commons.PLT do
   @spec put(PLT.t(), any, any) :: PLT.t()
   def put(%PLT{table_ref: table_ref} = plt, key, value) do
     ETS.put(table_ref, key, value)
+    plt
+  end
+
+  @doc """
+  Replaces the PLT's items with the ones dumped to the given file (see `Hologram.Commons.ETS.replace_all/2`).
+  Unlike reset/1 followed by load/2, a reader never finds the PLT empty.
+  """
+  @spec reload(PLT.t(), String.t()) :: PLT.t()
+  def reload(%PLT{table_ref: table_ref} = plt, dump_path) do
+    ETS.replace_all(table_ref, read_dump(dump_path))
     plt
   end
 
@@ -241,5 +245,12 @@ defmodule Hologram.Commons.PLT do
   @spec stop(PLT.t()) :: :ok
   def stop(%PLT{pid: pid}) do
     GenServer.stop(pid)
+  end
+
+  defp read_dump(dump_path) do
+    dump_path
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
+    |> Map.to_list()
   end
 end

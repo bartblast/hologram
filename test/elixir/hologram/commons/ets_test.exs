@@ -182,6 +182,35 @@ defmodule Hologram.Commons.ETSTest do
     assert :ets.lookup(table_ref, :my_key_3) == [{:my_key_3, :my_value_3}]
   end
 
+  describe "replace_all/2" do
+    test "puts the items in and deletes the keys they don't name", %{table_ref: table_ref} do
+      items = [
+        {:my_key_2, :my_value_2_new},
+        {:my_key_3, :my_value_3}
+      ]
+
+      replace_all(table_ref, items)
+
+      assert get_all(table_ref) == %{my_key_2: :my_value_2_new, my_key_3: :my_value_3}
+    end
+
+    test "keeps a key whose value didn't change", %{table_ref: table_ref} do
+      replace_all(table_ref, [{:my_key_1, :my_value_1}])
+
+      assert get_all(table_ref) == %{my_key_1: :my_value_1}
+    end
+
+    test "empty items empty the table", %{table_ref: table_ref} do
+      replace_all(table_ref, [])
+
+      assert get_all(table_ref) == %{}
+    end
+
+    test "returns true", %{table_ref: table_ref} do
+      assert replace_all(table_ref, [{:my_key_1, :my_value_1}]) == true
+    end
+  end
+
   test "reset/1", %{table_ref: table_ref} do
     assert reset(table_ref) == true
     assert get_all(table_ref) == %{}
