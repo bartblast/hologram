@@ -6,6 +6,9 @@ defmodule Hologram.DB.Writer do
   # EntityOperations. The evaluation holds the grant rows its answer rests on, and the related
   # rows its delegations read, until the transaction ends, so the authority a write was judged on
   # is still there when it commits.
+  # A transaction the verb opens and PostgreSQL aborts as a deadlock victim is run again, so the
+  # verb answers the way it would have a moment later. Inside a caller's transaction the error
+  # propagates to it instead.
   # EntityOperations itself stays claim-blind, so the framework's own writes (a grant under an
   # acting user) reach it as they always have.
 
@@ -22,7 +25,7 @@ defmodule Hologram.DB.Writer do
     stamped = stamp_actor(entity)
 
     {:ok, result} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         # The row being inserted is the struct in hand, so the claim is evaluated against it -
         # inside the transaction the insert runs in, which is what holds the grants the answer
         # rests on, and the related rows its delegations read, until the row lands.
@@ -42,7 +45,7 @@ defmodule Hologram.DB.Writer do
     entity_type = entity.__struct__
 
     {:ok, applied} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         # No row is nothing to authorize against, and deleting an id that names none is a no-op
         # through the type-indexed verb too.
         case EntityOperations.get(entity_type, entity.id, lock: :update) do
@@ -61,14 +64,18 @@ defmodule Hologram.DB.Writer do
 
   # Naming the row by type and id carries no claim, so under an actor this is delete/1 of a
   # struct that carries none - the verb's own operation, evaluated against the locked row.
-  # Without an actor there is nothing to evaluate and the row is deleted raw, as before.
+  # Without an actor there is nothing to evaluate and the row is deleted raw, inside a transaction
+  # of the verb's own, so a deadlock PostgreSQL resolves against it is rerun like any other.
   @doc false
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
     if Context.actor_user_id() do
       delete(%{struct!(entity_type) | id: id})
     else
-      EntityOperations.delete(entity_type, id)
+      {:ok, applied} =
+        Connection.retry_on_deadlock(fn -> EntityOperations.delete(entity_type, id) end)
+
+      applied
     end
   end
 
@@ -91,7 +98,7 @@ defmodule Hologram.DB.Writer do
     {attribute_changes, attribute_deltas} = split_attribute_ops(attribute_ops)
 
     {:ok, applied} =
-      Connection.transaction(fn ->
+      Connection.retry_on_deadlock(fn ->
         row = lock_row!(entity_type, entity.id, "update")
 
         evaluate!(entity, :update, row)
@@ -110,14 +117,16 @@ defmodule Hologram.DB.Writer do
   end
 
   # The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
-  # changes are given outright and the operation is the verb's own.
+  # changes are given outright and the operation is the verb's own. Without an actor the row is
+  # updated raw, inside a transaction of the verb's own, so a deadlock PostgreSQL resolves against
+  # it is rerun like any other.
   @doc false
   @spec update(module, String.t(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     if Context.actor_user_id() do
       {:ok, applied} =
-        Connection.transaction(fn ->
+        Connection.retry_on_deadlock(fn ->
           row = lock_row!(entity_type, id, "update")
 
           evaluate_operation!(:update, row)
@@ -127,7 +136,10 @@ defmodule Hologram.DB.Writer do
 
       applied
     else
-      EntityOperations.update(entity_type, id, changes)
+      {:ok, applied} =
+        Connection.retry_on_deadlock(fn -> EntityOperations.update(entity_type, id, changes) end)
+
+      applied
     end
   end
 
