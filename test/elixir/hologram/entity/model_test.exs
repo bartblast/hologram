@@ -269,7 +269,7 @@ defmodule Hologram.Entity.ModelTest do
     end
 
     test "changes a role's options as deltas" do
-      model = task_model(%{roles: [{:owner, [extends: :editor]}]})
+      model = task_model(%{roles: [{:owner, [extends: [:editor]]}]})
 
       ops = [
         %{
@@ -282,7 +282,39 @@ defmodule Hologram.Entity.ModelTest do
       ]
 
       assert fold(model, ops) ==
-               task_model(%{roles: [{:owner, [extends: :editor, granted_to: :creator]}]})
+               task_model(%{roles: [{:owner, [extends: [:editor], granted_to: :creator]}]})
+    end
+
+    test "folds an entity role's extends to a sorted list however the op spells it" do
+      model = task_model(%{roles: [{:editor, []}, {:viewer, []}]})
+
+      ops = [
+        %{op: :add_role, entity: MyApp.Task, name: :owner, opts: [extends: :editor], line: 3},
+        %{
+          op: :add_role,
+          entity: MyApp.Task,
+          name: :admin,
+          opts: [extends: [:viewer, :editor, :viewer]],
+          line: 4
+        },
+        %{
+          op: :change_role,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [extends: :viewer],
+          line: 5
+        }
+      ]
+
+      assert fold(model, ops) ==
+               task_model(%{
+                 roles: [
+                   {:admin, [extends: [:editor, :viewer]]},
+                   {:editor, []},
+                   {:owner, [extends: [:viewer]]},
+                   {:viewer, []}
+                 ]
+               })
     end
 
     test "deletes an enum value" do
@@ -375,7 +407,7 @@ defmodule Hologram.Entity.ModelTest do
       assert fold(model, ops) ==
                task_model(%{
                  roles: [
-                   {:admin, [extends: [:reviewer, :owner]]},
+                   {:admin, [extends: [:owner, :reviewer]]},
                    {:owner, [granted_to: :creator]},
                    {:reviewer, []}
                  ]
@@ -414,6 +446,47 @@ defmodule Hologram.Entity.ModelTest do
                roles: %{},
                user_entity: nil
              }
+    end
+
+    test "produces the entry the entity's declarations give" do
+      defmodule InlineFoldRolesPolicyFixture do
+        use Hologram.Policy
+
+        role :editor
+        role :owner, extends: :editor
+      end
+
+      defmodule InlineFoldRolesEntityFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        policy InlineFoldRolesPolicyFixture
+
+        role :owner, granted_to: :creator
+      end
+
+      ops = [
+        %{op: :create_entity, entity: InlineFoldRolesEntityFixture, line: 3},
+        %{
+          op: :add_attribute,
+          entity: InlineFoldRolesEntityFixture,
+          name: :title,
+          type: :string,
+          opts: [],
+          line: 4
+        },
+        %{op: :add_role, entity: InlineFoldRolesEntityFixture, name: :editor, opts: [], line: 5},
+        %{
+          op: :add_role,
+          entity: InlineFoldRolesEntityFixture,
+          name: :owner,
+          opts: [extends: :editor, granted_to: :creator],
+          line: 6
+        }
+      ]
+
+      assert fold(empty(), ops) == from_modules([InlineFoldRolesEntityFixture])
     end
 
     test "creates an entity type with no declarations" do
@@ -985,7 +1058,7 @@ defmodule Hologram.Entity.ModelTest do
     test "raises when deleting an entity role that other roles extend" do
       model =
         task_model(%{
-          roles: [{:admin, [extends: [:viewer]]}, {:owner, [extends: :viewer]}, {:viewer, []}]
+          roles: [{:admin, [extends: [:viewer]]}, {:owner, [extends: [:viewer]]}, {:viewer, []}]
         })
 
       ops = [%{op: :delete_role, entity: MyApp.Task, name: :viewer, line: 3}]
@@ -1311,7 +1384,7 @@ defmodule Hologram.Entity.ModelTest do
                      {:title, :string, []}
                    ],
                    relationships: [{:parent, Module1, [optional: true]}],
-                   roles: [{:editor, []}, {:owner, [extends: :editor, granted_to: :creator]}]
+                   roles: [{:editor, []}, {:owner, [extends: [:editor], granted_to: :creator]}]
                  }
                },
                roles: %{},
@@ -1332,6 +1405,66 @@ defmodule Hologram.Entity.ModelTest do
 
     test "leaves out the role grant store, which is derived rather than declared" do
       assert from_modules([Module1, RoleGrant]) == from_modules([Module1])
+    end
+
+    test "stores a role's extends as a sorted list of its targets" do
+      defmodule InlineExtendsListFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :viewer
+        role :owner, extends: [:viewer, :editor]
+      end
+
+      assert from_modules([InlineExtendsListFixture]) == %{
+               entities: %{
+                 InlineExtendsListFixture => %{
+                   attributes: [],
+                   relationships: [],
+                   roles: [{:editor, []}, {:owner, [extends: [:editor, :viewer]]}, {:viewer, []}]
+                 }
+               },
+               roles: %{},
+               user_entity: nil
+             }
+    end
+
+    test "returns one entry for a role declared once and a role declared in a policy and the entity" do
+      defmodule InlineRoleOncePolicyFixture do
+        use Hologram.Policy
+
+        role :editor
+        role :owner, extends: :editor
+      end
+
+      defmodule InlineRoleOnceFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        role :editor
+        role :owner, extends: :editor, granted_to: :creator
+      end
+
+      defmodule InlineRoleTwiceFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        policy InlineRoleOncePolicyFixture
+
+        role :owner, granted_to: :creator
+      end
+
+      once_entry = from_modules([InlineRoleOnceFixture]).entities[InlineRoleOnceFixture]
+      twice_entry = from_modules([InlineRoleTwiceFixture]).entities[InlineRoleTwiceFixture]
+
+      assert once_entry.roles == [
+               {:editor, []},
+               {:owner, [extends: [:editor], granted_to: :creator]}
+             ]
+
+      assert twice_entry == once_entry
     end
 
     test "normalizes neutral option values to absence" do
@@ -1590,6 +1723,51 @@ defmodule Hologram.Entity.ModelTest do
         |> hash()
 
       assert one_read == other_read
+    end
+
+    test "a role declared once and a role declared in a policy and the entity hash the same" do
+      defmodule InlineHashRolesPolicyFixture do
+        use Hologram.Policy
+
+        role :editor
+        role :owner, extends: :editor
+      end
+
+      defmodule InlineHashRoleOnceFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        role :editor
+        role :owner, extends: :editor, granted_to: :creator
+      end
+
+      defmodule InlineHashRoleTwiceFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        policy InlineHashRolesPolicyFixture
+
+        role :owner, granted_to: :creator
+      end
+
+      # Each entry goes under one entity type name, since the two fixtures' own names differ.
+      once_hash =
+        [InlineHashRoleOnceFixture]
+        |> from_modules()
+        |> get_in([:entities, InlineHashRoleOnceFixture])
+        |> task_model()
+        |> hash()
+
+      twice_hash =
+        [InlineHashRoleTwiceFixture]
+        |> from_modules()
+        |> get_in([:entities, InlineHashRoleTwiceFixture])
+        |> task_model()
+        |> hash()
+
+      assert once_hash == twice_hash
     end
 
     test "adding an entity type changes the hash" do
