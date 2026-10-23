@@ -445,6 +445,35 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "join_table_name/2" do
+    test "returns the join table of a to-many relationship" do
+      assert join_table_name(Module3, :a) == "test_fixtures_entity_module3_a_$join"
+    end
+
+    test "raises for a to-one relationship" do
+      expected_msg =
+        "relationship :c of Hologram.Test.Fixtures.Entity.Module3 is a to-one relationship, " <>
+          "stored as the c_id column of the entity's own table - a join table backs a to-many " <>
+          "relationship only"
+
+      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module3, :c) end
+    end
+
+    test "raises for an undeclared relationship" do
+      assert_error ArgumentError,
+                   "Hologram.Test.Fixtures.Entity.Module3 declares no relationship :x",
+                   fn -> join_table_name(Module3, :x) end
+    end
+
+    test "raises for a module that is not an entity type" do
+      expected_msg =
+        "Hologram.Reflection is not an entity type module - join_table_name/2 takes an entity " <>
+          "type and the name of one of its to-many relationships"
+
+      assert_error ArgumentError, expected_msg, fn -> join_table_name(Reflection, :a) end
+    end
+  end
+
   describe "reload/2" do
     test "re-derives the mapping and reconciles the schema" do
       {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
@@ -465,6 +494,12 @@ defmodule Hologram.DBTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         reload([Hologram.Blog.Post, Hologram.BlogPost], [])
       end
+    end
+  end
+
+  describe "schema_name/0" do
+    test "returns the data schema" do
+      assert schema_name() == "hologram_data"
     end
   end
 
@@ -521,6 +556,26 @@ defmodule Hologram.DBTest do
                    fn ->
                      sql!(~s|SELECT $1::uuid AS "id"|)
                    end
+    end
+  end
+
+  describe "table_name/1" do
+    test "returns the table of an entity type" do
+      assert table_name(Module1) == "test_fixtures_entity_module1"
+    end
+
+    test "returns the pinned table of the role grant store" do
+      assert table_name(RoleGrant) == "hologram_role_grant"
+    end
+
+    test "returns the table of a job type" do
+      assert table_name(JobModule1) == "test_fixtures_job_module1"
+    end
+
+    test "raises for a module that is not an entity type" do
+      assert_error ArgumentError,
+                   "Hologram.Reflection is not an entity type module - table_name/1 takes an entity type",
+                   fn -> table_name(Reflection) end
     end
   end
 

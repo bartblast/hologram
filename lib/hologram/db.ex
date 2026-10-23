@@ -240,6 +240,36 @@ defmodule Hologram.DB do
   end
 
   @doc """
+  Returns the name of the join table behind the given to-many relationship of the given entity
+  type, unquoted, for SQL written by hand.
+
+  The name is `<source table>_<relationship>_$join`, cut to a prefix and a hash past PostgreSQL's
+  63-byte limit, and the table has the columns `source_id` and `target_id`. The `$` means it has to
+  be quoted in SQL. The name follows the model: renaming the entity type or the relationship moves
+  it, so code that asks for it keeps working where a name written out would break.
+
+  Raises ArgumentError when the first argument is not an entity type module, or when the
+  relationship is a to-one relationship or not declared.
+  """
+  @spec join_table_name(module, atom) :: String.t()
+  def join_table_name(entity_type, relationship) do
+    validate_entity_type!(
+      entity_type,
+      "join_table_name/2 takes an entity type and the name of one of its to-many relationships"
+    )
+
+    join_table =
+      entity_type
+      |> Mapper.join_tables()
+      |> Enum.find(&(&1.relationship == relationship))
+
+    case join_table do
+      %{name: name} -> name
+      nil -> raise ArgumentError, message: join_table_refusal(entity_type, relationship)
+    end
+  end
+
+  @doc """
   Reads the given query from the database and returns its result - a list of entity
   structs for set queries, an entity struct or nil for single-result queries, and an
   integer for counting queries.
@@ -291,7 +321,11 @@ defmodule Hologram.DB do
   @spec read(module, Entity.id()) :: Entity.t() | nil
   def read(entity_type, id) do
     EntityOperations.validate_id!(id)
-    validate_entity_type!(entity_type)
+
+    validate_entity_type!(
+      entity_type,
+      "a by-id read takes the entity type, a query term is read with read/1"
+    )
 
     entity_type
     |> Query.filter(id: ^id)
@@ -307,6 +341,13 @@ defmodule Hologram.DB do
   defdelegate rollback(reason), to: Connection
 
   @doc """
+  Returns the name of the PostgreSQL schema every entity table and join table lives in, unquoted,
+  for SQL written by hand.
+  """
+  @spec schema_name() :: String.t()
+  def schema_name, do: "hologram_data"
+
+  @doc """
   Runs one SQL statement on the server against the data layer's tables and returns
   {:ok, result} or {:error, error}. The statement is prepared, with its `$1`-style placeholders
   bound from params - a param is never spliced into the text - and the result is a map:
@@ -315,11 +356,12 @@ defmodule Hologram.DB do
 
   This is the read the query stages cannot say: full-text search, aggregates and grouping, window
   functions, CTEs, a report joining several entity types, a search over data that is not synced.
-  Physical names come from schema_name/0, table_name/1 and join_table_name/2, quoted in the
-  SQL - a join table's name carries `$`, and an attribute may be named by a reserved word
-  (`"user"` unquoted is the database role). An attribute's column has the attribute's name, a
-  to-one relationship's column is `<name>_id`, every table has `id`, `created_at` and
-  `updated_at`, and a join table has `source_id` and `target_id`.
+  The names of the schema, of an entity type's table and of a to-many relationship's join table
+  come from this module at run time, quoted in the SQL - a join table's name carries `$`, and an
+  attribute may be named by a reserved word (`"user"` unquoted is the database role). An
+  attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
+  every table has `id`, `created_at` and `updated_at`, and a join table has `source_id` and
+  `target_id`.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
   user may see in the SQL itself.
@@ -330,9 +372,9 @@ defmodule Hologram.DB do
   :read_only_sql_transaction}} with a message saying so. A write that skipped the data layer would
   never reach the sync, and clients would drift from the server with nothing failing. The one
   thing a statement may write is a temporary table, which PostgreSQL exempts and which holds no
-  data of the layer. Any other failure - a syntax error, a missing table, a type mismatch, a
-  timeout - is {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and
-  the server's message.
+  data of the layer. Any other failure - a syntax error, a missing table, a type mismatch in the
+  SQL, a timeout - is {:error, %Hologram.SQLError{}} carrying the server's condition name as its
+  code and the server's message.
 
   A uuid column or uuid array comes back as canonical id strings, the spelling every entity
   carries, and an id string given for a uuid parameter or uuid array parameter is encoded for the
@@ -342,7 +384,7 @@ defmodule Hologram.DB do
   string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
   its label string and `jsonb` as a map.
 
-  Inside transaction/2 the statement runs on the transaction's connection and sees its
+  Inside an enclosing transaction the statement runs on the transaction's connection and sees its
   uncommitted rows, and the transaction stays writable afterwards.
 
   Runs only on the server: a page whose client code reaches it fails the build. Call it from a
@@ -353,7 +395,7 @@ defmodule Hologram.DB do
   The one option is `timeout:`, the milliseconds the statement may run as a positive integer, or
   `:infinity` - fifteen seconds by default. PostgreSQL enforces it: past it the statement is
   cancelled and answered as {:error, %Hologram.SQLError{code: :query_canceled}}, and the
-  connection and any enclosing transaction carry on. Inside transaction/2 the transaction's own
+  connection and any enclosing transaction carry on. Inside an enclosing transaction its own
   bound applies as well. The read is not run again when PostgreSQL resolves a deadlock, since it
   takes no row locks.
 
@@ -367,8 +409,9 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like sql/3, returning the result directly and raising the Hologram.SQLError instead of
-  returning {:error, ...}.
+  Runs one SQL statement on the server, read-only, the same way the non-raising variant does,
+  returning the result map directly and raising the Hologram.SQLError where that variant returns
+  {:error, error}.
   """
   @spec sql!(String.t(), list, keyword) :: sql_result
   def sql!(statement, params \\ [], opts \\ []) do
@@ -376,6 +419,24 @@ defmodule Hologram.DB do
       {:ok, result} -> result
       {:error, error} -> raise error
     end
+  end
+
+  @doc """
+  Returns the name of the given entity type's table, unquoted, for SQL written by hand.
+
+  The name is the module path snake-cased with the app's root namespace stripped
+  (`MyApp.Chat.Message` is `chat_message`), a module from another root keeps its whole path,
+  framework types are pinned (`hologram_role_grant`), and a name past PostgreSQL's 63-byte limit is
+  cut to a prefix and a hash. The name follows the model: renaming the entity type moves it, so
+  code that asks for it keeps working where a name written out would break.
+
+  Raises ArgumentError when the argument is not an entity type module.
+  """
+  @spec table_name(module) :: String.t()
+  def table_name(entity_type) do
+    validate_entity_type!(entity_type, "table_name/1 takes an entity type")
+
+    Mapper.table_name(entity_type)
   end
 
   @doc """
@@ -717,6 +778,23 @@ defmodule Hologram.DB do
     end
   end
 
+  # A to-one relationship is the one name a caller can reasonably expect a join table for and not
+  # get, so it is told where that relationship lives instead.
+  defp join_table_refusal(entity_type, relationship) do
+    declared? =
+      Enum.any?(entity_type.__relationships__(), fn {name, _target, _opts} ->
+        name == relationship
+      end)
+
+    if declared? do
+      "relationship #{inspect(relationship)} of #{inspect(entity_type)} is a to-one " <>
+        "relationship, stored as the #{relationship}_id column of the entity's own table - a " <>
+        "join table backs a to-many relationship only"
+    else
+      "#{inspect(entity_type)} declares no relationship #{inspect(relationship)}"
+    end
+  end
+
   # One line per violation, always bulleted - the shape Validator.error_message/3 set, and the
   # only one that reads the same whether the map holds one entry or several. A taken value is
   # described here because the validator never reports uniqueness: it is state, not a value.
@@ -727,11 +805,9 @@ defmodule Hologram.DB do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
   end
 
-  defp validate_entity_type!(query) do
-    if not Reflection.entity?(query) do
-      raise ArgumentError,
-        message:
-          "#{inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1"
+  defp validate_entity_type!(term, hint) do
+    if not Reflection.entity?(term) do
+      raise ArgumentError, message: "#{inspect(term)} is not an entity type module - #{hint}"
     end
 
     :ok

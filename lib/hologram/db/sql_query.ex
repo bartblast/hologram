@@ -2,8 +2,8 @@ defmodule Hologram.DB.SQLQuery do
   @moduledoc false
 
   # The execution of an SQL read: one statement, prepared and run inside a read-only
-  # subtransaction, answering Hologram's own result and error shapes. The public surface is
-  # Hologram.DB.sql/3, which carries the docs.
+  # subtransaction, answering Hologram's own result and error shapes. The public surface is on
+  # Hologram.DB, which carries the docs.
 
   alias Hologram.DB
   alias Hologram.DB.Codec
@@ -28,8 +28,8 @@ defmodule Hologram.DB.SQLQuery do
 
   @uuid_oid 2950
 
-  # The function run/3 hands the transaction always ends in a rollback, on purpose (see the
-  # comment inside), which Dialyzer reports as a function with no local return.
+  # The function handed to the transaction always ends in a rollback, on purpose (see the comment
+  # inside), which Dialyzer reports as a function with no local return.
   @dialyzer {:no_return, run: 3}
 
   @doc """
