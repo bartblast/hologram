@@ -51,7 +51,9 @@ defmodule Hologram.Entity.Model do
   :attributes, :relationships, and :roles in the reflection tuple shapes, and :roles maps
   each global role module to its :extends list. Members are sorted by name and every opts
   keyword list is sorted by key, so two terms describing the same model always compare
-  equal.
+  equal. An entity role's :extends is stored as a sorted list of its targets without
+  repeats, one target or many, so the two spellings of one target and any order of several
+  give one term.
 
   :user_entity is the entity type module designated as the app's user (nil when none is
   designated) - a declared fact like any other, carried in the term so a replayed history
@@ -601,23 +603,39 @@ defmodule Hologram.Entity.Model do
     |> Enum.sort()
   end
 
+  # Values are normalized before the neutral ones are dropped, so a value whose normal form is
+  # neutral (an extends with no targets) leaves the term like an absent option.
   defp normalize_opts(opts) do
     opts
+    |> Enum.map(fn {key, value} -> {key, normalize_value(key, value)} end)
     |> Enum.reject(fn {key, value} ->
       key in @transition_opts or is_nil(value) or (value == false and key in @flag_opts)
     end)
-    |> Enum.map(fn {key, value} -> {key, normalize_value(value)} end)
     |> Enum.sort()
+  end
+
+  # A role's extends takes one role name or a list of them, and a list's order carries no
+  # meaning, so the term keeps the targets as a sorted list without repeats - the form a merged
+  # declaration already has and the global role entries use. No targets is the neutral nil,
+  # which the change ops spell for a removed extension.
+  defp normalize_value(:extends, targets) do
+    sorted_targets =
+      targets
+      |> List.wrap()
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    if sorted_targets == [], do: nil, else: sorted_targets
   end
 
   # A regex carries a compiled pattern that differs from one read of a declaration to the next,
   # so two terms holding one never compare equal - the model keeps what the declaration says
   # instead, which is the pattern and the flags it was written with.
-  defp normalize_value(%Regex{} = regex) do
+  defp normalize_value(_key, %Regex{} = regex) do
     {:regex, Regex.source(regex), Regex.opts(regex)}
   end
 
-  defp normalize_value(value) do
+  defp normalize_value(_key, value) do
     value
   end
 
@@ -742,17 +760,18 @@ defmodule Hologram.Entity.Model do
     %{role_entry | extends: Enum.sort(retargeted)}
   end
 
-  # The extends option accepts a single role name as well as a list of them,
-  # and Keyword.replace/3 keeps the option in place, so the opts stay sorted.
+  # The term holds extends as a sorted list, and the renamed target can land anywhere in it, so
+  # the retargeted list is normalized again. Keyword.replace/3 keeps the option in place, so the
+  # opts stay sorted.
   defp retarget_role_opts({name, opts}, from, to) do
     case Keyword.fetch(opts, :extends) do
-      {:ok, targets} when is_list(targets) ->
-        {name, Keyword.replace(opts, :extends, retarget_targets(targets, from, to))}
+      {:ok, targets} ->
+        renamed_targets = retarget_targets(targets, from, to)
+        retargeted = normalize_value(:extends, renamed_targets)
 
-      {:ok, ^from} ->
-        {name, Keyword.replace(opts, :extends, to)}
+        {name, Keyword.replace(opts, :extends, retargeted)}
 
-      _other_target ->
+      :error ->
         {name, opts}
     end
   end
