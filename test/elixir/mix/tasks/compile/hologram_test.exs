@@ -16,7 +16,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
+  alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
@@ -25,6 +28,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
   alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
+  alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
@@ -73,6 +77,51 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @encode_function_mfa {Hologram.Compiler.Encoder, :encode_elixir_function, 6}
 
   @num_pages Enum.count(Reflection.list_pages())
+
+  # An entity type whose attribute and relationship derive the same column. The entity macro
+  # refuses that collision while the module compiles, so the entity contract is written by hand
+  # here, and the mapping-error test below is what reaches the collision through the compile
+  # task. The module sits at this level rather than inside that test so that the contract tests
+  # below can read it: a module defined inside a test body exists only once that test has run.
+  # It has no beam in any application's ebin directory, so the data model lists it only through
+  # the application spec the mapping-error test loads.
+  defmodule InvalidMappingEntityFixture do
+    defstruct __meta__: %Metadata{},
+              created_at: nil,
+              id: nil,
+              owner: %NotIncluded{relationship: :owner},
+              owner_id: nil,
+              updated_at: nil
+
+    @spec __attributes__() :: list({atom, atom, keyword})
+    def __attributes__, do: [{:owner_id, :string, []}]
+
+    @spec __is_hologram_entity__() :: boolean
+    def __is_hologram_entity__, do: true
+
+    @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
+    def __policies__, do: []
+
+    @spec __policy_sources__() :: list(module)
+    def __policy_sources__, do: []
+
+    @spec __relationships__() :: list({atom, module | list(module), keyword})
+    def __relationships__, do: [{:owner, Entity1, []}]
+
+    @spec __role_declarations__() :: list({atom, keyword, module})
+    def __role_declarations__, do: []
+
+    @spec __roles__() :: list({atom, keyword})
+    def __roles__, do: []
+
+    @spec __system_attributes__() :: list({atom, atom, keyword})
+    def __system_attributes__ do
+      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+    end
+
+    @spec new(%{optional(atom) => any} | keyword) :: struct
+    def new(values \\ []), do: Entity.new(__MODULE__, values)
+  end
 
   # This project's components include the ones the extractor and the validators exist to REFUSE -
   # a capture that recurses, one that reads a field off an integer, a query on a type declaring no
@@ -965,6 +1014,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Cache.reset()
   end
 
+  # The fixture above cannot be generated, so it has to be kept by hand. These two tests fail by
+  # name on anything the entity macro gains, instead of the mapping-error test failing with an
+  # undefined function the day the compile task reads it first.
+  test "the hand-written entity fixture exports every function the entity macro generates" do
+    macro_functions = Entity1.__info__(:functions)
+    fixture_functions = InvalidMappingEntityFixture.__info__(:functions)
+
+    missing = macro_functions -- fixture_functions
+
+    assert missing == []
+  end
+
+  test "the hand-written entity fixture carries every field the entity macro derives" do
+    macro_fields =
+      %Entity1{}
+      |> Map.from_struct()
+      |> Map.keys()
+      |> MapSet.new()
+
+    fixture_fields =
+      InvalidMappingEntityFixture
+      |> struct()
+      |> Map.from_struct()
+      |> Map.keys()
+      |> MapSet.new()
+
+    assert MapSet.difference(macro_fields, fixture_fields) == MapSet.new()
+  end
+
   describe "compiler skipping" do
     setup do
       # A validation with Hologram off fills the model caches from the beams.
@@ -1120,32 +1198,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "fails the build on mapping errors even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
-
-      # Bare entity reflection functions instead of use Hologram.Entity - the
-      # entity validator now rejects this collision at declaration time, and this
-      # test exercises the task's mapping-error path behind it.
-      defmodule InvalidMappingEntityFixture do
-        @spec __is_hologram_entity__() :: boolean
-        def __is_hologram_entity__, do: true
-
-        @spec __attributes__() :: list(tuple)
-        def __attributes__, do: [{:owner_id, :string, []}]
-
-        @spec __policies__() :: list(tuple)
-        def __policies__, do: []
-
-        @spec __policy_sources__() :: list(module)
-        def __policy_sources__, do: []
-
-        @spec __relationships__() :: list(tuple)
-        def __relationships__, do: [{:owner, Hologram.Test.Fixtures.Entity.Module1, []}]
-
-        @spec __role_declarations__() :: list(tuple)
-        def __role_declarations__, do: []
-
-        @spec __roles__() :: list(tuple)
-        def __roles__, do: []
-      end
 
       # Register a fake loaded OTP app whose spec lists the entity type module with the
       # colliding declarations, so that data model discovery picks it up.
