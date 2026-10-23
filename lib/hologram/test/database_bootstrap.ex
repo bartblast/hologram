@@ -8,6 +8,7 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   alias Hologram.DB.Config
   alias Hologram.DB.Mapper
+  alias Hologram.Reflection
 
   @drop_statements [
     ~s(DROP SCHEMA IF EXISTS "hologram_system" CASCADE),
@@ -21,6 +22,12 @@ defmodule Hologram.Test.DatabaseBootstrap do
   run converges from scratch. The configured test database is always prepared - the
   given names are prepared alongside it, for a suite that exercises more than one
   (a second mechanism, a second app instance).
+
+  A database another app or another env has claimed is refused before anything is
+  dropped, and the refusal names the database and whose it is - the claim is the marker
+  row the data layer writes in every database it manages, read here on the same
+  connection the drop would run on. A database nothing has claimed, or one this app's
+  test env has claimed, is dropped whichever mechanism claimed it.
 
   Runs before anything connects a pool, so it holds no assumption about the app being
   up. A connection that cannot be established prints what to check and halts: a usable
@@ -41,9 +48,11 @@ defmodule Hologram.Test.DatabaseBootstrap do
       |> Application.get_env(:database, [])
       |> Config.resolve!(:test)
 
+    claim = %{otp_app: Atom.to_string(Reflection.otp_app()), env: "test"}
+
     Enum.each([database_opts[:database] | extra_databases], fn database ->
       ensure_database!(database_opts, database)
-      drop_schema_layout!(database_opts, database)
+      drop_schema_layout!(database_opts, database, claim)
     end)
 
     :ok
@@ -59,15 +68,20 @@ defmodule Hologram.Test.DatabaseBootstrap do
     ]
   end
 
-  defp drop_schema_layout!(database_opts, database) do
+  # The connection is stopped on a refusal too, so a caller rescuing the refusal is not left
+  # linked to a live connection.
+  defp drop_schema_layout!(database_opts, database, claim) do
     {:ok, connection_pid} =
       database_opts
       |> connection_opts(database)
       |> Postgrex.start_link()
 
-    Enum.each(@drop_statements, &Postgrex.query!(connection_pid, &1, []))
-
-    GenServer.stop(connection_pid)
+    try do
+      refuse_claimed_elsewhere!(connection_pid, database, claim)
+      Enum.each(@drop_statements, &Postgrex.query!(connection_pid, &1, []))
+    after
+      GenServer.stop(connection_pid)
+    end
   end
 
   defp ensure_database!(database_opts, database) do
@@ -100,6 +114,25 @@ defmodule Hologram.Test.DatabaseBootstrap do
     GenServer.stop(connection_pid)
   end
 
+  # Read on this connection: no pool exists yet when this runs, and the marker table may be
+  # absent. A table that is absent, or holds no row, is no claim.
+  defp marker(connection_pid) do
+    existence_query = ~s[SELECT to_regclass('"hologram_system"."database"')]
+
+    case Postgrex.query!(connection_pid, existence_query, []) do
+      %{rows: [[nil]]} ->
+        nil
+
+      _present ->
+        marker_query = ~s(SELECT "otp_app", "env" FROM "hologram_system"."database")
+
+        case Postgrex.query!(connection_pid, marker_query, []) do
+          %{rows: []} -> nil
+          %{rows: [[otp_app, env]]} -> %{otp_app: otp_app, env: env}
+        end
+    end
+  end
+
   defp print_unusable_server_message(database_opts) do
     # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     IO.puts(:stderr, """
@@ -118,6 +151,18 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
     Override the connection settings with config :hologram, :database in config/test.exs.
     """)
+  end
+
+  defp refuse_claimed_elsewhere!(connection_pid, database, claim) do
+    marker = marker(connection_pid)
+
+    if marker != nil and marker != claim do
+      raise ~s(database "#{database}" belongs to the "#{marker.env}" env of app ) <>
+              ~s("#{marker.otp_app}" - Hologram.Test.DatabaseBootstrap.run!/1 drops ) <>
+              "Hologram's schemas only in a database nothing has claimed or the " <>
+              ~s("#{claim.env}" env of app "#{claim.otp_app}" has claimed - point the ) <>
+              "test env's config :hologram, :database at another database"
+    end
   end
 
   # The prod path this closes is one line in a release console: the :test atom passed to
