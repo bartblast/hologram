@@ -1,11 +1,39 @@
 pre-commit:
   parallel: true
+  files: git diff --name-only --cached
   commands:
+    check_cluster_elixir_code_formatted:
+      root: "test/cluster/"
+      glob: "*.{ex,exs}"
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_cluster_tests/.mix/cached_dot_formatter && mix format --check-formatted
+    check_cowboy_elixir_code_formatted:
+      root: "test/cowboy/"
+      glob: "*.{ex,exs}"
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_cowboy_tests/.mix/cached_dot_formatter && mix format --check-formatted
+    check_ecosystem_elixir_code_formatted:
+      root: "test/ecosystem/"
+      glob: "*.{ex,exs}"
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_ecosystem_tests/.mix/cached_dot_formatter && mix format --check-formatted
+    check_features_elixir_code_formatted:
+      root: "test/features/"
+      glob: "*.{ex,exs}"
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_feature_tests/.mix/cached_dot_formatter && mix format --check-formatted
+    check_features_javascript_code_formatted:
+      root: "test/features/"
+      glob: "test/features/assets/js/**"
+      run: mix format.js.check
     check_lib_elixir_code_formatted:
+      glob: "*.{ex,exs}"
+      exclude: "^test/(cluster|cowboy|ecosystem|features|minimal|umbrella)/"
       run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram/.mix/cached_dot_formatter && mix format --check-formatted
     check_lib_javascript_and_json_code_formatted:
+      glob: "{*.yml,.github/**,assets/*.json,assets/*.mjs,assets/js/**,benchmarks/javascript/**,scripts/**,test/javascript/**}"
       run: mix format.js.check
-    check_app_elixir_code_formatted:
-      run: cd test/features && (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_feature_tests/.mix/cached_dot_formatter && mix format --check-formatted
-    check_app_javascript_code_formatted:
-      run: cd test/features && mix format.js.check
+    check_minimal_elixir_code_formatted:
+      root: "test/minimal/"
+      glob: "*.{ex,exs}"
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_minimal_tests/.mix/cached_dot_formatter && mix format --check-formatted
+    check_umbrella_elixir_code_formatted:
+      root: "test/umbrella/"
+      glob: "*.{ex,exs}"
+      run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/.mix/cached_dot_formatter && mix format --check-formatted
