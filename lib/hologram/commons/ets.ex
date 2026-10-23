@@ -133,6 +133,25 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Makes the ETS table hold exactly the given items: puts them in with one insert, then deletes the keys
+  they don't name. Unlike reset/1 followed by put/2, a reader never finds the table empty, and a key
+  that is in the table before and after the call is readable throughout, with its old or its new value.
+  """
+  @spec replace_all(tid, list({any, any})) :: true
+  def replace_all(table_name_or_ref, items) do
+    put(table_name_or_ref, items)
+
+    kept_keys = MapSet.new(items, &elem(&1, 0))
+
+    table_name_or_ref
+    |> keys()
+    |> Enum.reject(&MapSet.member?(kept_keys, &1))
+    |> Enum.each(&delete(table_name_or_ref, &1))
+
+    true
+  end
+
+  @doc """
   Removes all items from the ETS table.
   """
   @spec reset(tid) :: true

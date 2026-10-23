@@ -230,6 +230,19 @@ defmodule Hologram.Commons.PLTTest do
     assert ETS.get!(table_ref, :my_key_3) == :my_value_3
   end
 
+  test "reload/2", %{plt: plt} do
+    dump_dir = Path.join([@tmp_dir, "tests", "commons", "plt", "reload_2"])
+    clean_dir(dump_dir)
+
+    dump_path = Path.join(dump_dir, "test.plt")
+    dump(plt, dump_path)
+
+    plt_2 = put(start(), [{:my_key_1, :stale_value}, {:my_key_3, :my_value_3}])
+
+    assert reload(plt_2, dump_path) == plt_2
+    assert get_all(plt_2) == Enum.into(@items, %{})
+  end
+
   test "reset/1", %{plt: %{table_ref: table_ref} = plt} do
     assert reset(plt) == plt
     assert ETS.get_all(table_ref) == %{}

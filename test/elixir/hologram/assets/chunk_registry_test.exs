@@ -178,15 +178,29 @@ defmodule Hologram.Assets.ChunkRegistryTest do
     end
   end
 
-  test "reload/0" do
-    ChunkRegistry.start_link([])
+  describe "reload/0" do
+    setup do
+      ChunkRegistry.start_link([])
+      :ok
+    end
 
-    ets_table_name = ChunkRegistryStub.ets_table_name()
-    ETS.put(ets_table_name, :dummy_key, :dummy_value)
+    test "replaces a stale value" do
+      ets_table_name = ChunkRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, {:page, :module_a}, [])
 
-    reload()
+      reload()
 
-    assert ETS.get_all(ets_table_name) == @items
+      assert ETS.get_all(ets_table_name) == @items
+    end
+
+    test "removes a key the data no longer holds" do
+      ets_table_name = ChunkRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, :dummy_key, :dummy_value)
+
+      reload()
+
+      assert ETS.get_all(ets_table_name) == @items
+    end
   end
 
   test "start_link/1" do
