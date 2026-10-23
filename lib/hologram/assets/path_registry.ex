@@ -34,8 +34,7 @@ defmodule Hologram.Assets.PathRegistry do
   def init(nil) do
     ets_table_name = impl().ets_table_name()
     ETS.create_named_table(ets_table_name)
-
-    populate(ets_table_name)
+    ETS.put(ets_table_name, find_assets(impl().static_dir()))
 
     {:ok, nil}
   end
@@ -96,10 +95,8 @@ defmodule Hologram.Assets.PathRegistry do
   """
   @spec reload :: :ok
   def reload do
-    ets_table_name = impl().ets_table_name()
-    ETS.reset(ets_table_name)
-
-    populate(ets_table_name)
+    ETS.replace_all(impl().ets_table_name(), find_assets(impl().static_dir()))
+    :ok
   end
 
   @doc """
@@ -169,12 +166,6 @@ defmodule Hologram.Assets.PathRegistry do
 
   defp match_digest_suffix(regexes, file_path) do
     Enum.find_value(regexes, &Regex.run(&1, file_path))
-  end
-
-  defp populate(ets_table_name) do
-    impl().static_dir()
-    |> find_assets()
-    |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
   end
 
   defp stream_build_asset_entries(file_infos) do
