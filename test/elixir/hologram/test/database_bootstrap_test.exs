@@ -47,6 +47,28 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
     route(scratch, fn -> SchemaReconciler.ensure_managed!(context) end)
   end
 
+  defp database_exists?(scratch, database) do
+    statement = "SELECT 1 FROM pg_catalog.pg_database WHERE datname = $1"
+
+    %{rows: rows} = Postgrex.query!(scratch, statement, [database])
+
+    rows != []
+  end
+
+  # Drops the database when the test exits, whether it passed or failed.
+  defp drop_database_on_exit(database) do
+    on_exit(fn ->
+      maintenance_opts = Config.connection_opts(database: "postgres")
+      {:ok, connection} = Postgrex.start_link(maintenance_opts)
+
+      quoted_database = Mapper.quote_identifier(database)
+      drop_statement = "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)"
+
+      Postgrex.query!(connection, drop_statement, [])
+      GenServer.stop(connection)
+    end)
+  end
+
   defp hologram_schemas(scratch) do
     statement = """
     SELECT nspname
@@ -65,6 +87,35 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
       assert run!() == :ok
 
       assert hologram_schemas(scratch) == []
+    end
+
+    test "creates the configured database and the given ones when absent", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      configured_database = scratch_opts[:database] <> "_configured"
+      given_database = scratch_opts[:database] <> "_given"
+
+      drop_database_on_exit(configured_database)
+      drop_database_on_exit(given_database)
+
+      Application.put_env(:hologram, :database, database: configured_database)
+
+      run!([given_database])
+
+      assert database_exists?(scratch, configured_database)
+      assert database_exists?(scratch, given_database)
+    end
+
+    test "leaves an existing database in place", %{scratch: scratch} do
+      Postgrex.query!(scratch, ~s{CREATE TABLE "public"."kept" ("id" integer)}, [])
+
+      run!()
+
+      %{rows: [[regclass]]} =
+        Postgrex.query!(scratch, ~s[SELECT to_regclass('"public"."kept"')::text], [])
+
+      assert regclass == "kept"
     end
 
     test "drops the Hologram schemas of a database this app's test env has claimed", %{
@@ -146,18 +197,9 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
       # The configured database is one the bootstrap creates, so the refusal can only come
       # from the given one.
       configured_database = scratch_opts[:database] <> "_configured"
+      drop_database_on_exit(configured_database)
+
       Application.put_env(:hologram, :database, database: configured_database)
-
-      on_exit(fn ->
-        maintenance_opts = Config.connection_opts(database: "postgres")
-        {:ok, connection} = Postgrex.start_link(maintenance_opts)
-
-        quoted_database = Mapper.quote_identifier(configured_database)
-        drop_statement = "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)"
-
-        Postgrex.query!(connection, drop_statement, [])
-        GenServer.stop(connection)
-      end)
 
       expected_msg =
         ~s(database "#{scratch_opts[:database]}" belongs to the "dev" env of app ) <>
