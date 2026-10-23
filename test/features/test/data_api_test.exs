@@ -131,6 +131,14 @@ defmodule HologramFeatureTests.DataApiTest do
     |> assert_text(css("#result"), "run_query_apple,run_query_banana")
   end
 
+  # Anchored: the excluded row sorts last, so a match on a substring would pass with it still there.
+  feature "reads rows with SQL in a command", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Read rows with SQL"))
+    |> assert_text(css("#result"), ~r/^sql_rows_sql_apple:true,sql_banana:true$/)
+  end
+
   feature "validates changes without writing", %{session: session} do
     session
     |> visit(DataApiPage)
