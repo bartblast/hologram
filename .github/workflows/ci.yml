@@ -539,6 +539,22 @@ jobs:
         if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix format --check-formatted
 
+      # Step: Download lib JavaScript dependencies, because the feature tests app's Prettier
+      # check runs the lib's Prettier.
+      - name: Download lib JavaScript deps
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
+        uses: nick-fields/retry@v4
+        with:
+          command: cd assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Check that the feature tests app JavaScript code has already been formatted.
+      - name: Check feature tests app JavaScript code formatted
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
+        run: mix format.js.check
+
       # Step: Run feature tests app Elixir static code analysis with Credo.
       - name: Run feature tests app Elixir static code analysis with Credo
         if: ${{ env.IS_FIRST_PARTITION == 'true' }}
