@@ -20,14 +20,15 @@ pre-commit:
       run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram_feature_tests/.mix/cached_dot_formatter && mix format --check-formatted
     check_features_javascript_code_formatted:
       root: "test/features/"
-      glob: "test/features/assets/js/**"
+      glob: "test/features/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,json5,jsonc,css,scss,less,html,vue,md,mdx,yml,yaml,graphql,gql,graphqls,hbs,handlebars,htm,livemd,markdown}"
       run: mix format.js.check
     check_lib_elixir_code_formatted:
       glob: "*.{ex,exs}"
       exclude: "^test/(cluster|cowboy|ecosystem|features|minimal|umbrella)/"
       run: (mix deps.loadpaths --no-compile > /dev/null 2>&1 || MIX_QUIET=1 mix deps.get --check-locked) && rm -f _build/*/lib/hologram/.mix/cached_dot_formatter && mix format --check-formatted
     check_lib_javascript_and_json_code_formatted:
-      glob: "{*.yml,.github/**,assets/*.json,assets/*.mjs,assets/js/**,benchmarks/javascript/**,scripts/**,test/javascript/**}"
+      glob: "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,json5,jsonc,css,scss,less,html,vue,md,mdx,yml,yaml,graphql,gql,graphqls,hbs,handlebars,htm,livemd,markdown}"
+      exclude: "^test/(cluster|cowboy|ecosystem|features|minimal|umbrella)/"
       run: mix format.js.check
     check_minimal_elixir_code_formatted:
       root: "test/minimal/"
