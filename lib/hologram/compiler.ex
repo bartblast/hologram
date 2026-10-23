@@ -59,6 +59,22 @@ defmodule Hologram.Compiler do
     {Hologram.Auth, :revoke_role, 3}
   ]
 
+  # The functions that run only on the server: the SQL surface, which reads the database through
+  # the driver and hands back names for SQL text. A page whose client code reaches one would have
+  # its server call tree transpiled into the bundle, down to the driver. The defaulted arities are
+  # functions of their own, each a vertex a page can reach.
+  @server_only_mfas [
+    {Hologram.DB, :join_table_name, 2},
+    {Hologram.DB, :schema_name, 0},
+    {Hologram.DB, :sql, 1},
+    {Hologram.DB, :sql, 2},
+    {Hologram.DB, :sql, 3},
+    {Hologram.DB, :sql!, 1},
+    {Hologram.DB, :sql!, 2},
+    {Hologram.DB, :sql!, 3},
+    {Hologram.DB, :table_name, 1}
+  ]
+
   # The four calls an app spells an entity operation at, each with where the operation is read
   # from: the argument's position, or the option an enqueue's keyword list names it under.
   @operation_asks %{
@@ -459,6 +475,36 @@ defmodule Hologram.Compiler do
   # bundle, down to a NIF. The two lists live in two modules for two reasons, and this is the
   # invariant that ties them.
   def permission_mfas, do: @permission_mfas
+
+  @doc false
+  @spec server_only_mfas() :: list(mfa)
+  # None of these may be manually ported: a ported function leaves the graph the reach is listed
+  # on, so the check could never see a page reaching it.
+  def server_only_mfas, do: @server_only_mfas
+
+  @doc """
+  Refuses a page whose client code reaches a function that runs only on the server, or returns :ok.
+
+  Takes each page's reach as the compile task lists it. Command handlers and the initialization a
+  page or component runs on the server are not part of a page's reach, so a call made there
+  passes. A function that runs only on the server reached from client code would have its server
+  call tree transpiled into the page's bundle, down to the database driver, and fail in the
+  browser when the code runs - the build fails instead, naming the page and the function. The
+  pages are judged in module order, so the same build always names the same page.
+
+  Raises Hologram.CompileError.
+  """
+  @spec validate_server_only_mfas!([{module, page_reach}]) :: :ok
+  def validate_server_only_mfas!(reach_by_page) do
+    reach_by_page
+    |> Enum.sort_by(fn {page_module, _reach} -> page_module end)
+    |> Enum.each(fn {page_module, %{mfas: mfas}} ->
+      case Enum.find(mfas, &(&1 in @server_only_mfas)) do
+        nil -> :ok
+        mfa -> raise Hologram.CompileError, message: server_only_mfa_message(page_module, mfa)
+      end
+    end)
+  end
 
   @doc """
   Builds the call graph of all modules in the project.
@@ -4522,6 +4568,12 @@ defmodule Hologram.Compiler do
     Enum.map_join(references, ", ", fn {entity_type, names} ->
       "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
     end)
+  end
+
+  defp server_only_mfa_message(page_module, {module, function, arity}) do
+    "page #{inspect(page_module)} reaches #{inspect(module)}.#{function}/#{arity} in its client " <>
+      "code - the SQL surface runs only on the server, so the browser could not answer it. Call " <>
+      "it from a command or a job instead, and send the client what it needs through an action."
   end
 
   # ":a", ":a and :b", ":a, :b and :c" - the spoken form, for a message listing a few names
