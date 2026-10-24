@@ -18,6 +18,8 @@ defmodule Hologram.AuthTest do
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Policy.Module10
+  alias Hologram.Test.Fixtures.Policy.Module11
   alias Hologram.Test.Fixtures.Policy.Module2
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
@@ -375,6 +377,33 @@ defmodule Hologram.AuthTest do
       assert can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: parent.id})
 
       refute "RowShareLock" in relation_lock_modes(Module2)
+    end
+
+    # The related type's create rule is open, so the refusal before the grant pins that the delegation
+    # asks the parent's update rule instead.
+    test "grants through the operation a delegation names" do
+      user = create_user("user_158@example.com")
+      parent = DB.create!(Module10.new())
+      entity = %Module11{id: Entity.generate_id(), parent_id: parent.id}
+
+      refute can?(user, :create, entity)
+
+      grant_role(user, :editor, parent)
+
+      assert can?(user, :create, entity)
+    end
+
+    test "denies when the operation a delegation names denies" do
+      user = create_user("user_159@example.com")
+
+      parent =
+        %{archived: true}
+        |> Module10.new()
+        |> DB.create!()
+
+      grant_role(user, :editor, parent)
+
+      refute can?(user, :create, %Module11{id: Entity.generate_id(), parent_id: parent.id})
     end
 
     test "answers a grant lifecycle operation for one role" do
@@ -834,6 +863,17 @@ defmodule Hologram.AuthTest do
       assert can?(user, :read, %Module8{id: Entity.generate_id(), parent_id: middle.id}, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module5)
+    end
+
+    # The answer is false - the user is no editor of the parent - and it would be true if the
+    # delegation asked the parent's open create rule.
+    test "with :held holds the related row a delegation naming its operation reads" do
+      user = create_user("user_160@example.com")
+      parent = DB.create!(Module10.new())
+
+      refute can?(user, :create, %Module11{id: Entity.generate_id(), parent_id: parent.id}, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module10)
     end
 
     test "with :held matches a grant for the grant store's own rows" do

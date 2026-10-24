@@ -19,6 +19,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
+  alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
 
   describe "__attributes__/0" do
     test "returns empty list for entity type with no attribute declarations" do
@@ -63,6 +64,10 @@ defmodule Hologram.EntityTest do
                {:triage, nil, nil, [priority: {:>=, 3}]},
                {:unlink, nil, nil, [parent_id: {:==, nil}]}
              ]
+    end
+
+    test "keeps a delegation naming its operation as written" do
+      assert PolicyModule11.__policies__() == [{:create, nil, {:update, :parent}, []}]
     end
   end
 

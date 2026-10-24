@@ -387,6 +387,12 @@ defmodule Hologram.PolicyTest do
                {:revoke_role, :owner} => [owner_rule]
              }
     end
+
+    test "keeps the operation a delegation names" do
+      assert build(Policy.Module11) == %{
+               create: [%{predicates: [], to: nil, via: {:update, :parent}}]
+             }
+    end
   end
 
   describe "build/1 for the grant lifecycle operations" do

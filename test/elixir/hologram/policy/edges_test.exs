@@ -115,6 +115,18 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
+    # The create asks the related row's update, so its edges are the update rule's, lifted one hop -
+    # the related type's create rule is open and reads nothing.
+    test "lifts the related type's edges for the operation a delegation names" do
+      assert derive([Policy.Module11]) == %{
+               {Policy.Module11, :create} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module10, [:archived]},
+                 {:relationship_grants, [:parent], Policy.Module10, [:editor]}
+               ]
+             }
+    end
+
     # A disjunction reads the row's own attributes, so its alternatives' attributes join the rule's
     # one attribute edge rather than adding a kind of edge.
     test "derives one attribute edge for a condition holding a disjunction" do
