@@ -253,8 +253,7 @@ defmodule Hologram.Query do
   pairs.
 
   To-one includes take no clauses (a single embedded entity has nothing to filter,
-  order, or slice) - nested includes are their only refinement. Traversal depth is
-  limited to 2 levels.
+  order, or slice) - nested includes are their only refinement. Includes nest to any depth.
 
   Including a relationship that is already included merges the two when neither narrows
   it with clauses: what each includes is included, by the same rule at every level, so
@@ -269,8 +268,7 @@ defmodule Hologram.Query do
   spec is invalid or empty, when a name is not a declared relationship - which is how a
   forgotten pin on a variable reads - when a relationship is included again and either include
   carries clauses, when a sub-builder is not a one-argument function or does not return a query
-  term for the related entity type, when a to-one include carries clauses, or when the include
-  depth exceeds 2 levels.
+  term for the related entity type, or when a to-one include carries clauses.
   """
   defmacro include(query, spec) do
     lowered = Expression.inclusion(spec, __CALLER__)

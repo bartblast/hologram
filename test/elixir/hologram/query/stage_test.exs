@@ -1083,6 +1083,22 @@ defmodule Hologram.Query.StageTest do
       assert query.include == %{a: base_term(Module2), b: base_term(Module2)}
     end
 
+    test "includes three levels deep" do
+      query =
+        include(Module5, :b, fn level_1 ->
+          include(level_1, :b, fn level_2 ->
+            include(level_2, :b)
+          end)
+        end)
+
+      assert query.include == %{
+               b: %Query{
+                 entity: Module5,
+                 include: %{b: %Query{entity: Module5, include: %{b: base_term(Module5)}}}
+               }
+             }
+    end
+
     test "merges a repeated include at the second level" do
       query =
         Module5
@@ -1327,18 +1343,6 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module3, :b, &filter(&1, a: true))
-      end
-    end
-
-    test "raises on excessive traversal depth" do
-      expected_msg = "including :b exceeds the traversal depth limit of 2 levels"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module5, :b, fn level_1 ->
-          include(level_1, :b, fn level_2 ->
-            include(level_2, :b)
-          end)
-        end)
       end
     end
   end

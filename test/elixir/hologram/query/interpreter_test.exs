@@ -986,6 +986,32 @@ defmodule Hologram.Query.InterpreterTest do
       assert [row] = agreed(query)
       assert row.a.c.id == required.id
     end
+
+    test "fills what an include includes, three levels down", %{source: source} do
+      rows =
+        Enum.reduce(1..4, [], fn _level, created ->
+          parent_id =
+            case created do
+              [] -> nil
+              [parent | _earlier] -> parent.id
+            end
+
+          {:ok, entity} =
+            %{a_id: source.id, b_id: parent_id}
+            |> Module5.new()
+            |> create()
+
+          [entity | created]
+        end)
+
+      [deepest | _rest] = rows
+      root = List.last(rows)
+
+      matched = agreed(include(Module5, b.b.b))
+      row = Enum.find(matched, &(&1.id == deepest.id))
+
+      assert row.b.b.b.id == root.id
+    end
   end
 
   describe "run/3 - the rows it reads" do

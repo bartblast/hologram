@@ -1780,6 +1780,31 @@ describe("Elixir_Hologram_Query_Stage", () => {
       });
     });
 
+    it("includes three levels deep", () => {
+      const query = include(
+        user,
+        Type.atom("manager"),
+        subBuilder((levelOne) =>
+          include(
+            levelOne,
+            Type.atom("manager"),
+            subBuilder((levelTwo) =>
+              include(levelTwo, Type.atom("manager"), Type.nil()),
+            ),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        manager: {
+          ...baseTerm(USER),
+          include: {
+            manager: {...baseTerm(USER), include: {manager: baseTerm(USER)}},
+          },
+        },
+      });
+    });
+
     it("merges a repeated include at the second level", () => {
       const spec = Type.list([
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
@@ -2162,27 +2187,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
           ),
         HologramBoxedError,
         "to-one relationship :owner takes no clauses - clauses apply to to-many includes",
-      );
-    });
-
-    it("raises on excessive traversal depth", () => {
-      assert.throw(
-        () =>
-          include(
-            user,
-            Type.atom("manager"),
-            subBuilder((levelOne) =>
-              include(
-                levelOne,
-                Type.atom("manager"),
-                subBuilder((levelTwo) =>
-                  include(levelTwo, Type.atom("manager"), Type.nil()),
-                ),
-              ),
-            ),
-          ),
-        HologramBoxedError,
-        "including :manager exceeds the traversal depth limit of 2 levels",
       );
     });
   });

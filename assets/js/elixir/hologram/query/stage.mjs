@@ -238,14 +238,6 @@ function filterableNames(entityType) {
   ].sort();
 }
 
-function includeDepth(term) {
-  const subTerms = Object.values(term.include);
-
-  return subTerms.length === 0
-    ? 0
-    : 1 + Math.max(...subTerms.map(includeDepth));
-}
-
 // The sub-builder is handed a fresh term for the related type, so what it returns is a query in
 // its own right - filtered, ordered and bounded like any other - which is then embedded under the
 // relationship's name.
@@ -380,7 +372,6 @@ function membershipValues(values, name, entityType) {
 // Two includes of one relationship are one include when neither narrows it: what each includes
 // merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
 // than the other, so a relationship included twice with clauses on either side is refused.
-// Merging cannot deepen a traversal, so the depth each side was validated for still holds.
 function mergedSubTerm(included, subTerm, name) {
   if (subTermHasClauses(included) || subTermHasClauses(subTerm)) {
     Interpreter.raiseArgumentError(
@@ -1103,7 +1094,7 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
 }
 
 // A to-one embeds one entity, so there is nothing for a filter, an order or a bound to do to it -
-// nesting is its only refinement, and two levels is as deep as either tier traverses.
+// nesting is its only refinement, to any depth.
 function validateSubTerm(subTerm, name, target, kind) {
   if (!isQueryTerm(subTerm)) {
     Interpreter.raiseArgumentError(
@@ -1126,12 +1117,6 @@ function validateSubTerm(subTerm, name, target, kind) {
   if (kind === "to_one" && subTermHasClauses(subTerm)) {
     Interpreter.raiseArgumentError(
       `to-one relationship ${Interpreter.inspect(name)} takes no clauses - clauses apply to to-many includes`,
-    );
-  }
-
-  if (includeDepth(subTerm) > 1) {
-    Interpreter.raiseArgumentError(
-      `including ${Interpreter.inspect(name)} exceeds the traversal depth limit of 2 levels`,
     );
   }
 }

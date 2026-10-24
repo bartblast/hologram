@@ -522,20 +522,6 @@ defmodule Hologram.Query.Stage do
     {name, operator, operand}
   end
 
-  defp include_depth(term) do
-    if term.include == %{} do
-      0
-    else
-      max_child_depth =
-        term.include
-        |> Map.values()
-        |> Enum.map(&include_depth/1)
-        |> Enum.max()
-
-      1 + max_child_depth
-    end
-  end
-
   defp include_spec_entry!(term, name) when is_atom(name) do
     include(term, name)
   end
@@ -564,7 +550,6 @@ defmodule Hologram.Query.Stage do
   # Two includes of one relationship are one include when neither narrows it: what each includes
   # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
   # than the other, so a relationship included twice with clauses on either side is refused.
-  # Merging cannot deepen a traversal, so the depth each side was validated for still holds.
   defp merged_sub_term!(included, sub_term, name) do
     if sub_term_has_clauses?(included) or sub_term_has_clauses?(sub_term) do
       raise ArgumentError,
@@ -1331,11 +1316,6 @@ defmodule Hologram.Query.Stage do
       raise ArgumentError,
         message:
           "to-one relationship #{inspect(name)} takes no clauses - clauses apply to to-many includes"
-    end
-
-    if include_depth(sub_term) > 1 do
-      raise ArgumentError,
-        message: "including #{inspect(name)} exceeds the traversal depth limit of 2 levels"
     end
   end
 

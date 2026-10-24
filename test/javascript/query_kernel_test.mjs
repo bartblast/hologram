@@ -347,7 +347,7 @@ describe("QueryKernel", () => {
           [USER]: {
             attributes: {email: "string", id: "uuid"},
             enumValues: {},
-            relationships: {},
+            relationships: {manager: {toMany: false, type: USER}},
             serverOnly: [],
           },
         },
@@ -772,6 +772,39 @@ describe("QueryKernel", () => {
         const [task] = node.includes.tasks;
 
         assert.equal(task.includes.owner.row.id, "u1");
+      });
+
+      it("fills what an include includes, three levels down", () => {
+        LocalDatabase.putRow(TASK, {
+          id: "t1",
+          owner_id: "u2",
+          position: 1,
+          title: "ada",
+        });
+
+        LocalDatabase.putRow(USER, {
+          email: "bob@example.com",
+          id: "u2",
+          manager_id: "u1",
+        });
+
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1"]);
+
+        const include = {
+          tasks: subTerm({
+            include: {
+              owner: subTerm({
+                entity: USER,
+                include: {manager: subTerm({entity: USER})},
+              }),
+            },
+          }),
+        };
+
+        const [node] = QueryKernel.run(projectTerm(include));
+        const [task] = node.includes.tasks;
+
+        assert.equal(task.includes.owner.includes.manager.row.id, "u1");
       });
 
       it("leaves a node's includes empty when the query asked for none", () => {
