@@ -278,7 +278,9 @@ defmodule Hologram.MixProject do
 
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
 
-    cmd_cross_platform("npm", ["install"], opts)
+    # Installs what the lockfile names without writing the lockfile back: an npm other than the
+    # one that generated it writes it differently, and a test run must not dirty the tree.
+    cmd_cross_platform("npm", ["install", "--no-save"], opts)
 
     {_exit_msg, exit_status} = cmd_cross_platform("npm", cmd, opts)
 
