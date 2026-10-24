@@ -21,8 +21,6 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
 
-  @data_schema "hologram_data"
-
   @doc false
   @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
   # sobelow_skip ["SQL.Query"]
@@ -797,7 +795,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp qualified_table(table) do
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+    "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
   # Whether the row a reference names is there, asked of the TARGET type's own table - the one

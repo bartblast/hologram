@@ -10,11 +10,6 @@ defmodule Hologram.Test.DatabaseBootstrap do
   alias Hologram.DB.Mapper
   alias Hologram.Reflection
 
-  @drop_statements [
-    ~s(DROP SCHEMA IF EXISTS "hologram_system" CASCADE),
-    ~s(DROP SCHEMA IF EXISTS "hologram_data" CASCADE)
-  ]
-
   @doc """
   Prepares the test databases before a suite runs and returns :ok.
 
@@ -78,10 +73,17 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
     try do
       refuse_claimed_elsewhere!(connection_pid, database, claim)
-      Enum.each(@drop_statements, &Postgrex.query!(connection_pid, &1, []))
+      Enum.each(drop_statements(), &Postgrex.query!(connection_pid, &1, []))
     after
       GenServer.stop(connection_pid)
     end
+  end
+
+  defp drop_statements do
+    [
+      ~s(DROP SCHEMA IF EXISTS "#{Mapper.system_schema()}" CASCADE),
+      ~s(DROP SCHEMA IF EXISTS "#{Mapper.data_schema()}" CASCADE)
+    ]
   end
 
   defp ensure_database!(database_opts, database) do
@@ -117,14 +119,15 @@ defmodule Hologram.Test.DatabaseBootstrap do
   # Read on this connection: no pool exists yet when this runs, and the marker table may be
   # absent. A table that is absent, or holds no row, is no claim.
   defp marker(connection_pid) do
-    existence_query = ~s[SELECT to_regclass('"hologram_system"."database"')]
+    system_schema = Mapper.system_schema()
+    existence_query = ~s[SELECT to_regclass('"#{system_schema}"."database"')]
 
     case Postgrex.query!(connection_pid, existence_query, []) do
       %{rows: [[nil]]} ->
         nil
 
       _present ->
-        marker_query = ~s(SELECT "otp_app", "env" FROM "hologram_system"."database")
+        marker_query = ~s(SELECT "otp_app", "env" FROM "#{system_schema}"."database")
 
         case Postgrex.query!(connection_pid, marker_query, []) do
           %{rows: []} -> nil

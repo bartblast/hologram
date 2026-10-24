@@ -1202,6 +1202,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     listed_reach = Compiler.list_reach_by_page(pages_to_list, call_graph_for_runtime)
 
+    # Only the pages listed again: every other page keeps the reach the last derivation listed, and
+    # passed this check then.
+    Compiler.validate_server_only_mfas!(listed_reach)
+
     # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
     # bundles are derived from no longer holds the vertex to ask about - while the question is
     # exactly whether the bundles reach it.

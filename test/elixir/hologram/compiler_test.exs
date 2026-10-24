@@ -1413,6 +1413,71 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "server_only_mfas/0" do
+    # A manually ported function leaves the graph a page's reach is listed on, so a page reaching
+    # one could never be refused.
+    test "lists no manually ported function" do
+      manually_ported_mfas = CallGraph.manually_ported_elixir_mfas()
+
+      assert Enum.filter(server_only_mfas(), &(&1 in manually_ported_mfas)) == []
+    end
+  end
+
+  # No fixture page calls a server-only function in its client code, deliberately: the compile task
+  # tests build this repo's own pages, and such a page would fail every one of them. The edge is
+  # added to a clone instead - a page's template is client code.
+  describe "validate_server_only_mfas!/1" do
+    test "passes a page reading with SQL in a command handler", %{call_graph: call_graph} do
+      assert validate_server_only_mfas!(page_reach(call_graph)) == :ok
+    end
+
+    test "raises for a page whose client code reads with SQL", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.DB, :sql, 3})
+
+      expected_msg =
+        "page Hologram.Test.Fixtures.Page.Module7 reaches Hologram.DB.sql/3 in its client code - " <>
+          "the SQL surface runs only on the server, so the browser could not answer it. Call it " <>
+          "from a command or a job instead, and send the client what it needs through an action."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_server_only_mfas!(page_reach(graph))
+      end
+    end
+
+    test "raises for a page whose client code asks for a table name", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.DB, :table_name, 1})
+
+      expected_msg =
+        "page Hologram.Test.Fixtures.Page.Module7 reaches Hologram.DB.table_name/1 in its client " <>
+          "code - the SQL surface runs only on the server, so the browser could not answer it. " <>
+          "Call it from a command or a job instead, and send the client what it needs through an " <>
+          "action."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_server_only_mfas!(page_reach(graph))
+      end
+    end
+
+    # Module10 sorts before Module7 as a module name, so the refusal names it whichever page the
+    # listing put first.
+    test "names the first page in module order", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.DB, :sql, 3})
+      CallGraph.add_edge(graph, {PageModule10, :template, 0}, {Hologram.DB, :sql, 3})
+
+      expected_msg =
+        "page Hologram.Test.Fixtures.Page.Module10 reaches Hologram.DB.sql/3 in its client code - " <>
+          "the SQL surface runs only on the server, so the browser could not answer it. Call it " <>
+          "from a command or a job instead, and send the client what it needs through an action."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_server_only_mfas!(page_reach(graph))
+      end
+    end
+  end
+
   describe "build_queries/2" do
     setup do
       [entity_types: Reflection.list_entities()]

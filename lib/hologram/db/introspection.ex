@@ -2,8 +2,7 @@ defmodule Hologram.DB.Introspection do
   @moduledoc false
 
   alias Hologram.DB.Connection
-
-  @data_schema "hologram_data"
+  alias Hologram.DB.Mapper
 
   # pg_constraint.confdeltype decoding.
   @delete_actions %{
@@ -50,7 +49,7 @@ defmodule Hologram.DB.Introspection do
     WHERE n.nspname = $1 AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
     """
 
-    {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
+    {:ok, %{rows: rows}} = Connection.query(statement, [Mapper.data_schema()])
 
     rows
     |> Enum.group_by(fn [table | _rest] -> table end)
@@ -101,7 +100,7 @@ defmodule Hologram.DB.Introspection do
     WHERE n.nspname = $1 AND con.contype IN ('p', 'f')
     """
 
-    {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
+    {:ok, %{rows: rows}} = Connection.query(statement, [Mapper.data_schema()])
 
     Enum.reduce(rows, {%{}, %{}}, &constraint_entry/2)
   end
@@ -121,7 +120,7 @@ defmodule Hologram.DB.Introspection do
     ORDER BY t.typname, e.enumsortorder
     """
 
-    {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
+    {:ok, %{rows: rows}} = Connection.query(statement, [Mapper.data_schema()])
 
     rows
     |> Enum.group_by(fn [typname, _label] -> typname end)
@@ -147,7 +146,7 @@ defmodule Hologram.DB.Introspection do
     WHERE n.nspname = $1 AND NOT i.indisprimary
     """
 
-    {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
+    {:ok, %{rows: rows}} = Connection.query(statement, [Mapper.data_schema()])
 
     rows
     |> Enum.group_by(fn [table | _rest] -> table end)
@@ -167,7 +166,7 @@ defmodule Hologram.DB.Introspection do
     WHERE n.nspname = $1 AND c.relkind = 'r'
     """
 
-    {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
+    {:ok, %{rows: rows}} = Connection.query(statement, [Mapper.data_schema()])
 
     Enum.map(rows, fn [name] -> name end)
   end

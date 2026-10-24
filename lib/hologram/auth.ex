@@ -629,7 +629,7 @@ defmodule Hologram.Auth do
   # sobelow_skip ["SQL.Query"]
   defp delete_grant(user_id, entity_type, entity_id, role) do
     statement = """
-    SELECT "id" FROM "hologram_data"."hologram_role_grant"
+    SELECT "id" FROM "#{Mapper.data_schema()}"."hologram_role_grant"
     WHERE "user_id" = $1
       AND "entity_type" IS NOT DISTINCT FROM $2::#{qualified_enum_type("entity_type")}
       AND "entity_id" IS NOT DISTINCT FROM $3
@@ -810,7 +810,7 @@ defmodule Hologram.Auth do
       |> Enum.find(&(&1.name == column_name))
       |> Map.fetch!(:sql_type)
 
-    ~s("hologram_data".#{Mapper.quote_identifier(enum_type)})
+    ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(enum_type)})
   end
 
   # The :held statement share-locks the rows it matches, so a revocation's FOR UPDATE on any of
@@ -825,7 +825,7 @@ defmodule Hologram.Auth do
     role_placeholder = "$#{length(scope_params) + 2}"
 
     selection = """
-    SELECT 1 FROM "hologram_data"."hologram_role_grant"
+    SELECT 1 FROM "#{Mapper.data_schema()}"."hologram_role_grant"
     WHERE "user_id" = $1
       AND #{scope_condition}
       AND "role" = ANY(#{role_placeholder}::#{qualified_enum_type("role")}[])

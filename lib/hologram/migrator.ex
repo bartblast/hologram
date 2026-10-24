@@ -55,7 +55,7 @@ defmodule Hologram.Migrator do
   """
   @spec applied_versions() :: MapSet.t()
   def applied_versions do
-    statement = ~s(SELECT "version" FROM "hologram_system"."migration")
+    statement = ~s(SELECT "version" FROM "#{Mapper.system_schema()}"."migration")
 
     {:ok, %{rows: rows}} = Connection.query(statement)
 
@@ -126,7 +126,7 @@ defmodule Hologram.Migrator do
 
       raise "schema drift detected - the database does not match the model:\n" <>
               lines <>
-              "\nhologram_data is model-managed - restore what is missing, remove what " <>
+              "\n#{Mapper.data_schema()} is model-managed - restore what is missing, remove what " <>
               "was added by hand, or express the change as a migration"
     end
 
@@ -214,9 +214,12 @@ defmodule Hologram.Migrator do
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
+    data_schema = Mapper.data_schema()
+    system_schema = Mapper.system_schema()
+
     case hologram_schemas() do
       [] -> claim(context)
-      ["hologram_data", "hologram_system"] -> check_marker!(context)
+      [^data_schema, ^system_schema] -> check_marker!(context)
       _partial -> raise_not_managed!()
     end
   end
@@ -242,7 +245,7 @@ defmodule Hologram.Migrator do
   @spec record_applied(String.t(), DateTime.t(), String.t()) :: :ok
   def record_applied(version, timestamp, model_hash) do
     statement = """
-    INSERT INTO "hologram_system"."migration" ("version", "applied_at", "model_hash")
+    INSERT INTO "#{Mapper.system_schema()}"."migration" ("version", "applied_at", "model_hash")
     VALUES ($1, $2, $3)
     """
 
@@ -458,8 +461,8 @@ defmodule Hologram.Migrator do
   # bump it belongs to - see `@system_schema_version` in Hologram.DB.SchemaReconciler, which
   # carries the whole reasoning. Until then a stale database is dropped and recreated.
   defp claim(context) do
-    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
-    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
+    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.system_schema()}"))
+    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.data_schema()}"))
 
     SchemaReconciler.create_system_tables()
 
@@ -570,7 +573,7 @@ defmodule Hologram.Migrator do
     statement = """
     SELECT nspname
     FROM pg_catalog.pg_namespace
-    WHERE nspname IN ('hologram_data', 'hologram_system')
+    WHERE nspname IN ('#{Mapper.data_schema()}', '#{Mapper.system_schema()}')
     ORDER BY nspname
     """
 
@@ -588,7 +591,7 @@ defmodule Hologram.Migrator do
   defp raise_not_managed! do
     raise "the configured database contains Hologram schemas but no managed-database " <>
             "marker - it is not managed by migrations - drop the " <>
-            ~s("hologram_system" and "hologram_data" schemas or point the config ) <>
+            ~s("#{Mapper.system_schema()}" and "#{Mapper.data_schema()}" schemas or point the config ) <>
             "at another database"
   end
 

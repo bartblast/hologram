@@ -62,6 +62,12 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
+  Returns the name of the PostgreSQL schema the entity tables and join tables live in, unquoted.
+  """
+  @spec data_schema() :: String.t()
+  def data_schema, do: "hologram_data"
+
+  @doc """
   Derives the complete physical name mapping for the given entity type modules and global role
   modules.
 
@@ -181,6 +187,14 @@ defmodule Hologram.DB.Mapper do
         edge_reference(entity_type, entry, constraint)
     end)
   end
+
+  @doc """
+  Returns the name of the PostgreSQL schema the framework's own bookkeeping tables live in - the
+  managed-database marker, the migration history, the operations log, the mutation record and the
+  schema object registry - unquoted.
+  """
+  @spec system_schema() :: String.t()
+  def system_schema, do: "hologram_system"
 
   @doc """
   Returns the table name derived from the given entity type module.

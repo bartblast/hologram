@@ -33,9 +33,10 @@ defmodule HologramFeatureTests.DataApiPage do
       <button $click={command: :create_review}> Create review </button>
       <button $click={command: :create_review_for_missing_product}> Review a missing product </button>
       <button $click={command: :delete_referenced_product}> Delete referenced product </button>
-      <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :raise_on_duplicate_account}> Raise on duplicate account </button>
       <button $click={command: :raise_on_duplicate_account_in_transaction}> Raise on duplicate in transaction </button>
+      <button $click={command: :read_rows_with_sql}> Read rows with SQL </button>
+      <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :run_query}> Run query </button>
       <button $click={command: :update_into_duplicate_account}> Update into duplicate account </button>
       <button $click={command: :validate_changes}> Validate changes </button>
@@ -166,26 +167,6 @@ defmodule HologramFeatureTests.DataApiPage do
     put_action(server, :show_result, result: "deleted_referenced_#{inspect(result)}")
   end
 
-  def command(:reject_invalid_review, _params, server) do
-    product =
-      %{name: "reject_invalid_review_product"}
-      |> Product.new()
-      |> DB.create!()
-
-    result =
-      try do
-        %{product_id: product.id, rating: 0}
-        |> Review.new()
-        |> DB.create!()
-
-        "rejected_nothing"
-      rescue
-        error in WriteError -> error.message
-      end
-
-    put_action(server, :show_result, result: result)
-  end
-
   def command(:raise_on_duplicate_account, _params, server) do
     %{handle: "taken"}
     |> Account.new()
@@ -226,6 +207,51 @@ defmodule HologramFeatureTests.DataApiPage do
     put_action(server, :show_result,
       result: "raise_on_duplicate_account_in_transaction_#{inspect(result)}"
     )
+  end
+
+  # Each row's id is compared with the id of the entity created for it, so the answer can only be
+  # true when the uuid column came back as the entity's id string. The excluded row is left out by
+  # an id string bound to a uuid placeholder.
+  def command(:read_rows_with_sql, _params, server) do
+    ids =
+      Map.new(["sql_apple", "sql_banana", "sql_excluded"], fn name ->
+        product =
+          %{name: name}
+          |> Product.new()
+          |> DB.create!()
+
+        {name, product.id}
+      end)
+
+    statement =
+      ~s|SELECT "id", "name" FROM "#{DB.schema_name()}"."#{DB.table_name(Product)}" | <>
+        ~s|WHERE "id" <> $1 ORDER BY "name"|
+
+    %{rows: rows} = DB.sql!(statement, [ids["sql_excluded"]])
+
+    result = Enum.map_join(rows, ",", fn [id, name] -> "#{name}:#{id == ids[name]}" end)
+
+    put_action(server, :show_result, result: "sql_rows_#{result}")
+  end
+
+  def command(:reject_invalid_review, _params, server) do
+    product =
+      %{name: "reject_invalid_review_product"}
+      |> Product.new()
+      |> DB.create!()
+
+    result =
+      try do
+        %{product_id: product.id, rating: 0}
+        |> Review.new()
+        |> DB.create!()
+
+        "rejected_nothing"
+      rescue
+        error in WriteError -> error.message
+      end
+
+    put_action(server, :show_result, result: result)
   end
 
   def command(:run_query, _params, server) do
