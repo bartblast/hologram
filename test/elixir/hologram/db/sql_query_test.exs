@@ -190,6 +190,13 @@ defmodule Hologram.DB.SQLQueryTest do
                {:ok, %{columns: ["timeout"], rows: [["0"]]}}
     end
 
+    test "runs the statement under the largest timeout PostgreSQL accepts" do
+      statement = ~s|SELECT current_setting('statement_timeout') AS "timeout"|
+
+      assert run(statement, [], timeout: 2_147_483_647) ==
+               {:ok, %{columns: ["timeout"], rows: [["2147483647ms"]]}}
+    end
+
     # A driver deadline on the transaction the read opens would close the connection when it fires,
     # so the statement timeout is the one bound. The calling process's default driver timeout is
     # shorter than the statement here, and the read still answers.
@@ -388,14 +395,22 @@ defmodule Hologram.DB.SQLQueryTest do
     # PostgreSQL reads a zero statement timeout as no limit.
     test "raises on a zero timeout" do
       assert_error ArgumentError,
-                   "invalid timeout 0 for DB.sql/3 - give a positive number of milliseconds or :infinity",
+                   "invalid timeout 0 for DB.sql/3 - give a positive number of milliseconds up to 2147483647, or :infinity",
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeout: 0) end
     end
 
     test "raises on a timeout that is not an integer" do
       assert_error ArgumentError,
-                   ~s(invalid timeout "5s" for DB.sql/3 - give a positive number of milliseconds or :infinity),
+                   ~s(invalid timeout "5s" for DB.sql/3 - give a positive number of milliseconds up to 2147483647, or :infinity),
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeout: "5s") end
+    end
+
+    # PostgreSQL stores the statement timeout as a 32-bit integer, so a larger value would fail the
+    # statement that sets it rather than the call.
+    test "raises on a timeout above the largest PostgreSQL accepts" do
+      assert_error ArgumentError,
+                   "invalid timeout 2147483648 for DB.sql/3 - give a positive number of milliseconds up to 2147483647, or :infinity",
+                   fn -> run(~s|SELECT 1 AS "one"|, [], timeout: 2_147_483_648) end
     end
 
     # A session-level lock outlives the rolled-back read and stays with whichever pooled connection

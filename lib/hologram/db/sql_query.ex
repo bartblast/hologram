@@ -20,6 +20,10 @@ defmodule Hologram.DB.SQLQuery do
   @limits_statement "SELECT set_config('transaction_read_only', 'on', true), " <>
                       "set_config('statement_timeout', $1, true)"
 
+  # The largest statement timeout PostgreSQL accepts, in milliseconds - the setting is a 32-bit
+  # integer, and a larger value fails the statement that sets it.
+  @max_timeout 2_147_483_647
+
   # The two kinds of session state that outlive the rolled-back read: a session-level advisory lock
   # and a named prepared statement. The read-only setting refuses neither, and either would stay
   # with whichever pooled connection ran the read, where the next read, likely on another
@@ -47,8 +51,9 @@ defmodule Hologram.DB.SQLQuery do
   {:ok, result} with the columns and rows, or {:error, error} for a statement the server refused,
   cancelled or failed.
 
-  The one option is :timeout, the milliseconds the statement may run as a positive integer, or
-  :infinity - 15 seconds by default. The server enforces it.
+  The one option is :timeout, the milliseconds the statement may run as a positive integer up to
+  2_147_483_647, the largest PostgreSQL accepts, or :infinity - 15 seconds by default. The server
+  enforces it.
 
   Raises ArgumentError for a statement that takes a session-level advisory lock or prepares a
   named statement, an unknown option, an invalid timeout, a param count that differs from the
@@ -184,14 +189,14 @@ defmodule Hologram.DB.SQLQuery do
       :infinity ->
         "0"
 
-      timeout when is_integer(timeout) and timeout > 0 ->
+      timeout when is_integer(timeout) and timeout > 0 and timeout <= @max_timeout ->
         Integer.to_string(timeout)
 
       timeout ->
         raise ArgumentError,
           message:
             "invalid timeout #{inspect(timeout)} for DB.sql/3 - give a positive number of " <>
-              "milliseconds or :infinity"
+              "milliseconds up to #{@max_timeout}, or :infinity"
     end
   end
 

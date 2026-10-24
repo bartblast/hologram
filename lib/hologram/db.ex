@@ -392,12 +392,12 @@ defmodule Hologram.DB do
   entity, so nothing strips server-only attribute values from it - a selected `password_hash` put
   in state reaches the client. Select what the client may see.
 
-  The one option is `timeout:`, the milliseconds the statement may run as a positive integer, or
-  `:infinity` - fifteen seconds by default. PostgreSQL enforces it: past it the statement is
-  cancelled and answered as {:error, %Hologram.SQLError{code: :query_canceled}}, and the
-  connection and any enclosing transaction carry on. Inside an enclosing transaction its own
-  bound applies as well. The read is not run again when PostgreSQL resolves a deadlock, since it
-  takes no row locks.
+  The one option is `timeout:`, the milliseconds the statement may run as a positive integer up
+  to 2_147_483_647, the largest PostgreSQL accepts, or `:infinity` - fifteen seconds by default.
+  PostgreSQL enforces it: past it the statement is cancelled and answered as
+  {:error, %Hologram.SQLError{code: :query_canceled}}, and the connection and any enclosing
+  transaction carry on. Inside an enclosing transaction its own bound applies as well. The read
+  is not run again when PostgreSQL resolves a deadlock, since it takes no row locks.
 
   Raises ArgumentError for a statement that takes a session-level advisory lock or prepares a
   named statement, either of which would outlive the read on a pooled connection - a
