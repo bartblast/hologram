@@ -436,6 +436,8 @@ defmodule Hologram.DB.QueryCompiler do
   # table name at statement level, and the subquery's alias inside an include or a delegation -
   # where the table name would resolve to the outer row for a relationship back to its own type.
   # The delegation depth counts the delegations the policy is nested in, naming each one's alias.
+  # Every alias the compiler gives a table begins with a $, which no derived table name begins
+  # with, so an alias never names a table the statement also reads.
   defp policy_context(entity_type, mapping, policy, quoted_row_prefix \\ nil)
 
   defp policy_context(_entity_type, _mapping, nil, _quoted_row_prefix), do: nil
@@ -500,9 +502,9 @@ defmodule Hologram.DB.QueryCompiler do
     {scope_sql, new_params} = grant_scope_sql(reference, context, params_after_roles)
 
     condition =
-      ~s|EXISTS (SELECT 1 FROM #{grant_table(context)} AS "rg" | <>
-        ~s|WHERE "rg"."user_id" = #{actor_placeholder} | <>
-        ~s|AND "rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
+      ~s|EXISTS (SELECT 1 FROM #{grant_table(context)} AS "$rg" | <>
+        ~s|WHERE "$rg"."user_id" = #{actor_placeholder} | <>
+        ~s|AND "$rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
 
     {condition, new_params}
   end
@@ -510,7 +512,7 @@ defmodule Hologram.DB.QueryCompiler do
   # A global role is held without an entity, so the row shape has both scope columns nil -
   # the lookup needs no correlation with the queried row.
   defp grant_scope_sql({:global, _role_modules}, _context, reversed_params) do
-    {~s|"rg"."entity_type" IS NULL AND "rg"."entity_id" IS NULL|, reversed_params}
+    {~s|"$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL|, reversed_params}
   end
 
   # A rule's own roles are held on the row itself or on its whole type - the lookup matches
@@ -520,9 +522,9 @@ defmodule Hologram.DB.QueryCompiler do
       entity_type_slot(context.entity_type, context, reversed_params)
 
     entity_sql =
-      ~s|("rg"."entity_id" = #{context.row_prefix}."id" OR "rg"."entity_id" IS NULL)|
+      ~s|("$rg"."entity_id" = #{context.row_prefix}."id" OR "$rg"."entity_id" IS NULL)|
 
-    {~s|"rg"."entity_type" = #{placeholder} AND #{entity_sql}|, new_params}
+    {~s|"$rg"."entity_type" = #{placeholder} AND #{entity_sql}|, new_params}
   end
 
   # The grant store's own policy checks a role held on the entity a grant row names, so the
@@ -531,8 +533,8 @@ defmodule Hologram.DB.QueryCompiler do
     {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
     scope_sql =
-      ~s|"rg"."entity_type" = #{placeholder} | <>
-        ~s|AND "rg"."entity_id" = #{context.row_prefix}."entity_id"|
+      ~s|"$rg"."entity_type" = #{placeholder} | <>
+        ~s|AND "$rg"."entity_id" = #{context.row_prefix}."entity_id"|
 
     {scope_sql, new_params}
   end
@@ -540,7 +542,7 @@ defmodule Hologram.DB.QueryCompiler do
   defp grant_scope_sql({:type, target_type, _role_names}, context, reversed_params) do
     {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
-    {~s|"rg"."entity_type" = #{placeholder} AND "rg"."entity_id" IS NULL|, new_params}
+    {~s|"$rg"."entity_type" = #{placeholder} AND "$rg"."entity_id" IS NULL|, new_params}
   end
 
   defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
@@ -556,8 +558,8 @@ defmodule Hologram.DB.QueryCompiler do
     quoted_column = Mapper.quote_identifier(column.name)
 
     scope_sql =
-      ~s|"rg"."entity_type" = #{placeholder} | <>
-        ~s|AND "rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
+      ~s|"$rg"."entity_type" = #{placeholder} | <>
+        ~s|AND "$rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
 
     {scope_sql, new_params}
   end
@@ -606,7 +608,7 @@ defmodule Hologram.DB.QueryCompiler do
     }
 
     depth = context.delegation_depth + 1
-    quoted_alias = Mapper.quote_identifier("d#{depth}")
+    quoted_alias = Mapper.quote_identifier("$d#{depth}")
 
     target_context =
       target_type
@@ -913,9 +915,9 @@ defmodule Hologram.DB.QueryCompiler do
          {reversed_params, index}
        ) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
-    quoted_wrapper = Mapper.quote_identifier("i#{index}")
-    quoted_join = Mapper.quote_identifier("j#{index}")
-    quoted_target = Mapper.quote_identifier("t#{index}")
+    quoted_wrapper = Mapper.quote_identifier("$i#{index}")
+    quoted_join = Mapper.quote_identifier("$j#{index}")
+    quoted_target = Mapper.quote_identifier("$t#{index}")
 
     {conditions, filtered_params} = conditions(sub_term.filter, target_mapping, reversed_params)
 
@@ -976,7 +978,7 @@ defmodule Hologram.DB.QueryCompiler do
       Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
 
     target_mapping = Map.fetch!(mapping, sub_term.entity)
-    quoted_alias = Mapper.quote_identifier("i#{index}")
+    quoted_alias = Mapper.quote_identifier("$i#{index}")
 
     target_policy = include_policy(policy, sub_term.entity)
 

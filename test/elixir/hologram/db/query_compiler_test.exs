@@ -77,7 +77,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|ORDER BY "i1"."c_$sort" ASC, "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|
+               ~s|ORDER BY "$i1"."c_$sort" ASC, "$i1"."c" ASC, "$i1"."id" ASC), '[]'::jsonb|
              )
     end
 
@@ -93,7 +93,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|ORDER BY "i1"."c_$sort" ASC, "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|
+               ~s|ORDER BY "$i1"."c_$sort" ASC, "$i1"."c" ASC, "$i1"."id" ASC), '[]'::jsonb|
              )
     end
 
@@ -338,13 +338,13 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|WHERE "i1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
-                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                 ~s|WHERE "rg"."user_id" = $1 | <>
-                 ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."entity_type" = | <>
+               ~s|WHERE "$i1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                 ~s|WHERE "$rg"."user_id" = $1 | <>
+                 ~s|AND "$rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "$rg"."entity_type" = | <>
                  ~s|$3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND ("rg"."entity_id" = "i1"."id" OR "rg"."entity_id" IS NULL))|
+                 ~s|AND ("$rg"."entity_id" = "$i1"."id" OR "$rg"."entity_id" IS NULL))|
              )
     end
 
@@ -360,7 +360,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|WHERE "i1"."id" = "test_fixtures_policy_module1"."parent_id")|
+               ~s|WHERE "$i1"."id" = "test_fixtures_policy_module1"."parent_id")|
              )
     end
 
@@ -436,13 +436,13 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
                    ~s|"created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
-                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                   ~s|WHERE "rg"."user_id" = $1 | <>
-                   ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."entity_type" = | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                   ~s|WHERE "$rg"."user_id" = $1 | <>
+                   ~s|AND "$rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                   ~s|AND "$rg"."entity_type" = | <>
                    ~s|$3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                   ~s|AND ("rg"."entity_id" = "test_fixtures_policy_module1"."id" | <>
-                   ~s|OR "rg"."entity_id" IS NULL)) ORDER BY "id" ASC|
+                   ~s|AND ("$rg"."entity_id" = "test_fixtures_policy_module1"."id" | <>
+                   ~s|OR "$rg"."entity_id" IS NULL)) ORDER BY "id" ASC|
              }
     end
 
@@ -461,10 +461,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                sql:
                  ~s|SELECT "id", "public", "created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                   ~s|WHERE "rg"."user_id" = $1 | <>
-                   ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."entity_type" IS NULL AND "rg"."entity_id" IS NULL) | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                   ~s|WHERE "$rg"."user_id" = $1 | <>
+                   ~s|AND "$rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                   ~s|AND "$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL) | <>
                    ~s|ORDER BY "id" ASC|
              }
     end
@@ -499,8 +499,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."entity_type" = $3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND "rg"."entity_id" IS NULL)|
+               ~s|AND "$rg"."entity_type" = $3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND "$rg"."entity_id" IS NULL)|
              )
     end
 
@@ -521,7 +521,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
+               ~s|AND "$rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
              )
     end
 
@@ -563,7 +563,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|"created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
                    ~s|AND "public" = $1) ORDER BY "id" ASC|
              }
     end
@@ -581,8 +581,37 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module9" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
-                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
                    ~s|AND "archived" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    # The mapper strips the app root, so this type's table is a bare d1 - the name the delegation's
+    # alias would have without its $, which would put both sides of the join on the inner row.
+    test "keeps a delegation's alias apart from a table of the same name" do
+      defmodule Elixir.Hologram.D1 do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        relationship :parent, Hologram.D1, optional: true
+
+        allow :read, via: {:update, parent}
+        allow :update, when: archived == false
+      end
+
+      mapping = Mapper.derive!([Hologram.D1], [])
+      term = Stage.normalize(Hologram.D1)
+      rules = Policy.build(Hologram.D1)[:read]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, false}],
+               sql:
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."d1" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."d1" AS "$d1" | <>
+                   ~s|WHERE "$d1"."id" = "d1"."parent_id" AND "archived" = $1) | <>
+                   ~s|ORDER BY "id" ASC|
              }
     end
 
@@ -602,9 +631,9 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module5" | <>
-                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module8"."parent_id" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module8"."parent_id" | <>
                    ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
-                   ~s|AS "d2" WHERE "d2"."id" = "d1"."parent_id" AND "public" = $1)) | <>
+                   ~s|AS "$d2" WHERE "$d2"."id" = "$d1"."parent_id" AND "public" = $1)) | <>
                    ~s|ORDER BY "id" ASC|
              }
     end
@@ -625,16 +654,16 @@ defmodule Hologram.DB.QueryCompilerTest do
                params: [{:value, false}, {:value, false}],
                sql:
                  ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions", | <>
-                   ~s|(SELECT jsonb_build_object('id', "i1"."id", 'archived', "i1"."archived", | <>
-                   ~s|'parent_id', "i1"."parent_id", 'created_at', "i1"."created_at", | <>
-                   ~s|'updated_at', "i1"."updated_at", '$revisions', "i1"."$revisions") | <>
-                   ~s|FROM "hologram_data"."test_fixtures_policy_module9" AS "i1" | <>
-                   ~s|WHERE "i1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'archived', "$i1"."archived", | <>
+                   ~s|'parent_id', "$i1"."parent_id", 'created_at', "$i1"."created_at", | <>
+                   ~s|'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module9" AS "$i1" | <>
+                   ~s|WHERE "$i1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
                    ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
-                   ~s|AS "d1" WHERE "d1"."id" = "i1"."parent_id" AND "archived" = $1)) | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "$i1"."parent_id" AND "archived" = $1)) | <>
                    ~s|AS "parent" FROM "hologram_data"."test_fixtures_policy_module9" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
-                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
                    ~s|AND "archived" = $2) ORDER BY "id" ASC|
              }
     end
@@ -683,13 +712,13 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(
                sql,
                ~s|EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                 ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
-                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                 ~s|WHERE "rg"."user_id" = $1 | <>
-                 ~s|AND "rg"."role" = ANY($4::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."entity_type" = | <>
+                 ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                 ~s|WHERE "$rg"."user_id" = $1 | <>
+                 ~s|AND "$rg"."role" = ANY($4::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "$rg"."entity_type" = | <>
                  ~s|$5::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND ("rg"."entity_id" = "d1"."id" OR "rg"."entity_id" IS NULL))|
+                 ~s|AND ("$rg"."entity_id" = "$d1"."id" OR "$rg"."entity_id" IS NULL))|
              )
     end
 
@@ -717,11 +746,11 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(
                sql,
                ~s|("entity_type" = $2 AND EXISTS (SELECT 1 FROM | <>
-                 ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1 | <>
-                 ~s|AND "rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."entity_type" = | <>
+                 ~s|"hologram_data"."hologram_role_grant" AS "$rg" WHERE "$rg"."user_id" = $1 | <>
+                 ~s|AND "$rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "$rg"."entity_type" = | <>
                  ~s|$4::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND "rg"."entity_id" = "hologram_role_grant"."entity_id"))|
+                 ~s|AND "$rg"."entity_id" = "hologram_role_grant"."entity_id"))|
              )
     end
 
@@ -910,12 +939,12 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "i1" WHERE "i1"."id" = "test_fixtures_entity_module3"."b_id") AS "b"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$i1" WHERE "$i1"."id" = "test_fixtures_entity_module3"."b_id") AS "b"|
              )
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "i2" WHERE "i2"."id" = "test_fixtures_entity_module3"."c_id") AS "c"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "$i2" WHERE "$i2"."id" = "test_fixtures_entity_module3"."c_id") AS "c"|
              )
     end
 
@@ -963,16 +992,16 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       expected_fragment =
         ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
-          ~s|'id', "i1"."id", 'a', "i1"."a", 'b', "i1"."b", 'c', "i1"."c", | <>
-          ~s|'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at", '$revisions', "i1"."$revisions", | <>
-          ~s|'c_$sort', "i1"."c_$sort"| <>
-          ~s|) ORDER BY "i1"."id" ASC), '[]'::jsonb) | <>
-          ~s|FROM (SELECT "t1".* | <>
-          ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "t1" | <>
-          ~s|WHERE "t1"."id" IN (SELECT "j1"."target_id" | <>
-          ~s|FROM "hologram_data"."test_fixtures_entity_module3_a_$join" AS "j1" | <>
-          ~s|WHERE "j1"."source_id" = "test_fixtures_entity_module3"."id") | <>
-          ~s|ORDER BY "id" ASC) AS "i1") AS "a"|
+          ~s|'id', "$i1"."id", 'a', "$i1"."a", 'b', "$i1"."b", 'c', "$i1"."c", | <>
+          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
+          ~s|'c_$sort', "$i1"."c_$sort"| <>
+          ~s|) ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
+          ~s|FROM (SELECT "$t1".* | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$t1" | <>
+          ~s|WHERE "$t1"."id" IN (SELECT "$j1"."target_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module3_a_$join" AS "$j1" | <>
+          ~s|WHERE "$j1"."source_id" = "test_fixtures_entity_module3"."id") | <>
+          ~s|ORDER BY "id" ASC) AS "$i1") AS "a"|
 
       assert String.contains?(sql, expected_fragment)
     end
@@ -989,9 +1018,9 @@ defmodule Hologram.DB.QueryCompilerTest do
                params: [],
                sql:
                  ~s|SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions", | <>
-                   ~s|(SELECT jsonb_build_object('id', "i1"."id", 'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at", '$revisions', "i1"."$revisions") | <>
-                   ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "i1" | <>
-                   ~s|WHERE "i1"."id" = "test_fixtures_entity_module3"."c_id") AS "c" | <>
+                   ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "$i1" | <>
+                   ~s|WHERE "$i1"."id" = "test_fixtures_entity_module3"."c_id") AS "c" | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC|
              }
     end
@@ -1008,7 +1037,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module5" AS "i1" WHERE "i1"."id" = "test_fixtures_entity_module5"."b_id") AS "b"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module5" AS "$i1" WHERE "$i1"."id" = "test_fixtures_entity_module5"."b_id") AS "b"|
              )
     end
 
@@ -1293,11 +1322,11 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       expected_fragment =
         ~s|, 'b', (SELECT jsonb_build_object(| <>
-          ~s|'id', "i2"."id", 'a', "i2"."a", 'b', "i2"."b", 'c', "i2"."c", | <>
-          ~s|'created_at', "i2"."created_at", 'updated_at', "i2"."updated_at", '$revisions', "i2"."$revisions", | <>
-          ~s|'c_$sort', "i2"."c_$sort"| <>
-          ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "i2" | <>
-          ~s|WHERE "i2"."id" = "i1"."b_id")|
+          ~s|'id', "$i2"."id", 'a', "$i2"."a", 'b', "$i2"."b", 'c', "$i2"."c", | <>
+          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions", | <>
+          ~s|'c_$sort', "$i2"."c_$sort"| <>
+          ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "$i2" | <>
+          ~s|WHERE "$i2"."id" = "$i1"."b_id")|
 
       assert String.contains?(sql, expected_fragment)
     end
@@ -1314,14 +1343,14 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|, 'b', (SELECT jsonb_build_object('id', "i2"."id"|
+               ~s|, 'b', (SELECT jsonb_build_object('id', "$i2"."id"|
              )
 
-      assert String.contains?(sql, ~s|AS "i2" WHERE "i2"."id" = "i1"."b_id")|)
+      assert String.contains?(sql, ~s|AS "$i2" WHERE "$i2"."id" = "$i1"."b_id")|)
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module6_a_$join" AS "j1"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module6_a_$join" AS "$j1"|
              )
     end
 
