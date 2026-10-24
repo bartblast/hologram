@@ -8,8 +8,6 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Policy
   alias Hologram.Query
 
-  @data_schema "hologram_data"
-
   @doc """
   Compiles the given normalized query term into a SQL statement using the given
   physical name mapping.
@@ -170,7 +168,7 @@ defmodule Hologram.DB.QueryCompiler do
   # Bind slots inside an ARRAY constructor carry no type context of their own -
   # without the cast Postgres resolves them to text.
   defp array_type(%{type: :enum, sql_type: sql_type}) do
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}[]"
+    "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(sql_type)}[]"
   end
 
   defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
@@ -220,7 +218,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp enum_type(%{sql_type: sql_type}) do
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}"
+    "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(sql_type)}"
   end
 
   defp bind_slot_value(encoded_value, reversed_params) do
@@ -570,7 +568,7 @@ defmodule Hologram.DB.QueryCompiler do
       |> Map.fetch!(RoleGrant)
       |> Map.fetch!(:table)
 
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+    "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
   defp group_condition([rule_sql]), do: rule_sql
@@ -612,7 +610,7 @@ defmodule Hologram.DB.QueryCompiler do
     inner_sql = Enum.join([join_sql | target_conditions], " AND ")
 
     condition =
-      ~s|EXISTS (SELECT 1 FROM #{Mapper.quote_identifier(@data_schema)}.| <>
+      ~s|EXISTS (SELECT 1 FROM #{Mapper.quote_identifier(Mapper.data_schema())}.| <>
         ~s|#{Mapper.quote_identifier(target_mapping.table)} WHERE #{inner_sql})|
 
     {[condition], new_params}
@@ -853,7 +851,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp qualified_table(table) do
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+    "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
   defp quoted_column_name(entity_mapping, name) do

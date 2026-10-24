@@ -345,7 +345,7 @@ defmodule Hologram.DB do
   for SQL written by hand.
   """
   @spec schema_name() :: String.t()
-  def schema_name, do: "hologram_data"
+  def schema_name, do: Mapper.data_schema()
 
   @doc """
   Runs one SQL statement on the server against the data layer's tables and returns

@@ -26,8 +26,6 @@ defmodule Hologram.DB.DDL do
     {"timestamptz", "date"}
   ]
 
-  @data_schema "hologram_data"
-
   # float8's magnitude bounds. A value between them converts - one outside overflows at the
   # top or underflows to zero at the bottom, and PostgreSQL refuses both.
   @float8_max_magnitude "1.7976931348623157e308"
@@ -234,7 +232,7 @@ defmodule Hologram.DB.DDL do
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{@data_schema}' AND c.relname = #{literal(index)} AND i.indisvalid = TRUE\
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND c.relname = #{literal(index)} AND i.indisvalid = TRUE\
     """
   end
 
@@ -253,7 +251,7 @@ defmodule Hologram.DB.DDL do
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{@data_schema}' AND c.relname = #{literal(index)} AND i.indisvalid = FALSE\
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND c.relname = #{literal(index)} AND i.indisvalid = FALSE\
     """
   end
 
@@ -271,7 +269,7 @@ defmodule Hologram.DB.DDL do
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{@data_schema}' AND NOT i.indisvalid\
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid\
     """
   end
 
@@ -288,7 +286,7 @@ defmodule Hologram.DB.DDL do
   """
   @spec reindex_statement(String.t()) :: String.t()
   def reindex_statement(index) do
-    ~s(REINDEX INDEX CONCURRENTLY "#{@data_schema}".#{Mapper.quote_identifier(index)})
+    ~s(REINDEX INDEX CONCURRENTLY "#{Mapper.data_schema()}".#{Mapper.quote_identifier(index)})
   end
 
   @doc """
@@ -569,7 +567,7 @@ defmodule Hologram.DB.DDL do
   end
 
   defp qualified(name) do
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(name)}"
+    "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(name)}"
   end
 
   defp rebuild_cast(quoted_column, []) do

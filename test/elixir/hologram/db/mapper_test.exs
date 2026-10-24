@@ -373,6 +373,12 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
+  describe "data_schema/0" do
+    test "returns the schema of the entity tables" do
+      assert data_schema() == "hologram_data"
+    end
+  end
+
   describe "derive!/2" do
     test "derives the role grant unique index comparing nulls as values" do
       mapping =
@@ -823,6 +829,12 @@ defmodule Hologram.DB.MapperTest do
       mapping = derive!([Module1, Module2, Module3], [])
 
       assert referencing_relationship(mapping, "nope_$fk") == nil
+    end
+  end
+
+  describe "system_schema/0" do
+    test "returns the schema of the bookkeeping tables" do
+      assert system_schema() == "hologram_system"
     end
   end
 

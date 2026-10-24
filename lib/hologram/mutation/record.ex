@@ -19,6 +19,7 @@ defmodule Hologram.Mutation.Record do
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
 
   @doc """
   Claims the record for the given batch in the caller's transaction and returns :ok.
@@ -30,7 +31,7 @@ defmodule Hologram.Mutation.Record do
   @spec claim!(String.t(), non_neg_integer, String.t() | nil, String.t()) :: :ok
   def claim!(replica_id, seq, actor_id, model_hash) do
     statement = """
-    INSERT INTO "hologram_system"."mutation" ("replica_id", "seq", "actor_id", "model_hash")
+    INSERT INTO "#{Mapper.system_schema()}"."mutation" ("replica_id", "seq", "actor_id", "model_hash")
     VALUES ($1, $2, $3, $4)
     """
 
@@ -56,7 +57,7 @@ defmodule Hologram.Mutation.Record do
   @spec complete!(String.t(), non_neg_integer, map) :: :ok
   def complete!(replica_id, seq, result) do
     statement = """
-    UPDATE "hologram_system"."mutation" SET "result" = $3
+    UPDATE "#{Mapper.system_schema()}"."mutation" SET "result" = $3
     WHERE "replica_id" = $1 AND "seq" = $2
     """
 
@@ -83,7 +84,7 @@ defmodule Hologram.Mutation.Record do
           %{actor_id: String.t() | nil, result: map | nil} | nil
   def find(replica_id, seq) do
     statement = """
-    SELECT "actor_id", "result" FROM "hologram_system"."mutation"
+    SELECT "actor_id", "result" FROM "#{Mapper.system_schema()}"."mutation"
     WHERE "replica_id" = $1 AND "seq" = $2
     """
 
@@ -105,7 +106,7 @@ defmodule Hologram.Mutation.Record do
   @spec highest_confirmed_seq(String.t()) :: non_neg_integer | nil
   def highest_confirmed_seq(replica_id) do
     statement = """
-    SELECT max("seq") FROM "hologram_system"."mutation"
+    SELECT max("seq") FROM "#{Mapper.system_schema()}"."mutation"
     WHERE "replica_id" = $1 AND "result"->>'status' = 'confirmed'
     """
 
@@ -125,7 +126,7 @@ defmodule Hologram.Mutation.Record do
     # Outside any transaction by intent: the refusal already took the batch's transaction back,
     # and this is the one statement that outlives it.
     statement = """
-    INSERT INTO "hologram_system"."mutation"
+    INSERT INTO "#{Mapper.system_schema()}"."mutation"
       ("replica_id", "seq", "actor_id", "model_hash", "envelope", "result")
     VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT ("replica_id", "seq") DO NOTHING

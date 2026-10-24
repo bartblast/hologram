@@ -48,101 +48,6 @@ defmodule Hologram.DB.SchemaReconciler do
   # rather than carried forward.
   @system_schema_version 1
 
-  # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
-  # The database table is the managed-database marker (single row, maintained by
-  # write_marker/1) - the schema_object table is the managed-object registry - the
-  # migration table records the applied migration versions - the oplog table records the
-  # effect each write had, written in the writing transaction and read by the dispatcher -
-  # the mutation table records each batch of client writes the server ANSWERED, by the
-  # client that sent it and that client's sequence number, which is what answers a batch
-  # arriving twice - and keeps a refused batch as it arrived, since its rows reached no log.
-  #
-  # The envelope column is filled for a refused batch only. A batch that LANDED has its rows
-  # in the oplog under mutation_ref, keyed by the same pair, so keeping them here would keep
-  # every write twice - a refused batch's rows are nowhere else, which is what this column is
-  # for. A refused batch's claim rolls back with its transaction, and its row is written
-  # afterwards, on its own statement.
-  #
-  # The oplog is read by transaction id rather than by insert order, because a sequence
-  # hands out its numbers before the transaction holding them commits: a reader trusting
-  # seq order would pass a row whose transaction is still open and never come back for it.
-  # Hence the tx column, defaulted to the writing transaction's own id, and the index the
-  # windowed read walks.
-  #
-  # The second oplog index is BRIN rather than btree, and pruning is what reads it. The
-  # table is append-only, so inserted_at runs with the physical order of the pages, which
-  # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
-  # per-row tree descent on a table every entity write appends to. A btree here would put
-  # its rightmost page in the path of every write in the system to speed up an hourly
-  # chore.
-  #
-  # Every environment gets the same tables, and which of them a database uses follows
-  # from how it is managed: reconciliation writes the registry and never the migration
-  # table, the migration applier the other way around. One schema everywhere keeps
-  # existence checks and the framework's own system-table evolution uniform.
-  @system_statements [
-    """
-    CREATE TABLE "hologram_system"."database" (
-      "otp_app" text NOT NULL,
-      "env" text NOT NULL,
-      "managed_by" text NOT NULL,
-      "hologram_version" text NOT NULL,
-      "system_schema_version" integer NOT NULL,
-      "last_reconciled_at" timestamptz NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE "hologram_system"."migration" (
-      "version" text NOT NULL,
-      "applied_at" timestamptz NOT NULL,
-      "model_hash" text NOT NULL,
-      PRIMARY KEY ("version")
-    )
-    """,
-    """
-    CREATE TABLE "hologram_system"."oplog" (
-      "seq" bigserial PRIMARY KEY,
-      "op" text NOT NULL,
-      "type" text NOT NULL,
-      "entity_id" uuid NOT NULL,
-      "data" jsonb,
-      "tx" xid8 NOT NULL DEFAULT pg_current_xact_id(),
-      "model_hash" text NOT NULL,
-      "mutation_ref" jsonb,
-      "revisions" jsonb,
-      "actor_id" uuid,
-      "inserted_at" timestamptz NOT NULL DEFAULT now()
-    )
-    """,
-    """
-    CREATE INDEX "oplog_tx_seq_$idx" ON "hologram_system"."oplog" ("tx", "seq")
-    """,
-    """
-    CREATE INDEX "oplog_inserted_at_$idx" ON "hologram_system"."oplog"
-    USING brin ("inserted_at")
-    """,
-    """
-    CREATE TABLE "hologram_system"."mutation" (
-      "replica_id" text NOT NULL,
-      "seq" bigint NOT NULL,
-      "actor_id" uuid,
-      "model_hash" text NOT NULL,
-      "result" jsonb,
-      "envelope" jsonb,
-      "answered_at" timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY ("replica_id", "seq")
-    )
-    """,
-    """
-    CREATE TABLE "hologram_system"."schema_object" (
-      "kind" text NOT NULL,
-      "parent" text NOT NULL,
-      "name" text NOT NULL,
-      PRIMARY KEY ("kind", "parent", "name")
-    )
-    """
-  ]
-
   @doc """
   Fills every sort-key companion column the given ops add, from the companion's source
   column, one row at a time in the caller's transaction - the key of a nil value is nil.
@@ -160,7 +65,7 @@ defmodule Hologram.DB.SchemaReconciler do
   """
   @spec create_system_tables() :: :ok
   def create_system_tables do
-    Enum.each(@system_statements, fn statement ->
+    Enum.each(system_statements(), fn statement ->
       {:ok, _result} = Connection.query(statement)
     end)
 
@@ -181,9 +86,12 @@ defmodule Hologram.DB.SchemaReconciler do
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
+    data_schema = Mapper.data_schema()
+    system_schema = Mapper.system_schema()
+
     case hologram_schemas() do
       [] -> claim(context)
-      ["hologram_data", "hologram_system"] -> check_marker!(context)
+      [^data_schema, ^system_schema] -> check_marker!(context)
       _partial -> raise_not_managed!()
     end
   end
@@ -200,7 +108,7 @@ defmodule Hologram.DB.SchemaReconciler do
     statement = """
     SELECT "otp_app", "env", "managed_by", "hologram_version", "system_schema_version",
            "last_reconciled_at"
-    FROM "hologram_system"."database"
+    FROM "#{Mapper.system_schema()}"."database"
     """
 
     {:ok, %{rows: rows}} = Connection.query(statement)
@@ -278,7 +186,8 @@ defmodule Hologram.DB.SchemaReconciler do
   """
   @spec registry() :: MapSet.t()
   def registry do
-    statement = ~s(SELECT "kind", "parent", "name" FROM "hologram_system"."schema_object")
+    statement =
+      ~s(SELECT "kind", "parent", "name" FROM "#{Mapper.system_schema()}"."schema_object")
 
     {:ok, %{rows: rows}} = Connection.query(statement)
 
@@ -313,10 +222,12 @@ defmodule Hologram.DB.SchemaReconciler do
   """
   @spec write_marker(%{atom => any}) :: :ok
   def write_marker(marker) do
-    {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."database"))
+    system_schema = Mapper.system_schema()
+
+    {:ok, _result} = Connection.query(~s(DELETE FROM "#{system_schema}"."database"))
 
     insert_statement = """
-    INSERT INTO "hologram_system"."database"
+    INSERT INTO "#{system_schema}"."database"
       ("otp_app", "env", "managed_by", "hologram_version", "system_schema_version",
        "last_reconciled_at")
     VALUES ($1, $2, $3, $4, $5, $6)
@@ -497,8 +408,8 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   defp claim(context) do
-    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
-    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
+    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.system_schema()}"))
+    {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.data_schema()}"))
 
     create_system_tables()
 
@@ -515,7 +426,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp deregister(kind, parent, name) do
     statement = """
-    DELETE FROM "hologram_system"."schema_object"
+    DELETE FROM "#{Mapper.system_schema()}"."schema_object"
     WHERE "kind" = $1 AND "parent" = $2 AND "name" = $3
     """
 
@@ -540,7 +451,7 @@ defmodule Hologram.DB.SchemaReconciler do
     statement = """
     SELECT nspname
     FROM pg_catalog.pg_namespace
-    WHERE nspname IN ('hologram_data', 'hologram_system')
+    WHERE nspname IN ('#{Mapper.data_schema()}', '#{Mapper.system_schema()}')
     ORDER BY nspname
     """
 
@@ -588,7 +499,7 @@ defmodule Hologram.DB.SchemaReconciler do
     SELECT 1
     FROM pg_catalog.pg_class c
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'hologram_system' AND c.relname = 'database' AND c.relkind = 'r'
+    WHERE n.nspname = '#{Mapper.system_schema()}' AND c.relname = 'database' AND c.relkind = 'r'
     """
 
     {:ok, %{rows: rows}} = Connection.query(statement)
@@ -597,7 +508,7 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   defp raise_alien!(description) do
-    raise "unknown #{description} in the hologram_data schema - " <>
+    raise "unknown #{description} in the #{Mapper.data_schema()} schema - " <>
             "this schema is model-managed - " <>
             "move the object to another schema or remove it"
   end
@@ -605,12 +516,12 @@ defmodule Hologram.DB.SchemaReconciler do
   defp raise_not_managed! do
     raise "the configured database contains Hologram schemas but no managed-database " <>
             "marker - it is not managed by schema reconciliation - drop the " <>
-            ~s("hologram_system" and "hologram_data" schemas or point the config ) <>
+            ~s("#{Mapper.system_schema()}" and "#{Mapper.data_schema()}" schemas or point the config ) <>
             "at another database"
   end
 
   defp qualified_table(table) do
-    ~s("hologram_data".#{Mapper.quote_identifier(table)})
+    ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(table)})
   end
 
   defp record_op(%{op: :add_column} = op), do: register(:column, op.table, op.column)
@@ -645,7 +556,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp record_op(%{op: :drop_index} = op) do
     statement = """
-    DELETE FROM "hologram_system"."schema_object"
+    DELETE FROM "#{Mapper.system_schema()}"."schema_object"
     WHERE "kind" = 'index' AND "name" = $1
     """
 
@@ -656,7 +567,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp record_op(%{op: :drop_table} = op) do
     statement = """
-    DELETE FROM "hologram_system"."schema_object"
+    DELETE FROM "#{Mapper.system_schema()}"."schema_object"
     WHERE ("kind" = 'table' AND "name" = $1) OR "parent" = $1
     """
 
@@ -669,7 +580,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp record_op(%{op: :rename_constraint} = op) do
     statement = """
-    UPDATE "hologram_system"."schema_object"
+    UPDATE "#{Mapper.system_schema()}"."schema_object"
     SET "name" = $1
     WHERE "kind" = 'constraint' AND "parent" = $2 AND "name" = $3
     """
@@ -683,7 +594,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp register(kind, parent, name) do
     statement = """
-    INSERT INTO "hologram_system"."schema_object" ("kind", "parent", "name")
+    INSERT INTO "#{Mapper.system_schema()}"."schema_object" ("kind", "parent", "name")
     VALUES ($1, $2, $3)
     ON CONFLICT DO NOTHING
     """
@@ -691,5 +602,104 @@ defmodule Hologram.DB.SchemaReconciler do
     {:ok, _result} = Connection.query(statement, [Atom.to_string(kind), parent, name])
 
     :ok
+  end
+
+  # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
+  # The database table is the managed-database marker (single row, maintained by
+  # write_marker/1) - the schema_object table is the managed-object registry - the
+  # migration table records the applied migration versions - the oplog table records the
+  # effect each write had, written in the writing transaction and read by the dispatcher -
+  # the mutation table records each batch of client writes the server ANSWERED, by the
+  # client that sent it and that client's sequence number, which is what answers a batch
+  # arriving twice - and keeps a refused batch as it arrived, since its rows reached no log.
+  #
+  # The envelope column is filled for a refused batch only. A batch that LANDED has its rows
+  # in the oplog under mutation_ref, keyed by the same pair, so keeping them here would keep
+  # every write twice - a refused batch's rows are nowhere else, which is what this column is
+  # for. A refused batch's claim rolls back with its transaction, and its row is written
+  # afterwards, on its own statement.
+  #
+  # The oplog is read by transaction id rather than by insert order, because a sequence
+  # hands out its numbers before the transaction holding them commits: a reader trusting
+  # seq order would pass a row whose transaction is still open and never come back for it.
+  # Hence the tx column, defaulted to the writing transaction's own id, and the index the
+  # windowed read walks.
+  #
+  # The second oplog index is BRIN rather than btree, and pruning is what reads it. The
+  # table is append-only, so inserted_at runs with the physical order of the pages, which
+  # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
+  # per-row tree descent on a table every entity write appends to. A btree here would put
+  # its rightmost page in the path of every write in the system to speed up an hourly
+  # chore.
+  #
+  # Every environment gets the same tables, and which of them a database uses follows
+  # from how it is managed: reconciliation writes the registry and never the migration
+  # table, the migration applier the other way around. One schema everywhere keeps
+  # existence checks and the framework's own system-table evolution uniform.
+  defp system_statements do
+    system_schema = Mapper.system_schema()
+
+    [
+      """
+      CREATE TABLE "#{system_schema}"."database" (
+        "otp_app" text NOT NULL,
+        "env" text NOT NULL,
+        "managed_by" text NOT NULL,
+        "hologram_version" text NOT NULL,
+        "system_schema_version" integer NOT NULL,
+        "last_reconciled_at" timestamptz NOT NULL
+      )
+      """,
+      """
+      CREATE TABLE "#{system_schema}"."migration" (
+        "version" text NOT NULL,
+        "applied_at" timestamptz NOT NULL,
+        "model_hash" text NOT NULL,
+        PRIMARY KEY ("version")
+      )
+      """,
+      """
+      CREATE TABLE "#{system_schema}"."oplog" (
+        "seq" bigserial PRIMARY KEY,
+        "op" text NOT NULL,
+        "type" text NOT NULL,
+        "entity_id" uuid NOT NULL,
+        "data" jsonb,
+        "tx" xid8 NOT NULL DEFAULT pg_current_xact_id(),
+        "model_hash" text NOT NULL,
+        "mutation_ref" jsonb,
+        "revisions" jsonb,
+        "actor_id" uuid,
+        "inserted_at" timestamptz NOT NULL DEFAULT now()
+      )
+      """,
+      """
+      CREATE INDEX "oplog_tx_seq_$idx" ON "#{system_schema}"."oplog" ("tx", "seq")
+      """,
+      """
+      CREATE INDEX "oplog_inserted_at_$idx" ON "#{system_schema}"."oplog"
+      USING brin ("inserted_at")
+      """,
+      """
+      CREATE TABLE "#{system_schema}"."mutation" (
+        "replica_id" text NOT NULL,
+        "seq" bigint NOT NULL,
+        "actor_id" uuid,
+        "model_hash" text NOT NULL,
+        "result" jsonb,
+        "envelope" jsonb,
+        "answered_at" timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY ("replica_id", "seq")
+      )
+      """,
+      """
+      CREATE TABLE "#{system_schema}"."schema_object" (
+        "kind" text NOT NULL,
+        "parent" text NOT NULL,
+        "name" text NOT NULL,
+        PRIMARY KEY ("kind", "parent", "name")
+      )
+      """
+    ]
   end
 end
