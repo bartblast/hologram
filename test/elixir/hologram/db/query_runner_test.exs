@@ -110,18 +110,18 @@ defmodule Hologram.DB.QueryRunnerTest do
       |> DB.create!()
     end
 
-    defp create_policy_entity(public) do
-      %{public: public}
-      |> PolicyModule1.new()
-      |> DB.create!()
-    end
-
     defp create_policy_container(children) do
       container = DB.create!(PolicyModule3.new())
 
       Enum.each(children, &add_relationship(PolicyModule3, container.id, :children, &1.id))
 
       container
+    end
+
+    defp create_policy_entity(public) do
+      %{public: public}
+      |> PolicyModule1.new()
+      |> DB.create!()
     end
 
     defp create_policy_parent do

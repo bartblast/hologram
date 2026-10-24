@@ -147,11 +147,9 @@ defmodule Hologram.Policy.Expression do
 
   # A value an unknown option can be read as an equality with - anything else (an operator tuple,
   # a list) meant another operator, and an equality hint would mislead.
-  defp equality_operand?({:^, _meta, [_expr]}), do: true
-
   defp equality_operand?({:user_id, _meta, []}), do: true
 
-  defp equality_operand?(value), do: literal?(value)
+  defp equality_operand?(value), do: pinned?(value) or literal?(value)
 
   defp grant_reference!({:^, _meta, [expr]}, _env), do: expr
 

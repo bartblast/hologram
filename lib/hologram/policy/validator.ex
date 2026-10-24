@@ -73,10 +73,6 @@ defmodule Hologram.Policy.Validator do
     hops_from_start ++ hops_before_start
   end
 
-  defp gate_operation_reason(operation) do
-    "#{inspect(operation)} is checked without loading the row, so it takes own role names and global role modules only"
-  end
-
   defp declared_role_names(entity_type) do
     Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
   end
@@ -195,6 +191,10 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  defp gate_operation_reason(operation) do
+    "#{inspect(operation)} is checked without loading the row, so it takes own role names and global role modules only"
+  end
+
   defp hop_node({entity_type, operation, _via, _source}), do: {entity_type, operation}
 
   # A line the entity type wrote itself reads exactly as it always did. One that arrived through
@@ -255,6 +255,103 @@ defmodule Hologram.Policy.Validator do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
     |> Enum.each(&validate_policy_line!(entity_type, &1))
+  end
+
+  defp validate_gate_line!(operation, to, via, predicates, location) do
+    references = List.wrap(to)
+
+    # A global role is held app-wide, so it is checked without the row as well - what the gate
+    # cannot honor is a reference through the row's data: a relationship or a typed reference.
+    Enum.each(references, fn reference ->
+      if not is_atom(reference) do
+        raise Hologram.CompileError,
+          message:
+            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+      end
+    end)
+
+    if via do
+      raise Hologram.CompileError,
+        message:
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+    end
+
+    case first_predicate_name(predicates) do
+      nil ->
+        :ok
+
+      name ->
+        raise Hologram.CompileError,
+          message:
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+    end
+
+    # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
+    # declaration-versus-effect mismatch the reference check catches, in the fail-closed direction.
+    # Checked last, so a line that did name something unusable reports what it named.
+    if references == [] do
+      raise Hologram.CompileError,
+        message:
+          "missing to option for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+    end
+
+    :ok
+  end
+
+  defp validate_gate_operation!(
+         entity_type,
+         {name, roles} = operation,
+         to,
+         via,
+         predicates,
+         location
+       )
+       when name in @role_operations do
+    roles
+    |> List.wrap()
+    |> Enum.each(&validate_gate_role!(entity_type, operation, &1, location))
+
+    validate_gate_line!(operation, to, via, predicates, location)
+  end
+
+  defp validate_gate_operation!(_entity_type, operation, to, via, predicates, location)
+       when operation in @gate_operations do
+    validate_gate_line!(operation, to, via, predicates, location)
+  end
+
+  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates, _location),
+    do: :ok
+
+  defp validate_gate_role!(entity_type, operation, role_name, location) do
+    declared_names = declared_role_names(entity_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
+    end
+  end
+
+  defp validate_global_reference!(operation, role_module, location) do
+    if not Reflection.role?(role_module) do
+      raise Hologram.CompileError,
+        message:
+          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{location} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
+    end
+  end
+
+  defp validate_own_reference!(entity_type, operation, role_name, location) do
+    declared_names = declared_role_names(entity_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
+    end
   end
 
   defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source}) do
@@ -414,103 +511,6 @@ defmodule Hologram.Policy.Validator do
       validate_global_reference!(operation, role_module, location)
     else
       validate_own_reference!(entity_type, operation, role_module, location)
-    end
-  end
-
-  defp validate_gate_operation!(
-         entity_type,
-         {name, roles} = operation,
-         to,
-         via,
-         predicates,
-         location
-       )
-       when name in @role_operations do
-    roles
-    |> List.wrap()
-    |> Enum.each(&validate_gate_role!(entity_type, operation, &1, location))
-
-    validate_gate_line!(operation, to, via, predicates, location)
-  end
-
-  defp validate_gate_operation!(_entity_type, operation, to, via, predicates, location)
-       when operation in @gate_operations do
-    validate_gate_line!(operation, to, via, predicates, location)
-  end
-
-  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates, _location),
-    do: :ok
-
-  defp validate_gate_role!(entity_type, operation, role_name, location) do
-    declared_names = declared_role_names(entity_type)
-
-    if role_name not in declared_names do
-      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "unknown role #{inspect(role_name)} in allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
-    end
-  end
-
-  defp validate_gate_line!(operation, to, via, predicates, location) do
-    references = List.wrap(to)
-
-    # A global role is held app-wide, so it is checked without the row as well - what the gate
-    # cannot honor is a reference through the row's data: a relationship or a typed reference.
-    Enum.each(references, fn reference ->
-      if not is_atom(reference) do
-        raise Hologram.CompileError,
-          message:
-            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-      end
-    end)
-
-    if via do
-      raise Hologram.CompileError,
-        message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-    end
-
-    case first_predicate_name(predicates) do
-      nil ->
-        :ok
-
-      name ->
-        raise Hologram.CompileError,
-          message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-    end
-
-    # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
-    # declaration-versus-effect mismatch the reference check catches, in the fail-closed direction.
-    # Checked last, so a line that did name something unusable reports what it named.
-    if references == [] do
-      raise Hologram.CompileError,
-        message:
-          "missing to option for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-    end
-
-    :ok
-  end
-
-  defp validate_global_reference!(operation, role_module, location) do
-    if not Reflection.role?(role_module) do
-      raise Hologram.CompileError,
-        message:
-          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{location} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
-    end
-  end
-
-  defp validate_own_reference!(entity_type, operation, role_name, location) do
-    declared_names = declared_role_names(entity_type)
-
-    if role_name not in declared_names do
-      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
     end
   end
 
