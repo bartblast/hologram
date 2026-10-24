@@ -61,9 +61,7 @@ defmodule Hologram.Policy.Expression do
 
   # A name atom (not nil, true or false) or a pinned expression, the two spellings of a role or an
   # operation.
-  defp atom_or_pin?({:^, _meta, [_expr]}), do: true
-
-  defp atom_or_pin?(ast), do: name_atom?(ast)
+  defp atom_or_pin?(ast), do: name_atom?(ast) or pinned?(ast)
 
   # __MODULE__ has the shape of a bare name, but it names the module it is written in.
   defp bare_name?({:__MODULE__, _meta, _context}), do: false
@@ -109,6 +107,16 @@ defmodule Hologram.Policy.Expression do
           env
         )
 
+      # A pin after a bare name is the relationship written first with a pinned operation, or a
+      # bare-name operation with a pinned relationship - nothing says which, so the message names
+      # the shape rather than a rewrite that could swap them.
+      bare_name?(operation) and pinned?(relationship) ->
+        QueryExpression.compile_error!(
+          "via puts the operation first, as an atom or pinned, and the relationship second, got: #{Macro.to_string(ast)} - write {operation, relationship}, like {:update, trip}",
+          ast,
+          env
+        )
+
       bare_name?(operation) ->
         {name, _meta, _context} = operation
 
@@ -118,7 +126,7 @@ defmodule Hologram.Policy.Expression do
           env
         )
 
-      atom_or_pin?(operation) ->
+      atom_or_pin?(operation) and not delegation_tuple?(relationship) ->
         {unpinned(operation), delegated_relationship!(relationship, env)}
 
       true ->
@@ -131,6 +139,11 @@ defmodule Hologram.Policy.Expression do
   end
 
   defp delegation!(ast, env), do: delegated_relationship!(ast, env)
+
+  # A literal 2-tuple where the relationship goes - a delegation nested in a delegation.
+  defp delegation_tuple?({_first, _second}), do: true
+
+  defp delegation_tuple?(_ast), do: false
 
   # A value an unknown option can be read as an equality with - anything else (an operator tuple,
   # a list) meant another operator, and an equality hint would mislead.
@@ -212,6 +225,10 @@ defmodule Hologram.Policy.Expression do
     do: unknown_option!(key, value, operation, env)
 
   defp option!(element, _operation, _env), do: element
+
+  defp pinned?({:^, _meta, [_expr]}), do: true
+
+  defp pinned?(_ast), do: false
 
   @spec reference_error!(Macro.t(), Macro.Env.t()) :: no_return
   defp reference_error!(ast, env) do

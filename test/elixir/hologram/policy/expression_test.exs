@@ -157,6 +157,12 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec("[via: {update, project}]") end
     end
 
+    test "raises on a delegation operation written as a bare name with a pinned relationship" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: via puts the operation first, as an atom or pinned, and the relationship second, got: {update, ^relationship} - write {operation, relationship}, like {:update, trip}",
+                   fn -> lower_spec("[via: {update, ^relationship}]") end
+    end
+
     test "raises on a delegation path" do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: via takes one relationship, got: trip.user",
@@ -167,6 +173,12 @@ defmodule Hologram.Policy.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
                    fn -> lower_spec("[via: __MODULE__]") end
+    end
+
+    test "raises on a delegation with the relationship before a pinned operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: via puts the operation first, as an atom or pinned, and the relationship second, got: {trip, ^operation} - write {operation, relationship}, like {:update, trip}",
+                   fn -> lower_spec("[via: {trip, ^operation}]") end
     end
 
     test "raises on a delegation with the relationship first" do
@@ -207,7 +219,7 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "raises on a nested delegation" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:7: via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: {:read, trip} - a value from the surrounding code is pinned: ^{:read, trip}",
+                   "lib/my_app/policies.ex:7: via takes a relationship or an {operation, relationship} tuple, got: {:update, {:read, trip}}",
                    fn -> lower_spec("[via: {:update, {:read, trip}}]") end
     end
 
