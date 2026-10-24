@@ -262,6 +262,20 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns what the given via option of an allow line for the given operation delegates, as
+  {operation, relationship}: a relationship asks the related row the same operation, and an
+  {operation, relationship} tuple names the one it asks. Returns nil for a line that delegates
+  nothing.
+  """
+  @spec delegation(Entity.operation(), atom | {atom, atom} | nil) :: {atom, atom} | nil
+  def delegation(_operation, nil), do: nil
+
+  def delegation(_operation, {delegated_operation, relationship_name}),
+    do: {delegated_operation, relationship_name}
+
+  def delegation(operation, relationship_name), do: {operation, relationship_name}
+
+  @doc """
   Returns the given global role module together with every global role module of the project's
   data model whose extends chain reaches it, sorted.
 
@@ -508,11 +522,6 @@ defmodule Hologram.Policy do
   defp declared_roles_description(declared_names) do
     "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
   end
-
-  # A delegation asks the related row the operation of its own line.
-  defp delegation(_operation, nil), do: nil
-
-  defp delegation(operation, relationship_name), do: {operation, relationship_name}
 
   # A bare grant lifecycle line covers, for each declared role, the holders it names whose own
   # role is that role or extends it - so the rule for a role above what a holder holds names

@@ -577,7 +577,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   # Delegation asks the related entity's policy for the operation the rule names, composed into a
   # correlated EXISTS. Recursion terminates because delegation cycles are a compile error, so
-  # every chain reaches a type that delegates no further.
+  # every chain reaches an operation of a type whose rules delegate no further.
   defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
   defp delegation_conditions(

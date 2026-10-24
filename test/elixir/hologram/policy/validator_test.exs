@@ -129,6 +129,40 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture21], []) == :ok
     end
 
+    test "returns :ok for a via option naming its operation" do
+      defmodule InlinePolicyFixture40 do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        allow :delete, via: {:update, parent}
+      end
+
+      assert validate_model!([InlinePolicyFixture40], []) == :ok
+    end
+
+    # Each create asks the other type's update, and neither update delegates, so no chain returns
+    # to where it started.
+    test "returns :ok for delegations that return to an entity type under another operation" do
+      defmodule InlinePolicyFixture41 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture42, optional: true
+
+        allow :create, via: {:update, peer}
+      end
+
+      defmodule InlinePolicyFixture42 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture41, optional: true
+
+        allow :create, via: {:update, peer}
+      end
+
+      assert validate_model!([InlinePolicyFixture41, InlinePolicyFixture42], []) == :ok
+    end
+
     test "returns :ok for actor leaves on uuid-carrying names" do
       defmodule InlinePolicyFixture7 do
         use Hologram.Entity
@@ -362,10 +396,44 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture24 - the via option must be a relationship name"
+        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture24 - the via option must be a relationship name or an {operation, relationship} tuple"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture24], [])
+      end
+    end
+
+    test "rejects a via option naming its operation and an unknown relationship" do
+      defmodule InlinePolicyFixture43 do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        allow :read, via: {:update, project}
+      end
+
+      expected_msg =
+        "unknown relationship :project in the via option of allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture43 - declared relationships are: :parent"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture43], [])
+      end
+    end
+
+    test "rejects a via option naming its operation with something other than an atom" do
+      defmodule InlinePolicyFixture44 do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        allow :read, via: ^{"update", :parent}
+      end
+
+      expected_msg =
+        ~s(invalid via option {"update", :parent} for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture44 - the via option must be a relationship name or an {operation, relationship} tuple)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture44], [])
       end
     end
 
@@ -394,6 +462,35 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture25, InlinePolicyFixture26], [])
+      end
+    end
+
+    # The create asks the other type's update, which asks the first type's create again.
+    test "rejects a delegation cycle across operations" do
+      defmodule InlinePolicyFixture45 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture46, optional: true
+
+        allow :create, via: {:update, peer}
+      end
+
+      defmodule InlinePolicyFixture46 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture45, optional: true
+
+        allow :update, via: {:create, peer}
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic policy delegation for allow :create - a via chain can't return to the entity type it starts from:
+          * Hologram.Policy.ValidatorTest.InlinePolicyFixture45 (via {:update, :peer}) -> Hologram.Policy.ValidatorTest.InlinePolicyFixture46 (via {:create, :peer}) -> Hologram.Policy.ValidatorTest.InlinePolicyFixture45\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture45, InlinePolicyFixture46], [])
       end
     end
 
@@ -832,7 +929,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.TakenNonAtomViaEntity, taken from Hologram.Policy.ValidatorTest.TakenNonAtomViaPolicy - the via option must be a relationship name"
+        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.TakenNonAtomViaEntity, taken from Hologram.Policy.ValidatorTest.TakenNonAtomViaPolicy - the via option must be a relationship name or an {operation, relationship} tuple"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenNonAtomViaEntity], [])

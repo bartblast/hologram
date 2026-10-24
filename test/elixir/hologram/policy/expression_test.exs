@@ -66,6 +66,10 @@ defmodule Hologram.Policy.ExpressionTest do
       assert lower_spec("[via: project]") == [via: :project]
     end
 
+    test "lowers a delegation naming its operation" do
+      assert lower_spec("[via: {:update, project}]") == [via: {:update, :project}]
+    end
+
     test "lowers a list of references" do
       assert lower_spec("[to: [:editor, {:owner, project}, MyApp.Roles.Admin]]") ==
                [to: [:editor, {:owner, :project}, MyApp.Roles.Admin]]
@@ -75,13 +79,28 @@ defmodule Hologram.Policy.ExpressionTest do
       assert lower_spec("[via: ^relationship]", relationship: :project) == [via: :project]
     end
 
+    test "lowers a pinned delegation naming its operation" do
+      assert lower_spec("[via: ^delegation]", delegation: {:update, :project}) ==
+               [via: {:update, :project}]
+    end
+
     test "lowers a pinned element of a reference list" do
       assert lower_spec("[to: [:owner, ^reference]]", reference: {:editor, :project}) ==
                [to: [:owner, {:editor, :project}]]
     end
 
+    test "lowers a pinned operation in a delegation" do
+      assert lower_spec("[via: {^operation, project}]", operation: :update) ==
+               [via: {:update, :project}]
+    end
+
     test "lowers a pinned reference list" do
       assert lower_spec("[to: ^roles]", roles: [:editor, :owner]) == [to: [:editor, :owner]]
+    end
+
+    test "lowers a pinned relationship in a delegation naming its operation" do
+      assert lower_spec("[via: {:update, ^relationship}]", relationship: :project) ==
+               [via: {:update, :project}]
     end
 
     test "lowers a pinned relationship in a reference" do
@@ -108,6 +127,36 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec("[via: @relationship]") end
     end
 
+    test "raises on a delegation naming an operation tuple" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: via takes a relationship or an {operation, relationship} tuple, got: {{:grant_role, :editor}, trip}",
+                   fn -> lower_spec("[via: {{:grant_role, :editor}, trip}]") end
+    end
+
+    test "raises on a delegation naming its operation through a path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via takes one relationship, got: trip.user",
+                   fn -> lower_spec("[via: {:update, trip.user}]") end
+    end
+
+    test "raises on a delegation naming its operation with an atom relationship" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: via names a relationship with a bare name, got: :project - write project",
+                   fn -> lower_spec("[via: {:update, :project}]") end
+    end
+
+    test "raises on a delegation naming its operation with a relationship to __MODULE__" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
+                   fn -> lower_spec("[via: {:update, __MODULE__}]") end
+    end
+
+    test "raises on a delegation operation written as a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via names an operation with an atom, got: update - write :update",
+                   fn -> lower_spec("[via: {update, project}]") end
+    end
+
     test "raises on a delegation path" do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: via takes one relationship, got: trip.user",
@@ -118,6 +167,12 @@ defmodule Hologram.Policy.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
                    fn -> lower_spec("[via: __MODULE__]") end
+    end
+
+    test "raises on a delegation with the relationship first" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: the operation comes first in a delegation, got: {trip, :update} - write {:update, trip}",
+                   fn -> lower_spec("[via: {trip, :update}]") end
     end
 
     test "raises on a delegation written as an atom" do
@@ -132,6 +187,12 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec(~s([via: "project"])) end
     end
 
+    test "raises on a malformed delegation operation" do
+      assert_error Hologram.CompileError,
+                   ~s(lib/my_app/policies.ex:7: via takes a relationship or an {operation, relationship} tuple, got: {"update", project}),
+                   fn -> lower_spec(~s([via: {"update", project}])) end
+    end
+
     test "raises on a malformed reference" do
       assert_error Hologram.CompileError,
                    ~s(lib/my_app/policies.ex:7: to takes a role name, a role module, a {role, relationship} or {role, entity type} tuple, a list of them, or a pinned expression, got: "owner"),
@@ -142,6 +203,12 @@ defmodule Hologram.Policy.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: to takes a role name, a role module, a {role, relationship} or {role, entity type} tuple, a list of them, or a pinned expression, got: {:a, :b, :c}",
                    fn -> lower_spec("[to: [:editor, {:a, :b, :c}]]") end
+    end
+
+    test "raises on a nested delegation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: {:read, trip} - a value from the surrounding code is pinned: ^{:read, trip}",
+                   fn -> lower_spec("[via: {:update, {:read, trip}}]") end
     end
 
     test "raises on a reference module attribute without a pin" do
