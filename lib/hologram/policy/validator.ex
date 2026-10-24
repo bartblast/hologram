@@ -226,6 +226,31 @@ defmodule Hologram.Policy.Validator do
         "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
   end
 
+  # A line asks the related type an operation it has to be askable about, the way can? refuses one
+  # it is not, so a typo or an operation the type never declares fails the build rather than every
+  # check that reaches it. A per-role gate line is left to the gate check, which refuses its via
+  # option and says why - asked here, the related type would be judged on a role of the line's own
+  # type. A bare gate operation needs no exception, since every type can be asked about it.
+  defp validate_delegated_operation!(
+         _target_type,
+         {name, _roles},
+         _via,
+         _delegated_operation,
+         _location
+       )
+       when name in @role_operations,
+       do: :ok
+
+  defp validate_delegated_operation!(target_type, operation, via, delegated_operation, location) do
+    Policy.validate_operation!(target_type, delegated_operation)
+  rescue
+    error in ArgumentError ->
+      message =
+        "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
+
+      reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
+
   defp validate_entity_policies!(entity_type) do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
@@ -543,7 +568,7 @@ defmodule Hologram.Policy.Validator do
           "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name or an {operation, relationship} tuple"
     end
 
-    {_delegated_operation, relationship_name} = Policy.delegation(operation, via)
+    {delegated_operation, relationship_name} = Policy.delegation(operation, via)
     definitions = entity_type.__relationships__()
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
@@ -552,8 +577,8 @@ defmodule Hologram.Policy.Validator do
           message:
             "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but delegation requires a to-one relationship"
 
-      {_name, _target, _opts} ->
-        :ok
+      {_name, target_type, _opts} ->
+        validate_delegated_operation!(target_type, operation, via, delegated_operation, location)
 
       nil ->
         declared_relationships =

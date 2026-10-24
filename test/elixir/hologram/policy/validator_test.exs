@@ -50,7 +50,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         allow :read
         allow :update, to: :owner
-        allow :publish, via: parent
+        allow :read, via: parent
       end
 
       assert validate_model!([Module14, InlinePolicyFixture2], []) == :ok
@@ -139,6 +139,18 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       assert validate_model!([InlinePolicyFixture40], []) == :ok
+    end
+
+    test "returns :ok for a via option naming a framework operation the related entity type declares no rule for" do
+      defmodule InlinePolicyFixture47 do
+        use Hologram.Entity
+
+        relationship :parent, Module1
+
+        allow :create, via: {:update, parent}
+      end
+
+      assert validate_model!([InlinePolicyFixture47], []) == :ok
     end
 
     # Each create asks the other type's update, and neither update delegates, so no chain returns
@@ -434,6 +446,40 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture44], [])
+      end
+    end
+
+    test "rejects a via option naming an operation the related entity type can't be asked about" do
+      defmodule InlinePolicyFixture48 do
+        use Hologram.Entity
+
+        relationship :parent, Module1
+
+        allow :publish, via: parent
+      end
+
+      expected_msg =
+        "invalid via option :parent for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture48 - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture48], [])
+      end
+    end
+
+    test "rejects a via option naming its operation and one the related entity type can't be asked about" do
+      defmodule InlinePolicyFixture49 do
+        use Hologram.Entity
+
+        relationship :parent, Module1
+
+        allow :create, via: {:udpate, parent}
+      end
+
+      expected_msg =
+        "invalid via option {:udpate, :parent} for allow :create in Hologram.Policy.ValidatorTest.InlinePolicyFixture49 - unknown operation :udpate for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture49], [])
       end
     end
 
@@ -936,6 +982,29 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a via option naming an operation the related entity type can't be asked about" do
+      defmodule TakenUnaskableViaPolicy do
+        use Hologram.Policy
+
+        allow :publish, via: parent
+      end
+
+      defmodule TakenUnaskableViaEntity do
+        use Hologram.Entity
+
+        relationship :parent, Module1
+
+        policy TakenUnaskableViaPolicy
+      end
+
+      expected_msg =
+        "invalid via option :parent for allow :publish in Hologram.Policy.ValidatorTest.TakenUnaskableViaEntity, taken from Hologram.Policy.ValidatorTest.TakenUnaskableViaPolicy - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenUnaskableViaEntity], [])
+      end
+    end
+
     test "rejects a predicate naming an attribute the taking entity type does not declare" do
       defmodule TakenUnknownPredicatePolicy do
         use Hologram.Policy
@@ -1317,6 +1386,28 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, UndeclaredRoleTupleGateFixture], [])
+      end
+    end
+
+    # The gate refusal says what is wrong with the line - asked first, the related type would be
+    # judged on a role it never declares.
+    test "rejects a tuple with a delegation" do
+      defmodule DelegatingRoleTupleGateFixture do
+        use Hologram.Entity
+
+        relationship :parent, Module1
+
+        role :editor
+        role :viewer
+
+        allow {:grant_role, :viewer}, to: :editor, via: parent
+      end
+
+      expected_msg =
+        "invalid via option :parent for allow {:grant_role, :viewer} in Hologram.Policy.ValidatorTest.DelegatingRoleTupleGateFixture - {:grant_role, :viewer} is checked without loading the row, so it takes own role names and global role modules only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, DelegatingRoleTupleGateFixture], [])
       end
     end
 
