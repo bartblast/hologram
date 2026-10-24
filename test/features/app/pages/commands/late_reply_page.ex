@@ -31,15 +31,15 @@ defmodule HologramFeatureTests.Commands.LateReplyPage do
     """
   end
 
-  # The destination deliberately has no clause for this, so a reply that outlives the navigation
-  # lands on a module that cannot answer it.
+  # The destination deliberately defines no action, so a reply that outlives the navigation lands
+  # on a module that cannot answer it.
   def action(:record_page_reply, _params, component) do
     put_state(component, :result, "page_reply_ran")
   end
 
   # Stands in for a slow fetch: the reply is still in flight after the user has navigated away.
   def command(:slow_page_command, _params, server) do
-    Process.sleep(2_000)
+    Process.sleep(3_000)
     put_action(server, :record_page_reply)
   end
 end

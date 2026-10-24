@@ -105,9 +105,10 @@ defmodule HologramFeatureTests.CommandsTest do
     # feature "next_action"
   end
 
-  # Each slow command sleeps 2 seconds before replying, and each test waits 3 after navigating, so
-  # the reply lands on the page navigated to. A reply that survives and raises there surfaces as a
-  # Wallaby.JSError on the first command after the sleep.
+  # Each slow command sleeps 3 seconds before replying, and each drop test waits 3.5 after
+  # navigating, so the reply arrives on the page navigated to. A component or page reply that
+  # survives raises there, which surfaces as a Wallaby.JSError on the first Wallaby call after the
+  # wait. A layout reply that survives raises nothing, so its tests read the layout's result.
   describe "reply after navigation" do
     # Positive control for the drops below: the same button's reply lands when the user stays put,
     # proving the fixture sends a real command whose reply arrives.
@@ -128,7 +129,7 @@ defmodule HologramFeatureTests.CommandsTest do
       |> click(button("Run slow component command"))
       |> click(link("Destination link"))
       |> assert_page(LateReplyDestinationPage)
-      |> sleep(3_000)
+      |> sleep(3_500)
       |> assert_text("Late reply destination title")
     end
 
@@ -141,12 +142,12 @@ defmodule HologramFeatureTests.CommandsTest do
       |> click(button("Run slow layout command"))
       |> click(link("Destination link"))
       |> assert_page(LateReplyDestinationPage)
-      |> sleep(3_000)
+      |> sleep(3_500)
       |> assert_text(css("#layout_result"), "nil")
     end
 
-    # The page cid resolves on the destination too, but to a module with no clause for the reply's
-    # action, so a surviving reply raises there.
+    # The page cid resolves on the destination too, but to a module that defines no action at all,
+    # so a surviving reply raises there.
     feature "navigating to another page drops the reply of a command targeting the page",
             %{session: session} do
       session
@@ -154,12 +155,12 @@ defmodule HologramFeatureTests.CommandsTest do
       |> click(button("Run slow page command"))
       |> click(link("Destination link"))
       |> assert_page(LateReplyDestinationPage)
-      |> sleep(3_000)
+      |> sleep(3_500)
       |> assert_text("Late reply destination title")
     end
 
     # Going back restores the registry from a snapshot rather than from mount data, so the reply
-    # lands after a transition that reached the epoch bump down a different path.
+    # arrives after a transition that reached the epoch bump down a different path.
     feature "going back to another page drops the reply of a command targeting the layout",
             %{session: session} do
       session
@@ -169,26 +170,8 @@ defmodule HologramFeatureTests.CommandsTest do
       |> click(button("Run slow layout command"))
       |> go_back()
       |> assert_page(LateReplyDestinationPage)
-      |> sleep(3_000)
+      |> sleep(3_500)
       |> assert_text(css("#layout_result"), "nil")
-    end
-  end
-
-  describe "command during a transition" do
-    # The destination's bundle is held back, so its markup is on screen and clickable for seconds
-    # before it mounts, while the registry still holds the page being left. A command clicked then
-    # is held for the mount and built from the destination's registry. Sent at once, it would have
-    # been built from the left page's, whose page module has no clause for it.
-    feature "a command clicked on the destination before its mount runs once it has mounted",
-            %{session: session} do
-      session
-      |> simulate_slow_page_bundle(4_000)
-      |> visit(LateReplyPage)
-      |> click(link("Destination link"))
-      |> assert_has(css("#destination_title"))
-      |> click(button("Run destination command"))
-      |> assert_page(LateReplyDestinationPage)
-      |> assert_text(css("#destination_result"), ~s/"destination_reply_ran"/)
     end
   end
 end

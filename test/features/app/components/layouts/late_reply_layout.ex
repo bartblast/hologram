@@ -1,11 +1,11 @@
 defmodule HologramFeatureTests.Components.LateReplyLayout do
   use Hologram.Component
 
-  alias Hologram.UI.Runtime
-  alias HologramFeatureTests.Components.CommonLayoutStyles
-
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
+
+  alias Hologram.UI.Runtime
+  alias HologramFeatureTests.Components.CommonLayoutStyles
 
   # Shared by both late reply pages, so the layout cid resolves on the destination too, to a new
   # instance of this same module, which has a clause for the reply. A reply that survives the
@@ -40,7 +40,7 @@ defmodule HologramFeatureTests.Components.LateReplyLayout do
 
   # Stands in for a slow fetch: the reply is still in flight after the user has navigated away.
   def command(:slow_layout_command, _params, server) do
-    Process.sleep(2_000)
+    Process.sleep(3_000)
     put_action(server, :record_layout_reply)
   end
 end
