@@ -1198,8 +1198,10 @@ describe("Hologram", () => {
       Hologram.executePrefetchPageAction.restore();
       Hologram.scheduleAction.restore();
 
-      // A dispatch made mid-transition waits in the queue, and would be ahead of the next test's.
+      // A dispatch made mid-transition waits in the queue or among the held commands, and would
+      // be ahead of the next test's.
       ActionQueue.entries = [];
+      Hologram.heldCommands = [];
     });
 
     it("event is ignored", () => {
@@ -1572,12 +1574,11 @@ describe("Hologram", () => {
     });
 
     // The reply's actions carry this stamp, so they are dropped if the page the user clicked on
-    // has been left by the time they land. It is the page on screen, not the page the registry
-    // answers for: the window a history restore opens has the registry moved on to the page being
-    // restored while the page the user clicked is still displayed.
+    // has been left by the time they land.
     it("sends a command stamped with the page the event happened on", () => {
       try {
-        Hologram.registryEpoch = 1;
+        Hologram.domEpoch = 2;
+        Hologram.registryEpoch = 2;
 
         const dispatch = Hologram.handleUiEvent(
           notIgnoredEvent,
@@ -1591,10 +1592,125 @@ describe("Hologram", () => {
         sinon.assert.calledOnceWithExactly(
           clientSendCommandStub,
           expectedCommand,
-          0,
+          2,
+        );
+      } finally {
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
+    });
+
+    // The window a forward navigation opens: the destination's markup is on screen and clickable
+    // while the registry still answers for the page being left, so a command built now would name
+    // that page's components. It waits for the mount instead, as an action does.
+    it("holds a command that lands while the destination is still mounting", () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        Hologram.domEpoch = 1;
+
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          commandSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.notCalled(clientSendCommandStub);
+        sinon.assert.notCalled(warnStub);
+
+        assert.deepStrictEqual(Hologram.heldCommands, [
+          {command: expectedCommand, epoch: 1},
+        ]);
+      } finally {
+        Hologram.domEpoch = 0;
+        warnStub.restore();
+      }
+    });
+
+    // The queue holds an action until the mount's first render is done, and a command follows
+    // the same rule, so that one clicked then is not sent ahead of what the mount releases.
+    it("holds a command dispatched during the mount", () => {
+      try {
+        Hologram.isMounting = true;
+
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          commandSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.notCalled(clientSendCommandStub);
+
+        assert.deepStrictEqual(Hologram.heldCommands, [
+          {command: expectedCommand, epoch: 0},
+        ]);
+      } finally {
+        Hologram.isMounting = false;
+      }
+    });
+
+    // The mirror window, opened by a history restoration: the registry has moved on to the page
+    // being restored while the page the user clicked is still on screen, so the command comes from
+    // a page that has been left and is not sent at all.
+    it("drops a command from a page a restore has moved past", () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        Hologram.registryEpoch = 1;
+
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          commandSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.notCalled(clientSendCommandStub);
+        assert.deepStrictEqual(Hologram.heldCommands, []);
+
+        sinon.assert.calledOnceWithExactly(
+          warnStub,
+          "Hologram: dropped a command dispatched on a page that has been left:",
+          ":my_command",
         );
       } finally {
         Hologram.registryEpoch = 0;
+        warnStub.restore();
+      }
+    });
+
+    // A debounce or a throttle can hold the dispatch across a navigation. The command still
+    // belongs to the page the user was looking at, which has been left by the time it fires.
+    it("drops a deferred command whose page was left before it fired", () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          commandSpecDom,
+          defaultTarget,
+        );
+
+        // A navigation between the event and the dispatch it was held back from.
+        Hologram.domEpoch = 1;
+
+        dispatch();
+
+        sinon.assert.notCalled(clientSendCommandStub);
+        assert.deepStrictEqual(Hologram.heldCommands, []);
+        sinon.assert.calledOnce(warnStub);
+      } finally {
+        Hologram.domEpoch = 0;
+        warnStub.restore();
       }
     });
 
@@ -2023,6 +2139,7 @@ describe("Hologram", () => {
       Hologram.registryEpoch = 0;
       Hologram.isMounting = false;
       ActionQueue.entries = [];
+      Hologram.heldCommands = [];
     });
 
     // A page the client cannot ask for is one only the browser can reach.
@@ -4508,6 +4625,107 @@ describe("Hologram", () => {
       } finally {
         warnStub.restore();
       }
+    });
+  });
+
+  // Called by the mount once the registry answers for the page on screen. The epochs are ones no
+  // earlier test reaches: the loadNewPage tests leave low ones recorded dead, and nothing can clear
+  // that record, so a command stamped with one would be dropped whatever these tests set up.
+  describe("sendHeldCommands()", () => {
+    let sendCommandStub, warnStub;
+
+    const commandNamed = (name) =>
+      Type.commandStruct({
+        name: Type.atom(name),
+        params: Type.map(),
+        target: cid1,
+      });
+
+    beforeEach(() => {
+      sendCommandStub = sinon
+        .stub(Client, "sendCommand")
+        .callsFake((_command, _epoch) => null);
+
+      warnStub = sinon.stub(console, "warn");
+    });
+
+    afterEach(() => {
+      sendCommandStub.restore();
+      warnStub.restore();
+
+      Hologram.domEpoch = 0;
+      Hologram.registryEpoch = 0;
+      Hologram.heldCommands = [];
+    });
+
+    // The way a mount leaves the epochs: level, at the epoch of the page mounted.
+    it("sends each held command of the page mounted, in the order they were dispatched", () => {
+      Hologram.domEpoch = 100;
+      Hologram.registryEpoch = 100;
+
+      Hologram.heldCommands = [
+        {command: commandNamed("first"), epoch: 100},
+        {command: commandNamed("second"), epoch: 100},
+      ];
+
+      Hologram.sendHeldCommands();
+
+      assert.deepStrictEqual(sendCommandStub.args, [
+        [commandNamed("first"), 100],
+        [commandNamed("second"), 100],
+      ]);
+
+      sinon.assert.notCalled(warnStub);
+      assert.deepStrictEqual(Hologram.heldCommands, []);
+    });
+
+    // The user clicked a command on the first destination and then a link to a second one before
+    // the first had mounted. The mount that runs is the second page's.
+    it("drops a held command whose page was left before the mount", () => {
+      Hologram.domEpoch = 101;
+      Hologram.registryEpoch = 101;
+
+      Hologram.heldCommands = [{command: commandNamed("stale"), epoch: 100}];
+
+      Hologram.sendHeldCommands();
+
+      sinon.assert.notCalled(sendCommandStub);
+
+      sinon.assert.calledOnceWithExactly(
+        warnStub,
+        "Hologram: dropped a command dispatched on a page that has been left:",
+        ":stale",
+      );
+
+      assert.deepStrictEqual(Hologram.heldCommands, []);
+    });
+
+    // A navigation started between the mount and the frame that sends what waited for it: the
+    // destination's markup is on screen, its command was held for its own mount, and the registry
+    // still answers for the page this frame belongs to.
+    it("keeps a held command waiting for its page's mount when another transition has opened", () => {
+      Hologram.domEpoch = 101;
+      Hologram.registryEpoch = 100;
+
+      Hologram.heldCommands = [
+        {command: commandNamed("next_page"), epoch: 101},
+      ];
+
+      Hologram.sendHeldCommands();
+
+      sinon.assert.notCalled(sendCommandStub);
+      sinon.assert.notCalled(warnStub);
+
+      assert.deepStrictEqual(Hologram.heldCommands, [
+        {command: commandNamed("next_page"), epoch: 101},
+      ]);
+    });
+
+    it("sends nothing when no command was held", () => {
+      Hologram.sendHeldCommands();
+
+      sinon.assert.notCalled(sendCommandStub);
+      sinon.assert.notCalled(warnStub);
     });
   });
 });

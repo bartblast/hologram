@@ -79,6 +79,14 @@ export default class Hologram {
   static domEpoch = 0;
 
   // Made public to make tests easier
+  // Commands dispatched while a transition was open or the mount was rendering, each with the
+  // epoch of the page it came from. A command's payload names its target's module, read from the
+  // registry, and during a transition the registry does not answer for the page on screen - so the
+  // command waits for the mount, the way an action dispatched then waits in the queue. The mount
+  // sends each one whose page is the one mounted and drops the rest (see sendHeldCommands).
+  static heldCommands = [];
+
+  // Made public to make tests easier
   // True from the start of a mount to the end of its first render. The registry arrives with every
   // struct's props empty and that render is what writes them, so no action may run before it. Set
   // and cleared by #mountPage.
@@ -377,7 +385,7 @@ export default class Hologram {
   // currentTarget once dispatch returns) - run synchronously here. Callers invoke the returned
   // dispatch immediately, or hand it to the debouncer so that only the dispatch is deferred
   // while preventDefault still takes effect on every event.
-  // Deps: [:maps.get/3]
+  // Deps: [:maps.get/2, :maps.get/3]
   static handleUiEvent(
     event,
     eventType,
@@ -460,7 +468,26 @@ export default class Hologram {
           }
         }
       } else {
-        Client.sendCommand(operation, epoch);
+        // The queue walk's gates for an action (see #runActions), in the same order: a command
+        // whose page has been left is dropped, one dispatched while a transition is open or the
+        // mount is rendering waits for the mount. The walk's last gate, a render on the stack, is
+        // left out: sending a command touches neither the DOM nor a component's state, and nothing
+        // would release a command held for a render.
+        if (
+          epoch < Math.max($.domEpoch, $.registryEpoch) ||
+          $.#deadEpochs.has(epoch)
+        ) {
+          console.warn(
+            "Hologram: dropped a command dispatched on a page that has been left:",
+            Interpreter.inspect(
+              Erlang_Maps["get/2"](Type.atom("name"), operation),
+            ),
+          );
+        } else if ($.domEpoch !== $.registryEpoch || $.isMounting) {
+          $.heldCommands.push({command: operation, epoch: epoch});
+        } else {
+          Client.sendCommand(operation, epoch);
+        }
       }
     };
   }
@@ -786,6 +813,33 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // Made public to make tests easier
+  // Sends the commands held until the mount, now that the registry answers for the page on screen.
+  // The gates are the dispatch's own, run again: one whose page was left meanwhile - a second
+  // navigation before this mount - is dropped, as the queue drops an action, and one dispatched on
+  // a page that has not mounted yet stays held for that page's mount, since a navigation can start
+  // between a mount and the frame that sends what waited for it.
+  // Deps: [:maps.get/2]
+  static sendHeldCommands() {
+    const commands = $.heldCommands;
+    $.heldCommands = [];
+
+    const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
+
+    for (const {command, epoch} of commands) {
+      if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+        console.warn(
+          "Hologram: dropped a command dispatched on a page that has been left:",
+          Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), command)),
+        );
+      } else if ($.domEpoch !== $.registryEpoch || $.isMounting) {
+        $.heldCommands.push({command: command, epoch: epoch});
+      } else {
+        Client.sendCommand(command, epoch);
+      }
+    }
   }
 
   static #buildPagePath(toParam) {
@@ -1729,6 +1783,14 @@ export default class Hologram {
         // A template expression is app code and can raise, so the flag is cleared on the way out
         // either way. Leaving it set would hold every action from here on.
         $.isMounting = false;
+
+        // The registry answers for the page on screen from here, which is what the held commands
+        // waited for. Sent on the way out either way, since a command reads neither props nor the
+        // DOM, and nothing later would send one a raising render had skipped: a command dispatched
+        // after it would go straight out and overtake it. Ahead of the queue's actions, which is no
+        // break with a settled page, where an action that awaits finishes after a command
+        // dispatched behind it.
+        Hologram.sendHeldCommands();
       }
 
       if ($.#scrollPosition) {
