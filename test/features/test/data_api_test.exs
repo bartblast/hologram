@@ -124,11 +124,12 @@ defmodule HologramFeatureTests.DataApiTest do
     |> assert_text(css("#result"), "attribute :rating must be in 1..5, got: 0")
   end
 
+  # Anchored: the excluded row sorts last, so a match on a substring would pass with it still there.
   feature "runs a filtered and ordered query", %{session: session} do
     session
     |> visit(DataApiPage)
     |> click(button("Run query"))
-    |> assert_text(css("#result"), "run_query_apple,run_query_banana")
+    |> assert_text(css("#result"), ~r/^run_query_apple,run_query_banana$/)
   end
 
   # Anchored: the excluded row sorts last, so a match on a substring would pass with it still there.

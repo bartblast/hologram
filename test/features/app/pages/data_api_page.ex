@@ -33,10 +33,10 @@ defmodule HologramFeatureTests.DataApiPage do
       <button $click={command: :create_review}> Create review </button>
       <button $click={command: :create_review_for_missing_product}> Review a missing product </button>
       <button $click={command: :delete_referenced_product}> Delete referenced product </button>
-      <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :raise_on_duplicate_account}> Raise on duplicate account </button>
       <button $click={command: :raise_on_duplicate_account_in_transaction}> Raise on duplicate in transaction </button>
       <button $click={command: :read_rows_with_sql}> Read rows with SQL </button>
+      <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :run_query}> Run query </button>
       <button $click={command: :update_into_duplicate_account}> Update into duplicate account </button>
       <button $click={command: :validate_changes}> Validate changes </button>
@@ -167,26 +167,6 @@ defmodule HologramFeatureTests.DataApiPage do
     put_action(server, :show_result, result: "deleted_referenced_#{inspect(result)}")
   end
 
-  def command(:reject_invalid_review, _params, server) do
-    product =
-      %{name: "reject_invalid_review_product"}
-      |> Product.new()
-      |> DB.create!()
-
-    result =
-      try do
-        %{product_id: product.id, rating: 0}
-        |> Review.new()
-        |> DB.create!()
-
-        "rejected_nothing"
-      rescue
-        error in WriteError -> error.message
-      end
-
-    put_action(server, :show_result, result: result)
-  end
-
   def command(:raise_on_duplicate_account, _params, server) do
     %{handle: "taken"}
     |> Account.new()
@@ -252,6 +232,26 @@ defmodule HologramFeatureTests.DataApiPage do
     result = Enum.map_join(rows, ",", fn [id, name] -> "#{name}:#{id == ids[name]}" end)
 
     put_action(server, :show_result, result: "sql_rows_#{result}")
+  end
+
+  def command(:reject_invalid_review, _params, server) do
+    product =
+      %{name: "reject_invalid_review_product"}
+      |> Product.new()
+      |> DB.create!()
+
+    result =
+      try do
+        %{product_id: product.id, rating: 0}
+        |> Review.new()
+        |> DB.create!()
+
+        "rejected_nothing"
+      rescue
+        error in WriteError -> error.message
+      end
+
+    put_action(server, :show_result, result: result)
   end
 
   def command(:run_query, _params, server) do
