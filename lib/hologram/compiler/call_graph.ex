@@ -438,9 +438,6 @@ defmodule Hologram.Compiler.CallGraph do
     client_class: [
       {:maps, :get, 2}
     ],
-    command_queue_class: [
-      {:maps, :get, 2}
-    ],
     component_registry_class: [
       {:maps, :get, 2},
       {:maps, :get, 3},
