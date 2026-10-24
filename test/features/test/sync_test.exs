@@ -9,13 +9,22 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Test.SyncClient
+  alias HologramFeatureTests.Entities.Account
+  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
+  alias HologramFeatureTests.Entities.Shop
+  alias HologramFeatureTests.Entities.Stop
+  alias HologramFeatureTests.Entities.Ticket
+  alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.RestockItem
 
   @base_url "http://localhost:4002"
 
@@ -27,7 +36,25 @@ defmodule HologramFeatureTests.SyncTest do
 
     tables =
       Enum.map_join(
-        [Document, Folder, Memo, Note, Review, Product, RoleGrant, User],
+        [
+          Account,
+          Booking,
+          Document,
+          Folder,
+          Item,
+          Memo,
+          Note,
+          Product,
+          RestockItem,
+          Review,
+          RoleGrant,
+          Shop,
+          Stop,
+          Ticket,
+          Todo,
+          Trip,
+          User
+        ],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
