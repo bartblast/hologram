@@ -44,6 +44,11 @@ const cid2 = Type.bitstring("my_component_2");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
+  // A navigation that fails records its epoch dead for the rest of the session, and every later
+  // dispatch stamped with that epoch is dropped. Left in place, a test's failed navigation would
+  // decide the outcome of whichever test reuses the epoch next.
+  afterEach(() => Hologram.deadEpochs.clear());
+
   describe("dispatchAction()", () => {
     let clock, executeActionStub;
 
@@ -4628,9 +4633,7 @@ describe("Hologram", () => {
     });
   });
 
-  // Called by the mount once the registry answers for the page on screen. The epochs are ones no
-  // earlier test reaches: the loadNewPage tests leave low ones recorded dead, and nothing can clear
-  // that record, so a command stamped with one would be dropped whatever these tests set up.
+  // Called by the mount once the registry answers for the page on screen.
   describe("sendHeldCommands()", () => {
     let sendCommandStub, warnStub;
 
@@ -4660,19 +4663,19 @@ describe("Hologram", () => {
 
     // The way a mount leaves the epochs: level, at the epoch of the page mounted.
     it("sends each held command of the page mounted, in the order they were dispatched", () => {
-      Hologram.domEpoch = 100;
-      Hologram.registryEpoch = 100;
+      Hologram.domEpoch = 1;
+      Hologram.registryEpoch = 1;
 
       Hologram.heldCommands = [
-        {command: commandNamed("first"), epoch: 100},
-        {command: commandNamed("second"), epoch: 100},
+        {command: commandNamed("first"), epoch: 1},
+        {command: commandNamed("second"), epoch: 1},
       ];
 
       Hologram.sendHeldCommands();
 
       assert.deepStrictEqual(sendCommandStub.args, [
-        [commandNamed("first"), 100],
-        [commandNamed("second"), 100],
+        [commandNamed("first"), 1],
+        [commandNamed("second"), 1],
       ]);
 
       sinon.assert.notCalled(warnStub);
@@ -4682,10 +4685,10 @@ describe("Hologram", () => {
     // The user clicked a command on the first destination and then a link to a second one before
     // the first had mounted. The mount that runs is the second page's.
     it("drops a held command whose page was left before the mount", () => {
-      Hologram.domEpoch = 101;
-      Hologram.registryEpoch = 101;
+      Hologram.domEpoch = 2;
+      Hologram.registryEpoch = 2;
 
-      Hologram.heldCommands = [{command: commandNamed("stale"), epoch: 100}];
+      Hologram.heldCommands = [{command: commandNamed("stale"), epoch: 1}];
 
       Hologram.sendHeldCommands();
 
@@ -4704,12 +4707,10 @@ describe("Hologram", () => {
     // destination's markup is on screen, its command was held for its own mount, and the registry
     // still answers for the page this frame belongs to.
     it("keeps a held command waiting for its page's mount when another transition has opened", () => {
-      Hologram.domEpoch = 101;
-      Hologram.registryEpoch = 100;
+      Hologram.domEpoch = 2;
+      Hologram.registryEpoch = 1;
 
-      Hologram.heldCommands = [
-        {command: commandNamed("next_page"), epoch: 101},
-      ];
+      Hologram.heldCommands = [{command: commandNamed("next_page"), epoch: 2}];
 
       Hologram.sendHeldCommands();
 
@@ -4717,7 +4718,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(warnStub);
 
       assert.deepStrictEqual(Hologram.heldCommands, [
-        {command: commandNamed("next_page"), epoch: 101},
+        {command: commandNamed("next_page"), epoch: 2},
       ]);
     });
 

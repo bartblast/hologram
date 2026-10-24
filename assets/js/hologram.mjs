@@ -75,6 +75,10 @@ export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
+  // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
+  static deadEpochs = new Set();
+
+  // Made public to make tests easier
   // The epoch of the page whose markup is on screen.
   static domEpoch = 0;
 
@@ -134,9 +138,6 @@ export default class Hologram {
   // The digests of the chunks this document was told of: the ones the document the server sent
   // carries and the ones requested since. A snapshot saves the loaded ones.
   static #chunkDigests = new Set();
-
-  // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
-  static #deadEpochs = new Set();
 
   // The snapshot of the history entry this document was loaded for, found while the runtime was
   // starting and restored by run() once its chunks are in. Null when there is none to restore, and
@@ -475,7 +476,7 @@ export default class Hologram {
         // would release a command held for a render.
         if (
           epoch < Math.max($.domEpoch, $.registryEpoch) ||
-          $.#deadEpochs.has(epoch)
+          $.deadEpochs.has(epoch)
         ) {
           console.warn(
             "Hologram: dropped a command dispatched on a page that has been left:",
@@ -829,7 +830,7 @@ export default class Hologram {
     const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
 
     for (const {command, epoch} of commands) {
-      if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+      if (epoch < currentEpoch || $.deadEpochs.has(epoch)) {
         console.warn(
           "Hologram: dropped a command dispatched on a page that has been left:",
           Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), command)),
@@ -1403,7 +1404,7 @@ export default class Hologram {
       },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
-        $.#deadEpochs.add(epoch);
+        $.deadEpochs.add(epoch);
 
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
@@ -1434,7 +1435,7 @@ export default class Hologram {
   static #handleScriptFailure(digest) {
     if (MountGate.requires(digest)) {
       MountGate.cancel();
-      $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+      $.deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
 
       return false;
     }
@@ -1690,7 +1691,7 @@ export default class Hologram {
     } catch (error) {
       // The mount that would have closed this transition is never going to run.
       if (!isSuperseded()) {
-        $.#deadEpochs.add(epoch);
+        $.deadEpochs.add(epoch);
       }
 
       throw error;
@@ -2203,7 +2204,7 @@ export default class Hologram {
         const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
 
         // Dropped whatever the page is doing: a stale entry has nothing to wait for.
-        if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+        if (epoch < currentEpoch || $.deadEpochs.has(epoch)) {
           ActionQueue.removeAt(index);
 
           console.warn(
