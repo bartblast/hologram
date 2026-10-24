@@ -20,6 +20,16 @@ defmodule Hologram.DB.SQLQuery do
   @limits_statement "SELECT set_config('transaction_read_only', 'on', true), " <>
                       "set_config('statement_timeout', $1, true)"
 
+  # The two kinds of session state that outlive the rolled-back read: a session-level advisory lock
+  # and a named prepared statement. The read-only setting refuses neither, and either would stay
+  # with whichever pooled connection ran the read, where the next read, likely on another
+  # connection, cannot reach it. Refused by the statement's text before anything is sent - a
+  # transaction-level lock has other names and passes, params are never scanned, and a function
+  # of the app's own that takes a lock inside is not seen.
+  @prepare_statement_pattern ~r/\A(?:\s|--[^\n]*(?:\n|\z)|\/\*.*?\*\/)*prepare\b/is
+
+  @session_lock_pattern ~r/\bpg_(?:try_)?advisory_lock(?:_shared)?\b/i
+
   # The type numbers PostgreSQL describes a uuid and a uuid array with - fixed in its catalog for
   # every version and every database, unlike the numbers of the types an app creates. The
   # conversion goes by these alone, never by a value's shape, so a text column holding something
@@ -40,11 +50,13 @@ defmodule Hologram.DB.SQLQuery do
   The one option is :timeout, the milliseconds the statement may run as a positive integer, or
   :infinity - 15 seconds by default. The server enforces it.
 
-  Raises ArgumentError for an unknown option, an invalid timeout, a param count that differs from
-  the statement's placeholders, and a param the driver cannot send as its placeholder's type.
+  Raises ArgumentError for a statement that takes a session-level advisory lock or prepares a
+  named statement, an unknown option, an invalid timeout, a param count that differs from the
+  statement's placeholders, and a param the driver cannot send as its placeholder's type.
   """
   @spec run(String.t(), list, keyword) :: {:ok, DB.sql_result()} | {:error, SQLError.t()}
   def run(statement, params, opts) do
+    validate_no_session_state!(statement)
     statement_timeout = statement_timeout!(opts)
 
     # The savepoint is rolled back whether the read succeeded or failed. The rollback is what
@@ -194,6 +206,26 @@ defmodule Hologram.DB.SQLQuery do
   # A failure the server never answered, such as a lost connection.
   defp to_error(exception) do
     %SQLError{code: nil, message: Exception.message(exception)}
+  end
+
+  defp validate_no_session_state!(statement) do
+    cond do
+      Regex.match?(@session_lock_pattern, statement) ->
+        raise ArgumentError,
+          message:
+            "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
+              "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 " <>
+              "instead."
+
+      Regex.match?(@prepare_statement_pattern, statement) ->
+        raise ArgumentError,
+          message:
+            "DB.sql/3 cannot prepare a named statement - it would stay with a pooled connection " <>
+              "after the read. Pass the statement to DB.sql/3 itself, with its params."
+
+      true ->
+        :ok
+    end
   end
 
   defp validate_param_count!(params, oids) do

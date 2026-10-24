@@ -361,7 +361,8 @@ defmodule Hologram.DB do
   attribute may be named by a reserved word (`"user"` unquoted is the database role). An
   attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
   every table has `id`, `created_at` and `updated_at`, and a join table has `source_id` and
-  `target_id`.
+  `target_id`. Columns whose names contain `$` are the framework's own, and what they hold can
+  change between versions. Select attributes by name.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
   user may see in the SQL itself.
@@ -370,11 +371,10 @@ defmodule Hologram.DB do
   delete or truncate, DDL, a row lock, `nextval()`, a writing CTE, a function that writes - is
   refused by PostgreSQL and answered as {:error, %Hologram.SQLError{code:
   :read_only_sql_transaction}} with a message saying so. A write that skipped the data layer would
-  never reach the sync, and clients would drift from the server with nothing failing. The one
-  thing a statement may write is a temporary table, which PostgreSQL exempts and which holds no
-  data of the layer. Any other failure - a syntax error, a missing table, a type mismatch in the
-  SQL, a timeout - is {:error, %Hologram.SQLError{}} carrying the server's condition name as its
-  code and the server's message.
+  never reach the sync, and clients would drift from the server with nothing failing. Any other
+  failure - a syntax error, a missing table, a type mismatch in the SQL, a timeout - is
+  {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and the server's
+  message.
 
   A uuid column or uuid array comes back as canonical id strings, the spelling every entity
   carries, and an id string given for a uuid parameter or uuid array parameter is encoded for the
@@ -399,9 +399,12 @@ defmodule Hologram.DB do
   bound applies as well. The read is not run again when PostgreSQL resolves a deadlock, since it
   takes no row locks.
 
-  Raises ArgumentError for an option other than `timeout:`, an invalid timeout, a number of params
-  that differs from the statement's placeholders, and a param that does not fit its placeholder's
-  type - none of which reaches the server.
+  Raises ArgumentError for a statement that takes a session-level advisory lock or prepares a
+  named statement, either of which would outlive the read on a pooled connection - a
+  transaction-level advisory lock taken inside an enclosing transaction is held until that
+  transaction ends. Raises it as well for an option other than `timeout:`, an invalid timeout, a
+  number of params that differs from the statement's placeholders, and a param that does not fit
+  its placeholder's type. None of these reaches the server.
   """
   @spec sql(String.t(), list, keyword) :: {:ok, sql_result} | {:error, SQLError.t()}
   def sql(statement, params \\ [], opts \\ []) do

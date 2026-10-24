@@ -264,6 +264,17 @@ defmodule Hologram.DB.SQLQueryTest do
       delete_by_id(id)
     end
 
+    # A transaction-level lock ends with the transaction the read runs in, so it outlives nothing.
+    test "allows a transaction-level advisory lock" do
+      assert run("SELECT pg_advisory_xact_lock(1378)", [], []) ==
+               {:ok, %{columns: ["pg_advisory_xact_lock"], rows: [[:void]]}}
+    end
+
+    test "allows a lock function name inside a param" do
+      assert run(~s|SELECT $1::text AS "text"|, ["pg_advisory_lock(1378)"], []) ==
+               {:ok, %{columns: ["text"], rows: [["pg_advisory_lock(1378)"]]}}
+    end
+
     test "refuses an insert with Hologram's message" do
       id = Codec.encode(Entity.generate_id(), :uuid)
 
@@ -385,6 +396,38 @@ defmodule Hologram.DB.SQLQueryTest do
       assert_error ArgumentError,
                    ~s(invalid timeout "5s" for DB.sql/3 - give a positive number of milliseconds or :infinity),
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeout: "5s") end
+    end
+
+    # A session-level lock outlives the rolled-back read and stays with whichever pooled connection
+    # ran it, where the next read cannot release it.
+    test "raises on a session-level advisory lock" do
+      expected_msg =
+        "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
+          "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 instead."
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run("SELECT pg_advisory_lock(1378)", [], [])
+      end
+    end
+
+    test "raises on a shared session-level advisory lock taken with try, in any case" do
+      expected_msg =
+        "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
+          "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 instead."
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run("SELECT PG_TRY_ADVISORY_LOCK_SHARED(1378)", [], [])
+      end
+    end
+
+    test "raises on a named prepared statement behind a comment" do
+      expected_msg =
+        "DB.sql/3 cannot prepare a named statement - it would stay with a pooled connection " <>
+          "after the read. Pass the statement to DB.sql/3 itself, with its params."
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run("-- the monthly report\nPREPARE report AS SELECT 1", [], [])
+      end
     end
   end
 end
