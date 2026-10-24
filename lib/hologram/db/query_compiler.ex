@@ -54,10 +54,9 @@ defmodule Hologram.DB.QueryCompiler do
   `author_id == user_id() or shared == true` still admits a visitor to the shared rows.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
-  type's :read policy - fixed at :read, since an include embeds rows regardless of the
-  operation the statement's own policy carries - keyed on the include's alias rather than
-  the target table name. A to-one embed the acting user cannot
-  read is NULL, and rows they cannot read drop out of a to-many aggregate before its view
+  type's :read policy - fixed at :read whatever rules the statement's own policy holds - keyed
+  on the include's alias rather than the target table name. A to-one embed the acting user
+  cannot read is NULL, and rows they cannot read drop out of a to-many aggregate before its view
   bounds apply. Compiling without a policy leaves every level unfiltered - the trusted tier.
 
   Nil is a regular value for equality and membership on both execution tiers:
@@ -597,7 +596,6 @@ defmodule Hologram.DB.QueryCompiler do
 
     target_policy = %{
       anonymous?: context.anonymous?,
-      operation: delegated_operation,
       rules: target_rules
     }
 
@@ -761,13 +759,12 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # An include embeds rows of the target type, so every level composes that type's :read policy,
-  # fixed at :read regardless of the operation the statement's own policy carries.
+  # whatever rules the statement's own policy holds.
   defp include_policy(nil, _entity_type), do: nil
 
   defp include_policy(policy, entity_type) do
     %{
       anonymous?: Map.get(policy, :anonymous?, false),
-      operation: :read,
       rules:
         entity_type
         |> Policy.build()

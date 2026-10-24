@@ -167,7 +167,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:c, :==, "text_1"}], to: nil, via: nil}]
 
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}, {:value, "text_1"}],
                sql:
                  ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
@@ -185,7 +185,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         %{predicates: [{:b, :>=, 3}, {:c, :==, "text_2"}], to: nil, via: nil}
       ]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3))|)
     end
@@ -200,7 +200,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: params, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert params == [{:value, true}, {:value, 3}, {:value, "x"}]
       assert String.contains?(sql, ~s|WHERE (((("a" = $1) OR ("b" >= $2))) OR ("c" = $3))|)
@@ -217,7 +217,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: [{:value, true}], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
     end
@@ -239,7 +239,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [{:value, true}, {:value, 3}], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "a" = $1 AND "b" >= $2 ORDER BY|)
     end
@@ -252,7 +252,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [{:value, true}, {:value, 3}], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2)) ORDER BY|)
     end
@@ -265,7 +265,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE FALSE ORDER BY|)
     end
@@ -278,7 +278,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE FALSE ORDER BY|)
     end
@@ -293,7 +293,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: nil}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
     end
@@ -314,7 +314,7 @@ defmodule Hologram.DB.QueryCompilerTest do
             [unconditional_rule, conditional_rule]
           ] do
         assert %{params: placeholders, sql: sql} =
-                 compile(term, mapping, %{operation: :read, rules: rules})
+                 compile(term, mapping, %{rules: rules})
 
         assert placeholders == [value: true]
         assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
@@ -331,7 +331,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: nil}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(
                sql,
@@ -366,7 +366,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = Stage.normalize(Module2)
 
       assert %{params: [], sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: []})
+               compile(term, mapping, %{rules: []})
 
       assert String.contains?(sql, " WHERE FALSE ORDER BY")
     end
@@ -381,7 +381,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: [:actor], sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE (("b_id" = $1) OR ("c_id" = $1))|)
     end
@@ -394,7 +394,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
 
       assert %{params: [{:placeholder, :target, :uuid}, :actor], sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "c_id" = $1 AND "b_id" = $2|)
     end
@@ -409,7 +409,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:a, :==, true}], to: nil, via: nil}]
 
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
                sql:
                  ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module2" | <>
@@ -423,7 +423,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}]
 
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [
                  :actor,
                  {:value, ["editor", "owner"]},
@@ -449,7 +449,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1, Role.Module2]}], via: nil}]
 
-      assert compile(term, mapping, %{operation: :archive, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [
                  :actor,
                  {:value,
@@ -473,7 +473,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [], to: [{:global, [Role.Module1]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :archive, rules: rules, anonymous?: true})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert placeholders == []
       refute String.contains?(sql, "hologram_role_grant")
@@ -486,7 +486,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [], to: [{:type, PolicyModule2, [:admin]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert placeholders == [
                :actor,
@@ -508,7 +508,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert placeholders == [
                :actor,
@@ -528,7 +528,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor]}], via: nil}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "priority" >= $1 AND EXISTS (SELECT 1|)
     end
@@ -541,7 +541,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         %{predicates: [], to: [{:own, [:viewer]}, {:type, PolicyModule2, [:admin]}], via: nil}
       ]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE ((EXISTS (SELECT 1|)
       assert String.contains?(sql, ~s|) OR (EXISTS (SELECT 1|)
@@ -553,28 +553,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
 
-      assert compile(term, mapping, %{operation: :publish, rules: rules}) == %{
-               params: [{:value, true}],
-               sql:
-                 ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
-                   ~s|"created_at", "updated_at", "$revisions" | <>
-                   ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
-                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                   ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
-                   ~s|"test_fixtures_policy_module1"."parent_id" AND "public" = $1) | <>
-                   ~s|ORDER BY "id" ASC|
-             }
-    end
-
-    # The statement reads, but the delegation names the related entity's publish rule, so that is the
-    # rule composed - Module2's read rule wants a member grant, its publish rule a public row.
-    test "composes the related entity's policy for the operation a delegation names" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
-      term = Stage.normalize(PolicyModule1)
-
-      rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
-
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
@@ -593,7 +572,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: {:delete, :parent}}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :delete, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(
                sql,
@@ -608,7 +587,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, :parent}}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :publish, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert placeholders == [{:value, 3}, {:value, true}]
       assert String.contains?(sql, ~s|WHERE "priority" >= $1 AND EXISTS (SELECT 1|)
@@ -624,7 +603,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert Enum.count(placeholders, &(&1 == :actor)) == 1
 
@@ -640,7 +619,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     test "composes the grant store's own visibility policy" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(RoleGrant)
-      policy = %{operation: :read, rules: Policy.build(RoleGrant)[:read]}
+      policy = %{rules: Policy.build(RoleGrant)[:read]}
 
       assert %{params: placeholders, sql: sql} = compile(term, mapping, policy)
 
@@ -1168,7 +1147,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = Stage.normalize(Module10)
       rules = [%{predicates: [{:count, :<=, {:attribute, :priority}}], to: nil, via: nil}]
 
-      assert %{params: [], sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
       assert String.contains?(sql, ~s( WHERE "count" <= "priority" ))
     end
 

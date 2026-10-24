@@ -54,7 +54,6 @@ defmodule Hologram.DB.QueryRunner do
 
     policy = %{
       anonymous?: is_nil(actor_user_id),
-      operation: :read,
       rules: read_rules(term.entity)
     }
 

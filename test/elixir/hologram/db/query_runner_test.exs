@@ -84,7 +84,6 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp archivable_ids(actor_user_id) do
       policy = %{
         anonymous?: false,
-        operation: :archive,
         rules: Policy.build(PolicyModule2)[:archive]
       }
 
