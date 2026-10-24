@@ -4525,6 +4525,10 @@ defmodule Hologram.Compiler do
     "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
   end
 
+  defp dead_path_message(module, dead_entity_types) do
+    "the registered query in #{inspect(module)} filters through #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny reads every such row as missing. Add allow lines, or drop the path."
+  end
+
   defp dead_root_message(module, dead_entity_types) do
     "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
   end
@@ -4542,6 +4546,23 @@ defmodule Hologram.Compiler do
 
   defp listing(entity_types) do
     Enum.map_join(entity_types, ", ", &inspect/1)
+  end
+
+  # The types a term's paths lead through, its includes' included: every type a hop reaches, which
+  # a policied read applies the read policy of.
+  defp path_entity_types(term) do
+    hop_types =
+      term.filter
+      |> Stage.predicate_references()
+      |> Enum.flat_map(fn {relationship_names, _name} ->
+        Enum.scan(relationship_names, term.entity, &Entity.relationship_target(&2, &1))
+      end)
+
+    term.include
+    |> Map.values()
+    |> Enum.flat_map(&path_entity_types/1)
+    |> Enum.concat(hop_types)
+    |> Enum.uniq()
   end
 
   # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
@@ -4596,31 +4617,47 @@ defmodule Hologram.Compiler do
     "the registered query in #{inspect(module)} filters or orders on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
   end
 
-  # Pairs each term entity with the server-only attributes its own filter and order_by name,
-  # walking include sub-terms so a reference nested under an include is reached too.
+  # Pairs each entity type with the server-only attributes a term's filter and order_by name on it -
+  # the term's own type first, then the types its paths lead to - walking include sub-terms so a
+  # reference nested under an include is reached too.
   defp server_only_references(term) do
-    server_only_names = Entity.server_only_attribute_names(term.entity)
+    filter_references =
+      term.filter
+      |> Stage.predicate_references()
+      |> Enum.map(fn {relationship_names, name} ->
+        {Entity.path_target(term.entity, relationship_names), name}
+      end)
 
-    filter_names = Stage.predicate_names(term.filter)
+    order_by_references =
+      Enum.map(term.order_by, fn {name, _direction} -> {term.entity, name} end)
 
-    order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
+    references_by_type =
+      (filter_references ++ order_by_references)
+      |> Enum.filter(fn {entity_type, name} ->
+        name in Entity.server_only_attribute_names(entity_type)
+      end)
+      |> Enum.group_by(fn {entity_type, _name} -> entity_type end, fn {_type, name} -> name end)
 
-    referenced_names =
-      (filter_names ++ order_by_names)
-      |> Enum.filter(&(&1 in server_only_names))
-      |> Enum.uniq()
-      |> Enum.sort()
+    {own_references, path_references} = Map.split(references_by_type, [term.entity])
 
     nested_references =
       term.include
       |> Map.values()
       |> Enum.flat_map(&server_only_references/1)
 
-    if referenced_names == [] do
-      nested_references
-    else
-      [{term.entity, referenced_names} | nested_references]
-    end
+    sorted_path_references =
+      Enum.sort_by(path_references, fn {entity_type, _names} -> inspect(entity_type) end)
+
+    own_references
+    |> Enum.concat(sorted_path_references)
+    |> Enum.map(fn {entity_type, names} -> {entity_type, sorted_unique(names)} end)
+    |> Enum.concat(nested_references)
+  end
+
+  defp sorted_unique(names) do
+    names
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp trusted_query_message(module) do
@@ -4654,15 +4691,31 @@ defmodule Hologram.Compiler do
     :ok
   end
 
+  # A path through a type with no allow lines reads nothing on it: the policied read applies the
+  # hop type's read policy, so every such hop is missing for every session.
+  defp validate_readable_paths!(module, term) do
+    dead_entity_types =
+      term
+      |> path_entity_types()
+      |> Policy.dead_entity_types()
+
+    if dead_entity_types != [] do
+      raise Hologram.CompileError, message: dead_path_message(module, dead_entity_types)
+    end
+
+    :ok
+  end
+
   # A registered query naming an entity type with no allow lines is statically dead: the policied
-  # read path composes default deny into every statement it reaches. The root and an include target
-  # fail differently, so they are checked and reported apart - and a dead root is reported alone,
-  # because a query returning no rows produces no embeds to be empty either.
+  # read path composes default deny into every statement it reaches. The root, an include target and
+  # a type a path goes through fail differently, so they are checked and reported apart - and a dead
+  # root is reported alone, because a query returning no rows produces no embeds to be empty either.
   defp validate_readable_queries!({module, module_terms}) do
     Enum.each(module_terms, fn term ->
       case Policy.dead_entity_types([term.entity]) do
         [] ->
           validate_readable_includes!(module, term)
+          validate_readable_paths!(module, term)
 
         dead_entity_types ->
           raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)

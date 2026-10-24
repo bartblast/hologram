@@ -655,6 +655,18 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture32], []) == :ok
     end
 
+    test "accepts a read predicate over a server-only attribute through a path" do
+      defmodule InlinePolicyFixture50 do
+        use Hologram.Entity
+
+        relationship :author, Module14
+
+        allow :read, when: author.password_hash == nil
+      end
+
+      assert validate_model!([Module14, InlinePolicyFixture50], []) == :ok
+    end
+
     test "accepts a non-read predicate over an attribute that is not server-only in this type" do
       defmodule InlinePolicyFixture31 do
         use Hologram.Entity
@@ -695,6 +707,23 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture33], [])
+      end
+    end
+
+    test "rejects a non-read predicate over a server-only attribute through a path" do
+      defmodule InlinePolicyFixture51 do
+        use Hologram.Entity
+
+        relationship :author, Module14
+
+        allow :update, when: author.password_hash == nil
+      end
+
+      expected_msg =
+        "invalid predicate author.password_hash for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture51 - author.password_hash is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture51], [])
       end
     end
 
@@ -1334,6 +1363,25 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, DisjunctionGateFixture], [])
+      end
+    end
+
+    test "rejects a predicate through a path the gate cannot honor" do
+      defmodule PathGateFixture do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        role :owner
+
+        allow :grant_role, to: :owner, when: parent.public == true
+      end
+
+      expected_msg =
+        "invalid predicate parent.public for allow :grant_role in Hologram.Policy.ValidatorTest.PathGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, PathGateFixture], [])
       end
     end
 

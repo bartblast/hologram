@@ -51,6 +51,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module47
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module48
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module49
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -584,6 +585,18 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module48, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a capture no entity type admits, naming a path it filters on", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_50.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50 builds no query that any entity type of the build admits - it filters on no_entity_declares_this.x - a prop with no window would read rows nothing ever fills"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module50, entity_types, ir_plt)
       end
     end
 

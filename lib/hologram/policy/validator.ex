@@ -146,9 +146,10 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  # The attribute a gate line's condition names first, read off the data form - a disjunction names
-  # what its first alternative does, since or names no attribute. The condition was validated
-  # before the gate is judged, so an or: entry holding a list is a disjunction here.
+  # The name a gate line's condition names first, read off the data form - an attribute or a path -
+  # and a disjunction names what its first alternative does, since or names no attribute. The
+  # condition was validated before the gate is judged, so an or: entry holding a list is a
+  # disjunction here.
   defp first_predicate_name([]), do: nil
 
   defp first_predicate_name([
@@ -226,6 +227,11 @@ defmodule Hologram.Policy.Validator do
         "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
   end
 
+  # An attribute of the row as inspect/1 spells it, a path as it is written.
+  defp server_only_spelling([name]), do: inspect(name)
+
+  defp server_only_spelling(path), do: Stage.inspect_name(path)
+
   # A line asks the related type an operation it has to be askable about, the way can? refuses one
   # it is not, so a typo or an operation the type never declares fails the build rather than every
   # check that reaches it. A per-role gate line is left to the gate check, which refuses its via
@@ -283,7 +289,7 @@ defmodule Hologram.Policy.Validator do
       name ->
         raise Hologram.CompileError,
           message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+            "invalid predicate #{Stage.inspect_name(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
     end
 
     # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
@@ -463,16 +469,23 @@ defmodule Hologram.Policy.Validator do
   # reference is rejected.
   defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
 
+  # A path reads the attribute of the row it leads to, so that row's type says whether the attribute
+  # is server-only.
   defp validate_server_only_predicates!(entity_type, operation, clauses, location) do
-    server_only_names = Entity.server_only_attribute_names(entity_type)
-
     clauses
-    |> Stage.predicate_names()
-    |> Enum.each(fn name ->
-      if name in server_only_names do
+    |> Stage.predicate_references()
+    |> Enum.each(fn {relationship_names, name} ->
+      subject_type = Entity.path_target(entity_type, relationship_names)
+
+      if name in Entity.server_only_attribute_names(subject_type) do
+        spelled =
+          relationship_names
+          |> Enum.concat([name])
+          |> server_only_spelling()
+
         raise Hologram.CompileError,
           message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{inspect(name)} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+            "invalid predicate #{spelled} for allow #{inspect(operation)} in #{location} - #{spelled} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
       end
     end)
   end

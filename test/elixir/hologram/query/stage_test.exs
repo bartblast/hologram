@@ -1687,6 +1687,16 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "inspect_name/1" do
+    test "spells an attribute as inspect does" do
+      assert inspect_name(:archived) == ":archived"
+    end
+
+    test "spells a path as it is written" do
+      assert inspect_name([:channel, :org, :name]) == "channel.org.name"
+    end
+  end
+
   describe "limit/2" do
     test "accepts a placeholder" do
       query = limit(Module2, %Placeholder{name: :size})
@@ -2201,19 +2211,29 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
-  describe "predicate_names/1" do
+  describe "predicate_references/1" do
     test "returns the compared attribute of every triple" do
-      assert predicate_names([{:a, :==, true}, {:b, :>=, 3}]) == [:a, :b]
+      assert predicate_references([{:a, :==, true}, {:b, :>=, 3}]) == [{[], :a}, {[], :b}]
     end
 
     test "adds the attribute an operand names" do
-      assert predicate_names([{:b, :<, {:attribute, :c}}, {:a, :==, true}]) == [:b, :c, :a]
+      assert predicate_references([{:b, :<, {:attribute, :c}}, {:a, :==, true}]) ==
+               [{[], :b}, {[], :c}, {[], :a}]
+    end
+
+    test "returns a path with the relationships it follows" do
+      assert predicate_references([{[:a, :b, :c], :==, "x"}]) == [{[:a, :b], :c}]
+    end
+
+    test "returns the path an operand names" do
+      assert predicate_references([{:c_id, :==, {:attribute, [:b, :id]}}]) ==
+               [{[], :c_id}, {[:b], :id}]
     end
 
     test "walks the alternatives of a disjunction" do
       filter = [{:or, [[{:a, :==, true}], [{:b, :>=, {:attribute, :c}}]]}]
 
-      assert predicate_names(filter) == [:a, :b, :c]
+      assert predicate_references(filter) == [{[], :a}, {[], :b}, {[], :c}]
     end
   end
 
@@ -2465,6 +2485,36 @@ defmodule Hologram.Query.StageTest do
         |> trust()
         |> trust()
       end
+    end
+  end
+
+  describe "written_names/1" do
+    test "returns the keys of a predicate list" do
+      assert written_names(a: true, b: {:>=, 3}) == [:a, :b]
+    end
+
+    test "adds the name an operand carries, bare or under an operator" do
+      assert written_names(a: {:attribute, :b}, c: {:<, {:attribute, :d}}) == [:a, :b, :c, :d]
+    end
+
+    test "walks the lists of an or entry" do
+      assert written_names(a: 1, or: [[b: 2], [c: {:attribute, :d}]]) == [:a, :b, :c, :d]
+    end
+
+    test "returns a path as its list" do
+      assert written_names([{[:a, :b], {:==, {:attribute, [:c, :d]}}}]) == [[:a, :b], [:c, :d]]
+    end
+
+    test "returns or for an or entry that is not a list of lists" do
+      assert written_names(or: [1, 2]) == [:or]
+    end
+
+    test "passes over a list that is not a path" do
+      assert written_names([{[%Placeholder{name: :field}, :x], {:attribute, [:y]}}, a: 1]) == [:a]
+    end
+
+    test "passes over a placeholder key" do
+      assert written_names([{%Placeholder{name: :field}, 1}]) == []
     end
   end
 end

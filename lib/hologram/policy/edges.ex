@@ -25,7 +25,8 @@ defmodule Hologram.Policy.Edges do
       on the related row (or its whole type) reached by following the chain of to-one
       relationships.
     * `{:relationship_attributes, chain, entity_type, names}` - attributes of the related
-      row reached by following the chain, read by delegated predicates.
+      row reached by following the chain: what a path in a condition reads, a reference field a
+      longer path is followed through, or what a delegated predicate reads.
     * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
       entity a grant-store row names, deciding that row's visibility.
 
@@ -55,6 +56,24 @@ defmodule Hologram.Policy.Edges do
   """
   @spec universal_edges() :: list(atom)
   def universal_edges, do: @universal_edges
+
+  # The reference fields a chain of to-one relationships is followed through: the first on the row
+  # itself, every later one on the row the relationships before it lead to - so a related row
+  # moving to another one is a change the edges name.
+  defp chain_edges(entity_type, [first_relationship_name | _later_names] = relationship_names) do
+    later_edges =
+      relationship_names
+      |> Enum.with_index()
+      |> Enum.drop(1)
+      |> Enum.map(fn {relationship_name, index} ->
+        chain = Enum.take(relationship_names, index)
+
+        {:relationship_attributes, chain, Entity.path_target(entity_type, chain),
+         [reference_field_name(relationship_name)]}
+      end)
+
+    [{:attributes, [reference_field_name(first_relationship_name)]} | later_edges]
+  end
 
   # A delegated edge names the same data one relationship hop further away: the target's
   # own-row dependencies become related-row dependencies through the chain, its own grants
@@ -111,11 +130,32 @@ defmodule Hologram.Policy.Edges do
   end
 
   # A disjunction reads the row's own attributes like any other condition, and so does a comparison
-  # between two of them, so neither adds an edge kind - their attributes join the rule's.
-  defp predicate_edges(predicates) do
-    names = Stage.predicate_names(predicates)
+  # between two of them, so neither adds an edge kind - their attributes join the rule's. A path
+  # reads the attribute of the row its relationships lead to, and the reference fields it is
+  # followed through.
+  defp predicate_edges(entity_type, predicates) do
+    {own_references, path_references} =
+      predicates
+      |> Stage.predicate_references()
+      |> Enum.split_with(fn {relationship_names, _name} -> relationship_names == [] end)
 
-    if names == [], do: [], else: [{:attributes, names}]
+    own_edges =
+      case Enum.map(own_references, fn {_relationship_names, name} -> name end) do
+        [] -> []
+        names -> [{:attributes, names}]
+      end
+
+    path_edges =
+      Enum.flat_map(path_references, fn {relationship_names, name} ->
+        target_type = Entity.path_target(entity_type, relationship_names)
+
+        [
+          {:relationship_attributes, relationship_names, target_type, [name]}
+          | chain_edges(entity_type, relationship_names)
+        ]
+      end)
+
+    own_edges ++ path_edges
   end
 
   defp reference_edges(_entity_type, nil), do: []
@@ -156,7 +196,7 @@ defmodule Hologram.Policy.Edges do
   end
 
   defp rule_edges(entity_type, %{predicates: predicates, to: to, via: via}) do
-    predicate_edges(predicates) ++
+    predicate_edges(entity_type, predicates) ++
       reference_edges(entity_type, to) ++
       via_edges(entity_type, via)
   end

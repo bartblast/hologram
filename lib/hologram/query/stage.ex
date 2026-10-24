@@ -172,6 +172,13 @@ defmodule Hologram.Query.Stage do
     put_delta(entity, name, amount, 1, "increment")
   end
 
+  # Returns a name as a message spells it: an attribute as inspect/1 does, a path as it is written.
+  @doc false
+  @spec inspect_name(atom | Query.path() | Query.placeholder()) :: String.t()
+  def inspect_name(path) when is_list(path), do: Enum.join(path, ".")
+
+  def inspect_name(name), do: inspect(name)
+
   @doc false
   @spec limit(module | Query.t(), non_neg_integer) :: Query.t()
   def limit(query, value) do
@@ -288,17 +295,20 @@ defmodule Hologram.Query.Stage do
     filter_names ++ bound_names ++ order_names ++ include_names
   end
 
-  # Returns every attribute name the given filter clauses read, in order: the compared attribute of
-  # every triple, and the attribute an attribute operand names beside it - the alternatives of a
-  # disjunction included. For readers that need what a filter reads rather than how it compares.
+  # Returns every name the given filter clauses read, in order, as {relationships, name} pairs: the
+  # compared attribute of every triple, and the one an attribute operand names beside it - the
+  # alternatives of a disjunction included. An attribute of the row comes with no relationships, an
+  # attribute a path reaches with the relationships followed to it. For readers that need what a
+  # filter reads rather than how it compares.
   @doc false
-  @spec predicate_names(list(Query.clause())) :: list(atom | Query.placeholder())
-  def predicate_names(clauses) do
+  @spec predicate_references(list(Query.clause())) ::
+          list({list(atom), atom | Query.placeholder()})
+  def predicate_references(clauses) do
     clauses
     |> triples()
     |> Enum.flat_map(fn
-      {name, _operator, {:attribute, other}} -> [name, other]
-      {name, _operator, _value} -> [name]
+      {name, _operator, {:attribute, other}} -> [reference(name), reference(other)]
+      {name, _operator, _value} -> [reference(name)]
     end)
   end
 
@@ -388,6 +398,32 @@ defmodule Hologram.Query.Stage do
     term = to_term(query)
 
     %{term | trust: true}
+  end
+
+  # Returns every name the given data-form predicates spell, in order, without judging any of them:
+  # each key, the name an {:attribute, name} operand carries bare or under an operator, and what the
+  # lists of an or: entry spell - a path as its list. For readers of predicates no entity type was
+  # asked about yet, such as the hint a build gives for a filter no entity type admits.
+  @doc false
+  @spec written_names(list) :: list(atom | Query.path())
+  def written_names(predicates) do
+    Enum.flat_map(predicates, fn
+      {:or, alternatives} when is_list(alternatives) ->
+        if Enum.all?(alternatives, &is_list/1) do
+          Enum.flat_map(alternatives, &written_names/1)
+        else
+          [:or]
+        end
+
+      {name, value} when is_atom(name) ->
+        [name | written_operand_names(value)]
+
+      {name, value} when is_list(name) ->
+        if path?(name), do: [name | written_operand_names(value)], else: []
+
+      _entry ->
+        []
+    end)
   end
 
   defp attribute_names(entity_type) do
@@ -559,11 +595,6 @@ defmodule Hologram.Query.Stage do
       message:
         "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
   end
-
-  # A name as a message spells it: an attribute as inspect/1 does, a path as it is written.
-  defp inspect_name(path) when is_list(path), do: Enum.join(path, ".")
-
-  defp inspect_name(name), do: inspect(name)
 
   defp integer_names(definitions) do
     definitions
@@ -927,6 +958,14 @@ defmodule Hologram.Query.Stage do
       message:
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
   end
+
+  defp reference(path) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    {relationship_names, name}
+  end
+
+  defp reference(name), do: {[], name}
 
   defp reference_field_names(entity_type) do
     entity_type
@@ -1441,4 +1480,14 @@ defmodule Hologram.Query.Stage do
     do: Enum.flat_map(values, &value_placeholder_names/1)
 
   defp value_placeholder_names(_value), do: []
+
+  defp written_operand_name(name) when is_atom(name), do: [name]
+
+  defp written_operand_name(name), do: if(path?(name), do: [name], else: [])
+
+  defp written_operand_names({:attribute, name}), do: written_operand_name(name)
+
+  defp written_operand_names({_operator, {:attribute, name}}), do: written_operand_name(name)
+
+  defp written_operand_names(_value), do: []
 end

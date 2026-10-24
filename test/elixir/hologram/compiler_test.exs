@@ -37,6 +37,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
   alias Hologram.Test.Fixtures.Component.Module30, as: ComponentModule30
   alias Hologram.Test.Fixtures.Component.Module31, as: ComponentModule31
+  alias Hologram.Test.Fixtures.Component.Module32, as: ComponentModule32
+  alias Hologram.Test.Fixtures.Component.Module33, as: ComponentModule33
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -1592,6 +1594,21 @@ defmodule Hologram.CompilerTest do
       end
     end
 
+    test "raises for a registered query whose path goes through a type declaring no allow lines",
+         %{entity_types: entity_types} do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module33 filters through " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny reads every such row as missing. Add allow lines, or drop the path."
+
+      component_queries =
+        extract_component_queries([ComponentModule33], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
     test "raises for a registered query filtering on a server-only attribute", %{
       entity_types: entity_types
     } do
@@ -1603,6 +1620,23 @@ defmodule Hologram.CompilerTest do
 
       component_queries =
         extract_component_queries([ComponentModule17], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute through a path", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module32 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      component_queries =
+        extract_component_queries([ComponentModule32], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)

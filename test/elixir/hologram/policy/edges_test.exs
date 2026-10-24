@@ -6,6 +6,8 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
@@ -35,6 +37,43 @@ defmodule Hologram.Policy.EdgesTest do
                {Policy.Module1, :update} => [
                  {:attributes, [:priority]},
                  {:own_grants, [:editor, :owner]}
+               ]
+             }
+    end
+
+    test "derives the edges a path in a condition reads" do
+      defmodule PathFixture1 do
+        use Hologram.Entity
+
+        relationship :b, Module3
+
+        allow :read, when: b.c_id == nil
+      end
+
+      assert derive([PathFixture1]) == %{
+               {PathFixture1, :read} => [
+                 {:attributes, [:b_id]},
+                 {:relationship_attributes, [:b], Module3, [:c_id]}
+               ]
+             }
+    end
+
+    # Each reference field the path is followed through is an edge of its own, so a related row
+    # moving to another one re-evaluates what leans on it.
+    test "derives the edges of a path through two relationships" do
+      defmodule PathFixture2 do
+        use Hologram.Entity
+
+        relationship :d, Module3
+
+        allow :read, when: d.b.a == true
+      end
+
+      assert derive([PathFixture2]) == %{
+               {PathFixture2, :read} => [
+                 {:attributes, [:d_id]},
+                 {:relationship_attributes, [:d], Module3, [:b_id]},
+                 {:relationship_attributes, [:d, :b], Module2, [:a]}
                ]
              }
     end
