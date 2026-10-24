@@ -713,6 +713,63 @@ describe("Hologram", () => {
         sinon.assert.calledTwice(renderStub);
       });
     });
+
+    // A next command belongs to the page its action belonged to, like a next action, so its reply
+    // is stamped with the parent's epoch and dropped if that page has been left when it lands.
+    describe("next command", () => {
+      let sendCommandStub;
+
+      const commandFor = (target) =>
+        Type.commandStruct({
+          name: Type.atom("the_next_command"),
+          params: Type.map(),
+          target: target,
+        });
+
+      const resultWith = (nextCommand) =>
+        Type.componentStruct({nextCommand: nextCommand, state: Type.map()});
+
+      beforeEach(() => {
+        ComponentRegistry.putEntry(
+          cid1,
+          Type.map([
+            [Type.atom("module"), module7],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({nextCommand: Type.nil()}),
+            ],
+          ]),
+        );
+
+        sendCommandStub = sinon
+          .stub(Client, "sendCommand")
+          .callsFake((_command, _epoch) => null);
+      });
+
+      it("sends a next command with its parent's epoch", () => {
+        callNamedFunctionStub.returns(resultWith(commandFor(cid1)));
+
+        Hologram.executeAction(actionFor(cid1), 7);
+
+        sinon.assert.calledOnceWithExactly(
+          sendCommandStub,
+          commandFor(cid1),
+          7,
+        );
+      });
+
+      it("sends a next command with no target to its parent's target", () => {
+        callNamedFunctionStub.returns(resultWith(commandFor(Type.nil())));
+
+        Hologram.executeAction(actionFor(cid1), 7);
+
+        sinon.assert.calledOnceWithExactly(
+          sendCommandStub,
+          commandFor(cid1),
+          7,
+        );
+      });
+    });
   });
 
   describe("executeLoadPrefetchedPageAction()", () => {
@@ -1057,8 +1114,44 @@ describe("Hologram", () => {
       [Type.atom("expression"), Type.tuple([Type.nil()])],
     ]);
 
+    // Example: $click={command: :my_command}
+    // Spec DOM: [expression: {[command: :my_command]}],
+    // which is equivalent to [{:expression, {[{:command, :my_command}]}}]
+    const commandSpecDom = Type.keywordList([
+      [
+        Type.atom("expression"),
+        Type.tuple([
+          Type.keywordList([[Type.atom("command"), Type.atom("my_command")]]),
+        ]),
+      ],
+    ]);
+
     const defaultTarget = cid1;
     const eventType = "click";
+
+    // What commandSpecDom dispatches for notIgnoredEvent below.
+    const expectedCommand = Type.commandStruct({
+      name: Type.atom("my_command"),
+      params: Type.map([
+        [
+          Type.atom("event"),
+          Type.map([
+            [Type.atom("client_x"), Type.float(10)],
+            [Type.atom("client_y"), Type.float(20)],
+            [Type.atom("movement_x"), Type.float(5)],
+            [Type.atom("movement_y"), Type.float(15)],
+            [Type.atom("offset_x"), Type.float(30)],
+            [Type.atom("offset_y"), Type.float(40)],
+            [Type.atom("page_x"), Type.float(1)],
+            [Type.atom("page_y"), Type.float(2)],
+            [Type.atom("pointer_type"), Type.atom("mouse")],
+            [Type.atom("screen_x"), Type.float(100)],
+            [Type.atom("screen_y"), Type.float(200)],
+          ]),
+        ],
+      ]),
+      target: defaultTarget,
+    });
 
     const notIgnoredEvent = {
       clientX: 10,
@@ -1457,18 +1550,6 @@ describe("Hologram", () => {
     });
 
     it("command", () => {
-      // Example: $click={command: :my_command}
-      // Spec DOM: [expression: {[command: :my_command]}],
-      // which is equivalent to [{:expression, {[{:command, :my_command}]}}]
-      const commandSpecDom = Type.keywordList([
-        [
-          Type.atom("expression"),
-          Type.tuple([
-            Type.keywordList([[Type.atom("command"), Type.atom("my_command")]]),
-          ]),
-        ],
-      ]);
-
       const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
@@ -1483,33 +1564,38 @@ describe("Hologram", () => {
       sinon.assert.notCalled(executePrefetchPageActionStub);
       sinon.assert.notCalled(scheduleActionStub);
 
-      const expectedCommand = Type.commandStruct({
-        name: Type.atom("my_command"),
-        params: Type.map([
-          [
-            Type.atom("event"),
-            Type.map([
-              [Type.atom("client_x"), Type.float(10)],
-              [Type.atom("client_y"), Type.float(20)],
-              [Type.atom("movement_x"), Type.float(5)],
-              [Type.atom("movement_y"), Type.float(15)],
-              [Type.atom("offset_x"), Type.float(30)],
-              [Type.atom("offset_y"), Type.float(40)],
-              [Type.atom("page_x"), Type.float(1)],
-              [Type.atom("page_y"), Type.float(2)],
-              [Type.atom("pointer_type"), Type.atom("mouse")],
-              [Type.atom("screen_x"), Type.float(100)],
-              [Type.atom("screen_y"), Type.float(200)],
-            ]),
-          ],
-        ]),
-        target: defaultTarget,
-      });
-
       sinon.assert.calledOnceWithExactly(
         clientSendCommandStub,
         expectedCommand,
+        0,
       );
+    });
+
+    // The reply's actions carry this stamp, so they are dropped if the page the user clicked on
+    // has been left by the time they land. It is the page on screen, not the page the registry
+    // answers for: the window a history restore opens has the registry moved on to the page being
+    // restored while the page the user clicked is still displayed.
+    it("sends a command stamped with the page the event happened on", () => {
+      try {
+        Hologram.registryEpoch = 1;
+
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          commandSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.calledOnceWithExactly(
+          clientSendCommandStub,
+          expectedCommand,
+          0,
+        );
+      } finally {
+        Hologram.registryEpoch = 0;
+      }
     });
 
     it("does not prevent default when isDefaultAllowed is true", () => {
@@ -4380,6 +4466,24 @@ describe("Hologram", () => {
       await flushPromises();
 
       sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 3);
+    });
+
+    // A command reply names the page the command was sent from, which the registry may have
+    // moved past by the time the reply arrives.
+    it("schedules the action with the epoch it is given", () => {
+      Hologram.schedulePushedAction(action, [], 7);
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 7);
+    });
+
+    it("schedules the action once its chunks have loaded, stamped with the epoch it is given", async () => {
+      Hologram.schedulePushedAction(action, ["AAAAAAAA"], 7);
+      Hologram.registryEpoch = 4;
+
+      announce("AAAAAAAA");
+      await flushPromises();
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, action, 7);
     });
 
     it("drops the action, and says so, when one of its chunks fails to load", async () => {

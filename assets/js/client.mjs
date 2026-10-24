@@ -165,7 +165,12 @@ export default class Client {
     return Connection.isConnected();
   }
 
-  static async sendCommand(command) {
+  // The epoch stamps the actions the reply carries, the next action and the self echoes: it is the
+  // page the command was sent from, so that a reply landing after a navigation is dropped as stale
+  // instead of running against the destination. A command the user triggered passes the displayed
+  // page's epoch, a command an action put passes that action's. The default reads the registry
+  // when the command is sent, never when the reply arrives.
+  static async sendCommand(command, epoch = Hologram.registryEpoch) {
     const opts = {
       method: "POST",
       headers: {
@@ -210,14 +215,14 @@ export default class Client {
       const nextAction = Interpreter.evaluateJavaScriptExpression(action);
 
       if (!Type.isNil(nextAction)) {
-        Hologram.schedulePushedAction(nextAction, chunks);
+        Hologram.schedulePushedAction(nextAction, chunks, epoch);
       }
 
       const selfEchoes =
         Interpreter.evaluateJavaScriptExpression(encodedSelfEchoes);
 
       for (const action of selfEchoes.data) {
-        Hologram.schedulePushedAction(action, chunks);
+        Hologram.schedulePushedAction(action, chunks, epoch);
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {

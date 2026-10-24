@@ -460,7 +460,7 @@ export default class Hologram {
           }
         }
       } else {
-        Client.sendCommand(operation);
+        Client.sendCommand(operation, epoch);
       }
     };
   }
@@ -735,9 +735,9 @@ export default class Hologram {
   // Runs the action once its delay has elapsed. The timer's callback is a new task, so the browser
   // can paint before the action runs, with no delay too.
   // Deps: [:maps.get/3]
-  // The default stamp covers every caller that reasoned about the registry rather than about the
-  // markup - server-pushed actions and command responses. A caller whose action came from the DOM
-  // passes the displayed page's epoch instead.
+  // The stamp is the page the action belongs to, which every caller knows better than this
+  // default does: a DOM dispatch passes the displayed page's epoch, a next action its parent's,
+  // and a pushed action the page it was sent to (see schedulePushedAction).
   static scheduleAction(action, epoch = $.registryEpoch) {
     const delay = Erlang_Maps["get/3"](
       Type.atom("delay"),
@@ -762,12 +762,13 @@ export default class Hologram {
   //
   // Realtime promises no order, so two pushed actions can run in the other order than the one
   // they were sent in, when the first of them waits for a chunk.
+  //
+  // The epoch is the page the action belongs to: a command reply carries the page the command was
+  // sent from, and an action that came over SSE takes the page the registry answers for when it
+  // arrives. A navigation while the chunks are fetched leaves the action stamped with that page,
+  // so that the queue drops it as stale.
   // Deps: [:maps.get/2]
-  static schedulePushedAction(action, chunkDigests) {
-    // Captured on arrival: a navigation while the chunks are fetched must leave the action stamped
-    // with the page it was sent to, so that the queue drops it as stale.
-    const epoch = $.registryEpoch;
-
+  static schedulePushedAction(action, chunkDigests, epoch = $.registryEpoch) {
     $.requestChunks(chunkDigests);
 
     if (ScriptRegistry.isLoaded(chunkDigests)) {
@@ -1961,7 +1962,9 @@ export default class Hologram {
         );
       }
 
-      Client.sendCommand(nextCommand);
+      // A next command belongs to the page its action belonged to, like a next action below, so
+      // its reply is dropped if that page has been left by the time it lands.
+      Client.sendCommand(nextCommand, epoch);
     }
 
     let savedComponentStruct = Erlang_Maps["put/3"](

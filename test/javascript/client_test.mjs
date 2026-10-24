@@ -479,7 +479,8 @@ describe("Client", () => {
     let fetchStub,
       schedulePushedActionStub,
       originalHologram,
-      originalInstanceId;
+      originalInstanceId,
+      originalRegistryEpoch;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -510,6 +511,11 @@ describe("Client", () => {
 
       originalInstanceId = App.instanceId;
       App.instanceId = "test-instance-id";
+
+      // A value another test is unlikely to leave behind, so that the stamp the reply's actions
+      // carry is visibly this describe's.
+      originalRegistryEpoch = Hologram.registryEpoch;
+      Hologram.registryEpoch = 3;
     });
 
     afterEach(() => {
@@ -517,6 +523,7 @@ describe("Client", () => {
       App.subscriptionReceiptRegistry.entries.clear();
       globalThis.Hologram = originalHologram;
       App.instanceId = originalInstanceId;
+      Hologram.registryEpoch = originalRegistryEpoch;
     });
 
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
@@ -584,6 +591,7 @@ describe("Client", () => {
         schedulePushedActionStub,
         Type.actionStruct({name: Type.atom("dummy_action")}),
         [],
+        3,
       );
     });
 
@@ -612,10 +620,12 @@ describe("Client", () => {
         [
           Type.actionStruct({name: Type.atom("next_action")}),
           ["AAAAAAAA", "BBBBBBBB"],
+          3,
         ],
         [
           Type.actionStruct({name: Type.atom("self_echo")}),
           ["AAAAAAAA", "BBBBBBBB"],
+          3,
         ],
       ]);
     });
@@ -714,11 +724,15 @@ describe("Client", () => {
       sinon.assert.calledWith(
         schedulePushedActionStub,
         Type.actionStruct({name: Type.atom("self_echo_a")}),
+        [],
+        3,
       );
 
       sinon.assert.calledWith(
         schedulePushedActionStub,
         Type.actionStruct({name: Type.atom("self_echo_b")}),
+        [],
+        3,
       );
     });
 
@@ -769,6 +783,72 @@ describe("Client", () => {
       assert.deepStrictEqual(
         schedulePushedActionStub.secondCall.args[0],
         Type.actionStruct({name: Type.atom("self_echo")}),
+      );
+    });
+
+    // The reply's actions belong to the page the command was sent from, which the caller names:
+    // the displayed page for a command the user triggered, the parent action's page for one an
+    // action put.
+    it("stamps the reply's actions with the epoch it is given", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("next_action")})',
+          selfEchoes:
+            'Type.list([Type.actionStruct({name: Type.atom("self_echo")})])',
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command, 7);
+      await waitForEventLoop();
+
+      assert.deepStrictEqual(schedulePushedActionStub.args, [
+        [Type.actionStruct({name: Type.atom("next_action")}), [], 7],
+        [Type.actionStruct({name: Type.atom("self_echo")}), [], 7],
+      ]);
+    });
+
+    // The default's one job is to read the epoch before the request goes out. A navigation can
+    // complete while the fetch is in flight, and a reply stamped on arrival would then pass for
+    // the destination's and run there against a target that page never had.
+    it("stamps the reply's actions with the registry's epoch when the command is sent, not when the reply arrives", async () => {
+      let resolveFetch;
+
+      const fetchPromise = new Promise((resolve) => {
+        resolveFetch = resolve;
+      });
+
+      fetchStub = sinon.stub(globalThis, "fetch").returns(fetchPromise);
+
+      const sendCommandPromise = Client.sendCommand(command);
+
+      // A page transition completing mid-flight.
+      Hologram.registryEpoch = 4;
+
+      resolveFetch({
+        ok: true,
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("next_action")})',
+          selfEchoes: "Type.list([])",
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
+      });
+
+      await sendCommandPromise;
+      await waitForEventLoop();
+
+      sinon.assert.calledOnceWithExactly(
+        schedulePushedActionStub,
+        Type.actionStruct({name: Type.atom("next_action")}),
+        [],
+        3,
       );
     });
 
