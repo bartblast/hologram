@@ -11,6 +11,7 @@ import {
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import App from "../../assets/js/app.mjs";
+import AssetPathRegistry from "../../assets/js/asset_path_registry.mjs";
 import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
@@ -28,6 +29,7 @@ import MountGate from "../../assets/js/mount_gate.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import ScriptRegistry from "../../assets/js/script_registry.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
@@ -3469,12 +3471,12 @@ describe("Hologram", () => {
 
       // Filed under a history id of its own each time: the handler first saves the page being
       // left under the id it holds, which is the one the last restore went to.
-      const seedSnapshot = (historyId) => {
+      const seedSnapshot = (historyId, snapshotPageModule = pageModule) => {
         const pageSnapshot = {
           chunkDigests: ["SNAPSHOT"],
           componentRegistryEntries: Type.map(),
           instanceId: "restored-instance",
-          pageModule: pageModule,
+          pageModule: snapshotPageModule,
           pageParams: Type.map(),
           scrollPosition: [0, 0],
           subscriptionReceipts: [],
@@ -3643,6 +3645,69 @@ describe("Hologram", () => {
 
         assert.isNotNull(MountGate.pendingMount);
         sinon.assert.notCalled(fetchPageStub);
+      });
+
+      // The mount counts the restored page as the one the registry answers for from its start,
+      // but the left page's markup, with its bindings, stays on screen until the mount's first
+      // render replaces it a frame later. A click on it before that frame must carry the left
+      // page's epoch, so that what it dispatches is dropped rather than run against the restored
+      // page. The render itself runs with the restored page's epoch, since the inline scripts its
+      // patch inserts are the restored page's.
+      it("keeps what is on screen on the left page's epoch until the frame of the mount's first render", async () => {
+        // A page module of its own, and a history id no other test files a snapshot under (the
+        // handler caches the snapshots it reads): the mount registers the module, and the
+        // neighbouring tests rely on theirs not being registered.
+        const mountedModule = Type.atom(
+          "Elixir.Hologram.Test.Fixtures.MountedFromSnapshot",
+        );
+
+        const assetPathEntries = AssetPathRegistry.entries;
+        let domEpochDuringRender = null;
+
+        const renderStub = sinon
+          .stub(Hologram, "render")
+          .callsFake(() => (domEpochDuringRender = Hologram.domEpoch));
+
+        const scrollToStub = sinon.stub(window, "scrollTo");
+        const sseConnectStub = sinon.stub(Sse, "connect");
+
+        let frame = null;
+        window.requestAnimationFrame = (callback) => (frame = callback);
+        globalThis.Hologram.assetManifest = {};
+
+        try {
+          ScriptRegistry.statuses.set("SNAPSHOT", "loaded");
+          seedSnapshot("history-mounted-from-snapshot", mountedModule);
+
+          await Hologram.handlePopstateEvent({
+            state: "history-mounted-from-snapshot",
+          });
+
+          await flushPromises();
+
+          // What the runtime does once a script announces itself (#defineLoadedScripts).
+          announce("restored-1");
+          MountGate.settle();
+
+          assert.isNotNull(frame);
+          assert.equal(Hologram.registryEpoch, 1);
+          assert.equal(Hologram.domEpoch, 0);
+
+          frame();
+
+          assert.equal(domEpochDuringRender, 1);
+          assert.equal(Hologram.domEpoch, 1);
+          assert.isFalse(Hologram.isMounting);
+        } finally {
+          delete window.requestAnimationFrame;
+          delete globalThis.Hologram.assetManifest;
+          AssetPathRegistry.entries = assetPathEntries;
+          LiveReload.pageBundleDigests.delete(mountedModule.value);
+          Hologram.isMounting = false;
+          renderStub.restore();
+          scrollToStub.restore();
+          sseConnectStub.restore();
+        }
       });
     });
   });

@@ -1697,9 +1697,13 @@ export default class Hologram {
     // the user leaves instead - in #showNewPage and handlePopstateEvent - which is the last
     // point at which every pending timer provably belongs to the page being left.
     //
-    // Whichever pointer ran ahead during the transition, the mount is where they converge: from
-    // here the page on screen and the page the registry answers for are the same page.
-    $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
+    // Whichever pointer ran ahead during the transition, the mount is where they converge. The
+    // registry answers for the mounted page from here. The epoch of what is displayed follows in
+    // the frame of the mount's first render, which is what replaces the markup on screen: after a
+    // history restore the left page's markup stays up, with its bindings, until then, and a click
+    // on it must still carry the left page's epoch.
+    const epoch = Math.max($.domEpoch, $.registryEpoch);
+    $.registryEpoch = epoch;
 
     // Nothing runs until the first render below has written the props - see the flag.
     $.isMounting = true;
@@ -1741,6 +1745,14 @@ export default class Hologram {
     ActionQueue.append(waitingEntries);
 
     window.requestAnimationFrame(() => {
+      // The render below is what puts the mounted page's markup on screen (see the top of
+      // #mountPage), so the displayed epoch catches up here. Before the render rather than after
+      // it: the patch runs the inline scripts it inserts, and what they dispatch is the mounted
+      // page's. A click on the left page's markup happened before this frame and carries its own
+      // epoch. A navigation started since may have moved the displayed epoch further on, and
+      // keeps it.
+      $.domEpoch = Math.max($.domEpoch, epoch);
+
       // The registry arrives with every struct's props empty - this render is what writes them, so
       // that the payload doesn't carry each prop value a second time - which is one more reason
       // nothing above may run a handler before this call, and why the queue is held until it is
@@ -2111,8 +2123,8 @@ export default class Hologram {
 
     // A restore swaps the registry while the previous page is still on screen - the mirror of a
     // forward navigation, where the markup runs ahead instead. The epoch of what the registry
-    // answers for was advanced when the restore was decided on; the mount brings the displayed
-    // side level.
+    // answers for was advanced when the restore was decided on; the frame of the mount's first
+    // render brings the displayed side level, as that render replaces the previous page's markup.
     ComponentRegistry.populate(componentRegistryEntries);
 
     App.instanceId = instanceId;
