@@ -20,6 +20,9 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+  alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
+  alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Role
 
   describe "compile/2" do
@@ -74,7 +77,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|ORDER BY "i1"."c_$sort" ASC, "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|
+               ~s|ORDER BY "$i1"."c_$sort" ASC, "$i1"."c" ASC, "$i1"."id" ASC), '[]'::jsonb|
              )
     end
 
@@ -90,7 +93,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|ORDER BY "i1"."c_$sort" ASC, "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|
+               ~s|ORDER BY "$i1"."c_$sort" ASC, "$i1"."c" ASC, "$i1"."id" ASC), '[]'::jsonb|
              )
     end
 
@@ -167,7 +170,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:c, :==, "text_1"}], to: nil, via: nil}]
 
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}, {:value, "text_1"}],
                sql:
                  ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
@@ -185,7 +188,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         %{predicates: [{:b, :>=, 3}, {:c, :==, "text_2"}], to: nil, via: nil}
       ]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3))|)
     end
@@ -200,7 +203,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: params, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert params == [{:value, true}, {:value, 3}, {:value, "x"}]
       assert String.contains?(sql, ~s|WHERE (((("a" = $1) OR ("b" >= $2))) OR ("c" = $3))|)
@@ -217,7 +220,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: [{:value, true}], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
     end
@@ -239,7 +242,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [{:value, true}, {:value, 3}], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "a" = $1 AND "b" >= $2 ORDER BY|)
     end
@@ -252,7 +255,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [{:value, true}, {:value, 3}], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2)) ORDER BY|)
     end
@@ -265,7 +268,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE FALSE ORDER BY|)
     end
@@ -278,7 +281,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: predicates, to: nil, via: nil}]
 
       assert %{params: [], sql: sql} =
-               compile(term, mapping, %{anonymous?: true, operation: :read, rules: rules})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE FALSE ORDER BY|)
     end
@@ -293,7 +296,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: nil}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
     end
@@ -314,7 +317,7 @@ defmodule Hologram.DB.QueryCompilerTest do
             [unconditional_rule, conditional_rule]
           ] do
         assert %{params: placeholders, sql: sql} =
-                 compile(term, mapping, %{operation: :read, rules: rules})
+                 compile(term, mapping, %{rules: rules})
 
         assert placeholders == [value: true]
         assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
@@ -331,17 +334,17 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: nil}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(
                sql,
-               ~s|WHERE "i1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
-                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                 ~s|WHERE "rg"."user_id" = $1 | <>
-                 ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."entity_type" = | <>
+               ~s|WHERE "$i1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                 ~s|WHERE "$rg"."user_id" = $1 | <>
+                 ~s|AND "$rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "$rg"."entity_type" = | <>
                  ~s|$3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND ("rg"."entity_id" = "i1"."id" OR "rg"."entity_id" IS NULL))|
+                 ~s|AND ("$rg"."entity_id" = "$i1"."id" OR "$rg"."entity_id" IS NULL))|
              )
     end
 
@@ -357,7 +360,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|WHERE "i1"."id" = "test_fixtures_policy_module1"."parent_id")|
+               ~s|WHERE "$i1"."id" = "test_fixtures_policy_module1"."parent_id")|
              )
     end
 
@@ -366,7 +369,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = Stage.normalize(Module2)
 
       assert %{params: [], sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: []})
+               compile(term, mapping, %{rules: []})
 
       assert String.contains?(sql, " WHERE FALSE ORDER BY")
     end
@@ -381,7 +384,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       ]
 
       assert %{params: [:actor], sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE (("b_id" = $1) OR ("c_id" = $1))|)
     end
@@ -394,7 +397,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
 
       assert %{params: [{:placeholder, :target, :uuid}, :actor], sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "c_id" = $1 AND "b_id" = $2|)
     end
@@ -409,7 +412,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:a, :==, true}], to: nil, via: nil}]
 
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
                sql:
                  ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module2" | <>
@@ -423,7 +426,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}]
 
-      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [
                  :actor,
                  {:value, ["editor", "owner"]},
@@ -433,13 +436,13 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
                    ~s|"created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
-                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                   ~s|WHERE "rg"."user_id" = $1 | <>
-                   ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."entity_type" = | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                   ~s|WHERE "$rg"."user_id" = $1 | <>
+                   ~s|AND "$rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                   ~s|AND "$rg"."entity_type" = | <>
                    ~s|$3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                   ~s|AND ("rg"."entity_id" = "test_fixtures_policy_module1"."id" | <>
-                   ~s|OR "rg"."entity_id" IS NULL)) ORDER BY "id" ASC|
+                   ~s|AND ("$rg"."entity_id" = "test_fixtures_policy_module1"."id" | <>
+                   ~s|OR "$rg"."entity_id" IS NULL)) ORDER BY "id" ASC|
              }
     end
 
@@ -449,7 +452,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1, Role.Module2]}], via: nil}]
 
-      assert compile(term, mapping, %{operation: :archive, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [
                  :actor,
                  {:value,
@@ -458,10 +461,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                sql:
                  ~s|SELECT "id", "public", "created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
-                   ~s|WHERE "rg"."user_id" = $1 | <>
-                   ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                   ~s|AND "rg"."entity_type" IS NULL AND "rg"."entity_id" IS NULL) | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                   ~s|WHERE "$rg"."user_id" = $1 | <>
+                   ~s|AND "$rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                   ~s|AND "$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL) | <>
                    ~s|ORDER BY "id" ASC|
              }
     end
@@ -473,7 +476,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [], to: [{:global, [Role.Module1]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :archive, rules: rules, anonymous?: true})
+               compile(term, mapping, %{anonymous?: true, rules: rules})
 
       assert placeholders == []
       refute String.contains?(sql, "hologram_role_grant")
@@ -486,7 +489,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [], to: [{:type, PolicyModule2, [:admin]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert placeholders == [
                :actor,
@@ -496,8 +499,8 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."entity_type" = $3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND "rg"."entity_id" IS NULL)|
+               ~s|AND "$rg"."entity_type" = $3::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND "$rg"."entity_id" IS NULL)|
              )
     end
 
@@ -508,7 +511,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert placeholders == [
                :actor,
@@ -518,7 +521,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|AND "rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
+               ~s|AND "$rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
              )
     end
 
@@ -528,7 +531,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor]}], via: nil}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "priority" >= $1 AND EXISTS (SELECT 1|)
     end
@@ -541,7 +544,7 @@ defmodule Hologram.DB.QueryCompilerTest do
         %{predicates: [], to: [{:own, [:viewer]}, {:type, PolicyModule2, [:admin]}], via: nil}
       ]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE ((EXISTS (SELECT 1|)
       assert String.contains?(sql, ~s|) OR (EXISTS (SELECT 1|)
@@ -551,18 +554,117 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: :parent}]
+      rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
 
-      assert compile(term, mapping, %{operation: :publish, rules: rules}) == %{
+      assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
                    ~s|"created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                   ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
-                   ~s|"test_fixtures_policy_module1"."parent_id" AND "public" = $1) | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                   ~s|AND "public" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    # The related row is a row of the delegating type, so only the alias keeps the two apart - the
+    # table name inside the subquery would name the inner row on both sides of the join.
+    test "composes a delegation back to the delegating entity type under an alias of its own" do
+      mapping = Mapper.derive!([PolicyModule9], [])
+      term = Stage.normalize(PolicyModule9)
+      rules = Policy.build(PolicyModule9)[:read]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, false}],
+               sql:
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AND "archived" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    # The mapper strips the app root, so this type's table is a bare d1 - the name the delegation's
+    # alias would have without its $, which would put both sides of the join on the inner row.
+    test "keeps a delegation's alias apart from a table of the same name" do
+      defmodule Elixir.Hologram.D1 do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        relationship :parent, Hologram.D1, optional: true
+
+        allow :read, via: {:update, parent}
+        allow :update, when: archived == false
+      end
+
+      mapping = Mapper.derive!([Hologram.D1], [])
+      term = Stage.normalize(Hologram.D1)
+      rules = Policy.build(Hologram.D1)[:read]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, false}],
+               sql:
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."d1" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."d1" AS "$d1" | <>
+                   ~s|WHERE "$d1"."id" = "d1"."parent_id" AND "archived" = $1) | <>
                    ~s|ORDER BY "id" ASC|
+             }
+    end
+
+    test "gives each nested delegation an alias of its own" do
+      mapping =
+        Mapper.derive!(
+          [Module14, PolicyModule1, PolicyModule2, PolicyModule5, PolicyModule8, RoleGrant],
+          []
+        )
+
+      term = Stage.normalize(PolicyModule8)
+      rules = Policy.build(PolicyModule8)[:read]
+
+      assert compile(term, mapping, %{anonymous?: true, rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module5" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module8"."parent_id" | <>
+                   ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|AS "$d2" WHERE "$d2"."id" = "$d1"."parent_id" AND "public" = $1)) | <>
+                   ~s|ORDER BY "id" ASC|
+             }
+    end
+
+    # The included row is the delegating one there, so the delegation correlates on the include's
+    # alias rather than on the statement's table.
+    test "composes a delegation inside an include subquery against the include's alias" do
+      mapping = Mapper.derive!([PolicyModule9], [])
+
+      term =
+        PolicyModule9
+        |> include(parent)
+        |> Stage.normalize()
+
+      rules = Policy.build(PolicyModule9)[:read]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, false}, {:value, false}],
+               sql:
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions", | <>
+                   ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'archived', "$i1"."archived", | <>
+                   ~s|'parent_id', "$i1"."parent_id", 'created_at', "$i1"."created_at", | <>
+                   ~s|'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module9" AS "$i1" | <>
+                   ~s|WHERE "$i1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "$i1"."parent_id" AND "archived" = $1)) | <>
+                   ~s|AS "parent" FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AND "archived" = $2) ORDER BY "id" ASC|
              }
     end
 
@@ -570,9 +672,9 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: :parent}]
+      rules = [%{predicates: [], to: nil, via: {:delete, :parent}}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :delete, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
       assert String.contains?(
                sql,
@@ -584,10 +686,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: :parent}]
+      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, :parent}}]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :publish, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert placeholders == [{:value, 3}, {:value, true}]
       assert String.contains?(sql, ~s|WHERE "priority" >= $1 AND EXISTS (SELECT 1|)
@@ -599,27 +701,31 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [
         %{predicates: [], to: [{:own, [:owner]}], via: nil},
-        %{predicates: [], to: nil, via: :parent}
+        %{predicates: [], to: nil, via: {:read, :parent}}
       ]
 
       assert %{params: placeholders, sql: sql} =
-               compile(term, mapping, %{operation: :read, rules: rules})
+               compile(term, mapping, %{rules: rules})
 
       assert Enum.count(placeholders, &(&1 == :actor)) == 1
 
       assert String.contains?(
                sql,
                ~s|EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                 ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
-                 ~s|"test_fixtures_policy_module1"."parent_id" AND EXISTS (SELECT 1 FROM | <>
-                 ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1|
+                 ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                 ~s|WHERE "$rg"."user_id" = $1 | <>
+                 ~s|AND "$rg"."role" = ANY($4::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "$rg"."entity_type" = | <>
+                 ~s|$5::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND ("$rg"."entity_id" = "$d1"."id" OR "$rg"."entity_id" IS NULL))|
              )
     end
 
     test "composes the grant store's own visibility policy" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(RoleGrant)
-      policy = %{operation: :read, rules: Policy.build(RoleGrant)[:read]}
+      policy = %{rules: Policy.build(RoleGrant)[:read]}
 
       assert %{params: placeholders, sql: sql} = compile(term, mapping, policy)
 
@@ -640,11 +746,11 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(
                sql,
                ~s|("entity_type" = $2 AND EXISTS (SELECT 1 FROM | <>
-                 ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1 | <>
-                 ~s|AND "rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
-                 ~s|AND "rg"."entity_type" = | <>
+                 ~s|"hologram_data"."hologram_role_grant" AS "$rg" WHERE "$rg"."user_id" = $1 | <>
+                 ~s|AND "$rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "$rg"."entity_type" = | <>
                  ~s|$4::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND "rg"."entity_id" = "hologram_role_grant"."entity_id"))|
+                 ~s|AND "$rg"."entity_id" = "hologram_role_grant"."entity_id"))|
              )
     end
 
@@ -833,12 +939,12 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "i1" WHERE "i1"."id" = "test_fixtures_entity_module3"."b_id") AS "b"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$i1" WHERE "$i1"."id" = "test_fixtures_entity_module3"."b_id") AS "b"|
              )
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "i2" WHERE "i2"."id" = "test_fixtures_entity_module3"."c_id") AS "c"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "$i2" WHERE "$i2"."id" = "test_fixtures_entity_module3"."c_id") AS "c"|
              )
     end
 
@@ -886,16 +992,16 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       expected_fragment =
         ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
-          ~s|'id', "i1"."id", 'a', "i1"."a", 'b', "i1"."b", 'c', "i1"."c", | <>
-          ~s|'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at", '$revisions', "i1"."$revisions", | <>
-          ~s|'c_$sort', "i1"."c_$sort"| <>
-          ~s|) ORDER BY "i1"."id" ASC), '[]'::jsonb) | <>
-          ~s|FROM (SELECT "t1".* | <>
-          ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "t1" | <>
-          ~s|WHERE "t1"."id" IN (SELECT "j1"."target_id" | <>
-          ~s|FROM "hologram_data"."test_fixtures_entity_module3_a_$join" AS "j1" | <>
-          ~s|WHERE "j1"."source_id" = "test_fixtures_entity_module3"."id") | <>
-          ~s|ORDER BY "id" ASC) AS "i1") AS "a"|
+          ~s|'id', "$i1"."id", 'a', "$i1"."a", 'b', "$i1"."b", 'c', "$i1"."c", | <>
+          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
+          ~s|'c_$sort', "$i1"."c_$sort"| <>
+          ~s|) ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
+          ~s|FROM (SELECT "$t1".* | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$t1" | <>
+          ~s|WHERE "$t1"."id" IN (SELECT "$j1"."target_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module3_a_$join" AS "$j1" | <>
+          ~s|WHERE "$j1"."source_id" = "test_fixtures_entity_module3"."id") | <>
+          ~s|ORDER BY "id" ASC) AS "$i1") AS "a"|
 
       assert String.contains?(sql, expected_fragment)
     end
@@ -912,9 +1018,9 @@ defmodule Hologram.DB.QueryCompilerTest do
                params: [],
                sql:
                  ~s|SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions", | <>
-                   ~s|(SELECT jsonb_build_object('id', "i1"."id", 'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at", '$revisions', "i1"."$revisions") | <>
-                   ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "i1" | <>
-                   ~s|WHERE "i1"."id" = "test_fixtures_entity_module3"."c_id") AS "c" | <>
+                   ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "$i1" | <>
+                   ~s|WHERE "$i1"."id" = "test_fixtures_entity_module3"."c_id") AS "c" | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC|
              }
     end
@@ -931,7 +1037,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module5" AS "i1" WHERE "i1"."id" = "test_fixtures_entity_module5"."b_id") AS "b"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module5" AS "$i1" WHERE "$i1"."id" = "test_fixtures_entity_module5"."b_id") AS "b"|
              )
     end
 
@@ -1147,7 +1253,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = Stage.normalize(Module10)
       rules = [%{predicates: [{:count, :<=, {:attribute, :priority}}], to: nil, via: nil}]
 
-      assert %{params: [], sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+      assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
       assert String.contains?(sql, ~s( WHERE "count" <= "priority" ))
     end
 
@@ -1216,11 +1322,11 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       expected_fragment =
         ~s|, 'b', (SELECT jsonb_build_object(| <>
-          ~s|'id', "i2"."id", 'a', "i2"."a", 'b', "i2"."b", 'c', "i2"."c", | <>
-          ~s|'created_at', "i2"."created_at", 'updated_at', "i2"."updated_at", '$revisions', "i2"."$revisions", | <>
-          ~s|'c_$sort', "i2"."c_$sort"| <>
-          ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "i2" | <>
-          ~s|WHERE "i2"."id" = "i1"."b_id")|
+          ~s|'id', "$i2"."id", 'a', "$i2"."a", 'b', "$i2"."b", 'c', "$i2"."c", | <>
+          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions", | <>
+          ~s|'c_$sort', "$i2"."c_$sort"| <>
+          ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "$i2" | <>
+          ~s|WHERE "$i2"."id" = "$i1"."b_id")|
 
       assert String.contains?(sql, expected_fragment)
     end
@@ -1237,14 +1343,14 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|, 'b', (SELECT jsonb_build_object('id', "i2"."id"|
+               ~s|, 'b', (SELECT jsonb_build_object('id', "$i2"."id"|
              )
 
-      assert String.contains?(sql, ~s|AS "i2" WHERE "i2"."id" = "i1"."b_id")|)
+      assert String.contains?(sql, ~s|AS "$i2" WHERE "$i2"."id" = "$i1"."b_id")|)
 
       assert String.contains?(
                sql,
-               ~s|FROM "hologram_data"."test_fixtures_entity_module6_a_$join" AS "j1"|
+               ~s|FROM "hologram_data"."test_fixtures_entity_module6_a_$join" AS "$j1"|
              )
     end
 

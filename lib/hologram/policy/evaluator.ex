@@ -34,7 +34,7 @@ defmodule Hologram.Policy.Evaluator do
   Returns true when the given compiled rule grants its operation for the given entity struct, or false otherwise.
 
   Every predicate clause must hold - a disjunction when any of its alternatives does - one grant
-  reference must be held, and the delegation must grant the same operation on the related entity.
+  reference must be held, and the related entity must grant the operation the delegation names.
   Predicate values compare as they do in the database: nil is a regular value for equality and
   membership, while ordering comparisons never match it. An attribute operand reads the row's other
   attribute, compared the way a literal is.
@@ -48,7 +48,7 @@ defmodule Hologram.Policy.Evaluator do
 
   Grant references and delegations are resolved by the given checker function, called as
   checker.(requirement, entity, actor user id) with the rule's grant reference or a
-  {:via, relationship name} tuple, and returning a boolean.
+  {:via, operation, relationship name} tuple, and returning a boolean.
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
@@ -185,7 +185,7 @@ defmodule Hologram.Policy.Evaluator do
 
   defp via_holds?(nil, _entity, _actor_user_id, _checker), do: true
 
-  defp via_holds?(relationship_name, entity, actor_user_id, checker) do
-    checker.({:via, relationship_name}, entity, actor_user_id)
+  defp via_holds?({operation, relationship_name}, entity, actor_user_id, checker) do
+    checker.({:via, operation, relationship_name}, entity, actor_user_id)
   end
 end

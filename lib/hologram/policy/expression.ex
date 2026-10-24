@@ -3,9 +3,10 @@ defmodule Hologram.Policy.Expression do
 
   # Lowers what an allow line was written with to the data form Hologram.Entity.__put_policy__/4
   # stores. Every key on the line is an option - to: names who holds the operation, via: the
-  # relationship it is delegated through, when: the condition - so no attribute name is taken by
-  # the line. Roles are atoms, relationships are bare names, the condition is an expression, and
-  # anything from the surrounding code is pinned with ^.
+  # relationship it is delegated through and, written as a tuple, the operation it asks there,
+  # when: the condition - so no attribute name is taken by the line. Roles and operations are
+  # atoms, relationships are bare names, the condition is an expression, and anything from the
+  # surrounding code is pinned with ^.
   #
   # It runs at expansion and judges the spelling only. Whether a role, a relationship or an
   # attribute is declared stays with the declaration and the whole-model validation, which judge
@@ -23,9 +24,11 @@ defmodule Hologram.Policy.Expression do
 
   `to:` keeps role names and role modules, lowers a `{role, relationship}` tuple's bare name to an
   atom (`{:editor, project}` to `{:editor, :project}`) and keeps a `{role, entity type}` tuple, in
-  a list or alone. `via:` lowers a bare name to an atom. `when:` lowers through
-  `Hologram.Query.Expression.condition/2`. A pinned `to:`, `via:` or `when:` value, a pinned
-  element of a `to:` list and a pinned role or scope of a tuple lower to the expression.
+  a list or alone. `via:` lowers a bare name to an atom, alone or as the relationship of an
+  `{operation, relationship}` tuple (`{:update, project}` to `{:update, :project}`). `when:`
+  lowers through `Hologram.Query.Expression.condition/2`. A pinned `to:`, `via:` or `when:` value, a pinned
+  element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
+  relationship of a delegation lower to the expression.
   `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
   element that is not a keyword entry pass through for the declaration to refuse.
 
@@ -33,7 +36,8 @@ defmodule Hologram.Policy.Expression do
   an option written twice (only one would be read, so the line would grant more than it says), on
   an unknown option (naming the condition it can mean when its value is an equality operand), on a
   grant reference with the scope first or a relationship written as an atom, on a role written as
-  a bare name, on a delegation written as an atom or as a path, and on anything else.
+  a bare name, on a delegation written as an atom or as a path, on a delegation with the
+  relationship first or with an operation that is not an atom, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
@@ -55,6 +59,10 @@ defmodule Hologram.Policy.Expression do
     )
   end
 
+  # A name atom (not nil, true or false) or a pinned expression, the two spellings of a role or an
+  # operation.
+  defp atom_or_pin?(ast), do: name_atom?(ast) or pinned?(ast)
+
   # __MODULE__ has the shape of a bare name, but it names the module it is written in.
   defp bare_name?({:__MODULE__, _meta, _context}), do: false
 
@@ -64,9 +72,7 @@ defmodule Hologram.Policy.Expression do
 
   # One hop, as the delegation has always been - a path reaches further than the target's own
   # policy, which is a change to what delegation means rather than a spelling.
-  defp delegation!(nil, _env), do: nil
-
-  defp delegation!({:__MODULE__, _meta, _context} = ast, env) do
+  defp delegated_relationship!({:__MODULE__, _meta, _context} = ast, env) do
     QueryExpression.compile_error!(
       "via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
       ast,
@@ -74,7 +80,7 @@ defmodule Hologram.Policy.Expression do
     )
   end
 
-  defp delegation!(ast, env) do
+  defp delegated_relationship!(ast, env) do
     case QueryExpression.hops(ast) do
       [_hop, _next_hop | _later_hops] ->
         QueryExpression.compile_error!(
@@ -88,13 +94,62 @@ defmodule Hologram.Policy.Expression do
     end
   end
 
+  defp delegation!(nil, _env), do: nil
+
+  # A tuple names the operation the related row is asked, the relationship in it taking every
+  # spelling it takes alone. The operation comes first, as the role does in a grant reference.
+  defp delegation!({operation, relationship} = ast, env) do
+    cond do
+      bare_name?(operation) and name_atom?(relationship) ->
+        QueryExpression.compile_error!(
+          "the operation comes first in a delegation, got: #{Macro.to_string(ast)} - write #{Macro.to_string({relationship, operation})}",
+          ast,
+          env
+        )
+
+      # A pin after a bare name is the relationship written first with a pinned operation, or a
+      # bare-name operation with a pinned relationship - nothing says which, so the message names
+      # the shape rather than a rewrite that could swap them.
+      bare_name?(operation) and pinned?(relationship) ->
+        QueryExpression.compile_error!(
+          "via puts the operation first, as an atom or pinned, and the relationship second, got: #{Macro.to_string(ast)} - write {operation, relationship}, like {:update, trip}",
+          ast,
+          env
+        )
+
+      bare_name?(operation) ->
+        {name, _meta, _context} = operation
+
+        QueryExpression.compile_error!(
+          "via names an operation with an atom, got: #{name} - write #{inspect(name)}",
+          operation,
+          env
+        )
+
+      atom_or_pin?(operation) and not delegation_tuple?(relationship) ->
+        {unpinned(operation), delegated_relationship!(relationship, env)}
+
+      true ->
+        QueryExpression.compile_error!(
+          "via takes a relationship or an {operation, relationship} tuple, got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+    end
+  end
+
+  defp delegation!(ast, env), do: delegated_relationship!(ast, env)
+
+  # A literal 2-tuple where the relationship goes - a delegation nested in a delegation.
+  defp delegation_tuple?({_first, _second}), do: true
+
+  defp delegation_tuple?(_ast), do: false
+
   # A value an unknown option can be read as an equality with - anything else (an operator tuple,
   # a list) meant another operator, and an equality hint would mislead.
-  defp equality_operand?({:^, _meta, [_expr]}), do: true
-
   defp equality_operand?({:user_id, _meta, []}), do: true
 
-  defp equality_operand?(value), do: literal?(value)
+  defp equality_operand?(value), do: pinned?(value) or literal?(value)
 
   defp grant_reference!({:^, _meta, [expr]}, _env), do: expr
 
@@ -122,8 +177,8 @@ defmodule Hologram.Policy.Expression do
           env
         )
 
-      role?(role) ->
-        {role_value(role), reference_scope!(ast, env)}
+      atom_or_pin?(role) ->
+        {unpinned(role), reference_scope!(ast, env)}
 
       true ->
         reference_error!(ast, env)
@@ -168,6 +223,10 @@ defmodule Hologram.Policy.Expression do
     do: unknown_option!(key, value, operation, env)
 
   defp option!(element, _operation, _env), do: element
+
+  defp pinned?({:^, _meta, [_expr]}), do: true
+
+  defp pinned?(_ast), do: false
 
   @spec reference_error!(Macro.t(), Macro.Env.t()) :: no_return
   defp reference_error!(ast, env) do
@@ -224,14 +283,6 @@ defmodule Hologram.Policy.Expression do
     )
   end
 
-  defp role?({:^, _meta, [_expr]}), do: true
-
-  defp role?(role), do: name_atom?(role)
-
-  defp role_value({:^, _meta, [expr]}), do: expr
-
-  defp role_value(role), do: role
-
   # The scope written where the role goes: a relationship or an entity type first and a role atom
   # second is the order the tuple had before it turned around.
   defp scope_first?({first, second}) do
@@ -267,4 +318,8 @@ defmodule Hologram.Policy.Expression do
       env
     )
   end
+
+  defp unpinned({:^, _meta, [expr]}), do: expr
+
+  defp unpinned(ast), do: ast
 end

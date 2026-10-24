@@ -3971,7 +3971,7 @@ defmodule Hologram.Compiler do
     render_json_object([
       {"predicates", render_policy_predicates(entity_type, rule.predicates)},
       {"to", render_policy_references(entity_type, rule.to)},
-      {"via", Jason.encode!(rule.via)}
+      {"via", render_policy_delegation(rule.via)}
     ])
   end
 
@@ -4092,6 +4092,13 @@ defmodule Hologram.Compiler do
       |> Jason.encode!()
     end)
     |> then(&"[#{&1}]")
+  end
+
+  # Operation first, as the server's tuple holds it - the array shape grant references bake as.
+  defp render_policy_delegation(nil), do: "null"
+
+  defp render_policy_delegation({operation, relationship_name}) do
+    Jason.encode!([Policy.operation_key(operation), Atom.to_string(relationship_name)])
   end
 
   # The client writes a creator's grants itself when it creates a row, so it has to be told which

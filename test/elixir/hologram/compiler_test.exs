@@ -3635,7 +3635,10 @@ defmodule Hologram.CompilerTest do
                ~s/"to":[["own",["viewer"]],["type","Hologram.Test.Fixtures.Policy.Module2",["admin"]]]/
              )
 
-      assert String.contains?(js, ~s/"publish":[{"predicates":[],"to":null,"via":"parent"}]/)
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish","parent"]}]/
+             )
     end
 
     # A member and its trailing comma, never a member plus whichever key follows it.

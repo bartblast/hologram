@@ -30,6 +30,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
+  alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Role
 
   @mapping Mapper.derive!([Module1, Module2, Module3], [])
@@ -84,7 +85,6 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp archivable_ids(actor_user_id) do
       policy = %{
         anonymous?: false,
-        operation: :archive,
         rules: Policy.build(PolicyModule2)[:archive]
       }
 
@@ -110,18 +110,18 @@ defmodule Hologram.DB.QueryRunnerTest do
       |> DB.create!()
     end
 
-    defp create_policy_entity(public) do
-      %{public: public}
-      |> PolicyModule1.new()
-      |> DB.create!()
-    end
-
     defp create_policy_container(children) do
       container = DB.create!(PolicyModule3.new())
 
       Enum.each(children, &add_relationship(PolicyModule3, container.id, :children, &1.id))
 
       container
+    end
+
+    defp create_policy_entity(public) do
+      %{public: public}
+      |> PolicyModule1.new()
+      |> DB.create!()
     end
 
     defp create_policy_parent do
@@ -131,6 +131,12 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp create_policy_user(email) do
       %{email: email}
       |> Module14.new()
+      |> DB.create!()
+    end
+
+    defp create_self_delegating(values) do
+      values
+      |> PolicyModule9.new()
       |> DB.create!()
     end
 
@@ -381,6 +387,32 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert included_child.id == child.id
       assert included_child.parent == nil
+    end
+
+    # The related row is a row of the same type, so the statement has to tell the two apart - and
+    # what it reads has to be what can? answers, row by row.
+    test "reads a row through a delegation back to its own entity type" do
+      editable = create_self_delegating(%{archived: false})
+      archived = create_self_delegating(%{archived: true})
+      editable_child = create_self_delegating(%{parent_id: editable.id})
+      archived_child = create_self_delegating(%{parent_id: archived.id})
+      mapping = Mapper.derive!([PolicyModule9], [])
+
+      ids =
+        PolicyModule9
+        |> Stage.normalize()
+        |> run_policied(mapping, nil)
+        |> Enum.map(& &1.id)
+
+      assert ids == [editable_child.id]
+
+      readable =
+        Enum.filter(
+          [editable, archived, editable_child, archived_child],
+          &Auth.can?(nil, :read, &1)
+        )
+
+      assert readable == [editable_child]
     end
 
     test "leaves the trusted run unrestricted" do

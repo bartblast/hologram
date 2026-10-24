@@ -5,6 +5,7 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
+      delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
       framework_operations: 0,
@@ -366,7 +367,7 @@ defmodule Hologram.PolicyTest do
                ],
                :grant_role => [owner_rule, owner_rule],
                :publish => [
-                 %{predicates: [], to: nil, via: :parent}
+                 %{predicates: [], to: nil, via: {:publish, :parent}}
                ],
                :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},
@@ -384,6 +385,12 @@ defmodule Hologram.PolicyTest do
                {:grant_role, :owner} => [owner_rule],
                {:revoke_role, :editor} => [owner_rule],
                {:revoke_role, :owner} => [owner_rule]
+             }
+    end
+
+    test "keeps the operation a delegation names" do
+      assert build(Policy.Module11) == %{
+               create: [%{predicates: [], to: nil, via: {:update, :parent}}]
              }
     end
   end
@@ -551,6 +558,20 @@ defmodule Hologram.PolicyTest do
 
     test "never returns the grant store" do
       assert dead_entity_types([RoleGrant]) == []
+    end
+  end
+
+  describe "delegation/2" do
+    test "returns nil for a line that delegates nothing" do
+      assert delegation(:read, nil) == nil
+    end
+
+    test "asks the same operation through a relationship" do
+      assert delegation(:read, :parent) == {:read, :parent}
+    end
+
+    test "keeps the operation a tuple names" do
+      assert delegation(:create, {:update, :parent}) == {:update, :parent}
     end
   end
 

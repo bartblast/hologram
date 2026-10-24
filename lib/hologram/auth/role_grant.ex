@@ -129,7 +129,7 @@ defmodule Hologram.Auth.RoleGrant do
   Returns the list of policy definitions for the role grant entity type.
   Empty - the visibility policy of role grants is framework-supplied, not declared.
   """
-  @spec __policies__() :: list({atom, term, atom | nil, keyword})
+  @spec __policies__() :: list({atom, term, atom | {atom, atom} | nil, keyword})
   def __policies__, do: []
 
   @doc """

@@ -11,18 +11,22 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Stop
+  alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Policies.Page2
   alias HologramFeatureTests.Policies.Page3
+  alias HologramFeatureTests.Policies.Page5
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
 
   # The tables truncate in one statement: the memo, note and role grant tables' foreign keys to the
-  # user table make Postgres reject truncating the referenced table alone.
+  # user table, and the stop table's to the trip table, make Postgres reject truncating the
+  # referenced table alone.
   setup do
     tables =
       Enum.map_join(
-        [Booking, Document, Folder, Memo, Note, RoleGrant, User],
+        [Booking, Document, Folder, Memo, Note, RoleGrant, Stop, Trip, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -32,6 +36,27 @@ defmodule HologramFeatureTests.PoliciesTest do
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
     :ok
+  end
+
+  # Proves the DOM changed without the page being fetched again - a reload would take the marker
+  # with it, so a passing assertion after one would say nothing.
+  defp assert_same_page_load(session) do
+    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
+  end
+
+  defp mark_this_page_load(session) do
+    execute_script(session, "globalThis.__thisPageLoad = 'held';")
+  end
+
+  defp seed_trips do
+    Map.new(["archived_trip", "other_trip", "own_trip"], fn name ->
+      trip =
+        %{archived: name == "archived_trip", name: name}
+        |> Trip.new()
+        |> DB.create!()
+
+      {name, trip}
+    end)
   end
 
   defp session_user do
@@ -268,5 +293,67 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> await_local_fill()
     |> click(button("Check unconfirmable locally"))
     |> assert_text(css("#local_unconfirmable"), ~r/^bravo$/)
+  end
+
+  feature "adds a stop to a trip the session user may update", %{session: session} do
+    trips = seed_trips()
+
+    session
+    |> visit(Page5)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :editor, trips["own_trip"])
+
+    session
+    |> click(button("Add stop to own trip"))
+    |> assert_text(css("#result"), "added_stop_to_own_trip")
+
+    assert [%Stop{name: "own_trip_stop"}] = DB.read(Stop)
+  end
+
+  # The trip's create rule is open to everyone and is not asked - the stop asks the trip's update
+  # rule, which wants an editor of a trip that is not archived.
+  feature "refuses a stop on a trip the session user may not update", %{session: session} do
+    trips = seed_trips()
+
+    session
+    |> visit(Page5)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :editor, trips["archived_trip"])
+
+    session
+    |> click(button("Add stop to other trip"))
+    |> assert_text(css("#result"), "refused_stop_on_other_trip")
+    |> click(button("Add stop to archived trip"))
+    |> assert_text(css("#result"), "refused_stop_on_archived_trip")
+
+    assert DB.read(Stop) == []
+  end
+
+  # The grants arrive on the stream and the browser answers again over the rows it holds, asking
+  # each trip's update rule, archived condition included. The archived trip's grant goes first, so
+  # by the time the own trip shows, the browser has already answered for the archived one. The
+  # reload renders the page for the session user: a login sets no context until a page renders.
+  feature "checks the trip's update rule in the browser", %{session: session} do
+    trips = seed_trips()
+
+    session =
+      session
+      |> visit(Page5)
+      |> click(button("Log in"))
+      |> assert_text(css("#result"), "logged_in")
+      |> reload()
+      |> assert_text(css("#stoppable_trips"), ~r/^$/)
+      |> mark_this_page_load()
+
+    Auth.grant_role(session_user(), :editor, trips["archived_trip"])
+    Auth.grant_role(session_user(), :editor, trips["own_trip"])
+
+    session
+    |> assert_text(css("#stoppable_trips"), ~r/^own_trip$/)
+    |> assert_same_page_load()
   end
 end

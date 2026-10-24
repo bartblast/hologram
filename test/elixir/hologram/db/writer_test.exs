@@ -30,6 +30,8 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
+  alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
   alias Hologram.Test.Fixtures.Policy.Module2
 
   defp create_user(email) do
@@ -133,6 +135,27 @@ defmodule Hologram.DB.WriterTest do
       end
 
       assert DB.read(Module2, denied_entity.id) == nil
+    end
+
+    # The related type's create rule is open, so a create asking it would pass - the delegation asks
+    # whether the parent may be updated, which takes an editor.
+    test "evaluates a delegation naming its operation against the related row" do
+      user = create_user("delegated_creator@example.com")
+      parent = DB.create!(PolicyModule10.new())
+      entity = PolicyModule11.new(parent_id: parent.id)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Policy.Module11 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> create(entity) end)
+      end
+
+      assert DB.read(PolicyModule11, entity.id) == nil
+
+      Auth.grant_role(user, :editor, parent)
+
+      assert {:ok, %PolicyModule11{}} = as_user(user, fn -> create(entity) end)
     end
 
     test "stamps a job with the acting user" do

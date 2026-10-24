@@ -54,10 +54,9 @@ defmodule Hologram.DB.QueryCompiler do
   `author_id == user_id() or shared == true` still admits a visitor to the shared rows.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
-  type's :read policy - fixed at :read, since an include embeds rows regardless of the
-  operation the statement's own policy carries - keyed on the include's alias rather than
-  the target table name. A to-one embed the acting user cannot
-  read is NULL, and rows they cannot read drop out of a to-many aggregate before its view
+  type's :read policy - fixed at :read whatever rules the statement's own policy holds - keyed
+  on the include's alias rather than the target table name. A to-one embed the acting user
+  cannot read is NULL, and rows they cannot read drop out of a to-many aggregate before its view
   bounds apply. Compiling without a policy leaves every level unfiltered - the trusted tier.
 
   Nil is a regular value for equality and membership on both execution tiers:
@@ -434,21 +433,24 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # The row prefix qualifies references to the row a policy is evaluated for. It is the entity's
-  # table name at statement level, and the include's alias inside an include subquery - where the
-  # table name would resolve to the outer row for a self-referencing relationship.
+  # table name at statement level, and the subquery's alias inside an include or a delegation -
+  # where the table name would resolve to the outer row for a relationship back to its own type.
+  # The delegation depth counts the delegations the policy is nested in, naming each one's alias.
+  # Every alias the compiler gives a table begins with a $, which no derived table name begins
+  # with, so an alias never names a table the statement also reads.
   defp policy_context(entity_type, mapping, policy, quoted_row_prefix \\ nil)
 
   defp policy_context(_entity_type, _mapping, nil, _quoted_row_prefix), do: nil
 
-  defp policy_context(entity_type, mapping, %{operation: operation} = policy, quoted_row_prefix) do
+  defp policy_context(entity_type, mapping, policy, quoted_row_prefix) do
     entity_mapping = Map.fetch!(mapping, entity_type)
 
     %{
       anonymous?: Map.get(policy, :anonymous?, false),
+      delegation_depth: 0,
       entity_mapping: entity_mapping,
       entity_type: entity_type,
       mapping: mapping,
-      operation: operation,
       row_prefix: quoted_row_prefix || Mapper.quote_identifier(entity_mapping.table)
     }
   end
@@ -500,9 +502,9 @@ defmodule Hologram.DB.QueryCompiler do
     {scope_sql, new_params} = grant_scope_sql(reference, context, params_after_roles)
 
     condition =
-      ~s|EXISTS (SELECT 1 FROM #{grant_table(context)} AS "rg" | <>
-        ~s|WHERE "rg"."user_id" = #{actor_placeholder} | <>
-        ~s|AND "rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
+      ~s|EXISTS (SELECT 1 FROM #{grant_table(context)} AS "$rg" | <>
+        ~s|WHERE "$rg"."user_id" = #{actor_placeholder} | <>
+        ~s|AND "$rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
 
     {condition, new_params}
   end
@@ -510,7 +512,7 @@ defmodule Hologram.DB.QueryCompiler do
   # A global role is held without an entity, so the row shape has both scope columns nil -
   # the lookup needs no correlation with the queried row.
   defp grant_scope_sql({:global, _role_modules}, _context, reversed_params) do
-    {~s|"rg"."entity_type" IS NULL AND "rg"."entity_id" IS NULL|, reversed_params}
+    {~s|"$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL|, reversed_params}
   end
 
   # A rule's own roles are held on the row itself or on its whole type - the lookup matches
@@ -520,9 +522,9 @@ defmodule Hologram.DB.QueryCompiler do
       entity_type_slot(context.entity_type, context, reversed_params)
 
     entity_sql =
-      ~s|("rg"."entity_id" = #{context.row_prefix}."id" OR "rg"."entity_id" IS NULL)|
+      ~s|("$rg"."entity_id" = #{context.row_prefix}."id" OR "$rg"."entity_id" IS NULL)|
 
-    {~s|"rg"."entity_type" = #{placeholder} AND #{entity_sql}|, new_params}
+    {~s|"$rg"."entity_type" = #{placeholder} AND #{entity_sql}|, new_params}
   end
 
   # The grant store's own policy checks a role held on the entity a grant row names, so the
@@ -531,8 +533,8 @@ defmodule Hologram.DB.QueryCompiler do
     {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
     scope_sql =
-      ~s|"rg"."entity_type" = #{placeholder} | <>
-        ~s|AND "rg"."entity_id" = #{context.row_prefix}."entity_id"|
+      ~s|"$rg"."entity_type" = #{placeholder} | <>
+        ~s|AND "$rg"."entity_id" = #{context.row_prefix}."entity_id"|
 
     {scope_sql, new_params}
   end
@@ -540,7 +542,7 @@ defmodule Hologram.DB.QueryCompiler do
   defp grant_scope_sql({:type, target_type, _role_names}, context, reversed_params) do
     {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
-    {~s|"rg"."entity_type" = #{placeholder} AND "rg"."entity_id" IS NULL|, new_params}
+    {~s|"$rg"."entity_type" = #{placeholder} AND "$rg"."entity_id" IS NULL|, new_params}
   end
 
   defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
@@ -556,8 +558,8 @@ defmodule Hologram.DB.QueryCompiler do
     quoted_column = Mapper.quote_identifier(column.name)
 
     scope_sql =
-      ~s|"rg"."entity_type" = #{placeholder} | <>
-        ~s|AND "rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
+      ~s|"$rg"."entity_type" = #{placeholder} | <>
+        ~s|AND "$rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
 
     {scope_sql, new_params}
   end
@@ -577,12 +579,20 @@ defmodule Hologram.DB.QueryCompiler do
     "(" <> Enum.map_join(rule_sqls, " OR ", &"(#{&1})") <> ")"
   end
 
-  # Delegation asks the related entity's policy for the same operation, composed into a
-  # correlated EXISTS. Recursion terminates because delegation cycles are a compile error, so
-  # every chain reaches a type that delegates no further.
+  # Delegation asks the related entity's policy for the operation the rule names, composed into a
+  # correlated EXISTS. The related table takes an alias of its own, so a relationship back to the
+  # delegating type keeps the related row apart from the delegating one. An alias only has to
+  # differ from the two scopes its subquery reads - its own and the one directly outside - so it
+  # is named by depth, and sibling delegations share it. Recursion terminates because delegation
+  # cycles are a compile error, so every chain reaches an operation of a type whose rules delegate
+  # no further.
   defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
-  defp delegation_conditions(relationship_name, context, reversed_params) do
+  defp delegation_conditions(
+         {delegated_operation, relationship_name},
+         context,
+         reversed_params
+       ) do
     column = reference_column(context.entity_mapping, relationship_name)
     target_type = relationship_target(context.entity_type, relationship_name)
     target_mapping = Map.fetch!(context.mapping, target_type)
@@ -590,28 +600,32 @@ defmodule Hologram.DB.QueryCompiler do
     target_rules =
       target_type
       |> Policy.build()
-      |> Map.get(context.operation, [])
+      |> Map.get(delegated_operation, [])
 
     target_policy = %{
       anonymous?: context.anonymous?,
-      operation: context.operation,
       rules: target_rules
     }
 
-    target_context = policy_context(target_type, context.mapping, target_policy)
+    depth = context.delegation_depth + 1
+    quoted_alias = Mapper.quote_identifier("$d#{depth}")
+
+    target_context =
+      target_type
+      |> policy_context(context.mapping, target_policy, quoted_alias)
+      |> Map.put(:delegation_depth, depth)
 
     {target_conditions, new_params} =
       policy_conditions(target_policy, target_context, reversed_params)
 
     join_sql =
-      ~s|#{Mapper.quote_identifier(target_mapping.table)}."id" = | <>
-        ~s|#{context.row_prefix}.#{Mapper.quote_identifier(column.name)}|
+      ~s|#{quoted_alias}."id" = #{context.row_prefix}.#{Mapper.quote_identifier(column.name)}|
 
     inner_sql = Enum.join([join_sql | target_conditions], " AND ")
 
     condition =
-      ~s|EXISTS (SELECT 1 FROM #{Mapper.quote_identifier(Mapper.data_schema())}.| <>
-        ~s|#{Mapper.quote_identifier(target_mapping.table)} WHERE #{inner_sql})|
+      ~s|EXISTS (SELECT 1 FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} | <>
+        ~s|WHERE #{inner_sql})|
 
     {[condition], new_params}
   end
@@ -758,13 +772,12 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # An include embeds rows of the target type, so every level composes that type's :read policy,
-  # fixed at :read regardless of the operation the statement's own policy carries.
+  # whatever rules the statement's own policy holds.
   defp include_policy(nil, _entity_type), do: nil
 
   defp include_policy(policy, entity_type) do
     %{
       anonymous?: Map.get(policy, :anonymous?, false),
-      operation: :read,
       rules:
         entity_type
         |> Policy.build()
@@ -902,9 +915,9 @@ defmodule Hologram.DB.QueryCompiler do
          {reversed_params, index}
        ) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
-    quoted_wrapper = Mapper.quote_identifier("i#{index}")
-    quoted_join = Mapper.quote_identifier("j#{index}")
-    quoted_target = Mapper.quote_identifier("t#{index}")
+    quoted_wrapper = Mapper.quote_identifier("$i#{index}")
+    quoted_join = Mapper.quote_identifier("$j#{index}")
+    quoted_target = Mapper.quote_identifier("$t#{index}")
 
     {conditions, filtered_params} = conditions(sub_term.filter, target_mapping, reversed_params)
 
@@ -965,7 +978,7 @@ defmodule Hologram.DB.QueryCompiler do
       Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
 
     target_mapping = Map.fetch!(mapping, sub_term.entity)
-    quoted_alias = Mapper.quote_identifier("i#{index}")
+    quoted_alias = Mapper.quote_identifier("$i#{index}")
 
     target_policy = include_policy(policy, sub_term.entity)
 

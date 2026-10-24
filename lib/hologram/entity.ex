@@ -123,7 +123,8 @@ defmodule Hologram.Entity do
       Returns the list of policy definitions for the compiled entity type, in declaration order.
       Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
       """
-      @spec __policies__() :: list({Hologram.Entity.operation(), term, atom | nil, keyword})
+      @spec __policies__() ::
+              list({Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword})
       def __policies__, do: Enum.reverse(@__policies__)
 
       @doc false
@@ -164,7 +165,11 @@ defmodule Hologram.Entity do
       (`{:editor, project}`), a role held on a whole entity type as `{role, entity type}`
       (`{:moderator, MyApp.Post}`), or a list of them, any one of which suffices.
     * `via:` - a to-one relationship, written as a bare name (`via: project`): the operation is
-      granted when the same operation is granted on the related row.
+      granted when the same operation is granted on the related row. Written as
+      `{operation, relationship}` (`via: {:update, project}`), it is granted when the named
+      operation is granted on the related row. A create rule names one when the related type's
+      own create rule says nothing about who may add to an existing row, as on a type whose rows
+      nobody holds a role on before they exist.
     * `when:` - a condition on the row: `when: priority < 3 and archived == false`,
       `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
       on either side of a comparison, so `when: guests <= capacity` compares two attributes, `^`

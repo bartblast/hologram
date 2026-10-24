@@ -492,13 +492,13 @@ defmodule Hologram.Auth do
   end
 
   # Global roles are held without an entity - the grant shape leaving both scope columns nil.
-  defp check_requirement({:global, role_modules}, _entity, actor_user_id, _operation, source) do
+  defp check_requirement({:global, role_modules}, _entity, actor_user_id, source) do
     grant_exists?(actor_user_id, :global, role_modules, source)
   end
 
   # Own roles are held on the entity itself or on its whole type - the two grant shapes the
   # store keeps apart by whether its entity_id column is nil.
-  defp check_requirement({:own, role_names}, entity, actor_user_id, _operation, source) do
+  defp check_requirement({:own, role_names}, entity, actor_user_id, source) do
     grant_exists?(actor_user_id, {:own, entity.__struct__, entity.id}, role_names, source)
   end
 
@@ -506,7 +506,6 @@ defmodule Hologram.Auth do
          {:type, target_type, role_names},
          _entity,
          actor_user_id,
-         _operation,
          source
        ) do
     grant_exists?(actor_user_id, {:type, target_type}, role_names, source)
@@ -516,7 +515,6 @@ defmodule Hologram.Auth do
          {:rel, relationship_name, role_names},
          entity,
          actor_user_id,
-         _operation,
          source
        ) do
     case related_id(entity, relationship_name) do
@@ -535,7 +533,6 @@ defmodule Hologram.Auth do
          {:named, target_type, role_names},
          entity,
          actor_user_id,
-         _operation,
          source
        ) do
     case entity.entity_id do
@@ -547,11 +544,16 @@ defmodule Hologram.Auth do
     end
   end
 
-  # Delegation asks the related entity's policy for the same operation. The related row is read
-  # raw, because a policy that could not see its own delegation target would deny everything.
-  # Under :held it is also share-locked until the transaction ends, so the delegation is judged
-  # against the row as it stands when the write commits.
-  defp check_requirement({:via, relationship_name}, entity, actor_user_id, operation, source) do
+  # Delegation asks the related entity's policy for the operation the rule names. The related row
+  # is read raw, because a policy that could not see its own delegation target would deny
+  # everything. Under :held it is also share-locked until the transaction ends, so the delegation
+  # is judged against the row as it stands when the write commits.
+  defp check_requirement(
+         {:via, delegated_operation, relationship_name},
+         entity,
+         actor_user_id,
+         source
+       ) do
     case related_id(entity, relationship_name) do
       nil ->
         false
@@ -560,7 +562,7 @@ defmodule Hologram.Auth do
         entity.__struct__
         |> relationship_target(relationship_name)
         |> EntityOperations.get(target_id, delegation_read_opts(source))
-        |> delegates?(actor_user_id, operation, source)
+        |> delegates?(actor_user_id, delegated_operation, source)
     end
   end
 
@@ -698,7 +700,7 @@ defmodule Hologram.Auth do
     Policy.validate_operation!(entity.__struct__, operation)
 
     policy = Policy.build(entity.__struct__)
-    checker = &check_requirement(&1, &2, &3, operation, source)
+    checker = &check_requirement(&1, &2, &3, source)
 
     Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
   end

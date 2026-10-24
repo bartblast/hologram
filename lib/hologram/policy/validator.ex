@@ -2,6 +2,7 @@ defmodule Hologram.Policy.Validator do
   @moduledoc false
 
   alias Hologram.Entity
+  alias Hologram.Policy
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -56,23 +57,20 @@ defmodule Hologram.Policy.Validator do
     hops_from_start ++ hops_before_start
   end
 
-  # Rotates the cycle to start at its alphabetically first entity type, so that the same
-  # cycle is always reported with the same hop order regardless of where traversal entered it.
+  # Rotates the cycle to start at its alphabetically first entity type, then operation, so that
+  # the same cycle is always reported with the same hop order regardless of where traversal
+  # entered it.
   defp canonicalize_via_cycle(cycle) do
     start_index =
       cycle
       |> Enum.with_index()
-      |> Enum.min_by(fn {{entity_type, relationship_name, _source}, _index} ->
-        {inspect(entity_type), relationship_name}
+      |> Enum.min_by(fn {{entity_type, operation, via, _source}, _index} ->
+        {inspect(entity_type), operation, inspect(via)}
       end)
       |> elem(1)
 
     {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
     hops_from_start ++ hops_before_start
-  end
-
-  defp gate_operation_reason(operation) do
-    "#{inspect(operation)} is checked without loading the row, so it takes own role names and global role modules only"
   end
 
   defp declared_role_names(entity_type) do
@@ -94,20 +92,22 @@ defmodule Hologram.Policy.Validator do
     "  * #{hops} -> #{inspect(first_role_module)}"
   end
 
-  defp describe_via_cycle([{first_entity_type, _name, _source} | _later_hops] = cycle) do
+  defp describe_via_cycle([{first_entity_type, _operation, _via, _source} | _later_hops] = cycle) do
     hops = Enum.map_join(cycle, " -> ", &describe_via_cycle_hop/1)
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
 
-  # A hop whose via line the entity type wrote itself reads as it always did; one taken from a
-  # policy names it, so a cycle formed out of a shared delegation says where the line lives.
-  defp describe_via_cycle_hop({entity_type, relationship_name, entity_type}) do
-    "#{inspect(entity_type)} (via #{inspect(relationship_name)})"
+  # A hop quotes its via option as written, so a delegation naming its operation shows the
+  # operation each hop asks. A hop whose via line the entity type wrote itself reads as it always
+  # did, and one taken from a policy names it, so a cycle formed out of a shared delegation says
+  # where the line lives.
+  defp describe_via_cycle_hop({entity_type, _operation, via, entity_type}) do
+    "#{inspect(entity_type)} (via #{inspect(via)})"
   end
 
-  defp describe_via_cycle_hop({entity_type, relationship_name, source}) do
-    "#{inspect(entity_type)} (via #{inspect(relationship_name)}, from #{inspect(source)})"
+  defp describe_via_cycle_hop({entity_type, _operation, via, source}) do
+    "#{inspect(entity_type)} (via #{inspect(via)}, from #{inspect(source)})"
   end
 
   # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
@@ -126,22 +126,23 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  # Depth-first traversal over the delegation edges of one operation. The path holds the hops
-  # taken to reach the current entity type (most recent first) - reaching an entity type
-  # already on the path closes a cycle. Fully explored entity types are marked visited and
-  # never re-entered, so each cycle is reported once.
-  defp find_via_cycles(entity_type, path, edges, {cycles, visited}) do
-    if MapSet.member?(visited, entity_type) do
+  # Depth-first traversal over the delegation edges. A node is an entity type under one operation,
+  # since a delegation leads from the operation of its line to the operation it asks the related
+  # row. The path holds the hops taken to reach the current node (most recent first) - reaching a
+  # node already on the path closes a cycle. Fully explored nodes are marked visited and never
+  # re-entered, so each cycle is reported once.
+  defp find_via_cycles({entity_type, operation} = node, path, edges, {cycles, visited}) do
+    if MapSet.member?(visited, node) do
       {cycles, visited}
     else
       {cycles, visited} =
         edges
-        |> Map.get(entity_type, [])
-        |> Enum.reduce({cycles, visited}, fn {relationship_name, target_type, source}, acc ->
-          follow_via_edge({entity_type, relationship_name, source}, target_type, path, edges, acc)
+        |> Map.get(node, [])
+        |> Enum.reduce({cycles, visited}, fn {via, target_node, source}, acc ->
+          follow_via_edge({entity_type, operation, via, source}, target_node, path, edges, acc)
         end)
 
-      {cycles, MapSet.put(visited, entity_type)}
+      {cycles, MapSet.put(visited, node)}
     end
   end
 
@@ -175,24 +176,26 @@ defmodule Hologram.Policy.Validator do
   end
 
   # Closes a cycle when the target is already on the path, descends into the target otherwise.
-  defp follow_via_edge(hop, target_type, path, edges, {cycles, visited}) do
+  defp follow_via_edge(hop, target_node, path, edges, {cycles, visited}) do
     new_path = [hop | path]
 
-    if Enum.any?(new_path, fn {entity_type, _relationship_name, _source} ->
-         entity_type == target_type
-       end) do
+    if Enum.any?(new_path, &(hop_node(&1) == target_node)) do
       {hops_beyond_target, [target_hop | _earlier_hops]} =
-        Enum.split_while(new_path, fn {entity_type, _relationship_name, _source} ->
-          entity_type != target_type
-        end)
+        Enum.split_while(new_path, &(hop_node(&1) != target_node))
 
       cycle = [target_hop | Enum.reverse(hops_beyond_target)]
 
       {[cycle | cycles], visited}
     else
-      find_via_cycles(target_type, new_path, edges, {cycles, visited})
+      find_via_cycles(target_node, new_path, edges, {cycles, visited})
     end
   end
+
+  defp gate_operation_reason(operation) do
+    "#{inspect(operation)} is checked without loading the row, so it takes own role names and global role modules only"
+  end
+
+  defp hop_node({entity_type, operation, _via, _source}), do: {entity_type, operation}
 
   # A line the entity type wrote itself reads exactly as it always did. One that arrived through
   # a policy names the module whose BODY wrote it - the file the dev has to open - because after
@@ -201,10 +204,154 @@ defmodule Hologram.Policy.Validator do
 
   defp location(entity_type, source), do: "#{inspect(entity_type)}, taken from #{inspect(source)}"
 
+  # Reported for one operation at a time, the alphabetically first among the operations the cycles
+  # start from once rotated - one message names one operation, which is what its header says.
+  defp raise_via_cycles!(cycles) do
+    {operation, operation_cycles} =
+      cycles
+      |> Enum.map(&canonicalize_via_cycle/1)
+      |> Enum.uniq()
+      |> Enum.group_by(fn [{_entity_type, operation, _via, _source} | _later_hops] ->
+        operation
+      end)
+      |> Enum.min_by(fn {operation, _operation_cycles} -> operation end)
+
+    descriptions =
+      operation_cycles
+      |> Enum.sort()
+      |> Enum.map_join("\n", &describe_via_cycle/1)
+
+    raise Hologram.CompileError,
+      message:
+        "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
+  end
+
+  # A line asks the related type an operation it has to be askable about, the way can? refuses one
+  # it is not, so a typo or an operation the type never declares fails the build rather than every
+  # check that reaches it. A per-role gate line is left to the gate check, which refuses its via
+  # option and says why - asked here, the related type would be judged on a role of the line's own
+  # type. A bare gate operation needs no exception, since every type can be asked about it.
+  defp validate_delegated_operation!(
+         _target_type,
+         {name, _roles},
+         _via,
+         _delegated_operation,
+         _location
+       )
+       when name in @role_operations,
+       do: :ok
+
+  defp validate_delegated_operation!(target_type, operation, via, delegated_operation, location) do
+    Policy.validate_operation!(target_type, delegated_operation)
+  rescue
+    error in ArgumentError ->
+      message =
+        "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
+
+      reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
+
   defp validate_entity_policies!(entity_type) do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
     |> Enum.each(&validate_policy_line!(entity_type, &1))
+  end
+
+  defp validate_gate_line!(operation, to, via, predicates, location) do
+    references = List.wrap(to)
+
+    # A global role is held app-wide, so it is checked without the row as well - what the gate
+    # cannot honor is a reference through the row's data: a relationship or a typed reference.
+    Enum.each(references, fn reference ->
+      if not is_atom(reference) do
+        raise Hologram.CompileError,
+          message:
+            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+      end
+    end)
+
+    if via do
+      raise Hologram.CompileError,
+        message:
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+    end
+
+    case first_predicate_name(predicates) do
+      nil ->
+        :ok
+
+      name ->
+        raise Hologram.CompileError,
+          message:
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+    end
+
+    # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
+    # declaration-versus-effect mismatch the reference check catches, in the fail-closed direction.
+    # Checked last, so a line that did name something unusable reports what it named.
+    if references == [] do
+      raise Hologram.CompileError,
+        message:
+          "missing to option for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+    end
+
+    :ok
+  end
+
+  defp validate_gate_operation!(
+         entity_type,
+         {name, roles} = operation,
+         to,
+         via,
+         predicates,
+         location
+       )
+       when name in @role_operations do
+    roles
+    |> List.wrap()
+    |> Enum.each(&validate_gate_role!(entity_type, operation, &1, location))
+
+    validate_gate_line!(operation, to, via, predicates, location)
+  end
+
+  defp validate_gate_operation!(_entity_type, operation, to, via, predicates, location)
+       when operation in @gate_operations do
+    validate_gate_line!(operation, to, via, predicates, location)
+  end
+
+  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates, _location),
+    do: :ok
+
+  defp validate_gate_role!(entity_type, operation, role_name, location) do
+    declared_names = declared_role_names(entity_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
+    end
+  end
+
+  defp validate_global_reference!(operation, role_module, location) do
+    if not Reflection.role?(role_module) do
+      raise Hologram.CompileError,
+        message:
+          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{location} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
+    end
+  end
+
+  defp validate_own_reference!(entity_type, operation, role_name, location) do
+    declared_names = declared_role_names(entity_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
+    end
   end
 
   defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source}) do
@@ -367,103 +514,6 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  defp validate_gate_operation!(
-         entity_type,
-         {name, roles} = operation,
-         to,
-         via,
-         predicates,
-         location
-       )
-       when name in @role_operations do
-    roles
-    |> List.wrap()
-    |> Enum.each(&validate_gate_role!(entity_type, operation, &1, location))
-
-    validate_gate_line!(operation, to, via, predicates, location)
-  end
-
-  defp validate_gate_operation!(_entity_type, operation, to, via, predicates, location)
-       when operation in @gate_operations do
-    validate_gate_line!(operation, to, via, predicates, location)
-  end
-
-  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates, _location),
-    do: :ok
-
-  defp validate_gate_role!(entity_type, operation, role_name, location) do
-    declared_names = declared_role_names(entity_type)
-
-    if role_name not in declared_names do
-      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "unknown role #{inspect(role_name)} in allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
-    end
-  end
-
-  defp validate_gate_line!(operation, to, via, predicates, location) do
-    references = List.wrap(to)
-
-    # A global role is held app-wide, so it is checked without the row as well - what the gate
-    # cannot honor is a reference through the row's data: a relationship or a typed reference.
-    Enum.each(references, fn reference ->
-      if not is_atom(reference) do
-        raise Hologram.CompileError,
-          message:
-            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-      end
-    end)
-
-    if via do
-      raise Hologram.CompileError,
-        message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-    end
-
-    case first_predicate_name(predicates) do
-      nil ->
-        :ok
-
-      name ->
-        raise Hologram.CompileError,
-          message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-    end
-
-    # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
-    # declaration-versus-effect mismatch the reference check catches, in the fail-closed direction.
-    # Checked last, so a line that did name something unusable reports what it named.
-    if references == [] do
-      raise Hologram.CompileError,
-        message:
-          "missing to option for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
-    end
-
-    :ok
-  end
-
-  defp validate_global_reference!(operation, role_module, location) do
-    if not Reflection.role?(role_module) do
-      raise Hologram.CompileError,
-        message:
-          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{location} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
-    end
-  end
-
-  defp validate_own_reference!(entity_type, operation, role_name, location) do
-    declared_names = declared_role_names(entity_type)
-
-    if role_name not in declared_names do
-      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(operation)} in #{location} - declared roles are: #{declared_roles}"
-    end
-  end
-
   defp validate_type_reference!(operation, target_type, role_name, location) do
     if not Reflection.entity?(target_type) do
       raise Hologram.CompileError,
@@ -512,22 +562,23 @@ defmodule Hologram.Policy.Validator do
   defp validate_via!(_entity_type, _operation, nil, _location), do: :ok
 
   defp validate_via!(entity_type, operation, via, location) do
-    if not is_atom(via) do
+    if not via_shape?(via) do
       raise Hologram.CompileError,
         message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name"
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name or an {operation, relationship} tuple"
     end
 
+    {delegated_operation, relationship_name} = Policy.delegation(operation, via)
     definitions = entity_type.__relationships__()
 
-    case Enum.find(definitions, fn {name, _type, _opts} -> name == via end) do
+    case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
       {_name, [_target], _opts} ->
         raise Hologram.CompileError,
           message:
-            "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - relationship #{inspect(via)} is to-many, but delegation requires a to-one relationship"
+            "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but delegation requires a to-one relationship"
 
-      {_name, _target, _opts} ->
-        :ok
+      {_name, target_type, _opts} ->
+        validate_delegated_operation!(target_type, operation, via, delegated_operation, location)
 
       nil ->
         declared_relationships =
@@ -535,63 +586,56 @@ defmodule Hologram.Policy.Validator do
 
         raise Hologram.CompileError,
           message:
-            "unknown relationship #{inspect(via)} in the via option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
+            "unknown relationship #{inspect(relationship_name)} in the via option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
     end
   end
 
   defp validate_via_cycles!(entity_types) do
-    entity_types
-    |> via_edges()
-    |> Enum.each(fn {operation, action_edges} ->
-      validate_via_cycles!(operation, action_edges)
-    end)
-  end
+    edges = via_edges(entity_types)
 
-  defp validate_via_cycles!(operation, action_edges) do
     {cycles, _visited} =
-      action_edges
+      edges
       |> Map.keys()
-      |> Enum.reduce({[], MapSet.new()}, fn entity_type, acc ->
-        find_via_cycles(entity_type, [], action_edges, acc)
+      |> Enum.reduce({[], MapSet.new()}, fn node, acc ->
+        find_via_cycles(node, [], edges, acc)
       end)
 
     if cycles != [] do
-      descriptions =
-        cycles
-        |> Enum.map(&canonicalize_via_cycle/1)
-        |> Enum.uniq()
-        |> Enum.sort()
-        |> Enum.map_join("\n", &describe_via_cycle/1)
-
-      raise Hologram.CompileError,
-        message:
-          "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
+      raise_via_cycles!(cycles)
     end
+
+    :ok
   end
 
   # The source rides the EDGE rather than being looked up when the cycle is described: by then
-  # the hop is only an entity type and a relationship name, and an entity type can carry several
-  # via lines from different policies.
+  # the hop is only a node and a via option, and an entity type can carry several via lines from
+  # different policies.
   defp via_declarations(entity_type) do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
     |> Enum.reject(fn {{_operation, _to, via, _predicates}, _source} -> is_nil(via) end)
     |> Enum.map(fn {{operation, _to, via, _predicates}, source} ->
-      {operation, entity_type, {via, Entity.relationship_target(entity_type, via), source}}
+      {delegated_operation, relationship_name} = Policy.delegation(operation, via)
+      target_type = Entity.relationship_target(entity_type, relationship_name)
+
+      {{entity_type, operation}, {via, {target_type, delegated_operation}, source}}
     end)
   end
 
-  # Delegation edges grouped as %{operation => %{entity type => [{relationship name, target type, source}]}} -
-  # a via chain delegates the SAME operation, so each operation forms its own independent graph.
+  # Delegation edges grouped by the node they leave, as
+  # %{{entity type, operation} => [{via as written, {target type, operation asked}, source}]} - one
+  # graph for every operation, since a delegation naming its operation leads from one operation's
+  # rules to another's.
   defp via_edges(entity_types) do
     entity_types
     |> Enum.flat_map(&via_declarations/1)
-    |> Enum.group_by(
-      fn {operation, _entity_type, _edge} -> operation end,
-      fn {_operation, entity_type, edge} -> {entity_type, edge} end
-    )
-    |> Map.new(fn {operation, declarations} ->
-      {operation, Enum.group_by(declarations, &elem(&1, 0), &elem(&1, 1))}
-    end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
+
+  # A relationship, or an {operation, relationship} tuple naming the operation with an atom.
+  defp via_shape?({operation, relationship_name}) do
+    is_atom(operation) and operation not in [nil, true, false] and is_atom(relationship_name)
+  end
+
+  defp via_shape?(via), do: is_atom(via)
 end

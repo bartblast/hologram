@@ -49,6 +49,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_job_module2",
                "test_fixtures_job_module3",
                "test_fixtures_policy_module1",
+               "test_fixtures_policy_module10",
+               "test_fixtures_policy_module11",
                "test_fixtures_policy_module2",
                "test_fixtures_policy_module3",
                "test_fixtures_policy_module3_children_$join",
@@ -56,7 +58,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_module5",
                "test_fixtures_policy_module6",
                "test_fixtures_policy_module7",
-               "test_fixtures_policy_module8"
+               "test_fixtures_policy_module8",
+               "test_fixtures_policy_module9"
              ]
     end
 
@@ -298,13 +301,16 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Job.Module2",
                  "Hologram.Test.Fixtures.Job.Module3",
                  "Hologram.Test.Fixtures.Policy.Module1",
+                 "Hologram.Test.Fixtures.Policy.Module10",
+                 "Hologram.Test.Fixtures.Policy.Module11",
                  "Hologram.Test.Fixtures.Policy.Module2",
                  "Hologram.Test.Fixtures.Policy.Module3",
                  "Hologram.Test.Fixtures.Policy.Module4",
                  "Hologram.Test.Fixtures.Policy.Module5",
                  "Hologram.Test.Fixtures.Policy.Module6",
                  "Hologram.Test.Fixtures.Policy.Module7",
-                 "Hologram.Test.Fixtures.Policy.Module8"
+                 "Hologram.Test.Fixtures.Policy.Module8",
+                 "Hologram.Test.Fixtures.Policy.Module9"
                ],
                "hologram_role_grant_role_$enum" => [
                  "Hologram.Test.Fixtures.Role.Module1",
