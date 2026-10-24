@@ -551,9 +551,30 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: :parent}]
+      rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
 
       assert compile(term, mapping, %{operation: :publish, rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
+                   ~s|"created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
+                   ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
+                   ~s|"test_fixtures_policy_module1"."parent_id" AND "public" = $1) | <>
+                   ~s|ORDER BY "id" ASC|
+             }
+    end
+
+    # The statement reads, but the delegation names the related entity's publish rule, so that is the
+    # rule composed - Module2's read rule wants a member grant, its publish rule a public row.
+    test "composes the related entity's policy for the operation a delegation names" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+
+      rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
+
+      assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
                params: [{:value, true}],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
@@ -570,7 +591,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: :parent}]
+      rules = [%{predicates: [], to: nil, via: {:delete, :parent}}]
 
       assert %{sql: sql} = compile(term, mapping, %{operation: :delete, rules: rules})
 
@@ -584,7 +605,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: :parent}]
+      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, :parent}}]
 
       assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{operation: :publish, rules: rules})
@@ -599,7 +620,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [
         %{predicates: [], to: [{:own, [:owner]}], via: nil},
-        %{predicates: [], to: nil, via: :parent}
+        %{predicates: [], to: nil, via: {:read, :parent}}
       ]
 
       assert %{params: placeholders, sql: sql} =

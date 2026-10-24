@@ -29,10 +29,10 @@ defmodule Hologram.Policy.Edges do
     * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
       entity a grant-store row names, deciding that row's visibility.
 
-  Delegations expand transitively: a via chain contributes the target policy's edges with
-  the chain prefixed, so every pair's list is complete on its own. Edges may over-approximate
-  the affected data - re-checking everything an edge names is slower than necessary, never
-  wrong - and they never under-approximate.
+  Delegations expand transitively: a via chain contributes the target policy's edges for the
+  operation each delegation names, with the chain prefixed, so every pair's list is complete on
+  its own. Edges may over-approximate the affected data - re-checking everything an edge names
+  is slower than necessary, never wrong - and they never under-approximate.
 
   Takes a validated data model: the transitive expansion follows delegation to its end, so a
   via cycle would not terminate. Cycles are a compile error, raised by
@@ -44,7 +44,7 @@ defmodule Hologram.Policy.Edges do
     for entity_type <- entity_types,
         {operation, rules} <- Policy.build(entity_type),
         into: %{} do
-      {{entity_type, operation}, operation_edges(entity_type, operation, rules)}
+      {{entity_type, operation}, operation_edges(entity_type, rules)}
     end
   end
 
@@ -104,9 +104,9 @@ defmodule Hologram.Policy.Edges do
     |> Enum.sort()
   end
 
-  defp operation_edges(entity_type, operation, rules) do
+  defp operation_edges(entity_type, rules) do
     rules
-    |> Enum.flat_map(&rule_edges(entity_type, operation, &1))
+    |> Enum.flat_map(&rule_edges(entity_type, &1))
     |> merge_edges()
   end
 
@@ -155,27 +155,29 @@ defmodule Hologram.Policy.Edges do
     String.to_existing_atom("#{relationship_name}_id")
   end
 
-  defp rule_edges(entity_type, operation, %{predicates: predicates, to: to, via: via}) do
+  defp rule_edges(entity_type, %{predicates: predicates, to: to, via: via}) do
     predicate_edges(predicates) ++
       reference_edges(entity_type, to) ++
-      via_edges(entity_type, operation, via)
+      via_edges(entity_type, via)
   end
 
-  defp via_edges(_entity_type, _operation, nil), do: []
+  defp via_edges(_entity_type, nil), do: []
 
-  defp via_edges(entity_type, operation, via) do
-    target_type = Entity.relationship_target(entity_type, via)
+  # The target's edges are those of the operation the delegation asks it, which need not be the
+  # delegating rule's own.
+  defp via_edges(entity_type, {delegated_operation, relationship_name}) do
+    target_type = Entity.relationship_target(entity_type, relationship_name)
 
     target_rules =
       target_type
       |> Policy.build()
-      |> Map.get(operation, [])
+      |> Map.get(delegated_operation, [])
 
     lifted_edges =
       target_type
-      |> operation_edges(operation, target_rules)
-      |> Enum.map(&lift_edge(&1, via, target_type))
+      |> operation_edges(target_rules)
+      |> Enum.map(&lift_edge(&1, relationship_name, target_type))
 
-    [{:attributes, [reference_field_name(via)]} | lifted_edges]
+    [{:attributes, [reference_field_name(relationship_name)]} | lifted_edges]
   end
 end

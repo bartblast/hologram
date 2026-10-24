@@ -366,7 +366,7 @@ defmodule Hologram.PolicyTest do
                ],
                :grant_role => [owner_rule, owner_rule],
                :publish => [
-                 %{predicates: [], to: nil, via: :parent}
+                 %{predicates: [], to: nil, via: {:publish, :parent}}
                ],
                :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},

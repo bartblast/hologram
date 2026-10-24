@@ -311,12 +311,13 @@ function unboxActorUserId(userOrId) {
   return Model.unbox(userOrId, "uuid");
 }
 
-// Delegation asks the RELATED entity's policy for the same operation, so it needs that row and
-// its rules. A client holds neither for a type its build never syncs, and cannot ask the server
-// mid-render - so the answer is no, the way it is for any rule the rows do not satisfy.
+// Delegation asks the RELATED entity's policy for the operation the rule names, so it needs that
+// row and its rules. A client holds neither for a type its build never syncs, and cannot ask the
+// server mid-render - so the answer is no, the way it is for any rule the rows do not satisfy.
 function viaHolds(rule, entityType, entity, actorUserId) {
-  const relationship = Model.entry(entityType).relationships[rule.via];
-  const targetId = entityValue(entityType, entity, `${rule.via}_id`);
+  const [operation, relationshipName] = rule.via;
+  const relationship = Model.entry(entityType).relationships[relationshipName];
+  const targetId = entityValue(entityType, entity, `${relationshipName}_id`);
 
   if (!relationship || targetId === null) {
     return false;
@@ -325,27 +326,22 @@ function viaHolds(rule, entityType, entity, actorUserId) {
   const target = LocalDatabase.getRow(relationship.type, targetId);
 
   return (
-    target !== null && grants(relationship.type, target, rule, actorUserId)
+    target !== null && grants(relationship.type, target, operation, actorUserId)
   );
 }
 
-function grants(entityType, row, rule, actorUserId) {
+function grants(entityType, row, operation, actorUserId) {
   const entry = globalThis.Hologram.sync?.model?.[entityType];
 
   if (!entry) {
     return false;
   }
 
-  const rules = entry.policy[rule.operation] ?? [];
+  const rules = entry.policy[operation] ?? [];
   const boxed = Model.box(entityType, row);
 
   return rules.some((related) =>
-    ruleMatches(
-      {...related, operation: rule.operation},
-      entityType,
-      boxed,
-      actorUserId,
-    ),
+    ruleMatches(related, entityType, boxed, actorUserId),
   );
 }
 
@@ -580,14 +576,7 @@ const Elixir_Hologram_Auth = {
 
     // An operation with no rules grants nothing, which is what makes the default deny.
     return Type.boolean(
-      rules.some((rule) =>
-        ruleMatches(
-          {...rule, operation: operationName},
-          entityType,
-          entity,
-          actorUserId,
-        ),
-      ),
+      rules.some((rule) => ruleMatches(rule, entityType, entity, actorUserId)),
     );
   },
 };

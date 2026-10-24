@@ -64,6 +64,18 @@ defmodule Hologram.Policy.EvaluatorTest do
       assert grants?(policy, {:grant_role, :viewer}, entity, "user_id_1", &grant/3)
       refute grants?(policy, {:grant_role, :editor}, entity, "user_id_1", &grant/3)
     end
+
+    # Asked through the policy, so the operation the rule is keyed by is at hand and must not be the
+    # one the checker hears.
+    test "asks the checker the operation a delegation names" do
+      checker = fn requirement, _entity, _actor_user_id ->
+        requirement == {:via, :update, :parent}
+      end
+
+      policy = %{create: [rule(via: {:update, :parent})]}
+
+      assert grants?(policy, :create, %Module1{}, "user_id_1", checker)
+    end
   end
 
   describe "rule_matches?/4" do
@@ -555,16 +567,16 @@ defmodule Hologram.Policy.EvaluatorTest do
     end
 
     test "delegates to the checker for a via requirement" do
-      rule = rule(via: :parent)
+      rule = rule(via: {:read, :parent})
 
       assert rule_matches?(rule, %Module1{}, "user_id_1", &grant/3)
       refute rule_matches?(rule, %Module1{}, "user_id_1", &deny/3)
     end
 
     test "evaluates a delegating rule for an anonymous session" do
-      checker = fn {:via, :parent}, _entity, actor_user_id -> is_nil(actor_user_id) end
+      checker = fn {:via, :read, :parent}, _entity, actor_user_id -> is_nil(actor_user_id) end
 
-      assert rule_matches?(rule(via: :parent), %Module1{}, nil, checker)
+      assert rule_matches?(rule(via: {:read, :parent}), %Module1{}, nil, checker)
     end
   end
 end

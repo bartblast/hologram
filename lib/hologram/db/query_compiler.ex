@@ -440,7 +440,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp policy_context(_entity_type, _mapping, nil, _quoted_row_prefix), do: nil
 
-  defp policy_context(entity_type, mapping, %{operation: operation} = policy, quoted_row_prefix) do
+  defp policy_context(entity_type, mapping, policy, quoted_row_prefix) do
     entity_mapping = Map.fetch!(mapping, entity_type)
 
     %{
@@ -448,7 +448,6 @@ defmodule Hologram.DB.QueryCompiler do
       entity_mapping: entity_mapping,
       entity_type: entity_type,
       mapping: mapping,
-      operation: operation,
       row_prefix: quoted_row_prefix || Mapper.quote_identifier(entity_mapping.table)
     }
   end
@@ -577,12 +576,16 @@ defmodule Hologram.DB.QueryCompiler do
     "(" <> Enum.map_join(rule_sqls, " OR ", &"(#{&1})") <> ")"
   end
 
-  # Delegation asks the related entity's policy for the same operation, composed into a
+  # Delegation asks the related entity's policy for the operation the rule names, composed into a
   # correlated EXISTS. Recursion terminates because delegation cycles are a compile error, so
   # every chain reaches a type that delegates no further.
   defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
-  defp delegation_conditions(relationship_name, context, reversed_params) do
+  defp delegation_conditions(
+         {delegated_operation, relationship_name},
+         context,
+         reversed_params
+       ) do
     column = reference_column(context.entity_mapping, relationship_name)
     target_type = relationship_target(context.entity_type, relationship_name)
     target_mapping = Map.fetch!(context.mapping, target_type)
@@ -590,11 +593,11 @@ defmodule Hologram.DB.QueryCompiler do
     target_rules =
       target_type
       |> Policy.build()
-      |> Map.get(context.operation, [])
+      |> Map.get(delegated_operation, [])
 
     target_policy = %{
       anonymous?: context.anonymous?,
-      operation: context.operation,
+      operation: delegated_operation,
       rules: target_rules
     }
 

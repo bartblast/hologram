@@ -244,6 +244,39 @@ describe("Elixir_Hologram_Auth", () => {
         Type.boolean(false),
       );
     });
+
+    // The folder's own create rule is open, so a delegation that asked it would grant either way.
+    it("asks the related entity the operation a delegation names", () => {
+      defineModel(
+        {create: [rule({via: ["update", "folder"]})]},
+        {
+          create: [rule()],
+          update: [rule({predicates: [["archived", "==", false]]})],
+        },
+      );
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("create"),
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(true),
+      );
+
+      LocalDatabase.putRow(FOLDER, {archived: true, id: FOLDER_ID});
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("create"),
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(false),
+      );
+    });
   });
 
   // Mirrors "rule_matches?/4" - whether one rule holds, which is where the value semantics live.
@@ -921,7 +954,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("delegates for a via requirement", () => {
       defineModel(
-        {read: [rule({via: "folder"})]},
+        {read: [rule({via: ["read", "folder"]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -951,7 +984,7 @@ describe("Elixir_Hologram_Auth", () => {
     // A delegating rule is still evaluated for a visitor, because the type it delegates to skips
     // its own actor-referencing rules in turn.
     it("evaluates a delegating rule for an anonymous session", () => {
-      defineModel({read: [rule({via: "folder"})]}, {read: [rule()]});
+      defineModel({read: [rule({via: ["read", "folder"]})]}, {read: [rule()]});
 
       LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
 
@@ -1184,7 +1217,7 @@ describe("Elixir_Hologram_Auth", () => {
   describe("delegation", () => {
     it("grants when the related entity's own rules grant the operation", () => {
       defineModel(
-        {read: [rule({via: "folder"})]},
+        {read: [rule({via: ["read", "folder"]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -1198,7 +1231,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("denies when the related entity's own rules deny the operation", () => {
       defineModel(
-        {read: [rule({via: "folder"})]},
+        {read: [rule({via: ["read", "folder"]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -1215,7 +1248,7 @@ describe("Elixir_Hologram_Auth", () => {
     // satisfy.
     it("denies when the related row is not in the database", () => {
       defineModel(
-        {read: [rule({via: "folder"})]},
+        {read: [rule({via: ["read", "folder"]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -1227,7 +1260,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("denies when the relationship is unset", () => {
       defineModel(
-        {read: [rule({via: "folder"})]},
+        {read: [rule({via: ["read", "folder"]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 

@@ -203,16 +203,18 @@ defmodule Hologram.Policy do
   type's read-grants roles.
 
   A rule holds the predicate clauses of its allow line - triples, and a `{:or, alternatives}` clause
-  for a condition written with `or` - its grant references, and its delegation. Predicates carry
-  the actor sentinel in value position where the declaration called user_id().
+  for a condition written with `or` - its grant references, and its delegation as {operation,
+  relationship name}, the operation it asks of the related row - nil when the line has none.
+  Predicates carry the actor sentinel in value position where the declaration called user_id().
   Grant references are extends-expanded, so a reference to a role also names every role carrying it:
   own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
   a related instance's roles as {:rel, relationship name, role names}, and global role modules as
   {:global, role modules} - nil when the line has none. The grant store's framework-supplied rules
   carry a fifth kind no declaration can spell, {:named, entity type, role names}: roles held on
   the entity a grant row names.
-  A rule grants its operation when its predicates hold, one of its grant references is held, and its
-  delegation grants the same operation - and a policy grants its operation when any of its rules does.
+  A rule grants its operation when its predicates hold, one of its grant references is held, and the
+  related row grants the operation its delegation names - and a policy grants its operation when any
+  of its rules does.
   The grant lifecycle operations grant_role and revoke_role are compiled per role: a line naming a
   role, or a list of them, yields one {operation, role} key per role, and a bare line yields one per
   declared role its holders may cover - a holder's own role and every role it extends, so nobody is
@@ -221,7 +223,11 @@ defmodule Hologram.Policy do
   """
   @spec build(module) :: %{
           Entity.operation() =>
-            list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
+            list(%{
+              predicates: list(tuple),
+              to: list(tuple) | nil,
+              via: {Entity.operation(), atom} | nil
+            })
         }
   def build(RoleGrant), do: %{read: role_grant_read_rules()}
 
@@ -231,7 +237,7 @@ defmodule Hologram.Policy do
       rule = %{
         predicates: Stage.predicate_triples!(entity_type, predicates),
         to: build_to(entity_type, to),
-        via: via
+        via: delegation(operation, via)
       }
 
       {operation, rule}
@@ -502,6 +508,11 @@ defmodule Hologram.Policy do
   defp declared_roles_description(declared_names) do
     "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
   end
+
+  # A delegation asks the related row the operation of its own line.
+  defp delegation(_operation, nil), do: nil
+
+  defp delegation(operation, relationship_name), do: {operation, relationship_name}
 
   # A bare grant lifecycle line covers, for each declared role, the holders it names whose own
   # role is that role or extends it - so the rule for a role above what a holder holds names
