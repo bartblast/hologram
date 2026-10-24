@@ -785,10 +785,10 @@ export default class Hologram {
   // Realtime promises no order, so two pushed actions can run in the other order than the one
   // they were sent in, when the first of them waits for a chunk.
   //
-  // The epoch is the page the action belongs to: a command reply carries the page the command was
-  // sent from, and an action that came over SSE takes the page the registry answers for when it
-  // arrives. A navigation while the chunks are fetched leaves the action stamped with that page,
-  // so that the queue drops it as stale.
+  // The epoch is the page the action belongs to: a command reply's next action carries the page
+  // the command was sent from, and a broadcast - one that came over SSE, or a command reply's self
+  // echo - takes the page the registry answers for when it arrives. A navigation while the chunks
+  // are fetched leaves the action stamped with that page, so that the queue drops it as stale.
   // Deps: [:maps.get/2]
   static schedulePushedAction(action, chunkDigests, epoch = $.registryEpoch) {
     $.requestChunks(chunkDigests);
