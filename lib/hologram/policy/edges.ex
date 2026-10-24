@@ -37,7 +37,7 @@ defmodule Hologram.Policy.Edges do
   Takes a validated data model: the transitive expansion follows delegation to its end, so a
   via cycle would not terminate. Cycles are a compile error, raised by
   `Hologram.Policy.Validator.validate_model!/2` before anything reads the model - the same
-  guarantee SQL composition relies on to keep the table names of a chain distinct.
+  guarantee SQL composition relies on to terminate.
   """
   @spec derive(list(module)) :: %{{module, Entity.operation()} => list(tuple)}
   def derive(entity_types) do

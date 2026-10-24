@@ -20,6 +20,9 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+  alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
+  alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Role
 
   describe "compile/2" do
@@ -560,9 +563,79 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|"created_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                   ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
-                   ~s|"test_fixtures_policy_module1"."parent_id" AND "public" = $1) | <>
+                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                   ~s|AND "public" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    # The related row is a row of the delegating type, so only the alias keeps the two apart - the
+    # table name inside the subquery would name the inner row on both sides of the join.
+    test "composes a delegation back to the delegating entity type under an alias of its own" do
+      mapping = Mapper.derive!([PolicyModule9], [])
+      term = Stage.normalize(PolicyModule9)
+      rules = Policy.build(PolicyModule9)[:read]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, false}],
+               sql:
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AND "archived" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    test "gives each nested delegation an alias of its own" do
+      mapping =
+        Mapper.derive!(
+          [Module14, PolicyModule1, PolicyModule2, PolicyModule5, PolicyModule8, RoleGrant],
+          []
+        )
+
+      term = Stage.normalize(PolicyModule8)
+      rules = Policy.build(PolicyModule8)[:read]
+
+      assert compile(term, mapping, %{anonymous?: true, rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module5" | <>
+                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module8"."parent_id" | <>
+                   ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|AS "d2" WHERE "d2"."id" = "d1"."parent_id" AND "public" = $1)) | <>
                    ~s|ORDER BY "id" ASC|
+             }
+    end
+
+    # The included row is the delegating one there, so the delegation correlates on the include's
+    # alias rather than on the statement's table.
+    test "composes a delegation inside an include subquery against the include's alias" do
+      mapping = Mapper.derive!([PolicyModule9], [])
+
+      term =
+        PolicyModule9
+        |> include(parent)
+        |> Stage.normalize()
+
+      rules = Policy.build(PolicyModule9)[:read]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, false}, {:value, false}],
+               sql:
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions", | <>
+                   ~s|(SELECT jsonb_build_object('id', "i1"."id", 'archived', "i1"."archived", | <>
+                   ~s|'parent_id', "i1"."parent_id", 'created_at', "i1"."created_at", | <>
+                   ~s|'updated_at', "i1"."updated_at", '$revisions', "i1"."$revisions") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module9" AS "i1" | <>
+                   ~s|WHERE "i1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|AS "d1" WHERE "d1"."id" = "i1"."parent_id" AND "archived" = $1)) | <>
+                   ~s|AS "parent" FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
+                   ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
+                   ~s|AND "archived" = $2) ORDER BY "id" ASC|
              }
     end
 
@@ -610,9 +683,13 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(
                sql,
                ~s|EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
-                 ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
-                 ~s|"test_fixtures_policy_module1"."parent_id" AND EXISTS (SELECT 1 FROM | <>
-                 ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1|
+                 ~s|AS "d1" WHERE "d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
+                 ~s|WHERE "rg"."user_id" = $1 | <>
+                 ~s|AND "rg"."role" = ANY($4::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "rg"."entity_type" = | <>
+                 ~s|$5::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
+                 ~s|AND ("rg"."entity_id" = "d1"."id" OR "rg"."entity_id" IS NULL))|
              )
     end
 

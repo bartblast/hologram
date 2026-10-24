@@ -433,8 +433,9 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # The row prefix qualifies references to the row a policy is evaluated for. It is the entity's
-  # table name at statement level, and the include's alias inside an include subquery - where the
-  # table name would resolve to the outer row for a self-referencing relationship.
+  # table name at statement level, and the subquery's alias inside an include or a delegation -
+  # where the table name would resolve to the outer row for a relationship back to its own type.
+  # The delegation depth counts the delegations the policy is nested in, naming each one's alias.
   defp policy_context(entity_type, mapping, policy, quoted_row_prefix \\ nil)
 
   defp policy_context(_entity_type, _mapping, nil, _quoted_row_prefix), do: nil
@@ -444,6 +445,7 @@ defmodule Hologram.DB.QueryCompiler do
 
     %{
       anonymous?: Map.get(policy, :anonymous?, false),
+      delegation_depth: 0,
       entity_mapping: entity_mapping,
       entity_type: entity_type,
       mapping: mapping,
@@ -576,8 +578,12 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # Delegation asks the related entity's policy for the operation the rule names, composed into a
-  # correlated EXISTS. Recursion terminates because delegation cycles are a compile error, so
-  # every chain reaches an operation of a type whose rules delegate no further.
+  # correlated EXISTS. The related table takes an alias of its own, so a relationship back to the
+  # delegating type keeps the related row apart from the delegating one. An alias only has to
+  # differ from the two scopes its subquery reads - its own and the one directly outside - so it
+  # is named by depth, and sibling delegations share it. Recursion terminates because delegation
+  # cycles are a compile error, so every chain reaches an operation of a type whose rules delegate
+  # no further.
   defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
   defp delegation_conditions(
@@ -599,20 +605,25 @@ defmodule Hologram.DB.QueryCompiler do
       rules: target_rules
     }
 
-    target_context = policy_context(target_type, context.mapping, target_policy)
+    depth = context.delegation_depth + 1
+    quoted_alias = Mapper.quote_identifier("d#{depth}")
+
+    target_context =
+      target_type
+      |> policy_context(context.mapping, target_policy, quoted_alias)
+      |> Map.put(:delegation_depth, depth)
 
     {target_conditions, new_params} =
       policy_conditions(target_policy, target_context, reversed_params)
 
     join_sql =
-      ~s|#{Mapper.quote_identifier(target_mapping.table)}."id" = | <>
-        ~s|#{context.row_prefix}.#{Mapper.quote_identifier(column.name)}|
+      ~s|#{quoted_alias}."id" = #{context.row_prefix}.#{Mapper.quote_identifier(column.name)}|
 
     inner_sql = Enum.join([join_sql | target_conditions], " AND ")
 
     condition =
-      ~s|EXISTS (SELECT 1 FROM #{Mapper.quote_identifier(Mapper.data_schema())}.| <>
-        ~s|#{Mapper.quote_identifier(target_mapping.table)} WHERE #{inner_sql})|
+      ~s|EXISTS (SELECT 1 FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} | <>
+        ~s|WHERE #{inner_sql})|
 
     {[condition], new_params}
   end
