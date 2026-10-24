@@ -505,6 +505,16 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "path_target/2" do
+    test "follows one relationship" do
+      assert path_target(Module3, [:b]) == Module2
+    end
+
+    test "follows several relationships" do
+      assert path_target(Module5, [:a, :b]) == Module2
+    end
+  end
+
   # The taken policy is the shared fixture rather than an inline module: this file imports
   # Hologram.Entity, and a nested defmodule with use Hologram.Policy inherits that import,
   # which collides on role/1 and allow/1.

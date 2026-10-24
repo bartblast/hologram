@@ -13,6 +13,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -399,6 +400,12 @@ defmodule Hologram.Query.StageTest do
 
     # The attribute is unknown, so nothing can say whether the other one compares with it - the
     # triple records what was written, as for any placeholder-keyed predicate.
+    test "accepts a placeholder sentinel as an attribute name with a bare attribute operand" do
+      query = filter(Module2, [{%Placeholder{name: :field}, {:attribute, :b}}])
+
+      assert query.filter == [{{:placeholder, :field}, :==, {:attribute, :b}}]
+    end
+
     test "accepts a placeholder sentinel as an attribute name with an attribute operand" do
       query = filter(Module2, [{%Placeholder{name: :field}, {:<, {:attribute, :b}}}])
 
@@ -498,6 +505,12 @@ defmodule Hologram.Query.StageTest do
       assert query == %Query{entity: Module2, filter: [{:a, :==, true}, {:b, :==, 123}]}
     end
 
+    test "builds a membership triple for a path" do
+      query = filter(Module3, [{[:b, :c], {:in, ["x", "y"]}}])
+
+      assert query.filter == [{[:b, :c], :in, ["x", "y"]}]
+    end
+
     test "builds a membership triple from a bare list" do
       query = filter(Module2, c: ["x", "y"])
 
@@ -516,10 +529,34 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{:b, :not_in, [1, 2]}]
     end
 
+    test "builds a triple for a one-hop path" do
+      query = filter(Module3, [{[:b, :a], true}])
+
+      assert query.filter == [{[:b, :a], :==, true}]
+    end
+
+    test "builds a triple for a two-hop path" do
+      query = filter(Module5, [{[:a, :b, :c], "x"}])
+
+      assert query.filter == [{[:a, :b, :c], :==, "x"}]
+    end
+
+    test "builds an actor triple for a path to a uuid attribute" do
+      query = filter(Module3, [{[:b, :id], {:actor}}])
+
+      assert query.filter == [{[:b, :id], :==, {:actor}}]
+    end
+
     test "builds an attribute equality triple from a bare attribute operand" do
       query = filter(Module10, count: {:attribute, :priority})
 
       assert query.filter == [{:count, :==, {:attribute, :priority}}]
+    end
+
+    test "builds an attribute triple between two paths" do
+      query = filter(Module25, [{[:e, :ends_on], {:<, {:attribute, [:e, :starts_on]}}}])
+
+      assert query.filter == [{[:e, :ends_on], :<, {:attribute, [:e, :starts_on]}}]
     end
 
     test "builds an attribute triple for a date pair" do
@@ -550,6 +587,12 @@ defmodule Hologram.Query.StageTest do
       query = filter(Module24, level: {:<, {:attribute, :priority}})
 
       assert query.filter == [{:level, :<, {:attribute, :priority}}]
+    end
+
+    test "builds an attribute triple for a path operand" do
+      query = filter(Module3, c_id: {:attribute, [:b, :id]})
+
+      assert query.filter == [{:c_id, :==, {:attribute, [:b, :id]}}]
     end
 
     test "builds an attribute triple for an integer compared with a float" do
@@ -610,6 +653,18 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{:c, :>, :x}]
     end
 
+    test "builds an ordering triple for a path to an enum attribute" do
+      query = filter(Module25, [{[:e, :priority], {:>=, :medium}}])
+
+      assert query.filter == [{[:e, :priority], :>=, :medium}]
+    end
+
+    test "builds an ordering triple for a path to an integer attribute" do
+      query = filter(Module3, [{[:b, :b], {:>=, 3}}])
+
+      assert query.filter == [{[:b, :b], :>=, 3}]
+    end
+
     test "builds an ordering triple for an integer attribute" do
       query = filter(Module2, b: {:>=, 3})
 
@@ -640,6 +695,12 @@ defmodule Hologram.Query.StageTest do
       query = filter(Module2, or: [[b: 1..3], [a: true]])
 
       assert query.filter == [{:or, [[{:b, :>=, 1}, {:b, :<=, 3}], [{:a, :==, true}]]}]
+    end
+
+    test "expands a range on a path into its two bounds" do
+      query = filter(Module3, [{[:b, :b], 1..3}])
+
+      assert query.filter == [{[:b, :b], :>=, 1}, {[:b, :b], :<=, 3}]
     end
 
     test "expands a range passed to the membership operator" do
@@ -694,6 +755,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module4, c: {:>, :z})
+      end
+    end
+
+    test "raises on a comparison against a value the enum a path ends at does not declare" do
+      expected_msg =
+        ":urgent is not a value of attribute e.priority in Hologram.Test.Fixtures.Entity.Module25 - the values are [:low, :medium, :high]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module25, [{[:e, :priority], {:>=, :urgent}}])
       end
     end
 
@@ -791,6 +861,95 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(123, a: true)
+      end
+    end
+
+    test "raises on a one-element list as a predicate name" do
+      expected_msg = "filter predicates must be a keyword list, got: [{[:a], true}]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, [{[:a], true}])
+      end
+    end
+
+    test "raises on a one-element list as an attribute operand" do
+      expected_msg =
+        "invalid attribute operand {:attribute, [:b]} - an attribute is named by an atom, and a path by a list of two or more atoms"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:attribute, [:b]})
+      end
+    end
+
+    test "raises on a path and an attribute of different types" do
+      expected_msg =
+        "operator :== compares attribute :c_id with attribute b.c in Hologram.Test.Fixtures.Entity.Module3, which have different types (:uuid and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, c_id: {:attribute, [:b, :c]})
+      end
+    end
+
+    test "raises on a path compared with itself" do
+      expected_msg =
+        "operator :< compares attribute b.b in Hologram.Test.Fixtures.Entity.Module3 with itself"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, [{[:b, :b], {:<, {:attribute, [:b, :b]}}}])
+      end
+    end
+
+    test "raises on a path through a to-many relationship" do
+      expected_msg =
+        ":a is a to-many relationship in Hologram.Test.Fixtures.Entity.Module3 - a path in a condition goes through to-one relationships only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, [{[:a, :c], "x"}])
+      end
+    end
+
+    test "raises on a path through an attribute" do
+      expected_msg =
+        ":c is an attribute in Hologram.Test.Fixtures.Entity.Module2 - a path goes through relationships, and only its last name is an attribute"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, [{[:c, :x], 1}])
+      end
+    end
+
+    test "raises on a path through an unknown relationship" do
+      expected_msg =
+        "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, [{[:x, :a], true}])
+      end
+    end
+
+    test "raises on a path through an unknown relationship on a later hop" do
+      expected_msg =
+        "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module5, [{[:a, :x, :c], "x"}])
+      end
+    end
+
+    test "raises on a path to a relationship" do
+      expected_msg =
+        ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :b_id"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module5, [{[:a, :b], nil}])
+      end
+    end
+
+    test "raises on a path to an unknown attribute" do
+      expected_msg =
+        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, [{[:b, :x], 1}])
       end
     end
 
@@ -994,6 +1153,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module5, a_id: {:<, {:attribute, :b_id}})
+      end
+    end
+
+    test "raises on an ordering comparison on a path to a boolean attribute" do
+      expected_msg =
+        "operator :> requires an orderable attribute - attribute b.a in Hologram.Test.Fixtures.Entity.Module3 has type :boolean, and boolean and uuid attributes have no order to compare by"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, [{[:b, :a], {:>, true}}])
       end
     end
 

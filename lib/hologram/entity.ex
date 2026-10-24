@@ -369,6 +369,12 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  @spec path_target(module, list(atom)) :: module
+  def path_target(entity_type, relationship_names) do
+    Enum.reduce(relationship_names, entity_type, &relationship_target(&2, &1))
+  end
+
+  @doc false
   @spec relationship_target(module, atom) :: module | list(module)
   def relationship_target(entity_type, relationship_name) do
     {_name, target_type, _opts} =

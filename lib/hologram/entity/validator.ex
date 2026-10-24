@@ -1431,8 +1431,9 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  # A written-out condition is lowered to a keyword list where it is written, so only a pinned one
-  # reaches here in another shape - and the rule builders take it apart as one.
+  # A written-out condition is lowered where it is written to a list of predicates, each keyed by a
+  # name or a path, so only a pinned one reaches here in another shape - and the rule builders take
+  # it apart as one.
   defp validate_when_opt_shape!(module, operation, spec) do
     case Keyword.fetch(spec, :when) do
       {:ok, condition} ->
@@ -1490,9 +1491,12 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # A predicate names an attribute with an atom, or a related row's attribute with a path of two or
+  # more atoms.
   defp when_value_valid?(condition) when is_list(condition) do
     Enum.all?(condition, fn
       {name, _value} when is_atom(name) -> true
+      {[_hop, _name | _rest] = path, _value} -> Enum.all?(path, &is_atom/1)
       _entry -> false
     end)
   end

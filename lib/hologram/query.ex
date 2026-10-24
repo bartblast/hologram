@@ -3,6 +3,7 @@ defmodule Hologram.Query do
 
   alias Hologram.Entity
   alias Hologram.Query.Expression
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
 
   # A query term - what the stages build and the executors run. Each field is named for the stage
@@ -22,8 +23,9 @@ defmodule Hologram.Query do
             order_by: [],
             trust: false
 
-  # Another attribute of the same row, compared with the predicate's attribute.
-  @type attribute_operand :: {:attribute, atom}
+  # Another attribute of the same row, or a path to an attribute of a related row, compared with
+  # the predicate's attribute.
+  @type attribute_operand :: {:attribute, atom | path}
 
   @type bound :: non_neg_integer | placeholder | nil
 
@@ -39,10 +41,17 @@ defmodule Hologram.Query do
 
   @type ordering :: {atom | placeholder, :asc | :desc | placeholder}
 
+  # Two or more names: the to-one relationships followed from the queried type, in order, and an
+  # attribute of the row they lead to.
+  @type path :: list(atom)
+
   @type placeholder :: {:placeholder, atom}
 
+  # The data form a filter is given in: an attribute, a path or a placeholder paired with a value.
+  @type predicates :: list({atom | path | Placeholder.t(), any})
+
   # The operand is a literal, a placeholder, the acting user ({:actor}) or an attribute_operand.
-  @type predicate :: {atom | placeholder, operator, any}
+  @type predicate :: {atom | path | placeholder, operator, any}
 
   @type t :: %__MODULE__{
           cardinality: cardinality,

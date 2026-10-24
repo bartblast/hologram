@@ -669,6 +669,12 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("entity_type == __MODULE__") end
     end
 
+    test "raises on __MODULE__ as the left side" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: __MODULE__",
+                   fn -> lower_predicates("__MODULE__ == entity_type") end
+    end
+
     test "raises on a bare name alone" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: unsupported expression in a filter: done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",

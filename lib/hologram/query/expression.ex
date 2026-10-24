@@ -278,11 +278,8 @@ defmodule Hologram.Query.Expression do
 
   defp alternatives!(ast, names, env), do: [side!(ast, :or, names, env)]
 
-  defp attribute!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
-    do: name
-
   # A path names an attribute of the row its relationships lead to, so it stands where an attribute
-  # does, as the list of its names.
+  # does, as the list of its names. __MODULE__ and the other special forms are values, never names.
   defp attribute!(ast, names, env) do
     case hops(ast) do
       nil ->
@@ -291,6 +288,9 @@ defmodule Hologram.Query.Expression do
           ast,
           env
         )
+
+      [name] ->
+        name
 
       path ->
         path

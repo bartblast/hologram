@@ -546,6 +546,18 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
     end
 
+    test "accepts a condition through a path" do
+      defmodule InlineEntityFixture105 do
+        use Hologram.Entity
+
+        allow :read, when: parent.public == true
+      end
+
+      assert InlineEntityFixture105.__policies__() == [
+               {:read, nil, nil, [{[:parent, :public], {:==, true}}]}
+             ]
+    end
+
     test "accepts a grant lifecycle operation naming a role" do
       defmodule InlineEntityFixture96 do
         use Hologram.Entity
@@ -710,6 +722,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           allow :read, when: ^"x"
+        end
+      end
+    end
+
+    test "rejects a pinned when option keyed by a one-element list" do
+      expected_msg =
+        "invalid when option [{[:public], true}] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture106 - a pinned condition must be a keyword list of predicates"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture106 do
+          use Hologram.Entity
+
+          allow :read, when: ^[{[:public], true}]
         end
       end
     end
