@@ -79,7 +79,10 @@ defmodule Hologram.DB.QueryCompiler do
   def compile(term, mapping, policy \\ nil) do
     entity_mapping = Map.fetch!(mapping, term.entity)
 
-    {authored_conditions, authored_params} = conditions(term.filter, entity_mapping, [])
+    quoted_table = Mapper.quote_identifier(entity_mapping.table)
+    statement_scope = condition_scope(term.entity, mapping, quoted_table, policy)
+
+    {authored_conditions, authored_params} = conditions(term.filter, statement_scope, [])
 
     {include_sql, params_after_includes} =
       include_selects(term, entity_mapping, mapping, policy, authored_params)
@@ -175,14 +178,13 @@ defmodule Hologram.DB.QueryCompiler do
   # Every enum attribute is a type of its own, and Postgres compares no two of them - so the other
   # column is cast to the compared column's type, by label, and the two compare in the declared
   # order they share.
-  defp attribute_operand_sql(entity_mapping, name, other) do
-    column = fetch_column!(entity_mapping, name)
-    quoted_other = quoted_column_name(entity_mapping, other)
+  defp attribute_operand_sql(scope, column, other, reversed_params) do
+    {other_sql, _other_column, new_params} = subject_sql(scope, other, reversed_params)
 
     if column.type == :enum do
-      "#{quoted_other}::text::#{enum_type(column)}"
+      {"#{other_sql}::text::#{enum_type(column)}", new_params}
     else
-      quoted_other
+      {other_sql, new_params}
     end
   end
 
@@ -237,11 +239,10 @@ defmodule Hologram.DB.QueryCompiler do
 
   # A disjunction renders the way a policy's rules do, as an OR group of its alternatives, each a
   # conjunction - so a rule whose condition holds one nests one level deeper.
-  defp condition({:or, alternatives}, entity_mapping, reversed_params) do
+  defp condition({:or, alternatives}, scope, reversed_params) do
     {rendered, new_params} =
       Enum.map_reduce(alternatives, reversed_params, fn alternative, acc_params ->
-        {alternative_conditions, next_params} =
-          conditions(alternative, entity_mapping, acc_params)
+        {alternative_conditions, next_params} = conditions(alternative, scope, acc_params)
 
         {Enum.join(alternative_conditions, " AND "), next_params}
       end)
@@ -252,150 +253,165 @@ defmodule Hologram.DB.QueryCompiler do
   # Two columns of one row. SQL's = and != are unknown when either side is NULL, so the equality
   # family uses the DISTINCT forms, which read nil as a value - the meaning a literal comparison
   # has. An ordering comparison is unknown over a NULL on its own, which is the meaning it has too.
-  defp condition({name, :==, {:attribute, other}}, entity_mapping, reversed_params) do
-    condition_sql =
-      "#{quoted_column_name(entity_mapping, name)} IS NOT DISTINCT FROM " <>
-        attribute_operand_sql(entity_mapping, name, other)
+  defp condition({name, :==, {:attribute, other}}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+    {operand_sql, new_params} = attribute_operand_sql(scope, column, other, params_after_subject)
 
-    {condition_sql, reversed_params}
+    {"#{subject_sql} IS NOT DISTINCT FROM #{operand_sql}", new_params}
   end
 
-  defp condition({name, :!=, {:attribute, other}}, entity_mapping, reversed_params) do
-    condition_sql =
-      "#{quoted_column_name(entity_mapping, name)} IS DISTINCT FROM " <>
-        attribute_operand_sql(entity_mapping, name, other)
+  defp condition({name, :!=, {:attribute, other}}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+    {operand_sql, new_params} = attribute_operand_sql(scope, column, other, params_after_subject)
 
-    {condition_sql, reversed_params}
+    {"#{subject_sql} IS DISTINCT FROM #{operand_sql}", new_params}
   end
 
   # Two strings compare by the pairs their ordering sorts by, each side its own key and value, so
   # the comparison agrees with ORDER BY on both columns.
-  defp condition({name, operator, {:attribute, other}}, entity_mapping, reversed_params) do
-    condition_sql =
-      case companion_column(entity_mapping, name) do
-        nil ->
-          "#{quoted_column_name(entity_mapping, name)} #{operator} " <>
-            attribute_operand_sql(entity_mapping, name, other)
+  defp condition({name, operator, {:attribute, other}}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
-        companion ->
-          other_companion = companion_column(entity_mapping, other)
+    case sort_key_sql(scope, name, params_after_subject) do
+      {nil, params_after_key} ->
+        {operand_sql, new_params} = attribute_operand_sql(scope, column, other, params_after_key)
 
-          "(#{Mapper.quote_identifier(companion.name)}, #{quoted_column_name(entity_mapping, name)}) " <>
-            "#{operator} " <>
-            "(#{Mapper.quote_identifier(other_companion.name)}, #{quoted_column_name(entity_mapping, other)})"
-      end
+        {"#{subject_sql} #{operator} #{operand_sql}", new_params}
 
-    {condition_sql, reversed_params}
-  end
+      {subject_key_sql, params_after_key} ->
+        {operand_key_sql, params_after_operand_key} = sort_key_sql(scope, other, params_after_key)
 
-  defp condition({name, :==, nil}, entity_mapping, reversed_params) do
-    quoted_name = quoted_column_name(entity_mapping, name)
+        {operand_sql, _operand_column, new_params} =
+          subject_sql(scope, other, params_after_operand_key)
 
-    {"#{quoted_name} IS NULL", reversed_params}
-  end
+        condition_sql =
+          "(#{subject_key_sql}, #{subject_sql}) #{operator} (#{operand_key_sql}, #{operand_sql})"
 
-  defp condition({name, :==, value}, entity_mapping, reversed_params) do
-    column = fetch_column!(entity_mapping, name)
-    {placeholder, new_params} = bind_slot(value, column, reversed_params)
-
-    {"#{Mapper.quote_identifier(column.name)} = #{placeholder}", new_params}
-  end
-
-  defp condition({name, :!=, nil}, entity_mapping, reversed_params) do
-    quoted_name = quoted_column_name(entity_mapping, name)
-
-    {"#{quoted_name} IS NOT NULL", reversed_params}
-  end
-
-  defp condition({name, :!=, value}, entity_mapping, reversed_params) do
-    column = fetch_column!(entity_mapping, name)
-    {placeholder, new_params} = bind_slot(value, column, reversed_params)
-
-    condition_sql = "#{Mapper.quote_identifier(column.name)} != #{placeholder}"
-
-    {null_inclusive(condition_sql, column), new_params}
-  end
-
-  defp condition({name, :in, values}, entity_mapping, reversed_params) when is_list(values) do
-    column = fetch_column!(entity_mapping, name)
-    quoted_name = Mapper.quote_identifier(column.name)
-
-    case Enum.reject(values, &is_nil/1) do
-      [] ->
-        {"#{quoted_name} IS NULL", reversed_params}
-
-      ^values ->
-        {placeholder, new_params} = membership_slot(values, column, reversed_params)
-
-        {"#{quoted_name} = ANY(#{placeholder})", new_params}
-
-      stripped_values ->
-        {placeholder, new_params} = membership_slot(stripped_values, column, reversed_params)
-
-        {null_inclusive("#{quoted_name} = ANY(#{placeholder})", column), new_params}
+        {condition_sql, new_params}
     end
   end
 
-  defp condition({name, :in, operand}, entity_mapping, reversed_params) do
-    column = fetch_column!(entity_mapping, name)
-    {placeholder, new_params} = membership_slot(operand, column, reversed_params)
+  defp condition({name, :==, nil}, scope, reversed_params) do
+    {subject_sql, _column, new_params} = subject_sql(scope, name, reversed_params)
 
-    {"#{Mapper.quote_identifier(column.name)} = ANY(#{placeholder})", new_params}
+    {"#{subject_sql} IS NULL", new_params}
   end
 
-  defp condition({name, :not_in, values}, entity_mapping, reversed_params)
-       when is_list(values) do
-    column = fetch_column!(entity_mapping, name)
-    quoted_name = Mapper.quote_identifier(column.name)
+  defp condition({name, :==, value}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+    {placeholder, new_params} = bind_slot(value, column, params_after_subject)
+
+    {"#{subject_sql} = #{placeholder}", new_params}
+  end
+
+  defp condition({name, :!=, nil}, scope, reversed_params) do
+    {subject_sql, _column, new_params} = subject_sql(scope, name, reversed_params)
+
+    {"#{subject_sql} IS NOT NULL", new_params}
+  end
+
+  defp condition({name, :!=, value}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+    {placeholder, new_params} = bind_slot(value, column, params_after_subject)
+
+    condition_sql = "#{subject_sql} != #{placeholder}"
+
+    {null_inclusive(condition_sql, subject_sql, column), new_params}
+  end
+
+  defp condition({name, :in, values}, scope, reversed_params) when is_list(values) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
       [] ->
-        {"#{quoted_name} IS NOT NULL", reversed_params}
+        {"#{subject_sql} IS NULL", params_after_subject}
 
       ^values ->
-        {placeholder, new_params} = membership_slot(values, column, reversed_params)
+        {placeholder, new_params} = membership_slot(values, column, params_after_subject)
 
-        {null_inclusive("#{quoted_name} != ALL(#{placeholder})", column), new_params}
+        {"#{subject_sql} = ANY(#{placeholder})", new_params}
 
       stripped_values ->
-        {placeholder, new_params} = membership_slot(stripped_values, column, reversed_params)
+        {placeholder, new_params} = membership_slot(stripped_values, column, params_after_subject)
 
-        condition_sql = "#{quoted_name} != ALL(#{placeholder})"
+        condition_sql = "#{subject_sql} = ANY(#{placeholder})"
 
-        {maybe_require_value(condition_sql, quoted_name, column), new_params}
+        {null_inclusive(condition_sql, subject_sql, column), new_params}
     end
   end
 
-  defp condition({name, :not_in, operand}, entity_mapping, reversed_params) do
-    column = fetch_column!(entity_mapping, name)
-    {placeholder, new_params} = membership_slot(operand, column, reversed_params)
+  defp condition({name, :in, operand}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+    {placeholder, new_params} = membership_slot(operand, column, params_after_subject)
 
-    condition_sql = "#{Mapper.quote_identifier(column.name)} != ALL(#{placeholder})"
+    {"#{subject_sql} = ANY(#{placeholder})", new_params}
+  end
 
-    {null_inclusive(condition_sql, column), new_params}
+  defp condition({name, :not_in, values}, scope, reversed_params) when is_list(values) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+
+    case Enum.reject(values, &is_nil/1) do
+      [] ->
+        {"#{subject_sql} IS NOT NULL", params_after_subject}
+
+      ^values ->
+        {placeholder, new_params} = membership_slot(values, column, params_after_subject)
+
+        condition_sql = "#{subject_sql} != ALL(#{placeholder})"
+
+        {null_inclusive(condition_sql, subject_sql, column), new_params}
+
+      stripped_values ->
+        {placeholder, new_params} = membership_slot(stripped_values, column, params_after_subject)
+
+        condition_sql = "#{subject_sql} != ALL(#{placeholder})"
+
+        {maybe_require_value(condition_sql, subject_sql, column), new_params}
+    end
+  end
+
+  defp condition({name, :not_in, operand}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
+    {placeholder, new_params} = membership_slot(operand, column, params_after_subject)
+
+    condition_sql = "#{subject_sql} != ALL(#{placeholder})"
+
+    {null_inclusive(condition_sql, subject_sql, column), new_params}
   end
 
   # A string compares by the pair its ordering sorts by - the key carries the order and the value
   # settles what the key cannot - so a bound is a position in the list the attribute sorts into,
   # and the comparison agrees with ORDER BY by construction. Every other type compares by its
   # column alone.
-  defp condition({name, operator, value}, entity_mapping, reversed_params) do
-    column = fetch_column!(entity_mapping, name)
+  defp condition({name, operator, value}, scope, reversed_params) do
+    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
-    case companion_column(entity_mapping, name) do
-      nil ->
-        {placeholder, new_params} = bind_slot(value, column, reversed_params)
+    case sort_key_sql(scope, name, params_after_subject) do
+      {nil, params_after_key} ->
+        {placeholder, new_params} = bind_slot(value, column, params_after_key)
 
-        {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
+        {"#{subject_sql} #{operator} #{placeholder}", new_params}
 
-      companion ->
-        {key_slot, raw_slot, new_params} = sort_key_slots(value, reversed_params)
+      {subject_key_sql, params_after_key} ->
+        {key_slot, raw_slot, new_params} = sort_key_slots(value, params_after_key)
 
-        quoted_pair =
-          "(#{Mapper.quote_identifier(companion.name)}, #{Mapper.quote_identifier(column.name)})"
+        condition_sql =
+          "(#{subject_key_sql}, #{subject_sql}) #{operator} (#{key_slot}, #{raw_slot})"
 
-        {"#{quoted_pair} #{operator} (#{key_slot}, #{raw_slot})", new_params}
+        {condition_sql, new_params}
     end
+  end
+
+  # Where a condition is rendered: the row it is about - its type, its mapping, and the name the
+  # statement gives it - and the policy the statement is read under, nil inside a policy rule.
+  defp condition_scope(entity_type, mapping, quoted_row_prefix, policy) do
+    %{
+      entity_mapping: Map.fetch!(mapping, entity_type),
+      entity_type: entity_type,
+      mapping: mapping,
+      policy: policy,
+      row_prefix: quoted_row_prefix
+    }
   end
 
   defp relationship_target(entity_type, relationship_name) do
@@ -630,9 +646,13 @@ defmodule Hologram.DB.QueryCompiler do
     {[condition], new_params}
   end
 
+  # A rule's own condition is about the row the policy is evaluated for, under no policy of its
+  # own.
   defp rule_condition(rule, context, reversed_params) do
+    scope = condition_scope(context.entity_type, context.mapping, context.row_prefix, nil)
+
     {predicate_conditions, params_after_predicates} =
-      conditions(rule.predicates, context.entity_mapping, reversed_params)
+      conditions(rule.predicates, scope, reversed_params)
 
     {reference_conditions, params_after_references} =
       grant_reference_conditions(rule.to, context, params_after_predicates)
@@ -661,9 +681,9 @@ defmodule Hologram.DB.QueryCompiler do
     {[group_condition(rendered)], new_params}
   end
 
-  defp conditions(triples, entity_mapping, reversed_params) do
+  defp conditions(triples, scope, reversed_params) do
     Enum.map_reduce(triples, reversed_params, fn triple, acc_params ->
-      condition(triple, entity_mapping, acc_params)
+      condition(triple, scope, acc_params)
     end)
   end
 
@@ -817,17 +837,17 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
-  defp maybe_require_value(condition_sql, quoted_name, %{null: true}) do
-    "(#{condition_sql} AND #{quoted_name} IS NOT NULL)"
+  defp maybe_require_value(condition_sql, subject_sql, %{null: true}) do
+    "(#{condition_sql} AND #{subject_sql} IS NOT NULL)"
   end
 
-  defp maybe_require_value(condition_sql, _quoted_name, _column), do: condition_sql
+  defp maybe_require_value(condition_sql, _subject_sql, _column), do: condition_sql
 
-  defp null_inclusive(condition_sql, %{null: true} = column) do
-    "(#{condition_sql} OR #{Mapper.quote_identifier(column.name)} IS NULL)"
+  defp null_inclusive(condition_sql, subject_sql, %{null: true}) do
+    "(#{condition_sql} OR #{subject_sql} IS NULL)"
   end
 
-  defp null_inclusive(condition_sql, _column), do: condition_sql
+  defp null_inclusive(condition_sql, _subject_sql, _column), do: condition_sql
 
   # A :string ordering whose mapping carries a `<attribute>_$sort` companion
   # orders by the companion first and the original column right after it (ties
@@ -867,11 +887,12 @@ defmodule Hologram.DB.QueryCompiler do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
-  defp quoted_column_name(entity_mapping, name) do
-    entity_mapping
-    |> fetch_column!(name)
-    |> Map.fetch!(:name)
-    |> Mapper.quote_identifier()
+  # A string's sort key - its companion column - or nil for a value of any other type.
+  defp sort_key_sql(scope, name, reversed_params) do
+    case companion_column(scope.entity_mapping, name) do
+      nil -> {nil, reversed_params}
+      companion -> {Mapper.quote_identifier(companion.name), reversed_params}
+    end
   end
 
   defp statement(
@@ -906,6 +927,13 @@ defmodule Hologram.DB.QueryCompiler do
       where_sql <> order_sql <> bounds_clause(term)
   end
 
+  # What a condition compares, and the column that says how its values bind.
+  defp subject_sql(scope, name, reversed_params) do
+    column = fetch_column!(scope.entity_mapping, name)
+
+    {Mapper.quote_identifier(column.name), column, reversed_params}
+  end
+
   defp to_many_include_expression(
          sub_term,
          join_table,
@@ -919,7 +947,9 @@ defmodule Hologram.DB.QueryCompiler do
     quoted_join = Mapper.quote_identifier("$j#{index}")
     quoted_target = Mapper.quote_identifier("$t#{index}")
 
-    {conditions, filtered_params} = conditions(sub_term.filter, target_mapping, reversed_params)
+    filter_scope = condition_scope(sub_term.entity, mapping, quoted_target, policy)
+
+    {conditions, filtered_params} = conditions(sub_term.filter, filter_scope, reversed_params)
 
     target_policy = include_policy(policy, sub_term.entity)
 
