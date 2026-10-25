@@ -7,7 +7,6 @@ defmodule Hologram.Policy.ValidatorTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
-  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Role
 
   describe "validate_model!/2" do
@@ -120,7 +119,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture54 do
         use Hologram.Entity
 
-        relationship :item, Module25
+        relationship :item, Hologram.Test.Fixtures.Entity.Module25
 
         allow :update, to: {:editor, item.h}
       end
@@ -170,7 +169,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture52 do
         use Hologram.Entity
 
-        relationship :item, Module25
+        relationship :item, Hologram.Test.Fixtures.Entity.Module25
 
         allow :publish, via: item.h
         allow :delete, via: {:read, item.h}
@@ -417,7 +416,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture57 do
         use Hologram.Entity
 
-        relationship :item, Module25
+        relationship :item, Hologram.Test.Fixtures.Entity.Module25
 
         allow :update, to: {:editor, item.project}
       end
@@ -434,7 +433,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture58 do
         use Hologram.Entity
 
-        relationship :item, Module25
+        relationship :item, Hologram.Test.Fixtures.Entity.Module25
 
         allow :update, to: {:publisher, item.h}
       end
@@ -627,7 +626,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture59 do
         use Hologram.Entity
 
-        relationship :item, Module25
+        relationship :item, Hologram.Test.Fixtures.Entity.Module25
 
         allow :read, via: item.project
       end
