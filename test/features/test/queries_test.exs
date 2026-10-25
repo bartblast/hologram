@@ -236,16 +236,6 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_same_page_load()
   end
 
-  # Proves the DOM changed without the page being fetched again - a reload would take the marker
-  # with it, so a passing assertion after one would say nothing.
-  defp assert_same_page_load(session) do
-    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
-  end
-
-  defp mark_this_page_load(session) do
-    execute_script(session, "globalThis.__thisPageLoad = 'held';")
-  end
-
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do

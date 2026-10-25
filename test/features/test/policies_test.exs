@@ -40,16 +40,6 @@ defmodule HologramFeatureTests.PoliciesTest do
     :ok
   end
 
-  # Proves the DOM changed without the page being fetched again - a reload would take the marker
-  # with it, so a passing assertion after one would say nothing.
-  defp assert_same_page_load(session) do
-    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
-  end
-
-  defp mark_this_page_load(session) do
-    execute_script(session, "globalThis.__thisPageLoad = 'held';")
-  end
-
   # Three trips, one archived, each with a stop and a leg on it. Each feature makes the session user
   # an editor of the archived trip and the own trip, so a refusal on the archived one comes from the
   # trip being archived - its update rule for a new leg, the rename rule's condition for a rename -

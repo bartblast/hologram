@@ -126,6 +126,14 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], callback)
   end
 
+  @doc """
+  Asserts the browser still holds the page load a marker was set on - a reload would take the
+  marker with it, so a passing assertion after one would say nothing.
+  """
+  def assert_same_page_load(session) do
+    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
+  end
+
   def assert_scroll_position(session, x, y) do
     callback = fn scroll_position ->
       if scroll_position == [x, y] do
@@ -484,6 +492,14 @@ defmodule HologramFeatureTests.Helpers do
       {:error, false} ->
         false
     end
+  end
+
+  @doc """
+  Marks the current page load in the browser, so a later check can tell the DOM changed without
+  the page being fetched again.
+  """
+  def mark_this_page_load(session) do
+    Browser.execute_script(session, "globalThis.__thisPageLoad = 'held';")
   end
 
   @doc """
