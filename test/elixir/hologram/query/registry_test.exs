@@ -165,6 +165,18 @@ defmodule Hologram.Query.RegistryTest do
       assert placeholder_shape(term) == %{min: :integer, search: :string}
     end
 
+    test "derives placeholder types through a path from the attribute it ends at" do
+      term = %{
+        Stage.normalize(Module3)
+        | filter: [
+            {[:b, :b], :in, {:placeholder, :counts}},
+            {[:b, :c], :==, {:placeholder, :search}}
+          ]
+      }
+
+      assert placeholder_shape(term) == %{counts: {:list, :integer}, search: :string}
+    end
+
     test "derives system attribute placeholder types" do
       term = %{Stage.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
 

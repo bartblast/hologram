@@ -2,6 +2,7 @@ defmodule Hologram.Query.Registry do
   @moduledoc false
 
   alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
@@ -63,9 +64,10 @@ defmodule Hologram.Query.Registry do
   to the logical type the placeholder binds as.
 
   The term's filter predicates are walked recursively through its includes, the ones inside a
-  disjunction's alternatives included. A placeholder bound as a whole membership operand binds as
-  a list of the attribute's logical type - `{:list, type}` - a placeholder as a membership list
-  element or under any other operator binds the attribute's type directly. A placeholder met
+  disjunction's alternatives included, and a predicate on a path binds as the attribute the path
+  ends at. A placeholder bound as a whole membership operand binds as a list of the attribute's
+  logical type - `{:list, type}` - a placeholder as a membership list element or under any other
+  operator binds the attribute's type directly. A placeholder met
   several times with one type appears once.
 
   Raises Hologram.CompileError when one placeholder name meets conflicting types.
@@ -73,6 +75,15 @@ defmodule Hologram.Query.Registry do
   @spec placeholder_shape(Query.t()) :: %{atom => atom | {:list, atom}}
   def placeholder_shape(term) do
     collect_params(term, %{})
+  end
+
+  # A path binds as the attribute it ends at, on the type its relationships lead to.
+  defp attribute_type(entity_type, path) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    entity_type
+    |> Entity.path_target(relationship_names)
+    |> attribute_type(name)
   end
 
   # A name matching no attribute definition is a to-one reference field - every reference

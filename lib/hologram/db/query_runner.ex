@@ -5,6 +5,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
   alias Hologram.Policy
@@ -64,6 +65,15 @@ defmodule Hologram.DB.QueryRunner do
       {:ok, result} -> decode_result(result, term, mapping)
       {:error, error} -> raise error
     end
+  end
+
+  # A path binds as the attribute it ends at, on the type its relationships lead to.
+  defp attribute_definition(entity_type, path) when is_list(path) do
+    {relationship_names, [attribute_name]} = Enum.split(path, -1)
+
+    entity_type
+    |> Entity.path_target(relationship_names)
+    |> attribute_definition(attribute_name)
   end
 
   # A name matching no attribute definition is a to-one reference field - every reference
