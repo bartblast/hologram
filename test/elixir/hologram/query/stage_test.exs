@@ -541,6 +541,12 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{[:a, :b, :c], :==, "x"}]
     end
 
+    test "builds an actor triple under an equality operator" do
+      query = filter(Module3, c_id: {:!=, {:actor}})
+
+      assert query.filter == [{:c_id, :!=, {:actor}}]
+    end
+
     test "builds an actor triple for a path to a uuid attribute" do
       query = filter(Module3, [{[:b, :id], {:actor}}])
 

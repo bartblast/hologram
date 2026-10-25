@@ -1175,6 +1175,250 @@ describe("QueryKernel", () => {
     });
   });
 
+  // A row the session may not read never reaches its database, so a row the database lacks covers
+  // both a row that is not there and one the session may not see.
+  describe("matches() - paths", () => {
+    const CHANNEL = "MyApp.Channel";
+    const MESSAGE = "MyApp.Message";
+    const ORG = "MyApp.Org";
+
+    const messages = [
+      {channel_id: "c1", created_on: "2026-02-01", id: "m1"},
+      {channel_id: "c2", created_on: "2025-12-01", id: "m2"},
+      {channel_id: null, created_on: "2026-02-01", id: "m3"},
+      {channel_id: "gone", created_on: "2026-02-01", id: "m4"},
+    ];
+
+    const idsMatching = (filter, context = {}, rows = messages) =>
+      rows
+        .filter((row) => matches(row, filter, context, MESSAGE))
+        .map((row) => row.id);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [CHANNEL]: {
+            attributes: {
+              archived: "boolean",
+              id: "uuid",
+              kind: "enum",
+              name: "string",
+              opened_on: "date",
+              rank: "integer",
+              weight: "integer",
+            },
+            // Out of alphabetical order, so only the declared positions answer a comparison.
+            enumValues: {kind: ["public", "group", "dm"]},
+            relationships: {org: {toMany: false, type: ORG}},
+            serverOnly: [],
+          },
+          [MESSAGE]: {
+            attributes: {created_on: "date", id: "uuid"},
+            enumValues: {},
+            relationships: {channel: {toMany: false, type: CHANNEL}},
+            serverOnly: [],
+          },
+          [ORG]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+
+      LocalDatabase.putRow(CHANNEL, {
+        archived: false,
+        id: "c1",
+        kind: "group",
+        name: "Mango",
+        name_sort: "mango",
+        opened_on: "2026-01-01",
+        org_id: "o1",
+        rank: 5,
+        weight: 9,
+      });
+
+      LocalDatabase.putRow(CHANNEL, {
+        archived: true,
+        id: "c2",
+        kind: "dm",
+        name: "apple",
+        name_sort: "apple",
+        opened_on: null,
+        org_id: null,
+        rank: 1,
+        weight: 0,
+      });
+
+      LocalDatabase.putRow(ORG, {id: "o1", name: "acme", name_sort: "acme"});
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("matches a value one hop away", () => {
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "archived"], "==", false]]),
+        ["m1"],
+      );
+    });
+
+    it("matches a value two hops away", () => {
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "org", "name"], "==", "acme"]]),
+        ["m1"],
+      );
+    });
+
+    it("compares a path's enum by its declared position", () => {
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "kind"], ">=", "group"]]),
+        ["m1", "m2"],
+      );
+    });
+
+    it("compares a path's date", () => {
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "opened_on"], "<", "2026-06-01"]]),
+        ["m1"],
+      );
+    });
+
+    it("compares a path's string by its sort key", () => {
+      assert.deepStrictEqual(idsMatching([[["channel", "name"], ">=", "M"]]), [
+        "m1",
+      ]);
+    });
+
+    it("compares a path with an attribute of the row", () => {
+      assert.deepStrictEqual(
+        idsMatching([
+          ["created_on", ">", {attribute: ["channel", "opened_on"]}],
+        ]),
+        ["m1"],
+      );
+    });
+
+    // m3 and m4 read nothing on either side - equal, the way two missing attributes of a row are,
+    // and never ordered.
+    it("compares two paths", () => {
+      assert.deepStrictEqual(
+        idsMatching([
+          [["channel", "rank"], "==", {attribute: ["channel", "weight"]}],
+        ]),
+        ["m3", "m4"],
+      );
+
+      assert.deepStrictEqual(
+        idsMatching([
+          [["channel", "rank"], "<", {attribute: ["channel", "weight"]}],
+        ]),
+        ["m1"],
+      );
+    });
+
+    it("binds a placeholder on a path", () => {
+      const context = {bindings: {kind: "dm"}};
+
+      assert.deepStrictEqual(
+        idsMatching(
+          [[["channel", "kind"], "==", {placeholder: "kind"}]],
+          context,
+        ),
+        ["m2"],
+      );
+    });
+
+    it("matches a path inside an alternative", () => {
+      const filter = [
+        {
+          or: [
+            [[["channel", "archived"], "==", true]],
+            [["channel_id", "==", null]],
+          ],
+        },
+      ];
+
+      assert.deepStrictEqual(idsMatching(filter), ["m2", "m3"]);
+    });
+
+    // m3 has no channel, so a path through it reads as missing, and each operator answers for it
+    // what it answers for an attribute that holds nothing.
+    it("passes a path through an empty relationship to the nil rules", () => {
+      const held = messages.filter((row) => row.id !== "m4");
+
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "archived"], "!=", false]], {}, held),
+        ["m2", "m3"],
+      );
+
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "archived"], "==", null]], {}, held),
+        ["m3"],
+      );
+
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "archived"], "not_in", [false]]], {}, held),
+        ["m2", "m3"],
+      );
+
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "rank"], ">", 0]], {}, held),
+        ["m1", "m2"],
+      );
+    });
+
+    // m4 names a channel this database does not hold - a fill arrives in pieces - so the path reads
+    // as missing there too.
+    it("reads a reference to a row the database does not hold as missing", () => {
+      const unheld = messages.filter((row) => row.id === "m4");
+
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "archived"], "==", null]], {}, unheld),
+        ["m4"],
+      );
+
+      assert.deepStrictEqual(
+        idsMatching([[["channel", "archived"], "==", false]], {}, unheld),
+        [],
+      );
+    });
+
+    it("runs a filter through a path over the rows it holds", () => {
+      for (const row of messages) {
+        LocalDatabase.putRow(MESSAGE, row);
+      }
+
+      const term = {
+        cardinality: "set",
+        entity: MESSAGE,
+        filter: [[["channel", "org", "name"], "==", "acme"]],
+        include: {},
+        limit: null,
+        offset: null,
+        orderBy: [["id", "asc"]],
+      };
+
+      assert.deepStrictEqual(
+        QueryKernel.run(term).map((node) => node.row.id),
+        ["m1"],
+      );
+    });
+
+    it("throws on a path when no entity type is given", () => {
+      assert.throws(
+        () => matches(messages[0], [[["channel", "archived"], "==", false]]),
+        HologramRuntimeError,
+        "a filter with a path needs the entity type of the rows it matches",
+      );
+    });
+  });
+
   describe("matches() - the acting user", () => {
     it("matches against who is asking", () => {
       const filter = [["id", "==", {actor: true}]];

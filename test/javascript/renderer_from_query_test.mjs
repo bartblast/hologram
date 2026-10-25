@@ -513,7 +513,7 @@ describe("Renderer from_query props", () => {
         Type.list([
           Type.tuple([
             Type.atom("id"),
-            Type.tuple([Type.atom("=="), Type.atom("actor")]),
+            Type.tuple([Type.atom("=="), Type.tuple([Type.atom("actor")])]),
           ]),
         ]),
       ),

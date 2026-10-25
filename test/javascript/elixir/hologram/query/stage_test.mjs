@@ -1310,8 +1310,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [["id", "==", {actor: true}]]);
     });
 
+    // The operand is the same {:actor} tuple the bare leaf is.
     it("reads the actor leaf under an equality operator", () => {
-      const value = Type.tuple([Type.atom("!="), Type.atom("actor")]);
+      const value = Type.tuple([
+        Type.atom("!="),
+        Type.tuple([Type.atom("actor")]),
+      ]);
       const query = filter(task, predicates([["id", value]]));
 
       assert.deepStrictEqual(query.filter, [["id", "!=", {actor: true}]]);

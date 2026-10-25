@@ -303,8 +303,14 @@ function inspectName(name) {
     : Interpreter.inspect(name);
 }
 
-function isActor(value) {
-  return Type.isAtom(value) && value.value === "actor";
+// The {:actor} leaf user_id() lowers to - bare, or as the operand of an equality operator.
+function isActorLeaf(value) {
+  return (
+    Type.isTuple(value) &&
+    value.data.length === 1 &&
+    Type.isAtom(value.data[0]) &&
+    value.data[0].value === "actor"
+  );
 }
 
 // The {:attribute, name} tuple a bare name or a path on the right side of a comparison lowers to.
@@ -515,7 +521,7 @@ function operatorTriples(name, tuple, entityType) {
     return [attributeTriple(name, operator, operand.data[1], entityType)];
   }
 
-  if (EQUALITY_OPERATORS.includes(operator) && isActor(operand)) {
+  if (EQUALITY_OPERATORS.includes(operator) && isActorLeaf(operand)) {
     validateActorAttribute(name, entityType);
 
     return [[nameValue(name), operator, {actor: true}]];
@@ -578,11 +584,7 @@ function predicateTriples(name, value, entityType) {
     return [[nameValue(name), "==", placeholderLeaf(value)]];
   }
 
-  if (
-    Type.isTuple(value) &&
-    value.data.length === 1 &&
-    isActor(value.data[0])
-  ) {
+  if (isActorLeaf(value)) {
     validateActorAttribute(name, entityType);
 
     return [[nameValue(name), "==", {actor: true}]];
