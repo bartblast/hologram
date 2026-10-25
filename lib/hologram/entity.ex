@@ -176,8 +176,8 @@ defmodule Hologram.Entity do
       marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
       `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
       `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
-      condition built from data goes in pinned, `when: ^predicates`, as a keyword list of
-      predicates, where an `or:` entry holding two or more predicate lists is a disjunction.
+      condition built from data goes in pinned, `when: ^predicates`, as a list of predicates pairing
+      names with values, where an `or:` entry holding two or more predicate lists is a disjunction.
 
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.

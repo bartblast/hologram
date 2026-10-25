@@ -558,6 +558,18 @@ defmodule Hologram.Entity.ValidatorTest do
              ]
     end
 
+    test "accepts a to option naming a role held through a path" do
+      defmodule InlineEntityFixture107 do
+        use Hologram.Entity
+
+        allow :update, to: {:owner, trip.user}
+      end
+
+      assert InlineEntityFixture107.__policies__() == [
+               {:update, {:owner, [:trip, :user]}, nil, []}
+             ]
+    end
+
     test "accepts a grant lifecycle operation naming a role" do
       defmodule InlineEntityFixture96 do
         use Hologram.Entity
@@ -674,7 +686,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option that is neither a role reference nor a list of them" do
       expected_msg =
-        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToOptionFixture do
@@ -689,7 +701,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option list holding a malformed reference" do
       expected_msg =
-        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToListFixture do
@@ -700,9 +712,22 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects a to option whose path holds something other than a name" do
+      expected_msg =
+        "invalid to option {:editor, [:trip, \"user\"]} for allow :update in Hologram.Entity.ValidatorTest.InlineEntityFixture108 - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture108 do
+          use Hologram.Entity
+
+          allow :update, to: ^{:editor, [:trip, "user"]}
+        end
+      end
+    end
+
     test "rejects an empty to option list" do
       expected_msg =
-        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule EmptyToListFixture do

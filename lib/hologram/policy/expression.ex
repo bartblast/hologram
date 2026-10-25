@@ -5,8 +5,8 @@ defmodule Hologram.Policy.Expression do
   # stores. Every key on the line is an option - to: names who holds the operation, via: the
   # relationship it is delegated through and, written as a tuple, the operation it asks there,
   # when: the condition - so no attribute name is taken by the line. Roles and operations are
-  # atoms, relationships are bare names, the condition is an expression, and anything from the
-  # surrounding code is pinned with ^.
+  # atoms, relationships are bare names or paths, the condition is an expression, and anything from
+  # the surrounding code is pinned with ^.
   #
   # It runs at expansion and judges the spelling only. Whether a role, a relationship or an
   # attribute is declared stays with the declaration and the whole-model validation, which judge
@@ -14,7 +14,7 @@ defmodule Hologram.Policy.Expression do
 
   alias Hologram.Query.Expression, as: QueryExpression
 
-  @delegation_names %{stage: "via", names: "a relationship", spelled: "a bare name"}
+  @delegation_names %{stage: "via", names: "a relationship", spelled: "a bare name or a path"}
 
   @option_names [:to, :via, :when]
 
@@ -23,9 +23,11 @@ defmodule Hologram.Policy.Expression do
   the keyword list `Hologram.Entity.__put_policy__/4` takes.
 
   `to:` keeps role names and role modules, lowers a `{role, relationship}` tuple's bare name to an
-  atom (`{:editor, project}` to `{:editor, :project}`) and keeps a `{role, entity type}` tuple, in
-  a list or alone. `via:` lowers a bare name to an atom, alone or as the relationship of an
-  `{operation, relationship}` tuple (`{:update, project}` to `{:update, :project}`). `when:`
+  atom (`{:editor, project}` to `{:editor, :project}`) and a path to the list of its names
+  (`{:owner, trip.user}` to `{:owner, [:trip, :user]}`), and keeps a `{role, entity type}` tuple,
+  in a list or alone. `via:` lowers a bare name to an atom and a path to the list of its names,
+  alone or as the relationship of an `{operation, relationship}` tuple (`{:update, project}` to
+  `{:update, :project}`, `trip.user` to `[:trip, :user]`). `when:`
   lowers through `Hologram.Query.Expression.condition/2`. A pinned `to:`, `via:` or `when:` value, a pinned
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
@@ -36,8 +38,8 @@ defmodule Hologram.Policy.Expression do
   an option written twice (only one would be read, so the line would grant more than it says), on
   an unknown option (naming the condition it can mean when its value is an equality operand), on a
   grant reference with the scope first or a relationship written as an atom, on a role written as
-  a bare name, on a delegation written as an atom or as a path, on a delegation with the
-  relationship first or with an operation that is not an atom, and on anything else.
+  a bare name, on a delegation written as an atom, on a delegation with the relationship first or
+  with an operation that is not an atom, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
@@ -70,11 +72,10 @@ defmodule Hologram.Policy.Expression do
 
   defp bare_name?(_ast), do: false
 
-  # One hop, as the delegation has always been - a path reaches further than the target's own
-  # policy, which is a change to what delegation means rather than a spelling.
+  # A relationship, or a path through several - the related row at its end is the one asked.
   defp delegated_relationship!({:__MODULE__, _meta, _context} = ast, env) do
     QueryExpression.compile_error!(
-      "via names a relationship with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
+      "via names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
       ast,
       env
     )
@@ -82,15 +83,8 @@ defmodule Hologram.Policy.Expression do
 
   defp delegated_relationship!(ast, env) do
     case QueryExpression.hops(ast) do
-      [_hop, _next_hop | _later_hops] ->
-        QueryExpression.compile_error!(
-          "via takes one relationship, got: #{Macro.to_string(ast)}",
-          ast,
-          env
-        )
-
-      _one_hop_or_none ->
-        QueryExpression.name!(ast, @delegation_names, env)
+      [_hop, _next_hop | _later_hops] = path -> path
+      _one_hop_or_none -> QueryExpression.name!(ast, @delegation_names, env)
     end
   end
 
@@ -100,7 +94,7 @@ defmodule Hologram.Policy.Expression do
   # spelling it takes alone. The operation comes first, as the role does in a grant reference.
   defp delegation!({operation, relationship} = ast, env) do
     cond do
-      bare_name?(operation) and name_atom?(relationship) ->
+      relationship_first?(ast) ->
         QueryExpression.compile_error!(
           "the operation comes first in a delegation, got: #{Macro.to_string(ast)} - write #{Macro.to_string({relationship, operation})}",
           ast,
@@ -131,7 +125,7 @@ defmodule Hologram.Policy.Expression do
 
       true ->
         QueryExpression.compile_error!(
-          "via takes a relationship or an {operation, relationship} tuple, got: #{Macro.to_string(ast)}",
+          "via takes a relationship, a path or an {operation, relationship} tuple, got: #{Macro.to_string(ast)}",
           ast,
           env
         )
@@ -224,6 +218,8 @@ defmodule Hologram.Policy.Expression do
 
   defp option!(element, _operation, _env), do: element
 
+  defp path?(ast), do: match?([_hop, _name | _later_names], QueryExpression.hops(ast))
+
   defp pinned?({:^, _meta, [_expr]}), do: true
 
   defp pinned?(_ast), do: false
@@ -231,15 +227,16 @@ defmodule Hologram.Policy.Expression do
   @spec reference_error!(Macro.t(), Macro.Env.t()) :: no_return
   defp reference_error!(ast, env) do
     QueryExpression.compile_error!(
-      "to takes a role name, a role module, a {role, relationship} or {role, entity type} tuple, a list of them, or a pinned expression, got: #{Macro.to_string(ast)}",
+      "to takes a role name, a role module, a {role, relationship}, {role, path} or {role, entity type} tuple, a list of them, or a pinned expression, got: #{Macro.to_string(ast)}",
       ast,
       env
     )
   end
 
   # The scope of a grant reference: a module names an entity type and stays, a bare name names a
-  # relationship and lowers to its atom. A relationship written as an atom is the old spelling,
-  # refused with the bare one.
+  # relationship and lowers to its atom, and a path the related row at its end, lowering to the
+  # list of its names. A relationship written as an atom is the old spelling, refused with the bare
+  # one.
   defp reference_scope!({_role, {:^, _meta, [expr]}}, _env), do: expr
 
   defp reference_scope!({_role, {:__aliases__, _meta, _segments} = scope}, _env), do: scope
@@ -256,15 +253,28 @@ defmodule Hologram.Policy.Expression do
   # nothing says which one is the role - the message names the shape rather than a rewrite that
   # could swap them.
   defp reference_scope!({_role, scope} = ast, env) do
-    if name_atom?(scope) do
-      QueryExpression.compile_error!(
-        "to names a relationship with a bare name and puts the role first, got: #{Macro.to_string(ast)} - write {role, relationship}, like {:editor, project}",
-        ast,
-        env
-      )
-    else
-      reference_error!(ast, env)
+    cond do
+      path?(scope) ->
+        QueryExpression.hops(scope)
+
+      name_atom?(scope) ->
+        QueryExpression.compile_error!(
+          "to names a relationship with a bare name and puts the role first, got: #{Macro.to_string(ast)} - write {role, relationship}, like {:editor, project}",
+          ast,
+          env
+        )
+
+      true ->
+        reference_error!(ast, env)
     end
+  end
+
+  # The relationship written where the operation goes: a relationship or a path first and an
+  # operation atom second is the order the tuple would have if it read like a sentence. A path
+  # first is never an operation, so a pinned value after it is the operation as well.
+  defp relationship_first?({first, second}) do
+    ((bare_name?(first) or path?(first)) and name_atom?(second)) or
+      (path?(first) and pinned?(second))
   end
 
   @spec repeated_option!(atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
@@ -283,10 +293,12 @@ defmodule Hologram.Policy.Expression do
     )
   end
 
-  # The scope written where the role goes: a relationship or an entity type first and a role atom
-  # second is the order the tuple had before it turned around.
+  # The scope written where the role goes: a relationship, a path or an entity type first and a role
+  # atom second is the order the tuple had before it turned around. A path first is never a role, so
+  # a pinned value after it is the role as well.
   defp scope_first?({first, second}) do
-    (bare_name?(first) or module?(first)) and name_atom?(second)
+    ((bare_name?(first) or path?(first) or module?(first)) and name_atom?(second)) or
+      (path?(first) and pinned?(second))
   end
 
   # Only the first of a repeated option would be read, so the line would grant more than it says -
