@@ -1984,6 +1984,10 @@ end
 
 By default, commands are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the `target` parameter. For more information about event targets, see the Events documentation.
 
+#### Leaving the Page Before the Reply
+
+The action a command puts with `put_action` runs on the page the command was sent from. If the visitor navigates to another page before that action runs, it is dropped and the browser console notes it. The command's server-side effects, such as session and cookie changes, database writes and broadcasts to other tabs, still apply.
+
 ### Navigation
 
 Hologram provides a seamless navigation experience by combining server-side rendering with client-side transitions. While each page is loaded fresh from the server, the framework uses the History PushState API and virtual DOM to ensure smooth transitions between pages.

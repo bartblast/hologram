@@ -165,7 +165,13 @@ export default class Client {
     return Connection.isConnected();
   }
 
-  static async sendCommand(command) {
+  // The epoch stamps the next action the reply carries: it is the page the command was sent from,
+  // so that a reply landing after a navigation is dropped as stale instead of running against the
+  // destination. A command the user triggered passes the displayed page's epoch, a command an
+  // action put passes that action's. The default reads the registry when the command is sent,
+  // never when the reply arrives. The reply's self echoes are not stamped with it: see below.
+  // Deps: [:maps.get/2]
+  static async sendCommand(command, epoch = Hologram.registryEpoch) {
     const opts = {
       method: "POST",
       headers: {
@@ -210,14 +216,24 @@ export default class Client {
       const nextAction = Interpreter.evaluateJavaScriptExpression(action);
 
       if (!Type.isNil(nextAction)) {
-        Hologram.schedulePushedAction(nextAction, chunks);
+        Hologram.schedulePushedAction(nextAction, chunks, epoch);
       }
 
       const selfEchoes =
         Interpreter.evaluateJavaScriptExpression(encodedSelfEchoes);
 
+      // A self echo is the sender's own copy of a broadcast, so it goes where a broadcast from
+      // another tab goes: to the page on screen when it arrives, since the subscription it answers
+      // may have survived a navigation (a layout's, say), and nowhere when its target is not on
+      // that page, the way SSE skips a pushed action for a cid the page does not hold. The server
+      // picked the targets from the subscriptions the command was sent with, so one of them can
+      // be a component only the page since left had.
       for (const action of selfEchoes.data) {
-        Hologram.schedulePushedAction(action, chunks);
+        const target = Erlang_Maps["get/2"](Type.atom("target"), action);
+
+        if (ComponentRegistry.isCidRegistered(target)) {
+          Hologram.schedulePushedAction(action, chunks);
+        }
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {

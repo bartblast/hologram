@@ -12,14 +12,22 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   # window, which is sized for a slow client connection.
   @attach_wait_ms 50
 
-  setup do
+  # For tests that inspect or release a parked caller themselves. Fifty milliseconds is less than
+  # a slow runner can take between parking a caller and seeing it parked, so a caller parked under
+  # the short window can time out before the test gets to it. Under this one it stays parked until
+  # the test releases it, firing its timer by hand where the timer's answer is what is under test.
+  @parked_wait_ms 60_000
+
+  setup context do
     # Parking a caller asks the cluster over PubSub, so it must be up first - the same
     # order Hologram.Application starts them in.
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
+    attach_wait_ms = Map.get(context, :attach_wait_ms, @attach_wait_ms)
+
     wait_for_process_cleanup(SubscriptionRegistry)
-    start_supervised!({SubscriptionRegistry, attach_wait_ms: @attach_wait_ms})
+    start_supervised!({SubscriptionRegistry, attach_wait_ms: attach_wait_ms})
 
     :ok
   end
@@ -46,6 +54,15 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end)
 
     task
+  end
+
+  # Sends the registry what the parked caller's own timer sends when the window elapses. The waiter
+  # ref doubles as the timer's ref, so a stale ref fires a timer whose waiter is gone.
+  defp fire_park_timer(instance_id, waiter_ref) do
+    send(
+      Process.whereis(SubscriptionRegistry),
+      {:apply_deltas_timeout, instance_id, waiter_ref}
+    )
   end
 
   # The ref a parked caller carries, which the connection's holder echoes back to address
@@ -405,6 +422,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert log =~ ~s(drops: [room_b: "comp_1"])
     end
 
+    @tag attach_wait_ms: @parked_wait_ms
     test "logs nothing when a connection attaches within the wait window" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
 
@@ -556,6 +574,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert entry.user_id == "new-user"
     end
 
+    @tag attach_wait_ms: @parked_wait_ms
     test "applies deltas parked by apply_deltas/4 against the entry it creates" do
       task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -567,6 +586,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-user-id"}
     end
 
+    @tag attach_wait_ms: @parked_wait_ms
     test "folds parked deltas on top of the validated bindings rather than replacing them" do
       task = park_apply_deltas("test-instance-id", [{:room_b, "page"}], [], "test-user-id")
 
@@ -588,6 +608,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
              }
     end
 
+    @tag attach_wait_ms: @parked_wait_ms
     test "sends zero-crossing messages for channels a parked delta newly binds" do
       task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -598,6 +619,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert_receive {:sub, :room_a}
     end
 
+    @tag attach_wait_ms: @parked_wait_ms
     test "releases callers parked for the same instance in the order they were issued" do
       task_a = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
       task_b = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
@@ -615,6 +637,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-user-id"}
     end
 
+    @tag attach_wait_ms: @parked_wait_ms
     test "leaves callers parked for other instances untouched" do
       # Captured because the untouched caller goes on to time out, which logs.
       capture_log(fn ->
@@ -630,6 +653,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
                  "test-other-instance-id"
                )
 
+        fire_park_timer("test-other-instance-id", parked_waiter_ref("test-other-instance-id"))
         Task.await(task)
       end)
     end
@@ -987,6 +1011,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   end
 
   describe "handle {:apply_deltas_remote_reply, ...}" do
+    @describetag attach_wait_ms: @parked_wait_ms
+
     test "releases the parked caller with the holder's result" do
       task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
       waiter_ref = parked_waiter_ref("test-instance-id")
@@ -1010,7 +1036,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       )
 
       # get_state queues behind the reply, so the waiter must already be gone by the time
-      # it returns - well inside the window, which would otherwise clear it on timeout.
+      # it returns. The window is long enough that only the reply can have cleared it.
       assert :sys.get_state(SubscriptionRegistry).waiters == %{}
 
       Task.await(task)
@@ -1029,8 +1055,9 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
           Task.await(task)
 
-          # Outlast the window so the stale timer fires against an absent waiter.
-          Process.sleep(@attach_wait_ms * 2)
+          # The stale timer fires against an absent waiter. get_state queues behind it, so it
+          # has been handled by the time get_state returns.
+          fire_park_timer("test-instance-id", waiter_ref)
           :sys.get_state(SubscriptionRegistry)
         end)
 
@@ -1047,7 +1074,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       assert Map.has_key?(:sys.get_state(SubscriptionRegistry).waiters, "test-instance-id")
 
-      # The caller stays parked and is answered by its own timer.
+      # The caller stays parked until its timer fires, and is answered the way the timer answers.
+      fire_park_timer("test-instance-id", parked_waiter_ref("test-instance-id"))
       capture_log(fn -> assert Task.await(task) == {[{:room_a, "page"}], []} end)
     end
 

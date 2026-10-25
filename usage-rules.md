@@ -152,6 +152,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Commands must return a `%Server{}` struct. Chain operations with `|>`.
 - Commands are always executed asynchronously.
 - Trigger a client action from a command: `put_action(server, :action_name)` or `put_action(server, :action_name, param: value)`.
+- The action a command puts runs on the page the command was sent from; it is dropped if the user navigates to another page before it runs. The command's server-side effects (session, cookies, broadcasts) still apply.
 - Manage session: `put_session(server, :key, value)`, `get_session(server, :key)`, `delete_session(server, :key)`.
 - Manage cookies: `put_cookie(server, "key", value)`, `get_cookie(server, "key")`, `delete_cookie(server, "key")`.
 - Commands can be triggered from templates via longhand event syntax or from actions via `put_command/2`/`put_command/3`.
