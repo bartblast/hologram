@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Stop
@@ -19,13 +20,14 @@ defmodule HologramFeatureTests.QueriesTest do
 
   # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
   # reaches the operations log they read, so they drain before the tables empty. The tables
-  # truncate in one statement: the review table's foreign key to the product table, and the stop
-  # table's to the trip table, make Postgres reject truncating the referenced table alone.
+  # truncate in one statement: the review table's foreign key to the product table, the stop
+  # table's to the trip table and the leg table's to the stop table make Postgres reject truncating
+  # the referenced table alone.
   setup do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Booking, Product, Review, Stop, Ticket, Trip], ", ", fn entity_type ->
+      Enum.map_join([Booking, Leg, Product, Review, Stop, Ticket, Trip], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 

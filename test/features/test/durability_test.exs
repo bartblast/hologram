@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
@@ -56,6 +57,7 @@ defmodule HologramFeatureTests.DurabilityTest do
           Document,
           Folder,
           Item,
+          Leg,
           Memo,
           Note,
           Product,
